@@ -6,9 +6,8 @@ const { isApolloHealthCheckSource } = require('./utils')
 const documentSources = new WeakMap()
 
 // Documents produced by parsing an Apollo Gateway health-check poll. Populated
-// here (parse owns the document lifecycle, like documentSources) and read by
-// the validate and execute plugins so a single detection suppresses every
-// graphql span for the poll. See utils.isApolloHealthCheckSource.
+// here (parse owns the document lifecycle, like documentSources) and read by the
+// validate plugin. Execute independently verifies the operation for cached docs.
 const healthCheckDocuments = new WeakSet()
 
 class GraphQLParsePlugin extends TracingPlugin {
@@ -19,10 +18,8 @@ class GraphQLParsePlugin extends TracingPlugin {
   bindStart (ctx) {
     const source = ctx.arguments?.[0]
 
-    // Apollo Gateway polls every subgraph with a fixed health-check query. Skip
-    // the whole graphql pipeline for it (no parse/validate/execute/resolve
-    // spans). validate and execute receive the parsed document, so parse marks
-    // it once the parser returns.
+    // Apollo Gateway polls every subgraph with a fixed health-check query.
+    // Mark its document after parsing so validation can skip the same poll.
     if (isApolloHealthCheckSource(source?.body ?? source)) {
       ctx.ddHealthCheck = true
       ctx.ddSkipped = true

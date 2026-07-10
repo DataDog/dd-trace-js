@@ -2876,6 +2876,39 @@ describe('Plugin', () => {
 
         after(() => agent.close())
 
+        function createHealthCheckSchema () {
+          return new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                hello: { type: graphql.GraphQLString, resolve: () => 'world' },
+              },
+            }),
+          })
+        }
+
+        /**
+         * @param {import('graphql').DocumentNode} document
+         * @param {string} [operationName]
+         */
+        async function executeAndCountStarts (document, operationName) {
+          const executeCh = dc.channel('apm:graphql:execute:start')
+          let starts = 0
+          const handler = () => { starts++ }
+          executeCh.subscribe(handler)
+
+          try {
+            const result = await graphql.execute({
+              schema: createHealthCheckSchema(),
+              document,
+              operationName,
+            })
+            return { result, starts }
+          } finally {
+            executeCh.unsubscribe(handler)
+          }
+        }
+
         it('should create graphql.resolve spans for fields reached only through a union member', () => {
           // Product is reachable only as a union member (no field returns it
           // directly), mirroring federation's `_Entity` union. Without descending
@@ -2966,21 +2999,8 @@ describe('Plugin', () => {
         })
 
         it('should create no graphql spans for the federation health-check operation', async () => {
-          const schema = new graphql.GraphQLSchema({
-            query: new graphql.GraphQLObjectType({
-              name: 'Query',
-              fields: {
-                hello: { type: graphql.GraphQLString, resolve: () => 'world' },
-              },
-            }),
-          })
-
-          // A health-check poll must produce no graphql spans at all — not
-          // parse, validate, execute, or resolve. graphql.graphql runs parse and
-          // validate before execute, so skipping only execute would still leave
-          // per-poll parse/validate heartbeat spans. Count every graphql span the
-          // agent receives across both operations: the health-check must add
-          // none, so the only parse/validate spans are the sentinel's one each.
+          const schema = createHealthCheckSchema()
+          // The sentinel makes absence observable: each graphql span should occur exactly once.
           const graphqlSpans = new Map()
           const collect = traces => {
             for (const trace of traces) {
@@ -3004,14 +3024,15 @@ describe('Plugin', () => {
             const sentinel = await graphql.graphql({ schema, source: 'query { hello }' })
             assert.ok(!sentinel.errors, inspect(sentinel.errors))
 
-            // parse, validate and execute flush as separate traces; retry until
-            // the sentinel's parse and validate have both arrived, then the
-            // counts prove the health-check contributed neither.
             await agent.assertSomeTraces(() => {
               assert.strictEqual(graphqlSpans.get('graphql.parse'), 1,
                 'only the sentinel query may emit a graphql.parse span')
               assert.strictEqual(graphqlSpans.get('graphql.validate'), 1,
                 'only the sentinel query may emit a graphql.validate span')
+              assert.strictEqual(graphqlSpans.get(expectedSchema.server.opName), 1,
+                'only the sentinel query may emit a graphql.execute span')
+              assert.strictEqual(graphqlSpans.get('graphql.resolve'), 1,
+                'only the sentinel query may emit a graphql.resolve span')
             })
           } finally {
             agent.unsubscribe(collect)
@@ -3019,43 +3040,76 @@ describe('Plugin', () => {
         })
 
         it('should skip a health-check document that reaches execute without an instrumented parse', async () => {
-          // Warm path: Apollo Server serves a documentStore-cached document, so
-          // parse and validate never run and the parse-side marker is absent —
-          // only execute sees the poll, and the operation-shape check is the sole
-          // gate. A structurally cloned document (no reference the parse plugin
-          // marked) reproduces that: the shape check must still skip it.
-          const schema = new graphql.GraphQLSchema({
-            query: new graphql.GraphQLObjectType({
-              name: 'Query',
-              fields: {
-                hello: { type: graphql.GraphQLString, resolve: () => 'world' },
-              },
-            }),
-          })
-
+          // A cloned AST reproduces Apollo Server's cached path without the parse-side marker.
           const document = JSON.parse(JSON.stringify(
             graphql.parse('query __ApolloServiceHealthCheck__ { __typename }')))
+          const { result, starts } = await executeAndCountStarts(document)
+          assert.ok(!result.errors, inspect(result.errors))
+          assert.strictEqual(starts, 0, 'the cached health-check document must skip its execute span')
+        })
+
+        it('should trace a health-check document changed after parsing', async () => {
+          const schema = createHealthCheckSchema()
+          const document = graphql.parse('query __ApolloServiceHealthCheck__ { __typename }')
+          document.definitions[0].selectionSet.selections[0].name.value = 'hello'
+
+          let validationErrors
+          await Promise.all([
+            agent.assertFirstTraceSpan({ name: 'graphql.validate' }),
+            (async () => {
+              validationErrors = graphql.validate(schema, document)
+            })(),
+          ])
+          assert.deepStrictEqual(validationErrors, [])
 
           const executeCh = dc.channel('apm:graphql:execute:start')
-          let starts = 0
-          const handler = () => { starts++ }
-          executeCh.subscribe(handler)
+          const resolverCh = dc.channel('datadog:graphql:resolver:start')
+          let executeStarts = 0
+          let resolverStarts = 0
+          const executeHandler = () => { executeStarts++ }
+          const resolverHandler = () => { resolverStarts++ }
+          executeCh.subscribe(executeHandler)
+          resolverCh.subscribe(resolverHandler)
 
           try {
             const result = await graphql.execute({ schema, document })
             assert.ok(!result.errors, inspect(result.errors))
-            assert.strictEqual(starts, 0, 'the cached health-check document must skip its execute span')
+            assert.strictEqual(result.data.hello, 'world')
+            assert.strictEqual(executeStarts, 1, 'a changed document must keep its execute span')
+            assert.strictEqual(resolverStarts, 1, 'a changed document must keep its AppSec resolver channel')
           } finally {
-            executeCh.unsubscribe(handler)
+            executeCh.unsubscribe(executeHandler)
+            resolverCh.unsubscribe(resolverHandler)
           }
         })
 
-        // Operation names are client-controlled: only the gateway's exact
-        // `query __ApolloServiceHealthCheck__ { __typename }` shape is skipped.
-        // Every request that reuses the reserved name but diverges from that
-        // shape must still be traced (and its resolvers must still reach the
-        // AppSec/IAST channels), so the skip can't become a tracing/security
-        // bypass. Each source diverges on a single dimension the shape check reads.
+        it('should trace a cached health-check operation from a larger document', async () => {
+          const document = graphql.parse(`
+            query __ApolloServiceHealthCheck__ { __typename }
+            query Other { hello }
+          `)
+          const { result, starts } = await executeAndCountStarts(document, '__ApolloServiceHealthCheck__')
+          assert.ok(!result.errors, inspect(result.errors))
+          assert.strictEqual(starts, 1, 'only Apollo\'s complete document may skip its execute span')
+        })
+
+        // execute() accepts cached documents without parsing or validating them.
+        const warmPathDivergences = {
+          'a variable definition': 'query __ApolloServiceHealthCheck__($unused: Boolean) { __typename }',
+          'an operation-level directive': 'query __ApolloServiceHealthCheck__ @cached { __typename }',
+        }
+
+        for (const [divergence, source] of Object.entries(warmPathDivergences)) {
+          it(`should trace a cached health-check-named document with ${divergence}`, async () => {
+            const document = graphql.parse(source)
+            const { result, starts } = await executeAndCountStarts(document)
+            assert.ok(!result.errors, inspect(result.errors))
+            assert.strictEqual(starts, 1,
+              'a document diverging from the exact health-check shape must still be traced')
+          })
+        }
+
+        // The reserved name is client-controlled; every non-Apollo shape must remain traced.
         const spoofedHealthChecks = {
           'a real field instead of __typename': 'query __ApolloServiceHealthCheck__ { hello }',
           'an extra selection alongside __typename': 'query __ApolloServiceHealthCheck__ { __typename hello }',

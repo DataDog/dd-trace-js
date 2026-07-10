@@ -235,32 +235,33 @@ const HEALTH_CHECK_QUERY = 'query __ApolloServiceHealthCheck__ { __typename }'
 
 /**
  * Matches the raw query string before it is parsed (the only input parse has).
- * The gateway sends the constant verbatim; `trim` tolerates transport-added
- * surrounding whitespace without loosening the match to other operations.
  *
- * @param {unknown} source Raw query string (or a graphql `Source` body).
+ * @param {unknown} source Raw query string or a graphql `Source` body.
  * @returns {boolean}
  */
 function isApolloHealthCheckSource (source) {
-  return typeof source === 'string' && source.trim() === HEALTH_CHECK_QUERY
+  return source === HEALTH_CHECK_QUERY
 }
 
 /**
- * Matches the parsed operation for the warm path, where Apollo Server serves a
- * cached document and neither parse nor validate run — so only execute sees the
- * poll. Confirms the exact `{ __typename }` shape rather than the reserved name
- * alone, since operation names are client-controlled.
+ * Matches Apollo's parsed health-check operation exactly for cached documents.
  *
- * @param {import('graphql').OperationDefinitionNode} operation
+ * @param {import('graphql').OperationDefinitionNode | undefined} operation
  * @returns {boolean}
  */
 function isApolloHealthCheck (operation) {
-  const selections = operation.selectionSet?.selections
-  if (operation.operation !== 'query' || selections?.length !== 1) return false
+  const selections = operation?.selectionSet?.selections
+  if (operation?.operation !== 'query' ||
+      operation.name?.value !== '__ApolloServiceHealthCheck__' ||
+      operation.variableDefinitions?.length ||
+      operation.directives?.length ||
+      selections?.length !== 1) {
+    return false
+  }
 
   const selection = selections[0]
   return selection.kind === 'Field' &&
-    selection.name.value === '__typename' &&
+    selection.name?.value === '__typename' &&
     selection.alias === undefined &&
     selection.selectionSet === undefined &&
     selection.arguments?.length === 0 &&

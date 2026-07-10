@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, refineRequestSpan } = require('./utils')
+const { extractErrorIntoSpanEvent, isApolloHealthCheck, refineRequestSpan } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -16,9 +16,11 @@ class GraphQLValidatePlugin extends TracingPlugin {
     // validate(schema, documentAST, rules, options, typeInfo)
     const document = ctx.arguments?.[1]
 
-    // The parse plugin marks documents parsed from an Apollo health-check poll;
-    // skip validation's span so the poll produces no graphql spans.
-    if (document && GraphQLParsePlugin.healthCheckDocuments.has(document)) {
+    // Verify the marked document in case the caller transformed its AST after parsing.
+    if (document &&
+        GraphQLParsePlugin.healthCheckDocuments.has(document) &&
+        document.definitions?.length === 1 &&
+        isApolloHealthCheck(document.definitions[0])) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }

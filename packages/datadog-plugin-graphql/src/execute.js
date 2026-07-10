@@ -118,17 +118,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation?.name?.value
     const source = this.config.source && docSource
 
-    // Apollo Gateway polls every subgraph with a fixed health-check query;
-    // tracing it floods traces with heartbeat noise. Skip it (no span, no
-    // resolver wrapping), the same way mongodb skips heartbeats. On the cold
-    // path the parse plugin already matched the source and marked the document;
-    // on the warm path Apollo Server serves a cached document so parse never
-    // ran, and only the operation shape is left to match. Operation names are
-    // client-controlled, so `isApolloHealthCheck` confirms the exact
-    // `{ __typename }` shape rather than the reserved name alone — a real query
-    // spoofing the name still gets its span and its AppSec/IAST channels.
-    if ((document && GraphQLParsePlugin.healthCheckDocuments.has(document)) ||
-        (name === '__ApolloServiceHealthCheck__' && isApolloHealthCheck(operation))) {
+    // Apollo Server may execute a cached document without parsing it first.
+    // Match the full gateway operation here so caller-owned AST transformations
+    // cannot suppress execute/resolver AppSec and IAST channels.
+    if (name === '__ApolloServiceHealthCheck__' &&
+        document.definitions.length === 1 &&
+        isApolloHealthCheck(operation)) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }
