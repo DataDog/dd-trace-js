@@ -13,6 +13,11 @@ const { createMetricsClient } = require('./client')
 const eventLoopDelayResolution = 4
 const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
 
+// @datadog/native-metrics is only needed on Node versions where
+// monitorEventLoopDelay's samplePerIteration option is unavailable.
+// TODO: remove @datadog/native-metrics and this branch once Node < 26.5 is no longer supported.
+const NATIVE_METRICS_REQUIRED = !EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE
+
 let nativeMetrics = null
 let gcObserver = null
 let interval = null
@@ -49,7 +54,7 @@ module.exports = {
     // When per-iteration sampling is available we prefer it over the native
     // addon: it provides accurate event loop delay measurements and lets us
     // collect CPU/GC/heap metrics entirely from JS APIs.
-    const useNative = !EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE && config.runtimeMetrics.native !== false
+    const useNative = NATIVE_METRICS_REQUIRED && config.runtimeMetrics.native !== false
 
     if (useNative) {
       // Using no-gc prevents the native gc metrics from being tracked. Not
