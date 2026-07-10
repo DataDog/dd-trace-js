@@ -55,6 +55,41 @@ describe('OTel TracerProvider', () => {
     assert.ok(provider.getActiveSpanProcessor() instanceof MultiSpanProcessor)
   })
 
+  it('should wire span processors passed through the constructor', () => {
+    // @opentelemetry/sdk-node 0.220+ builds the provider from
+    // @opentelemetry/sdk-trace 2.x, which hands processors to the constructor
+    // instead of `addSpanProcessor`. A processor supplied that way has to reach
+    // the active fan-out so a user's exporter still sees onStart/onEnd.
+    const first = new NoopSpanProcessor()
+    const second = new NoopSpanProcessor()
+    first.onStart = sinon.stub()
+    first.onEnd = sinon.stub()
+    second.onStart = sinon.stub()
+    second.onEnd = sinon.stub()
+
+    const provider = new TracerProvider({ spanProcessors: [first, second] })
+
+    assert.strictEqual(provider._processors.length, 2)
+    const active = provider.getActiveSpanProcessor()
+    assert.ok(active instanceof MultiSpanProcessor)
+
+    const span = {}
+    const context = {}
+    active.onStart(span, context)
+    active.onEnd(span)
+
+    sinon.assert.calledOnceWithExactly(first.onStart, span, context)
+    sinon.assert.calledOnceWithExactly(first.onEnd, span)
+    sinon.assert.calledOnceWithExactly(second.onStart, span, context)
+    sinon.assert.calledOnceWithExactly(second.onEnd, span)
+  })
+
+  it('should keep the noop processor when the constructor gets no processors', () => {
+    assert.ok(new TracerProvider().getActiveSpanProcessor() instanceof NoopSpanProcessor)
+    assert.ok(new TracerProvider({ spanProcessors: [] }).getActiveSpanProcessor() instanceof NoopSpanProcessor)
+    assert.strictEqual(new TracerProvider({ spanProcessors: [] })._processors.length, 0)
+  })
+
   it('should delegate shutdown to active span processor', () => {
     const provider = new TracerProvider()
     const processor = new NoopSpanProcessor()

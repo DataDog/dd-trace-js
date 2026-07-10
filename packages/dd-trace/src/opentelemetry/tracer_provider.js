@@ -18,6 +18,17 @@ class TracerProvider {
     this._tracers = new Map()
     this._activeProcessor = new NoopSpanProcessor()
     this._contextManager = new ContextManager()
+
+    // @opentelemetry/sdk-trace 2.x (used by @opentelemetry/sdk-node 0.220+)
+    // dropped `addSpanProcessor` and hands the processors to the provider
+    // constructor instead. Wire them the same way the 1.x `addSpanProcessor`
+    // path does, so a NodeSDK configured with a trace exporter or custom
+    // processors still delivers onStart/onEnd to them.
+    if (Array.isArray(config.spanProcessors)) {
+      for (const spanProcessor of config.spanProcessors) {
+        this.addSpanProcessor(spanProcessor)
+      }
+    }
   }
 
   getTracer (name = 'opentelemetry', version = '0.0.0', options) {
