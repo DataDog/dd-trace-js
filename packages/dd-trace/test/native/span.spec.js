@@ -510,6 +510,41 @@ describe('NativeDatadogSpan', () => {
       assert.deepEqual(Uint8Array.from(objCall.args[2]), Uint8Array.from(expected))
     })
 
+    it('recursively strips null/undefined from nested meta_struct values (matches legacy encoder)', () => {
+      // Stack frames carry `class_name: null` / `function: null` from V8. The
+      // legacy v0.4 encoder omits null map entries at every depth; a generic
+      // msgpack encoder would write them as nil, so the agent would decode
+      // `class_name: null` instead of absent — breaking IAST location matching.
+      span.meta_struct = {
+        '_dd.stack': {
+          iast: [{ id: '1', frames: [{ file: 'a.js', line: 8, class_name: null, function: null, isNative: false }] }],
+        },
+      }
+
+      span.finish()
+
+      const call = nativeSpans.setMetaStruct.getCalls().find(c => c.args[1] === '_dd.stack')
+      assert.ok(call, 'expected _dd.stack to be forwarded')
+      // null-valued keys dropped at every level; strings/numbers/booleans kept.
+      const expected = encodeMsgpack({
+        iast: [{ id: '1', frames: [{ file: 'a.js', line: 8, isNative: false }] }],
+      })
+      assert.deepEqual(Uint8Array.from(call.args[2]), Uint8Array.from(expected))
+    })
+
+    it('drops booleans and nulls from meta_struct arrays (matches legacy #encodeObjectAsArray)', () => {
+      // In array context the legacy encoder keeps string/number/non-null-object
+      // and drops booleans + nulls (unlike map context, which keeps booleans).
+      span.meta_struct = { arr: { list: ['keep', 7, true, null, { nested: 1 }] } }
+
+      span.finish()
+
+      const call = nativeSpans.setMetaStruct.getCalls().find(c => c.args[1] === 'arr')
+      assert.ok(call, 'expected arr to be forwarded')
+      const expected = encodeMsgpack({ list: ['keep', 7, { nested: 1 }] })
+      assert.deepEqual(Uint8Array.from(call.args[2]), Uint8Array.from(expected))
+    })
+
     it('does not call setMetaStruct when the span has no meta_struct', () => {
       span.finish()
       sinon.assert.notCalled(nativeSpans.setMetaStruct)

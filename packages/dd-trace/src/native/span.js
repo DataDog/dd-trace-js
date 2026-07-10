@@ -49,6 +49,45 @@ function buildNativeTraceId (lowId, tidHex) {
 // buffer as "no attributes").
 const EMPTY_ATTRS = Buffer.alloc(0)
 
+// Recursively drop `null`/`undefined` (and other unencodable values) from a
+// meta_struct value before msgpack-encoding it, so the wire shape matches the
+// legacy v0.4 encoder. That encoder's `#encodeObjectAsMap` keeps only
+// string/number/boolean/non-null-object entries and `#encodeObjectAsArray`
+// keeps only string/number/non-null-object items; a generic msgpack encoder
+// instead writes `null` as nil, which changes what the agent decodes (e.g. a
+// stack frame's `class_name: null` would round-trip as `null` rather than being
+// absent, breaking IAST location matching). Mirror the legacy filter exactly.
+function cleanMetaStructValue (value, seen = new Set()) {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return undefined
+    seen.add(value)
+    const out = []
+    for (const item of value) {
+      if (typeof item === 'string' || typeof item === 'number') {
+        out.push(item)
+      } else if (item !== null && typeof item === 'object' && !seen.has(item)) {
+        out.push(cleanMetaStructValue(item, seen))
+      }
+    }
+    return out
+  }
+  if (value !== null && typeof value === 'object') {
+    if (seen.has(value)) return undefined
+    seen.add(value)
+    const out = {}
+    for (const key of Object.keys(value)) {
+      const v = value[key]
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        out[key] = v
+      } else if (v !== null && typeof v === 'object' && !seen.has(v)) {
+        out[key] = cleanMetaStructValue(v, seen)
+      }
+    }
+    return out
+  }
+  return value
+}
+
 // `[len:u32 LE][utf8]`.
 function encodeLenPrefixedStr (s) {
   const body = Buffer.from(s, 'utf8')
@@ -540,7 +579,8 @@ class NativeDatadogSpan extends DatadogSpan {
         this._nativeSpans.setMetaStruct(
           this._spanContext._nativeSpanId,
           key,
-          encodeMsgpack(value)
+          // Strip nulls to match the legacy v0.4 encoder (see cleanMetaStructValue).
+          encodeMsgpack(cleanMetaStructValue(value))
         )
       }
     }
