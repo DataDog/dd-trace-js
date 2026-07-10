@@ -391,7 +391,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
-      it('should create a timestamp if it is an Azure Application Gateway proxy', async () => {
+      (proxyType === 'azure-gw' ? it : it.skip)('should create a timestamp if it is an Azure Application Gateway proxy', async () => {
         const testCase = additionalTestCases['azure-missingtimestamp']
         await loadTest({})
 
