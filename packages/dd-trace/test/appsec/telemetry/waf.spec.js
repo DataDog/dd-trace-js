@@ -351,6 +351,38 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
     })
 
+    describe('incrementRequestDurationMetrics', () => {
+      it('should report waf.duration and waf.duration_ext once per request with the accumulated total', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({ duration: 42, durationExt: 52, wafVersion, rulesVersion }, req)
+        appsecTelemetry.updateWafRequestsMetricTags({ duration: 24, durationExt: 25, wafVersion, rulesVersion }, req)
+
+        appsecTelemetry.incrementRequestDurationMetrics(req)
+
+        sinon.assert.calledWithExactly(distribution, 'waf.duration', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+        })
+        sinon.assert.calledWithExactly(distribution, 'waf.duration_ext', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+        })
+        sinon.assert.calledWith(track, 66)
+        sinon.assert.calledWith(track, 77)
+      })
+
+      it('should not report waf.duration/waf.duration_ext when there is no accumulated duration', () => {
+        appsecTelemetry.incrementRequestDurationMetrics(req)
+
+        sinon.assert.notCalled(distribution)
+      })
+
+      it('should not report anything if no request is provided', () => {
+        appsecTelemetry.incrementRequestDurationMetrics()
+
+        sinon.assert.notCalled(distribution)
+      })
+    })
+
     describe('updateRateLimitedMetric', () => {
       it('should set rate_limited to true on the request tags', () => {
         appsecTelemetry.updateRateLimitedMetric(req, metrics)
@@ -451,6 +483,13 @@ describe('Appsec Waf Telemetry metrics', () => {
       appsecTelemetry.updateBlockFailureMetric(req)
       const result = appsecTelemetry.updateWafRequestsMetricTags({ wafVersion, rulesVersion }, req)
       assert.strictEqual(result, undefined)
+    })
+
+    it('should not report waf.duration/waf.duration_ext if telemetry is disabled', () => {
+      appsecTelemetry.updateWafRequestsMetricTags({ duration: 42, durationExt: 52, wafVersion, rulesVersion }, req)
+      appsecTelemetry.incrementRequestDurationMetrics(req)
+
+      sinon.assert.notCalled(distribution)
     })
 
     describe('updateWafRequestMetricTags', () => {

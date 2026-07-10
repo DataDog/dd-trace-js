@@ -34,6 +34,14 @@ function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, error
 function trackWafMetrics (store, metrics) {
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
+  const requestMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
+  if (metrics.wafVersion) {
+    requestMetrics.wafVersion = metrics.wafVersion
+  }
+  if (metrics.rulesVersion) {
+    requestMetrics.rulesVersion = metrics.rulesVersion
+  }
+
   const metricTags = getOrCreateMetricTags(store, versionsTags)
 
   if (metrics.blockFailed) {
@@ -118,6 +126,19 @@ function incrementWafRequests (store) {
   }
 }
 
+function incrementWafDurationMetrics (requestMetrics) {
+  const { duration, durationExt, wafVersion, rulesVersion } = requestMetrics
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+
+  if (duration) {
+    appsecMetrics.distribution('waf.duration', versionsTags).track(duration)
+  }
+
+  if (durationExt) {
+    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(durationExt)
+  }
+}
+
 function incrementTruncatedMetrics (metrics, truncationReason) {
   const truncationTags = { truncation_reason: truncationReason }
   appsecMetrics.count('waf.input_truncated', truncationTags).inc(1)
@@ -140,4 +161,5 @@ module.exports = {
   incrementWafUpdates,
   incrementWafConfigErrors,
   incrementWafRequests,
+  incrementWafDurationMetrics,
 }
