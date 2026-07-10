@@ -24,6 +24,12 @@ const {
 } = require('./helpers')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
+// On unsupported runtimes the tracer is stubbed (see stubTracerIfNeeded), so the
+// real native-init debug lines never print; on supported runtimes the forced
+// (DD_INJECT_FORCE) path loads the real tracer and emits them.
+const nativeInitDebugLines = currentVersionIsSupported
+  ? 'Native spans interface initialized\nNative spans mode enabled\n'
+  : ''
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
 delete process.env.DD_INJECTION_ENABLED
@@ -163,9 +169,7 @@ false
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 >=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
-Native spans interface initialized
-Native spans mode enabled
-Application instrumentation bootstrapping complete
+${nativeInitDebugLines}Application instrumentation bootstrapping complete
 true
 `, telemetryForced))
         })
@@ -207,9 +211,7 @@ false
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 ${engines.node} <${NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
-Native spans interface initialized
-Native spans mode enabled
-Application instrumentation bootstrapping complete
+${nativeInitDebugLines}Application instrumentation bootstrapping complete
 true
 `, telemetryForced))
         })
