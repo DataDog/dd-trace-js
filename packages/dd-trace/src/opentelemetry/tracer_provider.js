@@ -43,7 +43,12 @@ class TracerProvider {
     return this._tracers.get(key)
   }
 
+  /**
+   * @param {NoopSpanProcessor} spanProcessor
+   */
   addSpanProcessor (spanProcessor) {
+    if (this._processors.includes(spanProcessor)) return
+
     if (!this._processors.length) {
       this._activeProcessor.shutdown()
     }

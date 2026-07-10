@@ -84,6 +84,24 @@ describe('OTel TracerProvider', () => {
     sinon.assert.calledOnceWithExactly(second.onEnd, span)
   })
 
+  it('should not register a constructor span processor twice', () => {
+    const processor = new NoopSpanProcessor()
+    processor.onStart = sinon.stub()
+    processor.onEnd = sinon.stub()
+
+    const provider = new TracerProvider({ spanProcessors: [processor] })
+    provider.addSpanProcessor(processor)
+
+    const span = {}
+    const context = {}
+    provider.getActiveSpanProcessor().onStart(span, context)
+    provider.getActiveSpanProcessor().onEnd(span)
+
+    assert.strictEqual(provider._processors.length, 1)
+    sinon.assert.calledOnceWithExactly(processor.onStart, span, context)
+    sinon.assert.calledOnceWithExactly(processor.onEnd, span)
+  })
+
   it('should keep the noop processor when the constructor gets no processors', () => {
     assert.ok(new TracerProvider().getActiveSpanProcessor() instanceof NoopSpanProcessor)
     assert.ok(new TracerProvider({ spanProcessors: [] }).getActiveSpanProcessor() instanceof NoopSpanProcessor)
