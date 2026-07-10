@@ -9,6 +9,10 @@ const { execFileSync } = require('node:child_process')
 const satisfies = require('../vendor/dist/semifies')
 const { getEnvironmentVariables } = require('../packages/dd-trace/src/config/helper')
 const { DD_MAJOR, VERSION } = require('../version')
+const {
+  sanitizeConsoleText,
+  sanitizeForReport,
+} = require('./test-optimization-validation/redaction')
 
 const MAX_TEXT_FILE_SIZE = 512 * 1024
 const MAX_SCANNED_FILES = 1500
@@ -2106,19 +2110,20 @@ if (require.main === module) {
   if (args.help) {
     console.log(getHelpText())
   } else if (args.unknown) {
-    console.error(`Unknown argument: ${args.unknown}`)
+    console.error(sanitizeConsoleText(`Unknown argument: ${args.unknown}`))
     console.error(getHelpText())
     process.exitCode = 1
   } else if (hasValidFailOn) {
     const report = runDiagnosis({ root: args.root })
+    const sanitizedReport = sanitizeForReport(report)
     if (args.json) {
-      console.log(JSON.stringify(report, null, 2))
+      console.log(JSON.stringify(sanitizedReport, null, 2))
     } else {
-      console.log(renderText(report))
+      console.log(sanitizeConsoleText(renderText(sanitizedReport)))
     }
     process.exitCode = getExitCode(report, args.failOn)
   } else {
-    console.error(`Invalid --fail-on value: ${args.failOn}`)
+    console.error(sanitizeConsoleText(`Invalid --fail-on value: ${args.failOn}`))
     console.error(getHelpText())
     process.exitCode = 1
   }

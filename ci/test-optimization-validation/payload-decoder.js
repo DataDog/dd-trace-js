@@ -2,19 +2,36 @@
 
 const zlib = require('zlib')
 
+const MAX_MSGPACK_COLLECTION_ENTRIES = 100_000
+const MAX_MSGPACK_TOTAL_COLLECTION_ENTRIES = 100_000
+
 function decodeBody (body, headers, options = {}) {
+  return decodeBodyWithMetadata(body, headers, options).value
+}
+
+function decodeBodyWithMetadata (body, headers, options = {}) {
   const inflated = inflateIfNeeded(body, headers, options.maxOutputLength)
   const contentType = String(headers['content-type'] || '')
+  let collectionEntries = 0
+  let value
 
   if (contentType.includes('application/json') || looksLikeJson(inflated)) {
-    return JSON.parse(inflated.toString('utf8'))
+    assertJsonCollectionEntryLimit(inflated)
+    value = JSON.parse(inflated.toString('utf8'))
+    collectionEntries = countCollectionEntries(value)
+  } else if (contentType.includes('application/msgpack')) {
+    const decoded = decodeMsgpackWithMetadata(inflated)
+    collectionEntries = decoded.collectionEntries
+    value = decoded.value
+  } else {
+    value = inflated.toString('utf8')
   }
 
-  if (contentType.includes('application/msgpack')) {
-    return decodeMsgpack(inflated)
+  return {
+    collectionEntries,
+    decodedBytes: inflated.length,
+    value,
   }
-
-  return inflated.toString('utf8')
 }
 
 function inflateIfNeeded (body, headers, maxOutputLength) {
@@ -30,14 +47,95 @@ function looksLikeJson (body) {
   return trimmed.startsWith('{') || trimmed.startsWith('[')
 }
 
+function assertJsonCollectionEntryLimit (buffer) {
+  const containers = []
+  let collectionEntries = 0
+  let escaped = false
+  let inString = false
+
+  for (const byte of buffer) {
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (byte === 0x5C) {
+        escaped = true
+      } else if (byte === 0x22) {
+        inString = false
+      }
+      continue
+    }
+
+    if (byte === 0x22) {
+      inString = true
+      continue
+    }
+
+    const container = containers[containers.length - 1]
+    if (container?.type === 'array' && !container.hasEntry && !isJsonWhitespace(byte) && byte !== 0x5D) {
+      container.hasEntry = true
+      collectionEntries++
+      assertCollectionEntryLimit(collectionEntries, 'JSON')
+    }
+
+    if (byte === 0x5B) {
+      containers.push({ type: 'array', hasEntry: false })
+    } else if (byte === 0x7B) {
+      containers.push({ type: 'object' })
+    } else if (byte === 0x5D || byte === 0x7D) {
+      containers.pop()
+    } else if (byte === 0x2C && container?.type === 'array') {
+      container.hasEntry = false
+    } else if (byte === 0x3A && container?.type === 'object') {
+      collectionEntries++
+      assertCollectionEntryLimit(collectionEntries, 'JSON')
+    }
+  }
+}
+
+function isJsonWhitespace (byte) {
+  return byte === 0x20 || byte === 0x09 || byte === 0x0A || byte === 0x0D
+}
+
+function assertCollectionEntryLimit (collectionEntries, format) {
+  if (collectionEntries > MAX_MSGPACK_TOTAL_COLLECTION_ENTRIES) {
+    throw new Error(`${format} aggregate collection entries exceed validation limit`)
+  }
+}
+
 function decodeMsgpack (buffer) {
+  return decodeMsgpackWithMetadata(buffer).value
+}
+
+function decodeMsgpackWithMetadata (buffer) {
   const decoder = new MsgpackDecoder(buffer)
-  return decoder.decode()
+  const value = decoder.decode()
+  return {
+    collectionEntries: decoder.collectionEntries,
+    value,
+  }
+}
+
+function countCollectionEntries (value) {
+  let collectionEntries = 0
+  const pending = [value]
+
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (!current || typeof current !== 'object') continue
+
+    const entries = Array.isArray(current) ? current : Object.values(current)
+    collectionEntries += entries.length
+    assertCollectionEntryLimit(collectionEntries, 'JSON')
+    for (const entry of entries) pending.push(entry)
+  }
+
+  return collectionEntries
 }
 
 class MsgpackDecoder {
   constructor (buffer) {
     this.buffer = buffer
+    this.collectionEntries = 0
     this.offset = 0
   }
 
@@ -188,6 +286,11 @@ class MsgpackDecoder {
    * @param {number} length collection entry count
    */
   assertCollectionLength (length) {
+    if (length > MAX_MSGPACK_COLLECTION_ENTRIES) {
+      throw new Error(`MessagePack collection length ${length} exceeds validation entry limit`)
+    }
+    this.collectionEntries += length
+    assertCollectionEntryLimit(this.collectionEntries, 'MessagePack')
     if (length > this.buffer.length - this.offset) {
       throw new Error(`MessagePack collection length ${length} exceeds remaining payload bytes`)
     }
@@ -212,4 +315,4 @@ function normalizeBigInt (value) {
   return value.toString()
 }
 
-module.exports = { decodeBody, decodeMsgpack }
+module.exports = { decodeBody, decodeBodyWithMetadata, decodeMsgpack }

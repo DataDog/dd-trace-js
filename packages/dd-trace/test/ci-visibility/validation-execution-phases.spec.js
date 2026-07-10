@@ -105,7 +105,11 @@ describe('test optimization validator-owned execution phases', () => {
     const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-test-optimization-validation'))
     framework.existingTestCommand = {
       cwd: root,
-      argv: ['pnpm', 'test', '--token', 'plan-secret'],
+      argv: ['npm', 'test', '--', '--runInBand', '--token', 'plan-secret'],
+      displayCommand: 'echo harmless-display-command',
+      env: {
+        BASH_ENV: './project-shell-init',
+      },
     }
     framework.ciWiring = {
       status: 'unknown',
@@ -113,12 +117,14 @@ describe('test optimization validator-owned execution phases', () => {
     }
     framework.ciWiringCommand = {
       cwd: root,
-      argv: ['pnpm', 'test'],
+      usesShell: true,
+      shellCommand: 'pnpm test',
       env: {
         CI: 'true',
         DD_API_KEY: 'safe-placeholder',
       },
     }
+    framework.ciWiring.shell = 'bash --noprofile --norc {0}'
     const manifest = {
       __path: manifestPath,
       repository: { root },
@@ -132,27 +138,50 @@ describe('test optimization validator-owned execution phases', () => {
         selectedFrameworkIds: ['jest:root'],
         requestedScenario: 'atr',
       })
+      const fullPlan = formatExecutionPlan({
+        manifest,
+        out: path.join(root, 'results'),
+        selectedFrameworkIds: ['jest:root'],
+      })
+      const ciOnlyPlan = formatExecutionPlan({
+        manifest,
+        out: path.join(root, 'results'),
+        selectedFrameworkIds: ['jest:root'],
+        requestedScenario: 'ci-wiring',
+      })
 
       assert.match(plan, /Approve executing exactly the plan above\?/)
       assert.match(plan, /--no-watchman/)
       assert.match(plan, new RegExp(escapeRegExp(generatedFile)))
-      assert.match(plan, /CI environment variables copied for this test \(values hidden\): CI, DD_API_KEY/)
+      assert.match(plan, /npm test -- --runInBand --token <redacted> --no-watchman/)
+      assert.doesNotMatch(plan, /echo harmless-display-command/)
+      assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
+      assert.match(fullPlan, /CI environment variables copied for this test: CI, DD_API_KEY/)
+      assert.match(fullPlan, /DD_API_KEY=<redacted>/)
+      assert.match(fullPlan, /bash --noprofile --norc -c "pnpm test"/)
+      assert.match(ciOnlyPlan, /#### Test Execution With CI Configuration/)
+      assert.doesNotMatch(ciOnlyPlan, /#### Temporary Tests Created for Advanced Checks/)
       assert.match(plan, /#### Test Execution Without Datadog/)
       assert.match(plan, /#### Test Execution With Datadog/)
-      assert.match(plan, /#### Test Execution With CI Configuration/)
+      assert.doesNotMatch(plan, /#### Test Execution With CI Configuration/)
       assert.match(plan, /#### Temporary Tests Created for Advanced Checks/)
-      assert.match(plan, /#### Advanced Check: Early Flake Detection/)
+      assert.match(plan, /#### Generated Test Verification: basic-pass/)
       assert.match(plan, /#### Advanced Check: Auto Test Retries/)
-      assert.match(plan, /#### Advanced Check: Test Management/)
+      assert.match(plan, /#### Generated Test Verification: test-management-target/)
+      assert.match(fullPlan, /Executions: once, plus at most one initialization-reachability probe/)
+      assert.match(plan, /Executions: three times: once without Datadog to verify test isolation/)
+      assert.match(plan, /Executions: once without Datadog/)
       assert.match(plan, /#### Files Removed After Validation/)
+      assert.match(plan, /Exact temporary test content/)
+      assert.match(plan, /\/\/ generated validation test/)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /validator included with the installed `dd-trace` package/)
       assert.match(plan, /does not require real Datadog credentials, inspect credential stores, or upload/)
       assert.doesNotMatch(plan, /- Confirm the selected test command/)
       assert.doesNotMatch(plan, /Credential exposure: unknown/)
-      assert.doesNotMatch(plan, /safe-placeholder/)
+      assert.doesNotMatch(fullPlan, /safe-placeholder/)
       assert.doesNotMatch(plan, /plan-secret/)
-      assert.match(plan, /--framework jest:root --scenario atr/)
+      assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64} --framework jest:root --scenario atr/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -176,6 +205,7 @@ describe('test optimization validator-owned execution phases', () => {
       })
 
       assert.match(plan, /node node_modules\/dd-trace\/ci\/validate-test-optimization\.js/)
+      assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64}/)
       assert.doesNotMatch(plan, /--manifest|--out|\.pnpm/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })

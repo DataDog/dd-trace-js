@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const {
+  sanitizeConsoleText,
   sanitizeForReport,
   sanitizeString,
 } = require('../../../../ci/test-optimization-validation/redaction')
@@ -172,5 +173,40 @@ describe('test optimization validation redaction', () => {
     assert.strictEqual(report.GITHUB_PAT, '<redacted>')
     assert.strictEqual(report.CI_JOB_JWT, '<redacted>')
     assert.strictEqual(report.remote, 'https://<redacted>@example.com/repository.git')
+  })
+
+  it('bounds deeply nested untrusted report data', () => {
+    const input = {}
+    let current = input
+    for (let index = 0; index < 1000; index++) {
+      current.child = {}
+      current = current.child
+    }
+
+    const report = sanitizeForReport(input)
+    JSON.stringify(report)
+    assert.match(JSON.stringify(report), /Truncated: nesting exceeds redaction limit/)
+  })
+
+  it('redacts secret names split by default-ignorable Unicode characters', () => {
+    const output = sanitizeString(
+      'AUTHORIZATION=Bearer top-secret-value npm test\nAPI_KEY\uFE0F=second-secret\n' +
+      'API_\u001BKEY=third-secret\nname=before\u202Ehidden'
+    )
+
+    assert.strictEqual(
+      output,
+      'AUTHORIZATION=<redacted> npm test\nAPI_KEY=<redacted>\nAPI_KEY=<redacted>\nname=beforehidden'
+    )
+    assert.doesNotMatch(output, /top-secret-value/)
+    assert.doesNotMatch(output, /second-secret/)
+    assert.doesNotMatch(output, /third-secret/)
+  })
+
+  it('renders terminal controls inert while preserving line breaks', () => {
+    assert.strictEqual(
+      sanitizeConsoleText('before\u001b[2Jafter\rbidi\u202Ehidden\nnext'),
+      'before[2Jafter\\u000dbidihidden\nnext'
+    )
   })
 })

@@ -346,6 +346,10 @@ validation tests without using intelligence.
 Generated files are available only for advanced scenarios. Do not reference generated validation
 files from `existingTestCommand`, `preflight`, `forcedLocalCommand`, or `ciWiringCommand`.
 
+Never copy a real secret into a command environment. Use the literal value
+`dd-validation-placeholder` for secret-like variables such as `DD_API_KEY`; runtime manifest
+validation rejects other values before project code can run.
+
 When generated files live in a nested package, prefer setting the command `cwd` to that package
 directory over relying on `npm --prefix ... exec` or similar package-manager routing. Some
 package-manager `exec` forms preserve the original process cwd for test-runner config resolution,
@@ -353,6 +357,12 @@ which can make a generated file look missing even though it exists in the nested
 
 For each runnable framework, include generated file contents as `contentLines`. The validator can
 join those lines with newline characters and write the files exactly.
+
+Use only small synthetic source with printable characters, no invisible Unicode or control characters,
+and no secret-like values. Each
+`contentLines` entry must be one source line. The validator limits each framework to eight generated
+files, each file to 256 lines and 32 KiB, and each line to 4096 bytes. The exact source is displayed
+in the approval plan before it can execute.
 
 When `generatedTestStrategy.status` is `planned` or `verified`, the generated tests must support:
 
@@ -382,9 +392,10 @@ unless an observed instrumented event proves the exact suite value. A stable tes
 file path is sufficient for the validator's baseline identity discovery.
 
 If `atr-fail-once` uses a state file, list that state file in
-`generatedTestStrategy.cleanupPaths`. The validator removes namespaced retry state before and after
-verification and before advanced scenarios. Do not rely on test code to clean up its own retry
-state.
+`generatedTestStrategy.cleanupPaths`. Use an exact file path, not a directory. The validator records
+that the file is absent before the strategy starts, then removes it between verification and
+advanced scenarios. It refuses to remove a pre-existing file and does not scan directories for
+similarly named files. Do not rely on test code to clean up its own retry state.
 
 Before choosing generated test syntax and file extension, inspect the nearest `package.json` and
 mirror the module format used by nearby tests. If generated tests cannot be planned concretely, use

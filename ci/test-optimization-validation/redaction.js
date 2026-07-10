@@ -1,6 +1,8 @@
 'use strict'
 
 const REDACTED = '<redacted>'
+const MAX_SANITIZE_DEPTH = 128
+const TRUNCATED_NESTING = '[Truncated: nesting exceeds redaction limit]'
 
 const SECRET_NAME_SOURCE = [
   'API_?KEY',
@@ -70,6 +72,20 @@ const SECRET_FLAG_NAME_PATTERN = new RegExp(
   'i'
 )
 const AUTH_HEADER_PATTERN = /\b(Bearer)\s+([^\s'",}\]]+)/gi
+const AUTH_SCHEME_ASSIGNMENT_QUOTED_PATTERN = new RegExp(
+  String.raw`\b(${SECRET_ASSIGNMENT_NAME_SOURCE})\s*=\s*(["'])(?:Bearer|Basic)\s+.*?\2`,
+  'gi'
+)
+const AUTH_SCHEME_ASSIGNMENT_PATTERN = new RegExp(
+  String.raw`\b(${SECRET_ASSIGNMENT_NAME_SOURCE})\s*=\s*(?:Bearer|Basic)\s+[^\s,;]+`,
+  'gi'
+)
+const DEFAULT_IGNORABLE_PATTERN = /\p{Default_Ignorable_Code_Point}/gu
+const DEFAULT_IGNORABLE_TEST_PATTERN = /\p{Default_Ignorable_Code_Point}/u
+const CONTROL_CHARACTER_TEST_PATTERN = /\p{Cc}/u
+const UNSAFE_CONTROL_SOURCE = String.raw`[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]`
+const UNSAFE_CONTROL_PATTERN = new RegExp(UNSAFE_CONTROL_SOURCE, 'g')
+const UNSAFE_CONTROL_TEST_PATTERN = new RegExp(UNSAFE_CONTROL_SOURCE)
 const PRIVATE_KEY_BLOCK_PATTERN =
   /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g
 const JWT_VALUE_PATTERN = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g
@@ -121,7 +137,7 @@ const SECRET_NAME_ONLY_KEYS = new Set([
  * @returns {unknown} sanitized copy
  */
 function sanitizeForReport (value) {
-  return sanitizeValue(value, new WeakSet())
+  return sanitizeValue(value, new WeakSet(), undefined, 0)
 }
 
 /**
@@ -161,14 +177,54 @@ function sanitizeEnvValue (name, value) {
  */
 function sanitizeString (value) {
   return value
+    .replaceAll(DEFAULT_IGNORABLE_PATTERN, '')
+    .replaceAll(UNSAFE_CONTROL_PATTERN, '')
     .replaceAll(PRIVATE_KEY_BLOCK_PATTERN, '<redacted-private-key>')
     .replaceAll(JWT_VALUE_PATTERN, REDACTED)
     .replaceAll(KNOWN_TOKEN_VALUE_PATTERN, REDACTED)
+    .replaceAll(AUTH_SCHEME_ASSIGNMENT_QUOTED_PATTERN, `$1=${REDACTED}`)
+    .replaceAll(AUTH_SCHEME_ASSIGNMENT_PATTERN, `$1=${REDACTED}`)
     .replaceAll(SECRET_ASSIGNMENT_PATTERN, `$1=${REDACTED}`)
     .replaceAll(SECRET_FLAG_PATTERN, `$1$2${REDACTED}`)
     .replaceAll(SECRET_HEADER_PATTERN, `$1: ${REDACTED}`)
     .replaceAll(AUTH_HEADER_PATTERN, `$1 ${REDACTED}`)
     .replaceAll(URL_CREDENTIAL_PATTERN, `$1${REDACTED}$3`)
+}
+
+/**
+ * Detects default-ignorable Unicode characters that can conceal executable text or secret names.
+ *
+ * @param {unknown} value candidate text
+ * @returns {boolean} true when the text contains a default-ignorable Unicode character
+ */
+function hasUnicodeDefaultIgnorable (value) {
+  return DEFAULT_IGNORABLE_TEST_PATTERN.test(String(value ?? ''))
+}
+
+function hasUnsafeInvisibleCharacter (value) {
+  const text = String(value ?? '')
+  return hasUnicodeDefaultIgnorable(text) || UNSAFE_CONTROL_TEST_PATTERN.test(text)
+}
+
+function hasUnsafeExecutionCharacter (value) {
+  return hasUnicodeDefaultIgnorable(value) || CONTROL_CHARACTER_TEST_PATTERN.test(String(value ?? ''))
+}
+
+/**
+ * Makes untrusted text safe to print to an interactive terminal while preserving line breaks.
+ *
+ * @param {unknown} value console value
+ * @returns {string} inert console text
+ */
+function sanitizeConsoleText (value) {
+  let result = ''
+  for (const character of sanitizeString(String(value ?? ''))) {
+    const code = character.charCodeAt(0)
+    result += character === '\n' || character === '\t' || code > 0x1F && code !== 0x7F
+      ? character
+      : String.raw`\u${code.toString(16).padStart(4, '0')}`
+  }
+  return result
 }
 
 /**
@@ -186,18 +242,19 @@ function isSensitiveName (name) {
     SENSITIVE_TOKEN_ALIAS_NAME_PATTERN.test(normalized)
 }
 
-function sanitizeValue (value, seen, key) {
+function sanitizeValue (value, seen, key, depth) {
   if (typeof value === 'string') {
     if (key && isSensitiveName(key) && !SECRET_NAME_ONLY_KEYS.has(key)) return REDACTED
     return sanitizeString(value)
   }
 
   if (value === null || typeof value !== 'object') return value
+  if (depth > MAX_SANITIZE_DEPTH) return TRUNCATED_NESTING
   if (seen.has(value)) return '[Circular]'
   seen.add(value)
 
   if (Array.isArray(value)) {
-    const sanitized = sanitizeArray(value, seen, key)
+    const sanitized = sanitizeArray(value, seen, key, depth)
     seen.delete(value)
     return sanitized
   }
@@ -214,7 +271,7 @@ function sanitizeValue (value, seen, key) {
       sanitized[entryKey] = REDACTED
       continue
     }
-    sanitized[entryKey] = sanitizeValue(entryValue, seen, entryKey)
+    sanitized[entryKey] = sanitizeValue(entryValue, seen, entryKey, depth + 1)
   }
   seen.delete(value)
   return sanitized
@@ -226,9 +283,10 @@ function sanitizeValue (value, seen, key) {
  * @param {Array<unknown>} value array to sanitize
  * @param {WeakSet<object>} seen objects currently being sanitized
  * @param {string|undefined} key parent key
+ * @param {number} depth current nesting depth
  * @returns {Array<unknown>} sanitized array
  */
-function sanitizeArray (value, seen, key) {
+function sanitizeArray (value, seen, key, depth) {
   const sanitized = []
 
   for (let index = 0; index < value.length; index++) {
@@ -242,7 +300,7 @@ function sanitizeArray (value, seen, key) {
       continue
     }
 
-    sanitized.push(sanitizeValue(item, seen, key))
+    sanitized.push(sanitizeValue(item, seen, key, depth + 1))
   }
 
   return sanitized
@@ -253,6 +311,10 @@ function isFlagToken (value) {
 }
 
 module.exports = {
+  hasUnsafeExecutionCharacter,
+  hasUnsafeInvisibleCharacter,
+  isSensitiveName,
+  sanitizeConsoleText,
   sanitizeEnv,
   sanitizeEnvValue,
   sanitizeForReport,

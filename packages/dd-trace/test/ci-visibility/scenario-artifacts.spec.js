@@ -7,6 +7,9 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  runInitializationProbe,
+} = require('../../../../ci/test-optimization-validation/init-probe')
+const {
   runInstrumentedCommand,
 } = require('../../../../ci/test-optimization-validation/scenarios/helpers')
 
@@ -125,6 +128,40 @@ describe('test optimization validation scenario artifacts', () => {
       ])
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rewrites child-controlled probe output as a bounded sanitized artifact', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-parent-'))
+    const script = [
+      'const fs = require("node:fs")',
+      'const file = process.env.DD_TEST_OPTIMIZATION_INIT_PROBE_FILE',
+      'fs.appendFileSync(file, "TOKEN=raw-child-secret\\n")',
+      'fs.appendFileSync(file, JSON.stringify({',
+      '  type: "process-start", pid: 123, ppid: 1, cwd: process.cwd(),',
+      '  argv: ["API_KEY=forged-child-secret"]',
+      '}) + "\\n")',
+    ].join(';')
+
+    try {
+      const probe = await runInitializationProbe({
+        command: {
+          cwd: out,
+          argv: [process.execPath, '-e', script],
+        },
+        framework: { id: 'node:probe' },
+        intake: { port: 8126 },
+        outDir: out,
+        options: { verbose: false },
+      })
+      const records = fs.readFileSync(probe.artifacts.records, 'utf8')
+
+      assert.doesNotMatch(records, /raw-child-secret|forged-child-secret/)
+      assert.doesNotMatch(records, /TOKEN=raw/)
+      assert.match(records, /API_KEY=<redacted>/)
+      assert.strictEqual(fs.existsSync(path.join(out, 'initialization-probe', '.records.raw.ndjson')), false)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
     }
   })
 })

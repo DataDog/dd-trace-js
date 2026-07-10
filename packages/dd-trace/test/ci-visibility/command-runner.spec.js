@@ -15,6 +15,7 @@ const {
   getCommandDetails,
   mergeNodeOptions,
   runCommand,
+  serializeApprovalCommand,
   serializeDisplayCommand,
 } = require('../../../../ci/test-optimization-validation/command-runner')
 
@@ -56,15 +57,8 @@ describe('test optimization validation command runner', () => {
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
-  it('does not inject --import for Vitest when the command Node does not support it', () => {
-    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
-      child_process: {
-        execFileSync () {
-          return '18.17.1\n'
-        },
-        spawn: childProcess.spawn,
-      },
-    })
+  it('does not execute an unapproved alternate Node binary to inspect its version', () => {
+    const { withCiPreloads } = require('../../../../ci/test-optimization-validation/command-runner')
     const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
       cwd: process.cwd(),
       argv: ['/opt/node/18.17.1/bin/node', 'node_modules/.bin/vitest', 'run'],
@@ -74,33 +68,20 @@ describe('test optimization validation command runner', () => {
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
-  it('injects --import for Vitest when the command Node supports it', () => {
-    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
-      child_process: {
-        execFileSync () {
-          return '18.18.0\n'
-        },
-        spawn: childProcess.spawn,
-      },
-    })
+  it('conservatively omits --import for any explicit alternate Node executable', () => {
+    const { withCiPreloads } = require('../../../../ci/test-optimization-validation/command-runner')
     const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
       cwd: process.cwd(),
       argv: ['/opt/node/18.18.0/bin/node', 'node_modules/.bin/vitest', 'run'],
     })
 
-    assert.match(nodeOptions, /--import/)
-    assert.match(nodeOptions, /[\\/]register\.js/)
+    assert.doesNotMatch(nodeOptions, /--import/)
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
-  it('injects --import for Vitest package-manager commands using the command environment Node', () => {
-    const observedExecutables = []
+  it('injects --import for Vitest package-manager commands without running a hidden version probe', () => {
     const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
       child_process: {
-        execFileSync (executable) {
-          observedExecutables.push(executable)
-          return '20.19.0\n'
-        },
         spawn: childProcess.spawn,
       },
     })
@@ -109,7 +90,6 @@ describe('test optimization validation command runner', () => {
       argv: ['pnpm', 'run', 'test'],
     })
 
-    assert.deepStrictEqual(observedExecutables, ['node'])
     assert.match(nodeOptions, /--import/)
     assert.match(nodeOptions, /[\\/]register\.js/)
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
@@ -259,6 +239,13 @@ describe('test optimization validation command runner', () => {
       runtimeWrapper: 'node/corepack',
       packageManager: 'pnpm',
     })
+  })
+
+  it('renders the executable argv for approval without trusting displayCommand', () => {
+    assert.strictEqual(serializeApprovalCommand({
+      argv: ['sh', '-c', 'printf "actual command"'],
+      displayCommand: 'npm test',
+    }), 'sh -c "printf \\"actual command\\""')
   })
 
   it('returns a result for missing executable spawn failures', async () => {

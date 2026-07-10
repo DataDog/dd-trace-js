@@ -650,5 +650,6 @@ function wait (ms) {
 }
 
 module.exports = {
+  getCiWiringCommand,
   runCiWiring,
 }

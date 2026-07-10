@@ -8,6 +8,8 @@ const path = require('path')
 const { getFrameworkDefinitions } = require('../diagnose')
 const { DD_MAJOR } = require('../../version')
 
+const { assertApprovalDigest } = require('./approval')
+
 const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
 const { runAutoTestRetries } = require('./scenarios/auto-test-retries')
@@ -28,6 +30,7 @@ const { loadManifest } = require('./manifest-loader')
 const { MockIntake } = require('./mock-intake')
 const { formatExecutionPlan } = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
+const { sanitizeConsoleText } = require('./redaction')
 const { writeReport } = require('./report-writer')
 const { ensureSafeDirectory } = require('./safe-files')
 const { runSetupCommands } = require('./setup-runner')
@@ -87,6 +90,9 @@ function parseArgs (argv) {
       case '--print-plan':
         options.printPlan = true
         break
+      case '--approved-plan-sha256':
+        options.approvedPlanSha256 = requireValue(argv, ++i, arg)
+        break
       case '--help':
       case '-h':
         options.help = true
@@ -126,6 +132,7 @@ Options:
   --verbose               Print command progress.
   --validate-manifest     Validate the manifest and exit without running project code.
   --print-plan            Print the normalized execution plan without running project code.
+  --approved-plan-sha256  Bind live execution to the exact manifest and options shown by --print-plan.
   --help                  Show this help.
 `)
 }
@@ -140,10 +147,11 @@ async function main (argv) {
 
     const manifest = loadManifest(options.manifest)
     if (options.printPlan) {
+      const out = validateOutputPath(manifest, options.out)
       manifest.frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
       console.log(formatExecutionPlan({
         manifest,
-        out: path.resolve(options.out),
+        out,
         selectedFrameworkIds: options.frameworks.size > 0
           ? manifest.frameworks.map(framework => framework.id)
           : [],
@@ -154,10 +162,27 @@ async function main (argv) {
       return
     }
     if (options.validateManifest) {
-      console.log(`Validation manifest is valid: ${manifest.__path}`)
+      console.log(sanitizeConsoleText(`Validation manifest is valid: ${manifest.__path}`))
       return
     }
-    const out = path.resolve(options.out)
+    if (!options.approvedPlanSha256) {
+      throw new Error(
+        'Live validation requires the --approved-plan-sha256 value emitted by --print-plan. ' +
+        'Render and approve a fresh execution plan first.'
+      )
+    }
+    const out = validateOutputPath(manifest, options.out)
+    const selectedFrameworks = filterFrameworks(manifest.frameworks, options.frameworks)
+    assertApprovalDigest(options.approvedPlanSha256, {
+      manifest,
+      out,
+      selectedFrameworkIds: options.frameworks.size > 0
+        ? selectedFrameworks.map(framework => framework.id)
+        : [],
+      requestedScenario: options.requestedScenario,
+      keepTempFiles: options.keepTempFiles,
+      verbose: options.verbose,
+    })
     ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
     annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
@@ -274,8 +299,18 @@ async function main (argv) {
     process.exitCode = results.some(isUnsuccessfulResult) ? 1 : 0
   } catch (err) {
     process.exitCode = 1
-    console.error(err && err.stack ? err.stack : err)
+    console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
   }
+}
+
+function validateOutputPath (manifest, outputPath) {
+  const root = path.resolve(manifest.repository.root)
+  const out = path.resolve(outputPath)
+  const relative = path.relative(root, out)
+  if (relative === '' || !relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Validation output directory must be a dedicated child directory inside repository.root.')
+  }
+  return out
 }
 
 function shouldRunCiWiringValidation (framework, manifest, options) {

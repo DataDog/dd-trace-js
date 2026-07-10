@@ -274,7 +274,7 @@ execution-environment blocker instead of an ordinary Basic Reporting failure:
     "errorCode": "EPERM",
     "errorSyscall": "listen",
     "errorAddress": "127.0.0.1",
-    "rerunCommand": "node /absolute/path/to/validate-test-optimization.js --manifest ./dd-test-optimization-validation-manifest.json --out ./dd-test-optimization-validation-results"
+    "rerunCommand": "node /absolute/path/to/validate-test-optimization.js --manifest ./dd-test-optimization-validation-manifest.json --out ./dd-test-optimization-validation-results --approved-plan-sha256 <digest-from-approved-plan>"
   },
   "steps": []
 }

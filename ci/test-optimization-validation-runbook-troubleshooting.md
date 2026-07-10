@@ -51,18 +51,20 @@ This restriction is not specific to subagents. A user running the validator from
 inside the same restricted sandbox can hit the same blocker.
 
 If a restricted agent already produced `./dd-test-optimization-validation-manifest.json`, preserve
-that manifest and rerun only live validation from the host shell:
+that manifest and render a fresh approval plan from the host shell:
 
 ```bash
 cd /absolute/path/to/repository
 node node_modules/dd-trace/ci/validate-test-optimization.js \
   --manifest ./dd-test-optimization-validation-manifest.json \
-  --out ./dd-test-optimization-validation-results
+  --out ./dd-test-optimization-validation-results \
+  --print-plan
 ```
 
-If the package manager requires a different resolver, keep the same command shape that resolved the
-validator in the restricted run, but execute it from an environment where both binding and
-connecting to `127.0.0.1` are allowed.
+Show and approve that plan, then run the exact command it prints, including
+`--approved-plan-sha256`. If the package manager requires a different resolver, use that resolver
+for both plan rendering and the digest-bound command in an environment where binding and connecting
+to `127.0.0.1` are allowed.
 
 ## Validation Path Interpretation
 

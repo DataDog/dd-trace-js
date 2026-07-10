@@ -7,13 +7,15 @@ const net = require('net')
 const path = require('path')
 const zlib = require('zlib')
 
-const { decodeBody } = require('./payload-decoder')
-const { sanitizeForReport } = require('./redaction')
+const { decodeBodyWithMetadata } = require('./payload-decoder')
+const { sanitizeConsoleText, sanitizeForReport } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024
 const DEFAULT_MAX_DECOMPRESSED_BODY_BYTES = 20 * 1024 * 1024
 const DEFAULT_MAX_REQUESTS = 1000
+const DEFAULT_MAX_RETAINED_PAYLOAD_BYTES = 64 * 1024 * 1024
+const ESTIMATED_COLLECTION_ENTRY_BYTES = 32
 const DEFAULT_SETTINGS = {
   code_coverage: false,
   tests_skipping: false,
@@ -42,13 +44,16 @@ class MockIntake {
     maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
     maxDecompressedBodyBytes = DEFAULT_MAX_DECOMPRESSED_BODY_BYTES,
     maxRequests = DEFAULT_MAX_REQUESTS,
+    maxRetainedPayloadBytes = DEFAULT_MAX_RETAINED_PAYLOAD_BYTES,
   }) {
     this.out = out
     this.verbose = verbose
     this.maxBodyBytes = maxBodyBytes
     this.maxDecompressedBodyBytes = maxDecompressedBodyBytes
     this.maxRequests = maxRequests
+    this.maxRetainedPayloadBytes = maxRetainedPayloadBytes
     this.receivedRequestCount = 0
+    this.retainedPayloadBytes = 0
     this.port = null
     this.server = null
     this.sockets = new Set()
@@ -126,47 +131,48 @@ class MockIntake {
 
     const body = await readBody(req, this.maxBodyBytes)
     const decoded = decodeSafely(body, req.headers, this.maxDecompressedBodyBytes)
+    const payload = this.retainPayload(decoded)
     const url = req.url
 
     if (req.method === 'GET' && url === '/info') {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendJson(res, 200, { endpoints: ['/evp_proxy/v2', '/debugger/v1/input'] })
       return
     }
 
     if (req.method === 'PUT' && url.startsWith('/v0.4/traces')) {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendJson(res, 200, { rate_by_service: { 'service:,env:': 1 } })
       return
     }
 
     if (req.method === 'POST' && url.endsWith('/api/v2/citestcycle')) {
-      this.record(req, decoded)
+      this.record(req, payload)
       res.statusCode = 200
       res.end('OK')
       return
     }
 
     if (req.method === 'POST' && url.endsWith('/api/v2/libraries/tests/services/setting')) {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendJson(res, 200, { data: { attributes: this.settings } })
       return
     }
 
     if (req.method === 'POST' && url.endsWith('/api/v2/ci/libraries/tests')) {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendMaybeGzipJson(req, res, 200, { data: { attributes: { tests: this.knownTests } } })
       return
     }
 
     if (req.method === 'POST' && url.endsWith('/api/v2/test/libraries/test-management/tests')) {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendJson(res, 200, { data: { attributes: { modules: this.testManagementTests } } })
       return
     }
 
     if (req.method === 'POST' && url.endsWith('/api/v2/ci/tests/skippable')) {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendJson(res, 200, { data: [], meta: { correlation_id: 'dd-test-optimization-validation' } })
       return
     }
@@ -178,12 +184,12 @@ class MockIntake {
       url.endsWith('/api/v2/logs') ||
       url.endsWith('/debugger/v1/input')
     )) {
-      this.record(req, decoded)
+      this.record(req, payload)
       sendJson(res, 200, { data: [] })
       return
     }
 
-    this.record(req, decoded, { unmatched: true })
+    this.record(req, payload, { unmatched: true })
     sendJson(res, 404, { errors: [`Unhandled validation intake endpoint: ${req.method} ${url}`] })
   }
 
@@ -199,8 +205,24 @@ class MockIntake {
     this.requests.push(request)
     this.allRequests.push(request)
     if (this.verbose) {
-      console.log(`[test-optimization-validator] intake ${req.method} ${req.url}`)
+      console.log(sanitizeConsoleText(`[test-optimization-validator] intake ${req.method} ${req.url}`))
     }
+  }
+
+  retainPayload ({ collectionEntries = 0, decodedBytes, payload }) {
+    const retainedCost = Math.max(decodedBytes, collectionEntries * ESTIMATED_COLLECTION_ENTRY_BYTES)
+    if (this.retainedPayloadBytes + retainedCost > this.maxRetainedPayloadBytes) {
+      return {
+        decodeError: `Validation intake retained-payload limit of ${this.maxRetainedPayloadBytes} bytes exceeded.`,
+        collectionEntries,
+        decodedBytes,
+        estimatedRetainedBytes: retainedCost,
+        payloadRetained: false,
+      }
+    }
+
+    this.retainedPayloadBytes += retainedCost
+    return payload
   }
 
   getArtifactRequests () {
@@ -262,24 +284,37 @@ function closeServer (server) {
 function decodeSafely (body, headers, maxDecompressedBodyBytes) {
   if (body.truncated) {
     return {
-      decodeError: `Request body exceeded ${body.maxBodyBytes} bytes and was truncated.`,
-      bodyBytesRead: body.bytesRead,
-      bodyBytesCaptured: body.bytesCaptured,
-      bodyTruncated: true,
-      maxBodyBytes: body.maxBodyBytes,
+      decodedBytes: body.bytesCaptured,
+      collectionEntries: 0,
+      payload: {
+        decodeError: `Request body exceeded ${body.maxBodyBytes} bytes and was truncated.`,
+        bodyBytesRead: body.bytesRead,
+        bodyBytesCaptured: body.bytesCaptured,
+        bodyTruncated: true,
+        maxBodyBytes: body.maxBodyBytes,
+      },
     }
   }
 
-  if (body.content.length === 0) return null
+  if (body.content.length === 0) return { collectionEntries: 0, decodedBytes: 0, payload: null }
 
   try {
-    return decodeBody(body.content, headers, { maxOutputLength: maxDecompressedBodyBytes })
+    const decoded = decodeBodyWithMetadata(body.content, headers, { maxOutputLength: maxDecompressedBodyBytes })
+    return {
+      collectionEntries: decoded.collectionEntries,
+      decodedBytes: decoded.decodedBytes,
+      payload: decoded.value,
+    }
   } catch (err) {
     return {
-      decodeError: err.message,
-      bodyBytesRead: body.bytesRead,
-      bodyBytesCaptured: body.bytesCaptured,
-      bodyTruncated: false,
+      decodedBytes: body.bytesCaptured,
+      collectionEntries: 0,
+      payload: {
+        decodeError: err.message,
+        bodyBytesRead: body.bytesRead,
+        bodyBytesCaptured: body.bytesCaptured,
+        bodyTruncated: false,
+      },
     }
   }
 }

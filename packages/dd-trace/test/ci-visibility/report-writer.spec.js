@@ -601,6 +601,49 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('caps aggregate retained intake payload bytes', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const intake = new MockIntake({
+      out: tmpDir,
+      maxRetainedPayloadBytes: 40,
+    })
+
+    try {
+      await postToIntake(intake, Buffer.from('{"one":1}'), {
+        'content-type': 'application/json',
+      })
+      await postToIntake(intake, Buffer.from('{"two":2}'), {
+        'content-type': 'application/json',
+      })
+
+      assert.deepStrictEqual(intake.requests[0].payload, { one: 1 })
+      assert.strictEqual(intake.requests[1].payload.payloadRetained, false)
+      assert.match(intake.requests[1].payload.decodeError, /retained-payload limit/)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('charges aggregate intake retention for decoded collection entries', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const intake = new MockIntake({
+      out: tmpDir,
+      maxRetainedPayloadBytes: 1000,
+    })
+
+    try {
+      await postToIntake(intake, Buffer.from(JSON.stringify(new Array(40).fill(null))), {
+        'content-type': 'application/json',
+      })
+
+      assert.strictEqual(intake.requests[0].payload.payloadRetained, false)
+      assert.strictEqual(intake.requests[0].payload.collectionEntries, 40)
+      assert.strictEqual(intake.requests[0].payload.estimatedRetainedBytes, 1280)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('escapes active Markdown and HTML from repository-derived report text', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')

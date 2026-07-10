@@ -110,10 +110,11 @@ It contains:
 - every setup/install command and why it is needed
 - every selected existing test command, CI wiring command, and generated-scenario command that will
   execute during the approved phase
-- each command's working directory and the non-secret environment variable names that the command
-  will set; describe validator-controlled fake-intake and noise-suppression variables collectively
-  as diagnostic plumbing instead of reading validator source to enumerate them; do not enumerate
-  the ambient process environment
+- each command's exact executable arguments or shell replay, working directory, shell executable,
+  and command-specific environment values after secret-like values are replaced with `<redacted>`;
+  describe validator-controlled fake-intake and noise-suppression variables collectively as
+  diagnostic plumbing instead of reading validator source to enumerate them; do not enumerate the
+  ambient process environment
 - whether dependency installation, external network access, services, browsers, or additional
   filesystem writes are required
 - whether credential isolation is guaranteed by trusted agent/sandbox configuration or unknown
@@ -124,9 +125,12 @@ service, network access, or write is either included in this approval request or
 discovery is needed to choose exact commands, continue read-only discovery before asking.
 
 Do not hand-compose a second execution plan. Make the draft manifest concrete enough that
-`--print-plan` can show the complete shell command or argv, absolute working directory, non-secret
-environment names, generated file paths, cleanup paths, and exact live validator command. Fix the
-manifest if the rendered plan contains placeholders or missing scope.
+`--print-plan` can show the complete shell command or argv, shell executable, absolute working
+directory, sanitized command environment, exact generated test source, cleanup paths, and exact live
+validator command. Fix the manifest if the rendered plan contains placeholders or missing scope.
+The live command contains `--approved-plan-sha256`; do not remove or replace it. It binds execution
+to the exact manifest, selected options, output path, and installed validator implementation that
+produced the approved plan.
 
 List the manifest, results directory, generated files, and explicit cleanup files. Test-runner caches
 and validator-owned files beneath the declared results directory may be described as bounded
@@ -139,8 +143,11 @@ Use this checkpoint order:
     when other detected families remain unclassified.
 2. **Selected test commands**: show the command used to confirm tests run normally, the same command
     with correct Datadog initialization, and the test command with the configuration supplied by CI.
-3. **Temporary advanced-feature tests**: show every temporary test path, the command that runs each
-    advanced-feature check, and the files that will be removed afterward.
+    State how many times each command can execute, including the conditional Basic Reporting debug
+    rerun and CI initialization-reachability probe.
+3. **Temporary advanced-feature tests**: show every temporary test path and its exact source, the
+    command that runs each advanced-feature check, each verification/baseline/feature execution and
+    conditional debug rerun, and the files that will be removed afterward.
 4. **Command the agent runs after approval**: show the exact installed validator command and explain
     that it starts the local mock intake, runs the listed checks, writes the report, and removes the
     temporary tests.
@@ -391,6 +398,12 @@ The minimum useful manifest has:
 
 Do not put unresolved shell placeholders such as `${NODE_OPTIONS}` into fields the validator
 executes. The validator does not perform shell substitution for manifest values.
+Do not put secret-like values directly in `argv`, `shellCommand`, or generated source. For a
+secret-like command environment variable, use the literal dummy value `dd-validation-placeholder`;
+the validator rejects other values and the plan redacts the placeholder while preserving the
+variable name.
+Keep repository evidence paths, project roots, and every command working directory inside
+`repository.root`. The validator rejects lexical and symbolic-link escapes.
 
 ## Generated Tests
 
@@ -409,6 +422,12 @@ Each generated scenario command must select exactly one scenario test. Declare
 commands manually. The validator creates the files, runs each command without Datadog, verifies the
 declared exit code and test count, clears namespaced retry state, and only then runs advanced checks.
 Do not use one command that runs all generated tests.
+
+Generated source must be small, synthetic, printable, free of invisible Unicode and control characters,
+and secret-free because its exact contents are shown in the approval plan and then executed. Declare
+every runtime state file as an exact cleanup path. The validator deletes only declared files that
+were absent when the strategy started; it does not scan generated directories for similarly named
+files and refuses to delete pre-existing files.
 
 Set generated `testIdentities[*].suite` to `null` unless an observed instrumented event proves the
 exact suite value. Jest and Vitest commonly report the test-file path as `test.suite` and include the
@@ -463,8 +482,9 @@ node /absolute/path/to/validate-test-optimization.js \
 
 Copy the complete rendered plan into the user-facing response and obtain the single approval it
 requests. A collapsed command transcript or agent-written summary is not a displayed plan. After
-approval, run the exact validator command from the plan. Do not replace it with a manually
-reconstructed command.
+approval, run the exact validator command from the plan, including its approval digest. Live
+validation fails closed when that digest is absent or no longer matches. Do not replace it with a
+manually reconstructed command.
 
 An existing manifest or report is evidence from an earlier attempt, not proof that the current
 validation ran. Execute the approved preflight and validator commands for the current request and
@@ -486,14 +506,17 @@ Do not broadly disable sandboxing. Prefer a mode that grants localhost listen/co
 outbound networking, credentials, and unrelated filesystem locations unavailable. If only an
 unrestricted host shell is available, show the exact rerun command and obtain explicit approval.
 
-Host-shell fallback command:
+For a host-shell fallback, render the plan again in that environment:
 
 ```bash
 cd "$REPO_ROOT"
 node node_modules/dd-trace/ci/validate-test-optimization.js \
   --manifest ./dd-test-optimization-validation-manifest.json \
-  --out ./dd-test-optimization-validation-results
+  --out ./dd-test-optimization-validation-results \
+  --print-plan
 ```
+
+Show and approve the fresh plan, then run the exact digest-bound live command it prints.
 
 ## Report Results
 

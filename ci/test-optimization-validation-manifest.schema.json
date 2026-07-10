@@ -108,7 +108,9 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "minLength": 1,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u0600-\\u0605\\u061C\\u06DD\\u070F\\u0890\\u0891\\u08E2\\u180B-\\u180F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uFE00-\\uFE0F\\uFEFF\\uFFF9-\\uFFFB]*$"
         },
         "nodeVersion": {
           "type": [
@@ -463,6 +465,12 @@
         "description": {
           "type": "string"
         },
+        "id": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
       "cwd": {
         "$ref": "#/$defs/absolutePathString"
       },
@@ -474,6 +482,9 @@
         },
         "env": {
           "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
           "additionalProperties": {
             "$ref": "#/$defs/executableString"
           }
@@ -486,7 +497,8 @@
         },
         "timeoutMs": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "maximum": 1800000
         },
         "usesShell": {
           "type": "boolean"
@@ -508,7 +520,7 @@
           ]
         }
       },
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "if": {
@@ -656,7 +668,9 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "minLength": 1,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u0600-\\u0605\\u061C\\u06DD\\u070F\\u0890\\u0891\\u08E2\\u180B-\\u180F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uFE00-\\uFE0F\\uFEFF\\uFFF9-\\uFFFB]*$"
         },
         "workingDirectory": {
           "anyOf": [
@@ -813,6 +827,7 @@
         },
         "files": {
           "type": "array",
+          "maxItems": 8,
           "items": {
             "$ref": "#/$defs/generatedFile"
           }
@@ -939,8 +954,11 @@
         },
         "contentLines": {
           "type": "array",
+          "maxItems": 256,
           "items": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 4096,
+            "pattern": "^[^\\r\\n\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u061C\\u180B-\\u180F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\uFE00-\\uFE0F\\uFEFF]*$"
           }
         }
       },

@@ -3,17 +3,27 @@
 const fs = require('fs')
 const path = require('path')
 
+const {
+  MAX_GENERATED_FILES,
+  getGeneratedFileContentError,
+} = require('./generated-file-policy')
 const { createFileSafely, ensureSafeDirectory } = require('./safe-files')
 
 const RUNTIME_FILE_NAMESPACE = 'dd-test-optimization-validation'
-const createdGeneratedDirectories = new Set()
-const writtenGeneratedFiles = new Set()
+const createdGeneratedDirectories = new Map()
+const initializedCleanupStrategies = new WeakSet()
+const authorizedRuntimeCleanupFiles = new Map()
+const writtenGeneratedFiles = new Map()
 
 function writeGeneratedFiles (framework) {
   const strategy = framework.generatedTestStrategy
   if (!strategy || !['planned', 'verified'].includes(strategy.status)) {
     return []
   }
+  if ((strategy.files || []).length > MAX_GENERATED_FILES) {
+    throw new Error(`Generated validation strategy must contain at most ${MAX_GENERATED_FILES} files.`)
+  }
+  initializeRuntimeCleanupFiles(framework, strategy)
 
   const written = []
   try {
@@ -31,12 +41,18 @@ function writeGeneratedFiles (framework) {
       ensureSafeDirectory(framework.project.root, directory, 'generated validation file directory', {
         allowRootSymlink: true,
       })
-      for (const createdDirectory of missingDirectories) createdGeneratedDirectories.add(createdDirectory)
+      for (const createdDirectory of missingDirectories) {
+        createdGeneratedDirectories.set(
+          createdDirectory,
+          authorizePathForCleanup(framework.project.root, createdDirectory)
+        )
+      }
       validateGeneratedFilePath(framework, filename)
       createFileSafely(framework.project.root, filename, content, 'generated validation file')
-      writtenGeneratedFiles.add(filename)
+      writtenGeneratedFiles.set(filename, authorizePathForCleanup(framework.project.root, filename))
       written.push(filename)
     }
+    pinRuntimeCleanupParents(strategy)
   } catch (err) {
     cleanupPaths(written)
     cleanupCreatedDirectories(framework.project.root)
@@ -81,11 +97,13 @@ function getMissingDirectories (root, directory) {
  */
 function cleanupCreatedDirectories (root) {
   const resolvedRoot = path.resolve(root)
-  const directories = [...createdGeneratedDirectories]
-    .filter(directory => isPathInside(resolvedRoot, directory))
-    .sort((left, right) => right.length - left.length)
+  const directories = [...createdGeneratedDirectories.entries()]
+    .filter(([directory, authorization]) => {
+      return isPathInside(resolvedRoot, directory) && isCleanupAuthorizationValid(directory, authorization)
+    })
+    .sort(([left], [right]) => right.length - left.length)
 
-  for (const directory of directories) {
+  for (const [directory] of directories) {
     try {
       fs.rmdirSync(directory)
       createdGeneratedDirectories.delete(directory)
@@ -99,7 +117,23 @@ function cleanupGeneratedRuntimeFiles (framework) {
   const strategy = framework.generatedTestStrategy
   if (!strategy) return
 
+  initializeRuntimeCleanupFiles(framework, strategy)
   cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: false }))
+}
+
+function initializeRuntimeCleanupFiles (framework, strategy) {
+  if (initializedCleanupStrategies.has(strategy)) return
+
+  const generatedFiles = new Set((strategy.files || []).map(file => validateGeneratedFilePath(framework, file.path)))
+  for (const cleanupPath of strategy.cleanupPaths || []) {
+    const filename = validateCleanupPath(framework, cleanupPath)
+    if (generatedFiles.has(filename) || isDirectory(filename) || !isNamespacedRuntimeFile(filename)) continue
+    if (fs.existsSync(filename)) {
+      throw new Error(`Refusing to delete pre-existing generated validation runtime file: ${filename}`)
+    }
+    authorizedRuntimeCleanupFiles.set(filename, authorizePathForCleanup(framework.project.root, filename))
+  }
+  initializedCleanupStrategies.add(strategy)
 }
 
 function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
@@ -111,10 +145,6 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
   }
 
   const cleanupPaths = []
-  const runtimeDirectories = new Set()
-  for (const filename of generatedFiles) {
-    runtimeDirectories.add(path.dirname(filename))
-  }
   for (const cleanupPath of strategy.cleanupPaths || []) {
     const filename = validateCleanupPath(framework, cleanupPath)
     if (generatedFiles.has(filename)) {
@@ -122,15 +152,9 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
       continue
     }
 
-    if (isDirectory(filename)) {
-      runtimeDirectories.add(filename)
-    } else if (isNamespacedRuntimeFile(filename)) {
+    if (authorizedRuntimeCleanupFiles.has(filename)) {
       cleanupPaths.push(filename)
     }
-  }
-
-  for (const directory of runtimeDirectories) {
-    cleanupPaths.push(...findNamespacedRuntimeFiles(framework, directory, generatedFiles))
   }
 
   if (includeGeneratedFiles) {
@@ -141,26 +165,12 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
   return [...new Set(cleanupPaths)]
 }
 
-function findNamespacedRuntimeFiles (framework, directory, generatedFiles) {
-  let entries
-  try {
-    entries = fs.readdirSync(directory, { withFileTypes: true })
-  } catch {
-    return []
-  }
-
-  const files = []
-  for (const entry of entries) {
-    if (!entry.isFile() || !isNamespacedRuntimeFile(entry.name)) continue
-    const filename = validateCleanupPath(framework, path.join(directory, entry.name))
-    if (!generatedFiles.has(filename)) files.push(filename)
-  }
-  return files
-}
-
 function cleanupPaths (cleanupPaths) {
   for (const cleanupPath of cleanupPaths) {
     try {
+      const authorization = writtenGeneratedFiles.get(cleanupPath) ||
+        authorizedRuntimeCleanupFiles.get(cleanupPath)
+      if (!authorization || !isCleanupAuthorizationValid(cleanupPath, authorization)) continue
       if (isDirectory(cleanupPath)) continue
       fs.rmSync(cleanupPath, { force: true })
       writtenGeneratedFiles.delete(cleanupPath)
@@ -173,6 +183,78 @@ function cleanupPaths (cleanupPaths) {
 function forgetWrittenGeneratedFiles (filenames) {
   for (const filename of filenames) {
     writtenGeneratedFiles.delete(filename)
+  }
+}
+
+function authorizePathForCleanup (root, filename) {
+  const lexicalRoot = path.resolve(root)
+  const physicalRoot = fs.realpathSync(lexicalRoot)
+  const rootStat = fs.statSync(physicalRoot)
+  const authorization = {
+    lexicalRoot,
+    physicalRoot,
+    rootDevice: rootStat.dev,
+    rootInode: rootStat.ino,
+  }
+  pinCleanupParent(authorization, filename)
+  pinCleanupTarget(authorization, filename)
+  return authorization
+}
+
+function pinRuntimeCleanupParents (strategy) {
+  for (const cleanupPath of strategy.cleanupPaths || []) {
+    const authorization = authorizedRuntimeCleanupFiles.get(path.resolve(cleanupPath))
+    if (authorization && authorization.physicalParent === undefined) {
+      pinCleanupParent(authorization, cleanupPath)
+    }
+  }
+}
+
+function pinCleanupParent (authorization, filename) {
+  try {
+    const physicalParent = fs.realpathSync(path.dirname(filename))
+    if (!isPathInside(authorization.physicalRoot, physicalParent)) return
+    const parentStat = fs.statSync(physicalParent)
+    authorization.physicalParent = physicalParent
+    authorization.parentDevice = parentStat.dev
+    authorization.parentInode = parentStat.ino
+  } catch {}
+}
+
+function pinCleanupTarget (authorization, filename) {
+  try {
+    const targetStat = fs.lstatSync(filename)
+    authorization.targetDevice = targetStat.dev
+    authorization.targetInode = targetStat.ino
+  } catch {}
+}
+
+function isCleanupAuthorizationValid (filename, authorization) {
+  try {
+    const currentPhysicalRoot = fs.realpathSync(authorization.lexicalRoot)
+    const rootStat = fs.statSync(currentPhysicalRoot)
+    if (currentPhysicalRoot !== authorization.physicalRoot ||
+      rootStat.dev !== authorization.rootDevice || rootStat.ino !== authorization.rootInode) {
+      return false
+    }
+
+    if (authorization.physicalParent === undefined) return false
+    const physicalParent = fs.realpathSync(path.dirname(filename))
+    const parentStat = fs.statSync(physicalParent)
+    if (physicalParent !== authorization.physicalParent ||
+      parentStat.dev !== authorization.parentDevice || parentStat.ino !== authorization.parentInode) {
+      return false
+    }
+
+    if (authorization.targetDevice !== undefined) {
+      const targetStat = fs.lstatSync(filename)
+      if (targetStat.dev !== authorization.targetDevice || targetStat.ino !== authorization.targetInode) {
+        return false
+      }
+    }
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -238,6 +320,10 @@ function isPathInside (root, filename) {
 function validateContentLines (contentLines, filename) {
   if (!Array.isArray(contentLines) || contentLines.some(line => typeof line !== 'string')) {
     throw new Error(`Generated validation file contentLines must be an array of strings: ${filename}`)
+  }
+  const policyError = getGeneratedFileContentError(contentLines)
+  if (policyError) {
+    throw new Error(`Generated validation file ${policyError}: ${filename}`)
   }
 }
 

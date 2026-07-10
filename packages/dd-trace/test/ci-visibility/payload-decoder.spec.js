@@ -42,8 +42,36 @@ describe('test optimization validation payload decoder', () => {
       Buffer.from([0xC0]),
     ])
     const oversizedCollection = Buffer.from([0xDD, 0xFF, 0xFF, 0xFF, 0xFF])
+    const tooManyEntries = Buffer.alloc(5 + 100_001, 0xC0)
+    tooManyEntries[0] = 0xDD
+    tooManyEntries.writeUInt32BE(100_001, 1)
 
     assert.throws(() => decodeMsgpack(nested), /nesting exceeds/)
     assert.throws(() => decodeMsgpack(oversizedCollection), /collection length/)
+    assert.throws(() => decodeMsgpack(tooManyEntries), /entry limit/)
+  })
+
+  it('caps MessagePack collection entries across the full decoded object graph', () => {
+    const arrayHeader = Buffer.alloc(3)
+    arrayHeader[0] = 0xDC
+    arrayHeader.writeUInt16BE(500, 1)
+    const innerArray = Buffer.concat([arrayHeader, Buffer.alloc(500, 0xC0)])
+    const aggregate = Buffer.concat([arrayHeader, ...new Array(500).fill(innerArray)])
+
+    assert.throws(() => decodeMsgpack(aggregate), /aggregate collection entries/)
+  })
+
+  it('caps JSON collection entries across the full decoded object graph', () => {
+    const aggregate = Buffer.from(JSON.stringify(new Array(100_001).fill(null)))
+    const invalidAggregate = Buffer.from(`[${','.repeat(100_001)}`)
+
+    assert.throws(() => decodeBody(aggregate, { 'content-type': 'application/json' }),
+      /JSON aggregate collection entries/)
+    assert.throws(() => decodeBody(invalidAggregate, { 'content-type': 'application/json' }),
+      /JSON aggregate collection entries/)
+    assert.throws(() => decodeBody(zlib.gzipSync(invalidAggregate), {
+      'content-encoding': 'gzip',
+      'content-type': 'application/json',
+    }), /JSON aggregate collection entries/)
   })
 })

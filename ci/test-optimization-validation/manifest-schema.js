@@ -2,6 +2,18 @@
 
 const path = require('path')
 
+const {
+  MAX_GENERATED_FILES,
+  getGeneratedFileContentError,
+} = require('./generated-file-policy')
+const {
+  hasUnsafeExecutionCharacter,
+  hasUnsafeInvisibleCharacter,
+  isSensitiveName,
+  sanitizeForReport,
+  sanitizeString,
+} = require('./redaction')
+
 const FRAMEWORKS = new Set([
   'jest',
   'vitest',
@@ -35,6 +47,23 @@ const CI_WIRING_STATUSES = new Set([
   'unknown',
 ])
 const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
+const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+const MAX_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
+const SECRET_PLACEHOLDER = 'dd-validation-placeholder'
+const SAFE_SECRET_FIELD_VALUES = new Set(['', '0', '1', 'false', 'true', 'none', 'disabled'])
+const COMMAND_FIELDS = new Set([
+  'argv',
+  'cwd',
+  'description',
+  'env',
+  'required',
+  'requiredEnvVars',
+  'shellCommand',
+  'shellReason',
+  'timeoutMs',
+  'usesShell',
+  'id',
+])
 
 const GENERATED_SCENARIO_IDS = new Set([
   'basic-pass',
@@ -74,7 +103,77 @@ function validateManifest (manifest) {
     }
   }
 
+  validateRepositoryContainedPaths(manifest, errors)
+
   return errors
+}
+
+function validateRepositoryContainedPaths (manifest, errors) {
+  const repositoryRoot = manifest.repository?.root
+  if (typeof repositoryRoot !== 'string' || !path.isAbsolute(repositoryRoot)) return
+
+  for (const [index, framework] of (manifest.frameworks || []).entries()) {
+    const prefix = `frameworks[${index}]`
+    containedPath(repositoryRoot, framework.project?.root, `${prefix}.project.root`, errors)
+    containedPath(repositoryRoot, framework.project?.packageJson, `${prefix}.project.packageJson`, errors)
+    for (const [configIndex, configFile] of (framework.project?.configFiles || []).entries()) {
+      containedPath(repositoryRoot, configFile, `${prefix}.project.configFiles[${configIndex}]`, errors)
+    }
+
+    for (const [name, command] of getFrameworkCommands(framework)) {
+      containedPath(repositoryRoot, command?.cwd, `${prefix}.${name}.cwd`, errors)
+    }
+
+    containedPath(repositoryRoot, framework.ciWiring?.configFile, `${prefix}.ciWiring.configFile`, errors)
+    containedPath(repositoryRoot, framework.ciWiring?.workingDirectory, `${prefix}.ciWiring.workingDirectory`, errors)
+
+    const strategy = framework.generatedTestStrategy
+    containedPath(repositoryRoot, strategy?.testDirectory, `${prefix}.generatedTestStrategy.testDirectory`, errors)
+    for (const [fileIndex, file] of (strategy?.files || []).entries()) {
+      containedPath(repositoryRoot, file?.path, `${prefix}.generatedTestStrategy.files[${fileIndex}].path`, errors)
+    }
+    for (const [cleanupIndex, cleanupPath] of (strategy?.cleanupPaths || []).entries()) {
+      containedPath(
+        repositoryRoot,
+        cleanupPath,
+        `${prefix}.generatedTestStrategy.cleanupPaths[${cleanupIndex}]`,
+        errors
+      )
+    }
+    for (const [scenarioIndex, scenario] of (strategy?.scenarios || []).entries()) {
+      for (const [identityIndex, identity] of (scenario?.testIdentities || []).entries()) {
+        containedPath(
+          repositoryRoot,
+          identity?.file,
+          `${prefix}.generatedTestStrategy.scenarios[${scenarioIndex}].testIdentities[${identityIndex}].file`,
+          errors
+        )
+      }
+    }
+  }
+}
+
+function getFrameworkCommands (framework) {
+  const commands = []
+  for (const name of ['existingTestCommand', 'forcedLocalCommand', 'ciWiringCommand']) {
+    if (framework[name]) commands.push([name, framework[name]])
+  }
+  for (const [index, command] of (framework.setup?.commands || []).entries()) {
+    commands.push([`setup.commands[${index}]`, command])
+  }
+  for (const [index, scenario] of (framework.generatedTestStrategy?.scenarios || []).entries()) {
+    if (scenario?.runCommand) {
+      commands.push([`generatedTestStrategy.scenarios[${index}].runCommand`, scenario.runCommand])
+    }
+  }
+  return commands
+}
+
+function containedPath (root, candidate, key, errors) {
+  if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return
+  const relative = path.relative(path.resolve(root), path.resolve(candidate))
+  if (relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))) return
+  errors.push(`${key} must be inside repository.root.`)
 }
 
 function validateCiDiscovery (ciDiscovery, prefix, errors) {
@@ -112,7 +211,7 @@ function validateFramework (framework, index, errors) {
   }
 
   if (framework.status === 'runnable') {
-    requiredCommand(framework, 'existingTestCommand', errors, prefix)
+    requiredCommand(framework, 'existingTestCommand', errors, prefix, { datadogClean: true })
     validateDatadogCleanCommand(framework.existingTestCommand, `${prefix}.existingTestCommand`, errors)
     requiredObject(framework, 'preflight', errors, prefix)
     requiredObject(framework, 'ciWiring', errors, prefix)
@@ -129,7 +228,7 @@ function validateFramework (framework, index, errors) {
   }
 
   if (framework.forcedLocalCommand) {
-    requiredCommand(framework, 'forcedLocalCommand', errors, prefix)
+    requiredCommand(framework, 'forcedLocalCommand', errors, prefix, { datadogClean: true })
     validateDatadogCleanCommand(framework.forcedLocalCommand, `${prefix}.forcedLocalCommand`, errors)
   }
 
@@ -165,10 +264,15 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
   }
 
   if (Array.isArray(strategy.files)) {
+    if (strategy.files.length > MAX_GENERATED_FILES) {
+      errors.push(`${prefix}.files must contain at most ${MAX_GENERATED_FILES} generated files.`)
+    }
     for (const [index, file] of strategy.files.entries()) {
       requiredAbsolutePath(file, 'path', errors, `${prefix}.files[${index}]`)
       requiredArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
       validateStringArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
+      const policyError = getGeneratedFileContentError(file.contentLines)
+      if (policyError) errors.push(`${prefix}.files[${index}].contentLines ${policyError}.`)
     }
   }
 
@@ -176,7 +280,7 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
     for (const [index, scenario] of strategy.scenarios.entries()) {
       requiredString(scenario, 'id', errors, `${prefix}.scenarios[${index}]`)
       enumString(scenario, 'id', GENERATED_SCENARIO_IDS, errors, `${prefix}.scenarios[${index}]`)
-      requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`)
+      requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`, { datadogClean: true })
       validateDatadogCleanCommand(scenario.runCommand, `${prefix}.scenarios[${index}].runCommand`, errors)
       validateScenarioIdentities(
         scenario,
@@ -217,6 +321,13 @@ function validateCiWiring (framework, prefix, errors) {
     requiredAbsolutePath(ciWiring, 'workingDirectory', errors, `${prefix}.ciWiring`)
     if (path.resolve(ciWiring.workingDirectory || '') !== path.resolve(framework.ciWiringCommand.cwd || '')) {
       errors.push(`${prefix}.ciWiringCommand.cwd must match ${prefix}.ciWiring.workingDirectory.`)
+    }
+    if (ciWiring.shell !== undefined && ciWiring.shell !== null) {
+      if (typeof ciWiring.shell !== 'string' || ciWiring.shell.trim() === '') {
+        errors.push(`${prefix}.ciWiring.shell must be a non-empty string when present.`)
+      } else if (hasUnsafeExecutionCharacter(ciWiring.shell)) {
+        errors.push(`${prefix}.ciWiring.shell must not contain invisible or control characters.`)
+      }
     }
   }
 
@@ -307,18 +418,32 @@ function validateScenarioIdentities (scenario, prefix, errors, required = false)
   }
 }
 
-function requiredCommand (target, field, errors, prefix = '') {
+function requiredCommand (target, field, errors, prefix = '', options = {}) {
   const value = target && target[field]
   const key = join(prefix, field)
   if (!value || typeof value !== 'object') {
     errors.push(`${key} must be an object.`)
     return
   }
+  for (const name of Object.keys(value)) {
+    if (!COMMAND_FIELDS.has(name)) errors.push(`${key}.${name} is not an allowed command field.`)
+  }
+  if (value.usesShell !== undefined && typeof value.usesShell !== 'boolean') {
+    errors.push(`${key}.usesShell must be a boolean when present.`)
+  }
+  if (value.required !== undefined && typeof value.required !== 'boolean') {
+    errors.push(`${key}.required must be a boolean when present.`)
+  }
   requiredAbsolutePath(value, 'cwd', errors, key)
   rejectUnresolvedPlaceholder(value.cwd, `${key}.cwd`, errors)
   if (value.usesShell) {
     requiredString(value, 'shellCommand', errors, key)
     rejectUnresolvedPlaceholder(value.shellCommand, `${key}.shellCommand`, errors)
+    if (typeof value.shellCommand === 'string' && hasUnsafeInvisibleCharacter(value.shellCommand)) {
+      errors.push(`${key}.shellCommand must not contain invisible or control characters.`)
+    } else if (typeof value.shellCommand === 'string' && sanitizeString(value.shellCommand) !== value.shellCommand) {
+      errors.push(`${key}.shellCommand must not contain inline secret-like values. Put safe placeholders in env.`)
+    }
   } else if (!Array.isArray(value.argv) || value.argv.length === 0) {
     errors.push(`${key}.argv must be a non-empty array unless usesShell is true.`)
   } else {
@@ -326,12 +451,28 @@ function requiredCommand (target, field, errors, prefix = '') {
     for (const [index, arg] of value.argv.entries()) {
       rejectUnresolvedPlaceholder(arg, `${key}.argv[${index}]`, errors)
     }
+    if (value.argv.some(hasUnsafeExecutionCharacter)) {
+      errors.push(`${key}.argv must not contain invisible or control characters.`)
+    } else if (JSON.stringify(sanitizeForReport(value.argv)) !== JSON.stringify(value.argv)) {
+      errors.push(`${key}.argv must not contain inline secret-like values. Put safe placeholders in env.`)
+    }
   }
   if (value.env !== undefined) {
     if (!value.env || typeof value.env !== 'object' || Array.isArray(value.env)) {
       errors.push(`${key}.env must be an object when present.`)
     } else {
       for (const [name, envValue] of Object.entries(value.env)) {
+        if (!ENV_NAME_PATTERN.test(name)) {
+          errors.push(`${key}.env contains invalid variable name ${JSON.stringify(name)}.`)
+        }
+        if (typeof envValue !== 'string') errors.push(`${key}.env.${name} must be a string.`)
+        const validatePlaceholder = !(options.datadogClean && name.startsWith('DD_'))
+        if (typeof envValue === 'string' && hasUnsafeExecutionCharacter(envValue)) {
+          errors.push(`${key}.env.${name} must not contain invisible or control characters.`)
+        } else if (validatePlaceholder && typeof envValue === 'string' && containsSecretValue(name, envValue) &&
+          envValue !== SECRET_PLACEHOLDER) {
+          errors.push(`${key}.env.${name} must use the safe placeholder ${JSON.stringify(SECRET_PLACEHOLDER)}.`)
+        }
         rejectUnresolvedPlaceholder(envValue, `${key}.env.${name}`, errors)
       }
     }
@@ -347,7 +488,14 @@ function requiredCommand (target, field, errors, prefix = '') {
   }
   if (value.timeoutMs !== undefined && (!Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0)) {
     errors.push(`${key}.timeoutMs must be a positive number when present.`)
+  } else if (value.timeoutMs > MAX_COMMAND_TIMEOUT_MS) {
+    errors.push(`${key}.timeoutMs must not exceed ${MAX_COMMAND_TIMEOUT_MS} ms.`)
   }
+}
+
+function containsSecretValue (name, value) {
+  if (SAFE_SECRET_FIELD_VALUES.has(value.toLowerCase())) return false
+  return isSensitiveName(name) || sanitizeString(value) !== value
 }
 
 function rejectUnresolvedPlaceholder (value, key, errors) {
@@ -384,6 +532,8 @@ function requiredAbsolutePath (target, field, errors, prefix = '') {
   const value = target && target[field]
   if (typeof value !== 'string' || !path.isAbsolute(value)) {
     errors.push(`${join(prefix, field)} must be an absolute path.`)
+  } else if (hasUnsafeExecutionCharacter(value)) {
+    errors.push(`${join(prefix, field)} must not contain invisible or control characters.`)
   }
 }
 
@@ -392,6 +542,8 @@ function optionalAbsolutePath (target, field, errors, prefix = '') {
   if (value === undefined || value === null) return
   if (typeof value !== 'string' || !path.isAbsolute(value)) {
     errors.push(`${join(prefix, field)} must be an absolute path when present.`)
+  } else if (hasUnsafeExecutionCharacter(value)) {
+    errors.push(`${join(prefix, field)} must not contain invisible or control characters.`)
   }
 }
 
@@ -406,6 +558,8 @@ function optionalAbsolutePathArray (target, field, errors, prefix = '') {
   for (const [index, item] of value.entries()) {
     if (typeof item !== 'string' || !path.isAbsolute(item)) {
       errors.push(`${join(prefix, field)}[${index}] must be an absolute path.`)
+    } else if (hasUnsafeExecutionCharacter(item)) {
+      errors.push(`${join(prefix, field)}[${index}] must not contain invisible or control characters.`)
     }
   }
 }

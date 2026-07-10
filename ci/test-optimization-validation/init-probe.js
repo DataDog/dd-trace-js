@@ -8,10 +8,12 @@ const {
   mergeNodeOptions,
   runCommand,
 } = require('./command-runner')
-const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
+const { sanitizeForReport } = require('./redaction')
+const { createFileSafely, ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const PROBE_PRELOAD = path.join(__dirname, 'init-probe-preload.js')
 const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
+const MAX_PROBE_RECORD_BYTES = 1024 * 1024
 
 /**
  * Runs a CI-shaped command with a lightweight NODE_OPTIONS preload that records process reachability.
@@ -27,28 +29,41 @@ const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
 async function runInitializationProbe ({ command, framework, intake, outDir, options }) {
   const probeOutDir = path.join(outDir, 'initialization-probe')
   const recordsPath = path.join(probeOutDir, 'records.ndjson')
+  const rawRecordsPath = path.join(probeOutDir, '.records.raw.ndjson')
   const probeCommand = getProbeCommand(command)
 
   ensureSafeDirectory(outDir, probeOutDir, 'initialization probe artifact directory')
-  writeFileSafely(outDir, recordsPath, '', 'initialization probe records')
+  createFileSafely(outDir, rawRecordsPath, '', 'raw initialization probe records')
 
   const transportEnv = buildCiWiringEnv({ intake })
-  const result = await runCommand(probeCommand, {
-    artifactRoot: outDir,
-    env: {
-      ...transportEnv,
-      [PROBE_FILE_ENV]: recordsPath,
-      NODE_OPTIONS: mergeNodeOptions(
-        transportEnv.NODE_OPTIONS,
-        `-r ${formatNodeRequire(PROBE_PRELOAD)}`
-      ),
-    },
-    envMode: 'clean',
-    outDir: probeOutDir,
-    label: `${framework.id}:ci-wiring:init-probe`,
-    verbose: options.verbose,
-  })
-  const records = readProbeRecords(recordsPath)
+  let result
+  let records
+  try {
+    result = await runCommand(probeCommand, {
+      artifactRoot: outDir,
+      env: {
+        ...transportEnv,
+        [PROBE_FILE_ENV]: rawRecordsPath,
+        NODE_OPTIONS: mergeNodeOptions(
+          transportEnv.NODE_OPTIONS,
+          `-r ${formatNodeRequire(PROBE_PRELOAD)}`
+        ),
+      },
+      envMode: 'clean',
+      outDir: probeOutDir,
+      label: `${framework.id}:ci-wiring:init-probe`,
+      verbose: options.verbose,
+    })
+    records = readProbeRecords(rawRecordsPath)
+    writeFileSafely(
+      outDir,
+      recordsPath,
+      records.map(record => JSON.stringify(sanitizeForReport(record))).join('\n') + '\n',
+      'initialization probe records'
+    )
+  } finally {
+    fs.rmSync(rawRecordsPath, { force: true })
+  }
 
   return {
     artifacts: {
@@ -170,26 +185,37 @@ function getRecordTools (record) {
 }
 
 function readProbeRecords (recordsPath) {
-  let content
+  let file
   try {
-    content = fs.readFileSync(recordsPath, 'utf8')
+    file = fs.openSync(recordsPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0))
+    const stat = fs.fstatSync(file)
+    if (!stat.isFile() || stat.size > MAX_PROBE_RECORD_BYTES) return []
+    const content = fs.readFileSync(file, 'utf8')
+    return parseProbeRecords(content)
   } catch {
     return []
+  } finally {
+    if (file !== undefined) fs.closeSync(file)
   }
+}
 
+function parseProbeRecords (content) {
   const records = []
   for (const line of content.split(/\r?\n/)) {
     if (!line) continue
     try {
-      records.push(JSON.parse(line))
-    } catch {
-      records.push({
-        type: 'parse-error',
-        line,
-      })
-    }
+      const record = JSON.parse(line)
+      if (isProbeRecord(record)) records.push(sanitizeForReport(record))
+    } catch {}
   }
   return records
+}
+
+function isProbeRecord (record) {
+  return record && typeof record === 'object' && !Array.isArray(record) &&
+    (record.type === 'process-start' || record.type === 'module-load') &&
+    Number.isInteger(record.pid) && Number.isInteger(record.ppid) &&
+    typeof record.cwd === 'string' && Array.isArray(record.argv)
 }
 
 function formatNodeRequire (filename) {

@@ -3,10 +3,10 @@
 /* eslint-disable no-console, eslint-rules/eslint-process-env */
 
 const path = require('path')
-const { execFileSync, spawn } = require('child_process')
+const { spawn } = require('child_process')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../version')
-const { sanitizeString } = require('./redaction')
+const { sanitizeConsoleText, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
@@ -117,7 +117,9 @@ function runCommand (command, options = {}) {
       })
 
     if (verbose) {
-      console.log(`[test-optimization-validator] running ${label || serializeCommand(command)}`)
+      console.log(sanitizeConsoleText(
+        `[test-optimization-validator] running ${label || serializeCommand(command)}`
+      ))
     }
 
     let killTimer
@@ -433,22 +435,16 @@ function supportsImportPreload (command) {
 function getCommandNodeVersion (command) {
   if (!command || command.usesShell || !Array.isArray(command.argv)) return
 
-  const { commandIndex, prefixEnv } = parseArgv(command.argv)
+  const { commandIndex } = parseArgv(command.argv)
   const executable = command.argv[commandIndex]
-  const nodeExecutable = isNodeExecutable(executable) ? executable : 'node'
+  if (isNodeExecutable(executable) && path.isAbsolute(executable) &&
+    path.resolve(executable) !== path.resolve(process.execPath)) {
+    return
+  }
 
-  try {
-    return String(execFileSync(nodeExecutable, ['-p', 'process.versions.node'], {
-      cwd: command.cwd,
-      encoding: 'utf8',
-      env: {
-        ...getBaseEnv('clean'),
-        ...prefixEnv,
-        ...command.env,
-      },
-      timeout: 2000,
-    })).trim()
-  } catch {}
+  // Do not execute a command-controlled `node` binary just to inspect its version. Package-manager commands
+  // normally inherit the validator runtime; explicit alternate Node executables conservatively omit --import.
+  return process.versions.node
 }
 
 /**
@@ -478,6 +474,28 @@ function formatNodeRequire (filename) {
 
 function serializeCommand (command) {
   return command.usesShell ? command.shellCommand : command.argv.join(' ')
+}
+
+/**
+ * Renders the command that will actually execute without trusting display-only manifest fields.
+ *
+ * @param {object} command command to render
+ * @returns {string} unambiguous customer-facing command
+ */
+function serializeApprovalCommand (command) {
+  if (command.usesShell) return command.shellCommand
+  return command.argv.map(formatApprovalArgument).join(' ')
+}
+
+/**
+ * Quotes arguments whose boundaries would otherwise be ambiguous in an approval plan.
+ *
+ * @param {string} value argument value
+ * @returns {string} visible argument
+ */
+function formatApprovalArgument (value) {
+  const argument = String(value)
+  return /^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument) ? argument : JSON.stringify(argument)
 }
 
 function serializeDisplayCommand (command) {
@@ -592,6 +610,7 @@ module.exports = {
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,
+  serializeApprovalCommand,
   serializeCommand,
   serializeDisplayCommand,
   withCiPreloads,

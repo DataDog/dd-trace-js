@@ -97,6 +97,83 @@ describe('test optimization validation generated files', () => {
     }
   })
 
+  it('does not delete outside files after the project root is replaced by a symbolic link', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-root-swap-'))
+    const root = path.join(base, 'project')
+    const originalRoot = path.join(base, 'original-project')
+    const outside = path.join(base, 'outside')
+    fs.mkdirSync(root)
+    fs.mkdirSync(outside)
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+    const framework = getFramework(root, filename)
+
+    try {
+      writeGeneratedFiles(framework)
+      fs.renameSync(root, originalRoot)
+      fs.symlinkSync(outside, root)
+      fs.writeFileSync(path.join(outside, path.basename(filename)), 'customer data\n')
+
+      cleanupGeneratedFiles({ frameworks: [framework] })
+
+      assert.strictEqual(fs.readFileSync(path.join(outside, path.basename(filename)), 'utf8'), 'customer data\n')
+      assert.strictEqual(fs.existsSync(path.join(originalRoot, path.basename(filename))), true)
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('does not delete redirected files after a generated directory is replaced by a symbolic link', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-directory-swap-'))
+    const generatedDirectory = path.join(root, 'generated')
+    const originalDirectory = path.join(root, 'original-generated')
+    const redirectedDirectory = path.join(root, 'redirected')
+    fs.mkdirSync(redirectedDirectory)
+    const filename = path.join(generatedDirectory, 'dd-test-optimization-validation.test.js')
+    const framework = getFramework(root, filename)
+
+    try {
+      writeGeneratedFiles(framework)
+      fs.renameSync(generatedDirectory, originalDirectory)
+      fs.symlinkSync(redirectedDirectory, generatedDirectory)
+      fs.writeFileSync(path.join(redirectedDirectory, path.basename(filename)), 'customer data\n')
+
+      cleanupGeneratedFiles({ frameworks: [framework] })
+
+      assert.strictEqual(
+        fs.readFileSync(path.join(redirectedDirectory, path.basename(filename)), 'utf8'),
+        'customer data\n'
+      )
+      assert.strictEqual(fs.existsSync(path.join(originalDirectory, path.basename(filename))), true)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses hidden secret-like values and control characters in generated source', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+
+    try {
+      const secretFramework = getFramework(root, filename)
+      secretFramework.generatedTestStrategy.files[0].contentLines = ['API_KEY="do-not-execute" npm test']
+      assert.throws(() => writeGeneratedFiles(secretFramework), /no secret-like values/)
+
+      const controlFramework = getFramework(root, filename)
+      controlFramework.generatedTestStrategy.files[0].contentLines = ['safe\u001b[2Jhidden']
+      assert.throws(() => writeGeneratedFiles(controlFramework), /printable source line/)
+
+      const formatControlFramework = getFramework(root, filename)
+      formatControlFramework.generatedTestStrategy.files[0].contentLines = ['API_KEY\uFE0F="do-not-execute"']
+      assert.throws(() => writeGeneratedFiles(formatControlFramework), /printable source line/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('only cleans generated files and namespaced runtime files', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const generated = path.join(root, 'dd-test-optimization-validation.test.js')
@@ -119,7 +196,7 @@ describe('test optimization validation generated files', () => {
     }
   })
 
-  it('cleans namespaced retry state found beneath a declared generated directory', () => {
+  it('does not delete undeclared files found beneath a generated directory', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const generatedDirectory = path.join(root, '__dd_validation__')
     const generated = path.join(generatedDirectory, 'dd-test-optimization-validation.test.js')
@@ -132,10 +209,26 @@ describe('test optimization validation generated files', () => {
       fs.writeFileSync(state, 'already passed\n')
       fs.writeFileSync(unrelated, 'customer data\n')
 
+      writeGeneratedFiles(framework)
       cleanupGeneratedRuntimeFiles(framework)
 
-      assert.strictEqual(fs.existsSync(state), false)
+      assert.strictEqual(fs.readFileSync(state, 'utf8'), 'already passed\n')
       assert.strictEqual(fs.readFileSync(unrelated, 'utf8'), 'customer data\n')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to delete a pre-existing declared runtime file', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
+    const generated = path.join(root, 'dd-test-optimization-validation.test.js')
+    const state = path.join(root, '.dd-test-optimization-validation-state')
+    const framework = getFramework(root, generated, [generated, state])
+    fs.writeFileSync(state, 'customer data\n')
+
+    try {
+      assert.throws(() => writeGeneratedFiles(framework), /Refusing to delete pre-existing/)
+      assert.strictEqual(fs.readFileSync(state, 'utf8'), 'customer data\n')
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

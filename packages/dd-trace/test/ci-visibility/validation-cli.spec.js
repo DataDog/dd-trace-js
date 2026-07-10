@@ -16,6 +16,9 @@ const {
 } = require('../../../../ci/test-optimization-validation/cli')
 
 const PASSING_VALIDATION_PHASES = {
+  './approval': {
+    assertApprovalDigest () {},
+  },
   './generated-verifier': {
     async verifyGeneratedTestStrategy () {
       return { ok: true }
@@ -33,6 +36,7 @@ const PASSING_VALIDATION_PHASES = {
     },
   },
 }
+const APPROVAL_ARGS = ['--approved-plan-sha256', 'a'.repeat(64)]
 
 function readMarkdownJsonSection (markdown, title) {
   const pattern = new RegExp(`## ${title}\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
@@ -78,6 +82,13 @@ describe('test optimization validation cli', () => {
     assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'ci-wiring'])
   })
 
+  it('parses a plan approval digest for live validation', () => {
+    const digest = 'a'.repeat(64)
+    const options = parseArgs(['--approved-plan-sha256', digest])
+
+    assert.strictEqual(options.approvedPlanSha256, digest)
+  })
+
   it('validates a manifest without creating output or starting live validation', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
@@ -110,6 +121,67 @@ describe('test optimization validation cli', () => {
       assert.deepStrictEqual(logs, [`Validation manifest is valid: ${manifestPath}`])
     } finally {
       console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('fails closed before live validation when no approved plan digest is supplied', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const errors = []
+    const originalError = console.error
+    const originalExitCode = process.exitCode
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            throw new Error('live validation should not start')
+          }
+        },
+      },
+    })
+
+    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
+    console.error = error => errors.push(String(error))
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out])
+
+      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(fs.existsSync(out), false)
+      assert.match(errors.join('\n'), /requires the --approved-plan-sha256 value/)
+    } finally {
+      console.error = originalError
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to use repository.root itself as the validation output directory', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const errors = []
+    const originalError = console.error
+    const originalExitCode = process.exitCode
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
+    })
+
+    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
+    console.error = error => errors.push(String(error))
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', tmpDir, ...APPROVAL_ARGS])
+
+      assert.strictEqual(process.exitCode, 1)
+      assert.match(errors.join('\n'), /dedicated child directory inside repository.root/)
+    } finally {
+      console.error = originalError
+      process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
@@ -170,7 +242,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'efd'])
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'efd', ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 1)
     } finally {
@@ -243,7 +315,7 @@ describe('test optimization validation cli', () => {
       process.exitCode = undefined
 
       try {
-        await main(['--manifest', manifestPath, '--out', out])
+        await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
 
         const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
         const reportResults = readMarkdownJsonSection(markdown, 'Execution Results JSON')
@@ -345,7 +417,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out])
+      await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 1)
       assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
@@ -449,7 +521,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting'])
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting', ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 0)
       assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
@@ -533,7 +605,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'ci-wiring'])
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'ci-wiring', ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 1)
       assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
@@ -641,7 +713,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting'])
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting', ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 0)
       const statuses = capturedResults.map(result => `${result.frameworkId}:${result.scenario}:${result.status}`)
@@ -736,7 +808,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out])
+      await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 0)
       assert.deepStrictEqual(capturedResults[0].evidence.configFiles, ['.mocharc.json'])
@@ -834,7 +906,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out])
+      await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
 
       assert.strictEqual(process.exitCode, 0)
       assert.deepStrictEqual(capturedResults.map(result => result.evidence.configFiles), [

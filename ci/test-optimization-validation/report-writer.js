@@ -7,7 +7,7 @@ const path = require('path')
 
 const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const { normalizeRequests } = require('./payload-normalizer')
-const { sanitizeForReport, sanitizeString } = require('./redaction')
+const { sanitizeConsoleText, sanitizeForReport, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 const { buildValidationPayloads } = require('./validation-payload')
 
@@ -80,7 +80,7 @@ function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
 
   writeFileSafely(out, reportPath, renderMarkdown(report), 'Markdown report')
 
-  console.log(renderConsoleSummary(sanitizedResults, reportPath))
+  console.log(sanitizeConsoleText(renderConsoleSummary(sanitizedResults, reportPath)))
 }
 
 function renderMarkdown (report) {
