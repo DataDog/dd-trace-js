@@ -13,7 +13,7 @@ module.exports = {
   ML_APP: '_ml_obs.meta.ml_app',
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
   PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',
-  PROPAGATED_SESSION_ID_KEY: '_dd.p.llmobs_session_id',
+  PROPAGATED_SESSION_ID_KEY: '_dd.p.llmobs_sid',
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',
   PROPAGATED_SAMPLING_DECISION_KEY: '_dd.p.llmobs_sd',
