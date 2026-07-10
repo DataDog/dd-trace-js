@@ -1,6 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { fork } = require('node:child_process')
+const { once } = require('node:events')
+const path = require('node:path')
+const { text } = require('node:stream/consumers')
 const { setImmediate } = require('node:timers/promises')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -46,6 +50,27 @@ function request (http2, url, options = {}) {
 
     req.end()
   })
+}
+
+/**
+ * @returns {Promise<{ code: number | null, stderr: string }>}
+ */
+async function runThrowingStreamHandler () {
+  const child = fork(path.join(__dirname, 'fixtures', 'throwing-stream-handler.js'), {
+    env: {
+      ...process.env,
+      DD_TRACE_AGENT_PORT: '0',
+      DD_TRACE_STARTUP_LOGS: 'false',
+    },
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+  })
+
+  const [[code], stderr] = await Promise.all([
+    once(child, 'exit'),
+    text(child.stderr),
+  ])
+
+  return { code, stderr }
 }
 
 describe('Plugin', () => {
@@ -832,6 +857,15 @@ describe('Plugin', () => {
           }
         })
       })
+    })
+  })
+
+  describe('http2/server error propagation', () => {
+    it('rethrows synchronous stream handler errors', async () => {
+      const { code, stderr } = await runThrowingStreamHandler()
+
+      assert.strictEqual(code, 1)
+      assert.match(stderr, /Error: expected stream handler failure/)
     })
   })
 })

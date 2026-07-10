@@ -133,16 +133,8 @@ function traceServerRequest (ctx, emitEvent) {
     try {
       return emitEvent()
     } catch (error) {
-      // `EventEmitter.emit` rethrows a listener's synchronous throw to its
-      // caller (this wrapper), so the catch is reachable. It unwinds through
-      // Node's http2 session synchronously and surfaces as an uncaughtException,
-      // which crashes any in-process test harness, so it is covered here rather
-      // than in a spec. Mirrors the `apm:http:server:request:error` path.
-      /* istanbul ignore next */
       ctx.error = error
-      /* istanbul ignore next */
       errorServerCh.publish(ctx)
-      /* istanbul ignore next */
       throw error
     }
   })
