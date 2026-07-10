@@ -47,22 +47,11 @@ function onErrorLog (msg) {
   }
 
   if (cause) {
-    const stack = getErrorStack(cause)
-    telLog.stack_trace = stack
-    if (stack) {
-      telLog.errorType = cause.constructor.name
-    }
+    telLog.stack_trace = cause.stack
+    telLog.errorType = cause.constructor.name
   }
 
   onLog(telLog)
-}
-
-function getErrorStack (error) {
-  let stack
-  try {
-    stack = error.stack
-  } catch {}
-  return stack
 }
 
 function start (config) {

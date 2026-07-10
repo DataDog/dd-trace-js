@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
-const vm = require('node:vm')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -359,24 +358,6 @@ describe('log', () => {
         assert.strictEqual(console.error.firstCall.args[0].message, 'test')
       })
 
-      it('should not treat non-errors with falsy stack values as causes', () => {
-        const cases = [
-          { stack: undefined, message: 'payload {"foo":"bar"}' },
-          { stack: null, message: 'payload {"stack":null,"foo":"bar"}' },
-          { stack: '', message: 'payload {"stack":"","foo":"bar"}' },
-        ]
-
-        for (const { stack, message } of cases) {
-          console.error.resetHistory()
-
-          log.error('payload %j', { stack, foo: 'bar' })
-
-          sinon.assert.calledOnce(console.error)
-          assert.ok(console.error.firstCall.args[0] instanceof Error)
-          assert.strictEqual(console.error.firstCall.args[0].message, message)
-        }
-      })
-
       it('should convert messages from callbacks to errors', () => {
         log.error(() => 'error')
 
@@ -392,45 +373,6 @@ describe('log', () => {
         assert.ok(console.error.firstCall.args[0] instanceof Error)
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
         assert.ok(console.error.secondCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
-      })
-
-      it('should allow a message + cross-realm Error', () => {
-        const cause = vm.runInNewContext('new Error("cause")')
-
-        log.error('this is an error', cause)
-
-        sinon.assert.calledTwice(console.error)
-        assert.ok(console.error.firstCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
-        assert.strictEqual(console.error.secondCall.args[0], cause)
-      })
-
-      it('should allow a message + object with stack', () => {
-        const cause = { message: 'cause', stack: 'Error: cause' }
-
-        log.error('this is an error', cause)
-
-        sinon.assert.calledTwice(console.error)
-        assert.ok(console.error.firstCall.args[0] instanceof Error)
-        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
-        assert.strictEqual(console.error.secondCall.args[0], cause)
-      })
-
-      it('should not format an error stack while detecting a message + Error', () => {
-        const prepareStackTrace = Error.prepareStackTrace
-        Error.prepareStackTrace = () => {
-          throw new Error('stack formatting failed')
-        }
-
-        try {
-          log.error('this is an error', new Error('cause'))
-        } finally {
-          Error.prepareStackTrace = prepareStackTrace
-        }
-
-        sinon.assert.called(console.error)
-        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
         assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
       })
 

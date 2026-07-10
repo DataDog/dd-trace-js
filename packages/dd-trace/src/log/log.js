@@ -1,6 +1,6 @@
 'use strict'
 
-const { format, types } = require('util')
+const { format } = require('util')
 
 // other times we produce an Error in a central location and log it several other places
 class NoTransmitError extends Error {}
@@ -35,7 +35,7 @@ class Log {
     }
 
     const maybeError = args.at(-1)
-    if (hasErrorStack(maybeError)) {
+    if (maybeError && typeof maybeError === 'object' && maybeError.stack) { // maybeError instanceof Error?
       cause = args.pop()
       if (cause instanceof NoTransmitError) sendViaTelemetry = false
     }
@@ -57,14 +57,6 @@ class Log {
 
     return new Log(message, args, cause, delegate, sendViaTelemetry)
   }
-}
-
-function hasErrorStack (value) {
-  if (!value || typeof value !== 'object') return false
-  if (types.isNativeError(value)) return true
-
-  const stack = Object.getOwnPropertyDescriptor(value, 'stack')
-  return Boolean(stack && 'value' in stack && stack.value)
 }
 
 /**
