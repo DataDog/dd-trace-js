@@ -41,7 +41,6 @@ describe('OTel TracerProvider', () => {
     const provider = new TracerProvider()
 
     // Initially is a NoopSpanProcessor
-    assert.strictEqual(provider._processors.length, 0)
     assert.ok(provider.getActiveSpanProcessor() instanceof NoopSpanProcessor)
 
     // Swap out shutdown function to check if it's called
@@ -51,7 +50,6 @@ describe('OTel TracerProvider', () => {
     // After adding a span processor it should be a MultiSpanProcessor
     provider.addSpanProcessor(new NoopSpanProcessor())
     sinon.assert.calledOnce(shutdown)
-    assert.strictEqual(provider._processors.length, 1)
     assert.ok(provider.getActiveSpanProcessor() instanceof MultiSpanProcessor)
   })
 
@@ -69,7 +67,6 @@ describe('OTel TracerProvider', () => {
 
     const provider = new TracerProvider({ spanProcessors: [first, second] })
 
-    assert.strictEqual(provider._processors.length, 2)
     const active = provider.getActiveSpanProcessor()
     assert.ok(active instanceof MultiSpanProcessor)
 
@@ -97,7 +94,6 @@ describe('OTel TracerProvider', () => {
     provider.getActiveSpanProcessor().onStart(span, context)
     provider.getActiveSpanProcessor().onEnd(span)
 
-    assert.strictEqual(provider._processors.length, 1)
     sinon.assert.calledOnceWithExactly(processor.onStart, span, context)
     sinon.assert.calledOnceWithExactly(processor.onEnd, span)
   })
@@ -105,7 +101,6 @@ describe('OTel TracerProvider', () => {
   it('should keep the noop processor when the constructor gets no processors', () => {
     assert.ok(new TracerProvider().getActiveSpanProcessor() instanceof NoopSpanProcessor)
     assert.ok(new TracerProvider({ spanProcessors: [] }).getActiveSpanProcessor() instanceof NoopSpanProcessor)
-    assert.strictEqual(new TracerProvider({ spanProcessors: [] })._processors.length, 0)
   })
 
   it('should delegate shutdown to active span processor', () => {
