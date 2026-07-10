@@ -6,6 +6,7 @@ const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
 const assert = require('node:assert')
 const { pathToFileURL } = require('node:url')
+const vm = require('node:vm')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -634,5 +635,36 @@ describe('check-require-cache', () => {
     await iter.next()
 
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
+  })
+})
+
+describe('rewriter source-map trailer', () => {
+  const rewriterPath = require.resolve('../../../src/helpers/rewriter')
+
+  it('does not embed a sourceMappingURL comment token in its own source', () => {
+    const source = readFileSync(rewriterPath, 'utf8')
+
+    assert.doesNotMatch(source, /\/\/[#@]\s*sourceMappingURL=/)
+  })
+
+  it('does not crash source-map-support when formatting a frame in its own file', () => {
+    const sourceMapSupport = require('source-map-support')
+    const originalPrepareStackTrace = Error.prepareStackTrace
+    sourceMapSupport.install({ environment: 'node', handleUncaughtExceptions: false })
+
+    try {
+      const boom = vm.runInThisContext(
+        '(function boom () { return new Error("boom") })',
+        { filename: rewriterPath }
+      )
+
+      const { stack } = boom()
+
+      assert.match(stack, /rewriter[/\\]index\.js/)
+    } finally {
+      Error.prepareStackTrace = originalPrepareStackTrace
+      sourceMapSupport.resetRetrieveHandlers()
+      delete require.cache[require.resolve('source-map-support')]
+    }
   })
 })
