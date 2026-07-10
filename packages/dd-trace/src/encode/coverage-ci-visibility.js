@@ -1,11 +1,12 @@
 'use strict'
-const { MsgpackChunk } = require('../msgpack')
+const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
+const log = require('../log')
 const FormData = require('../exporters/common/form-data')
 const { AgentEncoder } = require('./0.4')
 
@@ -40,7 +41,24 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     const startTime = Date.now()
 
     this._coveragesCount++
-    this.encodeCodeCoverage(this._coverageBytes, coverage)
+    try {
+      this.encodeCodeCoverage(this._coverageBytes, coverage)
+    } catch (error) {
+      if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+      // The coverage payload hit the chunk cap. `_coverageBytes` may
+      // hold a partial entry and a stale `coverages` array prefix. Drop
+      // the whole queued payload so the next encode starts from a clean
+      // state; the parent `AgentEncoder` does the equivalent for its own
+      // bytes / string cache via the inherited `_reset()`.
+      const dropped = this._coveragesCount
+      this.reset()
+      log.error(
+        'Coverage encoder reset after exceeding the %d byte chunk cap; dropped %d coverage(s)',
+        MAX_CHUNK_SIZE,
+        dropped
+      )
+      return
+    }
 
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
