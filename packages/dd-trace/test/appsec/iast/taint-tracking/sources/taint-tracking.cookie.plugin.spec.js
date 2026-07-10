@@ -13,10 +13,7 @@ const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-t
 const { getConfigFresh } = require('../../../../helpers/config')
 const { withVersions } = require('../../../../setup/mocha')
 const { NODE_MAJOR } = require('../../../../../../../version')
-const {
-  HTTP_REQUEST_COOKIE_NAME,
-  HTTP_REQUEST_COOKIE_VALUE,
-} = require('../../../../../src/appsec/iast/taint-tracking/source-types')
+const { HTTP_REQUEST_COOKIE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { testInRequest } = require('../../utils')
 
 describe('Cookies sourcing with cookies', () => {
@@ -35,17 +32,10 @@ describe('Cookies sourcing with cookies', () => {
       const rawCookies = 'cookie=value'
       const parse = cookie.parseCookie ?? cookie.parse
       const parsedCookies = parse(rawCookies)
-      Object.getOwnPropertySymbols(parsedCookies).forEach(cookieName => {
-        const cookieValue = parsedCookies[cookieName]
-        const isCookieValueTainted = isTainted(iastContext, cookieValue)
-        assert.strictEqual(isCookieValueTainted, true)
-        const taintedCookieValueRanges = getRanges(iastContext, cookieValue)
-        assert.strictEqual(taintedCookieValueRanges[0].iinfo.type, HTTP_REQUEST_COOKIE_VALUE)
-        const isCookieNameTainted = isTainted(iastContext, cookieName)
-        assert.strictEqual(isCookieNameTainted, true)
-        const taintedCookieNameRanges = getRanges(iastContext, cookieName)
-        assert.strictEqual(taintedCookieNameRanges[0].iinfo.type, HTTP_REQUEST_COOKIE_NAME)
-      })
+      const cookieValue = parsedCookies.cookie
+      assert.strictEqual(isTainted(iastContext, cookieValue), true)
+      const taintedCookieValueRanges = getRanges(iastContext, cookieValue)
+      assert.strictEqual(taintedCookieValueRanges[0].iinfo.type, HTTP_REQUEST_COOKIE_VALUE)
     }
 
     function tests (config) {

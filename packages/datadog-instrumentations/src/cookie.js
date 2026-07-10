@@ -15,13 +15,12 @@ function wrapParse (originalParse) {
   }
 }
 
-// cookie <1 exports only `parse`. 1.x exports `parse` plus a `parseCookie` alias. 2.x is ESM-only and exports only
-// `parseCookie`. Wrap whichever parse entry points the installed version exposes so the caller's chosen name is
-// instrumented; a single call hits exactly one export, so wrapping both when present does not double-publish.
+/** @param {typeof import('cookie')} cookie */
 addHook({ name: 'cookie', versions: ['>=0.4'] }, cookie => {
   for (const name of ['parse', 'parseCookie']) {
     if (typeof cookie[name] === 'function') {
-      shimmer.wrap(cookie, name, wrapParse)
+      // shimmer returns a mutable replacement when an ESM namespace export is non-configurable.
+      cookie = shimmer.wrap(cookie, name, wrapParse)
     }
   }
   return cookie
