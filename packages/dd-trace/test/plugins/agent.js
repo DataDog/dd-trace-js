@@ -266,10 +266,9 @@ function unformatSpanEvents (span) {
 
   // Native pipeline (DD_TRACE_NATIVE_SPAN_EVENTS enabled): span events land in
   // the top-level v0.4 `span_events` field instead of the legacy `meta.events`
-  // JSON string. Attributes arrive as typed OTLP wrappers and arrays are
-  // flattened into indexed scalar keys (`locations.0`, `path.0`, ...), so decode
-  // them back to the same `{ name, startTime, attributes }` shape (arrays
-  // intact) the plugin specs assert against.
+  // JSON string. Attributes arrive as typed OTLP wrappers (including
+  // `array_value` for arrays), so decode them back to the same
+  // `{ name, startTime, attributes }` shape the plugin specs assert against.
   if (Array.isArray(span.span_events)) {
     return span.span_events.map(event => {
       return {
@@ -298,9 +297,9 @@ function unwrapSpanEventAttributeValue (wrapper) {
   return wrapper
 }
 
-// Decode a native span-event attribute map, unwrapping typed values and
-// re-nesting flattened array keys (`locations.0`, `locations.1`) back into
-// arrays so the shape matches the legacy `meta.events` attributes.
+// Decode a native span-event attribute map, unwrapping each typed OTLP value
+// (arrays arrive as `array_value` and unwrap to real arrays) so the shape
+// matches the legacy `meta.events` attributes.
 function decodeNativeSpanEventAttributes (attributes) {
   if (!attributes || typeof attributes !== 'object') return undefined
   const keys = Object.keys(attributes)
@@ -308,15 +307,7 @@ function decodeNativeSpanEventAttributes (attributes) {
 
   const out = {}
   for (const key of keys) {
-    const value = unwrapSpanEventAttributeValue(attributes[key])
-    const indexedKey = /^(.+)\.(\d+)$/.exec(key)
-    if (indexedKey) {
-      const [, base, index] = indexedKey
-      if (!Array.isArray(out[base])) out[base] = []
-      out[base][Number(index)] = value
-    } else {
-      out[key] = value
-    }
+    out[key] = unwrapSpanEventAttributeValue(attributes[key])
   }
   return out
 }

@@ -566,10 +566,10 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(first.args[0], span._spanContext._nativeSpanId)
       assert.strictEqual(first.args[1], 'exception')
       assert.strictEqual(first.args[2], BigInt(Math.round(2 * 1e6)))
-      // Arrays are flattened into indexed scalar keys (matches the DD
-      // span_events shape / the JS formatter's addArrayOrScalarAttribute).
+      // Array attributes are encoded as a typed array (tag 4), which the native
+      // decoder rebuilds as a real array_value (not flattened indexed keys).
       assert.deepStrictEqual(decodeSpanEventAttrs(first.args[3]), {
-        msg: 'boom', code: 42n, ratio: 0.5, ok: true, 'tags.0': 'a', 'tags.1': 'b',
+        msg: 'boom', code: 42n, ratio: 0.5, ok: true, tags: ['a', 'b'],
       })
 
       const second = nativeSpans.addSpanEvent.getCall(1)
@@ -577,17 +577,18 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(second.args[3].length, 0) // no attributes
 
       // The meta-tag fallback must NOT be written on the native path.
-      assert.strictEqual(span._spanContext.getTag('_dd.span_events'), undefined)
+      assert.strictEqual(span._spanContext.getTag('events'), undefined)
     })
 
-    it('falls back to the _dd.span_events meta tag when the flag is disabled', () => {
+    it('falls back to the `events` meta tag when the flag is disabled', () => {
       tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = false
       span._events.push({ name: 'evt', startTime: 1, attributes: { k: 'v' } })
 
       span.finish()
 
       sinon.assert.notCalled(nativeSpans.addSpanEvent)
-      const parsed = JSON.parse(span._spanContext.getTag('_dd.span_events'))
+      // Same `events` meta key + shape the legacy JS encoder writes.
+      const parsed = JSON.parse(span._spanContext.getTag('events'))
       assert.strictEqual(parsed[0].name, 'evt')
       assert.strictEqual(parsed[0].time_unix_nano, Math.round(1 * 1e6))
       assert.deepStrictEqual(parsed[0].attributes, { k: 'v' })
@@ -597,7 +598,7 @@ describe('NativeDatadogSpan', () => {
       tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
       span.finish()
       sinon.assert.notCalled(nativeSpans.addSpanEvent)
-      assert.strictEqual(span._spanContext.getTag('_dd.span_events'), undefined)
+      assert.strictEqual(span._spanContext.getTag('events'), undefined)
     })
 
     it('encodes an integer beyond i64/safe range as a double instead of throwing', () => {

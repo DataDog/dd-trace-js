@@ -127,16 +127,24 @@ function encodeAttrScalar (value) {
   return out
 }
 
-// Flatten an attribute into the flat little-endian buffer the native
+// Encode one attribute into the flat little-endian buffer the native
 // `addSpanEvent` decodes (`decode_span_event_attributes` in the pipeline
-// crate): repeated `[key_len:u32][key][tag:u8] + value`. Arrays are flattened
-// into indexed scalar keys (`key.0`, `key.1`, ...), mirroring the JS
-// formatter's addArrayOrScalarAttribute — the DD span_events attribute shape is
-// flat, whereas a native array would serialize as an OTLP `{values:[...]}`.
+// crate): repeated `[key_len:u32][key][tag:u8] + value`. A scalar uses its
+// scalar tag (see encodeAttrScalar); an array uses tag 4 followed by
+// `[count:u32]` and each item as a scalar `[item_tag:u8] + value`. The native
+// decoder rebuilds an `AttributeAnyValue::Array`, which libdatadog serializes as
+// a real v0.4 span_events `array_value: {values:[...]}` (matching the JS
+// formatter), so array attributes such as a GraphQL error's `path` stay arrays
+// rather than being flattened into indexed keys. Arrays of scalars only — the
+// decoder rejects nested arrays.
 function appendSpanEventAttr (chunks, key, value) {
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      appendSpanEventAttr(chunks, `${key}.${i}`, value[i])
+    const header = Buffer.allocUnsafe(5)
+    header.writeUInt8(4, 0)
+    header.writeUInt32LE(value.length >>> 0, 1)
+    chunks.push(encodeLenPrefixedStr(key), header)
+    for (const item of value) {
+      chunks.push(encodeAttrScalar(item))
     }
     return
   }
@@ -519,10 +527,12 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Serialize span events to the `_dd.span_events` meta tag as JSON.
-   * The native exporter ships meta tags directly to the agent; the JS
-   * exporter uses a top-level `span_events` field — so this is a
-   * parallel-not-identical encoding. The agent accepts either form.
+   * Serialize span events. With `DD_TRACE_NATIVE_SPAN_EVENTS` enabled they go to
+   * the top-level v0.4 `span_events` field (native setter, typed attributes);
+   * otherwise they fall back to the `events` meta tag as JSON — the same key and
+   * shape the legacy JS encoder writes (`meta.events` via stringifySpanEvents),
+   * which is what the agent expects when it doesn't support native span events
+   * (system-tests Test_SpanEvents_WithoutAgentSupport).
    */
   #serializeSpanEvents () {
     if (!this._events?.length) return
@@ -530,7 +540,7 @@ class NativeDatadogSpan extends DatadogSpan {
     // When native span events are enabled (matching the legacy encoder's
     // `DD_TRACE_NATIVE_SPAN_EVENTS` gate), append each event to the top-level
     // v0.4 `span_events` field via the native setter — no truncation, typed
-    // attributes. Otherwise fall back to the `_dd.span_events` meta tag.
+    // attributes. Otherwise fall back to the `events` meta tag (plain JSON).
     if (this.tracer()._config.DD_TRACE_NATIVE_SPAN_EVENTS) {
       for (const event of this._events) {
         this._nativeSpans.addSpanEvent(
@@ -558,7 +568,7 @@ class NativeDatadogSpan extends DatadogSpan {
     if (serialized.length > MAX_META_VALUE_LENGTH) {
       serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
     }
-    this._spanContext.setTag('_dd.span_events', serialized)
+    this._spanContext.setTag('events', serialized)
   }
 
   /**
