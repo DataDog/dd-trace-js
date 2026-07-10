@@ -77,16 +77,16 @@ function formatExecutionPlan ({
     ''
   )
   for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
-    appendFrameworkExecutions(lines, framework, requestedScenario)
+    appendFrameworkExecutions(lines, framework, requestedScenario, manifest.repository.root)
   }
 
   lines.push(
     '',
     '## Start the Validation',
     '',
-    'After approval, the agent runs this one command. It starts the validator included with the installed ' +
-      '`dd-trace` package, performs every check listed above against a local mock intake, writes the validation ' +
-      'report, and removes the temporary test files afterward.',
+    '`validate-test-optimization.js` is the local validator included with the installed `dd-trace` package. ' +
+      'After approval, it starts a mock intake on `127.0.0.1`, performs every check listed above, writes the ' +
+      'local validation report, and removes the temporary test files afterward.',
     '',
     codeBlock(sanitizeString(serializeApprovalCommand({
       argv: getValidatorArgv({
@@ -117,10 +117,10 @@ function formatExecutionPlan ({
       'It does not require outbound networking unless a setup or test command listed above requires it.',
     '',
     'These checks run the project commands listed above. The validator does not require real Datadog ' +
-      'credentials, inspect credential stores, or upload validation results. Review the exact commands before ' +
+    'credentials, inspect credential stores, or upload validation results. Review the exact commands before ' +
       'approving them for this environment.',
     '',
-    'Approve executing exactly the plan above?'
+    'Live validation has not started. The exact command above requires one approval before execution.'
   )
 
   return lines.join('\n')
@@ -182,7 +182,7 @@ function getPreferredValidatorPath (repositoryRoot) {
   return VALIDATOR_PATH
 }
 
-function appendFrameworkExecutions (lines, framework, requestedScenario) {
+function appendFrameworkExecutions (lines, framework, requestedScenario, repositoryRoot) {
   const basicCommand = getBasicReportingCommand(framework)
   lines.push(`### ${plainText(framework.id)}`, '')
   for (const setupCommand of framework.setup?.commands || []) {
@@ -247,7 +247,7 @@ function appendFrameworkExecutions (lines, framework, requestedScenario) {
     )
     for (const file of strategy.files || []) {
       lines.push(
-        `- Path: ${inlineCode(file.path)}`,
+        `- Path: ${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}`,
         '',
         '  Exact temporary test content:',
         '',
@@ -272,12 +272,15 @@ function appendFrameworkExecutions (lines, framework, requestedScenario) {
       })
     }
     lines.push(
-      '#### Files Removed After Validation',
+      '#### Temporary Test Cleanup',
       '',
-      'The validator deletes these temporary files after all checks finish:',
+      'The validator removes these temporary test and state files after validation. Paths are relative to the ' +
+        'repository root:',
       ''
     )
-    for (const cleanupPath of strategy.cleanupPaths || []) lines.push(`- ${inlineCode(cleanupPath)}`)
+    for (const cleanupPath of strategy.cleanupPaths || []) {
+      lines.push(`- ${inlineCode(getRepositoryRelativePath(repositoryRoot, cleanupPath))}`)
+    }
     lines.push('', 'Directories created for these files are also removed when they are empty.', '')
   } else if (advancedSelected && strategy) {
     lines.push(
@@ -290,6 +293,19 @@ function appendFrameworkExecutions (lines, framework, requestedScenario) {
     )
   }
   lines.push('')
+}
+
+/**
+ * Shortens a validated repository path for customer-facing plans.
+ *
+ * @param {string} repositoryRoot repository root shown at the start of the plan
+ * @param {string} filename absolute validated path
+ * @returns {string} repository-relative path when possible
+ */
+function getRepositoryRelativePath (repositoryRoot, filename) {
+  const relative = path.relative(repositoryRoot, filename)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return filename
+  return relative
 }
 
 function getSelectedGeneratedScenario (requestedScenario) {

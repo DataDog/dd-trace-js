@@ -126,7 +126,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('prints normalized commands and absolute paths without executing project code', () => {
+  it('prints normalized commands and unambiguous paths without executing project code', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-plan-'))
     const manifestPath = path.join(root, 'manifest.json')
     const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
@@ -178,9 +178,11 @@ describe('test optimization validator-owned execution phases', () => {
         requestedScenario: 'ci-wiring',
       })
 
-      assert.match(plan, /Approve executing exactly the plan above\?/)
+      assert.match(plan, /The exact command above requires one approval before execution\./)
+      assert.doesNotMatch(plan, /Approve executing exactly the plan above\?/)
       assert.match(plan, /--no-watchman/)
-      assert.match(plan, new RegExp(escapeRegExp(generatedFile)))
+      assert.match(plan, new RegExp(escapeRegExp(path.relative(root, generatedFile))))
+      assert.doesNotMatch(plan, new RegExp(`Path: .*${escapeRegExp(generatedFile)}`))
       assert.match(plan, /npm test -- --runInBand --token <redacted> --no-watchman/)
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
@@ -200,11 +202,13 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(fullPlan, /Executions: once, plus at most one initialization-reachability probe/)
       assert.match(plan, /Executions: three times: once without Datadog to verify test isolation/)
       assert.doesNotMatch(plan, /Executions: once without Datadog/)
-      assert.match(plan, /#### Files Removed After Validation/)
+      assert.match(plan, /#### Temporary Test Cleanup/)
+      assert.match(plan, /Paths are relative to the repository root/)
       assert.match(plan, /Exact temporary test content/)
       assert.match(plan, /\/\/ generated validation test/)
       assert.match(plan, /## Start the Validation/)
-      assert.match(plan, /validator included with the installed `dd-trace` package/)
+      assert.match(plan, /local validator included with the installed `dd-trace` package/)
+      assert.match(plan, /starts a mock intake on `127\.0\.0\.1`/)
       assert.match(plan, /does not require real Datadog credentials, inspect credential stores, or upload/)
       assert.doesNotMatch(plan, /- Confirm the selected test command/)
       assert.doesNotMatch(plan, /Credential exposure: unknown/)

@@ -44,27 +44,27 @@ Tell the user:
 
 Do not try to solve this by starting the fake intake outside the sandbox while tests still run
 inside the sandbox. Prefer rerunning the validator in a sandbox mode that grants localhost to both
-processes without granting unrelated network or secret access. If only a host shell is available,
-show the exact command and obtain explicit approval before running project code there.
+processes without granting unrelated network or secret access.
 
 This restriction is not specific to subagents. A user running the validator from the repository root
 inside the same restricted sandbox can hit the same blocker.
 
-If a restricted agent already produced `./dd-test-optimization-validation-manifest.json`, preserve
-that manifest and render a fresh approval plan from the host shell:
+If the user already approved a digest-bound live command, preserve the manifest and retry that exact
+command in an environment where binding and connecting to `127.0.0.1` are allowed. Do not render or
+approve the full plan again solely because the sandbox blocked localhost. The existing
+`--approved-plan-sha256` fails closed if the manifest, options, output path, or installed validator
+changed.
 
-```bash
-cd /absolute/path/to/repository
-node node_modules/dd-trace/ci/validate-test-optimization.js \
-  --manifest ./dd-test-optimization-validation-manifest.json \
-  --out ./dd-test-optimization-validation-results \
-  --print-plan
-```
+Use the agent platform's host/sandbox permission prompt for this environment change. Explain that
+the local Test Optimization diagnostic bundled with `dd-trace` is rerunning the already-approved
+command with localhost listen/connect access, and that it does not contact Datadog or upload the
+report. State whether project commands ran before the blocker; if they did or this is unknown, say
+that those commands may execute again. Do not precede the platform prompt with another `Approve
+executing exactly the plan above?` question.
 
-Show and approve that plan, then run the exact command it prints, including
-`--approved-plan-sha256`. If the package manager requires a different resolver, use that resolver
-for both plan rendering and the digest-bound command in an environment where binding and connecting
-to `127.0.0.1` are allowed.
+If there is no platform permission prompt, ask one concise question about rerunning the already-
+approved command outside the restricted sandbox. Render and approve a new plan only when the exact
+approved command or digest is unavailable, or when a digest-bound input changed.
 
 ## Validation Path Interpretation
 

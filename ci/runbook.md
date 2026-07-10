@@ -156,18 +156,46 @@ Finalize framework/package scope before rendering the checkpoint. A scope choice
 choice. Self-check the `--print-plan` output. Do not ask for approval if it contains `...`,
 angle-bracket placeholders, `same command`, unnamed temporary files, relative cwd values,
 unclassified framework families, or work described as possible rather than explicitly included or
-excluded. Show that output and ask its one binary question only: `Approve executing exactly the plan
-above?` After approval, run the exact validator command printed in the plan. Do not separately run
+excluded. After approval, run the exact validator command printed in the plan. Do not separately run
 preflights or generated-scenario verification commands.
 
 The complete `--print-plan` stdout must be visible in the user-facing conversation before the
-approval question is presented. Output that exists only in a collapsed shell/tool transcript,
+approval is requested. Output that exists only in a collapsed shell/tool transcript,
 internal reasoning, or a local file does not count as shown. Do not replace it with a summary such as
 `the plan is ready`, `the plan will run`, or `the exact command is shown above`. Copy the complete
 rendered plan verbatim, including every command, working directory, temporary file, cleanup file,
-and the final validator command. If the agent platform uses a separate approval dialog, first send
-the complete plan as a normal user-visible message, then open the approval dialog with only the
-binary approval choice.
+and the final validator command.
+
+Use exactly one approval surface:
+
+- **Agent platform with a command-approval dialog**: first send the complete plan as a normal
+  user-visible message, then immediately request execution of the exact digest-bound live command.
+  The platform dialog is the single approval for the displayed plan and the required localhost
+  access. Do not ask `Approve executing exactly the plan above?` in chat before opening it.
+- **Agent platform without a command-approval dialog**: after showing the complete plan, ask one
+  binary chat question: `Approve executing exactly the plan above?` Run the exact command only after
+  that answer.
+
+Never use both a chat approval question and a command-approval dialog for the same unchanged plan.
+Run `--print-plan` in the current restricted environment; because that mode runs no project code and
+opens no sockets, do not move it to a host shell or request localhost access merely to render the
+plan.
+
+When the agent platform asks for permission to run the validator, explain what the specific mode
+does instead of referring only to `the validator` or a `runbook-required command`:
+
+- **Plan rendering (`--print-plan`)**: this is the local diagnostic bundled with the installed
+  `dd-trace` package. In this mode it reads and validates the local manifest, then prints the exact
+  commands, temporary files, cleanup, and live command proposed for approval. It does not run tests,
+  create temporary tests, open localhost sockets, contact Datadog, or write validation results.
+- **Digest-bound live validation**: this is the same local diagnostic running the approved plan. It
+  starts a mock intake on `127.0.0.1`, runs only the displayed project commands, creates and removes
+  the displayed temporary tests, and writes local diagnostic artifacts. It does not require real
+  Datadog credentials or upload the report.
+
+Use that context in the normal user-visible message and in any separate host/sandbox permission
+reason. A permission prompt that only says `run validate-test-optimization.js` does not give the user
+enough information to make an informed choice.
 
 Proceed without another user interaction only when the current execution environment is known to:
 
@@ -184,9 +212,9 @@ outbound networking.
 
 When environment isolation cannot be established, do not speculate about which credentials may be
 present and do not ask the user to certify or attest that none are present. Show the exact bounded
-plan and the neutral safety statement emitted by `--print-plan`, then ask only `Approve executing
-exactly the plan above?`. Do not add labels such as `credential exposure: unknown`, `Proceed anyway`,
-or language suggesting that exposed credentials were detected. Approval covers only the listed
+plan and the neutral safety statement emitted by `--print-plan`, then use the single approval surface
+defined above. Do not add labels such as `credential exposure: unknown`, `Proceed anyway`, or
+language suggesting that exposed credentials were detected. Approval covers only the listed
 commands and resources; newly discovered installs, services, network access, or commands require a
 revised checkpoint. A request to locate, inspect, or execute this runbook is not approval for a plan
 the user has not seen yet. A user answer that selects a framework, package, command, or other scope is
@@ -290,8 +318,8 @@ Basic Reporting passes.
     evidence, Datadog-clean commands, `preflight.status: "pending"`, planned generated strategies,
     and non-runnable reasons.
 7. Run the validator with `--validate-manifest` and fix every contract error.
-8. Run the validator with `--print-plan`, show its exact output, and obtain one approval.
-9. After approval, run the exact live validator command printed by `--print-plan`. It owns setup,
+8. Run the validator with `--print-plan`, show its exact output, and use exactly one approval surface.
+9. After that single approval, run the exact live validator command printed by `--print-plan`. It owns setup,
     Datadog-clean preflight execution, generated file creation and verification, live scenarios, and
     cleanup. For local Jest validation it may add `--no-watchman` to avoid home-directory writes;
     this local adjustment is shown in the plan and is never added to the CI wiring replay.
@@ -480,11 +508,12 @@ node /absolute/path/to/validate-test-optimization.js \
   --print-plan
 ```
 
-Copy the complete rendered plan into the user-facing response and obtain the single approval it
-requests. A collapsed command transcript or agent-written summary is not a displayed plan. After
-approval, run the exact validator command from the plan, including its approval digest. Live
-validation fails closed when that digest is absent or no longer matches. Do not replace it with a
-manually reconstructed command.
+Copy the complete rendered plan into the user-facing response. A collapsed command transcript or
+agent-written summary is not a displayed plan. Use the agent platform's command-approval dialog as
+the single approval when available; otherwise ask one binary chat question. After that approval,
+run the exact validator command from the plan, including its approval digest. Live validation fails
+closed when that digest is absent or no longer matches. Do not replace it with a manually
+reconstructed command.
 
 An existing manifest or report is evidence from an earlier attempt, not proof that the current
 validation ran. Execute the approved preflight and validator commands for the current request and
@@ -503,20 +532,27 @@ from CI, the host shell, or an agent mode that allows localhost sockets. See
 `ci/test-optimization-validation-runbook-troubleshooting.md`.
 
 Do not broadly disable sandboxing. Prefer a mode that grants localhost listen/connect while keeping
-outbound networking, credentials, and unrelated filesystem locations unavailable. If only an
-unrestricted host shell is available, show the exact rerun command and obtain explicit approval.
+outbound networking, credentials, and unrelated filesystem locations unavailable.
 
-For a host-shell fallback, render the plan again in that environment:
+When an already-approved digest-bound live command is blocked only by localhost permissions, do not
+render the plan again or ask `Approve executing exactly the plan above?` a second time. Retry the
+exact same command through the agent platform's host/sandbox permission mechanism. The existing
+`--approved-plan-sha256` binds the manifest, selected options, output path, and validator
+implementation; the retry fails closed if any of them changed.
 
-```bash
-cd "$REPO_ROOT"
-node node_modules/dd-trace/ci/validate-test-optimization.js \
-  --manifest ./dd-test-optimization-validation-manifest.json \
-  --out ./dd-test-optimization-validation-results \
-  --print-plan
-```
+Make the permission request distinct from plan approval. State that the already-approved local
+validator was blocked by localhost restrictions and that the same digest-bound command needs
+localhost listen/connect access. Include the validator context above and state whether any listed
+project commands ran before the blocker; if they did or this cannot be determined, disclose that
+they may run again. The platform permission prompt is the approval for this execution-environment
+change. Do not precede it with another copy of the plan or another identical approval question.
 
-Show and approve the fresh plan, then run the exact digest-bound live command it prints.
+If the platform has no separate permission mechanism, ask one concise environment-change question:
+`Approve rerunning the already-approved validation command with localhost access outside the
+restricted sandbox?` Do not ask the user to approve the full plan again.
+
+Only render and approve a new plan when the exact approved command or digest is unavailable, or when
+the manifest, commands, selected options, output path, or installed validator changed.
 
 ## Report Results
 
