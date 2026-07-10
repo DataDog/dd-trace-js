@@ -135,15 +135,15 @@ incidental output; do not inspect dependencies or validator internals merely to 
 Use this checkpoint order:
 
 1. **Framework coverage**: list every detected framework/runner family and either its selected
-   service-free representative or a concrete omission reason. Do not say `starting with` one family
-   when other detected families remain unclassified.
+    service-free representative or a concrete omission reason. Do not say `starting with` one family
+    when other detected families remain unclassified.
 2. **Selected test commands**: show the command used to confirm tests run normally, the same command
-   with correct Datadog initialization, and the test command with the configuration supplied by CI.
+    with correct Datadog initialization, and the test command with the configuration supplied by CI.
 3. **Temporary advanced-feature tests**: show every temporary test path, the command that runs each
-   advanced-feature check, and the files that will be removed afterward.
+    advanced-feature check, and the files that will be removed afterward.
 4. **Command the agent runs after approval**: show the exact installed validator command and explain
-   that it starts the local mock intake, runs the listed checks, writes the report, and removes the
-   temporary tests.
+    that it starts the local mock intake, runs the listed checks, writes the report, and removes the
+    temporary tests.
 
 Finalize framework/package scope before rendering the checkpoint. A scope choice is not an approval
 choice. Self-check the `--print-plan` output. Do not ask for approval if it contains `...`,

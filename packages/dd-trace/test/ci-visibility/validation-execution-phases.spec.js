@@ -185,15 +185,15 @@ describe('test optimization validator-owned execution phases', () => {
   it('counts only Vitest tests executed through a name filter', () => {
     assert.strictEqual(getObservedTestCount('vitest', `
       Test Files  1 passed (1)
-           Tests  1 passed | 2 skipped (3)
+          Tests  1 passed | 2 skipped (3)
     `), 1)
     assert.strictEqual(getObservedTestCount('vitest', `
       Test Files  1 failed (1)
-           Tests  1 failed | 2 skipped (3)
+          Tests  1 failed | 2 skipped (3)
     `), 1)
     assert.strictEqual(getObservedTestCount('vitest', `
       Test Files  1 passed (1)
-           Tests  3 passed (3)
+          Tests  3 passed (3)
     `), 3)
   })
 
