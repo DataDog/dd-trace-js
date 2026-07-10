@@ -82,7 +82,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     if (result?.errors?.length) {
       span.setTag('error', result.errors[0])
       for (const error of result.errors) {
-        extractErrorIntoSpanEvent(this._tracerConfig, span, error)
+        extractErrorIntoSpanEvent(this.config, span, error)
       }
     }
 
