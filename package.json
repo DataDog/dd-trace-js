@@ -230,6 +230,7 @@
     "semifies": "^1.0.0",
     "semver": "^7.8.5",
     "sinon": "^22.0.0",
+    "source-map-support": "^0.5.21",
     "test-exclude": "^8.0.0",
     "tiktoken": "^1.0.21",
     "typescript": "^6.0.3",
