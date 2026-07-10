@@ -92,9 +92,6 @@ class Tracer {
   }
 
   startSpan (name, options = {}, context) {
-    // Read the API at call time, not module load: the application's copy is captured on its own
-    // require, which may happen after this module loaded. A snapshotted copy would use different
-    // per-copy context keys than the application and lose the parent span (issue #6882).
     const api = getApi()
     if (context === undefined) {
       context = api.context.active()

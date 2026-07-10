@@ -12,7 +12,6 @@ const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
-require('./use-otel-api')
 
 const tracer = require('../../').init()
 

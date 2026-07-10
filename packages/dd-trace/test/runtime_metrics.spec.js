@@ -12,7 +12,6 @@ const sinon = require('sinon')
 const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
-require('./opentelemetry/use-otel-api')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const { DogStatsDClient } = require('../src/dogstatsd')
 

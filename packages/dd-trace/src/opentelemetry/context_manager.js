@@ -14,9 +14,6 @@ class ContextManager {
 
   // converts dd to otel
   active () {
-    // The application's copy is captured on its own require; read it here rather than at module
-    // load so context keys match the copy the application uses (issue #6882). OTel context keys are
-    // per-copy symbols, so a span written with one copy is invisible to another.
     const { trace, ROOT_CONTEXT, propagation } = getApi()
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT

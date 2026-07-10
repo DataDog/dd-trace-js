@@ -1,33 +1,26 @@
 'use strict'
 
-const otelApi = require('../../dd-trace/src/opentelemetry/api')
+const {
+  API_LOGS_VERSION_RANGE,
+  API_VERSION_RANGE,
+  setApi,
+  setApiLogs,
+} = require('../../dd-trace/src/opentelemetry/api')
 const { addHook } = require('./helpers/instrument')
 
-// Capture the application's own copy of the OpenTelemetry API packages as it is required,
-// so the bridge registers its providers on the exact copy the application reads with. The
-// OTel global API rejects a provider registered by a copy older than the reader's, which
-// silently downgrades every span to a no-op (issue #6882); binding to the application's copy
-// removes the mismatch. The version ranges match dd-trace's declared support — a copy outside
-// the range is left uncaptured, so the bridge falls back to dd-trace's own bundled copy rather
-// than binding to an unsupported version.
-
-/**
- * @param {string} packageName
- * @returns {(moduleExports: object) => object}
- */
-function capture (packageName) {
-  return (moduleExports) => {
-    otelApi.setApi(packageName, moduleExports)
-    return moduleExports
-  }
-}
+// Expose supported runtime-loaded API copies to the holder. It resolves from the application
+// entrypoint first, then uses these captures to handle custom resolution that createRequire()
+// cannot reproduce. Copies outside dd-trace's supported ranges are not captured.
 
 addHook({
-  name: otelApi.API,
-  versions: ['>=1.0.0 <1.10.0'],
-}, capture(otelApi.API))
+  name: '@opentelemetry/api',
+  versions: [API_VERSION_RANGE],
+  // Do not replace the namespace with the package's reduced default export, which omits constants.
+  patchDefault: false,
+}, setApi)
 
 addHook({
-  name: otelApi.API_LOGS,
-  versions: ['>=0.33.0 <1.0.0'],
-}, capture(otelApi.API_LOGS))
+  name: '@opentelemetry/api-logs',
+  versions: [API_LOGS_VERSION_RANGE],
+  patchDefault: false,
+}, setApiLogs)

@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 require('../setup/core')
-require('./use-otel-api')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const DDSpanContext = require('../../src/opentracing/span_context')
 const id = require('../../src/id')

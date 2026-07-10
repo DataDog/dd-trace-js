@@ -1,8 +1,8 @@
 'use strict'
 
-const { getApi } = require('../api')
 const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
+const { getApi } = require('../api')
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -72,8 +72,7 @@ class Logger {
     }
 
     if (!logRecord.context) {
-      // Store span context in the log record context for trace correlation. Read the API at emit
-      // time so it matches the copy the application captured (issue #6882).
+      // Store span context in the log record context for trace correlation.
       logRecord.context = getApi().context.active()
     }
 

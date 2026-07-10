@@ -9,7 +9,6 @@ const { assertObjectContains, ANY_STRING } = require('../../../../integration-te
 const { getAllBaggageItems, removeAllBaggageItems, removeBaggageItem, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
-require('./use-otel-api')
 const ContextManager = require('../../src/opentelemetry/context_manager')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 require('../../').init()

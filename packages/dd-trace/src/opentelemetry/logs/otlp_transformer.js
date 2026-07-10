@@ -1,14 +1,13 @@
 'use strict'
 
 const { getApi, getApiLogs } = require('../api')
-
-// SeverityNumber is an OTel spec enum of fixed numeric constants, identical across every copy of
-// the API, so reading it at load time is safe. `trace` is read at use time because it resolves
-// span context keys, which are per-copy (issue #6882).
-const { SeverityNumber } = getApiLogs()
-
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+
+// SeverityNumber is an OTel spec enum of fixed numeric constants, identical across every copy of
+// the API, so reading it at load time is safe. `trace` is read at use time so global API access
+// uses the application copy's version compatibility checks (issue #6882).
+const { SeverityNumber } = getApiLogs()
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord

@@ -8,7 +8,6 @@ const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 const { trace } = require('@opentelemetry/api')
 
 require('../setup/core')
-require('./use-otel-api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
@@ -130,7 +129,12 @@ describe('OTel TracerProvider', () => {
   // captured. Snapshotting the API at module load would register on dd-trace's fallback copy while
   // the application reads its own, silently downgrading every span to a no-op.
   it('registers on the @opentelemetry/api copy captured after the module loaded', () => {
-    const holder = proxyquire('../../src/opentelemetry/api', {})
+    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+    const applicationRequire = sinon.stub()
+    applicationRequire.resolve = sinon.stub().throws(notFound)
+    const holder = proxyquire('../../src/opentelemetry/api', {
+      'node:module': { createRequire: () => applicationRequire },
+    })
 
     const setGlobalTracerProvider = sinon.stub().returns(true)
     const setGlobalContextManager = sinon.spy()
@@ -150,12 +154,13 @@ describe('OTel TracerProvider', () => {
     })
 
     // The application requires its own copy only now, after the bridge module has been loaded.
-    holder.setApi(holder.API, applicationCopy)
+    holder.setApi(applicationCopy)
 
     const provider = new FreshTracerProvider()
     provider.register()
 
     sinon.assert.calledOnceWithExactly(setGlobalTracerProvider, provider)
     sinon.assert.calledOnceWithExactly(setGlobalContextManager, provider._contextManager)
+    sinon.assert.calledOnce(setGlobalPropagator)
   })
 })

@@ -4,9 +4,29 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { describe, it } = require('mocha')
+
+const { describe, it, afterEach } = require('mocha')
 
 const ddPlugin = require('../index')
+
+const temporaryDirectories = []
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+/**
+ * @param {Record<string, string | Record<string, string>>} manifest
+ * @returns {string}
+ */
+function createManifestDirectory (manifest) {
+  const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-otel-'))
+  temporaryDirectories.push(workingDirectory)
+  fs.writeFileSync(path.join(workingDirectory, 'package.json'), JSON.stringify(manifest))
+  return workingDirectory
+}
 
 function captureOptionalPeerOnLoad () {
   let onLoad
@@ -20,6 +40,10 @@ function captureOptionalPeerOnLoad () {
   return onLoad
 }
 
+/**
+ * @param {import('esbuild').BuildOptions} [initialOptions]
+ * @returns {string[] | undefined}
+ */
 function setupExternal (initialOptions = {}) {
   ddPlugin.setup({ initialOptions, onResolve () {}, onLoad () {} })
   return initialOptions.external
@@ -29,7 +53,7 @@ describe('datadog-esbuild plugin', () => {
   describe('OpenTelemetry API externalization', () => {
     // The repo's own package.json declares both packages, so a build run from the repo root
     // externalizes both (they are the application's declared copies).
-    it('marks both OpenTelemetry API peers external so the bundle shares the application copy', () => {
+    it('marks both OpenTelemetry API packages external so the bundle shares the application copy', () => {
       const external = setupExternal()
 
       assert.ok(external.includes('@opentelemetry/api'), 'should externalize @opentelemetry/api')
@@ -44,24 +68,28 @@ describe('datadog-esbuild plugin', () => {
       assert.ok(external.includes('@opentelemetry/api-logs'), 'should externalize @opentelemetry/api-logs')
     })
 
-    it('bundles a package the application does not depend on so the bundle stays self-contained', () => {
-      const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-otel-'))
-      fs.writeFileSync(path.join(workingDir, 'package.json'), JSON.stringify({ name: 'app', dependencies: {} }))
+    it('does not duplicate an OpenTelemetry API external supplied by the build', () => {
+      const external = setupExternal({ external: ['@opentelemetry/api'] })
 
-      const external = setupExternal({ absWorkingDir: workingDir }) ?? []
+      assert.strictEqual(external.filter(name => name === '@opentelemetry/api').length, 1)
+    })
+
+    it('bundles a package the application does not depend on so the bundle stays self-contained', () => {
+      const workingDirectory = createManifestDirectory({ name: 'app', dependencies: {} })
+
+      const external = setupExternal({ absWorkingDir: workingDirectory }) ?? []
 
       assert.ok(!external.includes('@opentelemetry/api'), 'should bundle @opentelemetry/api')
       assert.ok(!external.includes('@opentelemetry/api-logs'), 'should bundle @opentelemetry/api-logs')
     })
 
     it('externalizes only the package the application declares', () => {
-      const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-otel-'))
-      fs.writeFileSync(
-        path.join(workingDir, 'package.json'),
-        JSON.stringify({ name: 'app', dependencies: { '@opentelemetry/api': '^1.9.0' } })
-      )
+      const workingDirectory = createManifestDirectory({
+        name: 'app',
+        dependencies: { '@opentelemetry/api': '^1.9.0' },
+      })
 
-      const external = setupExternal({ absWorkingDir: workingDir }) ?? []
+      const external = setupExternal({ absWorkingDir: workingDirectory }) ?? []
 
       assert.ok(external.includes('@opentelemetry/api'), 'should externalize the declared copy')
       assert.ok(!external.includes('@opentelemetry/api-logs'), 'should bundle the undeclared copy')

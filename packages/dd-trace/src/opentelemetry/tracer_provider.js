@@ -65,10 +65,6 @@ class TracerProvider {
   // Not actually required by the SDK spec, but the official Node.js SDK does
   // this and the docs reflect that so we should do this too for familiarity.
   register (config = {}) {
-    // Read the API at register time, not module load: the application's copy is captured when it
-    // requires @opentelemetry/api, which may happen after this module was first loaded. Registering
-    // on a copy snapshotted before capture would bind the global provider to dd-trace's fallback
-    // copy while the application reads its own, downgrading every span to a no-op (issue #6882).
     const { trace, context, propagation } = getApi()
     context.setGlobalContextManager(this.#contextManager)
     if (!trace.setGlobalTracerProvider(this)) {

@@ -82,17 +82,13 @@ class DatadogWebpackPlugin {
       }
     })
 
-    // Keep an OpenTelemetry API package external only when the application declares its own copy: the
-    // bridge captures that copy through the @opentelemetry/api instrumentation, which fires on a
-    // runtime require, so bundling it would inline a second copy the instrumentation never sees and
-    // the bridge would register on the wrong one, downgrading every span to a no-op (issue #6882). A
-    // package the application does not declare is left to bundle, so dd-trace's own fallback copy is
-    // inlined and the bundle stays self-contained. The `commonjs` type forces a CommonJS require
-    // regardless of the user's externalsType.
-    const workingDir = compiler.options.context || process.cwd()
+    // Preserve a runtime require regardless of the user's externalsType.
+    const workingDirectory = compiler.options.context || process.cwd()
     const otelApiExternals = {}
-    for (const otelApiPackage of otelApiPackagesToExternalize(workingDir)) {
-      otelApiExternals[otelApiPackage] = `commonjs ${otelApiPackage}`
+    const outputModule = compiler.options.experiments?.outputModule || compiler.options.output?.module
+    const externalType = outputModule ? 'node-commonjs' : 'commonjs'
+    for (const otelApiPackage of otelApiPackagesToExternalize(workingDirectory)) {
+      otelApiExternals[otelApiPackage] = `${externalType} ${otelApiPackage}`
     }
     if (otelApiExternals['@opentelemetry/api'] || otelApiExternals['@opentelemetry/api-logs']) {
       const externals = Array.isArray(compiler.options.externals)

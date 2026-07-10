@@ -147,16 +147,13 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
-  // Keep an OpenTelemetry API package external only when the application declares its own copy: the
-  // bridge captures that copy through the `@opentelemetry/api` instrumentation, which fires on a
-  // runtime require, so bundling it would inline a second copy the instrumentation never sees and the
-  // bridge would register on the wrong one, downgrading every span to a no-op (issue #6882). A
-  // package the application does not declare is left to bundle, so dd-trace's own fallback copy is
-  // inlined and the bundle stays self-contained.
-  const workingDir = build.initialOptions.absWorkingDir || process.cwd()
-  for (const otelApiPackage of otelApiPackagesToExternalize(workingDir)) {
-    build.initialOptions.external ??= []
-    build.initialOptions.external.push(otelApiPackage)
+  // Preserve application-owned API packages while keeping fallback-only bundles self-contained.
+  const workingDirectory = build.initialOptions.absWorkingDir || process.cwd()
+  for (const otelApiPackage of otelApiPackagesToExternalize(workingDirectory)) {
+    if (!externalModules.has(otelApiPackage)) {
+      build.initialOptions.external ??= []
+      build.initialOptions.external.push(otelApiPackage)
+    }
     externalModules.add(otelApiPackage)
   }
 

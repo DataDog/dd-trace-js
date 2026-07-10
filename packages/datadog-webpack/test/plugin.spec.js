@@ -4,7 +4,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { describe, it } = require('mocha')
+
+const { describe, it, afterEach } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
@@ -12,6 +13,14 @@ const optionalPeerLoader = require('../src/optional-peer-loader')
 
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
+    const temporaryDirectories = []
+
+    afterEach(() => {
+      for (const directory of temporaryDirectories.splice(0)) {
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
+    })
+
     it('throws when minimize is enabled', () => {
       const plugin = new DatadogWebpackPlugin()
       let environmentHook
@@ -53,9 +62,20 @@ describe('DatadogWebpackPlugin', () => {
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
     })
 
-    function applyToExternals (externals, context) {
+    /**
+     * @param {string | Array<string | object>} [externals]
+     * @param {string} [context]
+     * @param {boolean} [outputModule]
+     * @returns {string | Array<string | object> | undefined}
+     */
+    function applyToExternals (externals, context, outputModule = false) {
       const compiler = {
-        options: { optimization: {}, externals, context },
+        options: {
+          optimization: {},
+          externals,
+          context,
+          experiments: { outputModule },
+        },
         hooks: {
           environment: { tap: () => {} },
           thisCompilation: { tap: () => {} },
@@ -66,23 +86,41 @@ describe('DatadogWebpackPlugin', () => {
       return compiler.options.externals
     }
 
-    function manifestDir (manifest) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webpack-otel-'))
-      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest))
-      return dir
+    /**
+     * @param {Record<string, string | Record<string, string>>} manifest
+     * @returns {string}
+     */
+    function createManifestDirectory (manifest) {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webpack-otel-'))
+      temporaryDirectories.push(directory)
+      fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify(manifest))
+      return directory
     }
 
+    /**
+     * @param {string | Array<string | object> | undefined} externals
+     * @returns {Record<string, string> | undefined}
+     */
     function otelExternalEntry (externals) {
       if (!Array.isArray(externals)) return undefined
       return externals.find(entry => entry && typeof entry === 'object' && '@opentelemetry/api' in entry)
     }
 
-    it('externalizes both OpenTelemetry API peers as a commonjs require', () => {
+    it('externalizes both OpenTelemetry API packages as a commonjs require', () => {
       const externals = applyToExternals()
 
       assert.deepStrictEqual(externals.at(-1), {
         '@opentelemetry/api': 'commonjs @opentelemetry/api',
         '@opentelemetry/api-logs': 'commonjs @opentelemetry/api-logs',
+      })
+    })
+
+    it('uses createRequire-compatible externals for ESM output', () => {
+      const externals = applyToExternals(undefined, undefined, true)
+
+      assert.deepStrictEqual(externals.at(-1), {
+        '@opentelemetry/api': 'node-commonjs @opentelemetry/api',
+        '@opentelemetry/api-logs': 'node-commonjs @opentelemetry/api-logs',
       })
     })
 
@@ -101,7 +139,7 @@ describe('DatadogWebpackPlugin', () => {
     })
 
     it('bundles a package the application does not depend on so the bundle stays self-contained', () => {
-      const context = manifestDir({ name: 'app', dependencies: {} })
+      const context = createManifestDirectory({ name: 'app', dependencies: {} })
 
       const externals = applyToExternals(undefined, context)
 
@@ -109,7 +147,10 @@ describe('DatadogWebpackPlugin', () => {
     })
 
     it('externalizes only the package the application declares', () => {
-      const context = manifestDir({ name: 'app', dependencies: { '@opentelemetry/api': '^1.9.0' } })
+      const context = createManifestDirectory({
+        name: 'app',
+        dependencies: { '@opentelemetry/api': '^1.9.0' },
+      })
 
       const entry = otelExternalEntry(applyToExternals(undefined, context))
 

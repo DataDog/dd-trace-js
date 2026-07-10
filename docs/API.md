@@ -400,7 +400,12 @@ const tracerProvider = new tracer.TracerProvider()
 tracerProvider.register()
 ```
 
-dd-trace binds to the application's own `@opentelemetry/api` copy when it is present and falls back to the copy it bundles otherwise. If you require `@opentelemetry/api` yourself, require it before creating the `TracerProvider` so the bridge registers on the same copy your code reads. The `dd-trace/esbuild` and `dd-trace/webpack` plugins mark a package external only when your application depends on it, so its single runtime copy is shared with the bridge; keep those resolvable at runtime. A package your application does not depend on is bundled from dd-trace's own copy, so no extra runtime dependency is needed.
+dd-trace resolves the application's own `@opentelemetry/api` copy from its entrypoint when the
+bridge first uses it and falls back to the copy bundled with dd-trace otherwise. The
+`dd-trace/esbuild` and `dd-trace/webpack` plugins keep an application dependency external so its
+single runtime copy is shared with the bridge; keep those dependencies resolvable at runtime. A
+package the application does not depend on is bundled from dd-trace's own copy, so no extra runtime
+dependency is needed.
 
 The following attributes are available to override Datadog-specific options:
 

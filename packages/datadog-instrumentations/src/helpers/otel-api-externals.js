@@ -15,11 +15,11 @@ const OTEL_API_PACKAGES = ['@opentelemetry/api', '@opentelemetry/api-logs']
  * competing copy, so it is left to bundle: dd-trace's own fallback copy is inlined and the bundle
  * stays self-contained, needing no `@opentelemetry/api` in `node_modules` at runtime.
  *
- * @param {string} workingDir Directory whose `package.json` lists the application's dependencies.
- * @returns {string[]} The subset of `OTEL_API_PACKAGES` to mark external.
+ * @param {string} workingDirectory Directory whose `package.json` lists the application's dependencies.
+ * @returns {string[]} The supported OpenTelemetry API packages to mark external.
  */
-function otelApiPackagesToExternalize (workingDir) {
-  const declared = readDeclaredDependencies(workingDir)
+function otelApiPackagesToExternalize (workingDirectory) {
+  const declared = readDeclaredDependencies(workingDirectory)
   // A missing or unreadable manifest is inconclusive, so err toward external: sharing the
   // application's copy is the correctness-preserving default and only costs the self-contained-bundle
   // optimization when the application in fact owns no copy.
@@ -28,14 +28,14 @@ function otelApiPackagesToExternalize (workingDir) {
 }
 
 /**
- * @param {string} workingDir
+ * @param {string} workingDirectory
  * @returns {Set<string> | undefined} All declared dependency names, or `undefined` when the manifest
  *   cannot be read.
  */
-function readDeclaredDependencies (workingDir) {
+function readDeclaredDependencies (workingDirectory) {
   let manifest
   try {
-    manifest = JSON.parse(fs.readFileSync(path.join(workingDir, 'package.json'), 'utf8'))
+    manifest = JSON.parse(fs.readFileSync(path.join(workingDirectory, 'package.json'), 'utf8'))
   } catch {
     return
   }
@@ -47,4 +47,4 @@ function readDeclaredDependencies (workingDir) {
   ])
 }
 
-module.exports = { OTEL_API_PACKAGES, otelApiPackagesToExternalize }
+module.exports = { otelApiPackagesToExternalize }
