@@ -27,7 +27,8 @@ const { getSourceMapsSupport, setSourceMapsSupport } =
   /** @type {ProgrammaticSourceMaps} */ (/** @type {unknown} */ (Module))
 
 const supportsProgrammaticSourceMaps = typeof setSourceMapsSupport === 'function'
-const legacySourceMapsEnabled = !supportsProgrammaticSourceMaps && sourceMapsFlagPresent()
+const nativeSourceMapsEnabled = isNativeSourceMapSupportEnabled()
+const legacySourceMapsEnabled = !supportsProgrammaticSourceMaps && nativeSourceMapsEnabled
 const SOURCE_MAP_URL_CACHE_LIMIT = 1024
 
 /** @type {WeakMap<NodeModule, import('node:module').SourceMap | null>} */
@@ -106,7 +107,7 @@ function canResolveSourceMaps () {
 /**
  * @returns {boolean} Whether source maps are enabled by the effective Node options.
  */
-function sourceMapsFlagPresent () {
+function isNativeSourceMapSupportEnabled () {
   let enabled = false
   const nodeOptions = parseNodeOptions(getEnvironmentVariable('NODE_OPTIONS'))
   for (let i = 0; i < nodeOptions.length; i++) {
@@ -357,7 +358,7 @@ function hasSourceMapNames (sourceMap) {
  * @param {string | null | undefined} fileName
  * @param {number | null} lineNumber
  * @param {number | null} columnNumber
- * @param {boolean} [cacheSourceMapByURL]
+ * @param {boolean} cacheSourceMapByURL
  * @returns {OriginalLocation | undefined}
  *
  * @typedef {object} OriginalLocation
@@ -367,7 +368,7 @@ function hasSourceMapNames (sourceMap) {
  * @property {string} formatted
  * @property {import('node:module').SourceMap} sourceMap
  */
-function resolveLocation (fileName, lineNumber, columnNumber, cacheSourceMapByURL = true) {
+function resolveLocation (fileName, lineNumber, columnNumber, cacheSourceMapByURL) {
   if (!fileName || lineNumber === null) return
 
   const sourceMap = getSourceMap(fileName, cacheSourceMapByURL)
@@ -554,5 +555,6 @@ function toOriginalCallSite (callSite, index, callSites) {
 
 module.exports = {
   enable,
+  isNativeSourceMapSupportEnabled,
   isSourceMapSupportEnabled,
 }

@@ -38,11 +38,23 @@ let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) 
   return { path, line, column }
 }
 
-function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOriginalPathAndLineFromSourceMap }) {
+/**
+ * @param {boolean} nativeSourceMapsEnabled
+ * @param {{
+ *   getOriginalPathAndLineFromSourceMap?: (path: string, line: number, column: number) =>
+ *     { path: string, line: number, column: number }
+ * }} iastRewriter
+ */
+function setGetOriginalPathAndLineFromSourceMapFunction (
+  nativeSourceMapsEnabled,
+  iastRewriter
+) {
+  const { getOriginalPathAndLineFromSourceMap } = iastRewriter
   if (!getOriginalPathAndLineFromSourceMap) return
 
-  // Source-map chaining already restores rewritten private-module locations.
-  getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap
+  // Native stack frames already contain chained source-map locations. Programmatically enabled
+  // support still exposes generated structured call sites, so the rewriter must translate them.
+  getRewriterOriginalPathAndLineFromSourceMap = nativeSourceMapsEnabled
     ? (path, line, column) => {
         return !globalThis.__DD_ESBUILD_IAST_WITH_SM && isPrivateModule(path) && !isDdTrace(path)
           ? { path, line, column }
@@ -61,7 +73,10 @@ function getRewriter (telemetryVerbosity) {
       cacheRewrittenSourceMap = iastRewriter.cacheRewrittenSourceMap
 
       const chainSourceMap = sourceMaps.isSourceMapSupportEnabled()
-      setGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter)
+      setGetOriginalPathAndLineFromSourceMapFunction(
+        sourceMaps.isNativeSourceMapSupportEnabled(),
+        iastRewriter
+      )
 
       rewriter = new Rewriter({
         csiMethods,

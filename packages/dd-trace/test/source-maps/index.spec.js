@@ -322,7 +322,13 @@ describe('source maps', function () {
   let originalNodeOptions
   /** @type {{ enabled: boolean, generatedCode: boolean, nodeModules: boolean } | undefined} */
   let originalSourceMapsSupport
-  /** @type {{ enable: () => void, isSourceMapSupportEnabled: () => boolean }} */
+  /**
+   * @type {{
+   *   enable: () => void,
+   *   isNativeSourceMapSupportEnabled: () => boolean,
+   *   isSourceMapSupportEnabled: () => boolean
+   * }}
+   */
   let sourceMaps
   const cachedModulePaths = new Set()
 
@@ -399,6 +405,7 @@ describe('source maps', function () {
       })
 
       assert.strictEqual(sourceMaps.isSourceMapSupportEnabled(), false)
+      assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), false)
       sourceMaps.enable()
 
       assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
@@ -454,6 +461,7 @@ describe('source maps', function () {
       })
 
       assert.strictEqual(sourceMaps.isSourceMapSupportEnabled(), true)
+      assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), true)
       sourceMaps.enable()
 
       assert.notStrictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
@@ -556,6 +564,7 @@ describe('source maps', function () {
         })
 
         assert.strictEqual(sourceMaps.isSourceMapSupportEnabled(), expected)
+        assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), expected)
         sourceMaps.enable()
 
         if (expected) {
@@ -985,6 +994,28 @@ describe('source maps', function () {
       sinon.assert.notCalled(setSourceMapsSupport)
     })
 
+    it('delegates remapped generated code to a custom formatter', function () {
+      const sourceMap = {
+        findEntry: sinon.stub().returns({
+          originalColumn: 4,
+          originalLine: 3,
+          originalSource: 'generated.ts',
+        }),
+      }
+      const findSourceMap = sinon.stub().withArgs('generated.js').returns(sourceMap)
+      Error.prepareStackTrace = formatFirstFileName
+      sourceMaps = loadStubbedSourceMaps(
+        findSourceMap,
+        undefined,
+        () => ({ enabled: true, generatedCode: true, nodeModules: false })
+      )
+      sourceMaps.enable()
+      const callSite = createCallSite(null, 1, 2)
+      callSite.getEvalOrigin = () => 'generated.js'
+
+      assert.strictEqual(Error.prepareStackTrace(new Error('boom'), [callSite]), 'generated.ts')
+    })
+
     it('preserves programmatic source maps for evaluated code', function () {
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
       if (typeof sourceMapsModule.setSourceMapsSupport !== 'function') this.skip()
@@ -1243,6 +1274,24 @@ describe('source maps', function () {
       support = { enabled: true, generatedCode: false, nodeModules: true }
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'after.ts')
       sinon.assert.calledTwice(findSourceMap)
+    })
+
+    it('preserves default generated frames when source map support is disabled', function () {
+      const fileName = path.join(temporaryDirectory, 'disabled.js')
+      const findSourceMap = sinon.stub()
+      let support = {
+        enabled: true,
+        generatedCode: false,
+        nodeModules: false,
+      }
+      sourceMaps = loadStubbedSourceMaps(findSourceMap, undefined, () => support)
+      sourceMaps.enable()
+      support = { enabled: false, generatedCode: false, nodeModules: false }
+
+      const stack = Error.prepareStackTrace(new Error('boom'), [createCallSite(fileName)])
+
+      assert.match(String(stack), /disabled\.js:1:1/)
+      sinon.assert.notCalled(findSourceMap)
     })
 
     it('caches source map entries without original positions', function () {

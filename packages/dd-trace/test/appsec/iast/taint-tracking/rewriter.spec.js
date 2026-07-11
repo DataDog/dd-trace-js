@@ -58,6 +58,7 @@ describe('IAST Rewriter', () => {
         register: sinon.stub(),
       }
       sourceMaps = {
+        isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
         isSourceMapSupportEnabled: sinon.stub().returns(false),
       }
 
@@ -384,6 +385,7 @@ describe('IAST Rewriter', () => {
     beforeEach(() => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       sourceMaps = {
+        isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
         isSourceMapSupportEnabled: sinon.stub().returns(false),
       }
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
@@ -408,7 +410,19 @@ describe('IAST Rewriter', () => {
       sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
     })
 
-    it('should not call native getOriginalPathAndLineFromSourceMap if source maps are enabled', () => {
+    it('should call native getOriginalPathAndLineFromSourceMap if source maps are enabled programmatically', () => {
+      sourceMaps.isSourceMapSupportEnabled.returns(true)
+
+      rewriter.enable(iastEnabledConfig)
+
+      const location = { path: 'test', line: 42, column: 4 }
+      rewriter.getOriginalPathAndLineFromSourceMap(location)
+
+      sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
+    })
+
+    it('should not call native getOriginalPathAndLineFromSourceMap if source maps are enabled natively', () => {
+      sourceMaps.isNativeSourceMapSupportEnabled.returns(true)
       sourceMaps.isSourceMapSupportEnabled.returns(true)
 
       rewriter.enable(iastEnabledConfig)
