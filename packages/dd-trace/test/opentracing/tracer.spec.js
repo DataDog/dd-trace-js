@@ -12,7 +12,6 @@ require('../setup/core')
 const {
   createStoreRetirement,
   enterSpanForRetirement,
-  markSpanProcessed,
 } = require('../../src/active-span')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
@@ -272,7 +271,6 @@ describe('Tracer', () => {
       }
       const store = enterSpanForRetirement(parent, {}, retirement)
       retirement.retire()
-      markSpanProcessed(parent)
       const retiredSpan = store.span
 
       tracer.startSpan('name', { childOf: retiredSpan })
@@ -387,7 +385,6 @@ describe('Tracer', () => {
       }
       const store = enterSpanForRetirement(parent, {}, retirement)
       retirement.retire()
-      markSpanProcessed(parent)
 
       tracer.inject(store.span, formats.TEXT_MAP, carrier)
 

@@ -11,7 +11,6 @@ require('./setup/core')
 const {
   createStoreRetirement,
   enterSpanForRetirement,
-  markSpanProcessed,
 } = require('../src/active-span')
 const Scope = require('../src/scope')
 
@@ -36,7 +35,7 @@ describe('Scope', () => {
     })
 
     it('should return one retired span for the active context', () => {
-      const context = { _baggageItems: {} }
+      const context = { _baggageItems: {}, _trace: { started: [] } }
       const tracer = {}
       const activeSpan = {
         _duration: 1,
@@ -46,7 +45,6 @@ describe('Scope', () => {
       const retirement = createStoreRetirement()
       enterSpanForRetirement(activeSpan, {}, retirement)
       retirement.retire()
-      markSpanProcessed(activeSpan)
 
       scope = new Scope()
       const retiredSpan = scope.active()
@@ -164,7 +162,7 @@ describe('Scope', () => {
     })
 
     it('should activate a retired span without restoring its original parent', () => {
-      const context = { _baggageItems: {} }
+      const context = { _baggageItems: {}, _trace: { started: [] } }
       const tracer = {}
       const activeSpan = {
         _duration: 1,
@@ -174,7 +172,6 @@ describe('Scope', () => {
       const retirement = createStoreRetirement()
       enterSpanForRetirement(activeSpan, {}, retirement)
       retirement.retire()
-      markSpanProcessed(activeSpan)
 
       scope = new Scope()
       const retiredSpan = scope.active()
@@ -185,7 +182,7 @@ describe('Scope', () => {
     })
 
     it('should suppress a retired span when activating null', () => {
-      const context = { _baggageItems: {} }
+      const context = { _baggageItems: {}, _trace: { started: [] } }
       const tracer = {}
       const activeSpan = {
         _duration: 1,
@@ -195,7 +192,6 @@ describe('Scope', () => {
       const retirement = createStoreRetirement()
       enterSpanForRetirement(activeSpan, {}, retirement)
       retirement.retire()
-      markSpanProcessed(activeSpan)
 
       scope = new Scope()
       scope.activate(null, () => {
@@ -204,7 +200,7 @@ describe('Scope', () => {
     })
 
     it('should preserve an explicitly activated original span after retirement', () => {
-      const context = { _baggageItems: {} }
+      const context = { _baggageItems: {}, _trace: { started: [] } }
       const tracer = {}
       const activeSpan = {
         _duration: 1,
@@ -214,7 +210,6 @@ describe('Scope', () => {
       const retirement = createStoreRetirement()
       enterSpanForRetirement(activeSpan, {}, retirement)
       retirement.retire()
-      markSpanProcessed(activeSpan)
 
       scope = new Scope()
       scope.activate(activeSpan, () => {
@@ -256,7 +251,7 @@ describe('Scope', () => {
       })
 
       it('should observe retirement after binding the active context', () => {
-        const context = { _baggageItems: {} }
+        const context = { _baggageItems: {}, _trace: { started: [] } }
         const tracer = {}
         const activeSpan = {
           _duration: 1,
@@ -269,7 +264,6 @@ describe('Scope', () => {
         scope = new Scope()
         const fn = scope.bind(() => scope.active())
         retirement.retire()
-        markSpanProcessed(activeSpan)
 
         assert.notStrictEqual(fn(), activeSpan)
         assert.strictEqual(fn().context(), context)

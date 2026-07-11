@@ -8,7 +8,6 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { storage } = require('../../../datadog-core')
-const { markSpanProcessed } = require('../../src/active-span')
 const SpanContext = require('../../src/opentracing/span_context')
 
 require('../setup/core')
@@ -52,7 +51,6 @@ describe('TestApiManualPlugin', () => {
       context: () => context,
       finish () {
         this._duration = 1
-        markSpanProcessed(this)
       },
       setTag: sinon.spy(),
       tracer: () => ({}),

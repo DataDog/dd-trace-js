@@ -10,13 +10,23 @@ const {
   enterSpanForRetirement,
   getLiveSpan,
   getRetiredSpanContext,
-  markSpanProcessed,
+  kPendingStoreRetirements,
+  retirePendingSpans,
 } = require('../src/active-span')
 const SpanContext = require('../src/opentracing/span_context')
 
 require('./setup/core')
 
 const legacyStorage = storage('legacy')
+
+/**
+ * @param {import('../src/opentracing/span')} span
+ */
+function eraseTrace (span) {
+  const trace = span.context()._trace
+  trace.started = []
+  retirePendingSpans(trace, trace[kPendingStoreRetirements])
+}
 
 describe('active span retirement', () => {
   let context
@@ -33,6 +43,7 @@ describe('active span retirement', () => {
       context: () => context,
       tracer: () => tracer,
     }
+    context._trace = { started: [span] }
   })
 
   afterEach(() => {
@@ -50,7 +61,7 @@ describe('active span retirement', () => {
     assert.strictEqual(getLiveSpan(firstStore), span)
     assert.strictEqual(getLiveSpan(secondStore), span)
 
-    markSpanProcessed(span)
+    eraseTrace(span)
 
     assert.strictEqual(getLiveSpan(firstStore), undefined)
     assert.strictEqual(getLiveSpan(secondStore), undefined)
@@ -64,7 +75,7 @@ describe('active span retirement', () => {
     const firstStore = enterSpanForRetirement(span, {}, retirement)
 
     retirement.retire()
-    markSpanProcessed(span)
+    eraseTrace(span)
 
     const lateStore = { ...firstStore, span }
     legacyStorage.enterWith(lateStore)
@@ -77,7 +88,7 @@ describe('active span retirement', () => {
     const store = enterSpanForRetirement(span, {}, retirement)
 
     retirement.retire()
-    markSpanProcessed(span)
+    eraseTrace(span)
 
     const retiredSpan = store.span
 
@@ -94,7 +105,7 @@ describe('active span retirement', () => {
     const store = enterSpanForRetirement(span, {}, retirement)
 
     retirement.retire()
-    markSpanProcessed(span)
+    eraseTrace(span)
 
     const retiredSpan = store.span
     retiredSpan.setBaggageItem('key', 'value')
@@ -119,7 +130,7 @@ describe('active span retirement', () => {
     const store = enterSpanForRetirement(span, {}, retirement)
 
     retirement.retire()
-    markSpanProcessed(span)
+    eraseTrace(span)
 
     const parent = store.span.context()
     assert.notStrictEqual(parent, sourceContext)

@@ -9,7 +9,6 @@ require('../setup/core')
 const {
   createStoreRetirement,
   enterSpanForRetirement,
-  markSpanProcessed,
 } = require('../../src/active-span')
 const { buildLogHolder, messageProxy } = require('../../src/plugins/log_injection')
 
@@ -37,7 +36,7 @@ describe('log_injection', () => {
     })
 
     it('injects the retired span context', () => {
-      const context = {}
+      const context = { _trace: { started: [] } }
       let injected
       const tracer = {
         inject (parent, _format, carrier) {
@@ -53,7 +52,6 @@ describe('log_injection', () => {
       const retirement = createStoreRetirement()
       enterSpanForRetirement(span, {}, retirement)
       retirement.retire()
-      markSpanProcessed(span)
 
       buildLogHolder(tracer)
 

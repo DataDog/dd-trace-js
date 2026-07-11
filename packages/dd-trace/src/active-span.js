@@ -4,9 +4,8 @@ const { kStoreRetirement, storage } = require('../../datadog-core/src/storage')
 const SpanContext = require('./opentracing/span_context')
 
 const legacyStorage = storage('legacy')
-const pendingStores = new WeakMap()
+const kPendingStoreRetirements = Symbol('dd-trace.pending-store-retirements')
 const pendingStoreSet = new WeakSet()
-const processedSpans = new WeakSet()
 const retiredSpans = new WeakMap()
 
 class RetiredSpan {
@@ -250,20 +249,6 @@ function getLiveSpan (store) {
 }
 
 /**
- * @param {import('./opentracing/span')} span
- */
-function markSpanProcessed (span) {
-  processedSpans.add(span)
-  const stores = pendingStores.get(span)
-  if (!stores) return
-
-  pendingStores.delete(span)
-  for (const store of stores) {
-    retireStoreNow(store, span)
-  }
-}
-
-/**
  * @param {object | undefined} store
  */
 function retireStoreGroup (store) {
@@ -292,16 +277,24 @@ function isRetiredSpan (span) {
 function retireStore (store) {
   const span = store.span
   if (!span || span._duration === undefined) return
-  if (processedSpans.has(span)) {
+  const trace = span.context()._trace
+  if (!trace.started.includes(span)) {
     retireStoreNow(store, span)
   } else if (!pendingStoreSet.has(store)) {
     pendingStoreSet.add(store)
-    let stores = pendingStores.get(span)
-    if (!stores) {
-      stores = []
-      pendingStores.set(span, stores)
-    }
-    stores.push(store)
+    const retirements = trace[kPendingStoreRetirements] ??= []
+    retirements.push(store, span)
+  }
+}
+
+/**
+ * @param {object} trace
+ * @param {object[]} retirements
+ */
+function retirePendingSpans (trace, retirements) {
+  trace[kPendingStoreRetirements] = undefined
+  for (let i = 0; i < retirements.length; i += 2) {
+    retireStoreNow(retirements[i], retirements[i + 1])
   }
 }
 
@@ -343,7 +336,8 @@ module.exports = {
   getLiveSpan,
   getRetiredSpanContext,
   isRetiredSpan,
+  kPendingStoreRetirements,
   kStoreRetirement,
-  markSpanProcessed,
+  retirePendingSpans,
   retireStoreGroup,
 }

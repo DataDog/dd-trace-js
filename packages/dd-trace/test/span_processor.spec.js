@@ -8,6 +8,11 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+const {
+  createStoreRetirement,
+  isRetiredSpan,
+  kStoreRetirement,
+} = require('../src/active-span')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -103,6 +108,22 @@ describe('SpanProcessor', () => {
     // _erase leaves per-span tag storage intact so callers that retain a
     // span ref after finish can still read tags.
     assert.deepStrictEqual(finishedSpan.context().getTags(), {})
+  })
+
+  it('should retire pending stores after erasing the trace', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const retirement = createStoreRetirement()
+    const store = { span: finishedSpan, [kStoreRetirement]: retirement }
+    retirement.add(store)
+    retirement.retire()
+
+    assert.strictEqual(store.span, finishedSpan)
+
+    processor.process(finishedSpan)
+
+    assert.strictEqual(isRetiredSpan(store.span), true)
+    assert.strictEqual(store.span.context(), finishedSpan.context())
   })
 
   it('should not flush a partial trace below the flushMinSpans threshold', () => {
