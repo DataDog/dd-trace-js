@@ -1,5 +1,7 @@
 'use strict'
 
+const { isModuleNamespaceObject } = require('node:util').types
+
 /**
  * @type {Set<string | symbol>}
  */
@@ -168,14 +170,19 @@ function wrap (target, name, wrapper, options) {
 
   copyProperties(original, wrapped)
 
-  if (descriptor.writable) {
+  const immutableModuleNamespace = descriptor.configurable === false &&
+    descriptor.writable && isModuleNamespaceObject(target)
+
+  if (descriptor.writable && !immutableModuleNamespace) {
     if (descriptor.configurable && descriptor.enumerable) {
       target[name] = wrapped
       return target
     }
     descriptor.value = wrapped
   } else {
-    if (descriptor.set && options?.replaceGetter) {
+    if (immutableModuleNamespace) {
+      descriptor.value = wrapped
+    } else if (descriptor.set && options?.replaceGetter) {
       // A lazy accessor pair (e.g. Node 20's `fs.opendir`). `original` already
       // resolved the value through the getter. Keep the property an accessor pair
       // so the shape stays observationally identical — a downstream consumer may
