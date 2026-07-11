@@ -1,6 +1,6 @@
 'use strict'
 
-const { getApi, getApiLogs } = require('../api')
+const { getApiBinding, getApiLogs } = require('../api')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
@@ -51,6 +51,8 @@ const SEVERITY_MAP = {
  * @augments OtlpTransformerBase
  */
 class OtlpTransformer extends OtlpTransformerBase {
+  #apiBinding
+
   /**
    * Creates a new OtlpTransformer instance.
    *
@@ -59,6 +61,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    */
   constructor (resourceAttributes, protocol) {
     super(resourceAttributes, protocol, 'logs')
+    this.#apiBinding = getApiBinding()
   }
 
   /**
@@ -186,7 +189,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   #extractSpanContext (logContext) {
     if (!logContext) return null
 
-    const activeSpan = getApi().trace.getSpan(logContext)
+    const activeSpan = this.#apiBinding.current.trace.getSpan(logContext)
     if (activeSpan) {
       return activeSpan.spanContext()
     }

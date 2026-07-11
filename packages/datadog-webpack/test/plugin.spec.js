@@ -11,6 +11,20 @@ const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
 const optionalPeerLoader = require('../src/optional-peer-loader')
 
+/**
+ * @typedef {(
+ *   data: { context?: string, request?: string },
+ *   callback: (error?: Error | null, result?: string | boolean) => void
+ * ) => void} WebpackExternal
+ */
+/**
+ * @typedef {(
+ *   context: string,
+ *   request: string,
+ *   callback: (error?: Error | null, result?: string | boolean) => void
+ * ) => void} LegacyWebpackExternal
+ */
+
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
     const temporaryDirectories = []
@@ -63,10 +77,10 @@ describe('DatadogWebpackPlugin', () => {
     })
 
     /**
-     * @param {string | Array<string | object>} [externals]
+     * @param {string | object | WebpackExternal | Array<string | object | WebpackExternal>} [externals]
      * @param {string} [context]
      * @param {boolean} [outputModule]
-     * @returns {string | Array<string | object> | undefined}
+     * @returns {Array<string | object | WebpackExternal>}
      */
     function applyToExternals (externals, context, outputModule = false) {
       const compiler = {
@@ -98,52 +112,209 @@ describe('DatadogWebpackPlugin', () => {
     }
 
     /**
-     * @param {string | Array<string | object> | undefined} externals
-     * @returns {Record<string, string> | undefined}
+     * @param {string} directory
+     * @param {string} name
+     * @param {string} version
      */
-    function otelExternalEntry (externals) {
-      if (!Array.isArray(externals)) return undefined
-      return externals.find(entry => entry && typeof entry === 'object' && '@opentelemetry/api' in entry)
+    function installPackage (directory, name, version) {
+      const packageDirectory = path.join(directory, 'node_modules', ...name.split('/'))
+      fs.mkdirSync(packageDirectory, { recursive: true })
+      fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({
+        name,
+        version,
+        main: 'index.js',
+      }))
+      fs.writeFileSync(path.join(packageDirectory, 'index.js'), 'module.exports = {}\n')
+    }
+
+    /**
+     * @param {WebpackExternal} external
+     * @param {string} context
+     * @param {string} request
+     * @returns {string | boolean | undefined}
+     */
+    function resolveExternal (external, context, request) {
+      let resolved
+      external({ context, request }, (error, result) => {
+        if (error) throw error
+        resolved = result
+      })
+      return resolved
+    }
+
+    /**
+     * @param {LegacyWebpackExternal} external
+     * @param {string} context
+     * @param {string} request
+     * @returns {string | boolean | undefined}
+     */
+    function resolveLegacyExternal (external, context, request) {
+      let resolved
+      external(context, request, (error, result) => {
+        if (error) throw error
+        resolved = result
+      })
+      return resolved
+    }
+
+    /**
+     * @param {unknown} external
+     * @param {string} request
+     * @returns {boolean}
+     */
+    function matchesExternal (external, request) {
+      if (typeof external === 'string') return external === request
+      if (Array.isArray(external)) return external.some(value => matchesExternal(value, request))
+      if (external instanceof RegExp) return external.test(request)
+      if (typeof external === 'function') {
+        return resolveExternal(external, '/app', request) !== undefined
+      }
+      return external !== null &&
+        typeof external === 'object' &&
+        Object.hasOwn(external, request)
+    }
+
+    /** @type {WebpackExternal} */
+    const userExternal = ({ request }, callback) => {
+      callback(null, request === '@opentelemetry/api' && 'module @opentelemetry/api')
     }
 
     it('externalizes both OpenTelemetry API packages as a commonjs require', () => {
       const externals = applyToExternals()
 
-      assert.deepStrictEqual(externals.at(-1), {
-        '@opentelemetry/api': 'commonjs @opentelemetry/api',
-        '@opentelemetry/api-logs': 'commonjs @opentelemetry/api-logs',
-      })
+      assert.strictEqual(resolveExternal(externals[0], '/app', '@opentelemetry/api'), 'commonjs @opentelemetry/api')
+      assert.strictEqual(
+        resolveExternal(externals[0], '/app', '@opentelemetry/api-logs'),
+        'commonjs @opentelemetry/api-logs'
+      )
+      assert.strictEqual(
+        resolveExternal(externals[0], '/app', '@opentelemetry/api/experimental'),
+        'commonjs @opentelemetry/api/experimental'
+      )
+      assert.strictEqual(resolveExternal(externals[0], '/app', 'pg'), undefined)
     })
 
     it('uses createRequire-compatible externals for ESM output', () => {
       const externals = applyToExternals(undefined, undefined, true)
 
-      assert.deepStrictEqual(externals.at(-1), {
-        '@opentelemetry/api': 'node-commonjs @opentelemetry/api',
-        '@opentelemetry/api-logs': 'node-commonjs @opentelemetry/api-logs',
-      })
+      assert.strictEqual(
+        resolveExternal(externals[0], '/app', '@opentelemetry/api'),
+        'node-commonjs @opentelemetry/api'
+      )
     })
 
     it('keeps externals supplied as an array', () => {
       const externals = applyToExternals(['pg'])
 
-      assert.ok(externals.includes('pg'), 'should preserve user externals')
-      assert.ok('@opentelemetry/api' in externals.at(-1), 'should externalize @opentelemetry/api')
+      assert.deepStrictEqual(externals.slice(1), ['pg'])
     })
 
     it('keeps a single non-array external', () => {
       const externals = applyToExternals('pg')
 
-      assert.ok(externals.includes('pg'), 'should preserve the user external')
-      assert.ok('@opentelemetry/api' in externals.at(-1), 'should externalize @opentelemetry/api')
+      assert.deepStrictEqual(externals.slice(1), ['pg'])
     })
 
-    it('bundles a package the application does not depend on so the bundle stays self-contained', () => {
+    it('filters nested arrays without changing unrelated externals', () => {
+      const externals = applyToExternals([['@opentelemetry/api', 'pg']])
+
+      assert.deepStrictEqual(externals.slice(1), [['pg']])
+    })
+
+    it('preserves unrelated regular expression externals', () => {
+      const externals = applyToExternals(/^pg$/)
+
+      assert.strictEqual(resolveExternal(externals[1], '/app', 'pg'), 'pg')
+      assert.strictEqual(resolveExternal(externals[1], '/app', 'express'), undefined)
+    })
+
+    it('preserves unrelated function externals', () => {
+      /** @type {WebpackExternal} */
+      const userExternal = ({ request }, callback) => callback(null, `commonjs ${request}`)
+      const externals = applyToExternals(userExternal)
+
+      assert.strictEqual(resolveExternal(externals[1], '/app', 'pg'), 'commonjs pg')
+    })
+
+    it('preserves unrelated legacy function externals', () => {
+      /** @type {LegacyWebpackExternal} */
+      const userExternal = (context, request, callback) => callback(null, `commonjs ${request}`)
+      const externals = applyToExternals(userExternal)
+
+      assert.strictEqual(resolveLegacyExternal(externals[1], '/app', 'pg'), 'commonjs pg')
+      assert.strictEqual(resolveLegacyExternal(externals[1], '/app', '@opentelemetry/api'), undefined)
+    })
+
+    it('filters OpenTelemetry APIs from layer-specific externals', () => {
+      const externals = applyToExternals({
+        byLayer: {
+          worker: {
+            '@opentelemetry/api': 'module @opentelemetry/api',
+            pg: 'commonjs pg',
+          },
+        },
+      })
+
+      assert.deepStrictEqual(externals[1], {
+        byLayer: {
+          worker: {
+            pg: 'commonjs pg',
+          },
+        },
+      })
+    })
+
+    it('bundles the holder fallback before user externals can match it', () => {
+      const externals = applyToExternals({ '@opentelemetry/api': 'module @opentelemetry/api' })
+      const holderDirectory = path.dirname(require.resolve('../../dd-trace/src/opentelemetry/api'))
+
+      assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api'), false)
+    })
+
+    for (const [name, userExternals] of [
+      ['string', '@opentelemetry/api'],
+      ['object', { '@opentelemetry/api': 'module @opentelemetry/api' }],
+      ['function', userExternal],
+      ['array', ['pg', { '@opentelemetry/api': 'module @opentelemetry/api' }]],
+    ]) {
+      it(`prioritizes the required ESM external over ${name} user externals`, () => {
+        const externals = applyToExternals(userExternals, undefined, true)
+
+        assert.strictEqual(
+          resolveExternal(externals[0], '/app', '@opentelemetry/api'),
+          'node-commonjs @opentelemetry/api'
+        )
+      })
+    }
+
+    for (const [name, userExternals] of [
+      ['string', '@opentelemetry/api'],
+      ['object', { '@opentelemetry/api': 'module @opentelemetry/api' }],
+      ['function', userExternal],
+      ['regular expression', /^@opentelemetry\/api$/],
+      ['array', ['pg', { '@opentelemetry/api': 'module @opentelemetry/api' }]],
+    ]) {
+      it(`overrides ${name} user externals for a package the application does not own`, () => {
+        const context = createManifestDirectory({ name: 'app', dependencies: {} })
+        installPackage(context, '@opentelemetry/api', '1.9.0')
+
+        const externals = applyToExternals(userExternals, context)
+
+        assert.strictEqual(resolveExternal(externals[0], '/app', '@opentelemetry/api'), false)
+        for (const external of externals.slice(1)) {
+          assert.strictEqual(matchesExternal(external, '@opentelemetry/api'), false)
+        }
+      })
+    }
+
+    it('overrides wildcard user externals for API subpaths the application does not own', () => {
       const context = createManifestDirectory({ name: 'app', dependencies: {} })
+      installPackage(context, '@opentelemetry/api', '1.9.0')
+      const request = '@opentelemetry/api/experimental'
+      const externals = applyToExternals(/^@opentelemetry\/api(?:\/.*)?$/, context)
 
-      const externals = applyToExternals(undefined, context)
-
-      assert.strictEqual(otelExternalEntry(externals), undefined)
+      assert.strictEqual(resolveExternal(externals[0], '/app', request), false)
+      assert.strictEqual(resolveExternal(externals[1], '/app', request), undefined)
     })
 
     it('externalizes only the package the application declares', () => {
@@ -151,19 +322,35 @@ describe('DatadogWebpackPlugin', () => {
         name: 'app',
         dependencies: { '@opentelemetry/api': '^1.9.0' },
       })
+      installPackage(context, '@opentelemetry/api', '1.9.0')
 
-      const entry = otelExternalEntry(applyToExternals(undefined, context))
+      const externals = applyToExternals(undefined, context)
 
-      assert.deepStrictEqual(entry, { '@opentelemetry/api': 'commonjs @opentelemetry/api' })
+      assert.strictEqual(
+        resolveExternal(externals[0], '/app', '@opentelemetry/api'),
+        'commonjs @opentelemetry/api'
+      )
+      assert.strictEqual(
+        resolveExternal(externals[0], '/app', '@opentelemetry/api/experimental'),
+        'commonjs @opentelemetry/api/experimental'
+      )
     })
   })
 
   describe('optional peer bundling', () => {
-    function captureAfterResolve () {
+    /**
+     * @param {string} [context]
+     * @returns {(resolveData: {
+     *   contextInfo?: { issuer?: string },
+     *   createData: { loaders?: object[], resource?: string },
+     *   request?: string
+     * }) => void}
+     */
+    function captureAfterResolve (context) {
       const plugin = new DatadogWebpackPlugin()
       let afterResolve
       plugin.apply({
-        options: { optimization: {} },
+        options: { context, optimization: {} },
         hooks: {
           environment: { tap: () => {} },
           thisCompilation: { tap: () => {} },
@@ -190,6 +377,40 @@ describe('DatadogWebpackPlugin', () => {
       const createData = { resource: '/app/packages/dd-trace/src/openfeature/index.js' }
 
       captureAfterResolve()({ createData })
+
+      assert.strictEqual(createData.loaders, undefined)
+    })
+
+    it('marks the installed application API loader as application-owned', () => {
+      const context = path.resolve(__dirname, '../../..')
+      const resource = require.resolve('@opentelemetry/api')
+      const moduleBaseDir = path.resolve(path.dirname(resource), '../..')
+      const packageJson = JSON.parse(fs.readFileSync(path.join(moduleBaseDir, 'package.json'), 'utf8'))
+      const createData = {
+        resource,
+      }
+
+      captureAfterResolve(context)({
+        contextInfo: { issuer: path.join(context, 'app.js') },
+        createData,
+        request: '@opentelemetry/api',
+      })
+
+      assert.deepStrictEqual(createData.loaders[0].options, {
+        applicationOwned: true,
+        moduleBaseDir,
+        path: '@opentelemetry/api',
+        pkg: '@opentelemetry/api',
+        version: packageJson.version,
+      })
+    })
+
+    it('does not apply the instrumentation loader to the fallback OpenTelemetry API', () => {
+      const createData = {
+        resource: require.resolve('../../../vendor/node_modules/@opentelemetry/api'),
+      }
+
+      captureAfterResolve()({ createData, request: '@opentelemetry/api' })
 
       assert.strictEqual(createData.loaders, undefined)
     })

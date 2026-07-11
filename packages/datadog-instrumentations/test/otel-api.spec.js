@@ -66,15 +66,17 @@ describe('otel-api instrumentation', () => {
 
   it('captures the required module into the holder and returns it unchanged', () => {
     const api = { trace: {}, context: {} }
-    const returned = hooks.get('@opentelemetry/api')(api)
+    const hookMetadata = { moduleBaseDir: '/app/node_modules/@opentelemetry/api' }
+    const returned = hooks.get('@opentelemetry/api')(api, '1.9.0', false, hookMetadata)
     assert.strictEqual(returned, api)
-    sinon.assert.calledOnceWithExactly(setApi, api)
+    sinon.assert.calledOnceWithExactly(setApi, api, '1.9.0', false, hookMetadata)
   })
 
   it('captures @opentelemetry/api-logs under its own package name', () => {
     const apiLogs = { logs: {}, SeverityNumber: {} }
-    const returned = hooks.get('@opentelemetry/api-logs')(apiLogs)
+    const hookMetadata = { moduleBaseDir: '/app/node_modules/@opentelemetry/api-logs' }
+    const returned = hooks.get('@opentelemetry/api-logs')(apiLogs, '0.203.0', false, hookMetadata)
     assert.strictEqual(returned, apiLogs)
-    sinon.assert.calledOnceWithExactly(setApiLogs, apiLogs)
+    sinon.assert.calledOnceWithExactly(setApiLogs, apiLogs, '0.203.0', false, hookMetadata)
   })
 })

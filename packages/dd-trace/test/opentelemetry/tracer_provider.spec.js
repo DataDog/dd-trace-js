@@ -157,10 +157,70 @@ describe('OTel TracerProvider', () => {
     holder.setApi(applicationCopy)
 
     const provider = new FreshTracerProvider()
-    provider.register()
+    const propagator = {}
+    provider.register({ propagator })
 
     sinon.assert.calledOnceWithExactly(setGlobalTracerProvider, provider)
     sinon.assert.calledOnceWithExactly(setGlobalContextManager, provider._contextManager)
-    sinon.assert.calledOnce(setGlobalPropagator)
+    sinon.assert.calledOnceWithExactly(setGlobalPropagator, propagator)
+  })
+
+  it('moves an existing registration to a late application copy', () => {
+    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+    const applicationRequire = sinon.stub()
+    applicationRequire.resolve = sinon.stub().throws(notFound)
+    const holder = proxyquire('../../src/opentelemetry/api', {
+      'node:module': { createRequire: () => applicationRequire },
+    })
+    const internalCopy = {
+      trace: {
+        disable: sinon.spy(),
+        getTracerProvider: () => ({ setDelegate () {} }),
+        setGlobalTracerProvider: sinon.stub().returns(true),
+      },
+      context: {
+        disable: sinon.spy(),
+        setGlobalContextManager: sinon.spy(),
+      },
+      propagation: {
+        disable: sinon.spy(),
+        setGlobalPropagator: sinon.spy(),
+      },
+    }
+    const applicationCopy = {
+      trace: {
+        disable: sinon.spy(),
+        getTracerProvider: () => ({ setDelegate () {} }),
+        setGlobalTracerProvider: sinon.stub().returns(true),
+      },
+      context: {
+        disable: sinon.spy(),
+        setGlobalContextManager: sinon.spy(),
+      },
+      propagation: {
+        disable: sinon.spy(),
+        setGlobalPropagator: sinon.spy(),
+      },
+    }
+    holder.setApi(internalCopy, '1.9.0')
+
+    const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
+      './api': holder,
+      '../../': {},
+      './context_manager': class {},
+      './tracer': class {},
+      './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
+    })
+    const provider = new FreshTracerProvider()
+    provider.register()
+
+    holder.setApi(applicationCopy, '1.9.0', false, { applicationOwned: true })
+
+    sinon.assert.calledOnce(internalCopy.trace.disable)
+    sinon.assert.calledOnce(internalCopy.context.disable)
+    sinon.assert.calledOnce(internalCopy.propagation.disable)
+    sinon.assert.calledOnceWithExactly(applicationCopy.trace.setGlobalTracerProvider, provider)
+    sinon.assert.calledOnceWithExactly(applicationCopy.context.setGlobalContextManager, provider._contextManager)
+    sinon.assert.calledOnce(applicationCopy.propagation.setGlobalPropagator)
   })
 })

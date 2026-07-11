@@ -1013,6 +1013,41 @@ describe('OpenTelemetry Meter Provider', () => {
       assert.strictEqual(meterProvider instanceof MeterProvider, false)
     })
 
+    it('moves the meter provider to a late application API copy', () => {
+      const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+      const applicationRequire = sinon.stub()
+      applicationRequire.resolve = sinon.stub().throws(notFound)
+      const holder = proxyquire.noPreserveCache()('../../src/opentelemetry/api', {
+        'node:module': { createRequire: () => applicationRequire },
+      })
+      const internalCopy = {
+        metrics: {
+          disable: sinon.spy(),
+          setGlobalMeterProvider: sinon.spy(),
+        },
+      }
+      const applicationCopy = {
+        metrics: {
+          disable: sinon.spy(),
+          setGlobalMeterProvider: sinon.spy(),
+        },
+      }
+      holder.setApi(internalCopy, '1.9.0')
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {
+        '../api': holder,
+        './meter_provider': class {},
+        './periodic_metric_reader': class {},
+        './otlp_http_metric_exporter': class {},
+      })
+
+      initializeOpenTelemetryMetrics({})
+      const meterProvider = internalCopy.metrics.setGlobalMeterProvider.firstCall.args[0]
+      holder.setApi(applicationCopy, '1.9.0', false, { applicationOwned: true })
+
+      sinon.assert.calledOnce(internalCopy.metrics.disable)
+      sinon.assert.calledOnceWithExactly(applicationCopy.metrics.setGlobalMeterProvider, meterProvider)
+    })
+
     it('handles shutdown correctly', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')

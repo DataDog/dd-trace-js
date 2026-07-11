@@ -37,7 +37,7 @@ describe('EvalMetricsHook', () => {
     }
 
     EvalMetricsHook = proxyquire('../../src/openfeature/eval-metrics-hook', {
-      '../opentelemetry/api': { getApi: () => mockOtelApi },
+      '../opentelemetry/api': { finalizeApi: () => mockOtelApi },
       '../log': log,
     })
   })

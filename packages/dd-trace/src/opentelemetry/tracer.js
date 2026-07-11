@@ -8,14 +8,23 @@ const id = require('../id')
 const log = require('../log')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
-const { getApi } = require('./api')
+const { getApiBinding } = require('./api')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
 const { normalizeLinkContext } = require('./span-helpers')
 
 class Tracer {
-  constructor (library, config, tracerProvider) {
+  #apiBinding
+
+  /**
+   * @param {import('@opentelemetry/core').InstrumentationLibrary} library
+   * @param {object} config
+   * @param {import('./tracer_provider')} tracerProvider
+   * @param {{ current: typeof import('@opentelemetry/api') }} [apiBinding]
+   */
+  constructor (library, config, tracerProvider, apiBinding = getApiBinding()) {
+    this.#apiBinding = apiBinding
     this._sampler = new Sampler()
     this._config = config
     this._tracerProvider = tracerProvider
@@ -92,7 +101,7 @@ class Tracer {
   }
 
   startSpan (name, options = {}, context) {
-    const api = getApi()
+    const api = this.#apiBinding.current
     if (context === undefined) {
       context = api.context.active()
     }
@@ -161,7 +170,7 @@ class Tracer {
       return
     }
 
-    const api = getApi()
+    const api = this.#apiBinding.current
     const parentContext = context || api.context.active()
     const span = this.startSpan(name, options, parentContext)
     const contextWithSpanSet = api.trace.setSpan(parentContext, span)

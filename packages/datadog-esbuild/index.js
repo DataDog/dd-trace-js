@@ -13,12 +13,17 @@ const {
   matchesOptionalPeerFile,
   rewriteOptionalPeerLoads,
 } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
-const { otelApiPackagesToExternalize } = require('../datadog-instrumentations/src/helpers/otel-api-externals')
+const {
+  getApplicationOtelApiPackages,
+} = require('../datadog-instrumentations/src/helpers/otel-api-externals')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api')
+const OTEL_API_PACKAGES = ['@opentelemetry/api', '@opentelemetry/api-logs']
+const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
 let rewriter
 
@@ -65,6 +70,16 @@ for (const builtin of builtinModules) {
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+
+/**
+ * @param {string} pattern
+ * @returns {RegExp}
+ */
+function externalPatternToRegExp (pattern) {
+  const escaped = pattern.replaceAll(/[|\\{}()[\]^$+?.]/g, String.raw`\$&`).replaceAll('*', '.*')
+  const matchesPackageSubpaths = !pattern.includes('*') && !pattern.startsWith('.') && !path.isAbsolute(pattern)
+  return new RegExp(`^${escaped}${matchesPackageSubpaths ? '(?:/.*)?' : ''}$`)
+}
 
 module.exports.name = 'datadog-esbuild'
 
@@ -124,7 +139,20 @@ module.exports.setup = function (build) {
 
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
-  const externalModules = new Set(build.initialOptions.external || [])
+  const externalModules = new Set()
+  const externalOtelApiPackages = new Set()
+  const deferredExternalPatterns = []
+  if (build.initialOptions.external) {
+    build.initialOptions.external = build.initialOptions.external.filter(name => {
+      const pattern = externalPatternToRegExp(name)
+      if (OTEL_API_PACKAGES.some(packageName => pattern.test(packageName))) {
+        deferredExternalPatterns.push(pattern)
+        return false
+      }
+      externalModules.add(name)
+      return true
+    })
+  }
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
   if (DD_IAST_ENABLED) {
@@ -147,14 +175,10 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
-  // Preserve application-owned API packages while keeping fallback-only bundles self-contained.
   const workingDirectory = build.initialOptions.absWorkingDir || process.cwd()
-  for (const otelApiPackage of otelApiPackagesToExternalize(workingDirectory)) {
-    if (!externalModules.has(otelApiPackage)) {
-      build.initialOptions.external ??= []
-      build.initialOptions.external.push(otelApiPackage)
-    }
-    externalModules.add(otelApiPackage)
+  const applicationOtelApiPackages = getApplicationOtelApiPackages(workingDirectory)
+  for (const otelApiPackage of applicationOtelApiPackages.keys()) {
+    externalOtelApiPackages.add(otelApiPackage)
   }
 
   const esmBuild = isESMBuild(build)
@@ -212,7 +236,25 @@ ${build.initialOptions.banner.js}`
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
 
+  // Application imports stay external, but the holder's fallback must remain in a relocated bundle.
+  /** @param {import('esbuild').OnResolveArgs} args */
+  function resolveOtelApi (args) {
+    const packageName = OTEL_API_PACKAGE_PATTERN.exec(args.path)?.[1]
+    if (args.importer === OTEL_API_HOLDER_PATH) return
+    if (externalOtelApiPackages.has(packageName)) {
+      log.debug('EXTERNAL: %s', args.path)
+      return { path: args.path, external: true }
+    }
+  }
+  build.onResolve({ filter: OTEL_API_PACKAGE_PATTERN }, resolveOtelApi)
+
   build.onResolve({ filter: /.*/ }, args => {
+    if (!OTEL_API_PACKAGE_PATTERN.test(args.path)) {
+      for (const pattern of deferredExternalPatterns) {
+        if (pattern.test(args.path)) return { path: args.path, external: true }
+      }
+    }
+
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       log.debug('EXTERNAL: %s', args.path)
@@ -251,6 +293,10 @@ ${build.initialOptions.banner.js}`
     }
 
     const extracted = extractPackageAndModulePath(fullPathToModule)
+    const moduleBaseDir = extracted?.pkgJson && path.dirname(extracted.pkgJson)
+    const applicationPackage = applicationOtelApiPackages.get(extracted?.pkg)
+    const applicationOwned = args.importer !== OTEL_API_HOLDER_PATH &&
+      applicationPackage?.moduleBaseDir === moduleBaseDir
 
     const internal = builtins.has(args.path)
 
@@ -317,6 +363,8 @@ ${build.initialOptions.banner.js}`
             kind: args.kind,
             internal,
             isESM,
+            applicationOwned,
+            moduleBaseDir,
           },
         }
       } catch (e) {
@@ -401,7 +449,9 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
             module: mod,
             version: '${data.version}',
             package: '${data.pkg}',
-            path: '${pkgPath}'
+            path: '${pkgPath}',
+            applicationOwned: ${data.applicationOwned === true},
+            moduleBaseDir: ${JSON.stringify(data.moduleBaseDir)}
           };
           ch.publish(payload);
           module.exports = payload.module;

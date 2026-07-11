@@ -635,6 +635,20 @@ describe('OTel Span', () => {
     assert.ok(Object.hasOwn(span._ddSpan, '_duration'), `Available keys: ${inspect(Object.keys(span._ddSpan))}`)
   })
 
+  it('reports a repeated end call through the selected API diagnostics', () => {
+    const span = makeSpan('name')
+    span.end()
+    const error = sinon.stub(api.diag, 'error')
+
+    try {
+      span.end()
+
+      sinon.assert.calledOnceWithExactly(error, 'You can only call end() on a span once.')
+    } finally {
+      error.restore()
+    }
+  })
+
   it('should trigger span processor events', () => {
     const tracerProvider = new TracerProvider()
     const tracer = tracerProvider.getTracer()

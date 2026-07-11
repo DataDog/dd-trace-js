@@ -13,47 +13,103 @@
 
 /** @typedef {typeof import('@opentelemetry/api')} OtelApi */
 /** @typedef {typeof import('@opentelemetry/api-logs')} OtelApiLogs */
+/**
+ * @typedef {object} HookMetadata
+ * @property {string} [moduleBaseDir]
+ * @property {boolean} [applicationOwned]
+ */
+/**
+ * @template T
+ * @typedef {object} ApiBinding
+ * @property {T} current
+ */
+/**
+ * @template T
+ * @typedef {object} ApiRegistration
+ * @property {(api: T) => void} activate
+ * @property {(api: T) => void} deactivate
+ */
+/**
+ * @typedef {object} ApplicationLocation
+ * @property {string} entrypoint
+ * @property {string} root
+ */
+/**
+ * @typedef {object} CapturePriority
+ * @property {number} rootIndex
+ * @property {number} depth
+ */
 
 const API_VERSION_RANGE = '>=1.0.0 <1.10.0'
 const API_LOGS_VERSION_RANGE = '>=0.33.0 <1.0.0'
 
-/** @type {NodeRequire | undefined} */
-let applicationRequire
+/** @type {ApplicationLocation[] | undefined} */
+let applicationLocations
+/** @type {NodeRequire[] | undefined} */
+let applicationRequires
 
 /**
- * Creates a require rooted at the application entrypoint. During SSI preloading and ESM startup,
- * `require.main` is unavailable, so `process.argv[1]` identifies the entrypoint instead. Directory
- * entrypoints need a synthetic filename inside the directory or Node resolves from their parent.
+ * Returns resolution locations ordered by ownership. A nested entrypoint comes first so its
+ * dependency wins in a workspace, while the working directory stays authoritative when an external
+ * CLI launches the application.
  *
- * @returns {NodeRequire}
+ * @returns {ApplicationLocation[]}
  */
-function getApplicationRequire () {
-  if (applicationRequire) return applicationRequire
+function getApplicationLocations () {
+  if (applicationLocations) return applicationLocations
 
   const { existsSync, statSync } = require('node:fs')
-  const { createRequire } = require('node:module')
-  const { join, resolve } = require('node:path')
+  const { dirname, isAbsolute, join, relative, resolve, sep } = require('node:path')
 
+  const workingDirectory = process.cwd()
+  const workingDirectoryLocation = {
+    entrypoint: join(workingDirectory, 'package.json'),
+    root: workingDirectory,
+  }
+  const locations = []
   let entrypoint = require.main?.filename ?? process.argv[1]
   if (entrypoint) {
     entrypoint = resolve(entrypoint)
+    let entrypointRoot = dirname(entrypoint)
     if (existsSync(entrypoint) && statSync(entrypoint).isDirectory()) {
+      entrypointRoot = entrypoint
       entrypoint = join(entrypoint, 'package.json')
     }
+    const pathFromWorkingDirectory = relative(workingDirectory, entrypoint)
+    const isNestedEntrypoint = pathFromWorkingDirectory !== '..' &&
+      !pathFromWorkingDirectory.startsWith(`..${sep}`) &&
+      !isAbsolute(pathFromWorkingDirectory)
+    const entrypointLocation = { entrypoint, root: entrypointRoot }
+    if (isNestedEntrypoint && entrypointRoot !== workingDirectory) locations.push(entrypointLocation)
+    locations.push(workingDirectoryLocation)
+    if (!isNestedEntrypoint && entrypointRoot !== workingDirectory) locations.push(entrypointLocation)
   } else {
-    entrypoint = join(process.cwd(), 'package.json')
+    locations.push(workingDirectoryLocation)
   }
 
-  applicationRequire = createRequire(entrypoint)
-  return applicationRequire
+  applicationLocations = locations
+  return applicationLocations
+}
+
+/**
+ * Creates requires rooted at each application resolution location.
+ *
+ * @returns {NodeRequire[]}
+ */
+function getApplicationRequires () {
+  if (applicationRequires) return applicationRequires
+
+  const { createRequire } = require('node:module')
+  applicationRequires = getApplicationLocations().map(({ entrypoint }) => createRequire(entrypoint))
+  return applicationRequires
 }
 
 /**
  * @param {string} entry
  * @param {string} packageName
- * @returns {string | undefined}
+ * @returns {{ version: string, moduleBaseDir: string } | undefined}
  */
-function readPackageVersion (entry, packageName) {
+function readPackageMetadata (entry, packageName) {
   const { existsSync, readFileSync } = require('node:fs')
   const { dirname, join, parse } = require('node:path')
 
@@ -63,7 +119,9 @@ function readPackageVersion (entry, packageName) {
     const manifestPath = join(directory, 'package.json')
     if (existsSync(manifestPath)) {
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-      if (manifest.name === packageName) return manifest.version
+      if (manifest.name === packageName && typeof manifest.version === 'string') {
+        return { version: manifest.version, moduleBaseDir: directory }
+      }
     }
     directory = dirname(directory)
   }
@@ -76,27 +134,91 @@ function readPackageVersion (entry, packageName) {
  *
  * @param {string} packageName
  * @param {string} versionRange
- * @returns {object | undefined}
+ * @returns {{ api: object, priority: CapturePriority, version: string } | undefined}
  */
 function loadApplicationApi (packageName, versionRange) {
-  let entry
-  try {
-    const requireFromApplication = getApplicationRequire()
-    entry = requireFromApplication.resolve(packageName)
-    const version = readPackageVersion(entry, packageName)
-    if (!version || !require('../../../../vendor/dist/semifies')(version, versionRange)) return
-    return requireFromApplication(packageName)
-  } catch (error) {
-    // A missing top-level package is the normal fallback case. Other resolution errors, and
-    // failures after resolution, are diagnostic only: loading an optional app copy must not
-    // prevent dd-trace from using its bundled copy.
-    if (entry !== undefined || error?.code !== 'MODULE_NOT_FOUND') {
-      require('../log').debug(
-        'Unable to load the application-owned %s; using the bundled fallback.',
-        packageName,
-        error
-      )
+  for (const requireFromApplication of getApplicationRequires()) {
+    let entry
+    try {
+      entry = requireFromApplication.resolve(packageName)
+      const metadata = readPackageMetadata(entry, packageName)
+      if (!metadata) continue
+      if (!require('../../../../vendor/dist/semifies')(metadata.version, versionRange)) {
+        require('../log').warn(
+          'Unsupported application-owned %s@%s; supported versions are %s. Using the bundled fallback.',
+          packageName,
+          metadata.version,
+          versionRange
+        )
+        return
+      }
+      return {
+        api: requireFromApplication(packageName),
+        priority: capturePriority({ moduleBaseDir: metadata.moduleBaseDir }),
+        version: metadata.version,
+      }
+    } catch (error) {
+      if (entry !== undefined || error?.code !== 'MODULE_NOT_FOUND') {
+        require('../log').debug(
+          'Unable to load the application-owned %s; using the bundled fallback.',
+          packageName,
+          error
+        )
+        return
+      }
     }
+  }
+}
+
+/**
+ * @param {HookMetadata | undefined} hookMetadata
+ * @returns {CapturePriority}
+ */
+function capturePriority (hookMetadata) {
+  if (hookMetadata?.applicationOwned === true) return { rootIndex: -1, depth: 0 }
+  if (!hookMetadata?.moduleBaseDir) {
+    return { rootIndex: Number.MAX_SAFE_INTEGER, depth: Number.MAX_SAFE_INTEGER }
+  }
+
+  const { isAbsolute, relative, sep } = require('node:path')
+  const locations = getApplicationLocations()
+
+  for (let rootIndex = 0; rootIndex < locations.length; rootIndex++) {
+    const { root } = locations[rootIndex]
+    const pathFromRoot = relative(root, hookMetadata.moduleBaseDir)
+    if (pathFromRoot === '..' || pathFromRoot.startsWith(`..${sep}`) || isAbsolute(pathFromRoot)) continue
+    return { rootIndex, depth: pathFromRoot.split(sep).length }
+  }
+  return { rootIndex: Number.MAX_SAFE_INTEGER, depth: Number.MAX_SAFE_INTEGER }
+}
+
+/**
+ * @param {CapturePriority} candidate
+ * @param {CapturePriority} current
+ * @returns {boolean}
+ */
+function hasHigherPriority (candidate, current) {
+  return candidate.rootIndex < current.rootIndex ||
+    (candidate.rootIndex === current.rootIndex && candidate.depth < current.depth)
+}
+
+/**
+ * @param {string} packageName
+ * @param {string | undefined} version
+ */
+function prepareGlobalRegistration (packageName, version) {
+  if (packageName !== '@opentelemetry/api' || !version) return
+
+  const major = version.slice(0, version.indexOf('.'))
+  const globalApi = Reflect.get(globalThis, Symbol.for(`opentelemetry.js.api.${major}`))
+  if (!globalApi || typeof globalApi !== 'object' || globalApi.version === version) return
+
+  // disable() removes providers but leaves the core API's global version behind. Transfer that
+  // container before the new copy registers or it rejects every provider with a version mismatch.
+  try {
+    globalApi.version = version
+  } catch (error) {
+    require('../log').error('Unable to transfer the OpenTelemetry API global to version %s.', version, error)
   }
 }
 
@@ -109,62 +231,152 @@ function loadApplicationApi (packageName, versionRange) {
  * @param {string} packageName
  * @param {string} versionRange
  * @param {() => T} loadFallback
- * @returns {{ get: () => T, set: (api: T) => T }}
+ * @returns {{
+ *   binding: () => ApiBinding<T>,
+ *   finalize: () => T,
+ *   get: () => T,
+ *   register: (registration: ApiRegistration<T>) => void,
+ *   set: (api: T, version?: string, isIitm?: boolean, hookMetadata?: HookMetadata) => T
+ * }}
  */
 function createApiHolder (packageName, versionRange, loadFallback) {
-  /** @type {T | undefined} */
-  let applicationApi
-  /** @type {T | undefined} */
-  let fallbackApi
+  /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
+  let applicationCapture
+  /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
+  let captured
+  /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
+  let fallback
+  /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
+  let finalized
+  /** @type {ApiBinding<T> | undefined} */
+  let binding
+  /** @type {Set<ApiRegistration<T>>} */
+  const registrations = new Set()
   let applicationChecked = false
   let loadingFallback = false
 
   /**
-   * @returns {T}
+   * @returns {{ api: T, priority: CapturePriority, version?: string }}
    */
-  function load () {
+  function select () {
+    if (finalized) return finalized
+
     if (!applicationChecked) {
       applicationChecked = true
-      const loadedApi = loadApplicationApi(packageName, versionRange)
-      if (loadedApi !== undefined) {
-        applicationApi = /** @type {T} */ (loadedApi)
+      const loaded = loadApplicationApi(packageName, versionRange)
+      if (loaded) {
+        applicationCapture = {
+          api: /** @type {T} */ (loaded.api),
+          priority: loaded.priority,
+          version: loaded.version,
+        }
       }
     }
-    if (applicationApi !== undefined) return applicationApi
+    if (applicationCapture) return applicationCapture
+    if (captured) return captured
+    if (fallback) return fallback
 
     loadingFallback = true
     try {
-      fallbackApi = loadFallback()
+      fallback = {
+        api: loadFallback(),
+        priority: { rootIndex: Number.MAX_SAFE_INTEGER, depth: Number.MAX_SAFE_INTEGER },
+      }
     } finally {
       loadingFallback = false
     }
-    return fallbackApi
+    return fallback
   }
 
   /**
    * @returns {T}
    */
   function get () {
-    // Resolve from the entrypoint before trusting a hook capture. Vendored OTel helpers also
-    // require the API and can otherwise be mistaken for the application's copy.
-    if (!applicationChecked) return load()
-    if (applicationApi !== undefined) return applicationApi
-    if (fallbackApi !== undefined) return fallbackApi
-    return load()
+    return select().api
+  }
+
+  /**
+   * @returns {T}
+   */
+  function finalize () {
+    finalized = select()
+    return finalized.api
+  }
+
+  /**
+   * @returns {ApiBinding<T>}
+   */
+  function getBinding () {
+    if (!binding) binding = { current: finalize() }
+    return binding
+  }
+
+  /**
+   * @param {{ api: T, priority: CapturePriority, version?: string }} candidate
+   */
+  function transition (candidate) {
+    const previous = finalized
+    const currentRegistrations = [...registrations]
+
+    for (const registration of currentRegistrations) {
+      try {
+        registration.deactivate(previous.api)
+      } catch (error) {
+        require('../log').error('Error deactivating the previous %s registration.', packageName, error)
+      }
+    }
+
+    prepareGlobalRegistration(packageName, candidate.version)
+    finalized = candidate
+    if (binding) binding.current = candidate.api
+
+    for (const registration of currentRegistrations) {
+      try {
+        registration.activate(candidate.api)
+      } catch (error) {
+        require('../log').error('Error activating the new %s registration.', packageName, error)
+      }
+    }
+  }
+
+  /**
+   * @param {ApiRegistration<T>} registration
+   */
+  function register (registration) {
+    registrations.add(registration)
+    registration.activate(finalize())
   }
 
   /**
    * @param {T} api
+   * @param {string} [version]
+   * @param {boolean} [_isIitm]
+   * @param {HookMetadata} [hookMetadata]
    * @returns {T}
    */
-  function set (api) {
-    if (!loadingFallback && applicationApi === undefined) {
-      applicationApi = api
+  function set (api, version, _isIitm, hookMetadata) {
+    if (loadingFallback || hookMetadata?.applicationOwned === false) return api
+
+    const candidate = { api, priority: capturePriority(hookMetadata), version }
+    if (finalized) {
+      if (hasHigherPriority(candidate.priority, finalized.priority)) {
+        captured = candidate
+        if (api === finalized.api) {
+          finalized = candidate
+        } else {
+          transition(candidate)
+        }
+      }
+      return api
+    }
+
+    if (!captured || hasHigherPriority(candidate.priority, captured.priority)) {
+      captured = candidate
     }
     return api
   }
 
-  return { get, set }
+  return { binding: getBinding, finalize, get, register, set }
 }
 
 /**
@@ -187,8 +399,12 @@ const apiLogsHolder = createApiHolder('@opentelemetry/api-logs', API_LOGS_VERSIO
 module.exports = {
   API_LOGS_VERSION_RANGE,
   API_VERSION_RANGE,
+  finalizeApi: apiHolder.finalize,
   getApi: apiHolder.get,
+  getApiBinding: apiHolder.binding,
   getApiLogs: apiLogsHolder.get,
+  registerApi: apiHolder.register,
+  registerApiLogs: apiLogsHolder.register,
   setApi: apiHolder.set,
   setApiLogs: apiLogsHolder.set,
 }

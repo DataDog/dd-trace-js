@@ -1,50 +1,81 @@
 'use strict'
 
 const fs = require('node:fs')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
-const OTEL_API_PACKAGES = ['@opentelemetry/api', '@opentelemetry/api-logs']
+const satisfies = require('../../../../vendor/dist/semifies')
+const {
+  API_LOGS_VERSION_RANGE,
+  API_VERSION_RANGE,
+} = require('../../../dd-trace/src/opentelemetry/api')
+const extractPackageAndModulePath = require('./extract-package-and-module-path')
+
+const OTEL_API_VERSION_RANGES = new Map([
+  ['@opentelemetry/api', API_VERSION_RANGE],
+  ['@opentelemetry/api-logs', API_LOGS_VERSION_RANGE],
+])
 
 /**
- * Decide which OpenTelemetry API packages a bundle must keep external.
- *
- * The bridge captures the application's own copy through require interception, which only fires on a
- * runtime require. Bundling a copy the application also owns would inline a second copy the
- * interception never sees, so the bridge would register its provider on the wrong copy and silently
- * downgrade every span to a no-op (issue #6882). A package the application does not declare has no
- * competing copy, so it is left to bundle: dd-trace's own fallback copy is inlined and the bundle
- * stays self-contained, needing no `@opentelemetry/api` in `node_modules` at runtime.
- *
- * @param {string} workingDirectory Directory whose `package.json` lists the application's dependencies.
- * @returns {string[]} The supported OpenTelemetry API packages to mark external.
+ * @typedef {object} OtelApiPackage
+ * @property {string} moduleBaseDir
  */
-function otelApiPackagesToExternalize (workingDirectory) {
+
+/**
+ * @param {string} workingDirectory
+ * @returns {Map<string, OtelApiPackage>}
+ */
+function getApplicationOtelApiPackages (workingDirectory) {
   const declared = readDeclaredDependencies(workingDirectory)
-  // A missing or unreadable manifest is inconclusive, so err toward external: sharing the
-  // application's copy is the correctness-preserving default and only costs the self-contained-bundle
-  // optimization when the application in fact owns no copy.
-  if (!declared) return OTEL_API_PACKAGES
-  return OTEL_API_PACKAGES.filter(name => declared.has(name))
+  const packages = new Map()
+  if (declared.size === 0) return packages
+
+  const requireFromApplication = createRequire(path.join(workingDirectory, 'package.json'))
+  for (const [name, versionRange] of OTEL_API_VERSION_RANGES) {
+    if (!declared.has(name)) continue
+
+    try {
+      const entry = requireFromApplication.resolve(name)
+      const { pkgJson } = extractPackageAndModulePath(entry)
+      const { version } = JSON.parse(fs.readFileSync(pkgJson, 'utf8'))
+      if (!satisfies(version, versionRange)) continue
+      packages.set(name, { moduleBaseDir: path.dirname(pkgJson) })
+    } catch {
+      // A declaration without a supported installed package cannot provide the runtime copy.
+    }
+  }
+  return packages
 }
 
 /**
  * @param {string} workingDirectory
- * @returns {Set<string> | undefined} All declared dependency names, or `undefined` when the manifest
- *   cannot be read.
+ * @returns {Set<string>}
  */
 function readDeclaredDependencies (workingDirectory) {
-  let manifest
-  try {
-    manifest = JSON.parse(fs.readFileSync(path.join(workingDirectory, 'package.json'), 'utf8'))
-  } catch {
-    return
+  const declared = new Set()
+  let directory = path.resolve(workingDirectory)
+  const { root } = path.parse(directory)
+
+  while (directory !== root) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
+      for (const dependencies of [
+        manifest.dependencies,
+        manifest.devDependencies,
+        manifest.optionalDependencies,
+        manifest.peerDependencies,
+      ]) {
+        if (!dependencies) continue
+        for (const name of Object.keys(dependencies)) {
+          declared.add(name)
+        }
+      }
+    } catch {
+      // Keep looking for a workspace manifest in an ancestor directory.
+    }
+    directory = path.dirname(directory)
   }
-  return new Set([
-    ...Object.keys(manifest.dependencies ?? {}),
-    ...Object.keys(manifest.devDependencies ?? {}),
-    ...Object.keys(manifest.optionalDependencies ?? {}),
-    ...Object.keys(manifest.peerDependencies ?? {}),
-  ])
+  return declared
 }
 
-module.exports = { otelApiPackagesToExternalize }
+module.exports = { getApplicationOtelApiPackages }

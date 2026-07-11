@@ -5,6 +5,8 @@ const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
 const { getApi } = require('./api')
 
+const { createTraceState } = getApi()
+
 function newContext () {
   const spanId = id()
   return new DatadogSpanContext({
@@ -38,7 +40,7 @@ class SpanContext {
 
   get traceState () {
     const ts = this._ddContext._tracestate
-    return getApi().createTraceState(ts ? ts.toString() : '')
+    return createTraceState(ts ? ts.toString() : '')
   }
 }
 

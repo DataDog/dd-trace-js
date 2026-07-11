@@ -4,7 +4,7 @@ const os = require('os')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
-const { getApi } = require('../api')
+const { registerApi } = require('../api')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
@@ -40,7 +40,6 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
  * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryMetrics (config) {
-  const { metrics } = getApi()
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
@@ -75,7 +74,10 @@ function initializeOpenTelemetryMetrics (config) {
   )
 
   const meterProvider = new MeterProvider({ reader })
-  metrics.setGlobalMeterProvider(meterProvider)
+  registerApi({
+    activate: api => api.metrics.setGlobalMeterProvider(meterProvider),
+    deactivate: api => api.metrics.disable(),
+  })
 }
 
 function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {

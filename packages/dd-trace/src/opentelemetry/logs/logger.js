@@ -2,7 +2,6 @@
 
 const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
-const { getApi } = require('../api')
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -23,6 +22,7 @@ const { getApi } = require('../api')
  * @class Logger
  */
 class Logger {
+  #apiBinding
   #instrumentationScope
 
   /**
@@ -38,8 +38,10 @@ class Logger {
    *  `name` defaults to 'dd-trace-js';
    *  `version` defaults to tracer version;
    *  `schemaUrl` defaults to '';
+   * @param {{ current: typeof import('@opentelemetry/api') }} apiBinding
    */
-  constructor (loggerProvider, instrumentationScope, instrumentationLibrary) {
+  constructor (loggerProvider, instrumentationScope, instrumentationLibrary, apiBinding) {
+    this.#apiBinding = apiBinding
     this.loggerProvider = loggerProvider
 
     // Support both newer instrumentationScope and legacy instrumentationLibrary
@@ -73,7 +75,7 @@ class Logger {
 
     if (!logRecord.context) {
       // Store span context in the log record context for trace correlation.
-      logRecord.context = getApi().context.active()
+      logRecord.context = this.#apiBinding.current.context.active()
     }
 
     this.loggerProvider.processor.onEmit(logRecord, this.#instrumentationScope)

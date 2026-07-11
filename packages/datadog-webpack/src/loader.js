@@ -11,7 +11,7 @@ const CHANNEL = 'dd-trace:bundler:load'
  */
 module.exports = function loader (source) {
   this.cacheable(false)
-  const { pkg, version, path: pkgPath } = this.getOptions()
+  const { applicationOwned, moduleBaseDir, pkg, version, path: pkgPath } = this.getOptions()
 
   return (
     source +
@@ -19,7 +19,9 @@ module.exports = function loader (source) {
     '  const __dd_dc = require(\'dc-polyfill\');\n' +
     `  const __dd_ch = __dd_dc.channel('${CHANNEL}');\n` +
     '  const __dd_mod = module.exports;\n' +
-    `  const __dd_payload = { module: __dd_mod, version: '${version}', package: '${pkg}', path: '${pkgPath}' };\n` +
+    `  const __dd_payload = { module: __dd_mod, version: '${version}', package: '${pkg}', ` +
+      `path: '${pkgPath}', applicationOwned: ${applicationOwned === true}, ` +
+      `moduleBaseDir: ${JSON.stringify(moduleBaseDir)} };\n` +
     '  __dd_ch.publish(__dd_payload);\n' +
     '  module.exports = __dd_payload.module;\n' +
     '}\n'

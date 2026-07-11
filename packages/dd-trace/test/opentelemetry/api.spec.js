@@ -107,6 +107,13 @@ describe('opentelemetry/api holder', () => {
     assert.notStrictEqual(holder.getApi(), require('@opentelemetry/api'))
   })
 
+  it('ignores a capture marked as dd-trace-owned', () => {
+    const internal = { copy: 'internal' }
+    holder.setApi(internal, '1.9.0', false, { applicationOwned: false })
+
+    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
+  })
+
   it('keeps the two packages independent', () => {
     const apiLogs = { logs: {} }
     holder.setApiLogs(apiLogs)
@@ -122,6 +129,222 @@ describe('opentelemetry/api holder', () => {
     assert.strictEqual(holder.getApi(), first)
   })
 
+  it('prefers a capture closest to the application root', () => {
+    const nested = { copy: 'nested' }
+    const application = { copy: 'application' }
+    holder.setApi(nested, '1.9.0', false, {
+      moduleBaseDir: path.join(process.cwd(), 'node_modules', 'helper', 'node_modules', '@opentelemetry', 'api'),
+    })
+    holder.setApi(application, '1.9.0', false, {
+      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
+    })
+
+    assert.strictEqual(holder.getApi(), application)
+  })
+
+  it('prefers a nested entrypoint capture over a shallower working directory capture', () => {
+    assert.ok(require.main)
+    const applicationDirectory = path.join(process.cwd(), 'packages', 'application')
+    require.main.filename = path.join(applicationDirectory, 'app.js')
+    const workingDirectoryCopy = { copy: 'working-directory' }
+    const applicationCopy = { copy: 'application' }
+    holder.setApi(workingDirectoryCopy, '1.9.0', false, {
+      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
+    })
+    holder.setApi(applicationCopy, '1.9.0', false, {
+      moduleBaseDir: path.join(applicationDirectory, 'custom', 'node_modules', '@opentelemetry', 'api'),
+    })
+
+    assert.strictEqual(holder.getApi(), applicationCopy)
+  })
+
+  it('ranks captures from the ESM entrypoint when require.main has no filename', () => {
+    assert.ok(require.main)
+    delete require.main.filename
+    const entrypointDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-api-entrypoint-'))
+    temporaryDirectories.push(entrypointDirectory)
+    process.argv[1] = path.join(entrypointDirectory, 'app.mjs')
+    const nested = { copy: 'nested' }
+    const application = { copy: 'application' }
+    holder.setApi(nested, '1.9.0', false, {
+      moduleBaseDir: path.join(os.tmpdir(), 'dependency', 'node_modules', '@opentelemetry', 'api'),
+    })
+    holder.setApi(application, '1.9.0', false, {
+      moduleBaseDir: path.join(entrypointDirectory, 'node_modules', '@opentelemetry', 'api'),
+    })
+
+    assert.strictEqual(holder.getApi(), application)
+  })
+
+  it('binds a custom application copy captured after an internal copy before registration', () => {
+    const internal = { copy: 'internal' }
+    const application = { copy: 'application' }
+    const activate = sinon.spy()
+    const deactivate = sinon.spy()
+    holder.setApi(internal, '1.9.0', false, {
+      applicationOwned: false,
+      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
+    })
+    holder.setApi(application, '1.9.0', false, {
+      moduleBaseDir: path.join(process.cwd(), 'custom', 'node_modules', '@opentelemetry', 'api'),
+    })
+    holder.registerApi({ activate, deactivate })
+
+    assert.strictEqual(holder.getApi(), application)
+    sinon.assert.calledOnceWithExactly(activate, application)
+    sinon.assert.notCalled(deactivate)
+  })
+
+  it('deactivates every registration before activating a late application copy', () => {
+    const internal = { copy: 'internal' }
+    const application = { copy: 'application' }
+    const calls = []
+    holder.setApi(internal, '1.9.0')
+    for (const signal of ['trace', 'metrics', 'logs']) {
+      holder.registerApi({
+        activate: api => calls.push(`activate ${signal} ${api.copy}`),
+        deactivate: api => calls.push(`deactivate ${signal} ${api.copy}`),
+      })
+    }
+
+    const binding = holder.getApiBinding()
+    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
+
+    assert.strictEqual(holder.getApi(), application)
+    assert.strictEqual(binding.current, application)
+    assert.deepStrictEqual(calls, [
+      'activate trace internal',
+      'activate metrics internal',
+      'activate logs internal',
+      'deactivate trace internal',
+      'deactivate metrics internal',
+      'deactivate logs internal',
+      'activate trace application',
+      'activate metrics application',
+      'activate logs application',
+    ])
+  })
+
+  it('continues a late transition when registrations throw', () => {
+    const error = sinon.spy()
+    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(
+      Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+    )), {
+      '../log': { error },
+    })
+    const internal = { copy: 'internal' }
+    const application = { copy: 'application' }
+    const activationError = new Error('activate failed')
+    const deactivationError = new Error('deactivate failed')
+    const activate = sinon.stub()
+    const deactivate = sinon.spy()
+    holder.setApi(internal, '1.9.0')
+    holder.registerApi({
+      activate,
+      deactivate: sinon.stub().throws(deactivationError),
+    })
+    holder.registerApi({
+      activate: sinon.stub().onSecondCall().throws(activationError),
+      deactivate,
+    })
+
+    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
+
+    assert.strictEqual(holder.getApi(), application)
+    sinon.assert.calledOnceWithExactly(deactivate, internal)
+    sinon.assert.calledTwice(activate)
+    sinon.assert.calledWithExactly(activate.secondCall, application)
+    assert.deepStrictEqual(error.args, [
+      ['Error deactivating the previous %s registration.', '@opentelemetry/api', deactivationError],
+      ['Error activating the new %s registration.', '@opentelemetry/api', activationError],
+    ])
+  })
+
+  it('transfers the core API global version before activating a different copy', () => {
+    const globalKey = Symbol.for('opentelemetry.js.api.1')
+    const previous = Reflect.get(globalThis, globalKey)
+    const globalApi = { version: '1.8.0' }
+    Reflect.set(globalThis, globalKey, globalApi)
+
+    try {
+      holder.setApi({ copy: 'internal' }, '1.8.0')
+      holder.registerApi({ activate: sinon.spy(), deactivate: sinon.spy() })
+
+      holder.setApi({ copy: 'application' }, '1.9.0', false, { applicationOwned: true })
+
+      assert.strictEqual(globalApi.version, '1.9.0')
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
+      else Reflect.set(globalThis, globalKey, previous)
+    }
+  })
+
+  it('continues a transition when the core API global version cannot be transferred', () => {
+    const globalKey = Symbol.for('opentelemetry.js.api.1')
+    const previous = Reflect.get(globalThis, globalKey)
+    Reflect.set(globalThis, globalKey, Object.freeze({ version: '1.8.0' }))
+    const error = sinon.spy()
+    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(
+      Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+    )), {
+      '../log': { error },
+    })
+    const application = { copy: 'application' }
+    const activate = sinon.spy()
+
+    try {
+      holder.setApi({ copy: 'internal' }, '1.8.0')
+      holder.registerApi({ activate, deactivate: sinon.spy() })
+
+      holder.setApi(application, '1.9.0', false, { applicationOwned: true })
+
+      assert.strictEqual(holder.getApi(), application)
+      sinon.assert.calledWithExactly(activate.secondCall, application)
+      sinon.assert.calledOnceWithExactly(
+        error,
+        'Unable to transfer the OpenTelemetry API global to version %s.',
+        '1.9.0',
+        sinon.match.instanceOf(TypeError)
+      )
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
+      else Reflect.set(globalThis, globalKey, previous)
+    }
+  })
+
+  it('updates the priority when the selected copy is later identified as application-owned', () => {
+    const api = { copy: 'shared' }
+    const activate = sinon.spy()
+    const deactivate = sinon.spy()
+    holder.setApi(api, '1.9.0')
+    holder.registerApi({ activate, deactivate })
+
+    holder.setApi(api, '1.9.0', false, { applicationOwned: true })
+    holder.setApi({ copy: 'internal' }, '1.9.0', false, { applicationOwned: false })
+
+    assert.strictEqual(holder.getApi(), api)
+    sinon.assert.calledOnceWithExactly(activate, api)
+    sinon.assert.notCalled(deactivate)
+  })
+
+  it('keeps an internal late capture from replacing the registered application copy', () => {
+    const application = { copy: 'application' }
+    const internal = { copy: 'internal' }
+    const activate = sinon.spy()
+    const deactivate = sinon.spy()
+    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
+    holder.registerApi({ activate, deactivate })
+
+    holder.setApi(internal, '1.9.0', false, {
+      applicationOwned: false,
+      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
+    })
+
+    assert.strictEqual(holder.getApi(), application)
+    sinon.assert.calledOnceWithExactly(activate, application)
+    sinon.assert.notCalled(deactivate)
+  })
+
   it('prefers the entrypoint API over an earlier internal capture', () => {
     const internal = { copy: 'internal' }
     const application = { copy: 'application' }
@@ -133,6 +356,69 @@ describe('opentelemetry/api holder', () => {
     holder.setApi(internal)
 
     assert.strictEqual(holder.getApi(), application)
+  })
+
+  it('moves a preloaded copy to a late explicitly application-owned copy', () => {
+    const preloaded = { copy: 'preloaded' }
+    const application = { copy: 'application' }
+    const applicationRequire = sinon.stub()
+    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
+    applicationRequire.withArgs('@opentelemetry/api').returns(preloaded)
+    holder = freshHolder(sinon.stub().returns(applicationRequire))
+    const activate = sinon.spy()
+    const deactivate = sinon.spy()
+    holder.registerApi({ activate, deactivate })
+
+    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
+
+    assert.strictEqual(holder.getApi(), application)
+    sinon.assert.calledOnceWithExactly(deactivate, preloaded)
+    assert.deepStrictEqual(activate.args, [[preloaded], [application]])
+  })
+
+  it('prefers the working-directory API over a launcher dependency', () => {
+    assert.ok(require.main)
+    const launcherDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-launcher-'))
+    temporaryDirectories.push(launcherDirectory)
+    require.main.filename = path.join(launcherDirectory, 'cli.js')
+
+    const application = { copy: 'application' }
+    const launcher = { copy: 'launcher' }
+    const applicationRequire = sinon.stub()
+    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
+    applicationRequire.withArgs('@opentelemetry/api').returns(application)
+    const launcherRequire = sinon.stub()
+    launcherRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
+    launcherRequire.withArgs('@opentelemetry/api').returns(launcher)
+    const createRequire = sinon.stub()
+    createRequire.withArgs(path.join(process.cwd(), 'package.json')).returns(applicationRequire)
+    createRequire.withArgs(require.main.filename).returns(launcherRequire)
+    holder = freshHolder(createRequire)
+
+    assert.strictEqual(holder.getApi(), application)
+    sinon.assert.notCalled(launcherRequire)
+  })
+
+  it('prefers a nested application entrypoint over the working-directory API', () => {
+    assert.ok(require.main)
+    const entrypoint = path.join(process.cwd(), 'packages', 'app', 'index.js')
+    require.main.filename = entrypoint
+
+    const workspace = { copy: 'workspace' }
+    const application = { copy: 'application' }
+    const workspaceRequire = sinon.stub()
+    workspaceRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.0.0'))
+    workspaceRequire.withArgs('@opentelemetry/api').returns(workspace)
+    const applicationRequire = sinon.stub()
+    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
+    applicationRequire.withArgs('@opentelemetry/api').returns(application)
+    const createRequire = sinon.stub()
+    createRequire.withArgs(entrypoint).returns(applicationRequire)
+    createRequire.withArgs(path.join(process.cwd(), 'package.json')).returns(workspaceRequire)
+    holder = freshHolder(createRequire)
+
+    assert.strictEqual(holder.getApi(), application)
+    sinon.assert.notCalled(workspaceRequire)
   })
 
   for (const [packageName, getter, version, supported] of [
@@ -164,6 +450,25 @@ describe('opentelemetry/api holder', () => {
     })
   }
 
+  it('warns when the application API version is unsupported', () => {
+    const applicationRequire = sinon.stub()
+    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.10.0'))
+    const warn = sinon.spy()
+    holder = freshHolder(sinon.stub().returns(applicationRequire), {
+      '../log': { warn },
+    })
+
+    holder.getApi()
+
+    sinon.assert.calledOnceWithExactly(
+      warn,
+      'Unsupported application-owned %s@%s; supported versions are %s. Using the bundled fallback.',
+      '@opentelemetry/api',
+      '1.10.0',
+      '>=1.0.0 <1.10.0'
+    )
+  })
+
   it('roots application resolution inside a directory entrypoint', () => {
     assert.ok(require.main)
     const entrypoint = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-entrypoint-'))
@@ -175,7 +480,10 @@ describe('opentelemetry/api holder', () => {
 
     holder.getApi()
 
-    sinon.assert.calledOnceWithExactly(createRequire, path.join(entrypoint, 'package.json'))
+    assert.deepStrictEqual(createRequire.args, [
+      [path.join(process.cwd(), 'package.json')],
+      [path.join(entrypoint, 'package.json')],
+    ])
   })
 
   it('roots application resolution at process.argv for an ESM entrypoint', () => {
@@ -188,7 +496,10 @@ describe('opentelemetry/api holder', () => {
 
     holder.getApi()
 
-    sinon.assert.calledOnceWithExactly(createRequire, process.argv[1])
+    assert.deepStrictEqual(createRequire.args, [
+      [path.join(process.cwd(), 'package.json')],
+      [process.argv[1]],
+    ])
   })
 
   it('roots application resolution in the working directory without an entrypoint', () => {
