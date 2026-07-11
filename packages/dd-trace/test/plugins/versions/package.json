@@ -111,7 +111,7 @@
     "cassandra-driver": "4.9.0",
     "collections": "5.1.13",
     "connect": "3.7.0",
-    "cookie": "1.1.1",
+    "cookie": "2.0.1",
     "cookie-parser": "1.4.7",
     "couchbase": "4.7.0",
     "cypress": "15.16.0",
