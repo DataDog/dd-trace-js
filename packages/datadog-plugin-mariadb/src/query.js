@@ -6,6 +6,7 @@ const { storage } = require('../../datadog-core')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { startQuerySpan } = require('../../datadog-plugin-mysql/src/shared')
 
+const DD_CONF = '__ddConf'
 const DD_SPAN = Symbol('dd-mariadb-span')
 
 // Stash caller's async-context store on the Command instance so completion
@@ -99,7 +100,6 @@ const USER_FACING_CHANNELS = [
   'v2Connection_queryPromise',
   'v2Connection_query',
   'v2Connection_queryCallback',
-  'v2PoolBase_query',
   'PrepareResultPacket_execute',
 ]
 
@@ -125,6 +125,48 @@ class MariadbQueryContextPlugin extends DatabasePlugin {
       })
       this.addBind(`${prefix}:asyncStart`, ctx => ctx.parentStore)
     }
+  }
+}
+
+class V2PoolQueryPlugin extends DatabasePlugin {
+  static id = 'mariadb'
+  static system = 'mariadb'
+  static operation = 'query'
+  static prefix = 'tracing:orchestrion:mariadb:v2PoolBase_query'
+
+  /**
+   * Starts the public v2 pool query span before pool internals enter noop.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @returns {object | undefined} Store containing the query span
+   */
+  bindStart (ctx) {
+    ctx.parentStore = legacyStorage.getStore()
+    ctx.sql = ctx.arguments?.[0]?.sql || ctx.arguments?.[0]
+    ctx.conf = ctx.self?.[DD_CONF] || {}
+    startQuerySpan(this, ctx)
+
+    return ctx.currentStore
+  }
+
+  /**
+   * Restores the caller context for promise continuations.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @returns {object | undefined} Parent store captured at start
+   */
+  bindAsyncStart (ctx) {
+    return ctx.parentStore
+  }
+
+  /**
+   * Finishes the public v2 pool query span.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @returns {void}
+   */
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 }
 
@@ -268,6 +310,7 @@ class CommandCompletionPlugin extends DatabasePlugin {
 
 module.exports = [
   MariadbQueryContextPlugin,
+  V2PoolQueryPlugin,
   QueryCommandPlugin,
   V2QueryCommandPlugin,
   CommandCompletionPlugin,

@@ -4,6 +4,9 @@ const { storage } = require('../../datadog-core')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 
 const DD_CONF = '__ddConf'
+const DD_SKIP_WRAPPED = Symbol('dd-mariadb-skip-wrapped')
+
+const legacyStorage = storage('legacy')
 
 /**
  * Extracts connection-relevant config from the raw user options.
@@ -19,6 +22,23 @@ function extractConf (opts) {
     database: opts.database,
     port: opts.port,
   }
+}
+
+/**
+ * Runs a v2 pool internal function outside the caller's trace.
+ *
+ * @param {unknown} fn - Pool internal function candidate
+ * @returns {unknown} Original value or wrapped pool internal function
+ */
+function wrapPoolInternalFunction (fn) {
+  if (typeof fn !== 'function' || fn[DD_SKIP_WRAPPED]) return fn
+
+  function wrappedPoolInternalFunction () {
+    return legacyStorage.run({ noop: true }, () => fn.apply(this, arguments))
+  }
+
+  wrappedPoolInternalFunction[DD_SKIP_WRAPPED] = true
+  return wrappedPoolInternalFunction
 }
 
 /**
@@ -39,7 +59,7 @@ class MariadbConnectionTrackingPlugin extends Plugin {
     // Clear context during createConnection/createPool so that pool-internal
     // TCP connections (e.g. from minimumIdle) don't become children of the
     // user's active span.
-    this.addBind(`${prefix}:start`, () => null)
+    this.addBind(`${prefix}:start`, ctx => this.bindStart(ctx))
 
     this.addSub(`${prefix}:end`, ctx => {
       this.storeConf(ctx)
@@ -48,6 +68,16 @@ class MariadbConnectionTrackingPlugin extends Plugin {
     this.addSub(`${prefix}:asyncEnd`, ctx => {
       this.storeConf(ctx)
     })
+  }
+
+  /**
+   * Computes the store to enter when the wrapped factory starts.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @returns {object | null} Store to bind during the wrapped call
+   */
+  bindStart (ctx) {
+    return null
   }
 
   /**
@@ -106,7 +136,8 @@ class PoolGetConnectionPlugin extends Plugin {
     // asyncStart restore through a noop store created by pool growth, while
     // `parentStore` preserves the existing query/command parent contract.
     this.addBind(`${prefix}:start`, ctx => {
-      ctx.parentStore = storage('legacy').getStore()
+      ctx.parentStore = legacyStorage.getStore()
+      ctx.currentStore = ctx.parentStore
       return null
     })
 
@@ -176,6 +207,21 @@ class V2PoolBasePlugin extends MariadbConnectionTrackingPlugin {
   static id = 'mariadb'
   static prefix = 'tracing:orchestrion:mariadb:v2PoolBase'
 
+  /**
+   * Wrap v2 pool internals that create connections or execute queued work.
+   *
+   * @param {object} ctx - Orchestrion channel context
+   * @returns {null} Store to bind during the wrapped constructor
+   */
+  bindStart (ctx) {
+    if (ctx.arguments) {
+      ctx.arguments[1] = wrapPoolInternalFunction(ctx.arguments[1])
+      ctx.arguments[2] = wrapPoolInternalFunction(ctx.arguments[2])
+    }
+
+    return null
+  }
+
   storeConf (ctx) {
     const opts = ctx.arguments?.[0]
     const target = ctx.self
@@ -201,7 +247,7 @@ class V2PoolBaseGetConnectionPlugin extends Plugin {
     const prefix = 'tracing:orchestrion:mariadb:v2PoolBase_getConnection'
 
     this.addBind(`${prefix}:start`, ctx => {
-      ctx.parentStore = storage('legacy').getStore()
+      ctx.parentStore = legacyStorage.getStore()
       ctx.currentStore = ctx.parentStore
       return null
     })

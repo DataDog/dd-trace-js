@@ -16,6 +16,7 @@ const [
 
 const [
   MariadbQueryContextPlugin,
+  V2PoolQueryPlugin,
   QueryCommandPlugin,
   V2QueryCommandPlugin,
   CommandCompletionPlugin,
@@ -32,6 +33,7 @@ class MariadbPlugin extends CompositePlugin {
     v2PoolBase: V2PoolBasePlugin,
     v2PoolGetConnection: V2PoolBaseGetConnectionPlugin,
     queryContext: MariadbQueryContextPlugin,
+    v2PoolQuery: V2PoolQueryPlugin,
     queryCommand: QueryCommandPlugin,
     v2QueryCommand: V2QueryCommandPlugin,
     commandCompletion: CommandCompletionPlugin,
