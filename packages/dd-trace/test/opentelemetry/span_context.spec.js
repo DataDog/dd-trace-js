@@ -90,4 +90,10 @@ describe('OTel Span Context', () => {
 
     assert.strictEqual(context.traceState.serialize(), 'dd=foo:bar')
   })
+
+  it('should get an empty trace state when none is set', () => {
+    const context = new SpanContext()
+
+    assert.strictEqual(context.traceState.serialize(), '')
+  })
 })

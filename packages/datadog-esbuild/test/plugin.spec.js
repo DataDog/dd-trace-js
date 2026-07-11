@@ -61,23 +61,27 @@ function captureOptionalPeerOnLoad () {
  * @returns {{
  *   external: string[] | undefined,
  *   resolve: (args: import('esbuild').OnResolveArgs) => object | undefined,
- *   resolveAny: (args: import('esbuild').OnResolveArgs) => object | undefined
+ *   resolveAny: (args: import('esbuild').OnResolveArgs) => object | undefined,
+ *   load: import('esbuild').OnLoadCallback
  * }}
  */
 function setupOtelApiResolution (initialOptions = {}) {
   const handlers = []
+  let load
   ddPlugin.setup({
     initialOptions,
     onResolve (options, callback) {
       handlers.push({ options, callback })
     },
-    onLoad () {},
+    onLoad (options, callback) {
+      if (options.filter.source === '.*') load = callback
+    },
   })
   const { callback: resolve } = handlers.find(({ options }) => {
     return options.filter.test('@opentelemetry/api') && !options.filter.test('express')
   })
   const { callback: resolveAny } = handlers.find(({ options }) => options.filter.test('express'))
-  return { external: initialOptions.external, resolve, resolveAny }
+  return { external: initialOptions.external, resolve, resolveAny, load }
 }
 
 describe('datadog-esbuild plugin', () => {
@@ -190,6 +194,51 @@ describe('datadog-esbuild plugin', () => {
         result.pluginData.moduleBaseDir,
         fs.realpathSync(path.join(workingDirectory, 'node_modules', '@opentelemetry', 'api'))
       )
+    })
+
+    it('forwards ownership metadata from application and fallback modules', async () => {
+      const workingDirectory = createManifestDirectory({
+        name: 'app',
+        dependencies: { '@opentelemetry/api': '^1.9.0' },
+      })
+      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
+      const { resolveAny, load } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
+      const applicationResult = resolveAny({
+        importer: path.join(workingDirectory, 'app.js'),
+        kind: 'require-call',
+        namespace: 'file',
+        path: '@opentelemetry/api',
+        resolveDir: workingDirectory,
+      })
+      const applicationLoad = await load({
+        path: applicationResult.path,
+        pluginData: applicationResult.pluginData,
+      })
+
+      assert.ok(applicationLoad.contents.includes("path: '@opentelemetry/api',"))
+      assert.ok(applicationLoad.contents.includes('applicationOwned: true,'))
+      assert.ok(applicationLoad.contents.includes(
+        `moduleBaseDir: ${JSON.stringify(applicationResult.pluginData.moduleBaseDir)}`
+      ))
+
+      const holderImporter = require.resolve('../../dd-trace/src/opentelemetry/api')
+      const fallbackResult = resolveAny({
+        importer: holderImporter,
+        kind: 'require-call',
+        namespace: 'file',
+        path: '@opentelemetry/api',
+        resolveDir: path.dirname(holderImporter),
+      })
+      const fallbackLoad = await load({
+        path: fallbackResult.path,
+        pluginData: fallbackResult.pluginData,
+      })
+
+      assert.ok(fallbackLoad.contents.includes("path: '@opentelemetry/api',"))
+      assert.ok(fallbackLoad.contents.includes('applicationOwned: false,'))
+      assert.ok(fallbackLoad.contents.includes(
+        `moduleBaseDir: ${JSON.stringify(fallbackResult.pluginData.moduleBaseDir)}`
+      ))
     })
 
     it('bundles a package the application does not depend on so the bundle stays self-contained', () => {

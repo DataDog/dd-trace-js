@@ -21,6 +21,26 @@ describe('OTel TracerProvider', () => {
     assert.strictEqual(trace.getTracerProvider().getDelegate(), provider)
   })
 
+  it('should register only once', () => {
+    const registerApi = sinon.spy()
+    const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
+      './api': {
+        getApiBinding: () => ({ current: {} }),
+        registerApi,
+      },
+      '../../': {},
+      './context_manager': class {},
+      './tracer': class {},
+      './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
+    })
+    const provider = new FreshTracerProvider()
+
+    provider.register()
+    provider.register()
+
+    sinon.assert.calledOnce(registerApi)
+  })
+
   it('should get tracer', () => {
     const provider = new TracerProvider()
     const tracer = provider.getTracer()

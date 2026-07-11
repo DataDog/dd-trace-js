@@ -130,7 +130,7 @@ describe('DatadogWebpackPlugin', () => {
     /**
      * @param {WebpackExternal} external
      * @param {string} context
-     * @param {string} request
+     * @param {string | undefined} request
      * @returns {string | boolean | undefined}
      */
     function resolveExternal (external, context, request) {
@@ -192,6 +192,7 @@ describe('DatadogWebpackPlugin', () => {
         'commonjs @opentelemetry/api/experimental'
       )
       assert.strictEqual(resolveExternal(externals[0], '/app', 'pg'), undefined)
+      assert.strictEqual(resolveExternal(externals[0], '/app', undefined), undefined)
     })
 
     it('uses createRequire-compatible externals for ESM output', () => {
