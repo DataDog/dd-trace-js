@@ -517,6 +517,12 @@ Early Flake Detection retries in every supported test-duration bucket. A value o
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
 
+<h3 id="source-mapped-stack-traces">Source-mapped stack traces</h3>
+
+On Node.js 22.x starting at 22.14.0, 23.x starting at 23.7.0, and later release lines, the tracer enables source-map parsing during initialization and maps error stack traces back to their original source when the stack is read. Only modules loaded after tracer initialization can be mapped, so preload `dd-trace/init` to map frames from the application's entry module. Set the environment variable `DD_TRACE_SOURCE_MAPS_ENABLED=false` before the tracer initializes to prevent the tracer from enabling source maps. It does not disable source maps already enabled by Node.js or another library. This setting is not available as an `init()` option.
+
+On runtimes without programmatic source-map support, start Node with `--enable-source-maps` to enable parsing.
+
 <h3 id="custom-logging">Custom Logging</h3>
 
 By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.

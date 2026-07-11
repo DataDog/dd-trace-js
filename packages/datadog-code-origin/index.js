@@ -38,8 +38,7 @@ function exitTags (topOfStackFunc) {
  * @returns {Record<string, string>}
  */
 function tag (type, limit, topOfStackFunc) {
-  // The `Error.prepareStackTrace` API doesn't support resolving source maps.
-  // Fall back to manually parsing the stack trace.
+  // Parse the formatted stack so the global formatter can remap source locations first.
   const originalLimit = Error.stackTraceLimit
   Error.stackTraceLimit = Infinity
   const dummy = {}

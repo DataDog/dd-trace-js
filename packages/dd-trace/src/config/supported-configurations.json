@@ -3805,6 +3805,14 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_SOURCE_MAPS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Whether the tracer should enable source maps and remap error stack traces to original sources. Modules must load after tracer initialization; runtimes without programmatic source-map support require --enable-source-maps. Disabling this setting does not disable source maps enabled by Node.js or another library."
+      }
+    ],
     "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [
       {
         "implementation": "B",

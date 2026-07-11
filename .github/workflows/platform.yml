@@ -147,6 +147,28 @@ jobs:
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}
 
+  source-maps:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [22.14.0, 23.7.0]
+    name: ${{ github.workflow }} / source-maps (node-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: ./node_modules/.bin/mocha packages/dd-trace/test/source-maps/index.spec.js
+      - run: ./node_modules/.bin/mocha --timeout 60000 integration-tests/source-maps.spec.js
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
+
   crashtracking:
     strategy:
       fail-fast: false
