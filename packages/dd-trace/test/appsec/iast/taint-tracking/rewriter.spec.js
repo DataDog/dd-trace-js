@@ -59,7 +59,7 @@ describe('IAST Rewriter', () => {
       }
       sourceMaps = {
         isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
-        isSourceMapSupportEnabled: sinon.stub().returns(false),
+        syncSourceMapSupport: sinon.stub().returns(false),
       }
 
       cacheRewrittenSourceMap = sinon.stub()
@@ -131,7 +131,7 @@ describe('IAST Rewriter', () => {
     })
 
     it('Should chain source maps when they are enabled programmatically', () => {
-      sourceMaps.isSourceMapSupportEnabled.returns(true)
+      sourceMaps.syncSourceMapSupport.returns(true)
 
       rewriter.enable(iastEnabledConfig)
 
@@ -228,7 +228,7 @@ describe('IAST Rewriter', () => {
 
       it('Should pass programmatic source map support to the ESM rewriter', () => {
         process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
-        sourceMaps.isSourceMapSupportEnabled.returns(true)
+        sourceMaps.syncSourceMapSupport.returns(true)
 
         rewriter.enable(iastEnabledConfig)
 
@@ -386,7 +386,7 @@ describe('IAST Rewriter', () => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       sourceMaps = {
         isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
-        isSourceMapSupportEnabled: sinon.stub().returns(false),
+        syncSourceMapSupport: sinon.stub().returns(false),
       }
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/wasm-js-rewriter': {
@@ -411,7 +411,7 @@ describe('IAST Rewriter', () => {
     })
 
     it('should call native getOriginalPathAndLineFromSourceMap if source maps are enabled programmatically', () => {
-      sourceMaps.isSourceMapSupportEnabled.returns(true)
+      sourceMaps.syncSourceMapSupport.returns(true)
 
       rewriter.enable(iastEnabledConfig)
 
@@ -423,7 +423,7 @@ describe('IAST Rewriter', () => {
 
     it('should not call native getOriginalPathAndLineFromSourceMap if source maps are enabled natively', () => {
       sourceMaps.isNativeSourceMapSupportEnabled.returns(true)
-      sourceMaps.isSourceMapSupportEnabled.returns(true)
+      sourceMaps.syncSourceMapSupport.returns(true)
 
       rewriter.enable(iastEnabledConfig)
 

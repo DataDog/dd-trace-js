@@ -72,7 +72,7 @@ function getRewriter (telemetryVerbosity) {
       kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
       cacheRewrittenSourceMap = iastRewriter.cacheRewrittenSourceMap
 
-      const chainSourceMap = sourceMaps.isSourceMapSupportEnabled()
+      const chainSourceMap = sourceMaps.syncSourceMapSupport()
       setGetOriginalPathAndLineFromSourceMapFunction(
         sourceMaps.isNativeSourceMapSupportEnabled(),
         iastRewriter
@@ -234,7 +234,7 @@ let enableEsmRewriter = function (telemetryVerbosity) {
           port: port2,
           csiMethods,
           telemetryVerbosity,
-          chainSourceMap: sourceMaps.isSourceMapSupportEnabled(),
+          chainSourceMap: sourceMaps.syncSourceMapSupport(),
           orchestrionConfig,
           iastEnabled: config?.iast?.enabled,
         },

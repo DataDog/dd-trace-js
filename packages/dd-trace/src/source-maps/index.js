@@ -169,13 +169,13 @@ function applySourceMapsFlag (option, enabled) {
 }
 
 /**
- * Read the current support options once per formatted stack. Other libraries can change these
+ * Synchronize the current support options once per formatted stack. Other libraries can change these
  * options after tracer initialization, so caches from a previous support state must not leak
  * remapped locations into the new state.
  *
  * @returns {boolean}
  */
-function isSourceMapSupportEnabled () {
+function syncSourceMapSupport () {
   if (!supportsProgrammaticSourceMaps) {
     return legacySourceMapsEnabled
   }
@@ -222,7 +222,7 @@ function isNodeDefaultPrepareStackTrace (handler) {
  * @returns {unknown}
  */
 function prepareStackTrace (error, callSites) {
-  const shouldRemap = isSourceMapSupportEnabled()
+  const shouldRemap = syncSourceMapSupport()
   if (typeof delegatePrepareStackTrace === 'function') {
     return delegatePrepareStackTrace.call(
       Error,
@@ -556,5 +556,5 @@ function toOriginalCallSite (callSite, index, callSites) {
 module.exports = {
   enable,
   isNativeSourceMapSupportEnabled,
-  isSourceMapSupportEnabled,
+  syncSourceMapSupport,
 }

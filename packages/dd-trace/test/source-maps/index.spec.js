@@ -326,7 +326,7 @@ describe('source maps', function () {
    * @type {{
    *   enable: () => void,
    *   isNativeSourceMapSupportEnabled: () => boolean,
-   *   isSourceMapSupportEnabled: () => boolean
+   *   syncSourceMapSupport: () => boolean
    * }}
    */
   let sourceMaps
@@ -404,7 +404,7 @@ describe('source maps', function () {
         },
       })
 
-      assert.strictEqual(sourceMaps.isSourceMapSupportEnabled(), false)
+      assert.strictEqual(sourceMaps.syncSourceMapSupport(), false)
       assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), false)
       sourceMaps.enable()
 
@@ -460,7 +460,7 @@ describe('source maps', function () {
         },
       })
 
-      assert.strictEqual(sourceMaps.isSourceMapSupportEnabled(), true)
+      assert.strictEqual(sourceMaps.syncSourceMapSupport(), true)
       assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), true)
       sourceMaps.enable()
 
@@ -563,7 +563,7 @@ describe('source maps', function () {
           },
         })
 
-        assert.strictEqual(sourceMaps.isSourceMapSupportEnabled(), expected)
+        assert.strictEqual(sourceMaps.syncSourceMapSupport(), expected)
         assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), expected)
         sourceMaps.enable()
 
