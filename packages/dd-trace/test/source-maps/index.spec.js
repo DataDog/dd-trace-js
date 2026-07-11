@@ -1277,6 +1277,9 @@ describe('source maps', function () {
     })
 
     it('preserves default generated frames when source map support is disabled', function () {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
+      if (typeof sourceMapsModule.setSourceMapsSupport !== 'function') this.skip()
+
       const fileName = path.join(temporaryDirectory, 'disabled.js')
       const findSourceMap = sinon.stub()
       let support = {
