@@ -245,6 +245,66 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('rejects an approval plan whose structured command executable is unavailable', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-unavailable-plan-'))
+    const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.ciWiringCommand = {
+      cwd: root,
+      argv: ['definitely-not-an-installed-test-runner', 'test'],
+    }
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), /Cannot render an approvable plan.*definitely-not-an-installed-test-runner.*not available/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('allows approved setup to provide executables used by later validation commands', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-setup-plan-'))
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.setup = {
+      commands: [{
+        id: 'install-test-runner',
+        cwd: root,
+        argv: [process.execPath, '-e', 'process.exit(0)'],
+      }],
+    }
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: ['test-runner-installed-by-setup', 'test'],
+    }
+
+    try {
+      const plan = formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+        requestedScenario: 'basic-reporting',
+      })
+
+      assert.match(plan, /Project Setup: install-test-runner/)
+      assert.match(plan, /test-runner-installed-by-setup test/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('counts only Vitest tests executed through a name filter', () => {
     assert.strictEqual(getObservedTestCount('vitest', `
       Test Files  1 passed (1)

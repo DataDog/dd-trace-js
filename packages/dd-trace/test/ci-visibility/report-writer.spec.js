@@ -896,6 +896,13 @@ describe('test optimization validation report writer', () => {
             missingLevels: ['test_session_end', 'test'],
             recommendation: 'Verify NODE_OPTIONS reaches Vitest.',
           },
+          ciConfigurationDiagnosis: 'The CI step invokes test instead of test:datadog.',
+          existingDatadogInitScripts: [
+            {
+              name: 'test:datadog',
+              packageJson: packageJsonPath,
+            },
+          ],
           initializationProbe: {
             ran: true,
             processCount: 2,
@@ -993,6 +1000,8 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Exit code: `1`/)
       assert.match(markdown, /Timed out: `false`/)
       assert.match(markdown, /Command output summary: `Tests {2}1 failed \| 2 passed \(3\)`/)
+      assert.match(markdown, /Manifest CI configuration diagnosis: The CI step invokes test instead of test:datadog\./)
+      assert.match(markdown, /Existing package scripts with Datadog initialization: `test:datadog \(/)
       assert.match(markdown, /Stderr excerpt: `AssertionError: expected true to be false`/)
       assert.match(markdown, /Event failure kind: `ci-wiring-no-test-optimization-events`/)
       assert.match(markdown, /NODE\\_OPTIONS probe: reached Node process `true`, reached test runner `false`/)

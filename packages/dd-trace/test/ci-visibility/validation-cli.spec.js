@@ -160,6 +160,83 @@ describe('test optimization validation cli', () => {
     }
   })
 
+  it('prints phase progress during live validation without requiring verbose mode', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-progress-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const logs = []
+    const originalLog = console.log
+    const originalExitCode = process.exitCode
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            this.requests = []
+          }
+
+          async start () {}
+          async close () {}
+        },
+      },
+      './report-writer': {
+        async writeReport () {},
+      },
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'pass',
+            diagnosis: 'Basic Reporting passed.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          return { ok: true }
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          return { report: {} }
+        },
+      },
+    })
+
+    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
+    console.log = message => logs.push(message)
+    process.exitCode = undefined
+
+    try {
+      await main([
+        '--manifest', manifestPath,
+        '--out', out,
+        '--scenario', 'basic-reporting',
+        ...APPROVAL_ARGS,
+      ])
+
+      assert.deepStrictEqual(logs, [
+        '[test-optimization-validator] Starting the local mock intake.',
+        '[test-optimization-validator] Local mock intake ready.',
+        '[test-optimization-validator] jest:root: Test execution without Datadog started.',
+        '[test-optimization-validator] jest:root: Test execution without Datadog pass.',
+        '[test-optimization-validator] jest:root: Basic Reporting started.',
+        '[test-optimization-validator] jest:root: Basic Reporting pass.',
+      ])
+      assert.strictEqual(process.exitCode, 0)
+    } finally {
+      console.log = originalLog
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('refuses to use repository.root itself as the validation output directory', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')

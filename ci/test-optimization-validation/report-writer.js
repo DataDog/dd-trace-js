@@ -498,6 +498,15 @@ function getResultDetailLines (result, options = {}) {
   if (Array.isArray(evidence.commandOutputSummary) && evidence.commandOutputSummary.length > 0) {
     lines.push(`Command output summary: ${formatList(evidence.commandOutputSummary, { format })}`)
   }
+  if (evidence.ciConfigurationDiagnosis) {
+    lines.push(`Manifest CI configuration diagnosis: ${evidence.ciConfigurationDiagnosis}`)
+  }
+  if (Array.isArray(evidence.existingDatadogInitScripts) && evidence.existingDatadogInitScripts.length > 0) {
+    const scripts = evidence.existingDatadogInitScripts.map(script => {
+      return `${script.name} (${script.packageJson})`
+    })
+    lines.push(`Existing package scripts with Datadog initialization: ${formatList(scripts, { format })}`)
+  }
 
   if (evidence.reason) lines.push(`Reason: ${evidence.reason}`)
   if (evidence.error) lines.push(`Error: ${format(evidence.error)}`)

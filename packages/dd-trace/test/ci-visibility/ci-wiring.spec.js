@@ -112,6 +112,60 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
+  it('preserves the manifest CI diagnosis and recommends an existing Datadog test script', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+    fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
+      scripts: {
+        test: 'jest',
+        'test:datadog': "NODE_OPTIONS='-r dd-trace/ci/init' npm test",
+      },
+    })}\n`)
+
+    try {
+      const result = await runCiWiring({
+        manifest: { repository: { root: out } },
+        framework: {
+          id: 'jest:root',
+          framework: 'jest',
+          project: { root: out },
+          ciWiring: {
+            diagnosis: 'The CI step runs test instead of the existing test:datadog script.',
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("1 passing")'],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic Reporting passed.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.match(result.diagnosis, /CI step runs test instead of the existing test:datadog script/)
+      assert.deepStrictEqual(result.evidence.existingDatadogInitScripts, [{
+        name: 'test:datadog',
+        packageJson: path.join(out, 'package.json'),
+      }])
+      assert.match(result.evidence.eventLevelFailure.recommendation, /already defines `test:datadog`/)
+      assert.match(result.evidence.eventLevelFailure.recommendation, /identified CI test step to invoke that script/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('replays shell CI commands with the recorded CI shell', async function () {
     if (process.platform === 'win32') this.skip()
 

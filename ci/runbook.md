@@ -339,6 +339,10 @@ Basic Reporting passes.
 - Prefer the smallest reliable passing test command.
 - Try at most one representative existing command and one smaller fallback per framework before
   recording the failure.
+- Follow CI-referenced workspaces and root package scripts first. Once one representative is selected
+  for every distinct CI/framework/working-directory/setup shape, stop recursive discovery. Summarize
+  nested examples, fixtures, and vendored test projects that CI does not invoke as one omitted category;
+  do not expand each one into a framework entry.
 - In large monorepos, validate one representative command per distinct framework/runner shape,
   working directory shape, setup requirement, and CI environment shape. Record duplicate packages or
   jobs as omitted or duplicate CI candidates instead of live-replaying every package.
@@ -351,7 +355,11 @@ Basic Reporting passes.
 - For Jest, record custom `runner` configuration. Custom runners can run tests while bypassing the
   lifecycle hooks dd-trace uses for individual suites and tests.
 - Respect the repository's declared Node and package-manager versions before judging a command
-  failure.
+  failure. Match CI's Node major when the failure may depend on runtime support or module loading.
+  Otherwise record the local/CI mismatch as a limitation, but do not claim exact CI parity.
+- For a multiline CI step that mixes tests with lint, typecheck, build, or upload commands, select only
+  the test-producing command for live replay. Preserve the complete original step in `displayCommand`
+  and record each excluded command in unresolved or omitted-command evidence.
 - Do not include secrets. Record required secret variable names only.
 - Schema path fields must be absolute: repository root, project roots, package JSON paths, command
   cwd values, generated file paths, cleanup paths, and generated test identity files.
@@ -507,6 +515,12 @@ node /absolute/path/to/validate-test-optimization.js \
   --out ./dd-test-optimization-validation-results \
   --print-plan
 ```
+
+Plan rendering also verifies that structured command executables and explicit shells that must be
+available before setup can be resolved locally. When no setup commands are declared, it checks every
+planned executable. If it reports an unavailable executable, do not ask for approval: choose an
+equivalent locally available command, add the required approved setup, or mark the affected check
+with its concrete setup blocker.
 
 Copy the complete rendered plan into the user-facing response. A collapsed command transcript or
 agent-written summary is not a displayed plan. Use the agent platform's command-approval dialog as

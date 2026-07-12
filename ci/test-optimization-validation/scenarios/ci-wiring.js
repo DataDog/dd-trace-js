@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('fs')
 const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
@@ -67,6 +68,8 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       ciCommandCandidate: buildCiCommandCandidate(framework),
       ciWiring: framework.ciWiring,
+      ciConfigurationDiagnosis: framework.ciWiring?.diagnosis || framework.ciWiring?.reason,
+      existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
       forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
       preflight: summarizePreflight(ciWiringPreflight),
       ...basicEventEvidence(events),
@@ -299,26 +302,40 @@ function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) 
 function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
   const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
     'environment and setup described by the CI job, no Test Optimization events reached the mock intake.'
+  const configurationSummary = evidence.ciConfigurationDiagnosis
+    ? ` Manifest CI discovery recorded: ${evidence.ciConfigurationDiagnosis}`
+    : ''
   const probeSummary = getInitializationProbeSummary(evidence.initializationProbe, framework)
 
   if (basicResult?.status === 'pass') {
-    return `${summary} The same selected test command reported test data when the validator supplied the ` +
+    return `${summary}${configurationSummary} The same selected test command reported test data when the ` +
+      'validator supplied the ' +
       'required Datadog initialization directly, so this repository can report when dd-trace is initialized ' +
       `correctly.${probeSummary}`
   }
 
-  return `${summary}${probeSummary}`
+  return `${summary}${configurationSummary}${probeSummary}`
 }
 
 function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
+  const existingInitScripts = evidence.existingDatadogInitScripts || []
   const probeReachedTestRunner = evidence.initializationProbe?.ran === true &&
     evidence.initializationProbe.reachedTestRunnerProcess === true
-  const recommendation = probeReachedTestRunner
-    ? 'Update the identified CI test job so NODE_OPTIONS includes `-r dd-trace/ci/init` and the required Datadog ' +
-      'environment variables are present. The NODE_OPTIONS probe reached the test runner for this command ' +
-      'shape, so no package-manager or wrapper change is needed.'
-    : 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test runner, and that ' +
-      'any package manager, monorepo runner, or wrapper preserves it.'
+  let recommendation
+
+  if (existingInitScripts.length > 0) {
+    const scriptNames = existingInitScripts.map(script => `\`${script.name}\``).join(', ')
+    recommendation = `The package already defines ${scriptNames} with the required ` +
+      '`dd-trace/ci/init` preload. Update the identified CI test step to invoke that script, or copy its ' +
+      '`NODE_OPTIONS` initialization into the CI test command.'
+  } else if (probeReachedTestRunner) {
+    recommendation = 'Update the identified CI test job so NODE_OPTIONS includes `-r dd-trace/ci/init` and the ' +
+      'required Datadog environment variables are present. The NODE_OPTIONS probe reached the test runner for ' +
+      'this command shape, so no package-manager or wrapper change is needed.'
+  } else {
+    recommendation = 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test ' +
+      'runner, and that any package manager, monorepo runner, or wrapper preserves it.'
+  }
 
   if (basicResult?.status === 'pass') {
     return `${recommendation} Compare the passing direct-initialization command with the CI job command to find ` +
@@ -326,6 +343,39 @@ function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
   }
 
   return recommendation
+}
+
+/**
+ * Finds package scripts that already set the required Test Optimization preload.
+ *
+ * @param {object|undefined} manifest normalized validation manifest
+ * @param {object} framework manifest framework entry
+ * @returns {{name: string, packageJson: string}[]} matching package scripts
+ */
+function findDatadogInitScripts (manifest, framework) {
+  const roots = new Set([framework.project?.root, manifest?.repository?.root].filter(Boolean))
+  const scripts = []
+
+  for (const root of roots) {
+    let packageJson
+    try {
+      packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+    } catch {
+      continue
+    }
+
+    for (const [name, command] of Object.entries(packageJson.scripts || {})) {
+      if (typeof command !== 'string' || !/\bNODE_OPTIONS\s*=.*\bdd-trace\/ci\/init\b/.test(command)) {
+        continue
+      }
+      scripts.push({
+        name,
+        packageJson: path.join(root, 'package.json'),
+      })
+    }
+  }
+
+  return scripts
 }
 
 function summarizeCiCommandFailure (result, evidence) {

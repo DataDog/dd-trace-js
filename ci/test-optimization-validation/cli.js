@@ -213,8 +213,10 @@ async function main (argv) {
 
       if (liveReadyFrameworks.length > 0) {
         try {
+          logValidationProgress('Starting the local mock intake.')
           await intake.start()
           intakeStarted = true
+          logValidationProgress('Local mock intake ready.')
         } catch (err) {
           for (const framework of liveReadyFrameworks) {
             results.push(getIntakeStartupFailure(framework, err))
@@ -225,8 +227,12 @@ async function main (argv) {
 
       for (const framework of liveReadyFrameworks) {
         // Setup commands are project preparation, not Test Optimization signal collection.
+        if (framework.setup?.commands?.length > 0) logPhaseStart(framework, 'Project setup')
         // eslint-disable-next-line no-await-in-loop
         const setup = await runSetupCommands({ framework, out, options })
+        if (framework.setup?.commands?.length > 0) {
+          logPhaseComplete(framework, 'Project setup', setup.ok ? 'pass' : setup.failure?.status)
+        }
         if (!setup.ok) {
           results.push(setup.failure)
           continue
@@ -238,13 +244,23 @@ async function main (argv) {
         let basicResult
         if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
           // The validator owns the dd-trace-less control so ambient agent initialization cannot contaminate it.
+          logPhaseStart(framework, 'Test execution without Datadog')
           // eslint-disable-next-line no-await-in-loop
           const preflight = await runFrameworkPreflight({ framework, out, options })
+          logPhaseComplete(
+            framework,
+            'Test execution without Datadog',
+            preflight.ok ? 'pass' : preflight.failure?.status
+          )
           // Scenarios intentionally run in order so each one can reset and configure the shared intake.
-          basicResult = preflight.ok
+          if (preflight.ok) {
+            logPhaseStart(framework, 'Basic Reporting')
             // eslint-disable-next-line no-await-in-loop
-            ? await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
-            : preflight.failure
+            basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
+            logPhaseComplete(framework, 'Basic Reporting', basicResult.status)
+          } else {
+            basicResult = preflight.failure
+          }
           results.push(basicResult)
         }
 
@@ -254,8 +270,11 @@ async function main (argv) {
             results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
           } else {
             // CI wiring runs after Basic Reporting proves this framework can report when initialized directly.
+            logPhaseStart(framework, 'CI wiring')
             // eslint-disable-next-line no-await-in-loop
-            results.push(await runCiWiring({ manifest, framework, intake, out, options, basicResult }))
+            const ciWiringResult = await runCiWiring({ manifest, framework, intake, out, options, basicResult })
+            results.push(ciWiringResult)
+            logPhaseComplete(framework, 'CI wiring', ciWiringResult.status)
           }
         }
 
@@ -268,8 +287,14 @@ async function main (argv) {
         }
 
         if (advancedScenarios.length > 0) {
+          logPhaseStart(framework, 'Temporary test verification')
           // eslint-disable-next-line no-await-in-loop
           const generatedVerification = await verifyGeneratedTestStrategy({ framework, out, options })
+          logPhaseComplete(
+            framework,
+            'Temporary test verification',
+            generatedVerification.ok ? 'pass' : generatedVerification.failure?.status
+          )
           if (!generatedVerification.ok) {
             results.push(generatedVerification.failure)
             for (const scenario of advancedScenarios) {
@@ -286,8 +311,11 @@ async function main (argv) {
         for (const scenario of advancedScenarios) {
           const runScenario = SCENARIOS[scenario]
           // Scenarios intentionally run in order so each one can reset and configure the shared intake.
+          logPhaseStart(framework, getScenarioDisplayName(scenario))
           // eslint-disable-next-line no-await-in-loop
-          results.push(await runScenario({ manifest, framework, intake, out, options }))
+          const result = await runScenario({ manifest, framework, intake, out, options })
+          results.push(result)
+          logPhaseComplete(framework, getScenarioDisplayName(scenario), result.status)
         }
       }
     } finally {
@@ -470,6 +498,53 @@ function getCurrentRerunCommand () {
 
 function isUnsuccessfulResult (result) {
   return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
+}
+
+/**
+ * Prints the start of one framework validation phase.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string} phase customer-facing phase name
+ * @returns {void}
+ */
+function logPhaseStart (framework, phase) {
+  logValidationProgress(`${framework.id}: ${phase} started.`)
+}
+
+/**
+ * Prints the outcome of one framework validation phase.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string} phase customer-facing phase name
+ * @param {string|undefined} status phase outcome
+ * @returns {void}
+ */
+function logPhaseComplete (framework, phase, status) {
+  logValidationProgress(`${framework.id}: ${phase} ${status || 'complete'}.`)
+}
+
+/**
+ * Prints a sanitized validator progress line.
+ *
+ * @param {string} message progress message
+ * @returns {void}
+ */
+function logValidationProgress (message) {
+  console.log(sanitizeConsoleText(`[test-optimization-validator] ${message}`))
+}
+
+/**
+ * Converts an advanced scenario id to customer-facing text.
+ *
+ * @param {string} scenario scenario id
+ * @returns {string} display name
+ */
+function getScenarioDisplayName (scenario) {
+  return {
+    efd: 'Early Flake Detection',
+    atr: 'Auto Test Retries',
+    'test-management': 'Test Management',
+  }[scenario] || scenario
 }
 
 function getStaticFailure (framework, blocker, staticDiagnosisPath) {

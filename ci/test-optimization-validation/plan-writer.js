@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const { getApprovalDigest } = require('./approval')
 const { serializeApprovalCommand } = require('./command-runner')
+const { getUnavailableExecutable } = require('./executable')
 const { getLocalValidationCommand } = require('./local-command')
 const { sanitizeEnv, sanitizeString } = require('./redaction')
 const { getBasicReportingCommand } = require('./scenarios/basic-reporting')
@@ -50,6 +51,8 @@ function formatExecutionPlan ({
   keepTempFiles = false,
   verbose = false,
 }) {
+  assertPlannedExecutablesAvailable(manifest, requestedScenario)
+
   const lines = [
     '# Test Optimization Validation Execution Plan',
     '',
@@ -124,6 +127,70 @@ function formatExecutionPlan ({
   )
 
   return lines.join('\n')
+}
+
+/**
+ * Refuses to render an approvable plan with a command that cannot start before setup runs.
+ *
+ * @param {object} manifest normalized validation manifest
+ * @param {string|null|undefined} requestedScenario selected scenario
+ * @returns {void}
+ */
+function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
+  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+    const plannedCommands = getPlannedCommands(framework, requestedScenario)
+    const setupCommandCount = framework.setup?.commands?.length || 0
+    for (const [index, plannedCommand] of plannedCommands.entries()) {
+      const executable = getUnavailableExecutable(plannedCommand.command)
+      if (!executable) continue
+      if (setupCommandCount > 0 && index > 0) continue
+
+      throw new Error(
+        `Cannot render an approvable plan because ${plannedCommand.label} for ${framework.id} uses ` +
+        `executable "${executable}", which is not available from ${plannedCommand.command.cwd}. ` +
+        'Choose a locally available command or mark this check with its concrete setup blocker before asking ' +
+        'for approval.'
+      )
+    }
+  }
+}
+
+/**
+ * Collects structured commands selected by the current plan options.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string|null|undefined} requestedScenario selected scenario
+ * @returns {{label: string, command: object}[]} planned commands
+ */
+function getPlannedCommands (framework, requestedScenario) {
+  const commands = []
+  for (const command of framework.setup?.commands || []) {
+    commands.push({ label: `project setup command ${command.id || command.description || ''}`.trim(), command })
+  }
+
+  commands.push({ label: 'the selected test command', command: getBasicReportingCommand(framework) })
+
+  const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
+  if (ciWiringSelected && framework.ciWiringCommand) {
+    commands.push({ label: 'the CI test command', command: getCiWiringCommand(framework) })
+  }
+
+  const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
+  const advancedSelected = !requestedScenario || selectedGeneratedScenario
+  const strategy = framework.generatedTestStrategy
+  if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
+    const scenarios = selectedGeneratedScenario
+      ? (strategy.scenarios || []).filter(scenario => scenario.id === selectedGeneratedScenario)
+      : strategy.scenarios || []
+    for (const scenario of scenarios) {
+      commands.push({
+        label: `the ${scenario.id} advanced-feature command`,
+        command: getLocalValidationCommand(framework, scenario.runCommand),
+      })
+    }
+  }
+
+  return commands
 }
 
 /**
