@@ -16,6 +16,7 @@ require('./core')
 const { engines, nodeMaxMajor } = require('../../../../package.json')
 
 const externals = require('../plugins/externals')
+const spanLeakDetector = require('../plugins/span-leak-detector')
 const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
@@ -443,6 +444,14 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
+// Reuse the span-leak detector's finish counter to detect per-test span activity
+// (see the afterEach sinon reset). Subscribing to `dd-trace:span:finish` here
+// directly would flip the channel's `hasSubscribers`, which some unit tests
+// assert stays false after teardown; the detector already subscribes (only while
+// armed, i.e. an agent is loaded), so read its count instead of adding a second
+// subscriber.
+let spanCountAtTestStart = 0
+
 // The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
 // hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
 // and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
@@ -472,11 +481,34 @@ exports.mochaHooks = {
     // Unref so a clean run (no leak) always exits without waiting for the timer.
     watchdog.unref()
   },
+  beforeEach () {
+    spanCountAtTestStart = spanLeakDetector.trackedCount()
+  },
   afterEach () {
     if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
+    // LLMObs keeps its own async-context store (see src/llmobs/storage.js). Like
+    // `legacy`, its last-entered `{ ...parent, span }` frame pins a finished span
+    // until overwritten, so clear it per test too — otherwise the retention rides
+    // into the next test / teardown and the span-leak detector flags it.
+    storage('llmobs').enterWith(undefined)
+    // Sinon records a `new Error()` per stubbed call in its `errorsWithCallStack`
+    // history. Each captured stack pins the async-context frame live at call time
+    // — including the traced callback's scope, which binds the finished span — so
+    // any suite that stubs a function called inside a span keeps every such span
+    // reachable until the stub is restored. Restoring happens in each suite's own
+    // hooks, but the history (and its retained frames) outlives individual `it`s;
+    // clearing it per test releases the spans without disturbing stub behavior
+    // (`resetHistory` keeps fakes' configured behavior, unlike `reset`/`restore`).
+    // Only reset when a span actually finished this test: `resetHistory()` also
+    // wipes call args / counts, which breaks suites that record in a `before` hook
+    // and assert `secondCall` / `thirdCall` across sibling `it`s. Those suites
+    // finish no span, so the history cannot pin one and the reset is unnecessary.
+    if (spanLeakDetector.trackedCount() !== spanCountAtTestStart) {
+      sinon.resetHistory()
+    }
     extraServices.clear()
   },
 }

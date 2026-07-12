@@ -20,6 +20,7 @@ const agent = require('../../plugins/agent')
 const { testInRequest } = require('./utils')
 
 describe('Overhead controller', () => {
+
   let oceContextKey, overheadController, web
 
   describe('unit tests', () => {

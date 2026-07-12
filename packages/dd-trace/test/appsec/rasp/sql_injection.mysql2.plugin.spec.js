@@ -11,6 +11,7 @@ const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
+
   withVersions('mysql2', 'express', expressVersion => {
     withVersions('mysql2', 'mysql2', mysql2Version => {
       describe('sql injection with mysql2', () => {

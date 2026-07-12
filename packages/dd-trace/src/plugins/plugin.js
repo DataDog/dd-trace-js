@@ -98,13 +98,23 @@ module.exports = class Plugin {
   /**
    * Enter a context with the provided span bound in storage.
    *
+   * A fresh `{ ...store, span }` object is written into the current
+   * async-context frame, so any async resource created while it is active
+   * snapshots the frame and keeps that object — and its `span` — reachable for
+   * the resource's whole lifetime, even after the span finishes. A caller whose
+   * span outlives the request should keep the returned store and null its `span`
+   * once the span is finished and no in-scope continuation can still read it as
+   * active; otherwise a never-freed resource pins the finished span (and its
+   * parent chain) forever.
+   *
    * @param {object} span The span to bind as current.
    * @param {object=} store Optional existing store to extend; if omitted, uses current store.
-   * @returns {void}
+   * @returns {{ span: object | null }} The store object written into storage.
    */
   enter (span, store) {
-    store = store || legacyStorage.getStore()
-    legacyStorage.enterWith({ ...store, span })
+    const activeStore = { ...(store || legacyStorage.getStore()), span }
+    legacyStorage.enterWith(activeStore)
+    return activeStore
   }
 
   /**

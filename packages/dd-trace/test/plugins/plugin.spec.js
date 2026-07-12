@@ -77,6 +77,50 @@ describe('Plugin', () => {
     assert.strictEqual(plugin._enabled, true)
   })
 
+  describe('enter', () => {
+    it('should return the store written into storage carrying the span', () => {
+      const parentSpan = { id: 'parent' }
+      const span = { id: 'child' }
+
+      plugin = new GoodPlugin()
+
+      const entered = plugin.enter(span, { span: parentSpan })
+
+      assert.strictEqual(entered.span, span)
+      // The returned object is the one written into storage, so a caller that
+      // holds it can drop the finished span from any frame captured off it.
+      assert.strictEqual(storage('legacy').getStore(), entered)
+    })
+
+    it('should extend the current store when none is passed', () => {
+      const span = { id: 'child' }
+
+      plugin = new GoodPlugin()
+
+      storage('legacy').run({ existing: true, span: undefined }, () => {
+        const entered = plugin.enter(span)
+
+        assert.deepStrictEqual(entered, { existing: true, span })
+        assert.strictEqual(storage('legacy').getStore(), entered)
+      })
+    })
+
+    it('should let a caller drop the finished span by nulling the returned store', () => {
+      const span = { id: 'child' }
+
+      plugin = new GoodPlugin()
+      const entered = plugin.enter(span, { span: undefined })
+
+      assert.strictEqual(entered.span, span)
+
+      // The release contract callers rely on at request finish: nulling the
+      // returned store's span means a frame that captured it stops pinning it.
+      entered.span = null
+
+      assert.strictEqual(entered.span, null)
+    })
+  })
+
   it('should run binding transforms with an undefined current store', () => {
     class TestPlugin extends Plugin {
       static id = 'test'

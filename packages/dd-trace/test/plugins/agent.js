@@ -12,6 +12,7 @@ const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
+const spanLeakDetector = require('./span-leak-detector')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -388,6 +389,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   const handlerPayload = {
     handler,
     spanResourceMatch: options.spanResourceMatch,
+    rejectionTimeout,
   }
 
   /**
@@ -417,6 +419,24 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   handlers.add(handlerPayload)
 
   return promise
+}
+
+/**
+ * Drop every pending expectation and clear the rejection timer each one armed.
+ * A handler whose trace never matched keeps its `setTimeout` pending, and under
+ * AsyncContextFrame that timer retains the `{ ...store, span }` frame active when
+ * `assertSomeTraces` was called — pinning the request's finished span past agent
+ * teardown until the timer fires. Clearing the set alone orphans those timers;
+ * clear their timeouts too so the span-leak detector sees no benign retention.
+ *
+ * @param {Set<{ rejectionTimeout?: NodeJS.Timeout }>} handlers
+ * @returns {void}
+ */
+function clearHandlers (handlers) {
+  for (const handlerPayload of handlers) {
+    clearTimeout(handlerPayload.rejectionTimeout)
+  }
+  handlers.clear()
 }
 
 module.exports = {
@@ -451,6 +471,10 @@ module.exports = {
     }
 
     currentIntegrationName = getCurrentIntegrationName()
+
+    // Track finished spans for the retention assertion in `close()`. Idempotent
+    // and inert without `--expose-gc`, so it is safe to arm on every load.
+    spanLeakDetector.arm()
 
     const tracerConfigJson = JSON.stringify(tracerConfig)
     if (
@@ -723,8 +747,8 @@ module.exports = {
    * expectations are scoped to whichever assertion helper added them.
    */
   reset () {
-    traceHandlers.clear()
-    statsHandlers.clear()
+    clearHandlers(traceHandlers)
+    clearHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
   },
@@ -746,8 +770,8 @@ module.exports = {
     }
     sockets = []
     agent = null
-    traceHandlers.clear()
-    statsHandlers.clear()
+    clearHandlers(traceHandlers)
+    clearHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
@@ -765,12 +789,29 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise(resolve => {
+    // Clear the async-context stores so the last request's `{ ...store, span }`
+    // frame stops pinning its finished span before the leak assertion runs. The
+    // global `afterEach` already does this between tests, but `close()` must not
+    // depend on a sibling hook having fired: a suite that finishes an op in an
+    // `after` hook (or calls `close()` outside the mocha lifecycle) would leave
+    // the last frame live and trip the detector on a benign, recency-bound span.
+    // `llmobs` is a separate store from `legacy`; both (and `baggage`) can hold a
+    // finished span, so reset all three.
+    storage('legacy').enterWith(undefined)
+    storage('baggage').enterWith(undefined)
+    storage('llmobs').enterWith(undefined)
+
+    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
         this.port = null
 
-        resolve()
+        // Expectation callbacks (which can hold spans) were cleared above and
+        // the server is closed, so no legitimate reference to a finished span
+        // remains beyond the last trace's root (see the detector). Assert
+        // retention did not grow with the request count, then resolve. A leak
+        // rejects `close()`, surfacing as a suite teardown failure.
+        spanLeakDetector.assertNoRetainedSpans().then(resolve, reject)
       })
     }))
   },

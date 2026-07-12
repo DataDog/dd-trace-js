@@ -11,10 +11,18 @@ const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers'
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let elasticsearch
   let tracer
+
+  // `@elastic/elasticsearch` keeps a pooled HTTP connection whose keep-alive
+  // timer pins the `{ ...store, span }` frame active when the connection was
+  // opened, so a fixed (non-scaling) count of finished spans stays reachable.
+  // Tolerate that pool-sized retention here without loosening the detector for
+  // other suites.
+  withSpanLeakBaseline(60)
 
   withVersions('elasticsearch', ['elasticsearch', '@elastic/elasticsearch'], (version, moduleName) => {
     const metaModule = require(`../../../versions/${moduleName}@${version}`)

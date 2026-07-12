@@ -9,11 +9,20 @@ const { describe, it, beforeEach, before, after } = require('mocha')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { getConfigFresh } = require('../../helpers/config')
+const { withSpanLeakBaseline } = require('../../plugins/span-leak-detector')
 const { withVersions } = require('../../setup/mocha')
 const { temporaryWarningExceptions } = require('../../setup/core')
 const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
 
 describe('RASP - command_injection', () => {
+  // This suite instruments child_process and spawns real subprocesses to detect
+  // command injection. A blocked request is aborted mid-flight, so its socket is
+  // never idle and `closeIdleConnections` cannot drop the keep-alive timer that
+  // pins the request's async-context frame; the spawned-process handles pin more.
+  // Neither retainer scales with the request count (a fixed ~18 across runs), so
+  // raise the bound for this suite without loosening the detector elsewhere.
+  withSpanLeakBaseline(25)
+
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
     function testShellBlockingAndSafeRequests () {
