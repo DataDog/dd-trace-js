@@ -93,6 +93,8 @@ describe('Plugin', () => {
                   `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
                 )
               }
+
+              assert.ok(!Object.hasOwn(traces[0][0].metrics, 'pg.pool.wait_time'))
             }, { spanResourceMatch: /^SELECT \$1::text as message$/ })
               .then(done)
               .catch(done)
@@ -459,6 +461,72 @@ describe('Plugin', () => {
           })
 
           await tracePromise
+        })
+
+        it('records the pool acquire wait time on the pooled query span', done => {
+          agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            assert.strictEqual(typeof span.metrics['pg.pool.wait_time'], 'number')
+            assert.ok(span.metrics['pg.pool.wait_time'] >= 0)
+          }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ })
+            .then(done)
+            .catch(done)
+
+          pool.query('SELECT 4 AS pool_wait_probe', error => {
+            if (error) done(error)
+          })
+        })
+
+        it('reports a zero wait time when an idle pooled client is reused', async () => {
+          await pool.query('SELECT 1')
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].metrics['pg.pool.wait_time'], 0)
+            }, { spanResourceMatch: /^SELECT 7 AS idle_probe$/ }),
+            pool.query('SELECT 7 AS idle_probe'),
+          ])
+        })
+
+        it('reports a positive wait time when a same-tick query takes the only idle client', async () => {
+          await pool.query('SELECT 1')
+
+          // Two queries dispatched in the same tick against a single idle client: the first takes
+          // it, the second queues behind it. `idleCount` still reads 1 when the second is
+          // dispatched, so a naive idle check would wrongly round its wait down to zero.
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.ok(
+                traces[0][0].metrics['pg.pool.wait_time'] > 0,
+                `expected a positive wait, got ${traces[0][0].metrics['pg.pool.wait_time']}`
+              )
+            }, { spanResourceMatch: /^SELECT 9 AS queued_probe$/ }),
+            pool.query('SELECT 8 AS idle_taker'),
+            pool.query('SELECT 9 AS queued_probe'),
+          ])
+        })
+
+        it('does not throw when the pool fails to acquire a connection', done => {
+          const probe = net.createServer().listen(0, '127.0.0.1', () => {
+            const { port } = probe.address()
+
+            probe.close(() => {
+              const failingPool = new pg.Pool({
+                host: '127.0.0.1',
+                port,
+                user: 'postgres',
+                database: 'postgres',
+                connectionTimeoutMillis: 500,
+              })
+              failingPool.on('error', () => {})
+
+              failingPool.query('SELECT 1', error => {
+                assert.ok(error, 'expected the pool connection to fail')
+                failingPool.end(() => done())
+              })
+            })
+          })
         })
       })
 
