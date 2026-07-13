@@ -82,6 +82,8 @@ function updateWafFromRC (transaction) {
         const asmFile = /** @type {AsmConfigFile} */ (item.file)
         if (asmFile?.actions?.length) {
           newActions.set(item.id, asmFile.actions)
+        } else {
+          newActions.delete(item.id)
         }
       }
     } catch (e) {
