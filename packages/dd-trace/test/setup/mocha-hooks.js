@@ -51,8 +51,7 @@ if (!patched.has(Runner.prototype)) {
         return fn(err && shouldSuppress(this) ? undefined : err)
       })
     } catch (err) {
-      if (shouldSuppress(this)) return fn()
-      return fn(err)
+      return this.callback(shouldSuppress(this) ? undefined : err)
     }
   }
 }

@@ -7,6 +7,8 @@ const os = require('node:os')
 const path = require('node:path')
 const util = require('node:util')
 
+const { Hook } = require('mocha')
+
 const execFileAsync = util.promisify(execFile)
 const mochaBin = path.join(__dirname, '../../../node_modules/mocha/bin/mocha.js')
 const coreSetupPath = path.join(__dirname, 'setup/core.js')
@@ -293,6 +295,34 @@ describe('mocha hooks setup', () => {
     `, ['--allow-uncaught'])
 
     assert.deepStrictEqual(getFailureMessages(result), ['setup failed'])
+  })
+
+  it('clears the timeout when a callback hook throws with allow uncaught enabled', () => {
+    const failure = new Error('setup failed')
+    const hook = new Hook('before all', (done) => {
+      assert.strictEqual(typeof done, 'function')
+      throw failure
+    })
+    const clearTimeout = hook.clearTimeout
+    let clearTimeoutCalls = 0
+    let hookError
+
+    hook.allowUncaught = true
+    hook.clearTimeout = function () {
+      clearTimeoutCalls++
+      return clearTimeout.call(this)
+    }
+
+    try {
+      hook.run((err) => {
+        hookError = err
+      })
+    } finally {
+      clearTimeout.call(hook)
+    }
+
+    assert.strictEqual(hookError, failure)
+    assert.strictEqual(clearTimeoutCalls, 2)
   })
 
   it('does not let a suppressed after each error change bail behavior', async () => {
