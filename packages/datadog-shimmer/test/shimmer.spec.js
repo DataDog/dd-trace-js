@@ -373,6 +373,18 @@ describe('shimmer', () => {
       })
     })
 
+    it('should wrap writable non-configurable module namespace exports', async () => {
+      const namespace = await import('data:text/javascript,export function count() { return 1 }')
+
+      /** @param {Function} count */
+      const increment = count => () => count() + 1
+      const wrapped = shimmer.wrap(namespace, 'count', increment)
+
+      assert.strictEqual(namespace.count(), 1)
+      assert.strictEqual(wrapped.count(), 2)
+      assert.notStrictEqual(wrapped, namespace)
+    })
+
     it('should skip non-configurable/writable string keyed methods', () => {
       const obj = {
         configurable () {},
