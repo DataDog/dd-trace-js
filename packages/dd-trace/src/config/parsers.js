@@ -297,7 +297,7 @@ const parsers = {
   },
 }
 
-const programmaticTypeTransformers = {
+const programmaticTypeCoercions = {
   /**
    * @param {unknown} value
    */
@@ -313,7 +313,7 @@ const programmaticTypeTransformers = {
    * @param {unknown} value
    */
   INT (value) {
-    if (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) {
+    if (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') {
       return parsers.INT(value)
     }
   },
@@ -321,7 +321,7 @@ const programmaticTypeTransformers = {
    * @param {unknown} value
    */
   DECIMAL (value) {
-    if (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) {
+    if (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') {
       return parsers.DECIMAL(value)
     }
   },
@@ -332,7 +332,7 @@ const programmaticTypeTransformers = {
     if (typeof value === 'string') {
       return value
     }
-    if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) {
+    if (typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)) {
       return String(value)
     }
   },
@@ -342,7 +342,7 @@ const programmaticTypeTransformers = {
   ARRAY (value) {
     if (Array.isArray(value)) {
       for (const item of value) {
-        if (typeof item !== 'string') {
+        if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
           return
         }
       }
@@ -369,7 +369,7 @@ const programmaticTypeTransformers = {
 
 module.exports = {
   parsers,
-  programmaticTypeTransformers,
+  programmaticTypeCoercions,
   transformers,
   telemetryTransformers,
   setWarnInvalidValue,

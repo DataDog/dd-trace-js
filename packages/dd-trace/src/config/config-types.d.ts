@@ -70,3 +70,11 @@ export type ConfigKey = KnownStringKeys<ConfigProperties>
 export type ConfigPath = ConfigPathFor<ConfigProperties>
 export type ConfigPathValue<TPath extends ConfigPath> = ConfigPathValueFor<ConfigProperties, TPath>
 export type ConfigDefaults = Partial<{ [TPath in ConfigPath]: ConfigPathValue<TPath> }>
+export type ConfigurationOption = {
+  property?: string
+  parser?: (value: unknown, optionName: string, source: string) => unknown
+  type?: string
+  canonicalName?: string
+  transformer?: (value: unknown, optionName: string, source: string) => unknown
+  telemetryTransformer?: (value: unknown) => unknown
+}

@@ -3,7 +3,6 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
-const { inspect } = require('node:util')
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -36,10 +35,10 @@ const {
   configWithOrigin,
   parseErrors,
   generateTelemetry,
-  transformProgrammaticOption,
+  warnInvalidValue,
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
-const { transformers } = require('./parsers')
+const { programmaticTypeCoercions, transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
 
@@ -57,6 +56,7 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
  * @typedef {import('./config-types').ConfigKey} ConfigKey
  * @typedef {import('./config-types').ConfigPath} ConfigPath
+ * @typedef {import('./config-types').ConfigurationOption} ConfigurationOption
  * @typedef {{
  *   value: import('./config-types').ConfigPathValue<ConfigPath>,
  *   source: TelemetrySource
@@ -124,14 +124,7 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     // TODO: This works as before while ignoring undefined programmatic options is not ideal.
     if (source !== 'default') {
       if (rawValue !== value) {
-        const rawType = typeof rawValue
-        const telemetryValue = rawValue === null ||
-          rawType === 'string' ||
-          rawType === 'number' ||
-          rawType === 'boolean'
-          ? rawValue
-          : inspect(rawValue, { customInspect: false, getters: false })
-        generateTelemetry(telemetryValue, source, name)
+        generateTelemetry(rawValue, source, name)
       }
       return
     }
@@ -158,6 +151,37 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   } else {
     trackedConfigOrigins.set(name, source)
   }
+}
+
+/**
+ * @param {ConfigurationOption} entry
+ * @param {unknown} value
+ * @param {string} optionName
+ * @param {TelemetrySource} source
+ */
+function coerceType (entry, value, optionName, source) {
+  let coerced = value
+  if (entry.type) {
+    try {
+      coerced = programmaticTypeCoercions[entry.type](value, entry.canonicalName ?? optionName)
+    } catch (error) {
+      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`, error)
+      return
+    }
+    if (coerced === undefined) {
+      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`)
+      return
+    }
+  }
+  if (entry.transformer) {
+    try {
+      coerced = entry.transformer(coerced, optionName, source)
+    } catch (error) {
+      warnInvalidValue(value, optionName, source, 'Invalid value', error)
+      return
+    }
+  }
+  return coerced
 }
 
 module.exports = getConfig
@@ -299,7 +323,7 @@ class Config extends ConfigBase {
       }
       const transformed = value === undefined
         ? value
-        : transformProgrammaticOption(entry, value, fullName, source)
+        : coerceType(entry, value, fullName, source)
       setAndTrack(this, entry.property ?? name, transformed, value, source)
     }
   }

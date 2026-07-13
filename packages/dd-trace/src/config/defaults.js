@@ -1,11 +1,12 @@
 'use strict'
 
+const assert = require('node:assert')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
 const {
   parsers,
-  programmaticTypeTransformers,
+  programmaticTypeCoercions,
   transformers,
   telemetryTransformers,
   setWarnInvalidValue,
@@ -76,6 +77,7 @@ for (const [name, value] of Object.entries(defaults)) {
 function generateTelemetry (value = null, origin, optionName) {
   const tableEntry = configurationsTable[optionName]
   const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  const error = parseErrors.get(`${canonicalName}${origin}`)
   // Sensitive configurations are excluded from configuration telemetry: their
   // entry is never added to `configWithOrigin`, the single source for every
   // telemetry path (app-started and app-client-configuration-change).
@@ -87,7 +89,9 @@ function generateTelemetry (value = null, origin, optionName) {
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
   // TODO: How to handle telemetry reporting for aliases?
   if (value !== null) {
-    if (telemetryTransformers[type]) {
+    if (error && typeof value === 'object') {
+      value = util.inspect(value, { customInspect: false, getters: false })
+    } else if (telemetryTransformers[type]) {
       value = telemetryTransformers[type](value)
     } else if (typeof value === 'object' && value !== null) {
       // Custom optionsTable entries (no `configurationsTable` row, e.g. `logger`)
@@ -106,7 +110,6 @@ function generateTelemetry (value = null, origin, optionName) {
     origin,
     seq_id: seqId++,
   }
-  const error = parseErrors.get(`${canonicalName}${origin}`)
   if (error) {
     parseErrors.delete(`${canonicalName}${origin}`)
     telemetryEntry.error = error
@@ -190,52 +193,10 @@ const parser = (value, optionName, source) => {
 }
 
 /**
- * @typedef {{
- *   property?: string,
- *   parser?: (value: unknown, optionName: string, source: string) => unknown,
- *   type?: string,
- *   canonicalName?: string,
- *   transformer?: (value: unknown, optionName: string, source: string) => unknown,
- *   telemetryTransformer?: (value: unknown) => unknown
- * }} ConfigurationOption
- */
-
-/**
  * @template {import('./config-types').ConfigPath} TPath
- * @type {Partial<Record<TPath, ConfigurationOption>>} ConfigurationsTable
+ * @type {Partial<Record<TPath, import('./config-types').ConfigurationOption>>} ConfigurationsTable
  */
 const configurationsTable = {}
-
-/**
- * @param {ConfigurationOption} entry
- * @param {unknown} value
- * @param {string} optionName
- * @param {string} source
- */
-function transformProgrammaticOption (entry, value, optionName, source) {
-  let transformed = value
-  if (entry.type) {
-    try {
-      transformed = programmaticTypeTransformers[entry.type](value, entry.canonicalName ?? optionName)
-    } catch (error) {
-      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`, error)
-      return
-    }
-    if (transformed === undefined) {
-      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`)
-      return
-    }
-  }
-  if (entry.transformer) {
-    try {
-      transformed = entry.transformer(transformed, optionName, source)
-    } catch (error) {
-      warnInvalidValue(value, optionName, source, 'Invalid value', error)
-      return
-    }
-  }
-  return transformed
-}
 
 // One way aliases. Must be applied in apply calculated entries.
 const fallbackConfigurations = new Map()
@@ -273,10 +234,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       ? `${entry.namespace}.${canonicalName}`
       : (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
     const type = entry.type.toUpperCase()
-    /* istanbul ignore if -- supported configuration types are static metadata */
-    if (!programmaticTypeTransformers[type]) {
-      throw new Error(`Missing programmatic transformer for configuration type: ${type}`)
-    }
+    assert.ok(programmaticTypeCoercions[type])
 
     let transformer = transformers[entry.transform]
     if (entry.allowed) {
@@ -400,7 +358,7 @@ module.exports = {
 
   generateTelemetry,
 
-  transformProgrammaticOption,
+  warnInvalidValue,
 }
 
 // `dns` is instrumented, so requiring it pulls in the dns plugin, which loads

@@ -1642,6 +1642,7 @@ describe('Config', () => {
       },
       profiling: true,
       service: 1234,
+      baggageTagKeys: ['valid', 1, true],
     })
 
     assert.strictEqual(config.startupLogs, false)
@@ -1649,6 +1650,7 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.pollInterval, 2.5)
     assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
     assert.strictEqual(config.service, '1234')
+    assert.deepStrictEqual(config.baggageTagKeys, ['valid', 1, true])
   })
 
   it('should accept infinite numeric programmatic option values', () => {
@@ -1691,7 +1693,7 @@ describe('Config', () => {
         pollInterval: [],
       },
       service: {},
-      baggageTagKeys: ['valid', 1],
+      baggageTagKeys: [null],
       headerTags: 'valid:value',
       serviceMapping: 'mysql:database',
       samplingRules,
