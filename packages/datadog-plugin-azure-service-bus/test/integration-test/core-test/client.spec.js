@@ -14,7 +14,10 @@ const {
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+const spawnEnv = {
+  DD_TRACE_FLUSH_INTERVAL: '2000',
+  NODE_OPTIONS: '--experimental-global-webcrypto',
+}
 
 describe('esm', () => {
   let agent
