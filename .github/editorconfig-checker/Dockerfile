@@ -1,0 +1,1 @@
+FROM mstruebing/editorconfig-checker@sha256:eb478136c4342af399bb90537319722a7da289b8a7a8d2471592e3d7a5f5bfa7
