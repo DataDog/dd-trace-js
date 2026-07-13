@@ -181,34 +181,36 @@ async function main () {
   )
 
   releaseRetainers()
-  const heapSamples = [await measureHeapUsed()]
+  const heapSamples = RETAINER === 'request-only' ? undefined : [await measureHeapUsed()]
 
   guard.loopStart()
   for (let i = 0; i < BATCHES; i++) {
     await sendRequests(REQUESTS_PER_BATCH)
-    heapSamples.push(await measureHeapUsed())
+    if (heapSamples) heapSamples.push(await measureHeapUsed())
   }
   // Keep revision comparisons below Node's default heap limit even when the measured tracer leaks.
   guard.done(0.15)
 
-  const bytesPerRequest = calculateBytesPerRequest(heapSamples)
-  // The pre-fix baseline intentionally exceeds this guard; it must still run so
-  // Sirun can compare its built-in metrics with the candidate.
-  if (BASELINE_OR_CANDIDATE !== 'baseline') {
-    assert.ok(
-      bytesPerRequest <= MAX_HEAP_GROWTH_BYTES_PER_REQUEST,
-      `heap growth was ${bytesPerRequest.toFixed(1)} bytes/request, ` +
-      `expected at most ${MAX_HEAP_GROWTH_BYTES_PER_REQUEST}`
-    )
-  }
+  if (heapSamples) {
+    const bytesPerRequest = calculateBytesPerRequest(heapSamples)
+    // The pre-fix baseline intentionally exceeds this guard; it must still run so
+    // Sirun can compare its built-in metrics with the candidate.
+    if (BASELINE_OR_CANDIDATE !== 'baseline') {
+      assert.ok(
+        bytesPerRequest <= MAX_HEAP_GROWTH_BYTES_PER_REQUEST,
+        `heap growth was ${bytesPerRequest.toFixed(1)} bytes/request, ` +
+        `expected at most ${MAX_HEAP_GROWTH_BYTES_PER_REQUEST}`
+      )
+    }
 
-  if (process.env.PRINT_RESULTS === '1') {
-    console.log(JSON.stringify({
-      bytesPerRequest,
-      heapSamples,
-      requests: BATCHES * REQUESTS_PER_BATCH,
-      retainer: RETAINER,
-    }))
+    if (process.env.PRINT_RESULTS === '1') {
+      console.log(JSON.stringify({
+        bytesPerRequest,
+        heapSamples,
+        requests: BATCHES * REQUESTS_PER_BATCH,
+        retainer: RETAINER,
+      }))
+    }
   }
 
   releaseRetainers()

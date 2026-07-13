@@ -32,11 +32,10 @@
       "env": {
         "BATCHES": "5",
         "MIDDLEWARE_COUNT": "20",
-        "OPERATIONS": "15000",
-        "REQUESTS_PER_BATCH": "3000",
+        "OPERATIONS": "40000",
+        "REQUESTS_PER_BATCH": "8000",
         "RETAINER": "request-only",
-        "WARMUP_REQUESTS": "250",
-        "MAX_HEAP_GROWTH_BYTES_PER_REQUEST": "2048"
+        "WARMUP_REQUESTS": "250"
       }
     }
   }
