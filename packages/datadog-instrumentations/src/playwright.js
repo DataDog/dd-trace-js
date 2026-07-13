@@ -993,12 +993,15 @@ function onDispatcherCreateWorker (dispatcher, worker) {
 
   worker.on('testBegin', ({ testId }) => {
     const test = getTestByTestId(dispatcher, testId)
+    if (!test) return
+
     const browser = getBrowserNameFromProjects(projects, test)
     const shouldCreateTestSpan = test.expectedStatus === 'skipped'
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
   worker.on('testEnd', ({ testId, status, errors, annotations }) => {
     const test = getTestByTestId(dispatcher, testId)
+    if (!test) return
 
     const isTimeout = status === 'timedOut'
     const testStatus = STATUS_TO_TEST_STATUS[status]
