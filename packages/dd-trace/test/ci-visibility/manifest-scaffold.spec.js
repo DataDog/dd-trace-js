@@ -137,6 +137,70 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('preserves custom Jest wrappers and generates tests in an established test directory', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-custom-jest-'))
+    const runnerRoot = path.join(root, 'node_modules', 'jest')
+    const sourceRoot = path.join(root, 'packages', 'app', 'src')
+    const independentRoot = path.join(root, 'packages', 'a-independent')
+    const testRoot = path.join(sourceRoot, '__tests__')
+    const auxiliaryTestRoot = path.join(root, 'compiler', 'src', '__tests__')
+    const wrapper = path.join(root, 'scripts', 'jest-cli.js')
+    const representative = path.join(testRoot, 'App-test.js')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.join(independentRoot, '__tests__'), { recursive: true })
+    fs.mkdirSync(path.join(sourceRoot, 'forks'), { recursive: true })
+    fs.mkdirSync(testRoot)
+    fs.mkdirSync(auxiliaryTestRoot, { recursive: true })
+    fs.mkdirSync(path.dirname(wrapper), { recursive: true })
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'jest',
+      version: '29.7.0',
+      bin: { jest: 'bin.js' },
+    }))
+    fs.writeFileSync(wrapper, '')
+    fs.writeFileSync(path.join(independentRoot, '__tests__', 'Independent-test.js'), '')
+    fs.writeFileSync(path.join(independentRoot, 'package.json'), JSON.stringify({
+      scripts: { test: 'jest' },
+    }))
+    fs.writeFileSync(path.join(sourceRoot, 'forks', 'HostConfig.test.js'), '')
+    fs.writeFileSync(representative, '')
+    fs.writeFileSync(path.join(auxiliaryTestRoot, 'Compiler-test.js'), '')
+    fs.writeFileSync(path.join(root, 'yarn.lock'), '')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'custom-jest-project',
+      devDependencies: { jest: '29.7.0' },
+      jest: { testRegex: '/__tests__/[^/]*\\.js$' },
+      scripts: { test: 'node ./scripts/jest-cli.js' },
+    }))
+
+    try {
+      const manifest = createManifestScaffold({ root })
+      const framework = manifest.frameworks[0]
+      const strategy = framework.generatedTestStrategy
+
+      assert.deepStrictEqual(validateManifest(manifest), [])
+      assert.strictEqual(strategy.testDirectory, testRoot)
+      assert.deepStrictEqual(framework.existingTestCommand.argv, [
+        'yarn',
+        'run',
+        'test',
+        '--runTestsByPath',
+        representative,
+        '--runInBand',
+        '--no-watchman',
+      ])
+      for (const scenario of strategy.scenarios) {
+        assert.deepStrictEqual(scenario.runCommand.argv.slice(0, 3), ['yarn', 'run', 'test'])
+        assert.ok(scenario.runCommand.argv.includes(scenario.testIdentities[0].file))
+        assert.ok(!scenario.runCommand.argv.includes('--silent'))
+        assert.doesNotMatch(scenario.runCommand.argv.join(' '), /node_modules[\\/]jest[\\/]bin/)
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   for (const definition of [
     {
       framework: 'jest',
@@ -200,6 +264,14 @@ describe('test optimization validation manifest scaffold', () => {
           framework.generatedTestStrategy.scenarios.map(scenario => scenario.id),
           ['basic-pass', 'atr-fail-once', 'test-management-target']
         )
+        assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
+          return scenario.runCommand.argv[0] === process.execPath
+        }))
+        if (definition.framework === 'jest') {
+          assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
+            return scenario.runCommand.argv.includes('--silent')
+          }))
+        }
         assert.strictEqual(new Set(framework.generatedTestStrategy.files.map(file => file.path)).size, 3)
         const atrFile = framework.generatedTestStrategy.files.find(file => file.path.includes('atr-fail-once'))
         const atrSource = atrFile.contentLines.join('\n')
