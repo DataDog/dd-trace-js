@@ -92,7 +92,7 @@ function collectPackages (moduleNames) {
   }
 
   /**
-   * @param {{ name: string, versions?: string[] }} instrumentation
+   * @param {{ name: string, versions?: string[], node?: string }} instrumentation
    * @param {boolean} external
    * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
    *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
@@ -102,6 +102,7 @@ function collectPackages (moduleNames) {
     const { versionList, unversioned } = resolvePluginVersions({
       name: instrumentation.name,
       declaredVersions: instrumentation.versions || [],
+      nodeRange: instrumentation.node,
       honourEnvRange: !external || instrumentation.name === pluginName,
     })
 
