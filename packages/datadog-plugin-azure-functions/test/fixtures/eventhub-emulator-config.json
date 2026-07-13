@@ -22,6 +22,15 @@
                 "Name": "cg2"
               }
             ]
+          },
+          {
+            "Name": "eh3",
+            "PartitionCount": "1",
+            "ConsumerGroups": [
+              {
+                "Name": "cg3"
+              }
+            ]
           }
         ]
       }
