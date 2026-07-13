@@ -65,6 +65,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
         service: this.serviceName(),
         type: 'serverless',
         meta,
+        childOf: null,
       }, ctx)
 
       if (isMessagingService) {
@@ -142,7 +143,7 @@ function mapTriggerTag (methodName) {
 // message & messages & batch with cardinality of 1 == applicationProperties
 // messages with cardinality of many == applicationPropertiesArray
 function setSpanLinks (triggerType, tracer, span, ctx) {
-  const cardinality = ctx.invocationContext.options.trigger.cardinality
+  const cardinality = ctx.invocationContext.options.trigger.cardinality ?? 'one'
   const triggerMetadata = ctx.invocationContext.triggerMetadata
   const isServiceBus = triggerType === 'ServiceBus'
 
