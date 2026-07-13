@@ -59,6 +59,7 @@ const COMMAND_FIELDS = new Set([
   'env',
   'required',
   'requiredEnvVars',
+  'shell',
   'shellCommand',
   'shellReason',
   'timeoutMs',
@@ -508,6 +509,14 @@ function requiredCommand (target, field, errors, prefix = '', options = {}) {
   }
   requiredAbsolutePath(value, 'cwd', errors, key)
   rejectUnresolvedPlaceholder(value.cwd, `${key}.cwd`, errors)
+  if (value.shell !== undefined) {
+    requiredString(value, 'shell', errors, key)
+    rejectUnresolvedPlaceholder(value.shell, `${key}.shell`, errors)
+    if (!value.usesShell) errors.push(`${key}.shell requires usesShell to be true.`)
+    if (typeof value.shell === 'string' && hasUnsafeExecutionCharacter(value.shell)) {
+      errors.push(`${key}.shell must not contain invisible or control characters.`)
+    }
+  }
   if (value.usesShell) {
     requiredString(value, 'shellCommand', errors, key)
     rejectUnresolvedPlaceholder(value.shellCommand, `${key}.shellCommand`, errors)

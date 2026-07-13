@@ -95,10 +95,39 @@ describe('test optimization validation manifest scaffold', () => {
   })
 
   for (const definition of [
-    { framework: 'jest', version: '29.7.0', command: 'jest --runInBand', packageType: undefined },
-    { framework: 'vitest', version: '2.1.9', command: 'vitest run', packageType: 'module' },
+    {
+      framework: 'jest',
+      version: '29.7.0',
+      command: 'jest --runInBand',
+      testFilename: 'unit.test.js',
+      expectedModuleSystem: 'commonjs',
+    },
+    {
+      framework: 'vitest',
+      version: '2.1.9',
+      command: 'vitest run',
+      packageType: 'module',
+      testFilename: 'unit.test.js',
+      expectedModuleSystem: 'module',
+    },
+    {
+      framework: 'jest',
+      version: '29.7.0',
+      command: 'jest --runInBand',
+      testFilename: 'unit.test.mjs',
+      expectedModuleSystem: 'module',
+    },
+    {
+      framework: 'jest',
+      version: '29.7.0',
+      command: 'jest --runInBand',
+      packageType: 'module',
+      testFilename: 'unit.test.cjs',
+      expectedModuleSystem: 'commonjs',
+    },
   ]) {
-    it(`creates standard isolated scenarios for ${definition.framework}`, () => {
+    it(`creates ${definition.expectedModuleSystem} scenarios for ${definition.framework} ` +
+      `from ${definition.testFilename}`, () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
       const runnerRoot = path.join(root, 'node_modules', definition.framework)
       fs.mkdirSync(runnerRoot, { recursive: true })
@@ -109,7 +138,7 @@ describe('test optimization validation manifest scaffold', () => {
         version: definition.version,
         bin: { [definition.framework]: 'bin.js' },
       }))
-      fs.writeFileSync(path.join(root, 'test', 'unit.test.js'), 'describe("unit", () => {})\n')
+      fs.writeFileSync(path.join(root, 'test', definition.testFilename), 'describe("unit", () => {})\n')
       fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
         name: `${definition.framework}-project`,
         type: definition.packageType,
@@ -123,11 +152,19 @@ describe('test optimization validation manifest scaffold', () => {
 
         assert.deepStrictEqual(validateManifest(manifest), [])
         assert.strictEqual(framework.framework, definition.framework)
+        assert.strictEqual(framework.generatedTestStrategy.moduleSystem, definition.expectedModuleSystem)
         assert.deepStrictEqual(
           framework.generatedTestStrategy.scenarios.map(scenario => scenario.id),
           ['basic-pass', 'atr-fail-once', 'test-management-target']
         )
         assert.strictEqual(new Set(framework.generatedTestStrategy.files.map(file => file.path)).size, 3)
+        const atrFile = framework.generatedTestStrategy.files.find(file => file.path.includes('atr-fail-once'))
+        const atrSource = atrFile.contentLines.join('\n')
+        if (definition.expectedModuleSystem === 'module') {
+          assert.match(atrSource, /import \{ existsSync, writeFileSync \} from 'node:fs'/)
+        } else {
+          assert.match(atrSource, /const fs = require\('node:fs'\)/)
+        }
       } finally {
         fs.rmSync(root, { recursive: true, force: true })
       }

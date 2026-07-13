@@ -6,6 +6,10 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  getResolvedExecutable,
+  getUnavailableExecutable,
+} = require('../../../../ci/test-optimization-validation/executable')
+const {
   cleanupGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
 const {
@@ -268,6 +272,29 @@ describe('test optimization validator-owned execution phases', () => {
         out: path.join(root, 'dd-test-optimization-validation-results'),
       }), /Cannot render an approvable plan.*definitely-not-an-installed-test-runner.*not available/s)
     } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves Windows executable names that already include a PATHEXT extension', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-executable-'))
+    const executable = path.join(root, 'npm.cmd')
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    fs.writeFileSync(executable, '')
+    fs.chmodSync(executable, 0o755)
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+      const command = {
+        cwd: root,
+        argv: ['npm.cmd', 'test'],
+        env: { PATH: root },
+      }
+
+      assert.strictEqual(getUnavailableExecutable(command), undefined)
+      assert.strictEqual(getResolvedExecutable(command), executable)
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
       fs.rmSync(root, { recursive: true, force: true })
     }
   })

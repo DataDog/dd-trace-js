@@ -380,27 +380,33 @@ function buildValidationTransportEnv (intake) {
  */
 function assertNoInlineValidationEnvOverrides (command, env) {
   if (!env[VALIDATION_INTAKE_URL_ENV]) return
+  const reservedEnvNames = new Set([
+    ...VALIDATION_RESERVED_ENV_NAMES,
+    ...Object.keys(env).filter(name => name.startsWith('DD_')),
+  ])
 
   if (command.usesShell) {
-    rejectReservedShellAssignments(command.shellCommand)
+    rejectReservedShellAssignments(command.shellCommand, reservedEnvNames)
     return
   }
 
   const parsed = parseArgv(command.argv)
-  rejectReservedEnvSplitStrings(command.argv)
+  rejectReservedEnvSplitStrings(command.argv, reservedEnvNames)
   if (parsed.ignoreEnvironment) throwEnvironmentReset()
   if (parsed.unsupportedEnvOption) throwUnsupportedEnvOption(parsed.unsupportedEnvOption)
   for (const name of Object.keys(parsed.prefixEnv)) {
-    if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
+    if (reservedEnvNames.has(name)) throwReservedEnvOverride(name)
   }
   for (const name of parsed.unsetEnvNames) {
-    if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
+    if (reservedEnvNames.has(name)) throwReservedEnvOverride(name)
   }
 
-  for (let index = 0; index < command.argv.length - 1; index++) {
-    const value = command.argv[index]
-    if (value === '-c' && typeof command.argv[index + 1] === 'string') {
-      rejectReservedShellAssignments(command.argv[index + 1])
+  if (isPosixShellExecutable(command.argv[parsed.commandIndex])) {
+    for (let index = parsed.commandIndex + 1; index < command.argv.length - 1; index++) {
+      const value = command.argv[index]
+      if (isShellCommandFlag(value) && typeof command.argv[index + 1] === 'string') {
+        rejectReservedShellAssignments(command.argv[index + 1], reservedEnvNames)
+      }
     }
   }
 }
@@ -409,15 +415,16 @@ function assertNoInlineValidationEnvOverrides (command, env) {
  * Rejects reserved variable assignments and removals in shell source.
  *
  * @param {string} shellCommand shell source
+ * @param {Set<string>} reservedEnvNames validator-controlled environment names
  */
-function rejectReservedShellAssignments (shellCommand) {
+function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
   const source = String(shellCommand || '')
   const environmentReset =
     /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-(?=\s|$)|-i\b|--ignore-environment\b)/i
 
   if (environmentReset.test(source)) throwEnvironmentReset()
 
-  for (const name of VALIDATION_RESERVED_ENV_NAMES) {
+  for (const name of reservedEnvNames) {
     const escapedName = escapeRegExp(name)
     const assignment = new RegExp(
       String.raw`(?:^|[\s;&|()'"])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*=`,
@@ -437,22 +444,33 @@ function rejectReservedShellAssignments (shellCommand) {
  * Rejects reserved environment changes hidden inside env --split-string arguments.
  *
  * @param {string[]} argv structured command arguments
+ * @param {Set<string>} reservedEnvNames validator-controlled environment names
  * @returns {void}
  */
-function rejectReservedEnvSplitStrings (argv) {
+function rejectReservedEnvSplitStrings (argv, reservedEnvNames) {
   if (!Array.isArray(argv) || !isEnvExecutable(argv[0])) return
 
   for (let index = 1; index < argv.length; index++) {
     const argument = argv[index]
     if (argument === '-S' || argument === '--split-string') {
-      if (typeof argv[index + 1] === 'string') rejectReservedShellAssignments(`env ${argv[index + 1]}`)
+      if (typeof argv[index + 1] === 'string') {
+        rejectReservedShellAssignments(`env ${argv[index + 1]}`, reservedEnvNames)
+      }
       index++
       continue
     }
 
     const splitString = /^(?:-S|--split-string=)(.+)$/.exec(argument)?.[1]
-    if (splitString !== undefined) rejectReservedShellAssignments(`env ${splitString}`)
+    if (splitString !== undefined) rejectReservedShellAssignments(`env ${splitString}`, reservedEnvNames)
   }
+}
+
+function isShellCommandFlag (value) {
+  return /^-[A-Za-z]*c[A-Za-z]*$/.test(value)
+}
+
+function isPosixShellExecutable (value) {
+  return /^(?:a|ba|da|k|z)?sh$/.test(path.basename(String(value || '')).toLowerCase())
 }
 
 /**

@@ -173,7 +173,7 @@ function buildExistingCommand ({ command, framework, packageJson, projectRoot, r
 function buildGeneratedTestStrategy ({ framework, packageJson, projectRoot, runner }) {
   const representative = findRepresentativeTestFile(projectRoot)
   const convention = getGeneratedTestConvention(representative, projectRoot)
-  const moduleSystem = framework === 'vitest' || packageJson.type === 'module' ? 'module' : 'commonjs'
+  const moduleSystem = getGeneratedModuleSystem(framework, convention.fileExtension, packageJson.type)
   const definitions = getGeneratedDefinitions({ framework, convention, moduleSystem })
 
   return {
@@ -211,6 +211,12 @@ function buildGeneratedTestStrategy ({ framework, packageJson, projectRoot, runn
         '.dd-test-optimization-validation-atr-state'),
     ],
   }
+}
+
+function getGeneratedModuleSystem (framework, fileExtension, packageType) {
+  if (framework === 'vitest' || /\.(?:mjs|mts)$/.test(fileExtension)) return 'module'
+  if (/\.(?:cjs|cts)$/.test(fileExtension)) return 'commonjs'
+  return packageType === 'module' ? 'module' : 'commonjs'
 }
 
 function getGeneratedTestConvention (representative, projectRoot) {

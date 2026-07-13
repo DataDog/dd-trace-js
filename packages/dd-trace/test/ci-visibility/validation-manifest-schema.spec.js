@@ -168,6 +168,11 @@ describe('test optimization validation manifest schema', () => {
         condition.if?.required?.includes('usesShell') &&
         condition.then?.required?.includes('shellCommand')
     }))
+    assert.ok(commandAllOf.some(condition => {
+      return condition.if?.required?.includes('shell') &&
+        condition.then?.required?.includes('usesShell') &&
+        condition.then?.properties?.usesShell?.const === true
+    }))
     assert.ok(frameworkAllOf.some(condition => {
       return condition.if?.properties?.ciWiring?.properties?.status?.enum?.includes('fail') &&
         condition.then?.required?.includes('ciWiringCommand')
@@ -390,13 +395,26 @@ describe('test optimization validation manifest schema', () => {
   it('rejects undeclared command fields that could change execution invisibly', () => {
     const manifest = getManifest()
     manifest.frameworks[0].existingTestCommand.displayCommand = 'npm test'
-    manifest.frameworks[0].existingTestCommand.shell = '/tmp/hidden-shell'
 
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].existingTestCommand.displayCommand is not an allowed command field.',
-      'frameworks[0].existingTestCommand.shell is not an allowed command field.',
     ])
     assert.strictEqual(jsonSchema.$defs.command.additionalProperties, false)
+  })
+
+  it('allows an explicit executable for shell commands', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand = {
+      cwd: '/repo',
+      usesShell: true,
+      shell: '/bin/bash',
+      shellCommand: 'npm test',
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+    assert.deepStrictEqual(jsonSchema.$defs.command.properties.shell, {
+      $ref: '#/$defs/executableString',
+    })
   })
 
   it('rejects ambiguous command types, environment names, and excessive timeouts', () => {

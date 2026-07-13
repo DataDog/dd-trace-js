@@ -510,6 +510,9 @@
         "usesShell": {
           "type": "boolean"
         },
+        "shell": {
+          "$ref": "#/$defs/executableString"
+        },
         "shellCommand": {
           "anyOf": [
             {
@@ -544,6 +547,23 @@
             "required": [
               "shellCommand"
             ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "shell"
+            ]
+          },
+          "then": {
+            "required": [
+              "usesShell"
+            ],
+            "properties": {
+              "usesShell": {
+                "const": true
+              }
+            }
           }
         }
       ],

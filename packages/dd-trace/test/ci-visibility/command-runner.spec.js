@@ -334,6 +334,58 @@ describe('test optimization validation command runner', () => {
         envMode: 'clean',
         outDir,
       }), /Refusing to clear the command environment/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['bash', '-lc', 'DD_TRACE_AGENT_URL=https://example.invalid npm test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['sh', '-ec', 'unset NODE_OPTIONS; npm test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', 'bash', '-lc', 'DD_TRACE_AGENT_URL=https://example.invalid npm test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+
+      const datadogEnv = buildDatadogEnv({
+        intake: { port: 43123 },
+        scenario: 'basic-reporting',
+        framework: { framework: 'jest' },
+        command: {},
+      })
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', 'DD_TRACE_ENABLED=false', 'npm', 'test'],
+      }, {
+        env: datadogEnv,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_TRACE_ENABLED changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'DD_CIVISIBILITY_ENABLED=0 npm test',
+      }, {
+        env: datadogEnv,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_CIVISIBILITY_ENABLED changes/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

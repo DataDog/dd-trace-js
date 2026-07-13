@@ -29,13 +29,17 @@ describe('test optimization CI remediation', () => {
     assert.deepStrictEqual(remediation.variants.map(variant => variant.id), ['agentless'])
     assert.match(remediation.variants[0].snippet, /# Job: unit/)
     assert.match(remediation.variants[0].snippet, /- name: "Run unit tests"/)
-    assert.match(remediation.variants[0].snippet, /NODE_OPTIONS: "-r dd-trace\/ci\/init"/)
+    assert.match(
+      remediation.variants[0].snippet,
+      /NODE_OPTIONS: "--import dd-trace\/register\.js -r dd-trace\/ci\/init"/
+    )
     assert.match(remediation.variants[0].snippet, /run: \|\n {4}npm run test:unit/)
     assert.match(remediation.variants[0].snippet, /DD_CIVISIBILITY_AGENTLESS_ENABLED: "true"/)
     assert.match(remediation.variants[0].snippet, /DD_API_KEY: \$\{\{ secrets\.DD_API_KEY \}\}/)
     assert.match(remediation.variants[0].snippet, /DD_SERVICE: "axios-tests"/)
     assert.match(remediation.variants[0].snippet, /DD_TEST_SESSION_NAME: "vitest-unit-tests"/)
     assert.match(remediation.summary, /do not pass DD_API_KEY or DD_CIVISIBILITY_AGENTLESS_ENABLED/)
+    assert.match(remediation.summary, /NODE_OPTIONS=--import dd-trace\/register\.js -r dd-trace\/ci\/init/)
     assert.doesNotMatch(remediation.summary, /DD_ENV|DD_TRACE_AGENT_URL/)
     assert.doesNotMatch(remediation.variants[0].snippet, /DD_ENV|DD_TRACE_AGENT_URL/)
     assert.strictEqual(
@@ -71,6 +75,7 @@ describe('test optimization CI remediation', () => {
 
   it('does not recommend agentless variables when CI already identifies an Agent endpoint', () => {
     const remediation = buildCiRemediation({
+      framework: 'jest',
       ciWiring: { provider: 'github-actions' },
       ciWiringCommand: {
         cwd: '/repo',
@@ -81,8 +86,9 @@ describe('test optimization CI remediation', () => {
 
     assert.deepStrictEqual(remediation.variants.map(variant => variant.id), ['agent'])
     assert.doesNotMatch(remediation.variants[0].snippet, /DD_API_KEY|AGENTLESS/)
+    assert.match(remediation.variants[0].snippet, /NODE_OPTIONS: "-r dd-trace\/ci\/init"/)
     assert.match(remediation.variants[0].snippet, /DD_SERVICE: "test-tests"/)
-    assert.match(remediation.variants[0].snippet, /DD_TEST_SESSION_NAME: "test-tests"/)
+    assert.match(remediation.variants[0].snippet, /DD_TEST_SESSION_NAME: "jest-tests"/)
     assert.deepStrictEqual(remediation.variants[0].optionalValues.map(value => value.name), [
     ])
   })

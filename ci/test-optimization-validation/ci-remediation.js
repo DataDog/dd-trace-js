@@ -5,11 +5,7 @@ const path = require('node:path')
 const { serializeDisplayCommand } = require('./command-runner')
 
 const GITHUB_API_KEY_REFERENCE = '$' + '{{ secrets.DD_API_KEY }}'
-const AGENT_ENV = {
-  NODE_OPTIONS: '-r dd-trace/ci/init',
-}
 const AGENTLESS_ENV = {
-  NODE_OPTIONS: '-r dd-trace/ci/init',
   DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true',
   DD_API_KEY: GITHUB_API_KEY_REFERENCE,
 }
@@ -33,8 +29,9 @@ function buildCiRemediation (framework) {
   const ciWiring = framework.ciWiring || {}
   const transport = getConfiguredTransport(framework)
   const location = getCiLocation(ciWiring)
+  const nodeOptions = getNodeOptions(framework)
   const recommendedValues = getRecommendedValues(framework)
-  const variants = getVariants(transport, ciWiring, framework.ciWiringCommand, recommendedValues)
+  const variants = getVariants(transport, ciWiring, framework.ciWiringCommand, recommendedValues, nodeOptions)
 
   return {
     provider: ciWiring.provider || 'unknown',
@@ -44,7 +41,7 @@ function buildCiRemediation (framework) {
     step: ciWiring.step,
     location,
     transport,
-    summary: getSummary({ location, transport, recommendedValues }),
+    summary: getSummary({ location, transport, recommendedValues, nodeOptions }),
     variants,
   }
 }
@@ -87,19 +84,19 @@ function formatPath (filename) {
   return JSON.stringify(relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative : value)
 }
 
-function getSummary ({ location, transport, recommendedValues }) {
+function getSummary ({ location, transport, recommendedValues, nodeOptions }) {
   const recommended = recommendedValues.map(({ name, value }) => `${name}=${value}`).join(' and ')
   if (transport === 'agentless') {
-    return `In ${location}, set NODE_OPTIONS=-r dd-trace/ci/init, keep ` +
+    return `In ${location}, set NODE_OPTIONS=${nodeOptions}, keep ` +
       `DD_CIVISIBILITY_AGENTLESS_ENABLED=true, provide DD_API_KEY from the CI secret store, and set ${recommended}. ` +
       getAgentAlternative()
   }
   if (transport === 'agent') {
-    return `In ${location}, set NODE_OPTIONS=-r dd-trace/ci/init and set ${recommended}. A Datadog Agent is ` +
+    return `In ${location}, set NODE_OPTIONS=${nodeOptions} and set ${recommended}. A Datadog Agent is ` +
       'already configured; when it is reachable by the test process, do not pass DD_API_KEY or ' +
       'DD_CIVISIBILITY_AGENTLESS_ENABLED.'
   }
-  return `In ${location}, set NODE_OPTIONS=-r dd-trace/ci/init, ` +
+  return `In ${location}, set NODE_OPTIONS=${nodeOptions}, ` +
     `DD_CIVISIBILITY_AGENTLESS_ENABLED=true, provide DD_API_KEY from the CI secret store, and set ${recommended}. ` +
     getAgentAlternative()
 }
@@ -109,13 +106,14 @@ function getAgentAlternative () {
     'DD_CIVISIBILITY_AGENTLESS_ENABLED.'
 }
 
-function getVariants (transport, ciWiring, command, recommendedValues) {
-  if (transport === 'agent') return [getVariant('agent', ciWiring, command, recommendedValues)]
-  return [getVariant('agentless', ciWiring, command, recommendedValues)]
+function getVariants (transport, ciWiring, command, recommendedValues, nodeOptions) {
+  if (transport === 'agent') return [getVariant('agent', ciWiring, command, recommendedValues, nodeOptions)]
+  return [getVariant('agentless', ciWiring, command, recommendedValues, nodeOptions)]
 }
 
-function getVariant (transport, ciWiring, command, recommendedValues) {
-  const requiredEnv = transport === 'agentless' ? AGENTLESS_ENV : AGENT_ENV
+function getVariant (transport, ciWiring, command, recommendedValues, nodeOptions) {
+  const transportEnv = transport === 'agentless' ? AGENTLESS_ENV : {}
+  const requiredEnv = { NODE_OPTIONS: nodeOptions, ...transportEnv }
   const recommendedEnv = Object.fromEntries(recommendedValues.map(({ name, value }) => [name, value]))
   return {
     id: transport,
@@ -132,6 +130,11 @@ function getVariant (transport, ciWiring, command, recommendedValues) {
     optionalValues: OPTIONAL_VALUES[transport],
     snippet: formatSnippet({ ...requiredEnv, ...recommendedEnv }, ciWiring, command),
   }
+}
+
+function getNodeOptions (framework) {
+  if (framework.framework === 'vitest') return '--import dd-trace/register.js -r dd-trace/ci/init'
+  return '-r dd-trace/ci/init'
 }
 
 function getRecommendedValues (framework) {

@@ -44,9 +44,7 @@ function resolveExecutable (executable, command) {
   }
 
   const environmentPath = command.env?.PATH || process.env.PATH || ''
-  const extensions = process.platform === 'win32'
-    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')
-    : ['']
+  const extensions = getExecutableExtensions()
 
   for (const directory of environmentPath.split(path.delimiter)) {
     if (!directory) continue
@@ -74,9 +72,7 @@ function getResolvedExecutable (command) {
   }
 
   const environmentPath = command.env?.PATH || process.env.PATH || ''
-  const extensions = process.platform === 'win32'
-    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')
-    : ['']
+  const extensions = getExecutableExtensions()
 
   for (const directory of environmentPath.split(path.delimiter)) {
     if (!directory) continue
@@ -85,6 +81,11 @@ function getResolvedExecutable (command) {
       if (isExecutable(filename)) return filename
     }
   }
+}
+
+function getExecutableExtensions () {
+  if (process.platform !== 'win32') return ['']
+  return ['', ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')]
 }
 
 /**
