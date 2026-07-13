@@ -7,6 +7,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const native = require('./native')
 const processTags = require('./process-tags')
+const { MAX_META_VALUE_LENGTH } = require('./encode/tags-processors')
 const { registerExtraService } = require('./service-naming/extra-services')
 const {
   SAMPLING_MECHANISM_MANUAL,
@@ -130,6 +131,37 @@ class SpanProcessor {
     if (typeof origin === 'string') {
       this._nativeSpans.queueOp(native.OpCode.SetTraceMetaAttr, spanId, ORIGIN_KEY, origin)
     }
+  }
+
+  _syncProcessTagsToNative (spanContext, spanId) {
+    if (typeof this._processTags !== 'string' || this._processTags.length === 0) return
+    if (spanContext.hasTag(processTags.TRACING_FIELD_NAME)) return
+
+    const value = this._processTags.length > MAX_META_VALUE_LENGTH
+      ? `${this._processTags.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : this._processTags
+
+    this._nativeSpans.queueOp(
+      native.OpCode.SetMetaAttr,
+      spanId,
+      processTags.TRACING_FIELD_NAME,
+      value
+    )
+  }
+
+  _isNativeLocalRoot (span) {
+    if (!span) return true
+
+    const context = span.context()
+    if (!context._parentId) return true
+    if (context._isRemote) return true
+
+    const trace = context._trace
+    return trace?.started?.[0] === span
+  }
+
+  _nativeChunkRoot (spans) {
+    return spans.find(span => this._isNativeLocalRoot(span)) || spans[0]
   }
 
   /**
@@ -273,6 +305,12 @@ class SpanProcessor {
       }
 
       if (finishedSpansToExport.length !== 0 && trace.isRecording !== false) {
+        const chunkRoot = this._nativeChunkRoot(finishedSpansToExport)
+        const chunkRootContext = chunkRoot?.context()
+        if (chunkRootContext?._nativeSpanId !== undefined) {
+          this._syncProcessTagsToNative(chunkRootContext, chunkRootContext._nativeSpanId)
+        }
+
         this._exporter.export(finishedSpansToExport)
         // The exporter has taken these spans; their native Create is (or is about
         // to be) removed from the change-buffer map. Mark each context exported

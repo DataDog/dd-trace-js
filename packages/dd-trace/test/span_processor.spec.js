@@ -78,6 +78,7 @@ describe('SpanProcessor', () => {
     fakeOpCode = {
       SetTraceMetricsAttr: 11,
       SetTraceMetaAttr: 10,
+      SetMetaAttr: 12,
     }
 
     nativeSpans = {
@@ -148,6 +149,63 @@ describe('SpanProcessor', () => {
     sinon.assert.calledOnceWithExactly(spanFormat, finishedSpan, true, false)
     sinon.assert.calledOnceWithExactly(onSpanFinished, formattedSpan)
     sinon.assert.calledOnceWithExactly(exporter.export, [finishedSpan])
+  })
+
+  it('stamps process tags as span meta on the native chunk root before export', () => {
+    const processTagsSerialized = 'entrypoint.workdir:test,svc.user:true'
+    const SpanProcessorWithProcessTags = proxyquire('../src/span_processor', {
+      './span_sampler': SpanSampler,
+      './native': { OpCode: fakeOpCode },
+      './process-tags': {
+        TRACING_FIELD_NAME: '_dd.tags.process',
+        serialized: processTagsSerialized,
+      },
+      './service-naming/extra-services': extraServicesStub,
+    })
+    const processorWithProcessTags = new SpanProcessorWithProcessTags(
+      exporter,
+      prioritySampler,
+      {
+        ...config,
+        flushMinSpans: 2,
+        DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: true,
+      },
+      nativeSpans
+    )
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 1
+      c._sampling.mechanism = 3
+    })
+
+    const active = createProcessorSpan(999, null)
+    active._duration = undefined
+    const child = createProcessorSpan(123, active.context()._spanId)
+    const localRoot = createProcessorSpan(456, { toString: () => 'remote-parent' })
+    localRoot.context()._isRemote = true
+    // Partial flush: the active root is still in trace.started but is not
+    // exported. The first exported span is a child; the later remote-parent
+    // span is the local root and must receive the chunk process tag.
+    trace.tags = {}
+    trace.started = [active, child, localRoot]
+    trace.finished = [child, localRoot]
+
+    processorWithProcessTags.process(localRoot)
+
+    sinon.assert.calledWith(
+      nativeSpans.queueOp,
+      fakeOpCode.SetMetaAttr,
+      localRoot.context()._nativeSpanId,
+      '_dd.tags.process',
+      processTagsSerialized
+    )
+    assert.strictEqual(
+      nativeSpans.queueOp.getCalls().some(call =>
+        call.args[0] === fakeOpCode.SetMetaAttr &&
+        call.args[1] === child.context()._nativeSpanId &&
+        call.args[2] === '_dd.tags.process'
+      ),
+      false
+    )
   })
 
   it('writes _dd.p.dm to native trace meta for kept traces (priority >= AUTO_KEEP)', () => {
@@ -465,6 +523,33 @@ describe('SpanProcessor', () => {
     })
   })
 
+  function createProcessorSpan (nativeSpanId, parentId) {
+    const tags = Object.create(null)
+    const spanId = {
+      toString: () => String(nativeSpanId),
+    }
+    const context = {
+      _nativeSpanId: nativeSpanId,
+      _spanId: spanId,
+      _parentId: parentId,
+      _isRemote: false,
+      _trace: trace,
+      _sampling: {},
+      getTags: () => tags,
+      getTag: (key) => tags[key],
+      setTag: (key, value) => { tags[key] = value },
+      hasTag: (key) => key in tags,
+      clearTags: () => {
+        for (const key of Object.keys(tags)) delete tags[key]
+      },
+    }
+
+    return {
+      tracer: sinon.stub().returns(tracer),
+      context: sinon.stub().returns(context),
+      _duration: 100,
+    }
+  }
   describe('native sampling sync', () => {
     it('should mirror sampling priority to native storage', () => {
       const ctx = {
