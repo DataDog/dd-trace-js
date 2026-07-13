@@ -202,6 +202,9 @@ function captureEventLoopDelay () {
   eventLoopDelayObserver.disable()
 
   if (eventLoopDelayObserver.count !== 0) {
+    // Node.js versions without iteration-based metrics use the default sampling method,
+    // which is interval-based and requires normalization because its values are much smaller
+    // than those from the original native implementation and iteration-based metrics.
     const minimum = EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE ? 0 : eventLoopDelayResolution * 1e6
     const avg = Math.max(eventLoopDelayObserver.mean - minimum, 0)
     const sum = Math.round(avg * eventLoopDelayObserver.count)
