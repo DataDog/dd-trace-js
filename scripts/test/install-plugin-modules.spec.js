@@ -81,6 +81,13 @@ describe('scripts/install_plugin_modules.js', function () {
     const manifest = require(path.join(versionsDir, '@google-cloud', 'vertexai', 'package.json'))
     assert.match(manifest.dependencies['google-auth-library'], /^9\./)
   })
+
+  it('normalizes unprefixed GitHub shorthand dependencies for Bun', () => {
+    runInstall('limitd-client')
+
+    const manifest = require(path.join(versionsDir, 'package.json'))
+    assert.strictEqual(manifest.overrides.hashlru, 'github:jfromaniello/hashlru#return_value_on_set')
+  })
 })
 
 /**
