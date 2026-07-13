@@ -3,11 +3,11 @@
 set -euo pipefail
 
 readonly TOOLKIT_REVISION="5bb7951901123f3b26ba882ddf4d2bc97155256e"
-readonly TOOLKIT_SOURCE_URL="git@github.com:DataDog/apm-instrumentation-toolkit.git"
+readonly TOOLKIT_ARCHIVE="apm-instrumentation-toolkit-${TOOLKIT_REVISION}.tar.gz"
+readonly TOOLKIT_ARCHIVE_SHA256="d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4e8abb8ca2d5a3fcf"
 readonly DD_AUTH_DOMAIN="app.datadoghq.com"
 readonly DATADOG_AGENT_IMAGE="gcr.io/datadoghq/agent:latest"
 readonly TEST_AGENT_IMAGE="ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.40.0"
-readonly GIT_INSTALL_TIMEOUT_SECONDS=120
 readonly PIP_INSTALL_TIMEOUT_SECONDS=300
 readonly VENV_INSTALL_TIMEOUT_SECONDS=60
 readonly LOCAL_PROBE_TIMEOUT_SECONDS=15
@@ -15,11 +15,10 @@ readonly MODEL_PROBE_TIMEOUT_SECONDS=45
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 readonly SCRIPT_DIR
-REPO_ROOT=$(git -C "${SCRIPT_DIR}/.." rev-parse --show-toplevel 2>/dev/null) || {
-  printf 'MISSING setup detail=not_a_git_checkout\n' >&2
-  exit 1
-}
+REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 readonly REPO_ROOT
+readonly TOOLKIT_ARCHIVE_PATH="${SCRIPT_DIR}/vendor/${TOOLKIT_ARCHIVE}"
+readonly TOOLKIT_ARCHIVE_MANIFEST="${TOOLKIT_ARCHIVE_PATH}.sha256"
 
 if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
   CACHE_HOME="${XDG_CACHE_HOME}"
@@ -32,6 +31,7 @@ fi
 readonly CACHE_HOME
 readonly TOOLKIT_ROOT="${CACHE_HOME}/dd-apm-bits/${TOOLKIT_REVISION}"
 readonly TOOLKIT_SOURCE_DIR="${TOOLKIT_ROOT}/source"
+readonly TOOLKIT_SKILLS_DIR="${TOOLKIT_SOURCE_DIR}/.claude/skills"
 readonly TOOLKIT_VENV_DIR="${TOOLKIT_ROOT}/venv"
 readonly CACHED_DD_APM="${TOOLKIT_VENV_DIR}/bin/dd-apm"
 readonly CACHED_DD_APM_PROVENANCE="${TOOLKIT_VENV_DIR}/.bits-dd-apm-provenance"
@@ -130,7 +130,7 @@ is_runnable_dd_apm_version() {
 }
 
 is_managed_cached_dd_apm() {
-  [[ -x "$CACHED_DD_APM" && -f "$CACHED_DD_APM_PROVENANCE" ]] || return 1
+  [[ -x "$CACHED_DD_APM" && -f "$CACHED_DD_APM_PROVENANCE" && -d "$TOOLKIT_SKILLS_DIR" ]] || return 1
   [[ "$(<"$CACHED_DD_APM_PROVENANCE")" == "$TOOLKIT_REVISION" ]]
 }
 
@@ -145,71 +145,60 @@ select_existing_dd_apm() {
   version=$(dd_apm_version_at "$CACHED_DD_APM") || return 1
   is_runnable_dd_apm_version "$version" || return 1
   dd_apm_command="$CACHED_DD_APM"
-  dd_apm_source="github_cache"
+  dd_apm_source="embedded_cache"
 }
 
 ensure_toolkit_source() {
-  local actual_revision=""
-  local detail=""
-  local remote_url=""
+  local actual_sha=""
+  local expected_sha=""
+  local extraction_dir=""
 
-  if ! command -v git >/dev/null 2>&1; then
-    missing "toolkit_source" "git unavailable; required to fetch ${TOOLKIT_SOURCE_URL}"
+  if [[ ! -f "$TOOLKIT_ARCHIVE_PATH" || ! -f "$TOOLKIT_ARCHIVE_MANIFEST" ]]; then
+    blocked "toolkit_source" "embedded_archive_missing=${TOOLKIT_ARCHIVE_PATH}"
     return 1
   fi
+  expected_sha=$(awk 'NF { print $1; exit }' "$TOOLKIT_ARCHIVE_MANIFEST")
+  if [[ "$expected_sha" != "$TOOLKIT_ARCHIVE_SHA256" ]]; then
+    blocked "toolkit_source" "embedded_manifest_mismatch=${TOOLKIT_ARCHIVE_MANIFEST}"
+    return 1
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual_sha=$(sha256sum "$TOOLKIT_ARCHIVE_PATH" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    actual_sha=$(shasum -a 256 "$TOOLKIT_ARCHIVE_PATH" | awk '{print $1}')
+  else
+    blocked "toolkit_source" "sha256_tool_missing=sha256sum_or_shasum"
+    return 1
+  fi
+  if [[ "$actual_sha" != "$expected_sha" ]]; then
+    blocked "toolkit_source" "embedded_archive_sha256_mismatch=expected=${expected_sha} actual=${actual_sha}"
+    return 1
+  fi
+
   mkdir -p "$TOOLKIT_ROOT"
-
-  if [[ ! -e "$TOOLKIT_SOURCE_DIR" ]]; then
-    mkdir "$TOOLKIT_SOURCE_DIR"
-    run_with_timeout "$LOCAL_PROBE_TIMEOUT_SECONDS" \
-      git -C "$TOOLKIT_SOURCE_DIR" init --quiet || {
-      rmdir "$TOOLKIT_SOURCE_DIR" 2>/dev/null || true
-      blocked "toolkit_source" "command_failed=git init ${TOOLKIT_SOURCE_DIR}"
+  if [[ ! -d "$TOOLKIT_SKILLS_DIR" ]]; then
+    extraction_dir=$(mktemp -d "${TOOLKIT_ROOT}/source.extract.XXXXXX") || {
+      blocked "toolkit_source" "could_not_create_extraction_directory=${TOOLKIT_ROOT}"
       return 1
     }
-  elif [[ ! -d "${TOOLKIT_SOURCE_DIR}/.git" ]]; then
-    blocked "toolkit_source" "path_exists_without_git=${TOOLKIT_SOURCE_DIR}"
+    if ! tar -xzf "$TOOLKIT_ARCHIVE_PATH" -C "$extraction_dir" --strip-components=1; then
+      rm -rf "$extraction_dir"
+      blocked "toolkit_source" "archive_extraction_failed=${TOOLKIT_ARCHIVE}"
+      return 1
+    fi
+    if [[ ! -d "${extraction_dir}/.claude/skills" ]]; then
+      rm -rf "$extraction_dir"
+      blocked "toolkit_source" "skills_missing_after_extraction=${TOOLKIT_SOURCE_DIR}/.claude/skills"
+      return 1
+    fi
+    rm -rf "$TOOLKIT_SOURCE_DIR"
+    mv "$extraction_dir" "$TOOLKIT_SOURCE_DIR"
+  fi
+  if [[ ! -d "$TOOLKIT_SKILLS_DIR" ]]; then
+    blocked "toolkit_source" "skills_missing=${TOOLKIT_SKILLS_DIR}"
     return 1
   fi
-
-  remote_url=$(run_with_timeout "$LOCAL_PROBE_TIMEOUT_SECONDS" \
-    git -C "$TOOLKIT_SOURCE_DIR" remote get-url origin 2>/dev/null || true)
-  if [[ -z "$remote_url" ]]; then
-    run_with_timeout "$LOCAL_PROBE_TIMEOUT_SECONDS" \
-      git -C "$TOOLKIT_SOURCE_DIR" remote add origin "$TOOLKIT_SOURCE_URL" || {
-      blocked "toolkit_source" "command_failed=git remote add origin ${TOOLKIT_SOURCE_URL}"
-      return 1
-    }
-  elif [[ "$remote_url" != "$TOOLKIT_SOURCE_URL" ]]; then
-    detail="expected_remote=${TOOLKIT_SOURCE_URL} actual_remote=$(summarize_output "$remote_url")"
-    blocked "toolkit_source" "$detail"
-    return 1
-  fi
-
-  actual_revision=$(run_with_timeout "$LOCAL_PROBE_TIMEOUT_SECONDS" \
-    git -C "$TOOLKIT_SOURCE_DIR" rev-parse HEAD 2>/dev/null || true)
-  if [[ "$actual_revision" != "$TOOLKIT_REVISION" ]]; then
-    run_with_timeout "$GIT_INSTALL_TIMEOUT_SECONDS" \
-      env GIT_TERMINAL_PROMPT=0 \
-      GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}" \
-      git -C "$TOOLKIT_SOURCE_DIR" fetch --depth 1 origin "$TOOLKIT_REVISION" || {
-      blocked "toolkit_source" "command_failed=git fetch ${TOOLKIT_REVISION}"
-      return 1
-    }
-    run_with_timeout "$LOCAL_PROBE_TIMEOUT_SECONDS" \
-      git -C "$TOOLKIT_SOURCE_DIR" checkout --detach "$TOOLKIT_REVISION" || {
-      blocked "toolkit_source" "command_failed=git checkout ${TOOLKIT_REVISION}"
-      return 1
-    }
-  fi
-
-  actual_revision=$(run_with_timeout "$LOCAL_PROBE_TIMEOUT_SECONDS" \
-    git -C "$TOOLKIT_SOURCE_DIR" rev-parse HEAD 2>/dev/null || true)
-  if [[ "$actual_revision" != "$TOOLKIT_REVISION" ]]; then
-    blocked "toolkit_source" "expected=${TOOLKIT_REVISION} actual=${actual_revision:-unavailable}"
-    return 1
-  fi
-  status "READY" "toolkit_source" "revision=${TOOLKIT_REVISION} path=${TOOLKIT_SOURCE_DIR}"
+  status "READY" "toolkit_source" "revision=${TOOLKIT_REVISION} archive_sha256=${actual_sha} path=${TOOLKIT_SOURCE_DIR} skills=${TOOLKIT_SKILLS_DIR}"
 }
 
 find_install_python() {
@@ -231,7 +220,7 @@ install_dd_apm_from_source() {
 
   python_command=$(find_install_python || true)
   if [[ -z "$python_command" ]]; then
-    missing "toolkit_python" "Python 3.11-3.14 is required for toolkit ${TOOLKIT_VERSION}"
+    missing "toolkit_python" "Python 3.11-3.14 is required for toolkit revision ${TOOLKIT_REVISION}"
     return 1
   fi
   if [[ ! -x "${TOOLKIT_VENV_DIR}/bin/python" ]]; then
@@ -253,7 +242,7 @@ install_dd_apm_from_source() {
 ensure_dd_apm() {
   if select_existing_dd_apm; then
     status "READY" "dd_apm_install" \
-      "version=$(summarize_output "$(dd_apm_version_at "$dd_apm_command")") source=${dd_apm_source} selected_from=origin/main revision=${TOOLKIT_REVISION} path=${dd_apm_command}"
+      "version=$(summarize_output "$(dd_apm_version_at "$dd_apm_command")") source=${dd_apm_source} selected_from=embedded_archive revision=${TOOLKIT_REVISION} path=${dd_apm_command}"
     return 0
   fi
 
@@ -264,7 +253,7 @@ ensure_dd_apm() {
     return 1
   fi
   status "READY" "dd_apm_install" \
-    "version=$(summarize_output "$(dd_apm_version_at "$dd_apm_command")") source=${dd_apm_source} selected_from=origin/main revision=${TOOLKIT_REVISION} path=${dd_apm_command}"
+    "version=$(summarize_output "$(dd_apm_version_at "$dd_apm_command")") source=${dd_apm_source} selected_from=embedded_archive revision=${TOOLKIT_REVISION} path=${dd_apm_command}"
 }
 
 ensure_dd_auth() {
@@ -314,7 +303,7 @@ check_dd_apm() {
   local version=""
 
   if ! select_existing_dd_apm; then
-    missing "dd_apm" "expected=${TOOLKIT_VERSION} run=${REPO_ROOT}/scripts/bits-dd-apm-setup.sh"
+    missing "dd_apm" "expected=embedded toolkit revision ${TOOLKIT_REVISION} run=${REPO_ROOT}/scripts/bits-dd-apm-setup.sh"
     return
   fi
   version=$(dd_apm_version_at "$dd_apm_command" || true)
@@ -324,7 +313,7 @@ check_dd_apm() {
     return
   fi
   status "READY" "dd_apm" \
-    "version=$(summarize_output "$version") source=${dd_apm_source} selected_from=origin/main revision=${TOOLKIT_REVISION} path=${dd_apm_command}"
+    "version=$(summarize_output "$version") source=${dd_apm_source} selected_from=embedded_archive revision=${TOOLKIT_REVISION} path=${dd_apm_command}"
 
   configured=$(config_list || true)
   if [[ "$configured" == *"dd_trace_js"* && "$configured" == *"${REPO_ROOT}"* ]]; then

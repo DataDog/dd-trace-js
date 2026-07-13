@@ -2,20 +2,19 @@
 
 ## Outcome
 
-The checkout now has noninteractive setup and preflight wrappers for Bits. Setup uses only the managed executable in
-the SHA-owned cache for the pinned toolkit source selected from `origin/main`. An arbitrary `dd-apm` on `PATH` is
-never accepted. The cached executable must carry the matching provenance marker and pass a runnable `dd-apm version`
-probe; no release semver is required. The wrappers invoke that cached executable directly, so callers do not need to
-modify `PATH`.
+The checkout now carries the toolkit source selected from `origin/main` as a verified 1.4 MB archive. Bits does not
+fetch toolkit source from GitHub. Setup verifies the embedded SHA-256, extracts it into a SHA-owned cache, requires
+the extracted `.claude/skills`, installs from that local source, and invokes the managed executable directly.
 
-The implementation is complete locally, but the main-SHA install is not live-proven. Prior source-fetch and build
-observations are retained only as historical context; no new install was run for this completion.
+The implementation is complete locally. Archive integrity, source extraction shape, skills presence, shell syntax,
+ShellCheck, and diff integrity were verified. Dependency installation was not rerun after embedding the archive.
 
 Toolkit pin:
 
-- Official source: `git@github.com:DataDog/apm-instrumentation-toolkit.git`
 - Selected ref: `origin/main`
 - Commit: `5bb7951901123f3b26ba882ddf4d2bc97155256e`
+- Embedded archive: `scripts/vendor/apm-instrumentation-toolkit-5bb7951901123f3b26ba882ddf4d2bc97155256e.tar.gz`
+- Archive SHA-256: `d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4e8abb8ca2d5a3fcf`
 - Version policy: any runnable `dd-apm version` output
 - Cache root: `${XDG_CACHE_HOME:-$HOME/.cache}/dd-apm-bits/5bb7951901123f3b26ba882ddf4d2bc97155256e`
 - Cached executable: `venv/bin/dd-apm`
@@ -28,11 +27,12 @@ requirement.
 
 ## Changed paths
 
-- `scripts/bits-dd-apm-bootstrap.sh`: pinned source install, direct cached invocation, checkout configuration, and
+- `scripts/bits-dd-apm-bootstrap.sh`: verified embedded-source install, direct cached invocation, configuration, and
   bounded preflight checks.
 - `scripts/bits-dd-apm-setup.sh`: setup entry point.
 - `scripts/bits-dd-apm-preflight.sh`: readiness entry point.
 - `scripts/bits-dd-apm-bootstrap.spec.mjs`: existing-install, fresh-source, idempotency, failure, and preflight tests.
+- `scripts/vendor/apm-instrumentation-toolkit-*.tar.gz{,.sha256}`: pinned toolkit source including `.claude/skills`.
 - `reports/T028-bits-dd-apm-bootstrap.md`: this operations and verification record.
 
 ## Bits commands
@@ -58,32 +58,19 @@ dd-auth --domain app.datadoghq.com --force-app-key -- ./scripts/bits-dd-apm-pref
 
 `BITS_CODEX_MODEL` may select the model probe; otherwise Codex's configured default is used.
 
-## Historical source proof
+## Embedded source proof
 
-An earlier isolated run fetched the official source and reached the build phase. That observation is historical only;
-the main install was not rerun here and is not claimed live-proven. The prior run used temporary home, cache, and
-temporary directories and was stopped before producing a usable installed executable. No slow pip install was repeated.
+The archive was produced from the local toolkit `origin/main` commit above. Verification from the dd-trace-js branch:
 
 ```bash
-# Historical command only; do not repeat as part of T028 completion.
-./scripts/bits-dd-apm-setup.sh
+shasum -a 256 -c scripts/vendor/apm-instrumentation-toolkit-*.tar.gz.sha256
+tar -tzf scripts/vendor/apm-instrumentation-toolkit-*.tar.gz | rg '/\.claude/skills/'
 ```
 
-The prior build attempt progressed through successful package builds:
-
-```text
-Processing a vendored semantic-conventions dependency
-Successfully built the toolkit and vendored dependency
-Installing collected packages: ... dd-apm
-```
-
-The install was stopped before it produced a usable executable. Consequently, no claim is made that the clean main
-install completed, that a second real setup was idempotent, or that source-installed commands ran. No destructive
-integration was run.
-
-The final pip command has a 300-second process bound plus `--timeout 15 --retries 0`; git fetch has a 120-second
-process bound, noninteractive SSH, and a 10-second SSH connection timeout. Every preflight network probe is also
-bounded and reports failure.
+The checksum passed, and the archive contains the toolkit `.claude/skills` tree plus the vendored package source
+needed by the local install. The setup path contains no `git fetch` or runtime toolkit-source download. Pip installs
+from the extracted local directory with bounded, noninteractive dependency resolution. No destructive integration
+was run.
 
 ## dd-auth investigation
 
@@ -121,22 +108,13 @@ git diff --check
 git status --short --untracked-files=all
 ```
 
-Result: `git diff --check` exited `0`; status contained exactly the five intended untracked paths below.
-
-```text
-?? reports/T028-bits-dd-apm-bootstrap.md
-?? scripts/bits-dd-apm-bootstrap.sh
-?? scripts/bits-dd-apm-bootstrap.spec.mjs
-?? scripts/bits-dd-apm-preflight.sh
-?? scripts/bits-dd-apm-setup.sh
-```
+Result: `git diff --check` exited `0`; only T028 bootstrap, report, and embedded archive paths changed.
 
 The bootstrap, setup, and preflight scripts all have mode `-rwxr-xr-x`.
 
 ## Remaining external requirements
 
-- Python 3.11-3.14 and public pip access for the pinned toolkit source installation.
-- GitHub SSH checkout access to the official toolkit repository.
+- Python 3.11-3.14 and dependency availability for installing the branch-local toolkit source.
 - Supported Linux `dd-auth` in the Bits base image, or organization-supported runtime secret injection.
 - Runtime `DD_API_KEY` and `DD_APP_KEY`; they are never committed or synthesized by these scripts.
 - A logged-in Codex CLI with access to the configured model or `BITS_CODEX_MODEL`.

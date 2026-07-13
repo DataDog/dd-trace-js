@@ -13,7 +13,6 @@ const repositoryRoot = path.dirname(scriptDirectory)
 const setupScript = path.join(scriptDirectory, 'bits-dd-apm-setup.sh')
 const preflightScript = path.join(scriptDirectory, 'bits-dd-apm-preflight.sh')
 const toolkitRevision = '5bb7951901123f3b26ba882ddf4d2bc97155256e'
-const toolkitSourceUrl = 'git@github.com:DataDog/apm-instrumentation-toolkit.git'
 
 async function addCommand (binDirectory, name, body) {
   const command = path.join(binDirectory, name)
@@ -58,6 +57,9 @@ async function createFixture ({
   const venvPythonTemplate = path.join(root, 'venv-python-template')
   await mkdir(binDirectory, { recursive: true })
   await mkdir(homeDirectory, { recursive: true })
+  if (existingDdApm) {
+    await mkdir(path.join(toolRoot, 'source', '.claude', 'skills'), { recursive: true })
+  }
 
   if (existingDdApm) {
     await addCommand(binDirectory, 'dd-apm', ddApmBody(root, existingVersion, existingVersionExit))
@@ -82,26 +84,6 @@ if [ "\${1:-}" = '-m' ] && [ "\${2:-}" = 'venv' ]; then
   exit 0
 fi
 exit 1`)
-  await addCommand(binDirectory, 'git', `
-if [ "\${1:-}" != '-C' ]; then exit 1; fi
-worktree=\$2
-shift 2
-if [ "\${1:-}" = 'rev-parse' ] && [ "\${2:-}" = '--show-toplevel' ]; then
-  printf '%s\n' '${repositoryRoot}'
-  exit 0
-fi
-printf '%s\n' "\$*" >> "${root}/git-calls"
-case "\${1:-}:\${2:-}" in
-  init:--quiet) mkdir -p "\$worktree/.git" ;;
-  remote:get-url) printf '%s\n' '${toolkitSourceUrl}' ;;
-  remote:add) ;;
-  fetch:--depth) ;;
-  checkout:--detach) printf '%s\n' "\$3" > "${root}/source-head" ;;
-  rev-parse:HEAD)
-    if [ -f "${root}/source-head" ]; then cat "${root}/source-head"; else exit 1; fi
-    ;;
-  *) exit 1 ;;
-esac`)
   await addCommand(binDirectory, 'dd-auth', `
 if [ "\${1:-}" = '--version' ]; then echo 'dd-auth version 1.3.6'; fi`)
   await addCommand(binDirectory, 'codex', `
@@ -178,7 +160,7 @@ describe('Bits dd-apm bootstrap', () => {
 
     assert.equal(first.code, 0, first.stdout + first.stderr)
     assert.equal(second.code, 0, second.stdout + second.stderr)
-    assert.match(first.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=github_cache.*revision=${toolkitRevision}`))
+    assert.match(first.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=embedded_cache.*revision=${toolkitRevision}`))
     assert.doesNotMatch(first.stdout, /source=path|1\.2\.0rc6|57bc59088efe4c0e5b4849ff6fae10d1d3e6a3d7/)
     assert.equal(await readFile(path.join(fixture.root, 'dd-apm-calls'), 'utf8'), 'add-repo\n')
     await assertFileMissing(path.join(fixture.root, 'git-calls'))
@@ -194,14 +176,13 @@ describe('Bits dd-apm bootstrap', () => {
     assert.equal(first.code, 0, first.stdout + first.stderr)
     assert.equal(second.code, 0, second.stdout + second.stderr)
     assert.match(first.stdout, new RegExp(`READY\\s+toolkit_source\\s+revision=${toolkitRevision}`))
-    assert.match(first.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=github_cache.*revision=${toolkitRevision}`))
-    assert.match(second.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=github_cache.*revision=${toolkitRevision}`))
+    assert.match(first.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=embedded_cache.*revision=${toolkitRevision}`))
+    assert.match(second.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=embedded_cache.*revision=${toolkitRevision}`))
     assert.equal((await readFile(path.join(fixture.root, 'venv-calls'), 'utf8')).split('\n').length, 2)
     assert.equal((await readFile(path.join(fixture.root, 'pip-calls'), 'utf8')).split('\n').length, 2)
     assert.equal(await readFile(path.join(fixture.root, 'dd-apm-calls'), 'utf8'), 'add-repo\n')
-    const gitCalls = await readFile(path.join(fixture.root, 'git-calls'), 'utf8')
-    assert.match(gitCalls, new RegExp(`fetch --depth 1 origin ${toolkitRevision}`))
-    assert.match(gitCalls, new RegExp(`checkout --detach ${toolkitRevision}`))
+    await assertFileMissing(path.join(fixture.root, 'git-calls'))
+    assert.match(first.stdout, /archive_sha256=d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4eabb8ca2d5a3fcf/)
   })
 
   it('falls back to the pinned source when the PATH candidate cannot be validated', async () => {
@@ -210,7 +191,7 @@ describe('Bits dd-apm bootstrap', () => {
     const result = await run(setupScript, fixture.env)
 
     assert.equal(result.code, 0, result.stdout + result.stderr)
-    assert.match(result.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=github_cache.*revision=${toolkitRevision}`))
+    assert.match(result.stdout, new RegExp(`READY\\s+dd_apm_install\\s+version=dev-main source=embedded_cache.*revision=${toolkitRevision}`))
     assert.match(await readFile(path.join(fixture.root, 'pip-calls'), 'utf8'), /pip install/)
   })
 
