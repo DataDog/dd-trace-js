@@ -178,6 +178,10 @@ function registerSyncLoaderHooks (data = {}) {
     load: loadSync,
   })
 
+  // Signal RITM that ESM (including require(esm)) is rewritten in place, so it
+  // does not redirect hooked dual-package `.mjs` entries to their CJS sibling.
+  globalThis[Symbol.for('dd-trace:sync-loader-hooks')] = true
+
   return true
 }
 
