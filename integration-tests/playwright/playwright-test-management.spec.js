@@ -752,9 +752,23 @@ versions.forEach((version) => {
 
         // Playwright itself only started ignoring unknown worker events in 1.39.0.
         if (version === latest || satisfies(version, '>=1.39.0')) {
-          it('does not crash when a serial retry schedules a disabled sibling', async (receiver, run) => {
+          it('skips and reports a disabled sibling added by a serial retry', async (receiver, run) => {
             receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
             receiver.setSettings({ test_management: { enabled: true } })
+
+            const testAssertionsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const disabledTestName = 'disabled serial retry should not run disabled sibling'
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const disabledTests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_NAME] === disabledTestName)
+
+                assert.strictEqual(disabledTests.length, 1)
+                assert.strictEqual(disabledTests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(disabledTests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
             const proc = run(
               './node_modules/.bin/playwright test -c playwright.config.js disabled-serial-test.js --retries=1',
@@ -774,8 +788,10 @@ versions.forEach((version) => {
               once(proc, 'exit'),
               once(proc.stdout, 'end'),
               once(proc.stderr, 'end'),
+              testAssertionsPromise,
             ])
 
+            assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
             assert.strictEqual(exitCode, 0, testOutput)
           })
         }

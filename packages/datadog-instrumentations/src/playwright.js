@@ -105,6 +105,7 @@ const efdStartedOriginalTestKeys = new Set()
 const efdSlowAbortedTests = new Set()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
+const disabledTestIds = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -113,6 +114,8 @@ const EFD_RETRY_COUNT_REQUEST = 'ddEfdRetryCountRequest'
 const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
+const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
+const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 
 function isValidKnownTests (receivedKnownTests) {
@@ -991,6 +994,25 @@ function onDispatcherCreateWorker (dispatcher, worker) {
   const projects = getProjectsFromDispatcher(dispatcher)
   sessionProjects = projects
 
+  if (disabledTestIds.size && !worker[kDdPlaywrightWorkerHostInstrumented] &&
+      typeof worker.runTestGroup === 'function') {
+    Object.defineProperty(worker, kDdPlaywrightWorkerHostInstrumented, { value: true })
+    shimmer.wrap(worker, 'runTestGroup', runTestGroup => function (runPayload) {
+      // Serial retries can restore disabled tests that were filtered from the initial dispatcher groups.
+      let disabledIds
+      for (const { testId } of runPayload.entries) {
+        if (disabledTestIds.has(testId)) {
+          disabledIds ??= []
+          disabledIds.push(testId)
+        }
+      }
+      if (disabledIds) {
+        runPayload._ddDisabledTestIds = disabledIds
+      }
+      return runTestGroup.apply(this, arguments)
+    })
+  }
+
   worker.on('testBegin', ({ testId }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
@@ -1311,6 +1333,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     efdSlowAbortedTests.clear()
     ddPropertiesByTestId.clear()
     ddPropertiesRequestsByTestId.clear()
+    disabledTestIds.clear()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1555,6 +1578,7 @@ function processRootSuite (createRootSuiteReturnValue) {
       if (testProperties.disabled) {
         test._ddIsDisabled = true
         if (!testProperties.attemptToFix) {
+          disabledTestIds.add(test.id)
           test.expectedStatus = 'skipped'
           // setting test.expectedStatus to 'skipped' does not work for every case,
           // so we need to filter out disabled tests in dispatcherRunWrapperNew,
@@ -1798,7 +1822,17 @@ function instrumentWorkerMainMethods (workerMain) {
   let steps = []
   const stepInfoByStepId = {}
 
+  shimmer.wrap(workerMain, 'runTestGroup', runTestGroup => function (runPayload) {
+    const disabledIds = runPayload._ddDisabledTestIds
+    this[kDdPlaywrightDisabledTestIds] = disabledIds ? new Set(disabledIds) : undefined
+    return runTestGroup.apply(this, arguments)
+  })
+
   shimmer.wrap(workerMain, '_runTest', _runTest => async function (test) {
+    if (this[kDdPlaywrightDisabledTestIds]?.has(test.id)) {
+      test._ddIsDisabled = true
+      test.expectedStatus = 'skipped'
+    }
     await waitForEfdRetryCount(test)
     if (shouldSkipEfdRetry(test)) {
       test._ddShouldSkipEfdRetry = true
@@ -2045,9 +2079,9 @@ function generateSummaryWrapper (generateSummary) {
   return function (...args) {
     for (const test of this.suite.allTests()) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
-      const didNotRun = test.outcome() === 'skipped' &&
-        (!test.results.length || test.expectedStatus !== 'skipped')
-      if (didNotRun && !testsReportedInGenerateSummary.has(test)) {
+      const shouldReportAsSkipped = test.outcome() === 'skipped' &&
+        (test._ddIsDisabled || !test.results.length || test.expectedStatus !== 'skipped')
+      if (shouldReportAsSkipped && !testsReportedInGenerateSummary.has(test)) {
         testsReportedInGenerateSummary.add(test)
         const {
           _requireFile: testSuiteAbsolutePath,

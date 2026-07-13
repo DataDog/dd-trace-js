@@ -7,7 +7,7 @@ test.describe.serial('disabled serial retry', () => {
     expect(test.info().retry).toBe(1)
   })
 
-  test('should not run disabled sibling', async () => {
-    expect(true).toBe(true)
+  test('should not run disabled sibling', () => {
+    throw new Error('SHOULD NOT BE EXECUTED')
   })
 })
