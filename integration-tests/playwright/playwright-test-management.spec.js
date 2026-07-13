@@ -82,6 +82,15 @@ const DISABLED_MANAGEMENT_TESTS = {
           },
         },
       },
+      'disabled-serial-test.js': {
+        tests: {
+          'disabled serial retry should not run disabled sibling': {
+            properties: {
+              disabled: true,
+            },
+          },
+        },
+      },
     },
   },
 }
@@ -740,6 +749,36 @@ versions.forEach((version) => {
           receiver.setSettings({ test_management: { enabled: true } })
           await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
         })
+
+        // Playwright itself only started ignoring unknown worker events in 1.39.0.
+        if (version === latest || satisfies(version, '>=1.39.0')) {
+          it('does not crash when a serial retry schedules a disabled sibling', async (receiver, run) => {
+            receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            const proc = run(
+              './node_modules/.bin/playwright test -c playwright.config.js disabled-serial-test.js --retries=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                },
+              }
+            )
+            let testOutput = ''
+            proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const [[exitCode]] = await Promise.all([
+              once(proc, 'exit'),
+              once(proc.stdout, 'end'),
+              once(proc.stderr, 'end'),
+            ])
+
+            assert.strictEqual(exitCode, 0, testOutput)
+          })
+        }
 
         it('fails if disable is not enabled', async (receiver) => {
           receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
