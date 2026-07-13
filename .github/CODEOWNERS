@@ -222,6 +222,7 @@
 /benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/sampling/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/span-format/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/span-retention/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
 /benchmark/sirun/test-optimization/ @DataDog/ci-app-libraries

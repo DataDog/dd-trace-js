@@ -8,16 +8,23 @@ const kPendingStoreRetirements = Symbol('dd-trace.pending-store-retirements')
 const pendingStoreSet = new WeakSet()
 const retiredSpans = new WeakMap()
 
+/** @typedef {ReturnType<typeof createPropagationState>} PropagationState */
+
 class RetiredSpan {
+  /** @type {import('./opentracing/span_context') | undefined} */
   #context
+  /** @type {PropagationState | undefined} */
+  #state
   #tracer
 
   /**
-   * @param {import('./opentracing/span_context')} context
+   * @param {import('./opentracing/span_context') | undefined} context
    * @param {import('./opentracing/tracer')} tracer
+   * @param {PropagationState} [state]
    */
-  constructor (context, tracer) {
+  constructor (context, tracer, state) {
     this.#context = context
+    this.#state = state
     this.#tracer = tracer
   }
 
@@ -25,6 +32,10 @@ class RetiredSpan {
    * @returns {import('./opentracing/span_context')}
    */
   context () {
+    if (!this.#context) {
+      this.#context = createPropagationContext(this.#state)
+      this.#state = undefined
+    }
     return this.#context
   }
 
@@ -49,7 +60,7 @@ class RetiredSpan {
    * @returns {RetiredSpan}
    */
   setBaggageItem (key, value) {
-    this.#context._baggageItems[key] = value
+    this.#baggageItems()[key] = value
     return this
   }
 
@@ -58,25 +69,29 @@ class RetiredSpan {
    * @returns {string | undefined}
    */
   getBaggageItem (key) {
-    return this.#context._baggageItems[key]
+    return this.#baggageItems()[key]
   }
 
   /**
    * @returns {string}
    */
   getAllBaggageItems () {
-    return JSON.stringify(this.#context._baggageItems)
+    return JSON.stringify(this.#baggageItems())
   }
 
   /**
    * @param {string} key
    */
   removeBaggageItem (key) {
-    delete this.#context._baggageItems[key]
+    delete this.#baggageItems()[key]
   }
 
   removeAllBaggageItems () {
-    this.#context._baggageItems = {}
+    if (this.#context) {
+      this.#context._baggageItems = {}
+    } else {
+      this.#state.baggageItems = {}
+    }
   }
 
   /**
@@ -137,11 +152,18 @@ class RetiredSpan {
    * @param {number} [finishTime]
    */
   finish (finishTime) {}
+
+  /**
+   * @returns {Record<string, string>}
+   */
+  #baggageItems () {
+    return this.#context?._baggageItems ?? this.#state.baggageItems
+  }
 }
 
 class StoreRetirement {
-  #context
   #retired = false
+  #retiredSpan
   #sourceContext
   #stores = []
 
@@ -165,16 +187,16 @@ class StoreRetirement {
 
   /**
    * @param {import('./opentracing/span')} span
-   * @returns {import('./opentracing/span_context')}
+   * @returns {RetiredSpan}
    */
-  context (span) {
-    if (!this.#context) {
-      this.#context = this.#sourceContext
-        ? createPropagationContext(this.#sourceContext)
-        : span.context()
+  retiredSpan (span) {
+    if (!this.#retiredSpan) {
+      this.#retiredSpan = this.#sourceContext
+        ? new RetiredSpan(undefined, span.tracer(), createPropagationState(this.#sourceContext))
+        : getRetiredSpan(span.context(), span.tracer())
       this.#sourceContext = undefined
     }
-    return this.#context
+    return this.#retiredSpan
   }
 
   retire () {
@@ -191,30 +213,64 @@ class StoreRetirement {
 
 /**
  * @param {import('./opentracing/span_context')} context
- * @returns {import('./opentracing/span_context')}
  */
-function createPropagationContext (context) {
+function createPropagationState (context) {
   const trace = context._trace
-  return new SpanContext({
+  let optional
+  if (
+    context._traceparent !== undefined ||
+    context._tracestate !== undefined ||
+    trace.origin !== undefined ||
+    trace.record !== undefined ||
+    trace.isRecording !== undefined
+  ) {
+    optional = {
+      traceparent: context._traceparent,
+      tracestate: context._tracestate,
+      traceOrigin: trace.origin,
+      traceRecord: trace.record,
+      traceIsRecording: trace.isRecording,
+    }
+  }
+  return {
     traceId: context._traceId,
     spanId: context._spanId,
     parentId: context._parentId,
-    isRemote: false,
-    isFinished: true,
     name: context._name,
     sampling: context._sampling,
     baggageItems: context._baggageItems,
-    traceparent: context._traceparent,
-    tracestate: context._tracestate,
+    traceTags: trace.tags,
+    traceTicks: trace.ticks,
+    traceStartTime: trace.startTime,
+    optional,
+  }
+}
+
+/**
+ * @param {PropagationState} state
+ * @returns {import('./opentracing/span_context')}
+ */
+function createPropagationContext (state) {
+  return new SpanContext({
+    traceId: state.traceId,
+    spanId: state.spanId,
+    parentId: state.parentId,
+    isRemote: false,
+    isFinished: true,
+    name: state.name,
+    sampling: state.sampling,
+    baggageItems: state.baggageItems,
+    traceparent: state.optional?.traceparent,
+    tracestate: state.optional?.tracestate,
     trace: {
       started: [],
       finished: [],
-      tags: trace.tags,
-      ticks: trace.ticks,
-      startTime: trace.startTime,
-      origin: trace.origin,
-      record: trace.record,
-      isRecording: trace.isRecording,
+      tags: state.traceTags,
+      ticks: state.traceTicks,
+      startTime: state.traceStartTime,
+      origin: state.optional?.traceOrigin,
+      record: state.optional?.traceRecord,
+      isRecording: state.optional?.traceIsRecording,
     },
   })
 }
@@ -306,8 +362,7 @@ function retireStoreNow (store, span) {
   if (store.span !== span) return
 
   const spanContext = span.context()
-  const context = store[kStoreRetirement]?.context(span) ?? spanContext
-  store.span = getRetiredSpan(context, span.tracer())
+  store.span = store[kStoreRetirement]?.retiredSpan(span) ?? getRetiredSpan(spanContext, span.tracer())
   store[kStoreRetirement] = undefined
   pendingStoreSet.delete(store)
 

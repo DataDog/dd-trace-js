@@ -1,0 +1,40 @@
+{
+  "name": "span-retention",
+  "run": "node --expose-gc index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --expose-gc index.js\"",
+  "iterations": 8,
+  "instructions": true,
+  "cachegrind": false,
+  "variants": {
+    "async-resource": {
+      "env": {
+        "BATCHES": "5",
+        "MIDDLEWARE_COUNT": "20",
+        "OPERATIONS": "15000",
+        "REQUESTS_PER_BATCH": "3000",
+        "RETAINER": "async-resource",
+        "WARMUP_REQUESTS": "250"
+      }
+    },
+    "long-timer": {
+      "env": {
+        "BATCHES": "5",
+        "MIDDLEWARE_COUNT": "20",
+        "OPERATIONS": "15000",
+        "REQUESTS_PER_BATCH": "3000",
+        "RETAINER": "long-timer",
+        "WARMUP_REQUESTS": "250"
+      }
+    },
+    "request-only": {
+      "env": {
+        "BATCHES": "5",
+        "MIDDLEWARE_COUNT": "20",
+        "OPERATIONS": "15000",
+        "REQUESTS_PER_BATCH": "3000",
+        "RETAINER": "request-only",
+        "WARMUP_REQUESTS": "250"
+      }
+    }
+  }
+}
