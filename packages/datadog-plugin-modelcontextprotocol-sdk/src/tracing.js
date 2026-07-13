@@ -94,7 +94,7 @@ class McpReadResourcePlugin extends McpPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_readResource'
   static spanName = 'mcp.resource.read'
   static kind = 'client'
-  getResource (ctx) { return ctx.arguments?.[0]?.uri }
+  getResource () { return 'resources/read' }
 }
 
 class McpListPromptsPlugin extends McpPlugin {
@@ -110,7 +110,7 @@ class McpGetPromptPlugin extends McpPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_getPrompt'
   static spanName = 'mcp.prompt.get'
   static kind = 'client'
-  getResource (ctx) { return ctx.arguments?.[0]?.name }
+  getResource () { return 'prompts/get' }
 }
 
 class McpServerRequestPlugin extends McpPlugin {

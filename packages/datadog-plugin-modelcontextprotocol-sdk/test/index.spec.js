@@ -189,11 +189,11 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   })
 
   describe('Client.readResource() - mcp.resource.read', () => {
-    it('should generate span with resource uri as resource tag', async () => {
+    it('should generate span with operation as resource tag', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.resource.read',
         type: 'mcp',
-        resource: 'file:///test-resource.txt',
+        resource: 'resources/read',
         meta: { component: 'modelcontextprotocol_read_resource', 'span.kind': 'client' },
       })
       await testSetup.clientReadResource()
@@ -215,11 +215,11 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   })
 
   describe('Client.getPrompt() - mcp.prompt.get', () => {
-    it('should generate span with prompt name as resource tag', async () => {
+    it('should generate span with operation as resource tag', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.prompt.get',
         type: 'mcp',
-        resource: 'test-prompt',
+        resource: 'prompts/get',
         meta: { component: 'modelcontextprotocol_get_prompt', 'span.kind': 'client' },
       })
       await testSetup.clientGetPrompt()
