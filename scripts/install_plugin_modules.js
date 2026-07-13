@@ -22,6 +22,14 @@ const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
 
+const versionsBunConfig = readFileSync(join(__dirname, '..', 'versions', 'bunfig.toml'), 'utf8')
+const minimumReleaseAgeMatch = /^minimumReleaseAge = (\d+)$/m.exec(versionsBunConfig)
+// The tracked config is the policy source and is validated by the migration regression test.
+/* istanbul ignore if */
+/* c8 ignore next */
+if (!minimumReleaseAgeMatch) throw new Error('versions/bunfig.toml must define minimumReleaseAge')
+const minimumReleaseTimestamp = Date.now() - Number(minimumReleaseAgeMatch[1]) * 1000
+
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
 // descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
@@ -303,14 +311,15 @@ async function patchPeerDependencies ({ folder, externalName }) {
               ? declared.split('||')[0].trim()
               // Only one version available so use that.
               : declared
-          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, range)
+          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, getCappedRange(name, range))
         }
         break
       }
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      versionPkgJson.dependencies[name] = version || latests[name]
+      const range = getCappedRange(name, version || latests[name])
+      versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, range)
     }
   }
 
@@ -569,7 +578,7 @@ function collectInstalledMajors (dotBun) {
 }
 
 /**
- * Resolve a semver range to the highest published version satisfying it.
+ * Resolve a semver range to the highest old-enough published version satisfying it.
  *
  * `bun pm view <pkg>@<range> version` returns the lowest matching version,
  * not the highest — the opposite of what the previous package manager picked
@@ -578,8 +587,9 @@ function collectInstalledMajors (dotBun) {
  * into `versions/pino@5.0.0/` (where pino's `prettyPrint: true` then
  * deadlocks the test process) and `@langchain/core@0.1.x` into the
  * langchain sandbox (where `coerceMessageLikeToMessage` rejects the
- * JSON-message regression test). Pull the full version list and use
- * `semver.maxSatisfying` so resolution matches the previous tool's choice.
+ * JSON-message regression test). Publication timestamps also have to be
+ * filtered here: pinning the newest version before `bun install` would make
+ * Bun reject the exact pin instead of selecting the newest old-enough release.
  *
  * @param {string} name
  * @param {string} range
@@ -590,28 +600,41 @@ function resolveLatestSatisfying (name, range) {
   const cacheKey = `${name}@${range}`
   const cached = resolvedRangeCache.get(cacheKey)
   if (cached) return cached
-  let versions
+  let publishTimes
   try {
-    const stdout = execFileSync('bun', ['pm', 'view', name, 'versions', '--json'], {
+    const stdout = execFileSync('bun', ['pm', 'view', name, 'time', '--json'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim()
-    versions = JSON.parse(stdout)
+    publishTimes = JSON.parse(stdout)
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
     return range
   }
-  if (!Array.isArray(versions) || versions.length === 0) {
+  // npm registry package metadata always exposes the time map.
+  /* istanbul ignore if */
+  /* c8 ignore next 6 */
+  if (!publishTimes || typeof publishTimes !== 'object') {
     // eslint-disable-next-line no-console
-    console.warn(`bun pm view returned no versions for ${name}: ${JSON.stringify(versions)}; ` +
+    console.warn(`bun pm view returned no publication times for ${name}: ${JSON.stringify(publishTimes)}; ` +
       'deferring to install-time resolution')
     return range
   }
+  const versions = []
+  for (const [version, publishedAt] of Object.entries(publishTimes)) {
+    const publishedTimestamp = Date.parse(publishedAt)
+    if (!semver.valid(version) || !Number.isFinite(publishedTimestamp) ||
+      publishedTimestamp > minimumReleaseTimestamp) continue
+    versions.push(version)
+  }
   const resolved = semver.maxSatisfying(versions, range, { includePrerelease: false })
+  // Whether a supported range has no old-enough release depends on live registry state.
+  /* istanbul ignore if */
+  /* c8 ignore next 5 */
   if (!resolved) {
     // eslint-disable-next-line no-console
-    console.warn(`no published ${name} version satisfies ${range}; deferring to install-time resolution`)
+    console.warn(`no old-enough ${name} version satisfies ${range}; deferring to install-time resolution`)
     return range
   }
   resolvedRangeCache.set(cacheKey, resolved)
