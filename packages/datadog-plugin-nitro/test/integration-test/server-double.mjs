@@ -8,6 +8,7 @@ import { tracingPlugin } from 'h3/tracing'
 // only once, producing a single span per request (no double instrumentation).
 const app = new H3()
 app.register(tracingPlugin())
+app.use(() => {})
 app.get('/hello', () => ({ ok: true }))
 
 const server = http.createServer(toNodeHandler(app))

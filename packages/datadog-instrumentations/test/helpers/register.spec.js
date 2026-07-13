@@ -82,4 +82,20 @@ describe('register', () => {
     sinon.assert.notCalled(hooksMock['@confluentinc/kafka-javascript'].fn)
     sinon.assert.notCalled(hooksMock['mongodb-core'].fn)
   })
+
+  it('should disable h3 hooks when nitro is disabled by DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
+    hooksMock = {
+      h3: {
+        fn: sinon.stub().returns('hooked'),
+      },
+    }
+
+    loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: 'nitro' })
+
+    assert.strictEqual(HookMock.callCount, 0)
+
+    runHookCallbacks(HookMock)
+
+    sinon.assert.notCalled(hooksMock.h3.fn)
+  })
 })

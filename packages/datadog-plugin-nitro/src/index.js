@@ -1,6 +1,10 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
+const web = require('../../dd-trace/src/plugins/util/web')
+
+const legacyStorage = storage('legacy')
 
 class NitroPlugin extends ServerPlugin {
   static id = 'nitro'
@@ -8,20 +12,11 @@ class NitroPlugin extends ServerPlugin {
   static prefix = 'tracing:h3.request'
 
   bindStart (ctx) {
-    // h3's tracingPlugin wraps both route handlers (type='route') and middleware
-    // (type='middleware') with the same tracingChannel. Only the matched route
-    // produces a per-request HTTP server span; middleware events would create
-    // duplicate spans per request.
-    if (ctx?.type !== 'route') return ctx.currentStore
+    if (!this.#isRequest(ctx)) return legacyStorage.getStore()
 
     const meta = this.getTags(ctx)
     const resource = this.getResource(ctx)
-    // event.req.headers is a Web Headers object in h3 v2; convert to plain object for extract
-    const rawHeaders = ctx?.event?.req?.headers
-    // Check for entries method instead of instanceof Headers for Node.js 18 compatibility
-    const isHeadersObject = rawHeaders && typeof rawHeaders.entries === 'function'
-    const headers = isHeadersObject ? Object.fromEntries(rawHeaders) : rawHeaders
-    const childOf = headers ? this.tracer.extract('http_headers', headers) || undefined : undefined
+    const childOf = this.activeSpan ? undefined : this.#extractChildOf(ctx)
 
     this.startSpan(this.operationName(), {
       type: 'web',
@@ -29,6 +24,7 @@ class NitroPlugin extends ServerPlugin {
       meta,
       resource,
       childOf,
+      service: this.config.service || this.serviceName(),
     }, ctx)
 
     return ctx.currentStore
@@ -66,29 +62,53 @@ class NitroPlugin extends ServerPlugin {
   }
 
   #getRoute (event) {
-    return event?.context?.matchedRoute?.route || event?.url?.pathname || event?.path
+    return event?.context?.matchedRoute?.route
+  }
+
+  #extractChildOf (ctx) {
+    // event.req.headers is a Web Headers object in h3 v2; convert to plain object for extract.
+    const rawHeaders = ctx?.event?.req?.headers
+    // Check for entries method instead of instanceof Headers for Node.js 18 compatibility.
+    const isHeadersObject = rawHeaders && typeof rawHeaders.entries === 'function'
+    const headers = isHeadersObject ? Object.fromEntries(rawHeaders) : rawHeaders
+
+    return headers ? this.tracer.extract('http_headers', headers) || undefined : undefined
+  }
+
+  #getStatus (ctx) {
+    const result = ctx?.result
+    if (result && typeof result === 'object' && typeof result.status === 'number') return result.status
+
+    if (ctx?.event?.res?.status !== undefined) return ctx.event.res.status
+    if (ctx?.error) return ctx.error.status ?? ctx.error.statusCode ?? 500
+
+    return 200
   }
 
   #applyResponseTags (ctx) {
     const span = ctx?.currentStore?.span
     if (!span) return
 
-    // h3 v2 leaves event.res.status undefined for default responses (status is computed
-    // inside prepareResponse() after the handler resolves). Resolve from the handler result,
-    // an explicit setResponseStatus() call, or fall back to 200 / 500.
-    let status
+    const resource = this.getResource(ctx)
+    if (resource) span.setTag('resource.name', resource)
+
+    const route = this.#getRoute(ctx?.event)
+    if (route) span.setTag('http.route', route)
+
+    const status = this.#getStatus(ctx)
+    span.setTag('http.status_code', String(status))
+
     if (ctx?.error) {
-      status = ctx.error.status ?? ctx.error.statusCode ?? 500
-    } else if (ctx?.result?.status === undefined) {
-      status = ctx?.event?.res?.status ?? 200
-    } else {
-      status = ctx.result.status
+      span.setTag('error', ctx.error)
+    } else if (!this.config.validateStatus(status)) {
+      span.setTag('error', true)
     }
 
-    span.setTag('http.status_code', String(status))
+    this.config.hooks.request(span, ctx.event?.req, ctx.result)
   }
 
   end (ctx) {
+    if (!this.#isRequest(ctx)) return
     this.#applyResponseTags(ctx)
     this.finish(ctx)
   }
@@ -100,6 +120,7 @@ class NitroPlugin extends ServerPlugin {
   }
 
   error (ctx) {
+    if (!this.#isRequest(ctx)) return
     const span = ctx?.currentStore?.span
     const error = ctx?.error
     if (span && error) {
@@ -108,8 +129,16 @@ class NitroPlugin extends ServerPlugin {
   }
 
   finish (ctx) {
-    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
+    if (!this.#isRequest(ctx) || (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error'))) return
     super.finish(ctx)
+  }
+
+  configure (config) {
+    return super.configure(web.normalizeConfig(config))
+  }
+
+  #isRequest (ctx) {
+    return ctx?.type === 'request'
   }
 }
 

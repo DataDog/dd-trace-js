@@ -18,16 +18,20 @@ const {
  *
  * @param {string} url - The URL to request.
  * @param {Record<string, string>} [headers] - Optional request headers.
- * @returns {Promise<void>}
+ * @returns {Promise<{ statusCode: number | undefined }>}
  */
 function httpGet (url, headers = {}) {
   return new Promise((resolve, reject) => {
     http.get(url, { headers }, res => {
       res.resume()
-      res.once('end', resolve)
+      res.once('end', () => resolve({ statusCode: res.statusCode }))
       res.once('error', reject)
     }).once('error', reject)
   })
+}
+
+function findNitroSpan (payload) {
+  return payload.flat().find(s => s.name === 'nitro.server.request')
 }
 
 // h3 v2 is ESM-only. We test by spawning a separate Node process that imports h3
@@ -62,7 +66,7 @@ describe('nitro ESM', () => {
       assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
       assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
-      const span = payload.flat().find(s => s.name === 'nitro.server.request')
+      const span = findNitroSpan(payload)
       assert.ok(span, `expected a 'nitro.server.request' span; got ${inspect(payload.flat().map(s => s.name))}`)
       assert.strictEqual(span.resource, 'GET /hello')
       assert.strictEqual(span.type, 'web')
@@ -79,7 +83,7 @@ describe('nitro ESM', () => {
   it('captures http.url with the request path', async () => {
     await spawnServer()
     const assertion = agent.assertMessageReceived(({ payload }) => {
-      const span = payload.flat().find(s => s.name === 'nitro.server.request')
+      const span = findNitroSpan(payload)
       assert.ok(span, 'expected a nitro.server.request span')
       assert.strictEqual(span.meta['http.method'], 'GET')
       assert.ok(span.meta['http.url']?.includes('/hello'),
@@ -92,7 +96,7 @@ describe('nitro ESM', () => {
   it('captures the route pattern (not the actual path) for parameterized routes', async () => {
     await spawnServer()
     const assertion = agent.assertMessageReceived(({ payload }) => {
-      const span = payload.flat().find(s => s.name === 'nitro.server.request')
+      const span = findNitroSpan(payload)
       assert.ok(span, 'expected a nitro.server.request span')
       assert.strictEqual(span.resource, 'GET /users/:id')
       assert.strictEqual(span.meta['http.route'], '/users/:id')
@@ -102,13 +106,30 @@ describe('nitro ESM', () => {
     return assertion
   }).timeout(30000)
 
+  it('creates a nitro.server.request span for unmatched requests', async () => {
+    await spawnServer()
+    const assertion = agent.assertMessageReceived(({ payload }) => {
+      const span = findNitroSpan(payload)
+      assert.ok(span, 'expected a nitro.server.request span')
+      assert.strictEqual(span.resource, 'GET')
+      assert.strictEqual(span.meta['http.method'], 'GET')
+      assert.strictEqual(span.meta['http.route'], undefined)
+      assert.strictEqual(span.meta['http.status_code'], '404')
+      assert.strictEqual(span.error, 0)
+    })
+    const res = await httpGet(`${proc.url}/missing`)
+    assert.strictEqual(res.statusCode, 404)
+    return assertion
+  }).timeout(30000)
+
   it('propagates distributed trace context from incoming headers', async () => {
     await spawnServer()
     const assertion = agent.assertMessageReceived(({ payload }) => {
-      const span = payload.flat().find(s => s.name === 'nitro.server.request')
+      const span = findNitroSpan(payload)
       assert.ok(span, 'expected a nitro.server.request span')
       assert.ok(span.parent_id && span.parent_id.toString() !== '0',
         'expected non-zero parent_id from injected headers')
+      assert.notStrictEqual(span.parent_id.toString(), '9876543210')
     })
     await httpGet(`${proc.url}/hello`, {
       'x-datadog-trace-id': '1234567890',
@@ -121,7 +142,7 @@ describe('nitro ESM', () => {
   it('generates a span with error tags on the error path', async () => {
     await spawnServer()
     const assertion = agent.assertMessageReceived(({ payload }) => {
-      const span = payload.flat().find(s => s.name === 'nitro.server.request')
+      const span = findNitroSpan(payload)
       assert.ok(span, 'expected a nitro.server.request span')
       assert.strictEqual(span.error, 1)
       assert.strictEqual(span.meta.component, 'nitro')
@@ -130,6 +151,52 @@ describe('nitro ESM', () => {
       assert.strictEqual(span.meta['http.status_code'], '500')
     })
     await httpGet(`${proc.url}/error`)
+    return assertion
+  }).timeout(30000)
+
+  it('does not use JSON body status fields as the HTTP status code', async () => {
+    await spawnServer()
+    const assertion = agent.assertMessageReceived(({ payload }) => {
+      const span = findNitroSpan(payload)
+      assert.ok(span, 'expected a nitro.server.request span')
+      assert.strictEqual(span.resource, 'GET /status-body')
+      assert.strictEqual(span.meta['http.route'], '/status-body')
+      assert.strictEqual(span.meta['http.status_code'], '200')
+      assert.strictEqual(span.error, 0)
+    })
+    const res = await httpGet(`${proc.url}/status-body`)
+    assert.strictEqual(res.statusCode, 200)
+    return assertion
+  }).timeout(30000)
+
+  it('marks returned Response objects with failing statuses as errors', async () => {
+    await spawnServer()
+    const assertion = agent.assertMessageReceived(({ payload }) => {
+      const span = findNitroSpan(payload)
+      assert.ok(span, 'expected a nitro.server.request span')
+      assert.strictEqual(span.resource, 'GET /response-error')
+      assert.strictEqual(span.meta['http.route'], '/response-error')
+      assert.strictEqual(span.meta['http.status_code'], '503')
+      assert.strictEqual(span.error, 1)
+    })
+    const res = await httpGet(`${proc.url}/response-error`)
+    assert.strictEqual(res.statusCode, 503)
+    return assertion
+  }).timeout(30000)
+
+  it('applies nitro plugin config before finishing spans', async () => {
+    await spawnServer('server-config.mjs')
+    const assertion = agent.assertMessageReceived(({ payload }) => {
+      const span = findNitroSpan(payload)
+      assert.ok(span, 'expected a nitro.server.request span')
+      assert.strictEqual(span.service, 'configured-nitro')
+      assert.strictEqual(span.resource, 'GET /response-error')
+      assert.strictEqual(span.meta['http.status_code'], '503')
+      assert.strictEqual(span.meta['nitro.request_hook'], 'true')
+      assert.strictEqual(span.error, 0)
+    })
+    const res = await httpGet(`${proc.url}/response-error`)
+    assert.strictEqual(res.statusCode, 503)
     return assertion
   }).timeout(30000)
 

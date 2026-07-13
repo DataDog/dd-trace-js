@@ -4,39 +4,100 @@ const { tracingChannel } = require('dc-polyfill')
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-// h3 has its own h3.request tracing plugin, but it is ESM-only and replaces
-// route objects after rou3 has stored them. Register here and mutate handlers in
-// place so h3's route table and dispatch trie stay aligned.
 const requestChannel = tracingChannel('h3.request')
+const requestContexts = new WeakMap()
 
 function wrapHandler (handler) {
   if (typeof handler !== 'function' || handler.__dd_traced__ || handler.__traced__) return handler
 
-  // Match h3's plugin: sync throws become promise rejections reported by tracePromise.
-  const wrapped = (...args) => requestChannel.tracePromise(
-    async () => await handler(...args),
-    { event: args[0], type: 'route' }
-  )
+  const wrapped = function (event) {
+    if (!requestChannel.start.hasSubscribers) return handler.apply(this, arguments)
+
+    const ctx = { event, type: 'request' }
+    requestContexts.set(event, ctx)
+
+    return requestChannel.start.runStores(ctx, () => {
+      try {
+        const result = handler.apply(this, arguments)
+        if (result && typeof result.then === 'function') {
+          return result.catch(error => {
+            ctx.error = error
+            requestChannel.error.publish(ctx)
+            throw error
+          })
+        }
+        return result
+      } catch (error) {
+        ctx.error = error
+        requestChannel.error.publish(ctx)
+        throw error
+      }
+    })
+  }
   wrapped.__dd_traced__ = true
   wrapped.__traced__ = true
 
   return wrapped
 }
 
-function ddTracingPlugin (app) {
-  for (const route of app['~routes'] ?? []) {
-    route.handler = wrapHandler(route.handler)
-  }
+function wrapOnResponse (app) {
+  const originalOnResponse = app.config.onResponse
+  if (originalOnResponse?.__dd_traced__) return
 
-  if (typeof app.on === 'function') {
-    const originalOn = app.on
-    app.on = function (...args) {
-      const instance = originalOn.apply(this, args)
-      const routes = instance['~routes']
-      const lastRoute = routes?.[routes.length - 1]
-      if (lastRoute) lastRoute.handler = wrapHandler(lastRoute.handler)
+  app.config.onResponse = function (response, event) {
+    const ctx = requestContexts.get(event)
+
+    if (!ctx) {
+      return originalOnResponse?.apply(this, arguments)
+    }
+
+    const finish = () => {
+      ctx.result = response
+      requestChannel.asyncStart.publish(ctx)
+      requestChannel.asyncEnd.publish(ctx)
+      requestContexts.delete(event)
+    }
+    const fail = error => {
+      ctx.error = error
+      requestChannel.error.publish(ctx)
+    }
+
+    try {
+      const result = originalOnResponse?.apply(this, arguments)
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          finish()
+          return value
+        }, error => {
+          fail(error)
+          finish()
+          throw error
+        })
+      }
+      finish()
+      return result
+    } catch (error) {
+      fail(error)
+      finish()
+      throw error
+    }
+  }
+  app.config.onResponse.__dd_traced__ = true
+}
+
+function ddTracingPlugin (app) {
+  app.handler = wrapHandler(app.handler)
+  wrapOnResponse(app)
+
+  if (typeof app.register === 'function' && !app.register.__dd_traced__) {
+    const originalRegister = app.register
+    app.register = function (...args) {
+      const instance = originalRegister.apply(this, args)
+      instance.handler = wrapHandler(instance.handler)
+      wrapOnResponse(instance)
       return instance
     }
+    app.register.__dd_traced__ = true
   }
 }
 

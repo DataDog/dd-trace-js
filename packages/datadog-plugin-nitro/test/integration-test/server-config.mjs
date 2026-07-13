@@ -1,15 +1,20 @@
-import 'dd-trace/init.js'
+import tracer from 'dd-trace'
 import http from 'node:http'
 import { H3, toNodeHandler } from 'h3'
 
-const app = new H3()
-app.get('/hello', () => ({ ok: true }))
-app.get('/users/:id', event => ({ id: event.context.params.id }))
-app.get('/status-body', () => ({ status: 123, data: 'ok' }))
-app.get('/response-error', () => new Response('bad', { status: 503 }))
-app.get('/error', () => {
-  throw new Error('nitro test boom')
+tracer.init()
+tracer.use('nitro', {
+  service: 'configured-nitro',
+  validateStatus: status => status < 600,
+  hooks: {
+    request (span) {
+      span.setTag('nitro.request_hook', 'true')
+    },
+  },
 })
+
+const app = new H3()
+app.get('/response-error', () => new Response('bad', { status: 503 }))
 
 const server = http.createServer(toNodeHandler(app))
 // Bind on all interfaces (no host) so the test client can reach it whether
