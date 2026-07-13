@@ -470,6 +470,8 @@ async function assertWorkspaces () {
     overrides: {
       collections: '^5.0.0',
       '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
+      // limitd-protocol@2.1.1 uses an unprefixed GitHub shorthand that Bun cannot resolve.
+      hashlru: 'github:jfromaniello/hashlru#return_value_on_set',
       'zod-to-json-schema': '<3.25.0',
     },
     trustedDependencies: [...trustedDependencies].sort(),
