@@ -40,16 +40,11 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
-# Install bun at the script level so subsequent `npm run services` /
-# `node ./scripts/install_plugin_modules.js` invocations from inside the
-# benchmark loop find it on `PATH` too. Doing the install inside a subshell
-# leaks the `export` and the benchmark process group loses access to bun
-# the moment the subshell exits. The bun installer pipes a `.zip` through
-# `unzip`, so install that first when the image lacks it (the
-# benchmarking-platform `ubuntu:22.04` base does not ship `unzip`).
-if ! command -v bun >/dev/null 2>&1; then
-  command -v unzip >/dev/null 2>&1 || (apt-get update >/dev/null && apt-get install -y --no-install-recommends unzip)
-  curl -fsSL https://bun.sh/install | bash || (sleep 60 && curl -fsSL https://bun.sh/install | bash)
+# Keep bun outside nvm's per-Node global prefix so later `nvm use` calls do not
+# remove it from PATH. The exact version comes from the root manifest.
+if [[ ! -x "$HOME/.bun/bin/bun" ]]; then
+  BUN_VERSION=$(node -p "require('../../package.json').devDependencies.bun")
+  npm install --global --prefix "$HOME/.bun" --no-audit --no-fund "bun@${BUN_VERSION}"
 fi
 export PATH="$HOME/.bun/bin:$PATH"
 
