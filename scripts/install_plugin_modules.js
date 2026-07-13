@@ -311,14 +311,14 @@ async function patchPeerDependencies ({ folder, externalName }) {
               ? declared.split('||')[0].trim()
               // Only one version available so use that.
               : declared
-          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, getCappedRange(name, range))
+          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, capKnownRange(name, range))
         }
         break
       }
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      const range = getCappedRange(name, version || latests[name])
+      const range = capKnownRange(name, version || latests[name])
       versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, range)
     }
   }
@@ -578,11 +578,20 @@ function collectInstalledMajors (dotBun) {
 }
 
 /**
+ * @param {string} name
+ * @param {string} range
+ * @returns {string}
+ */
+function capKnownRange (name, range) {
+  return latests[name] === undefined ? range : getCappedRange(name, range)
+}
+
+/**
  * Resolve a semver range to the highest old-enough published version satisfying it.
  *
- * `bun pm view <pkg>@<range> version` returns the lowest matching version,
- * not the highest — the opposite of what the previous package manager picked
- * and what every plugin regression test relied on. Without taking the highest
+ * Bun can select the lowest matching version instead of the highest that the
+ * previous package manager picked and every plugin regression test relied on.
+ * Without taking the highest
  * we install ancient transitives that, for instance, ship `pino-pretty@1.0.1`
  * into `versions/pino@5.0.0/` (where pino's `prettyPrint: true` then
  * deadlocks the test process) and `@langchain/core@0.1.x` into the
@@ -600,13 +609,18 @@ function resolveLatestSatisfying (name, range) {
   const cacheKey = `${name}@${range}`
   const cached = resolvedRangeCache.get(cacheKey)
   if (cached) return cached
-  let publishTimes
+  let metadata
   try {
-    const stdout = execFileSync('bun', ['pm', 'view', name, 'time', '--json'], {
+    const options = {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim()
-    publishTimes = JSON.parse(stdout)
+    }
+    const versions = execFileSync('bun', ['pm', 'view', name, 'versions', '--json'], options).trim()
+    const time = execFileSync('bun', ['pm', 'view', name, 'time', '--json'], options).trim()
+    metadata = {
+      versions: JSON.parse(versions),
+      time: JSON.parse(time),
+    }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
@@ -615,14 +629,15 @@ function resolveLatestSatisfying (name, range) {
   // npm registry package metadata always exposes the time map.
   /* istanbul ignore if */
   /* c8 ignore next 6 */
-  if (!publishTimes || typeof publishTimes !== 'object') {
+  if (!Array.isArray(metadata?.versions) || !metadata.time || typeof metadata.time !== 'object') {
     // eslint-disable-next-line no-console
-    console.warn(`bun pm view returned no publication times for ${name}: ${JSON.stringify(publishTimes)}; ` +
+    console.warn(`bun pm view returned incomplete publication metadata for ${name}: ${JSON.stringify(metadata)}; ` +
       'deferring to install-time resolution')
     return range
   }
   const versions = []
-  for (const [version, publishedAt] of Object.entries(publishTimes)) {
+  for (const version of metadata.versions) {
+    const publishedAt = metadata.time[version]
     const publishedTimestamp = Date.parse(publishedAt)
     if (!semver.valid(version) || !Number.isFinite(publishedTimestamp) ||
       publishedTimestamp > minimumReleaseTimestamp) continue
