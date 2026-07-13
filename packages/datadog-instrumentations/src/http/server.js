@@ -24,9 +24,18 @@ addHook({ name: 'http' }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
   shimmer.wrap(http.ServerResponse.prototype, 'setHeader', wrapSetHeader)
   shimmer.wrap(http.ServerResponse.prototype, 'removeHeader', wrapAppendOrRemoveHeader)
+  if (http.ServerResponse.prototype.writeContinue) {
+    shimmer.wrap(http.ServerResponse.prototype, 'writeContinue', wrapInformationalResponse)
+  }
+  if (http.ServerResponse.prototype.writeProcessing) {
+    shimmer.wrap(http.ServerResponse.prototype, 'writeProcessing', wrapInformationalResponse)
+  }
   // Added in node v16.17.0
   if (http.ServerResponse.prototype.appendHeader) {
     shimmer.wrap(http.ServerResponse.prototype, 'appendHeader', wrapAppendOrRemoveHeader)
+  }
+  if (http.ServerResponse.prototype.writeEarlyHints) {
+    shimmer.wrap(http.ServerResponse.prototype, 'writeEarlyHints', wrapInformationalResponse)
   }
   return http
 })
@@ -209,6 +218,23 @@ function wrapAppendOrRemoveHeader (originalMethod) {
     }
 
     return originalMethod.apply(this, args)
+  }
+}
+
+function wrapInformationalResponse (originalMethod) {
+  return function wrappedInformationalResponse (...args) {
+    if (!startSetHeaderCh.hasSubscribers) {
+      return Reflect.apply(originalMethod, this, args)
+    }
+
+    const abortController = new AbortController()
+    startSetHeaderCh.publish({ res: this, abortController })
+
+    if (abortController.signal.aborted) {
+      return
+    }
+
+    return Reflect.apply(originalMethod, this, args)
   }
 }
 
