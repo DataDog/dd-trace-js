@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-readonly TOOLKIT_REVISION="5bb7951901123f3b26ba882ddf4d2bc97155256e"
+readonly TOOLKIT_REVISION="3493c284"
 readonly TOOLKIT_ARCHIVE="apm-instrumentation-toolkit-${TOOLKIT_REVISION}.tar.gz"
-readonly TOOLKIT_ARCHIVE_SHA256="d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4e8abb8ca2d5a3fcf"
+readonly TOOLKIT_ARCHIVE_SHA256="9f27909746eb4ed6d1df475eda8efc45887c4611d03f267373b6c01c63785cc7"
 readonly DD_AUTH_DOMAIN="app.datadoghq.com"
 readonly DATADOG_AGENT_IMAGE="gcr.io/datadoghq/agent:latest"
 readonly TEST_AGENT_IMAGE="ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.40.0"

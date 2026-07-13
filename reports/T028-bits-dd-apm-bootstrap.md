@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The checkout now carries the toolkit source selected from `origin/main` as a verified 1.4 MB archive. Bits does not
+The checkout now carries the toolkit source selected from toolkit commit `3493c284` as a verified archive. Bits does not
 fetch toolkit source from GitHub. Setup verifies the embedded SHA-256, extracts it into a SHA-owned cache, requires
 the extracted `.claude/skills`, installs from that local source, and invokes the managed executable directly.
 
@@ -13,12 +13,12 @@ because the Bits environment failed the required capability checks described bel
 
 Toolkit pin:
 
-- Selected ref: `origin/main`
-- Commit: `5bb7951901123f3b26ba882ddf4d2bc97155256e`
-- Embedded archive: `scripts/vendor/apm-instrumentation-toolkit-5bb7951901123f3b26ba882ddf4d2bc97155256e.tar.gz`
-- Archive SHA-256: `d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4e8abb8ca2d5a3fcf`
+- Selected ref: toolkit commit `3493c284`
+- Commit: `3493c284`
+- Embedded archive: `scripts/vendor/apm-instrumentation-toolkit-3493c284.tar.gz`
+- Archive SHA-256: `9f27909746eb4ed6d1df475eda8efc45887c4611d03f267373b6c01c63785cc7`
 - Version policy: any runnable `dd-apm version` output
-- Cache root: `${XDG_CACHE_HOME:-$HOME/.cache}/dd-apm-bits/5bb7951901123f3b26ba882ddf4d2bc97155256e`
+- Cache root: `${XDG_CACHE_HOME:-$HOME/.cache}/dd-apm-bits/3493c284`
 - Cached executable: `venv/bin/dd-apm`
 - Provenance marker: `venv/.bits-dd-apm-provenance` containing the pinned commit
 
@@ -62,7 +62,7 @@ dd-auth --domain app.datadoghq.com --force-app-key -- ./scripts/bits-dd-apm-pref
 
 ## Embedded source proof
 
-The archive was produced from the local toolkit `origin/main` commit above. Verification from the dd-trace-js branch:
+The archive was produced from toolkit commit `3493c284`. Verification from the dd-trace-js branch:
 
 ```bash
 shasum -a 256 -c scripts/vendor/apm-instrumentation-toolkit-*.tar.gz.sha256
@@ -76,12 +76,14 @@ was run.
 
 ## Bits end-to-end setup evidence
 
-Bits ran the setup and preflight scripts from branch `conti/bits-dd-apm-bootstrap` at commit `53b64b194`.
+Bits ran the setup and preflight scripts from branch `conti/bits-dd-apm-bootstrap` at commit `53b64b194`. The branch
+now also carries the local-only auth fix from toolkit commit `3493c284` for the next setup run.
 
 Setup reported:
 
-- `READY toolkit_source` for revision `5bb7951901123f3b26ba882ddf4d2bc97155256e`, selected from the verified
-  embedded archive with SHA-256 `d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4e8abb8ca2d5a3fcf`.
+- Previous Bits run: `READY toolkit_source` for revision `5bb7951901123f3b26ba882ddf4d2bc97155256e` from the
+  verified archive. The updated archive is revision `3493c284` with SHA-256
+  `9f27909746eb4ed6d1df475eda8efc45887c4611d03f267373b6c01c63785cc7`.
 - `READY dd_apm_install` with version `1.2.0rc6`, source `embedded_cache`, and the expected cached executable.
 - `READY dd_trace_js_target` for `/workspace/repo`.
 - The extracted toolkit `.claude/skills` directory existed and was directly confirmed before workflow execution.
@@ -99,6 +101,14 @@ This run proves that Bits can install and invoke the embedded toolkit and access
 from GitHub. It does not prove the requested Codex + Trajectory agent run, container-backed validation, or Datadog
 backend trace submission; those remain blocked on Bits image configuration, credentials, preloaded images or registry
 access, and outbound service connectivity.
+
+## Local-only workflow mode
+
+Toolkit commit `3493c284` changes workflow startup so `DD_TRACE_ENABLED=false` skips Datadog API/App key checks and
+local `dd-auth`, while still requiring the model credential and preserving backend checks when tracing is enabled.
+The real CLI was run with no `DD_API_KEY`, no `DD_APP_KEY`, no `dd-auth`, and `CI=1`; it passed config and API-key
+preflight and entered `dd-apm: Analyzing ai`. The run was then cancelled before a placeholder model credential could
+make an external request.
 
 ## dd-auth investigation
 
