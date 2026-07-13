@@ -46,6 +46,7 @@ describe('test visibility with dynamic instrumentation', () => {
               b: { type: 'number', value: '2' },
               localVar: { type: 'number', value: '1' },
               users: { type: 'Array' },
+              metadata: { type: 'Object' },
             },
           },
         },
@@ -55,7 +56,7 @@ describe('test visibility with dynamic instrumentation', () => {
     })
   })
 
-  it('omits empty collection payloads from captured values', (done) => {
+  it('omits empty capture containers from captured values', (done) => {
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
     childProcess.on('message', ({ snapshot }) => {
@@ -64,9 +65,202 @@ describe('test visibility with dynamic instrumentation', () => {
       const users = snapshot.captures.lines[10].locals.users
       assert.strictEqual(users.type, 'Array')
       assert.strictEqual('elements' in users, false)
+      const metadata = snapshot.captures.lines[10].locals.metadata
+      assert.strictEqual(metadata.type, 'Object')
+      assert.strictEqual('fields' in metadata, false)
       assert.doesNotMatch(JSON.stringify(snapshot), /"elements":\[\]/)
+      assert.doesNotMatch(JSON.stringify(snapshot), /"elements":null/)
+      assert.doesNotMatch(JSON.stringify(snapshot), /"fields":\{\}/)
+      assert.doesNotMatch(JSON.stringify(snapshot), /"fields":null/)
 
       done()
+    })
+  })
+
+  it('recursively omits empty capture containers without skipping name collisions', async () => {
+    const breakpointSetChannel = new EventEmitter()
+    const breakpointHitChannel = new EventEmitter()
+    const breakpointRemoveChannel = new EventEmitter()
+    const postedBreakpointHits = []
+    const session = new EventEmitter()
+    const localState = {
+      emptyObject: { type: 'Object', fields: {} },
+      emptyArray: { type: 'Array', elements: [] },
+      emptySet: { type: 'Set', elements: [] },
+      emptyMap: { type: 'Map', entries: [] },
+      nullFields: { type: 'Object', fields: null },
+      nullElements: { type: 'Array', elements: null },
+      nullEntries: { type: 'Map', entries: null },
+      nestedObject: {
+        type: 'Object',
+        fields: {
+          child: { type: 'Object', fields: {} },
+          arrayChild: {
+            type: 'Array',
+            elements: [
+              { type: 'Object', fields: {} },
+            ],
+          },
+        },
+      },
+      elements: { type: 'Array', elements: [] },
+      entries: { type: 'Map', entries: [] },
+      fields: { type: 'Object', fields: {} },
+      propertyCollision: {
+        type: 'Object',
+        fields: {
+          elements: { type: 'Array', elements: [] },
+          entries: { type: 'Map', entries: [] },
+          fields: { type: 'Object', fields: {} },
+        },
+      },
+      nonEmptyObject: {
+        type: 'Object',
+        fields: {
+          value: { type: 'number', value: '1' },
+          emptyNested: { type: 'Object', fields: {} },
+        },
+      },
+      nonEmptyArray: {
+        type: 'Array',
+        elements: [
+          { type: 'number', value: '1' },
+          { type: 'Object', fields: {} },
+        ],
+      },
+      nonEmptyMap: {
+        type: 'Map',
+        entries: [
+          [
+            { type: 'string', value: 'key' },
+            { type: 'Object', fields: {} },
+          ],
+        ],
+      },
+      metadata: {
+        type: 'Object',
+        fields: {},
+        notCapturedReason: 'fieldCount',
+        size: 100,
+      },
+    }
+    session.post = sinon.stub()
+    session.post.withArgs('Debugger.enable').resolves()
+    session.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId: 'breakpoint-id' })
+    session.post.withArgs('Debugger.resume').resolves()
+    breakpointSetChannel.postMessage = sinon.stub()
+    breakpointHitChannel.postMessage = (message) => {
+      postedBreakpointHits.push(message)
+    }
+    breakpointRemoveChannel.postMessage = sinon.stub()
+
+    proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
+      worker_threads: {
+        workerData: {
+          config: {},
+          breakpointSetChannel,
+          breakpointHitChannel,
+          breakpointRemoveChannel,
+        },
+      },
+      crypto: {
+        randomUUID: () => 'snapshot-id',
+      },
+      '../../../debugger/devtools_client/session': session,
+      '../../../debugger/devtools_client/source-maps': {
+        getGeneratedPosition: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/snapshot': {
+        getLocalStateForCallFrame: () => ({
+          processLocalState: () => localState,
+        }),
+      },
+      '../../../debugger/devtools_client/snapshot/constants': {
+        DEFAULT_MAX_REFERENCE_DEPTH: 1,
+        DEFAULT_MAX_COLLECTION_SIZE: 1,
+        DEFAULT_MAX_FIELD_COUNT: 1,
+        DEFAULT_MAX_LENGTH: 1,
+      },
+      '../../../debugger/devtools_client/state': {
+        findScriptFromPartialPath: () => ({ url: 'file.js', scriptId: 'script-id' }),
+        getStackFromCallFrames: () => [{ fileName: 'file.js' }],
+      },
+      '../../../log': {
+        error: () => {},
+        warn: () => {},
+      },
+    })
+
+    breakpointSetChannel.emit('message', { id: 'probe-id', file: 'file.js', line: 10 })
+    await setImmediatePromise()
+
+    session.emit('Debugger.paused', {
+      params: {
+        hitBreakpoints: ['breakpoint-id'],
+        callFrames: [{ callFrameId: 'call-frame-id' }],
+      },
+    })
+    await setImmediatePromise()
+
+    assert.deepStrictEqual(postedBreakpointHits[0].snapshot.captures.lines[10].locals, {
+      emptyObject: { type: 'Object' },
+      emptyArray: { type: 'Array' },
+      emptySet: { type: 'Set' },
+      emptyMap: { type: 'Map' },
+      nullFields: { type: 'Object' },
+      nullElements: { type: 'Array' },
+      nullEntries: { type: 'Map' },
+      nestedObject: {
+        type: 'Object',
+        fields: {
+          child: { type: 'Object' },
+          arrayChild: {
+            type: 'Array',
+            elements: [
+              { type: 'Object' },
+            ],
+          },
+        },
+      },
+      elements: { type: 'Array' },
+      entries: { type: 'Map' },
+      fields: { type: 'Object' },
+      propertyCollision: {
+        type: 'Object',
+        fields: {
+          elements: { type: 'Array' },
+          entries: { type: 'Map' },
+          fields: { type: 'Object' },
+        },
+      },
+      nonEmptyObject: {
+        type: 'Object',
+        fields: {
+          value: { type: 'number', value: '1' },
+          emptyNested: { type: 'Object' },
+        },
+      },
+      nonEmptyArray: {
+        type: 'Array',
+        elements: [
+          { type: 'number', value: '1' },
+          { type: 'Object' },
+        ],
+      },
+      nonEmptyMap: {
+        type: 'Map',
+        entries: [
+          [
+            { type: 'string', value: 'key' },
+            { type: 'Object' },
+          ],
+        ],
+      },
+      metadata: {
+        type: 'Object',
+        notCapturedReason: 'fieldCount',
+        size: 100,
+      },
     })
   })
 
