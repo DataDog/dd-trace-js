@@ -13,6 +13,9 @@ const {
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
+  TELEMETRY_KNOWN_TESTS_PAGES_FETCHED,
+  TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS,
+  TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS,
 } = require('../../ci-visibility/telemetry')
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
@@ -185,11 +188,15 @@ function fetchFromApi ({
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)
 
   const startTime = Date.now()
+  const totalFetchStartTime = Date.now()
   let aggregateTests = null
   let totalResponseBytes = 0
   let pageNumber = 0
+  let pagesFetched = 0
+  let totalRequestMs = 0
 
   function fetchPage (pageState) {
+    const pageStartTime = Date.now()
     pageNumber++
 
     if (pageNumber > MAX_KNOWN_TESTS_PAGES) {
@@ -224,12 +231,16 @@ function fetchFromApi ({
 
       try {
         totalResponseBytes += res.length
+        pagesFetched++
 
         const parsedResponse = parseJsonResponse(res)
         const pageTests = parseKnownTestsResponse(parsedResponse)
         const { page_info: responsePageInfo } = parsedResponse.data.attributes
 
         aggregateTests = mergeKnownTests(aggregateTests, pageTests)
+
+        const pageRequestMs = Date.now() - pageStartTime
+        totalRequestMs += pageRequestMs
 
         // Check if there are more pages
         if (responsePageInfo && responsePageInfo.has_next) {
@@ -245,6 +256,9 @@ function fetchFromApi ({
 
         // Done — no more pages
         distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_PAGES_FETCHED, {}, pagesFetched)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS, {}, Date.now() - totalFetchStartTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS, {}, totalRequestMs)
 
         const numTests = getNumFromKnownTests(aggregateTests)
 
