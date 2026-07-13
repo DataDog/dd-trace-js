@@ -239,6 +239,103 @@ describe('test optimization validation payload', () => {
     assert.deepStrictEqual(payload.checks[0].steps, [])
   })
 
+  it('preserves generated test verification failures in the payload status', () => {
+    const [{ payload }] = buildValidationPayloads({
+      manifest: {
+        frameworks: [
+          {
+            id: 'vitest:root',
+            framework: 'vitest',
+            frameworkVersion: '4.1.5',
+          },
+        ],
+      },
+      results: [
+        {
+          frameworkId: 'vitest:root',
+          scenario: 'basic-reporting',
+          status: 'pass',
+          diagnosis: 'Basic reporting passed.',
+          evidence: {
+            commandExitCode: 0,
+            testSessionEvents: 1,
+            testModuleEvents: 1,
+            testSuiteEvents: 1,
+            testEvents: 1,
+          },
+          artifacts: [],
+        },
+        {
+          frameworkId: 'vitest:root',
+          scenario: 'generated-test-verification',
+          status: 'error',
+          diagnosis: 'The generated ATR scenario ran more than one test.',
+          evidence: {
+            scenarios: [
+              {
+                id: 'atr-fail-once',
+                exitCode: 1,
+                expectedExitCode: 1,
+                observedTestCount: 3,
+                expectedTestCount: 1,
+              },
+            ],
+          },
+          artifacts: [],
+        },
+      ],
+      artifacts: {
+        reportPath: '/tmp/report.md',
+      },
+    })
+
+    assert.strictEqual(payload.status, 'failed')
+    assert.deepStrictEqual(payload.checks.map(check => check.id), [
+      'basic-reporting',
+      'generated-test-verification',
+    ])
+    assert.strictEqual(payload.checks[1].status, 'failed')
+    assert.strictEqual(payload.checks[1].reason, 'The generated ATR scenario ran more than one test.')
+  })
+
+  it('does not present an initialization probe as a CI test run', () => {
+    const [{ payload }] = buildValidationPayloads({
+      manifest: {
+        frameworks: [
+          {
+            id: 'vitest:root',
+            framework: 'vitest',
+            frameworkVersion: '4.1.5',
+          },
+        ],
+      },
+      results: [
+        {
+          frameworkId: 'vitest:root',
+          scenario: 'ci-wiring',
+          status: 'fail',
+          diagnosis: 'The selected CI configuration does not initialize Datadog.',
+          evidence: {
+            ciCommandExecution: {
+              mode: 'initialization-probe-only',
+              fullReplayRan: false,
+            },
+            initializationProbe: {
+              reachedTestRunnerProcess: true,
+            },
+          },
+          artifacts: [],
+        },
+      ],
+      artifacts: {
+        reportPath: '/tmp/report.md',
+      },
+    })
+
+    assert.strictEqual(payload.status, 'failed')
+    assert.deepStrictEqual(payload.checks[0].steps.map(step => step.id), ['check-ci-wiring-events'])
+  })
+
   it('includes command and debug excerpts for basic reporting failures after tests ran', () => {
     const [{ payload }] = buildValidationPayloads({
       manifest: {

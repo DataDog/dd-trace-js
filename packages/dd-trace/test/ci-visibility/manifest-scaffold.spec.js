@@ -5,12 +5,14 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const jsonSchema = require('../../../../ci/test-optimization-validation-manifest.schema.json')
 const { createManifestScaffold } = require('../../../../ci/test-optimization-validation/manifest-scaffold')
 const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
 
 describe('test optimization validation manifest scaffold', () => {
   it('creates a schema-valid Mocha scaffold without executing project code', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
     const mochaRoot = path.dirname(require.resolve('mocha/package.json'))
     const marker = path.join(root, 'project-command-ran')
     fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true })
@@ -19,7 +21,8 @@ describe('test optimization validation manifest scaffold', () => {
     fs.symlinkSync(mochaRoot, path.join(root, 'node_modules', 'mocha'), 'dir')
     fs.writeFileSync(path.join(root, '.github', 'workflows', 'test.yml'), 'jobs: {}\n')
     fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("unit", () => {})\n')
-    fs.writeFileSync(path.join(root, 'package-lock.json'), '{}\n')
+    fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+    fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), 'packages: []\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'scaffold-project',
       devDependencies: { mocha: require('mocha/package.json').version },
@@ -29,9 +32,16 @@ describe('test optimization validation manifest scaffold', () => {
     }))
 
     try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
       const manifest = createManifestScaffold({ root })
 
       assert.deepStrictEqual(validateManifest(manifest), [])
+      assert.strictEqual(manifest.environment.os, 'windows')
+      assert.ok(jsonSchema.$defs.environment.properties.os.enum.includes(manifest.environment.os))
+      assert.strictEqual(manifest.repository.workspaceManager, 'pnpm')
+      assert.ok(jsonSchema.$defs.repository.properties.workspaceManager.enum.includes(
+        manifest.repository.workspaceManager
+      ))
       assert.strictEqual(fs.existsSync(marker), false)
       assert.deepStrictEqual(manifest.ciDiscovery.found, ['.github/workflows/test.yml'])
       assert.strictEqual(manifest.frameworks.length, 1)
@@ -43,6 +53,7 @@ describe('test optimization validation manifest scaffold', () => {
         ['basic-pass', 'atr-fail-once', 'test-management-target']
       )
     } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
       fs.rmSync(root, { recursive: true, force: true })
     }
   })

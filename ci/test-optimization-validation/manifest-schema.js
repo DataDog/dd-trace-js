@@ -89,6 +89,9 @@ function validateManifest (manifest) {
   requiredObject(manifest, 'repository', errors)
   requiredObject(manifest, 'environment', errors)
   requiredArray(manifest, 'frameworks', errors)
+  if (Array.isArray(manifest.frameworks) && manifest.frameworks.length === 0) {
+    errors.push('frameworks must include at least one framework entry.')
+  }
 
   if (manifest.repository) {
     requiredAbsolutePath(manifest.repository, 'root', errors)

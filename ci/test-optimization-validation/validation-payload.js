@@ -19,6 +19,10 @@ const CHECKS = {
     id: 'basic-reporting',
     name: 'Basic reporting',
   },
+  'generated-test-verification': {
+    id: 'generated-test-verification',
+    name: 'Generated test verification',
+  },
   efd: {
     id: 'efd-new-test-detection-and-retry',
     name: 'EFD new test detection and retry',
@@ -128,27 +132,30 @@ function buildCheck ({ result }) {
   if (!definition) return null
   const commandInfo = readResultCommandInfo(result)
 
+  const steps = []
+  if (result.scenario !== 'ci-wiring' || result.evidence?.ciCommandExecution?.fullReplayRan !== false) {
+    steps.push({
+      id: 'run-tests',
+      name: 'Run tests',
+      status: getRunTestsStatus(result),
+      command: commandInfo.command,
+      exitCode: stringify(result.evidence.commandExitCode),
+      evidence: getRunTestsEvidence(commandInfo),
+    })
+  }
+  steps.push({
+    id: getFeatureCheckStepId(result.scenario),
+    name: getFeatureCheckStepName(result.scenario),
+    status: toUiStatus(result.status),
+    evidence: withReason(result.evidence, result),
+  })
+
   return {
     id: definition.id,
     name: definition.name,
     status: toUiStatus(result.status),
     reason: isProblemStatus(result.status) ? result.diagnosis : undefined,
-    steps: [
-      {
-        id: 'run-tests',
-        name: 'Run tests',
-        status: getRunTestsStatus(result),
-        command: commandInfo.command,
-        exitCode: stringify(result.evidence.commandExitCode),
-        evidence: getRunTestsEvidence(commandInfo),
-      },
-      {
-        id: getFeatureCheckStepId(result.scenario),
-        name: getFeatureCheckStepName(result.scenario),
-        status: toUiStatus(result.status),
-        evidence: withReason(result.evidence, result),
-      },
-    ],
+    steps,
   }
 }
 

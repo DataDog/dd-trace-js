@@ -49,7 +49,7 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
       workspaceManager: detectWorkspaceManager(repositoryRoot),
     },
     environment: {
-      os: process.platform,
+      os: getManifestOs(process.platform),
       shell: process.env.SHELL || null,
       nodeVersion: process.version,
       requiredEnvVars: [],
@@ -435,9 +435,15 @@ function detectPackageManager (root) {
 }
 
 function detectWorkspaceManager (root) {
-  if (fs.existsSync(path.join(root, 'pnpm-workspace.yaml'))) return 'pnpm-workspaces'
+  if (fs.existsSync(path.join(root, 'pnpm-workspace.yaml'))) return 'pnpm'
   const packageJson = readJson(path.join(root, 'package.json'))
   return packageJson?.workspaces ? detectPackageManager(root) : 'none'
+}
+
+function getManifestOs (platform) {
+  if (platform === 'win32') return 'windows'
+  if (platform === 'darwin' || platform === 'linux') return platform
+  return 'unknown'
 }
 
 function findYarnRelease (root) {

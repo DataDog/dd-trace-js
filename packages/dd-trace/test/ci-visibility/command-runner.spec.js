@@ -253,7 +253,52 @@ describe('test optimization validation command runner', () => {
 
       await assert.rejects(runCommand({
         cwd: outDir,
+        argv: ['/usr/bin/env', '-C', outDir, 'NODE_OPTIONS=--no-warnings', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '--chdir=' + outDir, 'DD_TRACE_AGENT_URL=https://example.invalid', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '-SNODE_OPTIONS=--no-warnings node test.js'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '--future-option', 'NODE_OPTIONS=--no-warnings', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing unsupported env option --future-option/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
         argv: ['/usr/bin/env', '-i', 'PATH=/usr/bin', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing to clear the command environment/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '-', 'npm', 'test'],
       }, {
         env,
         envMode: 'clean',
@@ -274,6 +319,16 @@ describe('test optimization validation command runner', () => {
         cwd: outDir,
         usesShell: true,
         shellCommand: 'env --ignore-environment PATH=/usr/bin npm test',
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing to clear the command environment/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'env - npm test',
       }, {
         env,
         envMode: 'clean',

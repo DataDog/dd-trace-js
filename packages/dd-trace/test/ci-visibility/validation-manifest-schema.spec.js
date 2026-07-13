@@ -7,6 +7,16 @@ const jsonSchema = require('../../../../ci/test-optimization-validation-manifest
 const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
 
 describe('test optimization validation manifest schema', () => {
+  it('requires at least one framework entry', () => {
+    const manifest = getManifest()
+    manifest.frameworks = []
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks must include at least one framework entry.',
+    ])
+    assert.strictEqual(jsonSchema.properties.frameworks.minItems, 1)
+  })
+
   it('requires unique framework ids', () => {
     const manifest = getManifest()
     manifest.frameworks.push({ ...manifest.frameworks[0] })

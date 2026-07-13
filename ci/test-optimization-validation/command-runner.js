@@ -389,6 +389,7 @@ function assertNoInlineValidationEnvOverrides (command, env) {
   const parsed = parseArgv(command.argv)
   rejectReservedEnvSplitStrings(command.argv)
   if (parsed.ignoreEnvironment) throwEnvironmentReset()
+  if (parsed.unsupportedEnvOption) throwUnsupportedEnvOption(parsed.unsupportedEnvOption)
   for (const name of Object.keys(parsed.prefixEnv)) {
     if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
   }
@@ -411,7 +412,8 @@ function assertNoInlineValidationEnvOverrides (command, env) {
  */
 function rejectReservedShellAssignments (shellCommand) {
   const source = String(shellCommand || '')
-  const environmentReset = /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-i\b|--ignore-environment\b)/i
+  const environmentReset =
+    /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-(?=\s|$)|-i\b|--ignore-environment\b)/i
 
   if (environmentReset.test(source)) throwEnvironmentReset()
 
@@ -448,7 +450,7 @@ function rejectReservedEnvSplitStrings (argv) {
       continue
     }
 
-    const splitString = /^--split-string=(.*)$/.exec(argument)?.[1]
+    const splitString = /^(?:-S|--split-string=)(.+)$/.exec(argument)?.[1]
     if (splitString !== undefined) rejectReservedShellAssignments(`env ${splitString}`)
   }
 }
@@ -469,6 +471,13 @@ function throwEnvironmentReset () {
   throw new Error(
     'Refusing to clear the command environment during live validation because this would remove the local fake ' +
     'intake and Datadog initialization settings.'
+  )
+}
+
+function throwUnsupportedEnvOption (option) {
+  throw new Error(
+    `Refusing unsupported env option ${option} during live validation because its environment effects cannot be ` +
+    'verified safely.'
   )
 }
 
@@ -644,6 +653,7 @@ function parseArgv (argv) {
     commandIndex: 0,
     corepackIndex: -1,
     pathAdjusted: false,
+    unsupportedEnvOption: undefined,
   }
 
   if (!Array.isArray(argv) || argv.length === 0) return result
@@ -657,7 +667,7 @@ function parseArgv (argv) {
         index++
         break
       }
-      if (option === '-i' || option === '--ignore-environment') {
+      if (option === '-' || option === '-i' || option === '--ignore-environment') {
         result.ignoreEnvironment = true
         index++
         continue
@@ -672,6 +682,28 @@ function parseArgv (argv) {
         result.unsetEnvNames.push(unsetMatch[1])
         index++
         continue
+      }
+      if (option === '-C' || option === '--chdir') {
+        index += 2
+        continue
+      }
+      if (/^(?:-C.+|--chdir=.+)$/.test(option)) {
+        index++
+        continue
+      }
+      if (option === '-S' || option === '--split-string') {
+        break
+      }
+      if (/^(?:-S.+|--split-string=.+)$/.test(option)) {
+        break
+      }
+      if (isSupportedEnvFlag(option)) {
+        index++
+        continue
+      }
+      if (option.startsWith('-')) {
+        result.unsupportedEnvOption = option
+        break
       }
       if (!isEnvAssignment(option)) break
 
@@ -697,6 +729,11 @@ function parseArgv (argv) {
   }
 
   return result
+}
+
+function isSupportedEnvFlag (option) {
+  return /^(?:-0|-v|--null|--debug|--help|--version|--list-signal-handling)$/.test(option) ||
+    /^--(?:block|default|ignore)-signal(?:=.*)?$/.test(option)
 }
 
 function isEnvExecutable (value) {
