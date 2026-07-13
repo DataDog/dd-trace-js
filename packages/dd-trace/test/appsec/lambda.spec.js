@@ -379,6 +379,7 @@ describe('WAF path safety with non-HTTP req', () => {
       incrementWafConfigErrorsMetric: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
       incrementWafRequestsMetric: sinon.stub(),
+      incrementRequestDurationMetrics: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
