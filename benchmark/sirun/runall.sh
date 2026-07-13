@@ -40,24 +40,33 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
-# Keep bun outside nvm's per-Node global prefix so later `nvm use` calls do not
-# remove it from PATH. The exact version comes from the root manifest.
-if [[ ! -x "$HOME/.bun/bin/bun" ]]; then
-  BUN_VERSION=$(node -p "require('../../package.json').devDependencies.bun")
-  npm install --global --prefix "$HOME/.bun" --no-audit --no-fund "bun@${BUN_VERSION}"
+# Keep the package manager outside nvm's per-Node global prefix so later
+# `nvm use` calls do not remove it from PATH.
+if [[ -f ../../bun.lock ]]; then
+  if [[ ! -x "$HOME/.bun/bin/bun" ]]; then
+    BUN_VERSION=$(node -p "require('../../package.json').devDependencies.bun")
+    npm install --global --prefix "$HOME/.bun" --no-audit --no-fund "bun@${BUN_VERSION}" \
+      || (sleep 60 && npm install --global --prefix "$HOME/.bun" --no-audit --no-fund "bun@${BUN_VERSION}")
+  fi
+  export PATH="$HOME/.bun/bin:$PATH"
+else
+  if [[ ! -x "$HOME/.yarn/bin/yarn" ]]; then
+    YARN_VERSION=$(node -p "require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies.yarn")
+    npm install --global --prefix "$HOME/.yarn" --no-audit --no-fund "yarn@${YARN_VERSION}" \
+      || (sleep 60 && npm install --global --prefix "$HOME/.yarn" --no-audit --no-fund "yarn@${YARN_VERSION}")
+  fi
+  export PATH="$HOME/.yarn/bin:$PATH"
 fi
-export PATH="$HOME/.bun/bin:$PATH"
 
 (
   cd ../../
   if [[ -f bun.lock ]]; then
     bun install --frozen-lockfile || (sleep 60 && bun install --frozen-lockfile)
+    PLUGINS="bluebird|q|graphql|express" npm run services
   else
-    # The baseline checkout still uses the legacy lockfile; --no-save migrates it
-    # in memory without rejecting the migration as a frozen lockfile change.
-    bun install --no-save || (sleep 60 && bun install --no-save)
+    yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines)
+    PLUGINS="bluebird|q|graphql|express" yarn services
   fi
-  PLUGINS="bluebird|q|graphql|express" npm run services
 )
 
 (

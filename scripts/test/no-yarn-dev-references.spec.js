@@ -30,6 +30,9 @@ const ALLOWLIST_EXACT = new Set([
   'packages/dd-trace/test/plugins/versions/package.json',
   '.github/workflows/platform.yml',
 
+  // Benchmark comparisons execute the baseline's pre-migration installer against the baseline source.
+  'benchmark/sirun/runall.sh',
+
   // .gitignore tracks the per-fixture yarn.lock paths so they don't accidentally land in git.
   '.gitignore',
 
