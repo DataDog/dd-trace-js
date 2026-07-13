@@ -236,12 +236,33 @@ class NativeExporter {
   }
 
   /**
-   * Compatibility shim for external tooling (e.g. the parametric test app) that
-   * reaches `tracer._exporter._writer.flush(cb)`; the legacy AgentExporter
-   * exposed a `_writer`. The native exporter flushes directly.
+   * Compatibility shim for external tooling (e.g. the system-tests weblog and
+   * parametric app) that reaches `tracer._exporter._writer.flush(cb)`; the
+   * legacy AgentExporter exposed a `_writer`.
+   *
+   * The legacy AgentWriter.flush() shipped traces; client-computed stats were
+   * flushed separately (the weblog /flush endpoint also calls
+   * `_processor._stats.onInterval()`). In native mode APM stats live in the
+   * WASM concentrator (not `_processor._stats`) and otherwise ship only on a
+   * 10s interval, which a test-harness teardown can beat. So flush traces
+   * first (at the default non-zero flushInterval, prepareChunk feeds the
+   * concentrator synchronously before the send), then force-flush the native
+   * stats concentrator, and signal `done` only after both — callers like the
+   * /flush endpoint await this, so the async stats send completes before the
+   * process is torn down. `flushStats()` is a no-op (resolves immediately) when
+   * native stats are disabled, so this is inert otherwise.
    */
   get _writer () {
-    return { flush: (done) => this.flush(done) }
+    return {
+      flush: (done = () => {}) => {
+        this.flush(() => {
+          this.flushStats().then(() => done(), (err) => {
+            log.error('Error force-flushing native stats via _writer.flush:', err)
+            done()
+          })
+        })
+      }
+    }
   }
 
   /**

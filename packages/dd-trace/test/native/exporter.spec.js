@@ -269,9 +269,12 @@ describe('NativeExporter', () => {
       })
     })
 
-    it('exposes a _writer.flush shim that delegates to flush() (parametric app compat)', (done) => {
+    it('exposes a _writer.flush shim that flushes traces then native stats (weblog /flush compat)', (done) => {
       exporter._writer.flush(() => {
+        // no pending spans -> no trace send, but the shim still force-flushes
+        // the native stats concentrator so the /flush endpoint ships stats
         sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
+        sinon.assert.calledOnce(nativeSpans.flushStats)
         done()
       })
     })
@@ -280,9 +283,11 @@ describe('NativeExporter', () => {
       const result = await exporter.flushStats()
       sinon.assert.calledOnce(nativeSpans.flushStats)
       assert.strictEqual(result, true)
-      // stats are NOT flushed by the trace flush path (own 10s cadence)
-      exporter._writer.flush(() => {})
-      sinon.assert.calledOnce(nativeSpans.flushStats)
+      // The weblog /flush endpoint reaches _writer.flush(cb); it must also
+      // force-flush client-computed stats (native APM stats otherwise ship
+      // only on a 10s interval that a test-harness teardown can beat).
+      await new Promise((resolve) => exporter._writer.flush(resolve))
+      sinon.assert.calledTwice(nativeSpans.flushStats)
     })
 
     // The success path is one observable sequence — splitting it across 5
