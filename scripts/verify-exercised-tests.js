@@ -418,20 +418,22 @@ function extractScriptInvocations (run) {
 
   const tokens = shellSplit(String(run))
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i] !== 'npm' || tokens[i + 1] !== 'run') continue
-
-    const script = tokens[i + 2]
-    if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
-      out.push({ script })
+    const token = tokens[i]
+    if (token === 'npm' && tokens[i + 1] === 'run') {
+      const script = tokens[i + 2]
+      if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
+        out.push({ script })
+      }
+      continue
     }
 
     // `node scripts/c8-ci.js <script>` runs an in-process suite under V8 coverage; its first
     // argument names the package script whose glob actually selects the specs. Treat it like
     // `npm run <script>` so the chain from a `:ci` script to its underlying glob stays traceable.
-    if (t === 'node' && /(^|\/)scripts\/c8-ci\.js$/.test(String(tokens[i + 1] ?? ''))) {
+    if (token === 'node' && /(^|\/)scripts\/c8-ci\.js$/.test(String(tokens[i + 1]))) {
       const script = tokens[i + 2]
       if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
-        out.push({ tool: 'npm', script, explicit: true })
+        out.push({ script })
       }
     }
   }
@@ -846,13 +848,6 @@ function collectWorkflowRuns (repoRoot) {
             const stepEnv = { ...env }
             const exports = parseExportAssignments(command)
             for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-            const idxYarn = command.indexOf('yarn ')
-            const idxNpm = command.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const assigns = parseInlineAssignments(command.slice(0, idx))
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
             out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
           }
         }
@@ -1160,7 +1155,7 @@ function main () {
   }
 
   // Transitive closure: a script counts as "invoked" when CI either runs it directly or runs
-  // another script that calls it via `npm run X` / `yarn X`. Without this, chaining a `:ci`
+  // another script that calls it via `npm run X`. Without this, chaining a `:ci`
   // script into the body of a parent script (e.g. `lint` -> `npm run lint:codeowners:ci`)
   // looks orphaned to the coverage check below even though the parent's CI step exercises it.
   const invokedScripts = new Set(invoked.map(i => i.script))
@@ -1170,7 +1165,7 @@ function main () {
     if (name === undefined) continue
     const cmd = scripts[name]
     if (typeof cmd !== 'string') continue
-    for (const inv of extractScriptInvocations(cmd, knownScripts)) {
+    for (const inv of extractScriptInvocations(cmd)) {
       if (!invokedScripts.has(inv.script)) {
         invokedScripts.add(inv.script)
         closureQueue.push(inv.script)
