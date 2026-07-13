@@ -96,7 +96,13 @@ class DatadogTracer {
         langInterpreter: process.versions.bun ? 'JavaScriptCore' : (process.jsEngine || 'v8'),
         pid: process.pid,
         tracerService: config.service,
-        statsEnabled: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || false,
+        // Native v0.6 client stats and OTLP trace metrics are mutually exclusive
+        // (system-tests FR02): when OTLP trace metrics are enabled, config forces
+        // DD_TRACE_STATS_COMPUTATION_ENABLED=true so the OTLP stats exporter runs,
+        // but the native concentrator must NOT also ship v0.6 stats. Route stats
+        // to OTLP only in that case by leaving the native concentrator disabled.
+        statsEnabled: (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+          !config.OTEL_TRACES_SPAN_METRICS_ENABLED) || false,
         hostname: config.hostname || os.hostname(),
         env: config.env || '',
         appVersion: config.version || '',
