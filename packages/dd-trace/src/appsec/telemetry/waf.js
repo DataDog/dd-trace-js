@@ -128,6 +128,8 @@ function incrementWafRequests (store) {
 
 function incrementWafDurationMetrics (requestMetrics) {
   const { duration, durationExt, wafVersion, rulesVersion } = requestMetrics
+  if (!duration && !durationExt) return
+
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
 
   if (duration) {

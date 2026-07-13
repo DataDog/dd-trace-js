@@ -79,6 +79,8 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
 
 function incrementRaspDurationMetrics (requestMetrics) {
   const { raspDuration, raspDurationExt, wafVersion, rulesVersion } = requestMetrics
+  if (!raspDuration && !raspDurationExt) return
+
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
 
   if (raspDuration) {
