@@ -3,7 +3,13 @@
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
-const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const {
+  parsers,
+  programmaticTypeTransformers,
+  transformers,
+  telemetryTransformers,
+  setWarnInvalidValue,
+} = require('./parsers')
 const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
@@ -184,16 +190,52 @@ const parser = (value, optionName, source) => {
 }
 
 /**
- * @template {import('./config-types').ConfigPath} TPath
- * @type {Partial<Record<TPath, {
+ * @typedef {{
  *   property?: string,
- *   parser: (value: unknown, optionName: string, source: string) => unknown,
+ *   parser?: (value: unknown, optionName: string, source: string) => unknown,
+ *   type?: string,
  *   canonicalName?: string,
  *   transformer?: (value: unknown, optionName: string, source: string) => unknown,
  *   telemetryTransformer?: (value: unknown) => unknown
- * }>>} ConfigurationsTable
+ * }} ConfigurationOption
+ */
+
+/**
+ * @template {import('./config-types').ConfigPath} TPath
+ * @type {Partial<Record<TPath, ConfigurationOption>>} ConfigurationsTable
  */
 const configurationsTable = {}
+
+/**
+ * @param {ConfigurationOption} entry
+ * @param {unknown} value
+ * @param {string} optionName
+ * @param {string} source
+ */
+function transformProgrammaticOption (entry, value, optionName, source) {
+  let transformed = value
+  if (entry.type) {
+    try {
+      transformed = programmaticTypeTransformers[entry.type](value, entry.canonicalName ?? optionName)
+    } catch (error) {
+      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`, error)
+      return
+    }
+    if (transformed === undefined) {
+      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`)
+      return
+    }
+  }
+  if (entry.transformer) {
+    try {
+      transformed = entry.transformer(transformed, optionName, source)
+    } catch (error) {
+      warnInvalidValue(value, optionName, source, 'Invalid value', error)
+      return
+    }
+  }
+  return transformed
+}
 
 // One way aliases. Must be applied in apply calculated entries.
 const fallbackConfigurations = new Map()
@@ -231,6 +273,10 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       ? `${entry.namespace}.${canonicalName}`
       : (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
     const type = entry.type.toUpperCase()
+    /* istanbul ignore if -- supported configuration types are static metadata */
+    if (!programmaticTypeTransformers[type]) {
+      throw new Error(`Missing programmatic transformer for configuration type: ${type}`)
+    }
 
     let transformer = transformers[entry.transform]
     if (entry.allowed) {
@@ -353,6 +399,8 @@ module.exports = {
   parseErrors,
 
   generateTelemetry,
+
+  transformProgrammaticOption,
 }
 
 // `dns` is instrumented, so requiring it pulls in the dns plugin, which loads

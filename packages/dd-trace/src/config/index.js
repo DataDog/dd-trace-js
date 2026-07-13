@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
+const { inspect } = require('node:util')
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -35,6 +36,7 @@ const {
   configWithOrigin,
   parseErrors,
   generateTelemetry,
+  transformProgrammaticOption,
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
@@ -121,6 +123,16 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   if (value == null) {
     // TODO: This works as before while ignoring undefined programmatic options is not ideal.
     if (source !== 'default') {
+      if (rawValue !== value) {
+        const rawType = typeof rawValue
+        const telemetryValue = rawValue === null ||
+          rawType === 'string' ||
+          rawType === 'number' ||
+          rawType === 'boolean'
+          ? rawValue
+          : inspect(rawValue, { customInspect: false, getters: false })
+        generateTelemetry(telemetryValue, source, name)
+      }
       return
     }
   } else if (source === 'calculated' || source === 'remote_config') {
@@ -285,8 +297,9 @@ class Config extends ConfigBase {
           continue
         }
       }
-      // TODO: Coerce mismatched types to the expected type, if possible. E.g., strings <> numbers
-      const transformed = value !== undefined && entry.transformer ? entry.transformer(value, fullName, source) : value
+      const transformed = value === undefined
+        ? value
+        : transformProgrammaticOption(entry, value, fullName, source)
       setAndTrack(this, entry.property ?? name, transformed, value, source)
     }
   }

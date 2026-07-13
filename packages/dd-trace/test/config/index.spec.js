@@ -1633,6 +1633,128 @@ describe('Config', () => {
     })
   })
 
+  it('should transform safe programmatic option types', () => {
+    const config = getConfig({
+      startupLogs: 'False',
+      flushInterval: '1234.9',
+      remoteConfig: {
+        pollInterval: '2.5',
+      },
+      profiling: true,
+      service: 1234,
+    })
+
+    assert.strictEqual(config.startupLogs, false)
+    assert.strictEqual(config.flushInterval, 1234)
+    assert.strictEqual(config.remoteConfig.pollInterval, 2.5)
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+    assert.strictEqual(config.service, '1234')
+  })
+
+  it('should accept infinite numeric programmatic option values', () => {
+    const config = getConfig({
+      flushInterval: Infinity,
+      remoteConfig: {
+        pollInterval: '-Infinity',
+      },
+    })
+
+    assert.strictEqual(config.flushInterval, Infinity)
+    assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
+  })
+
+  it('should ignore undefined programmatic option values', () => {
+    const config = getConfig({ startupLogs: undefined })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should preserve environment tags when the programmatic tags type is invalid', () => {
+    process.env.DD_TRACE_GLOBAL_TAGS = 'team:checkout,tier:backend'
+
+    const config = getConfig({ tags: process.env.DD_TRACE_GLOBAL_TAGS })
+
+    assertObjectContains(config.tags, { team: 'checkout', tier: 'backend' })
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid MAP input: 'team:checkout,tier:backend' for tags (source: code), picked default",
+    )
+  })
+
+  it('should ignore invalid programmatic option types and report them to telemetry', () => {
+    const samplingRules = JSON.stringify([{ service: 'web', sample_rate: 1 }])
+    const config = getConfig({
+      startupLogs: 'yes',
+      flushInterval: {},
+      remoteConfig: {
+        pollInterval: [],
+      },
+      service: {},
+      baggageTagKeys: ['valid', 1],
+      headerTags: 'valid:value',
+      serviceMapping: 'mysql:database',
+      samplingRules,
+    })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
+    assert.strictEqual(config.service, 'node')
+    assert.deepStrictEqual(config.baggageTagKeys, defaults.baggageTagKeys)
+    assert.deepStrictEqual(config.headerTags, defaults.headerTags)
+    assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
+    assert.deepStrictEqual(config.samplingRules, defaults.samplingRules)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
+    )
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+      name: 'DD_TRACE_STARTUP_LOGS',
+      value: 'yes',
+      origin: 'code',
+      error: {
+        message: "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
+      },
+    }])
+  })
+
+  it('should ignore invalid primitive programmatic option values', () => {
+    const config = getConfig({
+      startupLogs: 1,
+      flushInterval: ' ',
+      remoteConfig: {
+        pollInterval: NaN,
+      },
+      service: null,
+    })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
+    assert.strictEqual(config.service, 'node')
+  })
+
+  it('should ignore programmatic options when their transformations throw', () => {
+    const headerTags = new Proxy([], {
+      get () {
+        throw new Error('array transformation failed')
+      },
+    })
+    const samplingRules = new Proxy({}, {
+      ownKeys () {
+        throw new Error('option transformation failed')
+      },
+    })
+
+    const config = getConfig({ headerTags, samplingRules })
+
+    assert.deepStrictEqual(config.headerTags, defaults.headerTags)
+    assert.deepStrictEqual(config.samplingRules, defaults.samplingRules)
+    sinon.assert.calledWithMatch(log.error, /^Invalid ARRAY input:/)
+    sinon.assert.calledWithMatch(log.error, /^Invalid value:/)
+  })
+
   it('should initialize from environment variables with url taking precedence', () => {
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:7777'
     process.env.DD_SITE = 'datadoghq.eu'
@@ -1847,7 +1969,7 @@ describe('Config', () => {
       },
       dogstatsd: {
         hostname: 'agent-dsd',
-        port: '5218',
+        port: 5218,
       },
       dynamicInstrumentation: {
         enabled: true,
