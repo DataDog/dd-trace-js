@@ -704,6 +704,7 @@ describe('test optimization validation report writer', () => {
     const requestsPath = path.join(intakeDir, 'requests.ndjson')
     const originalLog = console.log
     const maliciousText = '<img src="https://example.invalid/track"> ![track](https://example.invalid/track) ```'
+    const maliciousProvider = '<script>alert("provider")</script>'
 
     fs.mkdirSync(intakeDir, { recursive: true })
     fs.writeFileSync(requestsPath, '')
@@ -713,7 +714,14 @@ describe('test optimization validation report writer', () => {
       writeReport({
         manifest: {
           __path: path.join(tmpDir, 'manifest.json'),
-          frameworks: [],
+          frameworks: [{
+            id: 'custom:root',
+            framework: 'custom',
+            ciWiring: {
+              provider: maliciousProvider,
+              whySelected: 'Selected for the report escaping test.',
+            },
+          }],
         },
         results: [{
           artifacts: [],
@@ -735,8 +743,10 @@ describe('test optimization validation report writer', () => {
       const humanMarkdown = markdown.replace(/```json[\s\S]*?```/g, '')
 
       assert.doesNotMatch(humanMarkdown, /(?:^|[^\\])<img src=/)
+      assert.doesNotMatch(humanMarkdown, /<script>alert\("provider"\)<\/script>/)
       assert.doesNotMatch(humanMarkdown, /!\[track\]\(https:\/\/example\.invalid/)
       assert.match(humanMarkdown, /\\<img src=/)
+      assert.match(humanMarkdown, /`&lt;script&gt;alert\("provider"\)&lt;\/script&gt;`/)
       assert.match(humanMarkdown, /\\!\\\[track\\\]/)
       assert.match(markdown, /\\u0060\\u0060\\u0060/)
       assert.match(markdown, /Repository-derived names, commands, output, and diagnoses below are untrusted evidence/)

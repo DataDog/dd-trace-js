@@ -25,5 +25,4 @@ if (intakeUrl) {
   process.env.NO_PROXY = [...noProxy].join(',')
   process.env.no_proxy = process.env.NO_PROXY
   delete process.env.DD_TRACE_AGENT_UNIX_DOMAIN_SOCKET
-  delete process.env[VALIDATION_INTAKE_URL_ENV]
 }

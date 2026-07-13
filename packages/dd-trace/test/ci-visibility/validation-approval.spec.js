@@ -12,6 +12,48 @@ const {
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 
 describe('test optimization validation approval', () => {
+  it('binds approval to validator-controlled preload files', () => {
+    const packageRoot = path.resolve(__dirname, '../../../..')
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-preloads-'))
+    const copiedPackageRoot = path.join(root, 'dd-trace')
+    const copiedValidationDirectory = path.join(copiedPackageRoot, 'ci', 'test-optimization-validation')
+    const copiedFiles = [
+      'ci/diagnose.js',
+      'ci/init.js',
+      'ci/validate-test-optimization.js',
+      'loader-hook.mjs',
+      'register.js',
+      'version.js',
+    ]
+
+    fs.cpSync(path.join(packageRoot, 'ci', 'test-optimization-validation'), copiedValidationDirectory, {
+      recursive: true,
+    })
+    for (const relativePath of copiedFiles) {
+      const destination = path.join(copiedPackageRoot, relativePath)
+      fs.mkdirSync(path.dirname(destination), { recursive: true })
+      fs.copyFileSync(path.join(packageRoot, relativePath), destination)
+    }
+
+    const copiedApproval = require(path.join(copiedValidationDirectory, 'approval'))
+    const input = {
+      manifest: { __path: path.join(root, 'manifest.json'), repository: { root } },
+      out: path.join(root, 'results'),
+    }
+
+    try {
+      let digest = copiedApproval.getApprovalDigest(input)
+      for (const relativePath of ['ci/init.js', 'register.js', 'loader-hook.mjs', 'version.js']) {
+        fs.appendFileSync(path.join(copiedPackageRoot, relativePath), '\n// changed after approval\n')
+        const changedDigest = copiedApproval.getApprovalDigest(input)
+        assert.notStrictEqual(changedDigest, digest, `${relativePath} must affect the approval digest`)
+        digest = changedDigest
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects manifest or option changes made after the plan was rendered', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
     const manifestPath = path.join(root, 'manifest.json')

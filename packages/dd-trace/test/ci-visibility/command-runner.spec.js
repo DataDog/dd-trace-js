@@ -200,6 +200,38 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('reapplies fake-intake transport in descendant Node.js processes', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+    const childSource = 'process.stdout.write(JSON.stringify({' +
+      'agentUrl: process.env.DD_TRACE_AGENT_URL,' +
+      'agentlessUrl: process.env.DD_CIVISIBILITY_AGENTLESS_URL' +
+    '}))'
+    const wrapperSource = 'const { spawnSync } = require("node:child_process");' +
+      'const env = { ...process.env, DD_TRACE_AGENT_URL: "https://example.invalid", ' +
+      'DD_CIVISIBILITY_AGENTLESS_URL: "https://example.invalid" };' +
+      `const child = spawnSync(process.execPath, ["-e", ${JSON.stringify(childSource)}], ` +
+      '{ env, encoding: "utf8" });' +
+      'process.stdout.write(child.stdout); process.stderr.write(child.stderr); process.exitCode = child.status;'
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [process.execPath, '-e', wrapperSource],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      })
+      const observed = JSON.parse(result.stdout)
+
+      assert.strictEqual(observed.agentUrl, 'http://127.0.0.1:43123')
+      assert.strictEqual(observed.agentlessUrl, 'http://127.0.0.1:43123')
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
   it('refuses inline fake-intake and NODE_OPTIONS overrides', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
     const env = buildCiWiringEnv({ intake: { port: 43123 } })

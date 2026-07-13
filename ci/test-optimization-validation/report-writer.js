@@ -638,7 +638,7 @@ function formatCiCommandCandidateSummary (candidate, options = {}) {
     ? markdownCode
     : value => value
   const parts = [
-    candidate.provider,
+    candidate.provider && format(candidate.provider),
     candidate.workflow && `workflow ${format(candidate.workflow)}`,
     candidate.job && `job ${format(candidate.job)}`,
     candidate.step && `step ${format(candidate.step)}`,

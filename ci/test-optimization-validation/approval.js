@@ -41,9 +41,14 @@ function getApprovalDigest ({
 
 function getValidatorDigest () {
   const validationDirectory = __dirname
+  const packageRoot = path.resolve(validationDirectory, '..', '..')
   const files = [
     path.resolve(validationDirectory, '..', 'diagnose.js'),
+    path.resolve(validationDirectory, '..', 'init.js'),
     path.resolve(validationDirectory, '..', 'validate-test-optimization.js'),
+    path.resolve(packageRoot, 'loader-hook.mjs'),
+    path.resolve(packageRoot, 'register.js'),
+    path.resolve(packageRoot, 'version.js'),
     ...collectJavaScriptFiles(validationDirectory),
   ].sort()
   const hash = crypto.createHash('sha256')

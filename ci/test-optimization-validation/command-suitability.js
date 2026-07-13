@@ -5,6 +5,20 @@ const path = require('node:path')
 
 const MAX_CONFIG_BYTES = 512 * 1024
 const TYPECHECK_ENABLED_PATTERN = /typecheck\s*:\s*\{[\s\S]{0,2000}?enabled\s*:\s*true/
+const VITEST_CONFIG_FILENAMES = [
+  'vitest.config.js',
+  'vitest.config.mjs',
+  'vitest.config.cjs',
+  'vitest.config.ts',
+  'vitest.config.mts',
+  'vitest.config.cts',
+  'vite.config.js',
+  'vite.config.mjs',
+  'vite.config.cjs',
+  'vite.config.ts',
+  'vite.config.mts',
+  'vite.config.cts',
+]
 
 /**
  * Returns why a planned command is unsuitable for deterministic validation.
@@ -92,6 +106,19 @@ function getVitestConfigFile (command) {
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === '--config' && argv[index + 1]) return path.resolve(command.cwd, argv[index + 1])
     if (argv[index].startsWith('--config=')) return path.resolve(command.cwd, argv[index].slice('--config='.length))
+  }
+
+  for (const filename of VITEST_CONFIG_FILENAMES) {
+    const configFile = path.resolve(command.cwd, filename)
+    if (isFile(configFile)) return configFile
+  }
+}
+
+function isFile (filename) {
+  try {
+    return fs.statSync(filename).isFile()
+  } catch {
+    return false
   }
 }
 

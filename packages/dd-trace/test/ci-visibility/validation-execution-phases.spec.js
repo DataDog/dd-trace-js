@@ -299,6 +299,28 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('resolves relative PATH entries from the command working directory', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-relative-path-'))
+    const bin = path.join(root, 'node_modules', '.bin')
+    const executable = path.join(bin, 'test-runner')
+    fs.mkdirSync(bin, { recursive: true })
+    fs.writeFileSync(executable, '')
+    fs.chmodSync(executable, 0o755)
+
+    try {
+      const command = {
+        cwd: root,
+        argv: ['test-runner'],
+        env: { PATH: path.join('node_modules', '.bin') },
+      }
+
+      assert.strictEqual(getUnavailableExecutable(command), undefined)
+      assert.strictEqual(getResolvedExecutable(command), executable)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects ambient Yarn when the repository pins a Yarn release', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-plan-'))
     const framework = getPlannedFramework(
@@ -330,6 +352,7 @@ describe('test optimization validator-owned execution phases', () => {
     const configFile = path.join(root, 'vitest.config.ts')
     const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
     framework.framework = 'vitest'
+    framework.existingTestCommand.argv.push('--typecheck.enabled=false')
     framework.generatedTestStrategy.fileExtension = '.test.ts'
     fs.writeFileSync(configFile, 'export default { test: { typecheck: { enabled: true } } }\n')
     for (const scenario of framework.generatedTestStrategy.scenarios) {
@@ -379,6 +402,9 @@ describe('test optimization validator-owned execution phases', () => {
       }), /selected direct test command.*--typecheck\.enabled=false/s)
 
       framework.existingTestCommand.argv.push('--typecheck.enabled=false')
+      for (const scenario of framework.generatedTestStrategy.scenarios) {
+        scenario.runCommand.argv.push('--typecheck.enabled=false')
+      }
       formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'manifest.json'),
@@ -391,6 +417,39 @@ describe('test optimization validator-owned execution phases', () => {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  for (const configName of ['vitest.config.ts', 'vite.config.ts']) {
+    it(`rejects a selected Vitest command using default ${configName}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-default-config-plan-'))
+      const framework = getPlannedFramework(
+        root,
+        path.join(root, 'dd-test-optimization-validation.test.ts'),
+        path.join(root, '.dd-validation-state')
+      )
+      framework.framework = 'vitest'
+      framework.existingTestCommand = {
+        cwd: root,
+        argv: [process.execPath, '-e', ''],
+      }
+      fs.writeFileSync(
+        path.join(root, configName),
+        'export default { test: { typecheck: { enabled: true } } }\n'
+      )
+
+      try {
+        assert.throws(() => formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out: path.join(root, 'results'),
+        }), new RegExp(`typecheck-enabled Vitest config .*${configName}`))
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('rejects an unknown absolute Node shim for direct Vitest validation', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-node-shim-'))

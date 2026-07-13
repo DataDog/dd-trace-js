@@ -48,8 +48,9 @@ function resolveExecutable (executable, command) {
 
   for (const directory of environmentPath.split(path.delimiter)) {
     if (!directory) continue
+    const resolvedDirectory = path.resolve(command.cwd, directory)
     for (const extension of extensions) {
-      const filename = path.join(directory, `${executable}${extension}`)
+      const filename = path.join(resolvedDirectory, `${executable}${extension}`)
       if (isExecutable(filename)) return true
     }
   }
@@ -76,8 +77,9 @@ function getResolvedExecutable (command) {
 
   for (const directory of environmentPath.split(path.delimiter)) {
     if (!directory) continue
+    const resolvedDirectory = path.resolve(command.cwd, directory)
     for (const extension of extensions) {
-      const filename = path.join(directory, `${executable}${extension}`)
+      const filename = path.join(resolvedDirectory, `${executable}${extension}`)
       if (isExecutable(filename)) return filename
     }
   }
