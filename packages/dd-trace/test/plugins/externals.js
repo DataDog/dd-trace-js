@@ -219,7 +219,13 @@ module.exports = {
     },
     {
       name: '@fastify/cookie',
+      versions: ['>=6 <11.1.0'],
+      node: '<22',
+    },
+    {
+      name: '@fastify/cookie',
       versions: ['>=6'],
+      node: '>=22',
     },
     {
       name: '@fastify/multipart',
