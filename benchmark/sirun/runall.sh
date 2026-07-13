@@ -49,14 +49,15 @@ fi
 export PATH="$HOME/.bun/bin:$PATH"
 
 (
-  cd ../../ &&
-  # `--frozen-lockfile` keeps benchmark runs reproducible: a fresh resolve
-  # against the registry could pull a newer patch of a transitive dep and
-  # silently move the perf numbers. The supply-chain pin in `bunfig.toml`
-  # (`minimumReleaseAge = 259200`) only applies on resolve, so the lockfile
-  # is what actually nails the versions when the benchmark fires.
-  (bun install --frozen-lockfile || (sleep 60 && bun install --frozen-lockfile)) \
-    && PLUGINS="bluebird|q|graphql|express" npm run services
+  cd ../../
+  if [[ -f bun.lock ]]; then
+    bun install --frozen-lockfile || (sleep 60 && bun install --frozen-lockfile)
+  else
+    # The baseline checkout still uses the legacy lockfile; --no-save migrates it
+    # in memory without rejecting the migration as a frozen lockfile change.
+    bun install --no-save || (sleep 60 && bun install --no-save)
+  fi
+  PLUGINS="bluebird|q|graphql|express" npm run services
 )
 
 (

@@ -36,22 +36,7 @@ describe('scripts/install_plugin_modules.js', function () {
   })
 
   it('installs every pino sandbox to a version satisfying its declared range, using bun (not yarn)', () => {
-    const result = spawnSync(process.execPath, [installScript], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        PLUGINS: 'pino',
-        PATH: `${bunBinDir}:/usr/bin:/bin`,
-      },
-    })
-
-    assert.strictEqual(
-      result.status,
-      0,
-      `install_plugin_modules.js exited with status ${result.status} (signal ${result.signal}).\n` +
-        `--- stdout ---\n${result.stdout}\n--- stderr ---\n${result.stderr}`
-    )
+    runInstall('pino')
 
     const sandboxFolders = fs.readdirSync(versionsDir, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && entry.name.startsWith('pino@'))
@@ -82,7 +67,43 @@ describe('scripts/install_plugin_modules.js', function () {
 
     assert.deepStrictEqual(resolvedVersions, expectedVersions)
   })
+
+  it('ignores unpublished versions left in registry time metadata', () => {
+    runInstall('mariadb')
+
+    const manifest = require(path.join(versionsDir, 'mariadb@2', 'package.json'))
+    assert.strictEqual(manifest.dependencies.mariadb, '2.5.6')
+  })
+
+  it('does not require latest-version caps for forced transitive dependencies', () => {
+    runInstall('google-cloud-vertexai')
+
+    const manifest = require(path.join(versionsDir, '@google-cloud', 'vertexai', 'package.json'))
+    assert.match(manifest.dependencies['google-auth-library'], /^9\./)
+  })
 })
+
+/**
+ * @param {string} plugin
+ */
+function runInstall (plugin) {
+  const result = spawnSync(process.execPath, [installScript], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PLUGINS: plugin,
+      PATH: `${bunBinDir}:/usr/bin:/bin`,
+    },
+  })
+
+  assert.strictEqual(
+    result.status,
+    0,
+    `install_plugin_modules.js exited with status ${result.status} (signal ${result.signal}).\n` +
+      `--- stdout ---\n${result.stdout}\n--- stderr ---\n${result.stderr}`
+  )
+}
 
 function resolveBunBinary () {
   if (process.env.BUN_BIN) return process.env.BUN_BIN
