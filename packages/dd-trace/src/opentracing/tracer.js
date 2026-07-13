@@ -91,7 +91,9 @@ class DatadogTracer {
         tracerVersion: pkg.version,
         lang: 'nodejs',
         langVersion: process.version,
-        langInterpreter: process.jsEngine || 'v8',
+        // Bun runs on JavaScriptCore; match the legacy agent writer's
+        // Datadog-Meta-Lang-Interpreter (process.versions.bun ? 'JavaScriptCore' : 'v8').
+        langInterpreter: process.versions.bun ? 'JavaScriptCore' : (process.jsEngine || 'v8'),
         pid: process.pid,
         tracerService: config.service,
         statsEnabled: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || false,
