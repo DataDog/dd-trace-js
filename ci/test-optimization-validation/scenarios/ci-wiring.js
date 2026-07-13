@@ -4,12 +4,14 @@ const fs = require('fs')
 const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
+const { buildCiRemediation } = require('../ci-remediation')
 const { buildCiWiringEnv, runCommand, serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
+const { findLateInitialization } = require('../late-initialization')
 const { normalizeRequests } = require('../payload-normalizer')
 const { sanitizeForReport } = require('../redaction')
-const { writeFileSafely } = require('../safe-files')
+const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
   basicEventEvidence,
@@ -29,11 +31,24 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
 
   try {
     const command = getCiWiringCommand(framework)
-    if (!command) return getMissingCiWiringCommandResult(framework, manifest)
+    if (!command) return getMissingCiWiringCommandResult(framework, manifest, basicResult)
 
     const outDir = frameworkOutDir(out, framework, scenarioName)
+    ensureSafeDirectory(out, outDir, 'CI wiring artifact directory')
     intake.configure()
     intake.resetRequests()
+    const baseEvidence = getCiWiringBaseEvidence({ framework, manifest, basicResult, command })
+    const conclusiveStaticResult = await maybeConcludeMissingCiInitialization({
+      baseEvidence,
+      basicResult,
+      command,
+      framework,
+      intake,
+      options,
+      out,
+      outDir,
+    })
+    if (conclusiveStaticResult) return conclusiveStaticResult
 
     const result = await runCommand(command, {
       artifactRoot: out,
@@ -41,6 +56,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
       envMode: 'clean',
       outDir,
       label: `${framework.id}:${scenarioName}`,
+      repositoryRoot: options.repositoryRoot,
       verbose: options.verbose,
     })
 
@@ -62,15 +78,11 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
 
     const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
     const evidence = {
+      ...baseEvidence,
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
       commandDescription: command.description,
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
-      ciCommandCandidate: buildCiCommandCandidate(framework),
-      ciWiring: framework.ciWiring,
-      ciConfigurationDiagnosis: framework.ciWiring?.diagnosis || framework.ciWiring?.reason,
-      existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
-      forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
       preflight: summarizePreflight(ciWiringPreflight),
       ...basicEventEvidence(events),
     }
@@ -123,6 +135,87 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
   } catch (err) {
     return error(framework, scenarioName, err)
   }
+}
+
+function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command }) {
+  return {
+    commandDescription: command.description,
+    ciCommandCandidate: buildCiCommandCandidate(framework),
+    ciWiring: framework.ciWiring,
+    ciConfigurationDiagnosis: framework.ciWiring?.diagnosis || framework.ciWiring?.reason,
+    ciRemediation: buildCiRemediation(framework),
+    nodeOptionsRemoval: findNodeOptionsRemoval(framework, manifest),
+    existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
+    lateInitialization: findLateInitialization(manifest, framework),
+    forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
+  }
+}
+
+async function maybeConcludeMissingCiInitialization ({
+  baseEvidence,
+  basicResult,
+  command,
+  framework,
+  intake,
+  options,
+  out,
+  outDir,
+}) {
+  const initialization = framework.ciWiring?.initialization
+  if (initialization?.status !== 'not_configured' || basicResult?.status !== 'pass') return
+
+  let probe
+  try {
+    probe = await runInitializationProbe({ command, framework, intake, options, outDir })
+  } catch (error) {
+    baseEvidence.shortcutProbe = {
+      ran: false,
+      error: error?.message || String(error),
+    }
+    return
+  } finally {
+    intake.resetRequests()
+  }
+  if (probe.summary?.reachedTestRunnerProcess !== true) {
+    baseEvidence.shortcutProbe = probe.summary
+    return
+  }
+
+  const frameworkName = getDisplayFrameworkName(framework.framework)
+  const staticEvidence = initialization.evidence.join(' ')
+  const diagnosis = `The selected CI configuration does not initialize Datadog. ${staticEvidence} ` +
+    `A short NODE_OPTIONS probe reached the ${frameworkName} process, so the CI command can carry the required ` +
+    'initialization to the test runner. Basic Reporting already proved this test suite reports when Datadog is ' +
+    'initialized, so the validator did not replay the full CI test suite.'
+  const evidence = {
+    ...baseEvidence,
+    initializationProbe: probe.summary,
+    ciCommandExecution: {
+      mode: 'initialization-probe-only',
+      fullReplayRan: false,
+      reason: 'Static CI evidence showed no Datadog initialization and the exact-command probe reached the ' +
+        'selected test runner.',
+    },
+    monorepoFindings: getMonorepoFindings({ framework, command, probe: probe.summary }),
+    eventLevelFailure: {
+      kind: 'ci-wiring-static-missing-initialization',
+      missingLevels: ['session', 'module', 'suite', 'test'],
+      summary: diagnosis,
+      recommendation: baseEvidence.ciRemediation.summary,
+    },
+    ...basicEventEvidence([]),
+  }
+  const resultPath = path.join(outDir, 'result.json')
+  writeFileSafely(
+    out,
+    resultPath,
+    `${JSON.stringify(sanitizeForReport({ status: 'fail', diagnosis, evidence }), null, 2)}\n`,
+    'CI wiring static conclusion artifact'
+  )
+  return fail(framework, 'ci-wiring', diagnosis, evidence, null, {
+    ...probe.artifacts,
+    result: resultPath,
+  })
 }
 
 /**
@@ -211,6 +304,16 @@ function isBourneShell (executable) {
 async function maybeRunInitializationProbe ({ command, framework, intake, options, outDir, result, evidence }) {
   if (result.timedOut === true) return {}
   if (!commandOutputShowsTestsRan(evidence.commandOutputSummary)) return {}
+  if (evidence.nodeOptionsRemoval) {
+    return {
+      summary: {
+        ran: false,
+        skippedBecauseConfigurationProvesRemoval: true,
+        reason: `The package script expansion ${evidence.nodeOptionsRemoval.command} explicitly removes ` +
+          'NODE_OPTIONS before the test runner starts.',
+      },
+    }
+  }
 
   try {
     return await runInitializationProbe({
@@ -232,7 +335,7 @@ async function maybeRunInitializationProbe ({ command, framework, intake, option
   }
 }
 
-function getMissingCiWiringCommandResult (framework, manifest) {
+function getMissingCiWiringCommandResult (framework, manifest, basicResult) {
   const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
   if (contradiction) {
     return fail(framework, 'ci-wiring', contradiction.reason, {
@@ -247,10 +350,30 @@ function getMissingCiWiringCommandResult (framework, manifest) {
   const diagnosis = ciWiring?.diagnosis ||
     ciWiring?.reason ||
     'No replayable CI wiring command was provided in the manifest.'
+  const ciRemediation = buildCiRemediation(framework)
   const evidence = {
     ciCommandCandidate: buildCiCommandCandidate(framework),
     ciWiring,
+    ciRemediation,
     recommendation: 'Add ciWiringCommand to the manifest when a CI test step can be safely replayed locally.',
+  }
+
+  if (ciWiring?.initialization?.status === 'not_configured' && basicResult?.status === 'pass') {
+    const staticEvidence = ciWiring.initialization.evidence.join(' ')
+    const summary = `The selected CI configuration does not initialize Datadog. ${staticEvidence} ` +
+      'Basic Reporting proved this test suite reports when Datadog is initialized. The exact CI command could not ' +
+      `be replayed locally: ${diagnosis} This does not change the current conclusion because CI provides no ` +
+      'initialization to propagate. Apply the generated CI configuration below; the next normal CI test run will ' +
+      'provide end-to-end verification.'
+    evidence.forcedLocalBasicReporting = summarizeBasicReportingResult(basicResult)
+    evidence.eventLevelFailure = {
+      kind: 'ci-wiring-static-missing-initialization',
+      missingLevels: ['session', 'module', 'suite', 'test'],
+      summary,
+      recommendation: ciRemediation.summary,
+    }
+    evidence.recommendation = ciRemediation.summary
+    return fail(framework, 'ci-wiring', summary, evidence)
   }
 
   if (ciWiring?.status === 'skip') return skip(framework, 'ci-wiring', diagnosis, evidence)
@@ -274,7 +397,7 @@ function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) 
       ...localFailure,
       kind: 'ci-wiring-no-test-optimization-events',
       summary: getCiWiringTestsRanSummary({ basicResult, evidence, framework }),
-      recommendation: getCiWiringTestsRanRecommendation({ basicResult, evidence }),
+      recommendation: getCiWiringTestsRanRecommendation({ basicResult, evidence, framework }),
     }
   }
 
@@ -300,49 +423,130 @@ function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) 
 }
 
 function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
+  if (evidence.nodeOptionsRemoval) {
+    return getNodeOptionsRemovalDiagnosis({ basicResult, evidence, framework })
+  }
+
   const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
     'environment and setup described by the CI job, no Test Optimization events reached the mock intake.'
   const configurationSummary = evidence.ciConfigurationDiagnosis
     ? ` Manifest CI discovery recorded: ${evidence.ciConfigurationDiagnosis}`
     : ''
   const probeSummary = getInitializationProbeSummary(evidence.initializationProbe, framework)
+  const lateInitializationSummary = getLateInitializationSummary(evidence.lateInitialization)
 
   if (basicResult?.status === 'pass') {
-    return `${summary}${configurationSummary} The same selected test command reported test data when the ` +
+    return `${summary}${configurationSummary}${lateInitializationSummary} ` +
+      'The same selected test command ' +
+      'reported test data when the ' +
       'validator supplied the ' +
       'required Datadog initialization directly, so this repository can report when dd-trace is initialized ' +
       `correctly.${probeSummary}`
   }
 
-  return `${summary}${configurationSummary}${probeSummary}`
+  return `${summary}${configurationSummary}${lateInitializationSummary}${probeSummary}`
 }
 
-function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
+function getCiWiringTestsRanRecommendation ({ basicResult, evidence, framework }) {
   const existingInitScripts = evidence.existingDatadogInitScripts || []
+  const lateInitialization = evidence.lateInitialization || []
   const probeReachedTestRunner = evidence.initializationProbe?.ran === true &&
     evidence.initializationProbe.reachedTestRunnerProcess === true
+  const nodeOptionsRemoval = evidence.nodeOptionsRemoval
   let recommendation
 
-  if (existingInitScripts.length > 0) {
+  if (nodeOptionsRemoval) {
+    const source = nodeOptionsRemoval.scriptName && nodeOptionsRemoval.packageJson
+      ? `Script \`${nodeOptionsRemoval.scriptName}\` in \`${nodeOptionsRemoval.packageJson}\``
+      : 'The package script'
+    recommendation = `${source} clears NODE_OPTIONS before the test runner starts. Remove the empty ` +
+      '`NODE_OPTIONS=` assignment, or pass the CI-provided `-r dd-trace/ci/init` preload to the next command.'
+  } else if (lateInitialization.length > 0) {
+    const setupFiles = lateInitialization.map(finding => `\`${finding.setupFile}\``).join(', ')
+    recommendation = `Move Test Optimization initialization out of Vitest setup file ${setupFiles}. ` +
+      'Vitest setup files run after the test runner starts, which is too late for dd-trace to instrument the ' +
+      'runner. Set `NODE_OPTIONS=-r dd-trace/ci/init` on the CI test command instead.'
+  } else if (existingInitScripts.length > 0) {
     const scriptNames = existingInitScripts.map(script => `\`${script.name}\``).join(', ')
     recommendation = `The package already defines ${scriptNames} with the required ` +
       '`dd-trace/ci/init` preload. Update the identified CI test step to invoke that script, or copy its ' +
       '`NODE_OPTIONS` initialization into the CI test command.'
   } else if (probeReachedTestRunner) {
-    recommendation = 'Update the identified CI test job so NODE_OPTIONS includes `-r dd-trace/ci/init` and the ' +
-      'required Datadog environment variables are present. The NODE_OPTIONS probe reached the test runner for ' +
-      'this command shape, so no package-manager or wrapper change is needed.'
+    recommendation = `${evidence.ciRemediation?.summary || buildCiRemediation(framework).summary} ` +
+      'The NODE_OPTIONS probe reached the test runner for this command shape, so no package-manager or wrapper ' +
+      'change is needed.'
   } else {
     recommendation = 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test ' +
       'runner, and that any package manager, monorepo runner, or wrapper preserves it.'
   }
 
-  if (basicResult?.status === 'pass') {
+  if (basicResult?.status === 'pass' && !nodeOptionsRemoval && lateInitialization.length === 0 &&
+    !probeReachedTestRunner) {
     return `${recommendation} Compare the passing direct-initialization command with the CI job command to find ` +
       'where the Datadog setup differs.'
   }
 
   return recommendation
+}
+
+function getNodeOptionsRemovalDiagnosis ({ basicResult, evidence, framework }) {
+  const finding = evidence.nodeOptionsRemoval
+  const frameworkName = getDisplayFrameworkName(framework.framework)
+  const ciCommand = evidence.ciCommandCandidate?.command
+    ? `When CI runs \`${evidence.ciCommandCandidate.command}\`, `
+    : 'In the selected CI test job, '
+  const source = finding.scriptName && finding.packageJson
+    ? `script \`${finding.scriptName}\` in \`${finding.packageJson}\``
+    : 'a package script'
+  const directResult = basicResult?.status === 'pass'
+    ? ` When the same ${frameworkName} test command runs with ` +
+      '`NODE_OPTIONS=-r dd-trace/ci/init` supplied directly, it reports test data successfully.'
+    : ''
+
+  return `The CI test command ran tests, but no Test Optimization events reached the mock intake. ${ciCommand}` +
+    `${source} expands to \`${finding.command}\`. The empty \`NODE_OPTIONS=\` assignment clears the Datadog ` +
+    `preload before ${frameworkName} starts.${directResult}`
+}
+
+function findNodeOptionsRemoval (framework, manifest) {
+  const commands = framework.ciWiring?.packageScriptExpansionChain || []
+  for (const command of commands) {
+    if (typeof command !== 'string') continue
+    if (/(?:^|\s)NODE_OPTIONS\s*=\s*(?=\s|$)/.test(command) ||
+      /(?:^|\s)unset\s+NODE_OPTIONS(?:\s|$)/.test(command) ||
+      /(?:^|\s)env\s+-u\s+NODE_OPTIONS(?:\s|$)/.test(command)) {
+      return {
+        command,
+        ...findPackageScriptSource(manifest, framework, command),
+      }
+    }
+  }
+}
+
+function findPackageScriptSource (manifest, framework, command) {
+  const roots = new Set([manifest?.repository?.root, framework.project?.root].filter(Boolean))
+  for (const root of roots) {
+    const packageJsonPath = path.join(root, 'package.json')
+    let packageJson
+    try {
+      packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+    } catch {
+      continue
+    }
+
+    for (const [scriptName, scriptCommand] of Object.entries(packageJson.scripts || {})) {
+      if (scriptCommand === command) return { packageJson: packageJsonPath, scriptName }
+    }
+  }
+  return {}
+}
+
+function getLateInitializationSummary (findings) {
+  if (!Array.isArray(findings) || findings.length === 0) return ''
+  const setupFiles = findings.map(finding => `\`${finding.setupFile}\``).join(', ')
+  return ' Static configuration inspection found Test Optimization initialization in Vitest setup file ' +
+    `${setupFiles}. Vitest loads setup files after the runner starts, so this initialization is too late to ` +
+    'instrument the test runner.'
 }
 
 /**
@@ -612,7 +816,7 @@ function getMonorepoFindings ({ framework, command, probe }) {
     })
   }
 
-  if (probe?.reachedAnyNodeProcess && !probe.reachedTestRunnerProcess) {
+  if (probe?.reachedAnyNodeProcess && !probe.reachedTestRunnerProcess && !findNodeOptionsRemoval(framework)) {
     findings.push({
       id: 'node-options-not-observed-in-test-runner',
       tool: 'node',

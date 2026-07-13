@@ -113,6 +113,9 @@ const SECRET_HEADER_PATTERN = new RegExp(
   'gi'
 )
 const URL_CREDENTIAL_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)(@)/gi
+const GITHUB_SECRET_REFERENCE_PATTERN =
+  /(?:\b[A-Za-z_][A-Za-z0-9_.-]*\s*[:=]\s*)?\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g
+const SAFE_REFERENCE_MARKER_PATTERN = /DDCIVARREF([0-9]+)X/g
 
 const ENV_CONTAINER_KEYS = new Set([
   'safeEnv',
@@ -176,7 +179,11 @@ function sanitizeEnvValue (name, value) {
  * @returns {string} sanitized string
  */
 function sanitizeString (value) {
-  return value
+  const references = []
+  const protectedValue = value.replaceAll(GITHUB_SECRET_REFERENCE_PATTERN, reference => {
+    return `DDCIVARREF${references.push(reference) - 1}X`
+  })
+  const sanitized = protectedValue
     .replaceAll(DEFAULT_IGNORABLE_PATTERN, '')
     .replaceAll(UNSAFE_CONTROL_PATTERN, '')
     .replaceAll(PRIVATE_KEY_BLOCK_PATTERN, '<redacted-private-key>')
@@ -189,6 +196,8 @@ function sanitizeString (value) {
     .replaceAll(SECRET_HEADER_PATTERN, `$1: ${REDACTED}`)
     .replaceAll(AUTH_HEADER_PATTERN, `$1 ${REDACTED}`)
     .replaceAll(URL_CREDENTIAL_PATTERN, `$1${REDACTED}$3`)
+
+  return sanitized.replaceAll(SAFE_REFERENCE_MARKER_PATTERN, (marker, index) => references[Number(index)] || marker)
 }
 
 /**

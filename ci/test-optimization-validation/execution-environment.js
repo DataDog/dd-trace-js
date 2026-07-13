@@ -5,7 +5,8 @@ const LOCAL_SOCKET_SYSCALLS = new Set(['connect', 'listen'])
 const LOCALHOST_ADDRESSES = new Set(['127.0.0.1', '::1', 'localhost'])
 
 const LOCALHOST_BLOCKED_DIAGNOSIS =
-  'The local fake intake could not start because this environment blocks localhost sockets. ' +
+  'Validation was blocked before any project command ran. The local fake intake could not start because this ' +
+  'environment blocks localhost sockets. ' +
   'This is not evidence that Test Optimization is misconfigured. No Test Optimization conclusion was reached.'
 
 const LOCALHOST_BLOCKED_REASON =
@@ -40,7 +41,13 @@ function getLocalhostBlockedRemediation () {
   return [...LOCALHOST_BLOCKED_REMEDIATION]
 }
 
-function buildExecutionEnvironmentBlockerResult ({ framework, error, rerunCommand }) {
+function buildExecutionEnvironmentBlockerResult ({
+  framework,
+  error,
+  rerunCommand,
+  approvedPlanSha256,
+  workingDirectory,
+}) {
   const message = error && error.message ? error.message : String(error)
 
   return {
@@ -50,6 +57,7 @@ function buildExecutionEnvironmentBlockerResult ({ framework, error, rerunComman
     diagnosis: LOCALHOST_BLOCKED_DIAGNOSIS,
     evidence: {
       intakeStarted: false,
+      projectCommandsRan: false,
       blockedByExecutionEnvironment: true,
       localNetworkingBlocked: true,
       manifestMayBeReused: true,
@@ -58,6 +66,8 @@ function buildExecutionEnvironmentBlockerResult ({ framework, error, rerunComman
       errorCode: error?.code,
       errorSyscall: error?.syscall,
       errorAddress: error?.address,
+      approvedPlanSha256,
+      workingDirectory,
       remediation: getLocalhostBlockedRemediation(),
       rerunCommand,
     },

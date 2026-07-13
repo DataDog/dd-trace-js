@@ -46,6 +46,7 @@ const CI_WIRING_STATUSES = new Set([
   'skip',
   'unknown',
 ])
+const CI_INITIALIZATION_STATUSES = new Set(['configured', 'not_configured', 'unknown'])
 const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const MAX_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
@@ -63,6 +64,7 @@ const COMMAND_FIELDS = new Set([
   'timeoutMs',
   'usesShell',
   'id',
+  'outputPaths',
 ])
 
 const GENERATED_SCENARIO_IDS = new Set([
@@ -98,6 +100,7 @@ function validateManifest (manifest) {
 
   if (Array.isArray(manifest.frameworks)) {
     validateUniqueFrameworkIds(manifest.frameworks, errors)
+    validateDuplicateRunnableCoverage(manifest.frameworks, errors)
     for (const [index, framework] of manifest.frameworks.entries()) {
       validateFramework(framework, index, errors)
     }
@@ -106,6 +109,49 @@ function validateManifest (manifest) {
   validateRepositoryContainedPaths(manifest, errors)
 
   return errors
+}
+
+function validateDuplicateRunnableCoverage (frameworks, errors) {
+  const seen = new Map()
+  for (const [index, framework] of frameworks.entries()) {
+    if (framework.status !== 'runnable' || !framework.ciWiringCommand) continue
+    const key = JSON.stringify({
+      framework: framework.framework,
+      projectRoot: framework.project?.root,
+      existingTestCommand: commandExecutionShape(framework.existingTestCommand),
+      ciWiringCommand: commandExecutionShape(framework.ciWiringCommand),
+      ciInitializesDatadog: commandInitializesDatadog(framework.ciWiringCommand),
+    })
+    const previous = seen.get(key)
+    if (previous === undefined) {
+      seen.set(key, index)
+      continue
+    }
+    errors.push(
+      `frameworks[${index}] duplicates runnable framework and CI command coverage from frameworks[${previous}]. ` +
+      'Keep one representative framework entry and record the other CI job as an omitted or duplicate candidate.'
+    )
+  }
+}
+
+function commandExecutionShape (command) {
+  if (!command) return null
+  return {
+    argv: command.argv,
+    cwd: command.cwd,
+    shell: command.shell,
+    shellCommand: command.shellCommand,
+    usesShell: Boolean(command.usesShell),
+  }
+}
+
+function commandInitializesDatadog (command) {
+  const values = [
+    ...(command?.argv || []),
+    command?.shellCommand,
+    command?.env?.NODE_OPTIONS,
+  ].filter(Boolean).join(' ')
+  return /dd-trace\/ci\/init/.test(values)
 }
 
 function validateRepositoryContainedPaths (manifest, errors) {
@@ -309,6 +355,10 @@ function validateCiWiring (framework, prefix, errors) {
     errors.push(`${prefix}.ciWiring.status must be pass, fail, skip, or unknown.`)
   }
 
+  if (ciWiring.initialization !== undefined) {
+    validateCiInitialization(ciWiring.initialization, `${prefix}.ciWiring.initialization`, errors)
+  }
+
   if ((ciWiring.status === 'pass' || ciWiring.status === 'fail') && !framework.ciWiringCommand) {
     errors.push(`${prefix}.ciWiringCommand is required when ciWiring.status is ${ciWiring.status}.`)
   }
@@ -334,6 +384,25 @@ function validateCiWiring (framework, prefix, errors) {
   if ((ciWiring.status === 'skip' || ciWiring.status === 'unknown') &&
     !hasNonEmptyString(ciWiring.diagnosis) && !hasNonEmptyString(ciWiring.reason)) {
     errors.push(`${prefix}.ciWiring must explain why CI wiring is ${ciWiring.status}.`)
+  }
+}
+
+function validateCiInitialization (initialization, prefix, errors) {
+  if (!initialization || typeof initialization !== 'object' || Array.isArray(initialization)) {
+    errors.push(`${prefix} must be an object when present.`)
+    return
+  }
+
+  if (!CI_INITIALIZATION_STATUSES.has(initialization.status)) {
+    errors.push(`${prefix}.status must be configured, not_configured, or unknown.`)
+  }
+  if (Array.isArray(initialization.evidence)) {
+    validateStringArray(initialization, 'evidence', errors, prefix)
+    if (initialization.status !== 'unknown' && initialization.evidence.length === 0) {
+      errors.push(`${prefix}.evidence must explain the ${initialization.status} conclusion.`)
+    }
+  } else {
+    errors.push(`${prefix}.evidence must be an array.`)
   }
 }
 
@@ -486,6 +555,7 @@ function requiredCommand (target, field, errors, prefix = '', options = {}) {
       errors.push(`${key}.requiredEnvVars must be an array when present.`)
     }
   }
+  optionalAbsolutePathArray(value, 'outputPaths', errors, key)
   if (value.timeoutMs !== undefined && (!Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0)) {
     errors.push(`${key}.timeoutMs must be a positive number when present.`)
   } else if (value.timeoutMs > MAX_COMMAND_TIMEOUT_MS) {

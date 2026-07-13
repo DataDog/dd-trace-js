@@ -36,6 +36,12 @@ function getGeneratedFileContentError (contentLines) {
   if (totalBytes > MAX_GENERATED_FILE_BYTES) {
     return `must be at most ${MAX_GENERATED_FILE_BYTES} bytes`
   }
+
+  const source = contentLines.join('\n')
+  if (/\bwriteFileSync\s*\(/.test(source) && /\bnew\s+URL\s*\(/.test(source) &&
+    !/\bfileURLToPath\s*\(/.test(source)) {
+    return 'must convert generated state-file URLs with fileURLToPath before passing them to writeFileSync'
+  }
 }
 
 function hasUnsafeControlCharacter (value) {

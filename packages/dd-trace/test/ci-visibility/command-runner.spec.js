@@ -417,6 +417,45 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('stops argv command process groups when diagnostic evidence is complete', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const marker = path.join(outDir, 'early-stop-child-survived')
+    const childScript = [
+      `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 750)`,
+      'setInterval(() => {}, 1000)',
+    ].join(';')
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      `spawn(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(childScript)}], { stdio: "ignore" })`,
+      'setInterval(() => {}, 1000)',
+    ].join(';')
+    const startedAt = Date.now()
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [process.execPath, '-e', parentScript],
+        timeoutMs: 5000,
+      }, {
+        outDir,
+        stopWhen: () => Date.now() - startedAt >= 150,
+      })
+
+      await new Promise(resolve => setTimeout(resolve, 700))
+
+      assert.strictEqual(result.stoppedEarly, true)
+      assert.strictEqual(result.timedOut, false)
+      assert.ok(result.durationMs < 2000)
+      assert.strictEqual(fs.existsSync(marker), false)
+      const commandArtifact = JSON.parse(fs.readFileSync(path.join(outDir, 'command.json'), 'utf8'))
+      assert.strictEqual(commandArtifact.stoppedEarly, true)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
   it('uses an explicit shell for shell commands', async function () {
     if (process.platform === 'win32') this.skip()
 
@@ -523,6 +562,87 @@ describe('test optimization validation command runner', () => {
       assert.strictEqual(commandArtifact.maxOutputBytes, 32)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('restores a pre-existing coverage directory after an approved coverage command', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const coverage = path.join(repositoryRoot, 'coverage')
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(coverage)
+    fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'require("node:fs").mkdirSync("coverage", { recursive: true }); ' +
+            'require("node:fs").writeFileSync("coverage/new.txt", "new")',
+          '--',
+          '--coverage',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.readFileSync(path.join(coverage, 'original.txt'), 'utf8'), 'original')
+      assert.strictEqual(fs.existsSync(path.join(coverage, 'new.txt')), false)
+      assert.deepStrictEqual(result.commandOutputPaths, [{ outputPath: coverage, action: 'restored' }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('removes a newly created coverage directory after an approved coverage command', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    fs.mkdirSync(artifactRoot)
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'require("node:fs").mkdirSync("coverage", { recursive: true })',
+          '--',
+          '--coverage',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(path.join(repositoryRoot, 'coverage')), false)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: path.join(repositoryRoot, 'coverage'),
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('restores earlier outputs when a later declared output is unsafe', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const coverage = path.join(repositoryRoot, 'coverage')
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(coverage)
+    fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')
+
+    try {
+      assert.throws(() => runCommand({
+        cwd: repositoryRoot,
+        argv: [process.execPath, '-e', ''],
+        outputPaths: [coverage, path.join(repositoryRoot, '..', 'outside')],
+      }, { artifactRoot, outDir, repositoryRoot }), /must be a child of repository\.root/)
+      assert.strictEqual(fs.readFileSync(path.join(coverage, 'original.txt'), 'utf8'), 'original')
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
     }
   })
 

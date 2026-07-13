@@ -166,8 +166,8 @@ The detailed Markdown report should contain:
 - unresolved CI expressions, includes, outputs, secrets, shared libraries, orb expansions, dynamic
   pipeline generation, or matrix values affecting replay confidence
 - relevant stdout/stderr excerpts selected by the validator
-- embedded `Validation Payloads JSON`, `Execution Results JSON`, and `Normalized Manifest JSON`
-  sections
+- one embedded `Diagnostic JSON` section containing validation payloads, the normalized manifest,
+  and static diagnosis without a duplicate raw execution-results copy
 - artifact paths for detailed inspection
 
 Treat the generated report and artifacts as local/internal diagnostics. They can reveal repository

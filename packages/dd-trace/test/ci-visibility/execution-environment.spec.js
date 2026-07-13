@@ -18,6 +18,8 @@ describe('test optimization execution environment diagnosis', () => {
       framework: { id: 'jest:root' },
       error,
       rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
+      approvedPlanSha256: 'a'.repeat(64),
+      workingDirectory: '/repo',
     })
 
     assert.strictEqual(isLocalSocketPermissionError(error), true)
@@ -28,6 +30,9 @@ describe('test optimization execution environment diagnosis', () => {
     assert.strictEqual(result.evidence.blockedByExecutionEnvironment, true)
     assert.strictEqual(result.evidence.localNetworkingBlocked, true)
     assert.strictEqual(result.evidence.manifestMayBeReused, true)
+    assert.strictEqual(result.evidence.projectCommandsRan, false)
+    assert.strictEqual(result.evidence.workingDirectory, '/repo')
+    assert.strictEqual(result.evidence.approvedPlanSha256, 'a'.repeat(64))
     assert.strictEqual(result.evidence.errorCode, 'EPERM')
     assert.strictEqual(result.evidence.errorSyscall, 'listen')
     assert.deepStrictEqual(result.evidence.remediation, [

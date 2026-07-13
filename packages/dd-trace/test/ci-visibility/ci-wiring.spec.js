@@ -24,6 +24,44 @@ describe('test optimization CI wiring validation', () => {
     assert.strictEqual(result.diagnosis, 'CI does not configure Datadog initialization.')
   })
 
+  it('fails from conclusive static CI evidence when the unavailable command cannot be replayed', async () => {
+    const result = await runCiWiring({
+      manifest: {},
+      framework: {
+        id: 'vitest:date-fns',
+        framework: 'vitest',
+        project: { name: 'date-fns' },
+        ciWiring: {
+          status: 'skip',
+          provider: 'github-actions',
+          diagnosis: 'The CI command requires mise, which is unavailable locally.',
+          initialization: {
+            status: 'not_configured',
+            evidence: ['The selected CI job does not set NODE_OPTIONS or Datadog environment variables.'],
+          },
+        },
+      },
+      basicResult: {
+        status: 'pass',
+        diagnosis: 'Basic Reporting passed.',
+      },
+    })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.diagnosis, /does not initialize Datadog/)
+    assert.match(result.diagnosis, /exact CI command could not be replayed locally/)
+    assert.match(result.diagnosis, /requires mise/)
+    assert.match(result.diagnosis, /does not change the current conclusion/)
+    assert.match(result.diagnosis, /next normal CI test run will provide end-to-end verification/)
+    assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-static-missing-initialization')
+    assert.deepStrictEqual(result.evidence.forcedLocalBasicReporting, {
+      ran: true,
+      status: 'pass',
+      diagnosis: 'Basic Reporting passed.',
+    })
+    assert.deepStrictEqual(result.evidence.ciRemediation.variants.map(variant => variant.id), ['agentless'])
+  })
+
   it('reports unknown CI wiring without a replay command as incomplete', async () => {
     const result = await runCiWiring({
       manifest: {},
@@ -161,6 +199,110 @@ describe('test optimization CI wiring validation', () => {
       }])
       assert.match(result.evidence.eventLevelFailure.recommendation, /already defines `test:datadog`/)
       assert.match(result.evidence.eventLevelFailure.recommendation, /identified CI test step to invoke that script/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('diagnoses dd-trace initialization from a Vitest setup file as too late', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const setupFile = path.join(out, 'datadog-setup.ts')
+    const configFile = path.join(out, 'vitest.config.ts')
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+    fs.writeFileSync(setupFile, 'import "dd-trace/ci/init"\n')
+    fs.writeFileSync(configFile, 'export default { test: { setupFiles: ["datadog-setup.ts"] } }\n')
+
+    try {
+      const result = await runCiWiring({
+        manifest: { repository: { root: out } },
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          project: { root: out, configFiles: [configFile] },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("Tests 1 passed")'],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.deepStrictEqual(result.evidence.lateInitialization, [{ configFile, setupFile }])
+      assert.match(result.diagnosis, /setup files after the runner starts.*too late/s)
+      assert.match(result.evidence.eventLevelFailure.recommendation, /Move Test Optimization initialization out/)
+      assert.match(result.evidence.eventLevelFailure.recommendation, /NODE_OPTIONS=-r dd-trace\/ci\/init/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('diagnoses a package script that explicitly removes NODE_OPTIONS', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const packageJson = path.join(out, 'package.json')
+      fs.writeFileSync(packageJson, `${JSON.stringify({
+        scripts: {
+          'test:ci': 'NODE_OPTIONS= yarn workspace app test',
+        },
+      }, null, 2)}\n`)
+      const result = await runCiWiring({
+        manifest: { repository: { root: out } },
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          ciWiring: {
+            packageScriptExpansionChain: [
+              'yarn test:ci',
+              'NODE_OPTIONS= yarn workspace app test',
+              'vitest run',
+            ],
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("Tests 1 passed")'],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.deepStrictEqual(result.evidence.nodeOptionsRemoval, {
+        command: 'NODE_OPTIONS= yarn workspace app test',
+        packageJson,
+        scriptName: 'test:ci',
+      })
+      assert.match(result.diagnosis, /script `test:ci` in .*package\.json.*empty `NODE_OPTIONS=` assignment/s)
+      assert.match(result.diagnosis, /same Vitest test command.*reports test data successfully/s)
+      assert.match(result.evidence.eventLevelFailure.recommendation,
+        /Script `test:ci` in .*package\.json.*clears NODE_OPTIONS/s)
+      assert.match(result.evidence.eventLevelFailure.recommendation, /pass the CI-provided/)
+      assert.doesNotMatch(result.evidence.eventLevelFailure.recommendation, /Compare the passing/)
+      assert.deepStrictEqual(result.evidence.monorepoFindings, [])
+      assert.strictEqual(result.evidence.initializationProbe.ran, false)
+      assert.strictEqual(result.evidence.initializationProbe.skippedBecauseConfigurationProvesRemoval, true)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -402,6 +544,118 @@ describe('test optimization CI wiring validation', () => {
       assert.match(result.diagnosis, /did not appear to reach a Jest process/)
       assert.strictEqual(result.evidence.monorepoFindings[0].id, 'nx-executor-env-forwarding')
       assert.strictEqual(result.evidence.monorepoFindings.at(-1).id, 'node-options-not-observed-in-test-runner')
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('aggregates repeated test runner probe signals by tool and working directory', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const wrapperScript = path.join(out, 'run-tests.js')
+    const vitestScript = path.join(out, 'vitest.mjs')
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    fs.writeFileSync(vitestScript, 'console.log("Tests 1 passed")\n')
+    fs.writeFileSync(wrapperScript, `
+      const { spawnSync } = require('node:child_process')
+      for (let index = 0; index < 2; index++) {
+        spawnSync(process.execPath, [${JSON.stringify(vitestScript)}], { stdio: 'inherit' })
+      }
+    `)
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, wrapperScript],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, true)
+      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals.length, 1)
+      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals[0].name, 'vitest')
+      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals[0].cwd, fs.realpathSync(out))
+      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals[0].processCount, 1)
+      assert.strictEqual(result.evidence.initializationProbe.stoppedAfterRunnerReached, true)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('uses static missing-initialization evidence and the exact-command probe instead of a full CI ' +
+    'replay', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const vitestScript = path.join(out, 'vitest.mjs')
+    const fullReplayMarker = path.join(out, 'full-replay-ran')
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+    fs.writeFileSync(vitestScript, `
+      import fs from 'node:fs'
+      setTimeout(() => {
+        fs.writeFileSync(${JSON.stringify(fullReplayMarker)}, 'ran')
+        console.log('Tests 1 passed')
+      }, 1000)
+    `)
+
+    try {
+      const result = await runCiWiring({
+        manifest: { repository: { root: out } },
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          project: { root: out },
+          ciWiring: {
+            status: 'unknown',
+            provider: 'github-actions',
+            configFile: path.join(out, '.github/workflows/test.yml'),
+            workflow: 'test',
+            job: 'unit',
+            step: 'Run tests',
+            initialization: {
+              status: 'not_configured',
+              evidence: ['The unit job defines no NODE_OPTIONS or Datadog environment variables.'],
+            },
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, vitestScript],
+          },
+        },
+        intake,
+        out,
+        options: { repositoryRoot: out, verbose: false },
+        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.ok(result.evidence.ciCommandExecution, JSON.stringify(result.evidence, null, 2))
+      assert.strictEqual(result.evidence.ciCommandExecution.fullReplayRan, false)
+      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, true)
+      assert.strictEqual(fs.existsSync(fullReplayMarker), false)
+      assert.match(result.diagnosis, /did not replay the full CI test suite/)
+      assert.match(result.evidence.ciRemediation.variants[0].snippet, /NODE_OPTIONS/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }

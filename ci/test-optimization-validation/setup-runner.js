@@ -18,6 +18,7 @@ async function runSetupCommands ({ framework, out, options }) {
       envMode: 'clean',
       outDir,
       label: `${framework.id}:setup:${command.id || index + 1}`,
+      repositoryRoot: options.repositoryRoot,
       verbose: options.verbose,
     })
     const summary = summarizeSetupCommand(command, result, outDir)

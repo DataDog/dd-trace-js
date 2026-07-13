@@ -51,7 +51,9 @@ async function runInitializationProbe ({ command, framework, intake, outDir, opt
       },
       envMode: 'clean',
       outDir: probeOutDir,
+      repositoryRoot: options.repositoryRoot,
       label: `${framework.id}:ci-wiring:init-probe`,
+      stopWhen: () => probeReachedFramework(rawRecordsPath, framework.framework),
       verbose: options.verbose,
     })
     records = readProbeRecords(rawRecordsPath)
@@ -72,7 +74,7 @@ async function runInitializationProbe ({ command, framework, intake, outDir, opt
       stderr: result.artifacts.stderr,
       stdout: result.artifacts.stdout,
     },
-    summary: summarizeProbeResult({ result, records, recordsPath }),
+    summary: summarizeProbeResult({ framework, result, records, recordsPath }),
   }
 }
 
@@ -129,12 +131,13 @@ function isDatadogPreload (value) {
   return normalized.includes('dd-trace/ci/init') || normalized.includes('dd-trace/register')
 }
 
-function summarizeProbeResult ({ result, records, recordsPath }) {
+function summarizeProbeResult ({ framework, result, records, recordsPath }) {
   const processRecords = records.filter(record => record.type === 'process-start')
   const moduleLoadRecords = records.filter(record => record.type === 'module-load')
   const testRunnerSignals = getToolSignals(records, 'test-runner')
-  const wrapperSignals = getToolSignals(records, 'wrapper')
-  const packageManagerSignals = getToolSignals(records, 'package-manager')
+    .filter(signal => signal.name === framework.framework)
+  const wrapperSignals = getToolSignals(records, 'wrapper', { processStartsOnly: true })
+  const packageManagerSignals = getToolSignals(records, 'package-manager', { processStartsOnly: true })
 
   return {
     ran: true,
@@ -144,6 +147,7 @@ function summarizeProbeResult ({ result, records, recordsPath }) {
     moduleLoadCount: moduleLoadRecords.length,
     reachedAnyNodeProcess: processRecords.length > 0,
     reachedTestRunnerProcess: testRunnerSignals.length > 0,
+    stoppedAfterRunnerReached: result.stoppedEarly === true && testRunnerSignals.length > 0,
     testRunnerSignals,
     wrapperSignals,
     packageManagerSignals,
@@ -151,31 +155,48 @@ function summarizeProbeResult ({ result, records, recordsPath }) {
   }
 }
 
-function getToolSignals (records, kind) {
+function probeReachedFramework (recordsPath, frameworkName) {
+  return readProbeRecords(recordsPath).some(record => {
+    return getRecordTools(record).some(tool => tool.kind === 'test-runner' && tool.name === frameworkName)
+  })
+}
+
+function getToolSignals (records, kind, { processStartsOnly = false } = {}) {
   const signals = []
-  const seen = new Set()
+  const signalsByLocation = new Map()
 
   for (const record of records) {
+    if (processStartsOnly && record.type !== 'process-start') continue
     for (const tool of getRecordTools(record)) {
       if (tool.kind !== kind) continue
 
-      const key = `${tool.name}:${record.pid}:${record.type}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      signals.push({
-        name: tool.name,
-        kind: tool.kind,
-        pid: record.pid,
-        ppid: record.ppid,
-        source: record.type,
-        argv: Array.isArray(record.argv) ? record.argv : undefined,
-        cwd: record.cwd,
-        request: record.request,
-      })
+      const key = `${tool.name}:${record.cwd}`
+      let signal = signalsByLocation.get(key)
+      if (!signal) {
+        signal = {
+          name: tool.name,
+          kind: tool.kind,
+          pid: record.pid,
+          ppid: record.ppid,
+          source: record.type,
+          argv: Array.isArray(record.argv) ? record.argv : undefined,
+          cwd: record.cwd,
+          request: record.request,
+          processCount: 0,
+          processIds: new Set(),
+        }
+        signalsByLocation.set(key, signal)
+        signals.push(signal)
+      }
+      signal.processIds.add(record.pid)
     }
   }
 
-  return signals
+  return signals.map(signal => {
+    signal.processCount = signal.processIds.size
+    delete signal.processIds
+    return signal
+  })
 }
 
 function getRecordTools (record) {

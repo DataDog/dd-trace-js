@@ -23,6 +23,7 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     envMode: 'clean',
     label: `${framework.id}:preflight`,
     outDir,
+    repositoryRoot: options.repositoryRoot,
     verbose: options.verbose,
   })
   const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)

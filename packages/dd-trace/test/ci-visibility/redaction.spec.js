@@ -78,6 +78,16 @@ describe('test optimization validation redaction', () => {
     assert.strictEqual(report.regularCommand, 'API_KEY=<redacted> npm test')
   })
 
+  it('preserves name-only GitHub Actions secret references while redacting actual values', () => {
+    const reference = 'DD_API_KEY: $' + '{{ secrets.DD_API_KEY }}'
+
+    assert.strictEqual(
+      sanitizeString(reference),
+      reference
+    )
+    assert.strictEqual(sanitizeString('DD_API_KEY=actual-value'), 'DD_API_KEY=<redacted>')
+  })
+
   it('redacts colon-form secret environment output', () => {
     const output = sanitizeString([
       'DD_API_KEY: dd-api-key-colon-secret',

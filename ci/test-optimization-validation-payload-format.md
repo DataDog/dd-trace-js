@@ -101,11 +101,14 @@ non-secret Datadog configuration are preserved because they are the wiring being
 
 ## Validator Artifacts
 
-`dd-trace/ci/validate-test-optimization.js` writes one detailed Markdown report with one embedded
-payload per framework entry that produced a validator result:
+`dd-trace/ci/validate-test-optimization.js` writes one detailed Markdown report with one canonical
+diagnostic JSON object:
 
-- `report.md`: readable execution details plus a `Validation Payloads JSON` section containing an
-  array of `{ frameworkId, payload }`
+- `report.md`: readable execution details plus a `Diagnostic JSON` section containing
+  `validationPayloads`, `normalizedManifest`, `staticDiagnosis`, and `runSummary`. Each validation
+  payload entry is `{ frameworkId, payload }`; overlapping raw execution-result JSON is not serialized
+  a second time. `runSummary.runCompleted` and `runSummary.validatorExitCode` distinguish a completed
+  validation with findings from an interrupted run.
 
 Multi-framework repositories should present each payload separately. A failed static-only payload is
 emitted when live validation is skipped because static diagnosis found a hard blocker, such as an

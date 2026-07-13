@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { getApprovalDigest } = require('./approval')
+const { getCommandOutputPaths } = require('./command-output-policy')
+const { getCommandSuitabilityError } = require('./command-suitability')
 const { serializeApprovalCommand } = require('./command-runner')
 const { getUnavailableExecutable } = require('./executable')
 const { getLocalValidationCommand } = require('./local-command')
@@ -152,6 +154,18 @@ function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
         'for approval.'
       )
     }
+    for (const plannedCommand of plannedCommands) {
+      const suitabilityError = getCommandSuitabilityError({
+        command: plannedCommand.command,
+        framework,
+        label: plannedCommand.label,
+        repositoryRoot: manifest.repository.root,
+      })
+      if (!suitabilityError) continue
+      throw new Error(
+        `Cannot render an approvable plan because ${plannedCommand.label} for ${framework.id} ${suitabilityError}`
+      )
+    }
   }
 }
 
@@ -251,78 +265,48 @@ function getPreferredValidatorPath (repositoryRoot) {
 
 function appendFrameworkExecutions (lines, framework, requestedScenario, repositoryRoot) {
   const basicCommand = getBasicReportingCommand(framework)
-  lines.push(`### ${plainText(framework.id)}`, '')
+  const commands = createCommandCatalog()
+  const checks = []
+
   for (const setupCommand of framework.setup?.commands || []) {
-    appendCommandSection(
-      lines,
-      `Project Setup: ${setupCommand.id || setupCommand.description || 'project setup'}`,
-      setupCommand,
-      {
-        description: 'Prepares the project for the test executions below.',
-        executions: 'once',
-      }
-    )
+    checks.push({
+      check: `Project setup: ${setupCommand.id || setupCommand.description || 'project setup'}`,
+      commandId: commands.add(setupCommand),
+      executions: '1',
+      environment: 'Manifest command environment',
+    })
   }
-  appendCommandSection(lines, 'Test Execution Without Datadog', basicCommand, {
-    description: 'Checks that the selected tests can run before Datadog is initialized.',
-    executions: 'once',
-    environmentLabel: 'Environment changes',
-    environment: `remove inherited NODE_OPTIONS and DD_* variables; ${formatCommandVariableContext(basicCommand)}`,
-  })
-  appendCommandSection(lines, 'Test Execution With Datadog', basicCommand, {
-    description: 'Checks that the tests report to the local mock intake when Datadog is initialized correctly.',
-    executions: 'once, plus at most one diagnostic rerun with debug logging if expected events are missing',
-    environmentLabel: 'Environment changes',
-    environment: `supply Datadog initialization and the local mock intake; ${
-      formatCommandVariableContext(basicCommand)
-    }`,
-  })
+  const basicCommandId = commands.add(basicCommand)
+  checks.push(
+    {
+      check: 'Confirm tests run without Datadog',
+      commandId: basicCommandId,
+      executions: '1',
+      environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(basicCommand)}`,
+    },
+    {
+      check: 'Confirm tests report when Datadog is initialized',
+      commandId: basicCommandId,
+      executions: '1, plus 1 debug rerun only if events are missing',
+      environment: 'Add dd-trace initialization and the localhost mock intake',
+    }
+  )
 
   const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
   if (ciWiringSelected && framework.ciWiringCommand) {
-    appendCommandSection(lines, 'Test Execution With CI Configuration', getCiWiringCommand(framework), {
-      description: 'Checks whether the configuration supplied by the CI job initializes Datadog in the final ' +
-        'test process.',
-      executions: 'once, plus at most one initialization-reachability probe reusing the displayed CI argv or ' +
-        'shell source if expected events are missing; the probe removes Datadog preloads from CI NODE_OPTIONS ' +
-        'and adds its own local preload',
-      environmentLabel: 'CI environment variables copied for this test',
-      environment: formatEnvironmentNames(framework.ciWiringCommand),
+    const ciCommand = getCiWiringCommand(framework)
+    checks.push({
+      check: 'Check the real CI configuration',
+      commandId: commands.add(ciCommand),
+      executions: '1, plus 1 short preload probe when needed',
+      environment: `Copy CI variables: ${formatEnvironmentNames(framework.ciWiringCommand)}`,
     })
-  } else if (ciWiringSelected) {
-    lines.push(
-      '#### Test Execution With CI Configuration',
-      '',
-      'Not run.',
-      '',
-      `- Reason: ${plainText(
-        framework.ciWiring?.reason || framework.ciWiring?.diagnosis || 'No replayable CI test command was selected.'
-      )}`,
-      ''
-    )
   }
 
   const strategy = framework.generatedTestStrategy
   const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
   const advancedSelected = !requestedScenario || selectedGeneratedScenario
   if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
-    lines.push(
-      '#### Temporary Tests Created for Advanced Checks',
-      '',
-      'The validator creates these tests temporarily and removes them after validation.',
-      ''
-    )
-    for (const file of strategy.files || []) {
-      lines.push(
-        `- Path: ${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}`,
-        '',
-        '  Exact temporary test content:',
-        '',
-        codeBlock(file.contentLines.join('\n')),
-        ''
-      )
-    }
-    lines.push('')
     const selectedScenarios = selectedGeneratedScenario
       ? (strategy.scenarios || []).filter(scenario => scenario.id === selectedGeneratedScenario)
       : strategy.scenarios || []
@@ -332,11 +316,44 @@ function appendFrameworkExecutions (lines, framework, requestedScenario, reposit
         heading: `Advanced Check: ${scenario.id}`,
         description: 'Runs a temporary test to verify this advanced feature.',
       }
-      appendCommandSection(lines, details.heading, command, {
-        description: details.description,
-        executions: 'three times: once without Datadog to verify test isolation, once to discover the reported ' +
-          'test identity, and once with the feature enabled; on failure, at most one additional debug rerun',
+      checks.push({
+        check: details.heading,
+        commandId: commands.add(command),
+        executions: '3: isolate, discover identity, validate feature; plus 1 debug rerun only on failure',
+        environment: 'Validator-controlled feature settings and localhost mock intake',
       })
+    }
+  }
+
+  lines.push(`### ${plainText(framework.id)}`, '', '#### Checks', '')
+  appendCheckTable(lines, checks)
+  if (ciWiringSelected && !framework.ciWiringCommand) {
+    lines.push(
+      '',
+      `CI configuration check not run: ${plainText(
+        framework.ciWiring?.reason || framework.ciWiring?.diagnosis || 'No replayable CI test command was selected.'
+      )}`
+    )
+  }
+  lines.push('', '#### Commands', '')
+  for (const entry of commands.entries) appendCommandDefinition(lines, entry, repositoryRoot)
+
+  if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
+    lines.push(
+      '#### Temporary Tests Created for Advanced Checks',
+      '',
+      'The validator creates these tests temporarily and removes them after validation.',
+      ''
+    )
+    for (const file of strategy.files || []) {
+      lines.push(
+        `<details><summary>${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}</summary>`,
+        '',
+        codeBlock(file.contentLines.join('\n')),
+        '',
+        '</details>',
+        ''
+      )
     }
     lines.push(
       '#### Temporary Test Cleanup',
@@ -362,6 +379,64 @@ function appendFrameworkExecutions (lines, framework, requestedScenario, reposit
   lines.push('')
 }
 
+function createCommandCatalog () {
+  const entries = []
+  const identifiers = new Map()
+  return {
+    entries,
+    add (command) {
+      const key = serializeApprovalCommand(command)
+      let identifier = identifiers.get(key)
+      if (identifier) return identifier
+      identifier = `C${entries.length + 1}`
+      identifiers.set(key, identifier)
+      entries.push({ command, identifier })
+      return identifier
+    },
+  }
+}
+
+function appendCheckTable (lines, checks) {
+  lines.push('| Check | Command | Runs | Environment |', '|---|---:|---:|---|')
+  for (const check of checks) {
+    lines.push(`| ${tableText(check.check)} | ${check.commandId} | ${tableText(check.executions)} | ` +
+      `${tableText(check.environment)} |`)
+  }
+}
+
+function appendCommandDefinition (lines, entry, repositoryRoot) {
+  const { command, identifier } = entry
+  lines.push(
+    `##### ${identifier}`,
+    '',
+    codeBlock(sanitizeString(serializeApprovalCommand(command))),
+    '',
+    `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
+    `- Timeout: ${command.timeoutMs || 300_000} ms`
+  )
+  if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
+  const environment = sanitizeEnv(command.env)
+  if (environment) {
+    lines.push(`- Command environment: ${Object.entries(environment).map(([name, value]) => {
+      return inlineCode(`${name}=${value}`)
+    }).join(', ')}`)
+  }
+  const outputPaths = getCommandOutputPaths(command)
+  if (outputPaths.length > 0) {
+    lines.push('- Command-created outputs: ' + outputPaths.map(outputPath => {
+      return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
+    }).join(', ') + ' (pre-existing paths are restored; newly created paths are removed)')
+  }
+  for (const adjustment of command.localAdjustments || []) {
+    lines.push(`- Local adjustment: ${plainText(adjustment)}`)
+  }
+  lines.push('')
+}
+
+function tableText (value) {
+  return plainText(value).replaceAll('|', String.raw`\|`)
+}
+
 /**
  * Shortens a validated repository path for customer-facing plans.
  *
@@ -371,7 +446,8 @@ function appendFrameworkExecutions (lines, framework, requestedScenario, reposit
  */
 function getRepositoryRelativePath (repositoryRoot, filename) {
   const relative = path.relative(repositoryRoot, filename)
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return filename
+  if (!relative) return '.'
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return filename
   return relative
 }
 
@@ -381,58 +457,6 @@ function getSelectedGeneratedScenario (requestedScenario) {
     atr: 'atr-fail-once',
     'test-management': 'test-management-target',
   }[requestedScenario]
-}
-
-/**
- * Adds one execution phase to the customer-facing plan.
- *
- * @param {string[]} lines rendered plan lines
- * @param {string} heading execution phase heading
- * @param {object} command manifest command
- * @param {object} [options] display options
- * @param {string} [options.description] purpose of the execution phase
- * @param {string} [options.executions] number and purpose of command executions
- * @param {string} [options.environmentLabel] environment detail label
- * @param {string} [options.environment] environment detail
- * @returns {void}
- */
-function appendCommandSection (lines, heading, command, options = {}) {
-  const environment = options.environment
-  lines.push(`#### ${plainText(heading)}`, '')
-  if (options.description) lines.push(plainText(options.description), '')
-  lines.push(
-    codeBlock(sanitizeString(serializeApprovalCommand(command))),
-    '',
-    `- Working directory: ${inlineCode(command.cwd)}`
-  )
-  if (options.executions) lines.push(`- Executions: ${plainText(options.executions)}`)
-  if (command.usesShell) {
-    lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
-  }
-  lines.push(`- Timeout: ${command.timeoutMs || 300_000} ms`)
-  if (environment) {
-    lines.push(`- ${plainText(options.environmentLabel || 'Environment variable names')}: ${
-      plainText(environment)
-    }`)
-  }
-  appendCommandEnvironment(lines, command)
-  for (const adjustment of command.localAdjustments || []) {
-    lines.push(`- Local adjustment: ${plainText(adjustment)}`)
-  }
-  lines.push('')
-}
-
-function appendCommandEnvironment (lines, command) {
-  const environment = sanitizeEnv(command.env)
-  if (!environment) {
-    lines.push('- Command-specific environment: none')
-    return
-  }
-
-  lines.push('- Command-specific environment:')
-  for (const [name, value] of Object.entries(environment)) {
-    lines.push(`  - ${inlineCode(`${name}=${value}`)}`)
-  }
 }
 
 function formatEnvironmentNames (command) {

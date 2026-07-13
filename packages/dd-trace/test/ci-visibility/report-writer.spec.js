@@ -9,20 +9,44 @@ const path = require('node:path')
 const { Readable } = require('node:stream')
 const zlib = require('node:zlib')
 
+const { buildCiRemediation } = require('../../../../ci/test-optimization-validation/ci-remediation')
 const executionEnvironment = require('../../../../ci/test-optimization-validation/execution-environment')
 const { MockIntake } = require('../../../../ci/test-optimization-validation/mock-intake')
-const { writeReport } = require('../../../../ci/test-optimization-validation/report-writer')
+const {
+  writePendingReport,
+  writeReport,
+} = require('../../../../ci/test-optimization-validation/report-writer')
 
 const { buildExecutionEnvironmentBlockerResult } = executionEnvironment
 
 function readMarkdownJsonSection (markdown, title) {
-  const pattern = new RegExp(`## ${title}\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
+  const pattern = new RegExp(`<details><summary>${title}<\\/summary>\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
   const match = pattern.exec(markdown)
   assert.ok(match, `Expected ${title} section`)
   return JSON.parse(match[1])
 }
 
 describe('test optimization validation report writer', () => {
+  it('records an incomplete run before live validation starts', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    fs.mkdirSync(out)
+
+    try {
+      writePendingReport({
+        manifest: { __path: path.join(tmpDir, 'dd-test-optimization-validation-manifest.json') },
+        out,
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      assert.match(markdown, /Validation completed: no/)
+      assert.match(markdown, /"runCompleted": false/)
+      assert.match(markdown, /"validatorExitCode": null/)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('prints rerun remediation and preserves execution-environment blockers in report payloads', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
@@ -84,42 +108,44 @@ describe('test optimization validation report writer', () => {
         results,
         out,
         intake,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           reportPath: staticDiagnosisPath,
         },
       })
 
       const summary = logs.join('\n')
-      assert.match(summary, /BLOCKED jest:root/)
+      assert.match(summary, /not validated blocked by execution environment: example \(Jest\)/)
       assert.match(summary, /not evidence that Test Optimization is misconfigured/)
       assert.match(summary, /manifest and generated artifacts may still be useful/)
-      assert.match(summary, /Rerun the validator outside the restricted sandbox/)
       assert.match(summary, /Rerun the validator command shown below from the host shell/)
       assert.match(summary, /Rerun in CI/)
-      assert.match(summary, /Command: node \/repo\/node_modules\/dd-trace\/ci\/validate-test-optimization\.js/)
+      assert.match(summary, /Host command: node \/repo\/node_modules\/dd-trace\/ci\/validate-test-optimization\.js/)
       assert.match(summary, /Detailed report: .*report\.md/)
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      const humanReadableReport = markdown.split('<details><summary>Diagnostic JSON</summary>')[0]
       assert.match(markdown, /Sanitized intake requests/)
       assert.doesNotMatch(markdown, /Raw intake requests/)
       assert.match(markdown, /## Failed and Blocked Result Details/)
       assert.match(markdown, /Reason: The current agent sandbox blocks localhost sockets/)
+      assert.strictEqual(humanReadableReport.includes(tmpDir), false)
       assert.match(markdown, /Error code: `EPERM`/)
       assert.match(markdown, /Rerun command: `node \/repo\/node_modules\/dd-trace\/ci\/validate-test-optimization/)
 
-      const executionResults = readMarkdownJsonSection(markdown, 'Execution Results JSON')
-      assert.strictEqual(executionResults[0].status, 'blocked')
-      assert.strictEqual(executionResults[0].evidence.blockedByExecutionEnvironment, true)
-      assert.strictEqual(executionResults[0].evidence.manifestMayBeReused, true)
-      assert.deepStrictEqual(executionResults[0].evidence.remediation, [
+      const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
+      assert.deepStrictEqual(diagnostic.runSummary, { runCompleted: true, validatorExitCode: 1 })
+      const validationPayloads = diagnostic.validationPayloads
+      const check = validationPayloads[0].payload.checks[0]
+      assert.strictEqual(check.evidence.blockedByExecutionEnvironment, true)
+      assert.strictEqual(check.evidence.manifestMayBeReused, true)
+      assert.deepStrictEqual(check.remediation, [
         'Rerun the validator command shown below from the host shell',
         'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and ' +
           'filesystem restrictions',
         'Rerun in CI',
       ])
 
-      const validationPayloads = readMarkdownJsonSection(markdown, 'Validation Payloads JSON')
-      const check = validationPayloads[0].payload.checks[0]
       assert.deepStrictEqual(Object.keys(validationPayloads[0]).sort(), ['frameworkId', 'payload'])
       assert.strictEqual(validationPayloads[0].payload.status, 'unknown')
       assert.strictEqual(check.id, 'execution-environment')
@@ -197,6 +223,14 @@ describe('test optimization validation report writer', () => {
     const results = [
       {
         frameworkId: 'vitest:app',
+        scenario: 'basic-reporting',
+        status: 'pass',
+        diagnosis: 'Basic Reporting passed.',
+        evidence: {},
+        artifacts: [],
+      },
+      {
+        frameworkId: 'vitest:app',
         scenario: 'ci-wiring',
         status: 'fail',
         diagnosis: 'The test command used by the CI job was identified and ran tests.',
@@ -244,18 +278,21 @@ describe('test optimization validation report writer', () => {
         results,
         out,
         intake,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           reportPath: staticDiagnosisPath,
         },
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      const humanReadableReport = markdown.split('<details><summary>Diagnostic JSON</summary>')[0]
+      assert.ok(humanReadableReport.includes('example \\(Vitest\\)'))
       assert.match(markdown, /Selected because: The unit job runs this step after dependency installation\./)
       assert.match(markdown, /Environment found in CI: workflow `NODE_OPTIONS=-r dd-trace\/ci\/init`/)
       assert.match(markdown, /step `DD_API_KEY=&lt;redacted&gt;`/)
       assert.match(markdown, /Package script expansion: `pnpm test` -> `vitest run`/)
       assert.match(markdown, /Runner\/tool chain: `GitHub Actions ubuntu-latest` -> `pnpm test` -> `vitest`/)
-      assert.match(markdown, /Selected `pnpm test` -> `vitest run` from CI\./)
+      assert.doesNotMatch(humanReadableReport, /Selected `pnpm test` -> `vitest run` from CI\./)
       assert.doesNotMatch(markdown, /&#96;|-&gt;/)
       assert.match(markdown, /Unresolved replay details: `Matrix node version was approximated locally\.`/)
       assert.match(markdown, /Command failure: The CI-shaped command failed before tests started/)
@@ -329,6 +366,14 @@ describe('test optimization validation report writer', () => {
       ],
     }
     const results = [
+      {
+        frameworkId: 'vitest:app',
+        scenario: 'basic-reporting',
+        status: 'pass',
+        diagnosis: 'Basic Reporting passed.',
+        evidence: {},
+        artifacts: [],
+      },
       {
         frameworkId: 'vitest:app',
         scenario: 'ci-wiring',
@@ -419,14 +464,15 @@ describe('test optimization validation report writer', () => {
         results,
         out,
         intake,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           reportPath: staticDiagnosisPath,
         },
       })
 
       const reportFacingOutput = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-      const executionResults = readMarkdownJsonSection(reportFacingOutput, 'Execution Results JSON')
-      const normalizedManifest = readMarkdownJsonSection(reportFacingOutput, 'Normalized Manifest JSON')
+      const diagnostic = readMarkdownJsonSection(reportFacingOutput, 'Diagnostic JSON')
+      const normalizedManifest = diagnostic.normalizedManifest
 
       assert.match(reportFacingOutput, /not public-shareable as-is/)
       assert.match(reportFacingOutput, /best-effort/)
@@ -436,7 +482,7 @@ describe('test optimization validation report writer', () => {
         normalizedManifest.frameworks[0].ciWiringCommand.env.DD_API_KEY,
         '<redacted>'
       )
-      assert.strictEqual(executionResults[0].evidence.ciWiring.stepEnv.DD_API_KEY, '<redacted>')
+      assert.match(JSON.stringify(diagnostic.validationPayloads), /<redacted>/)
       const normalizedPayloads = fs.readFileSync(path.join(out, 'intake', 'payloads.normalized.ndjson'), 'utf8')
       assert.match(normalizedPayloads, /<redacted>/)
       assert.match(reportFacingOutput, /<redacted>/)
@@ -880,6 +926,14 @@ describe('test optimization validation report writer', () => {
     const results = [
       {
         frameworkId: 'vitest:app',
+        scenario: 'basic-reporting',
+        status: 'pass',
+        diagnosis: 'Basic Reporting passed.',
+        evidence: {},
+        artifacts: [],
+      },
+      {
+        frameworkId: 'vitest:app',
         scenario: 'ci-wiring',
         status: 'fail',
         diagnosis: 'The test command used by the CI job was identified and ran tests.',
@@ -912,6 +966,7 @@ describe('test optimization validation report writer', () => {
               {
                 name: 'turbo',
                 pid: 123,
+                processCount: 12,
                 cwd: tmpDir,
               },
             ],
@@ -927,12 +982,51 @@ describe('test optimization validation report writer', () => {
               recommendation: 'Verify turbo.json pass-through settings preserve NODE_OPTIONS.',
             },
           ],
+          ciRemediation: buildCiRemediation({
+            id: 'vitest:app',
+            framework: 'vitest',
+            project: { name: 'example' },
+            ciWiring: {
+              provider: 'github-actions',
+              configFile: path.join(tmpDir, '.github/workflows/test.yml'),
+              job: 'unit',
+              step: 'Run unit tests',
+            },
+            ciWiringCommand: {
+              cwd: tmpDir,
+              argv: ['pnpm', 'test'],
+            },
+          }),
         },
         artifacts: [
           commandPath,
           stdoutPath,
           stderrPath,
         ],
+      },
+      {
+        frameworkId: 'vitest:app',
+        scenario: 'efd',
+        status: 'pass',
+        diagnosis: 'Early Flake Detection passed.',
+        evidence: {},
+        artifacts: [],
+      },
+      {
+        frameworkId: 'vitest:app',
+        scenario: 'atr',
+        status: 'pass',
+        diagnosis: 'Auto Test Retries passed.',
+        evidence: {},
+        artifacts: [],
+      },
+      {
+        frameworkId: 'vitest:app',
+        scenario: 'test-management',
+        status: 'pass',
+        diagnosis: 'Test Management passed.',
+        evidence: {},
+        artifacts: [],
       },
     ]
     const intake = {
@@ -969,6 +1063,7 @@ describe('test optimization validation report writer', () => {
         results,
         out,
         intake,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           report: {
             results: [
@@ -983,17 +1078,26 @@ describe('test optimization validation report writer', () => {
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      const humanReadableReport = markdown.split('<details><summary>Diagnostic JSON</summary>')[0]
 
+      assert.ok(markdown.includes('example \\(Vitest\\): dd-trace successfully reports this test suite, but the ' +
+        'selected CI job does not load dd-trace when it runs the tests.'))
+      assert.ok(markdown.includes('Can these tests report to Datadog? \\(Basic Reporting\\)'))
+      assert.ok(markdown.includes('Does the selected CI job initialize Datadog? \\(CI Wiring\\)'))
       assert.match(markdown, /## How to Fix/)
-      assert.match(markdown, /### vitest:app: CI Wiring/)
+      assert.ok(markdown.includes('### example \\(Vitest\\): CI Wiring'))
       assert.match(markdown, /Verify NODE\\_OPTIONS reaches Vitest\./)
       assert.match(markdown, /Verify turbo\.json pass-through settings preserve NODE\\_OPTIONS\./)
+      assert.match(markdown, /#### Agentless reporting/)
+      assert.match(markdown, /Recommended variables: `DD_SERVICE=example-tests`/)
+      assert.match(markdown, /`DD_TEST_SESSION_NAME=vitest-unit-tests`/)
+      assert.doesNotMatch(humanReadableReport, /DD_ENV|DD_TRACE_AGENT_URL/)
       assert.match(markdown, /## Static Diagnosis Notes/)
       assert.match(markdown, /not a direct-initialization Basic Reporting blocker/)
-      assert.match(markdown, /## Omitted Test Commands/)
-      assert.match(markdown, /pnpm run test:types was omitted/)
-      assert.match(markdown, /pnpm run legacy-test was omitted/)
-      assert.match(markdown, /command `pnpm run test:types`/)
+      assert.doesNotMatch(markdown, /## Not Validated/)
+      assert.doesNotMatch(humanReadableReport, /pnpm run test:types was omitted/)
+      assert.doesNotMatch(humanReadableReport, /pnpm run legacy-test was omitted/)
+      assert.ok(markdown.includes('Typecheck commands \\(1 command\\): do not execute supported runtime tests.'))
       assert.match(markdown, /## Failed and Blocked Result Details/)
       assert.match(markdown, /Command: `pnpm test`/)
       assert.match(markdown, /Cwd: `/)
@@ -1005,20 +1109,84 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Stderr excerpt: `AssertionError: expected true to be false`/)
       assert.match(markdown, /Event failure kind: `ci-wiring-no-test-optimization-events`/)
       assert.match(markdown, /NODE\\_OPTIONS probe: reached Node process `true`, reached test runner `false`/)
-      assert.match(markdown, /Probe wrapper signals: `turbo pid 123 cwd /)
+      assert.match(markdown, /Probe wrapper signals: `turbo 12 processes cwd /)
       assert.match(markdown, /Monorepo finding: `turbo-env-pass-through`, `tool turbo`/)
-      assert.match(markdown, /Artifacts: `.*command\.json`, `.*stdout\.txt`, `.*stderr\.txt`/)
-      assert.match(markdown, /## Validation Payloads JSON/)
-      assert.match(markdown, /## Execution Results JSON/)
-      assert.match(markdown, /## Normalized Manifest JSON/)
-      assert.match(markdown, /## Static Diagnosis JSON/)
+      assert.match(markdown, /Scenario artifacts: \[open artifact directory\]\(<runs\/vitest-app\/ci-wiring\/>\)/)
+      assert.match(markdown, /Are new tests retried\? .*The validator added a temporary passing test/)
+      assert.match(markdown, /Are failed tests retried\? .*temporary test that fails once.*retry pass/)
+      assert.match(markdown, /Can tests be quarantined\? .*temporary target test.*quarantine tag/)
+      assert.match(markdown, /<details><summary>Diagnostic JSON<\/summary>/)
+      assert.doesNotMatch(markdown, /## Validation Payloads JSON/)
+      assert.doesNotMatch(markdown, /## Execution Results JSON/)
+      assert.doesNotMatch(markdown, /## Normalized Manifest JSON/)
+      assert.doesNotMatch(markdown, /## Static Diagnosis JSON/)
       const summary = logs.join('\n')
       assert.match(summary, /How to fix:/)
-      assert.match(summary, /vitest:app - CI Wiring:/)
+      assert.match(summary, /example \(Vitest\) - CI Wiring:/)
       assert.match(summary, /Verify NODE_OPTIONS reaches Vitest\./)
       assert.match(summary, /Verify turbo\.json pass-through settings preserve NODE_OPTIONS\./)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not claim a CI command ran for a static-only wiring failure', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const packageJsonPath = path.join(tmpDir, 'package.json')
+    const manifest = {
+      repository: { root: tmpDir },
+      frameworks: [{
+        id: 'vitest:date-fns',
+        framework: 'vitest',
+        project: {
+          name: 'date-fns',
+          root: tmpDir,
+          packageJson: packageJsonPath,
+        },
+      }],
+    }
+    const results = [{
+      frameworkId: 'vitest:date-fns',
+      scenario: 'ci-wiring',
+      status: 'fail',
+      diagnosis: 'Static CI inspection found no Datadog initialization.',
+      evidence: {
+        eventLevelFailure: { kind: 'ci-wiring-static-missing-initialization' },
+      },
+      artifacts: [],
+    }]
+    const intake = {
+      requests: [],
+      writeArtifacts () {
+        const intakeDir = path.join(out, 'intake')
+        fs.mkdirSync(intakeDir, { recursive: true })
+        const requestsPath = path.join(intakeDir, 'requests.ndjson')
+        fs.writeFileSync(requestsPath, '')
+        return { requestsPath }
+      },
+    }
+    const originalLog = console.log
+    const logs = []
+    fs.writeFileSync(packageJsonPath, '{}\n')
+    console.log = message => logs.push(message)
+
+    try {
+      writeReport({
+        manifest,
+        results,
+        out,
+        intake,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
+      })
+
+      const summary = logs.join('\n')
+      assert.match(summary, /Static CI inspection found no Datadog initialization/)
+      assert.match(summary, /CI command was not replayed locally/)
+      assert.doesNotMatch(summary, /CI ran tests/)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -1086,10 +1254,9 @@ describe('test optimization validation report writer', () => {
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
-      assert.match(markdown, /## Diagnostic-only and Blocked Frameworks/)
-      assert.match(markdown, /SKIP jest:db-package/)
-      assert.match(markdown, /Diagnostic-only: no live Test Optimization conclusion was reached/)
-      assert.match(markdown, /not safely validated in this environment/)
+      assert.match(markdown, /## Scope/)
+      assert.ok(markdown.includes('requires project setup: example \\(Jest\\)'))
+      assert.doesNotMatch(markdown, /## Diagnostic-only and Blocked Frameworks/)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -1157,8 +1324,8 @@ describe('test optimization validation report writer', () => {
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
-      assert.match(markdown, /## Diagnostic-only and Blocked Frameworks/)
-      assert.match(markdown, /BLOCKED jest:root/)
+      assert.ok(markdown.includes('Not validated: requires project setup: example \\(Jest\\)'))
+      assert.ok(markdown.includes('### BLOCKED example \\(Jest\\) Validation Environment'))
       assert.match(markdown, /## How to Fix/)
       assert.match(markdown, /Run the required project build, then rerun validation for this framework\./)
       assert.doesNotMatch(markdown, /### Advanced Features/)

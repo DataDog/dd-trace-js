@@ -121,6 +121,17 @@ Recognize these CI systems and extract test-command evidence when practical:
   shape includes framework, package manager, wrapper or monorepo tool, working directory layout,
   required setup, and CI environment. Live-replay one small representative per shape; record the
   other packages or matrix entries as duplicate candidates or omitted commands with source metadata.
+- The manifest validator treats entries with the same framework, project root, existing-test command,
+  CI command, and Datadog-initialization state as duplicate live coverage. Keep one runnable entry;
+  workflow/job names alone do not justify repeating Basic Reporting and advanced checks.
+- For Vitest, do not run generated `.test.ts` runtime scenarios through `--typecheck` or a config with
+  `test.typecheck.enabled: true`. Use an existing typecheck-disabled config or a declared temporary
+  config so each generated test executes exactly once.
+- When a repository pins Yarn under `.yarn/releases`, represent local replay as structured
+  `node .yarn/releases/yarn-<version>.cjs ...` argv. Do not depend on an ambient `yarn` shim.
+- Importing `dd-trace/ci/init` from a Vitest `setupFiles` entry is too late to instrument the Vitest
+  runner. Preserve that static evidence in the manifest, but configure initialization through
+  `NODE_OPTIONS=-r dd-trace/ci/init` on the CI test process.
 - If a framework is validator-supported but only available through commands that need heavy setup
   such as a full monorepo build, Docker, databases, browser downloads, generated clients, or
   external services, mark it `requires_external_service` or `requires_manual_setup` unless that
@@ -168,10 +179,19 @@ direct-initialization manifest commands manually.
 
 Do not skip a replayable CI test command merely because CI configures no Datadog initialization.
 Represent the executable command and its non-secret CI environment exactly in `ciWiringCommand`.
-Running that command and observing no Test Optimization events is how the validator proves that the
-CI job is not wired. Use `skip` only when the CI-shaped command cannot be replayed safely or required
+Set `ciWiring.initialization.status` to `not_configured` and record the workflow/job/step evidence when static
+inspection conclusively finds no Datadog initialization. After Basic Reporting passes, the validator can then run
+the exact-command initialization probe and, if it reaches the selected runner, conclude the CI wiring failure
+without replaying the full suite. If CI initialization is configured or static evidence is ambiguous, the
+validator still replays the authentic command shape. Use `skip` only when the CI-shaped command cannot be replayed safely or required
 setup is unavailable. `unknown` records incomplete discovery and causes an unsuccessful validation
 unless a replay command supplies the missing evidence.
+
+The initialization-reachability probe always reuses the exact `ciWiringCommand` so package-manager,
+workspace, monorepo, and wrapper behavior cannot be bypassed accidentally. The validator watches its local
+probe records and stops that diagnostic process tree immediately after the selected test runner is observed.
+Do not create a separate scoped probe command: package-manager argument forwarding is not reliable enough to
+prove that an apparently focused command preserves the same behavior or actually selects one test.
 
 ## Framework Source Trees
 
@@ -195,6 +215,12 @@ Useful optional CI metadata:
 {
   "ciWiring": {
     "status": "fail",
+    "initialization": {
+      "status": "configured",
+      "evidence": [
+        "The unit job sets NODE_OPTIONS=-r dd-trace/ci/init at job level."
+      ]
+    },
     "provider": "github-actions",
     "configFile": "/absolute/path/to/repo/.github/workflows/test.yml",
     "workflow": "test",
@@ -354,6 +380,12 @@ When generated files live in a nested package, prefer setting the command `cwd` 
 directory over relying on `npm --prefix ... exec` or similar package-manager routing. Some
 package-manager `exec` forms preserve the original process cwd for test-runner config resolution,
 which can make a generated file look missing even though it exists in the nested package.
+
+For validator-owned direct Vitest and generated-test commands, invoke the active runtime as `node`
+or use the validator's exact `process.execPath`. Do not replace `node` with an absolute version-manager
+shim such as `~/.volta/bin/node`: plan rendering cannot safely execute that shim to determine whether
+it supports the `--import dd-trace/register.js` preload required by Vitest. Preserve an absolute or
+alternate Node executable only in `ciWiringCommand` when the CI job itself specifies it.
 
 For each runnable framework, include generated file contents as `contentLines`. The validator can
 join those lines with newline characters and write the files exactly.

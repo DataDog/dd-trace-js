@@ -27,11 +27,12 @@ const {
   isLocalSocketPermissionError,
 } = require('./execution-environment')
 const { loadManifest } = require('./manifest-loader')
+const { createManifestScaffold } = require('./manifest-scaffold')
 const { MockIntake } = require('./mock-intake')
 const { formatExecutionPlan } = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
-const { writeReport } = require('./report-writer')
+const { writePendingReport, writeReport } = require('./report-writer')
 const { ensureSafeDirectory } = require('./safe-files')
 const { runSetupCommands } = require('./setup-runner')
 const {
@@ -87,6 +88,9 @@ function parseArgs (argv) {
       case '--validate-manifest':
         options.validateManifest = true
         break
+      case '--init-manifest':
+        options.initManifest = true
+        break
       case '--print-plan':
         options.printPlan = true
         break
@@ -131,6 +135,7 @@ Options:
   --keep-temp-files       Leave generated validation files in place.
   --verbose               Print command progress.
   --validate-manifest     Validate the manifest and exit without running project code.
+  --init-manifest         Create a schema-valid Jest, Mocha, or Vitest manifest scaffold without running code.
   --print-plan            Print the normalized execution plan without running project code.
   --approved-plan-sha256  Bind live execution to the exact manifest and options shown by --print-plan.
   --help                  Show this help.
@@ -142,6 +147,20 @@ async function main (argv) {
     const options = parseArgs(argv)
     if (options.help) {
       printHelp()
+      return
+    }
+
+    if (options.initManifest) {
+      const manifestPath = path.resolve(options.manifest)
+      if (path.dirname(manifestPath) !== process.cwd()) {
+        throw new Error('The generated manifest must be stored directly in the current repository root.')
+      }
+      const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+      console.log(sanitizeConsoleText(
+        `Created validation manifest scaffold without running project code: ${manifestPath}\n` +
+        'Review the selected test command and add one replayable CI test step, then run --validate-manifest.'
+      ))
       return
     }
 
@@ -172,6 +191,7 @@ async function main (argv) {
       )
     }
     const out = validateOutputPath(manifest, options.out)
+    options.repositoryRoot = manifest.repository.root
     const selectedFrameworks = filterFrameworks(manifest.frameworks, options.frameworks)
     assertApprovalDigest(options.approvedPlanSha256, {
       manifest,
@@ -184,6 +204,7 @@ async function main (argv) {
       verbose: options.verbose,
     })
     ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
+    if (writePendingReport) writePendingReport({ manifest, out })
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
     annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
 
@@ -219,7 +240,10 @@ async function main (argv) {
           logValidationProgress('Local mock intake ready.')
         } catch (err) {
           for (const framework of liveReadyFrameworks) {
-            results.push(getIntakeStartupFailure(framework, err))
+            results.push(getIntakeStartupFailure(framework, err, {
+              approvedPlanSha256: options.approvedPlanSha256,
+              workingDirectory: manifest.repository.root,
+            }))
           }
           liveReadyFrameworks.length = 0
         }
@@ -323,8 +347,19 @@ async function main (argv) {
       await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
     }
 
-    await writeReport({ manifest, results, out, intake, staticDiagnosis })
-    process.exitCode = results.some(isUnsuccessfulResult) ? 1 : 0
+    const validatorExitCode = results.some(isUnsuccessfulResult) ? 1 : 0
+    await writeReport({
+      manifest,
+      results,
+      out,
+      intake,
+      staticDiagnosis,
+      runSummary: {
+        runCompleted: true,
+        validatorExitCode,
+      },
+    })
+    process.exitCode = validatorExitCode
   } catch (err) {
     process.exitCode = 1
     console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
@@ -459,7 +494,7 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
   }
 }
 
-function getIntakeStartupFailure (framework, err) {
+function getIntakeStartupFailure (framework, err, options = {}) {
   const message = err && err.message ? err.message : String(err)
   const permissionError = isLocalSocketPermissionError(err)
   if (permissionError) {
@@ -467,6 +502,8 @@ function getIntakeStartupFailure (framework, err) {
       framework,
       error: err,
       rerunCommand: getCurrentRerunCommand(),
+      approvedPlanSha256: options.approvedPlanSha256,
+      workingDirectory: options.workingDirectory,
     })
   }
 

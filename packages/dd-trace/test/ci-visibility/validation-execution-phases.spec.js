@@ -138,6 +138,7 @@ describe('test optimization validator-owned execution phases', () => {
       env: {
         BASH_ENV: './project-shell-init',
       },
+      outputPaths: [path.join(root, 'coverage')],
     }
     framework.ciWiring = {
       status: 'unknown',
@@ -186,26 +187,28 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /npm test -- --runInBand --token <redacted> --no-watchman/)
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
-      assert.match(fullPlan, /CI environment variables copied for this test: CI, DD_API_KEY/)
+      assert.match(plan, /Command-created outputs: `coverage` \(pre-existing paths are restored; newly created /)
+      assert.match(fullPlan, /Copy CI variables: CI, DD_API_KEY/)
       assert.match(fullPlan, /DD_API_KEY=<redacted>/)
       assert.match(fullPlan, /bash --noprofile --norc -c "pnpm test"/)
-      assert.match(ciOnlyPlan, /#### Test Execution With CI Configuration/)
+      assert.match(ciOnlyPlan, /Check the real CI configuration/)
       assert.doesNotMatch(ciOnlyPlan, /#### Temporary Tests Created for Advanced Checks/)
-      assert.match(plan, /#### Test Execution Without Datadog/)
-      assert.match(plan, /#### Test Execution With Datadog/)
-      assert.doesNotMatch(plan, /#### Test Execution With CI Configuration/)
+      assert.match(plan, /Confirm tests run without Datadog/)
+      assert.match(plan, /Confirm tests report when Datadog is initialized/)
+      assert.doesNotMatch(plan, /Check the real CI configuration/)
       assert.match(plan, /#### Temporary Tests Created for Advanced Checks/)
-      assert.match(plan, /#### Advanced Check: Auto Test Retries/)
-      assert.doesNotMatch(plan, /#### Advanced Check: Early Flake Detection/)
-      assert.doesNotMatch(plan, /#### Advanced Check: Test Management/)
+      assert.match(plan, /Advanced Check: Auto Test Retries/)
+      assert.doesNotMatch(plan, /Advanced Check: Early Flake Detection/)
+      assert.doesNotMatch(plan, /Advanced Check: Test Management/)
       assert.doesNotMatch(plan, /#### Generated Test Verification:/)
-      assert.match(fullPlan, /Executions: once, plus at most one initialization-reachability probe/)
-      assert.match(plan, /Executions: three times: once without Datadog to verify test isolation/)
-      assert.doesNotMatch(plan, /Executions: once without Datadog/)
+      assert.match(fullPlan, /1, plus 1 short preload probe when needed/)
+      assert.match(plan, /3: isolate, discover identity, validate feature/)
       assert.match(plan, /#### Temporary Test Cleanup/)
       assert.match(plan, /Paths are relative to the repository root/)
-      assert.match(plan, /Exact temporary test content/)
+      assert.match(plan, /<details><summary>`tests\/dd-test-optimization-validation\.test\.js`<\/summary>/)
       assert.match(plan, /\/\/ generated validation test/)
+      assert.match(plan, /- Working directory: `\.`/)
+      assert.strictEqual(countOccurrences(fullPlan, 'bash --noprofile --norc -c "pnpm test"'), 1)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /local validator included with the installed `dd-trace` package/)
       assert.match(plan, /starts a mock intake on `127\.0\.0\.1`/)
@@ -268,6 +271,138 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('rejects ambient Yarn when the repository pins a Yarn release', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-plan-'))
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.ciWiringCommand = { cwd: root, argv: ['yarn', 'test'] }
+    fs.mkdirSync(path.join(root, '.yarn', 'releases'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.yarn', 'releases', 'yarn-4.4.1.cjs'), '')
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), /uses bare "yarn".*repository pins \.yarn\/releases\/yarn-4\.4\.1\.cjs/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects generated Vitest runtime tests under a typecheck-enabled config', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-plan-'))
+    const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.ts')
+    const configFile = path.join(root, 'vitest.config.ts')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.framework = 'vitest'
+    framework.generatedTestStrategy.fileExtension = '.test.ts'
+    fs.writeFileSync(configFile, 'export default { test: { typecheck: { enabled: true } } }\n')
+    for (const scenario of framework.generatedTestStrategy.scenarios) {
+      scenario.runCommand = {
+        cwd: root,
+        argv: [process.execPath, 'vitest.mjs', 'run', '--config', configFile, generatedFile],
+      }
+    }
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), /typecheck-enabled Vitest config.*count each generated test twice/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a selected Vitest command under a typecheck-enabled config', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-typecheck-plan-'))
+    const configFile = path.join(root, 'vitest.config.ts')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'dd-test-optimization-validation.test.ts'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.framework = 'vitest'
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, '-e', '', '--config', configFile],
+    }
+    fs.writeFileSync(configFile, 'export default { test: { typecheck: { enabled: true } } }\n')
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      }), /selected direct test command.*--typecheck\.enabled=false/s)
+
+      framework.existingTestCommand.argv.push('--typecheck.enabled=false')
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects an unknown absolute Node shim for direct Vitest validation', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-node-shim-'))
+    const nodeShim = path.join(root, 'node')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'dd-test-optimization-validation.test.ts'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.framework = 'vitest'
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [nodeShim, '-e', ''],
+    }
+    fs.writeFileSync(nodeShim, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      }), /alternate Node executable.*Use "node".*process\.execPath/s)
+
+      framework.existingTestCommand.argv[0] = process.execPath
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('allows approved setup to provide executables used by later validation commands', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-setup-plan-'))
     const framework = getPlannedFramework(
@@ -298,7 +433,7 @@ describe('test optimization validator-owned execution phases', () => {
         requestedScenario: 'basic-reporting',
       })
 
-      assert.match(plan, /Project Setup: install-test-runner/)
+      assert.match(plan, /Project setup: install-test-runner/)
       assert.match(plan, /test-runner-installed-by-setup test/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -395,4 +530,8 @@ function getScenario (root, id, exitCode, stateFile) {
 
 function escapeRegExp (value) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+}
+
+function countOccurrences (value, search) {
+  return value.split(search).length - 1
 }

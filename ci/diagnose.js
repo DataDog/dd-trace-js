@@ -169,7 +169,7 @@ function getFrameworkDefinitions (ddMajor) {
     {
       id: 'playwright',
       name: 'Playwright',
-      packages: ['@playwright/test', 'playwright'],
+      packages: ['@playwright/test'],
       commandPatterns: [/\bplaywright\s+test\b/],
       configPatterns: [/^playwright\.config\./],
       supportedRange: ddMajor >= 6 ? '>=1.38.0' : '>=1.18.0',
@@ -743,6 +743,18 @@ function checkInitialization (results, frameworks, evidence, env) {
  * @param {Array<object>} manifests package manifests
  */
 function checkFrameworkConfiguration (results, frameworks, evidence, textFiles, manifests) {
+  if (hasFramework(frameworks, 'vitest') && !hasFramework(frameworks, 'playwright') &&
+    findDependencyEntries(manifests, ['playwright']).length > 0) {
+    addResult(
+      results,
+      'info',
+      'Playwright package is not a Playwright Test runner',
+      'The repository uses Vitest and has the playwright package, but no @playwright/test runner was detected. ' +
+        'Treat Playwright as Vitest browser-provider infrastructure, not as another test framework.',
+      {}
+    )
+  }
+
   if (hasFramework(frameworks, 'cypress')) {
     checkCypressConfiguration(results, evidence)
   }

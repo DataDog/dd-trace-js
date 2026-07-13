@@ -6,6 +6,7 @@ const path = require('path')
 const { spawn } = require('child_process')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../version')
+const { prepareCommandOutputs, restoreCommandOutputs } = require('./command-output-policy')
 const { sanitizeConsoleText, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
@@ -59,7 +60,7 @@ const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
 
 function runCommand (command, options = {}) {
-  const { env = {}, envMode = 'inherit', outDir, label, verbose = false } = options
+  const { env = {}, envMode = 'inherit', outDir, label, repositoryRoot, stopWhen, verbose = false } = options
   const artifactRoot = options.artifactRoot || path.dirname(outDir)
   const startedAt = Date.now()
   const timeoutMs = command.timeoutMs || 300_000
@@ -74,6 +75,7 @@ function runCommand (command, options = {}) {
     cwd: command.cwd,
     exitCode: null,
     signal: null,
+    stoppedEarly: false,
     durationMs: 0,
     timedOut: false,
     stdout: '',
@@ -84,6 +86,7 @@ function runCommand (command, options = {}) {
   }
 
   ensureSafeDirectory(artifactRoot, outDir, 'command artifact directory')
+  const outputStates = prepareCommandOutputs({ command, artifactRoot, outDir, repositoryRoot })
 
   return new Promise((resolve) => {
     let finalized = false
@@ -100,21 +103,34 @@ function runCommand (command, options = {}) {
     }
 
     const useProcessGroup = shouldUseProcessGroup()
-    const child = command.usesShell
-      ? spawn(command.shellCommand, {
-        cwd: command.cwd,
-        detached: useProcessGroup,
-        env: childEnv,
-        shell: command.shell || true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
-      : spawn(command.argv[0], command.argv.slice(1), {
-        cwd: command.cwd,
-        detached: useProcessGroup,
-        env: childEnv,
-        shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+    let child
+    try {
+      child = command.usesShell
+        ? spawn(command.shellCommand, {
+          cwd: command.cwd,
+          detached: useProcessGroup,
+          env: childEnv,
+          shell: command.shell || true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+        : spawn(command.argv[0], command.argv.slice(1), {
+          cwd: command.cwd,
+          detached: useProcessGroup,
+          env: childEnv,
+          shell: false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+    } catch (error) {
+      result.stderr = `${error.stack || error}\n`
+      result.durationMs = Date.now() - startedAt
+      try {
+        result.commandOutputPaths = restoreCommandOutputs(outputStates)
+      } catch (cleanupError) {
+        result.outputCleanupError = cleanupError?.message || String(cleanupError)
+      }
+      resolve(result)
+      return
+    }
 
     if (verbose) {
       console.log(sanitizeConsoleText(
@@ -124,6 +140,7 @@ function runCommand (command, options = {}) {
 
     let killTimer
     let finalizeTimer
+    let stopTimer
     const timeout = setTimeout(() => {
       result.timedOut = true
       processGroupCleanupPending = useProcessGroup
@@ -136,6 +153,21 @@ function runCommand (command, options = {}) {
         }, timeoutFinalizeGraceMs)
       }, timeoutKillGraceMs)
     }, timeoutMs)
+
+    if (stopWhen) {
+      stopTimer = setInterval(() => {
+        let shouldStop = false
+        try {
+          shouldStop = stopWhen()
+        } catch {}
+        if (!shouldStop) return
+
+        clearInterval(stopTimer)
+        result.stoppedEarly = true
+        signalChild(child, 'SIGTERM', useProcessGroup)
+        killTimer = setTimeout(() => signalChild(child, 'SIGKILL', useProcessGroup), 500)
+      }, 25)
+    }
 
     child.stdout.on('data', chunk => {
       const capture = appendCapturedOutput(result.stdout, chunk, maxOutputBytes)
@@ -165,9 +197,19 @@ function runCommand (command, options = {}) {
       clearTimeout(timeout)
       clearTimeout(killTimer)
       clearTimeout(finalizeTimer)
+      clearInterval(stopTimer)
       result.exitCode = code
       result.signal = signal
       result.durationMs = Date.now() - startedAt
+
+      try {
+        result.commandOutputPaths = restoreCommandOutputs(outputStates)
+      } catch (err) {
+        result.outputCleanupError = err && err.message ? err.message : String(err)
+        result.stderr += '\n[test-optimization-validator] could not restore command outputs: ' +
+          `${result.outputCleanupError}\n`
+        if (result.exitCode === 0) result.exitCode = 1
+      }
 
       result.artifacts.stdout = path.join(outDir, 'stdout.txt')
       result.artifacts.stderr = path.join(outDir, 'stderr.txt')
@@ -194,9 +236,12 @@ function runCommand (command, options = {}) {
         signal: result.signal,
         durationMs: result.durationMs,
         timedOut: result.timedOut,
+        stoppedEarly: result.stoppedEarly,
         stdoutTruncated: result.stdoutTruncated,
         stderrTruncated: result.stderrTruncated,
         maxOutputBytes,
+        commandOutputPaths: result.commandOutputPaths,
+        outputCleanupError: result.outputCleanupError,
       }, null, 2)}\n`, 'command metadata artifact')
 
       resolve(result)

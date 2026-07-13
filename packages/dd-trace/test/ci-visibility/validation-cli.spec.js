@@ -39,7 +39,7 @@ const PASSING_VALIDATION_PHASES = {
 const APPROVAL_ARGS = ['--approved-plan-sha256', 'a'.repeat(64)]
 
 function readMarkdownJsonSection (markdown, title) {
-  const pattern = new RegExp(`## ${title}\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
+  const pattern = new RegExp(`<details><summary>${title}<\\/summary>\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
   const match = pattern.exec(markdown)
   assert.ok(match, `Expected ${title} section`)
   return JSON.parse(match[1])
@@ -87,6 +87,45 @@ describe('test optimization validation cli', () => {
     const options = parseArgs(['--approved-plan-sha256', digest])
 
     assert.strictEqual(options.approvedPlanSha256, digest)
+  })
+
+  it('initializes a manifest scaffold without starting live validation', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-init-manifest-'))
+    const originalCwd = process.cwd()
+    const logs = []
+    const originalLog = console.log
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './manifest-scaffold': {
+        createManifestScaffold ({ root }) {
+          return { schemaVersion: '1.0', repository: { root }, environment: {}, frameworks: [] }
+        },
+      },
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            throw new Error('live validation should not start')
+          }
+        },
+      },
+    })
+
+    process.chdir(tmpDir)
+    console.log = message => logs.push(message)
+    try {
+      await main(['--init-manifest'])
+
+      const manifest = JSON.parse(fs.readFileSync(path.join(
+        tmpDir,
+        'dd-test-optimization-validation-manifest.json'
+      )))
+      assert.strictEqual(manifest.repository.root, fs.realpathSync(tmpDir))
+      assert.match(logs.join('\n'), /without running project code/)
+      assert.strictEqual(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-validation-results')), false)
+    } finally {
+      console.log = originalLog
+      process.chdir(originalCwd)
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 
   it('validates a manifest without creating output or starting live validation', async () => {
@@ -395,19 +434,21 @@ describe('test optimization validation cli', () => {
         await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
 
         const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-        const reportResults = readMarkdownJsonSection(markdown, 'Execution Results JSON')
-        const validationPayloads = readMarkdownJsonSection(markdown, 'Validation Payloads JSON')
+        const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
+        const validationPayloads = diagnostic.validationPayloads
+        const check = validationPayloads[0].payload.checks[0]
         const summary = logs.join('\n')
 
         assert.strictEqual(process.exitCode, 1)
-        assert.strictEqual(reportResults[0].status, 'blocked')
-        assert.strictEqual(reportResults[0].evidence.blockedByExecutionEnvironment, true)
-        assert.strictEqual(reportResults[0].evidence.errorCode, code)
+        assert.strictEqual(check.evidence.blockedByExecutionEnvironment, true)
+        assert.strictEqual(check.evidence.errorCode, code)
         assert.strictEqual(validationPayloads[0].payload.status, 'unknown')
         assert.strictEqual(validationPayloads[0].payload.checks[0].id, 'execution-environment')
         assert.strictEqual(validationPayloads[0].payload.checks[0].status, 'unknown')
-        assert.match(summary, /environment blocks localhost sockets/)
-        assert.match(summary, /Rerun the validator outside the restricted sandbox/)
+        assert.match(summary, /Validation blocked before project commands ran/)
+        assert.match(summary, /this agent cannot open the localhost mock intake/)
+        assert.match(summary, /Run this already-approved command from the host context/)
+        assert.match(summary, /Then inspect: .*report\.md/)
         assert.match(summary, /Detailed report: .*report\.md/)
         assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
         assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)

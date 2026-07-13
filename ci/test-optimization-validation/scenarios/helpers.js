@@ -39,6 +39,7 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
     envMode: 'clean',
     outDir,
     label: `${framework.id}:${scenarioName}`,
+    repositoryRoot: options.repositoryRoot,
     verbose: options.verbose,
   })
 
@@ -397,11 +398,13 @@ function truncateLine (line) {
 }
 
 function tailInterestingLines (output) {
-  return output
+  return uniqueLines(output
     .split(/\r?\n/)
     .map(stripAnsi)
     .map(line => line.trimEnd())
     .filter(line => line.trim() !== '')
+    .filter(line => !/^\s*Encoding payload:/.test(line))
+    .map(truncateLine))
     .slice(-12)
 }
 

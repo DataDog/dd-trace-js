@@ -2,7 +2,7 @@
 
 You are running inside the repository that needs Datadog Test Optimization validation.
 
-Your task is to discover how tests are run, write a validation manifest, run the deterministic
+Your task is to discover how tests are run, initialize and complete a validation manifest, run the deterministic
 Datadog validator, and report the result. Do not debug Datadog internals and do not add Datadog
 instrumentation during discovery.
 
@@ -132,9 +132,11 @@ The live command contains `--approved-plan-sha256`; do not remove or replace it.
 to the exact manifest, selected options, output path, and installed validator implementation that
 produced the approved plan.
 
-List the manifest, results directory, generated files, and explicit cleanup files. Test-runner caches
-and validator-owned files beneath the declared results directory may be described as bounded
-incidental output; do not inspect dependencies or validator internals merely to enumerate them.
+List the manifest, results directory, generated files, explicit cleanup files, and command-created outputs
+identified by the plan, such as `coverage/`. The validator preserves and restores a pre-existing declared output
+and removes a newly created one. Test-runner caches that cannot be predicted statically and validator-owned files
+beneath the declared results directory may be described as bounded incidental output; do not inspect dependencies
+or validator internals merely to enumerate them.
 
 Use this checkpoint order:
 
@@ -154,10 +156,13 @@ Use this checkpoint order:
 
 Finalize framework/package scope before rendering the checkpoint. A scope choice is not an approval
 choice. Self-check the `--print-plan` output. Do not ask for approval if it contains `...`,
-angle-bracket placeholders, `same command`, unnamed temporary files, relative cwd values,
-unclassified framework families, or work described as possible rather than explicitly included or
-excluded. After approval, run the exact validator command printed in the plan. Do not separately run
-preflights or generated-scenario verification commands.
+angle-bracket placeholders, `same command`, unnamed temporary files, working directories that cannot
+be resolved against the plan's absolute repository path, unclassified framework families, or work
+described as possible rather than explicitly included or excluded. Repository-relative display paths
+such as `.` or `packages/app` are approval-ready when the plan shows the absolute repository path and
+the manifest's corresponding `cwd` is absolute and remains inside that repository. After approval,
+run the exact validator command printed in the plan. Do not separately run preflights or
+generated-scenario verification commands.
 
 The complete `--print-plan` stdout must be visible in the user-facing conversation before the
 approval is requested. Output that exists only in a collapsed shell/tool transcript,
@@ -307,16 +312,17 @@ excludes that feature or the manifest records a concrete technical eligibility b
 failure is not such a blocker: advanced scenarios use direct initialization and must still run after
 Basic Reporting passes.
 
-1. Discover CI workflow definitions before choosing local package scripts.
-2. Identify CI jobs, stages, or steps that install dependencies, set up Node, and run tests.
-3. Reproduce the CI test command shape as faithfully as practical and record whether CI appears to
-    provide Test Optimization initialization to the final test process.
-4. Discover every test framework present in the repository.
-5. Select `existingTestCommand` for each runnable framework. Prefer the CI-derived test command,
-    but keep it Datadog-clean: do not include CI-provided `NODE_OPTIONS` or Datadog env here.
-6. Write `./dd-test-optimization-validation-manifest.json` with framework detection, CI wiring
-    evidence, Datadog-clean commands, `preflight.status: "pending"`, planned generated strategies,
-    and non-runnable reasons.
+1. Run the installed validator with `--init-manifest`. It statically detects runnable Jest, Mocha,
+    and Vitest candidates and writes standard isolated advanced-feature scenarios without executing project code.
+2. Inspect only the known CI files listed in the scaffold's `ciDiscovery.found` field.
+3. Resolve only package scripts invoked by test-producing CI steps. Select one small representative per supported
+    runner and distinct command/setup/environment shape.
+4. Fill the scaffold's ambiguous command selection and CI evidence. Keep `existingTestCommand` Datadog-clean and
+    add the authentic replayable `ciWiringCommand` when available.
+5. Group non-CI nested examples, duplicate shapes, and unsupported runtimes into concise omissions, then stop
+    discovery unless a selected command remains ambiguous.
+6. Record CI initialization as `configured`, `not_configured`, or `unknown` in
+    `ciWiring.initialization`, with short static evidence strings. Do not infer it from validator overlays.
 7. Run the validator with `--validate-manifest` and fix every contract error.
 8. Run the validator with `--print-plan`, show its exact output, and use exactly one approval surface.
 9. After that single approval, run the exact live validator command printed by `--print-plan`. It owns setup,
@@ -327,6 +333,11 @@ Basic Reporting passes.
     detailed Markdown report path.
 
 ## Discovery Rules
+
+The five discovery steps above are an early-stop rule, not a starting point for repository-wide exploration. Once
+one representative exists for every distinct supported runner/command shape, stop. Do not dump package trees,
+whole schemas, complete lockfile diffs, full workflows, or entire result JSON. Use filename-only searches and
+targeted line ranges for one specific ambiguity. Group nested examples that CI does not invoke into one omission.
 
 - Search hidden CI directories explicitly. A search that excludes `.github`, `.circleci`, or
   `.buildkite` is incomplete.
@@ -346,6 +357,10 @@ Basic Reporting passes.
 - In large monorepos, validate one representative command per distinct framework/runner shape,
   working directory shape, setup requirement, and CI environment shape. Record duplicate packages or
   jobs as omitted or duplicate CI candidates instead of live-replaying every package.
+- Do not create separate runnable framework entries for CI jobs that have the same framework,
+  project root, test command, CI command, and Datadog-initialization state. The manifest validator
+  rejects this duplicate coverage; keep one representative and record the other jobs as omitted or
+  duplicate candidates.
 - If a command shape requires a full monorepo build, Docker, databases, browser binaries, or
   external services, omit it unless that setup is already available or documented and cheap to run.
 - Do not classify an entire framework or package as service-dependent only because its main test
@@ -404,11 +419,23 @@ differs in a way that can affect Test Optimization initialization.
 
 ## Manifest Checkpoint
 
-Write one draft manifest after discovery. Do not manually run preflights or create temporary
-generated tests first. If any framework is incomplete, write it as `requires_manual_setup`,
+Create the draft scaffold before manual manifest authoring. From the repository root, use the same installed
+validator that owns this runbook:
+
+```bash
+node ./node_modules/dd-trace/ci/validate-test-optimization.js --init-manifest
+```
+
+For non-standard package layouts, run the resolved validator path instead. This mode performs static discovery and
+writes the manifest only; it does not run project code, create temporary tests, or open localhost sockets. Do not
+read the full JSON schema or example unless `--validate-manifest` reports a field-specific error that the reference
+docs do not explain.
+
+Complete the scaffold after bounded CI discovery. Do not manually run preflights or create temporary generated
+tests first. If any framework is incomplete, write it as `requires_manual_setup`,
 `detected_not_runnable`, `unsupported_by_validator`, or `unknown`.
 
-Use the published manifest contract:
+The published manifest contract remains available for targeted troubleshooting:
 
 - schema: `./node_modules/dd-trace/ci/test-optimization-validation-manifest.schema.json`
 - example: `./node_modules/dd-trace/ci/test-optimization-validation-manifest.example.json`
@@ -428,6 +455,8 @@ The minimum useful manifest has:
 - `existingTestCommand` and `{ "status": "pending" }` preflight for each runnable framework
 - `ciWiring` for each runnable framework, with `ciWiringCommand` whenever the CI test command is
   replayable; `forcedLocalCommand` remains optional
+- `ciWiring.initialization.status` set to `configured`, `not_configured`, or `unknown`, plus short
+  `evidence` strings naming the workflow/job/step-level facts used for that conclusion
 - `generatedTestStrategy.status: "planned"` with concrete files, isolated commands, expected
   outcomes, identities, and cleanup paths; use `proposed` or `not_possible` only for a concrete
   technical blocker
@@ -464,6 +493,10 @@ and secret-free because its exact contents are shown in the approval plan and th
 every runtime state file as an exact cleanup path. The validator deletes only declared files that
 were absent when the strategy started; it does not scan generated directories for similarly named
 files and refuses to delete pre-existing files.
+
+For generated retry state, pass a filesystem path string to `existsSync` and `writeFileSync`. In ESM
+source, convert `new URL(..., import.meta.url)` with `fileURLToPath(...)` first. Do not pass a URL object
+directly; test transforms and filesystem instrumentation can make its scheme unsuitable at runtime.
 
 Set generated `testIdentities[*].suite` to `null` unless an observed instrumented event proves the
 exact suite value. Jest and Vitest commonly report the test-file path as `test.suite` and include the
@@ -518,9 +551,11 @@ node /absolute/path/to/validate-test-optimization.js \
 
 Plan rendering also verifies that structured command executables and explicit shells that must be
 available before setup can be resolved locally. When no setup commands are declared, it checks every
-planned executable. If it reports an unavailable executable, do not ask for approval: choose an
-equivalent locally available command, add the required approved setup, or mark the affected check
-with its concrete setup blocker.
+planned executable. It also rejects bare Yarn commands when the repository contains a pinned Yarn
+release, and rejects generated Vitest runtime tests that use `--typecheck` or a typecheck-enabled
+config. If it reports an unavailable or unsuitable command, do not ask for approval: use the
+repository-pinned package manager, choose a typecheck-disabled generated-test command, add the
+required approved setup, or mark the affected check with its concrete setup blocker.
 
 Copy the complete rendered plan into the user-facing response. A collapsed command transcript or
 agent-written summary is not a displayed plan. Use the agent platform's command-approval dialog as
@@ -541,8 +576,18 @@ or `pnpm exec node`.
 
 Live validation requires localhost sockets. If the fake intake fails with `EPERM` or `EACCES` on
 `127.0.0.1`/localhost, this is an execution-environment blocker, not a Test Optimization
-misconfiguration. Preserve the manifest and artifacts, then ask the user to rerun live validation
-from CI, the host shell, or an agent mode that allows localhost sockets. See
+misconfiguration. Preserve the manifest and artifacts and emit this single handoff without rendering or approving
+the plan again:
+
+```text
+Validation blocked before project commands ran.
+Reason: this agent cannot open the localhost mock intake.
+Run this already-approved command from the host context:
+<the exact digest-bound command>
+Then inspect: ./dd-test-optimization-validation-results/report.md
+```
+
+Run it from CI, the host shell, or an agent mode that allows localhost sockets. See
 `ci/test-optimization-validation-runbook-troubleshooting.md`.
 
 Do not broadly disable sandboxing. Prefer a mode that grants localhost listen/connect while keeping
@@ -592,6 +637,9 @@ Include:
 - advanced feature pass/fail/skip summary
 - any execution-environment blocker
 - a short `How to fix` section copied from the validator output for every failed, errored, or blocked check
+
+Lead with the validator's verdict and checks table. Include one scope sentence naming live-validated framework
+representatives and grouped omission reasons; do not restate the report as a second long narrative.
 
 Use validator diagnoses as the source of truth. Do not claim that Datadog Test Optimization is
 broken unless the validator reports that diagnosis. Copy structured remediation from the validator;

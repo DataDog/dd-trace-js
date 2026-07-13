@@ -101,6 +101,52 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('treats playwright as Vitest browser infrastructure without Playwright Test runner evidence', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        playwright: '1.50.0',
+        vitest: '4.0.0',
+      },
+      scripts: { test: 'vitest run' },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.deepStrictEqual(report.supportedFrameworks.map(framework => framework.id), ['vitest'])
+      assert.ok(report.results.some(result => result.title === 'Playwright package is not a Playwright Test runner'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('detects Playwright Test when the runner package and command are present', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { '@playwright/test': '1.50.0' },
+      scripts: { test: 'playwright test' },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.deepStrictEqual(report.supportedFrameworks.map(framework => framework.id), ['playwright'])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps root package metadata when the text file scan is truncated', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     const nestedRoot = path.join(root, 'aaaa')

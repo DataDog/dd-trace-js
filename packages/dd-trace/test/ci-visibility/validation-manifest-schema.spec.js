@@ -136,6 +136,7 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(jsonSchema.$defs.project.properties.packageJson, nullableAbsolutePath)
     assert.deepStrictEqual(jsonSchema.$defs.project.properties.configFiles.items, absolutePathRef)
     assert.deepStrictEqual(jsonSchema.$defs.command.properties.cwd, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.command.properties.outputPaths.items, absolutePathRef)
     assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.testDirectory, nullableAbsolutePath)
     assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.cleanupPaths.items, absolutePathRef)
     assert.deepStrictEqual(jsonSchema.$defs.generatedFile.properties.path, absolutePathRef)
@@ -145,6 +146,7 @@ describe('test optimization validation manifest schema', () => {
   it('publishes runtime conditional requirements in the JSON schema', () => {
     const frameworkAllOf = jsonSchema.$defs.framework.allOf
     const commandAllOf = jsonSchema.$defs.command.allOf
+    const initializationAllOf = jsonSchema.$defs.ciWiring.properties.initialization.allOf
 
     assert.ok(frameworkAllOf.some(condition => {
       return condition.if?.properties?.status?.enum?.includes('requires_manual_setup') &&
@@ -159,6 +161,10 @@ describe('test optimization validation manifest schema', () => {
     assert.ok(frameworkAllOf.some(condition => {
       return condition.if?.properties?.ciWiring?.properties?.status?.enum?.includes('fail') &&
         condition.then?.required?.includes('ciWiringCommand')
+    }))
+    assert.ok(initializationAllOf.some(condition => {
+      return condition.if?.properties?.status?.enum?.includes('not_configured') &&
+        condition.then?.properties?.evidence?.minItems === 1
     }))
     assert.deepStrictEqual(jsonSchema.$defs.expectedWithoutDatadog.required, [
       'exitCode',

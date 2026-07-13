@@ -59,6 +59,35 @@ function resolveExecutable (executable, command) {
 }
 
 /**
+ * Resolves the filesystem path used for a structured command executable.
+ *
+ * @param {object} command manifest command
+ * @returns {string|undefined} resolved executable path
+ */
+function getResolvedExecutable (command) {
+  const executable = getExecutable(command)
+  if (!executable) return
+
+  if (path.isAbsolute(executable) || executable.includes(path.sep)) {
+    const filename = path.resolve(command.cwd, executable)
+    return isExecutable(filename) ? filename : undefined
+  }
+
+  const environmentPath = command.env?.PATH || process.env.PATH || ''
+  const extensions = process.platform === 'win32'
+    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')
+    : ['']
+
+  for (const directory of environmentPath.split(path.delimiter)) {
+    if (!directory) continue
+    for (const extension of extensions) {
+      const filename = path.join(directory, `${executable}${extension}`)
+      if (isExecutable(filename)) return filename
+    }
+  }
+}
+
+/**
  * Checks whether a filesystem entry can be executed.
  *
  * @param {string} filename executable candidate
@@ -73,4 +102,4 @@ function isExecutable (filename) {
   }
 }
 
-module.exports = { getUnavailableExecutable }
+module.exports = { getResolvedExecutable, getUnavailableExecutable }

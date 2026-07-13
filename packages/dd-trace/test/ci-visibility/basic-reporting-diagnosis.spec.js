@@ -13,6 +13,9 @@ const {
   shouldRunDebugRerun,
   summarizeTestOutput,
 } = require('../../../../ci/test-optimization-validation/scenarios/basic-reporting')
+const {
+  tailInterestingLines,
+} = require('../../../../ci/test-optimization-validation/scenarios/helpers')
 
 describe('test optimization basic reporting diagnosis', () => {
   it('uses forcedLocalCommand for direct-initialization Basic Reporting when present', () => {
@@ -191,6 +194,19 @@ describe('test optimization basic reporting diagnosis', () => {
 
       1 passing (2ms)
     `), ['      1 passing (2ms)'])
+  })
+
+  it('omits encoded payloads and truncates long debug tail lines', () => {
+    const lines = tailInterestingLines([
+      `Encoding payload: ${'secret-payload'.repeat(100)}`,
+      `Error: ${'x'.repeat(600)}`,
+      'Tests 4 passed (4)',
+    ].join('\n'))
+
+    assert.strictEqual(lines.length, 2)
+    assert.strictEqual(lines[0].length, 503)
+    assert.match(lines[0], /\.\.\.$/)
+    assert.strictEqual(lines[1], 'Tests 4 passed (4)')
   })
 
   it('explains when tests ran but debug output shows package-manager initialization only', () => {
