@@ -6,8 +6,10 @@ The checkout now carries the toolkit source selected from `origin/main` as a ver
 fetch toolkit source from GitHub. Setup verifies the embedded SHA-256, extracts it into a SHA-owned cache, requires
 the extracted `.claude/skills`, installs from that local source, and invokes the managed executable directly.
 
-The implementation is complete locally. Archive integrity, source extraction shape, skills presence, shell syntax,
-ShellCheck, and diff integrity were verified. Dependency installation was not rerun after embedding the archive.
+The bootstrap was also exercised end to end in a real Bits checkout on branch commit `53b64b194`. Setup succeeded
+from the embedded archive, installed `dd-apm` 1.2.0rc6, and confirmed the extracted `.claude/skills` tree. The
+bootstrap itself is therefore verified. The intended Codex + Trajectory + Datadog backend workflow was not verified
+because the Bits environment failed the required capability checks described below.
 
 Toolkit pin:
 
@@ -71,6 +73,32 @@ The checksum passed, and the archive contains the toolkit `.claude/skills` tree 
 needed by the local install. The setup path contains no `git fetch` or runtime toolkit-source download. Pip installs
 from the extracted local directory with bounded, noninteractive dependency resolution. No destructive integration
 was run.
+
+## Bits end-to-end setup evidence
+
+Bits ran the setup and preflight scripts from branch `conti/bits-dd-apm-bootstrap` at commit `53b64b194`.
+
+Setup reported:
+
+- `READY toolkit_source` for revision `5bb7951901123f3b26ba882ddf4d2bc97155256e`, selected from the verified
+  embedded archive with SHA-256 `d3ba54b12ab3b8b1cf67897d4991724acb290cd99598ebe4e8abb8ca2d5a3fcf`.
+- `READY dd_apm_install` with version `1.2.0rc6`, source `embedded_cache`, and the expected cached executable.
+- `READY dd_trace_js_target` for `/workspace/repo`.
+- The extracted toolkit `.claude/skills` directory existed and was directly confirmed before workflow execution.
+- `dd-apm version` returned `1.2.0rc6`; `dd-apm --help` and `dd-apm config list` executed successfully.
+
+Preflight then identified environment blockers outside the bootstrap:
+
+- `dd-auth` was absent, and `DD_API_KEY` and `DD_APP_KEY` were not injected.
+- Codex was not logged in, and the model probe failed through external egress with HTTP 502.
+- Trajectory and its configuration were absent.
+- The Datadog Agent and APM Test Agent images were not preloaded; registry access failed with HTTP 502.
+- Datadog backend access failed with HTTP 502, so backend credential validation could not run.
+
+This run proves that Bits can install and invoke the embedded toolkit and access its skills without fetching source
+from GitHub. It does not prove the requested Codex + Trajectory agent run, container-backed validation, or Datadog
+backend trace submission; those remain blocked on Bits image configuration, credentials, preloaded images or registry
+access, and outbound service connectivity.
 
 ## dd-auth investigation
 
