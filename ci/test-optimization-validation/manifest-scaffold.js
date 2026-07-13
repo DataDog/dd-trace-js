@@ -34,8 +34,11 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
     return SUPPORTED_SCAFFOLD_FRAMEWORKS.has(framework.id) &&
       (frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0]))
   })
-  if (selected.length === 0) {
-    throw new Error('No supported runnable Jest, Mocha, or Vitest command was detected for manifest scaffolding.')
+  const unsupported = diagnosis.unsupportedFrameworks.filter(framework => {
+    return frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0])
+  })
+  if (selected.length === 0 && unsupported.length === 0) {
+    throw new Error('No test framework was detected for manifest scaffolding.')
   }
 
   const manifest = {
@@ -56,10 +59,11 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
       safeEnv: {},
     },
     ciDiscovery: discoverCiFiles(repositoryRoot),
-    frameworks: selected.map(framework => buildFrameworkScaffold(repositoryRoot, framework)),
-    omitted: diagnosis.unsupportedFrameworks.map(framework => {
-      return `${framework.name}: unsupported test runner; not included in live validation.`
-    }),
+    frameworks: [
+      ...selected.map(framework => buildFrameworkScaffold(repositoryRoot, framework)),
+      ...unsupported.map(framework => buildUnsupportedFrameworkScaffold(repositoryRoot, framework)),
+    ],
+    omitted: [],
   }
 
   const errors = validateManifest(manifest)
@@ -67,6 +71,34 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
     throw new Error(`Generated manifest scaffold is invalid:\n- ${errors.join('\n- ')}`)
   }
   return manifest
+}
+
+/**
+ * Builds a diagnostic-only entry for a detected runner the validator cannot execute.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} detection static framework detection
+ * @returns {object} non-runnable framework manifest entry
+ */
+function buildUnsupportedFrameworkScaffold (repositoryRoot, detection) {
+  const packageJsonPath = getDetectionPackageJson(repositoryRoot, detection.locations)
+  const projectRoot = path.dirname(packageJsonPath)
+  const packageJson = readJson(packageJsonPath) || {}
+  const framework = detection.id === 'node-test' ? 'node:test' : detection.id
+
+  return {
+    id: `${detection.id}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+    framework,
+    frameworkVersion: getInstalledFrameworkVersion(detection.id, projectRoot, packageJson),
+    language: 'unknown',
+    status: 'unsupported_by_validator',
+    supportLevel: 'detected_only',
+    project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+    notes: [
+      `${detection.name} was detected at ${detection.locations.join(', ') || 'an unknown location'}, but is not ` +
+        'supported by this Test Optimization validator.',
+    ],
+  }
 }
 
 function buildFrameworkScaffold (repositoryRoot, detection) {
@@ -409,6 +441,39 @@ function findConfigFiles (root, framework) {
   } catch {
     return []
   }
+}
+
+/**
+ * Resolves the package.json associated with a framework detection.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {string[]} locations detected evidence paths
+ * @returns {string} absolute package.json path
+ */
+function getDetectionPackageJson (repositoryRoot, locations = []) {
+  const location = locations.find(value => path.basename(value) === 'package.json')
+  return path.resolve(repositoryRoot, location || 'package.json')
+}
+
+/**
+ * Resolves a detected runner version without executing repository code.
+ *
+ * @param {string} framework detected framework package name
+ * @param {string} projectRoot detected project root
+ * @param {object} packageJson detected project package.json
+ * @returns {string|null} installed or declared framework version
+ */
+function getInstalledFrameworkVersion (framework, projectRoot, packageJson) {
+  if (framework === 'node-test') return process.version
+  try {
+    const filename = require.resolve(`${framework}/package.json`, { paths: [projectRoot] })
+    return readJson(filename)?.version || null
+  } catch {}
+
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+    if (typeof packageJson[field]?.[framework] === 'string') return packageJson[field][framework]
+  }
+  return null
 }
 
 function discoverCiFiles (root) {

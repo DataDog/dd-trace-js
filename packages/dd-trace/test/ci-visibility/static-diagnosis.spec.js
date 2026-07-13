@@ -521,6 +521,74 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('selects test scripts that explicitly disable watch mode', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+        vitest: '4.0.0',
+      },
+      scripts: {
+        'test:jest': 'jest --watchAll=false',
+        'test:vitest': 'vitest run --watch=false',
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const eligibleCommands = report.eligibleFrameworks.map(framework => framework.command)
+
+      assert.deepStrictEqual(eligibleCommands.sort(), [
+        'jest --watchAll=false',
+        'vitest run --watch=false',
+      ])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes previous validator output from static initialization evidence', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const out = path.join(root, 'dd-test-optimization-validation-results')
+    const previousRun = path.join(out, 'runs', 'vitest-root', 'basic-reporting')
+
+    fs.mkdirSync(previousRun, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        vitest: '4.0.0',
+      },
+      scripts: {
+        test: 'vitest run',
+      },
+    }))
+    fs.writeFileSync(path.join(previousRun, 'command.json'), JSON.stringify({
+      env: {
+        NODE_OPTIONS: '-r dd-trace/ci/init',
+      },
+    }))
+
+    try {
+      const staticDiagnosis = runStaticDiagnosis({
+        manifest: { repository: { root } },
+        out,
+      })
+      const titles = staticDiagnosis.report.results.map(result => result.title)
+
+      assert.ok(titles.includes('Missing Test Optimization initialization'))
+      assert.ok(!titles.includes('Test Optimization initialization found'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not block a root framework entry with an unsupported nested fixture version', () => {
     const diagnosis = getDiagnosisWithNestedMochaError()
     const framework = {

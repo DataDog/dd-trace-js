@@ -318,6 +318,33 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
+  it('requires generated test identities with usable names', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'planned',
+      files: [],
+      cleanupPaths: [],
+      scenarios: [
+        getGeneratedScenario('basic-pass', 0, 1),
+        getGeneratedScenario('atr-fail-once', 1, 1),
+        getGeneratedScenario('test-management-target', 0, 1),
+      ],
+    }
+    manifest.frameworks[0].generatedTestStrategy.scenarios[0].testIdentities = [{ file: '/repo/test.js' }]
+    manifest.frameworks[0].generatedTestStrategy.scenarios[1].testIdentities = [{ name: 123, suite: 456 }]
+    manifest.frameworks[0].generatedTestStrategy.scenarios[2].testIdentities = [null]
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities[0].name must be a non-empty string.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities[0].name must be a non-empty string.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities[0].suite must be a string or null when ' +
+        'present.',
+      'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities[0] must be an object.',
+    ])
+    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.required, ['name'])
+    assert.strictEqual(jsonSchema.$defs.testIdentity.properties.name.minLength, 1)
+  })
+
   it('requires CI command metadata and matching working directories', () => {
     const manifest = getManifest()
     manifest.frameworks[0].ciWiring = {

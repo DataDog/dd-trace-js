@@ -40,8 +40,10 @@ describe('test optimization validation report writer', () => {
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       assert.match(markdown, /Validation completed: no/)
+      assert.match(markdown, /"version": 2/)
       assert.match(markdown, /"runCompleted": false/)
       assert.match(markdown, /"validatorExitCode": null/)
+      assert.match(markdown, /"validationSummaries": \[\]/)
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
@@ -70,6 +72,7 @@ describe('test optimization validation report writer', () => {
       repository: {
         root: tmpDir,
       },
+      omitted: ['A secondary command shape was not selected.'],
       frameworks: [
         {
           id: 'jest:root',
@@ -132,11 +135,15 @@ describe('test optimization validation report writer', () => {
       assert.strictEqual(humanReadableReport.includes(tmpDir), false)
       assert.match(markdown, /Error code: `EPERM`/)
       assert.match(markdown, /Rerun command: `node \/repo\/node_modules\/dd-trace\/ci\/validate-test-optimization/)
+      assert.match(markdown, /1 additional command shape was outside the selected validation scope/)
 
       const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
       assert.deepStrictEqual(diagnostic.runSummary, { runCompleted: true, validatorExitCode: 1 })
-      const validationPayloads = diagnostic.validationPayloads
-      const check = validationPayloads[0].payload.checks[0]
+      assert.strictEqual(diagnostic.version, 2)
+      assert.strictEqual(diagnostic.normalizedManifest, undefined)
+      assert.strictEqual(diagnostic.staticDiagnosis, undefined)
+      const validationSummaries = diagnostic.validationSummaries
+      const check = validationSummaries[0].checks[0]
       assert.strictEqual(check.evidence.blockedByExecutionEnvironment, true)
       assert.strictEqual(check.evidence.manifestMayBeReused, true)
       assert.deepStrictEqual(check.remediation, [
@@ -146,8 +153,13 @@ describe('test optimization validation report writer', () => {
         'Rerun in CI',
       ])
 
-      assert.deepStrictEqual(Object.keys(validationPayloads[0]).sort(), ['frameworkId', 'payload'])
-      assert.strictEqual(validationPayloads[0].payload.status, 'unknown')
+      assert.deepStrictEqual(Object.keys(validationSummaries[0]).sort(), [
+        'checks',
+        'framework',
+        'frameworkId',
+        'status',
+      ])
+      assert.strictEqual(validationSummaries[0].status, 'unknown')
       assert.strictEqual(check.id, 'execution-environment')
       assert.strictEqual(check.status, 'unknown')
       assert.notStrictEqual(check.id, 'basic-reporting')
@@ -472,17 +484,11 @@ describe('test optimization validation report writer', () => {
 
       const reportFacingOutput = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       const diagnostic = readMarkdownJsonSection(reportFacingOutput, 'Diagnostic JSON')
-      const normalizedManifest = diagnostic.normalizedManifest
 
       assert.match(reportFacingOutput, /not public-shareable as-is/)
       assert.match(reportFacingOutput, /best-effort/)
-      assert.strictEqual(normalizedManifest.environment.safeEnv.DD_API_KEY, '<redacted>')
-      assert.deepStrictEqual(normalizedManifest.environment.requiredSecretEnvVars, ['DD_API_KEY'])
-      assert.strictEqual(
-        normalizedManifest.frameworks[0].ciWiringCommand.env.DD_API_KEY,
-        '<redacted>'
-      )
-      assert.match(JSON.stringify(diagnostic.validationPayloads), /<redacted>/)
+      assert.strictEqual(diagnostic.normalizedManifest, undefined)
+      assert.strictEqual(diagnostic.staticDiagnosis, undefined)
       const normalizedPayloads = fs.readFileSync(path.join(out, 'intake', 'payloads.normalized.ndjson'), 'utf8')
       assert.match(normalizedPayloads, /<redacted>/)
       assert.match(reportFacingOutput, /<redacted>/)
@@ -512,6 +518,7 @@ describe('test optimization validation report writer', () => {
       ]) {
         assert.doesNotMatch(reportFacingOutput, new RegExp(secret))
         assert.doesNotMatch(normalizedPayloads, new RegExp(secret))
+        assert.doesNotMatch(JSON.stringify(diagnostic), new RegExp(secret))
       }
     } finally {
       console.log = originalLog
@@ -1120,6 +1127,20 @@ describe('test optimization validation report writer', () => {
       assert.doesNotMatch(markdown, /## Execution Results JSON/)
       assert.doesNotMatch(markdown, /## Normalized Manifest JSON/)
       assert.doesNotMatch(markdown, /## Static Diagnosis JSON/)
+      const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
+      const validation = diagnostic.validationSummaries[0]
+      const ciWiring = validation.checks.find(check => check.id === 'ci-wiring')
+      assert.strictEqual(validation.status, 'failed')
+      assert.strictEqual(ciWiring.command, 'pnpm test')
+      assert.strictEqual(ciWiring.exitCode, '1')
+      assert.strictEqual(ciWiring.evidence.failureKind, 'ci-wiring-no-test-optimization-events')
+      assert.strictEqual(ciWiring.evidence.initializationProbe.reachedTestRunnerProcess, false)
+      assert.strictEqual(ciWiring.artifactDirectory, 'runs/vitest-app/ci-wiring')
+      assert.ok(ciWiring.remediation.length > 0)
+      assert.strictEqual(diagnostic.normalizedManifest, undefined)
+      assert.strictEqual(diagnostic.staticDiagnosis, undefined)
+      assert.doesNotMatch(JSON.stringify(diagnostic), /stderrExcerpt|stdoutExcerpt|samples/)
+      assert.ok(Buffer.byteLength(JSON.stringify(diagnostic)) < 10_000)
       const summary = logs.join('\n')
       assert.match(summary, /How to fix:/)
       assert.match(summary, /example \(Vitest\) - CI Wiring:/)
@@ -1155,7 +1176,10 @@ describe('test optimization validation report writer', () => {
       status: 'fail',
       diagnosis: 'Static CI inspection found no Datadog initialization.',
       evidence: {
-        eventLevelFailure: { kind: 'ci-wiring-static-missing-initialization' },
+        eventLevelFailure: {
+          kind: 'ci-wiring-static-missing-initialization',
+          missingLevels: ['test_session_end', 'test'],
+        },
       },
       artifacts: [],
     }]
@@ -1184,9 +1208,12 @@ describe('test optimization validation report writer', () => {
       })
 
       const summary = logs.join('\n')
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       assert.match(summary, /Static CI inspection found no Datadog initialization/)
       assert.match(summary, /CI command was not replayed locally/)
       assert.doesNotMatch(summary, /CI ran tests/)
+      assert.doesNotMatch(markdown, /Missing event levels:/)
+      assert.ok(markdown.includes('Event levels that require CI initialization \\(static inference\\)'))
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })

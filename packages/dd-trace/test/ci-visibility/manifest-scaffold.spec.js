@@ -58,6 +58,49 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('records unsupported runners explicitly', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
+    const mochaRoot = path.dirname(require.resolve('mocha/package.json'))
+    const karmaRoot = path.join(root, 'node_modules', 'karma')
+    fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'test'))
+    fs.mkdirSync(karmaRoot)
+    fs.symlinkSync(mochaRoot, path.join(root, 'node_modules', 'mocha'), 'dir')
+    fs.writeFileSync(path.join(karmaRoot, 'package.json'), JSON.stringify({
+      name: 'karma',
+      version: '6.4.4',
+    }))
+    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'mixed-runner-project',
+      devDependencies: {
+        karma: '^6.4.4',
+        mocha: require('mocha/package.json').version,
+      },
+      scripts: {
+        'test-spec': 'mocha test/unit.spec.js',
+        'test-karma': 'karma start',
+        test: 'npm run test-spec',
+      },
+    }))
+
+    try {
+      const manifest = createManifestScaffold({ root })
+      const mocha = manifest.frameworks.find(framework => framework.framework === 'mocha')
+      const karma = manifest.frameworks.find(framework => framework.framework === 'karma')
+
+      assert.deepStrictEqual(validateManifest(manifest), [])
+      assert.strictEqual(karma.status, 'unsupported_by_validator')
+      assert.strictEqual(karma.frameworkVersion, '6.4.4')
+      assert.match(karma.notes[0], /not supported by this Test Optimization validator/)
+      assert.strictEqual(mocha.ciWiring.status, 'unknown')
+      assert.strictEqual(mocha.ciWiringCommand, undefined)
+      assert.deepStrictEqual(manifest.omitted, [])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps installed runners runnable when a nested detected runner is unavailable', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
     const mochaRoot = path.dirname(require.resolve('mocha/package.json'))

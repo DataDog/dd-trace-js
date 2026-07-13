@@ -4,6 +4,7 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const { builtinModules } = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -46,6 +47,64 @@ function readMarkdownJsonSection (markdown, title) {
 }
 
 describe('test optimization validation cli', () => {
+  it('uses only published files and runtime dependencies', () => {
+    const packageRoot = path.resolve(__dirname, '../../../..')
+    const packageJson = require(path.join(packageRoot, 'package.json'))
+    const runtimePackages = new Set([
+      packageJson.name,
+      ...Object.keys(packageJson.dependencies ?? {}),
+      ...Object.keys(packageJson.optionalDependencies ?? {}),
+    ])
+    const builtins = new Set(builtinModules.map(name => name.replace(/^node:/, '')))
+    const sourceFiles = [
+      path.join(packageRoot, 'ci', 'diagnose.js'),
+      path.join(packageRoot, 'ci', 'init.js'),
+      path.join(packageRoot, 'ci', 'validate-test-optimization.js'),
+      path.join(packageRoot, 'register.js'),
+      ...listJavaScriptFiles(path.join(packageRoot, 'ci', 'test-optimization-validation')),
+    ]
+    const developmentOnlyImports = []
+    const unpublishedImports = []
+    const requirePattern = /\brequire(?:\.resolve)?\(\s*['"]([^'"]+)['"]/g
+
+    for (const sourceFile of sourceFiles) {
+      const source = fs.readFileSync(sourceFile, 'utf8')
+      let match
+
+      while ((match = requirePattern.exec(source)) !== null) {
+        const specifier = match[1]
+
+        if (specifier.startsWith('.')) {
+          let resolved
+
+          try {
+            resolved = require.resolve(path.resolve(path.dirname(sourceFile), specifier))
+          } catch {
+            unpublishedImports.push(`${path.relative(packageRoot, sourceFile)} -> ${specifier} (missing)`)
+            continue
+          }
+
+          const relativeTarget = path.relative(packageRoot, resolved).split(path.sep).join('/')
+          if (!isPublishedValidationPath(relativeTarget)) {
+            unpublishedImports.push(`${path.relative(packageRoot, sourceFile)} -> ${relativeTarget}`)
+          }
+          continue
+        }
+
+        const normalizedSpecifier = specifier.replace(/^node:/, '')
+        if (builtins.has(normalizedSpecifier)) continue
+
+        const packageName = getPackageName(specifier)
+        if (!runtimePackages.has(packageName)) {
+          developmentOnlyImports.push(`${path.relative(packageRoot, sourceFile)} -> ${specifier}`)
+        }
+      }
+    }
+
+    assert.deepStrictEqual(developmentOnlyImports, [])
+    assert.deepStrictEqual(unpublishedImports, [])
+  })
+
   it('normalizes copied framework targets with a trailing colon', () => {
     assert.strictEqual(normalizeFrameworkTarget(' vitest:root-unit: '), 'vitest:root-unit')
 
@@ -89,6 +148,91 @@ describe('test optimization validation cli', () => {
     assert.strictEqual(options.approvedPlanSha256, digest)
   })
 
+  it('parses the localhost capability check mode', () => {
+    const options = parseArgs(['--check-localhost'])
+
+    assert.strictEqual(options.checkLocalhost, true)
+  })
+
+  it('checks localhost capability without loading a manifest or starting live validation', async () => {
+    const logs = []
+    const originalLog = console.log
+    let checked = false
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './execution-environment': {
+        async checkLocalhostCapability () {
+          checked = true
+        },
+        isLocalSocketPermissionError () {
+          return false
+        },
+      },
+      './manifest-loader': {
+        loadManifest () {
+          throw new Error('manifest should not load')
+        },
+      },
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            throw new Error('live validation should not start')
+          }
+        },
+      },
+    })
+
+    console.log = message => logs.push(message)
+    try {
+      await main(['--check-localhost'])
+
+      assert.strictEqual(checked, true)
+      assert.deepStrictEqual(logs, [
+        'Localhost capability check passed: this environment can listen and connect on 127.0.0.1.',
+      ])
+    } finally {
+      console.log = originalLog
+    }
+  })
+
+  it('reports a blocked localhost capability check without running project commands', async () => {
+    const errors = []
+    const originalError = console.error
+    const originalExitCode = process.exitCode
+    const error = Object.assign(new Error('listen EPERM 127.0.0.1'), {
+      address: '127.0.0.1',
+      code: 'EPERM',
+      syscall: 'listen',
+    })
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './execution-environment': {
+        async checkLocalhostCapability () {
+          throw error
+        },
+        isLocalSocketPermissionError (candidate) {
+          return candidate === error
+        },
+      },
+      './manifest-loader': {
+        loadManifest () {
+          throw new Error('manifest should not load')
+        },
+      },
+    })
+
+    console.error = message => errors.push(String(message))
+    process.exitCode = undefined
+    try {
+      await main(['--check-localhost'])
+
+      assert.strictEqual(process.exitCode, 1)
+      assert.match(errors.join('\n'), /No project commands ran/)
+      assert.match(errors.join('\n'), /execution mode that permits localhost sockets/)
+    } finally {
+      console.error = originalError
+      process.exitCode = originalExitCode
+    }
+  })
+
   it('initializes a manifest scaffold without starting live validation', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-init-manifest-'))
     const originalCwd = process.cwd()
@@ -120,6 +264,7 @@ describe('test optimization validation cli', () => {
       )))
       assert.strictEqual(manifest.repository.root, fs.realpathSync(tmpDir))
       assert.match(logs.join('\n'), /without running project code/)
+      assert.match(logs.join('\n'), /CI files listed in ciDiscovery/)
       assert.strictEqual(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-validation-results')), false)
     } finally {
       console.log = originalLog
@@ -435,16 +580,16 @@ describe('test optimization validation cli', () => {
 
         const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
         const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
-        const validationPayloads = diagnostic.validationPayloads
-        const check = validationPayloads[0].payload.checks[0]
+        const validationSummaries = diagnostic.validationSummaries
+        const check = validationSummaries[0].checks[0]
         const summary = logs.join('\n')
 
         assert.strictEqual(process.exitCode, 1)
         assert.strictEqual(check.evidence.blockedByExecutionEnvironment, true)
         assert.strictEqual(check.evidence.errorCode, code)
-        assert.strictEqual(validationPayloads[0].payload.status, 'unknown')
-        assert.strictEqual(validationPayloads[0].payload.checks[0].id, 'execution-environment')
-        assert.strictEqual(validationPayloads[0].payload.checks[0].status, 'unknown')
+        assert.strictEqual(validationSummaries[0].status, 'unknown')
+        assert.strictEqual(check.id, 'execution-environment')
+        assert.strictEqual(check.status, 'unknown')
         assert.match(summary, /Validation blocked before project commands ran/)
         assert.match(summary, /this agent cannot open the localhost mock intake/)
         assert.match(summary, /Run this already-approved command from the host context/)
@@ -1098,4 +1243,50 @@ function writeEmptyRequestsArtifact (out) {
   const requestsPath = path.join(intakeDir, 'requests.ndjson')
   fs.writeFileSync(requestsPath, '')
   return { requestsPath }
+}
+
+/**
+ * Returns every JavaScript file below a directory.
+ *
+ * @param {string} directory
+ * @returns {string[]}
+ */
+function listJavaScriptFiles (directory) {
+  const files = []
+
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name)
+
+    if (entry.isDirectory()) {
+      files.push(...listJavaScriptFiles(entryPath))
+    } else if (entry.name.endsWith('.js')) {
+      files.push(entryPath)
+    }
+  }
+
+  return files
+}
+
+/**
+ * Returns the installable package name for a module specifier.
+ *
+ * @param {string} specifier
+ * @returns {string}
+ */
+function getPackageName (specifier) {
+  const parts = specifier.split('/')
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+}
+
+/**
+ * Reports whether a path is covered by package.json's published file patterns.
+ *
+ * @param {string} relativePath
+ * @returns {boolean}
+ */
+function isPublishedValidationPath (relativePath) {
+  return relativePath.startsWith('ci/') ||
+    relativePath.startsWith('vendor/dist/') ||
+    /^packages\/[^/]+\/(?:index\.js|lib\/|src\/)/.test(relativePath) ||
+    ['loader-hook.mjs', 'register.js', 'version.js'].includes(relativePath)
 }

@@ -1164,6 +1164,9 @@
     },
     "testIdentity": {
       "type": "object",
+      "required": [
+        "name"
+      ],
       "properties": {
         "suite": {
           "type": [
@@ -1172,7 +1175,8 @@
           ]
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
       "file": {
         "anyOf": [

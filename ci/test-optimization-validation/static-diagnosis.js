@@ -31,7 +31,7 @@ const UNSUPPORTED_FRAMEWORK_NAMES = {
 }
 
 function runStaticDiagnosis ({ manifest, out }) {
-  const report = runDiagnosis({ root: manifest.repository.root })
+  const report = runDiagnosis({ root: manifest.repository.root, excludePaths: [out] })
   const reportPath = path.join(out, 'static-diagnosis.json')
   writeFileSafely(
     out,

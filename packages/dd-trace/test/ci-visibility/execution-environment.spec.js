@@ -1,13 +1,79 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter } = require('node:events')
 
 const {
   buildExecutionEnvironmentBlockerResult,
+  checkLocalhostCapability,
   isLocalSocketPermissionError,
 } = require('../../../../ci/test-optimization-validation/execution-environment')
 
 describe('test optimization execution environment diagnosis', () => {
+  it('checks localhost listen and connect capability without leaving sockets open', async () => {
+    let clientDestroyed = false
+    let serverClosed = false
+    const server = Object.assign(new EventEmitter(), {
+      listening: false,
+      listen (port, host, callback) {
+        assert.strictEqual(port, 0)
+        assert.strictEqual(host, '127.0.0.1')
+        this.listening = true
+        queueMicrotask(callback)
+      },
+      address () {
+        return { port: 43210 }
+      },
+      close (callback) {
+        this.listening = false
+        serverClosed = true
+        queueMicrotask(callback)
+      },
+    })
+    const client = Object.assign(new EventEmitter(), {
+      destroy () {
+        clientDestroyed = true
+      },
+    })
+    const netModule = {
+      createServer () {
+        return server
+      },
+      createConnection (options) {
+        assert.deepStrictEqual(options, { host: '127.0.0.1', port: 43210 })
+        queueMicrotask(() => client.emit('connect'))
+        return client
+      },
+    }
+
+    await checkLocalhostCapability({ netModule })
+
+    assert.strictEqual(clientDestroyed, true)
+    assert.strictEqual(serverClosed, true)
+  })
+
+  it('preserves localhost listen permission errors from the capability check', async () => {
+    const error = Object.assign(new Error('listen EPERM 127.0.0.1'), {
+      address: '127.0.0.1',
+      code: 'EPERM',
+      syscall: 'listen',
+    })
+    const server = Object.assign(new EventEmitter(), {
+      listening: false,
+      listen () {
+        queueMicrotask(() => this.emit('error', error))
+      },
+    })
+
+    await assert.rejects(checkLocalhostCapability({
+      netModule: {
+        createServer () {
+          return server
+        },
+      },
+    }), candidate => candidate === error)
+  })
+
   it('turns fake intake EPERM listen failures into execution-environment blockers', () => {
     const error = Object.assign(new Error('listen EPERM: operation not permitted 127.0.0.1'), {
       address: '127.0.0.1',

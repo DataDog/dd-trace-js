@@ -1,6 +1,8 @@
 # Test Optimization Validation Payload Format
 
-The validator writes one JSON payload per framework inside the detailed Markdown report:
+The validator builds one JSON payload per framework as its detailed internal validation shape. To
+keep the Markdown report compact, the report embeds a summary projection rather than serializing
+these complete payloads:
 
 ```text
 dd-test-optimization-validation-results/report.md
@@ -101,14 +103,54 @@ non-secret Datadog configuration are preserved because they are the wiring being
 
 ## Validator Artifacts
 
-`dd-trace/ci/validate-test-optimization.js` writes one detailed Markdown report with one canonical
-diagnostic JSON object:
+`dd-trace/ci/validate-test-optimization.js` writes one detailed Markdown report with one compact,
+canonical diagnostic JSON object:
 
 - `report.md`: readable execution details plus a `Diagnostic JSON` section containing
-  `validationPayloads`, `normalizedManifest`, `staticDiagnosis`, and `runSummary`. Each validation
-  payload entry is `{ frameworkId, payload }`; overlapping raw execution-result JSON is not serialized
-  a second time. `runSummary.runCompleted` and `runSummary.validatorExitCode` distinguish a completed
-  validation with findings from an interrupted run.
+  `validationSummaries`, `artifacts`, and `runSummary`. Each validation summary keeps framework and
+  check status, reasons, selected commands, compact scenario evidence, remediation, and one scenario
+  artifact-directory reference. The normalized manifest and static diagnosis remain available through
+  the linked manifest and `static-diagnosis.json` artifacts instead of being embedded again.
+  `runSummary.runCompleted` and `runSummary.validatorExitCode` distinguish a completed validation with
+  findings from an interrupted run.
+
+The embedded diagnostic object uses this shape:
+
+```json
+{
+  "version": 2,
+  "runSummary": {
+    "runCompleted": true,
+    "validatorExitCode": 1
+  },
+  "validationSummaries": [
+    {
+      "frameworkId": "mocha:root",
+      "status": "failed",
+      "framework": {
+        "id": "mocha",
+        "name": "Mocha",
+        "version": "11.7.6",
+        "packageName": "example-package"
+      },
+      "checks": [
+        {
+          "id": "ci-wiring",
+          "name": "CI wiring",
+          "status": "failed",
+          "reason": "The selected CI job does not initialize Test Optimization.",
+          "artifactDirectory": "runs/mocha-root/ci-wiring"
+        }
+      ]
+    }
+  ],
+  "artifacts": {
+    "markdownReport": "report.md",
+    "manifest": "../dd-test-optimization-validation-manifest.json",
+    "staticDiagnosis": "static-diagnosis.json"
+  }
+}
+```
 
 Multi-framework repositories should present each payload separately. A failed static-only payload is
 emitted when live validation is skipped because static diagnosis found a hard blocker, such as an

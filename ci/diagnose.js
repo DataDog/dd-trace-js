@@ -90,6 +90,7 @@ const AGENTLESS_ENABLED_RE = /DD_CIVISIBILITY_AGENTLESS_ENABLED["'\s:=]+(?:true|
 const API_KEY_RE = /\b(?:DD_API_KEY|DATADOG_API_KEY)\b/
 const SERVICE_RE = /\bDD_SERVICE\b/
 const OTEL_OTLP_RE = /OTEL_TRACES_EXPORTER["'\s:=]+otlp\b/i
+const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!(?:=false)(?:\s|$))(?:\s|=|$)/
 
 const CYPRESS_MANUAL_PLUGIN_RE = /dd-trace\/ci\/cypress\/(?:plugin|after-run|after-spec)\b/
 const CYPRESS_SUPPORT_RE = /dd-trace\/ci\/cypress\/support\b/
@@ -228,6 +229,7 @@ const UNSUPPORTED_FRAMEWORKS = [
  * @param {string} [options.gitExecutable] trusted git executable used for git checks
  * @param {number} [options.maxFiles] maximum number of text files to scan
  * @param {number} [options.maxTotalBytes] maximum aggregate bytes of text files to scan
+ * @param {string[]} [options.excludePaths] repository paths to exclude from the text scan
  * @returns {object} diagnosis report
  */
 function runDiagnosis (options = {}) {
@@ -237,7 +239,7 @@ function runDiagnosis (options = {}) {
   const maxFiles = options.maxFiles || MAX_SCANNED_FILES
   const maxTotalBytes = options.maxTotalBytes || MAX_SCANNED_TEXT_BYTES
   const results = []
-  const files = collectTextFiles(root, maxFiles)
+  const files = collectTextFiles(root, maxFiles, options.excludePaths)
   const textFiles = readTextFiles(root, files, maxTotalBytes)
   const truncatedFileScan = files.truncated || textFiles.truncated
   const manifests = readPackageManifests(root, textFiles)
@@ -1326,7 +1328,7 @@ function getEligibleCommandMatch (framework) {
  */
 function isIneligibleFrameworkCommand (frameworkId, command) {
   if (frameworkId === 'vitest' && /\bvitest\s+bench\b/.test(command)) return true
-  if (/(?:^|\s)(?:watch|--watch|--watchAll)(?:\s|=|$)/.test(command)) return true
+  if (WATCH_MODE_RE.test(command)) return true
 
   return false
 }
@@ -1584,11 +1586,13 @@ function findLocations (textFiles, pattern) {
  *
  * @param {string} root repository root
  * @param {number} maxFiles maximum number of files
+ * @param {string[]} [excludePaths] repository paths excluded from the scan
  * @returns {Array<string> & {truncated?: boolean}} relative paths
  */
-function collectTextFiles (root, maxFiles) {
+function collectTextFiles (root, maxFiles, excludePaths = []) {
   const files = []
   const seen = new Set()
+  const exclusions = getScanExclusions(root, excludePaths)
   files.truncated = false
 
   addTextFileIfPresent('package.json')
@@ -1616,6 +1620,7 @@ function collectTextFiles (root, maxFiles) {
 
       const relativePath = relativeDir ? path.join(relativeDir, entry.name) : entry.name
       const absolutePath = path.join(root, relativePath)
+      if (isScanPathExcluded(relativePath, exclusions)) continue
 
       if (entry.isDirectory()) {
         if (!SKIPPED_DIRECTORIES.has(entry.name)) {
@@ -1655,6 +1660,39 @@ function collectTextFiles (root, maxFiles) {
 
   walk(root, '')
   return files
+}
+
+/**
+ * Normalizes caller-provided scan exclusions to repository-relative paths.
+ *
+ * @param {string} root repository root
+ * @param {string[]} excludePaths paths to exclude
+ * @returns {Set<string>} normalized repository-relative exclusions
+ */
+function getScanExclusions (root, excludePaths) {
+  const exclusions = new Set()
+  for (const candidate of excludePaths) {
+    if (typeof candidate !== 'string') continue
+    const relative = path.relative(root, path.resolve(root, candidate))
+    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) continue
+    exclusions.add(normalizeRelativePath(relative))
+  }
+  return exclusions
+}
+
+/**
+ * Checks whether a scanned path is inside a caller-provided exclusion.
+ *
+ * @param {string} relativePath repository-relative path
+ * @param {Set<string>} exclusions normalized exclusions
+ * @returns {boolean} whether the path must be skipped
+ */
+function isScanPathExcluded (relativePath, exclusions) {
+  const normalizedPath = normalizeRelativePath(relativePath)
+  for (const exclusion of exclusions) {
+    if (normalizedPath === exclusion || normalizedPath.startsWith(`${exclusion}/`)) return true
+  }
+  return false
 }
 
 /**

@@ -24,6 +24,7 @@ const {
 } = require('./ci-discovery')
 const {
   buildExecutionEnvironmentBlockerResult,
+  checkLocalhostCapability,
   isLocalSocketPermissionError,
 } = require('./execution-environment')
 const { loadManifest } = require('./manifest-loader')
@@ -94,6 +95,9 @@ function parseArgs (argv) {
       case '--print-plan':
         options.printPlan = true
         break
+      case '--check-localhost':
+        options.checkLocalhost = true
+        break
       case '--approved-plan-sha256':
         options.approvedPlanSha256 = requireValue(argv, ++i, arg)
         break
@@ -135,7 +139,8 @@ Options:
   --keep-temp-files       Leave generated validation files in place.
   --verbose               Print command progress.
   --validate-manifest     Validate the manifest and exit without running project code.
-  --init-manifest         Create a schema-valid Jest, Mocha, or Vitest manifest scaffold without running code.
+  --init-manifest         Create a schema-valid manifest scaffold without running project code.
+  --check-localhost       Check localhost listen/connect capability without running project code.
   --print-plan            Print the normalized execution plan without running project code.
   --approved-plan-sha256  Bind live execution to the exact manifest and options shown by --print-plan.
   --help                  Show this help.
@@ -150,6 +155,23 @@ async function main (argv) {
       return
     }
 
+    if (options.checkLocalhost) {
+      try {
+        await checkLocalhostCapability()
+        console.log('Localhost capability check passed: this environment can listen and connect on 127.0.0.1.')
+      } catch (error) {
+        if (!isLocalSocketPermissionError(error)) throw error
+
+        process.exitCode = 1
+        console.error(sanitizeConsoleText(
+          'Localhost capability check blocked: this environment does not allow the validator to listen and ' +
+          'connect on 127.0.0.1. No project commands ran and no Test Optimization conclusion was reached. ' +
+          'Run the approved live validation in an execution mode that permits localhost sockets.'
+        ))
+      }
+      return
+    }
+
     if (options.initManifest) {
       const manifestPath = path.resolve(options.manifest)
       if (path.dirname(manifestPath) !== process.cwd()) {
@@ -159,7 +181,8 @@ async function main (argv) {
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
       console.log(sanitizeConsoleText(
         `Created validation manifest scaffold without running project code: ${manifestPath}\n` +
-        'Review the selected test command and add one replayable CI test step, then run --validate-manifest.'
+        'Review the selected test commands and the CI files listed in ciDiscovery, record one replayable CI test ' +
+        'step when available, then run --validate-manifest.'
       ))
       return
     }

@@ -30,9 +30,19 @@ requires a sandbox capability that permits the local mock intake to bind to `127
 process to connect back to that localhost socket. Some agent sandbox modes block one or both
 directions.
 
+Check this before live approval with `validate-test-optimization.js --check-localhost`. The check
+opens a temporary localhost listener, connects to it, closes both sockets, and exits without loading
+the manifest, running project code, or writing artifacts. Run it in the current agent environment.
+Do not request host access merely to make the capability check pass.
+
 If the fake intake fails with `EPERM` or `EACCES` on `listen` or `connect` for
 `127.0.0.1`/localhost, treat that as an execution-environment blocker, not as a Test Optimization
 misconfiguration.
+
+If the capability check reports the same blocker before approval, continue to render the complete
+plan. Use the platform's localhost-capable execution mode when requesting the single approval for the
+digest-bound live command. Do not first run the live validator in the known-blocked environment, and
+do not add a separate chat approval for the environment change.
 
 Tell the user:
 
@@ -166,9 +176,13 @@ The detailed Markdown report should contain:
 - unresolved CI expressions, includes, outputs, secrets, shared libraries, orb expansions, dynamic
   pipeline generation, or matrix values affecting replay confidence
 - relevant stdout/stderr excerpts selected by the validator
-- one embedded `Diagnostic JSON` section containing validation payloads, the normalized manifest,
-  and static diagnosis without a duplicate raw execution-results copy
+- one embedded `Diagnostic JSON` section containing compact framework/check summaries, run status,
+  and artifact references; the normalized manifest and static diagnosis remain linked artifacts
 - artifact paths for detailed inspection
+
+Read the human-readable sections first. Inspect the embedded diagnostic summary or linked run
+artifacts only when a specific failure needs deeper debugging; do not load or restate them in full
+for the normal completion summary.
 
 Treat the generated report and artifacts as local/internal diagnostics. They can reveal repository
 and CI metadata even after secret-like values are redacted. Tell the user to review and redact them

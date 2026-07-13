@@ -487,7 +487,16 @@ function validateScenarioIdentities (scenario, prefix, errors, required = false)
   }
 
   for (const [index, identity] of scenario.testIdentities.entries()) {
-    optionalAbsolutePath(identity, 'file', errors, `${prefix}.testIdentities[${index}]`)
+    const identityPrefix = `${prefix}.testIdentities[${index}]`
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
+      errors.push(`${identityPrefix} must be an object.`)
+      continue
+    }
+    requiredString(identity, 'name', errors, identityPrefix)
+    if (identity.suite !== undefined && identity.suite !== null && typeof identity.suite !== 'string') {
+      errors.push(`${identityPrefix}.suite must be a string or null when present.`)
+    }
+    optionalAbsolutePath(identity, 'file', errors, identityPrefix)
   }
 }
 
