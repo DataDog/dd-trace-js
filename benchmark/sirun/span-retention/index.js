@@ -12,7 +12,6 @@ const EXPRESS_PATH = require.resolve('express')
 const HTTP_MODULE = 'node:http'
 
 const guard = require('../startup-guard')
-const StatsD = require('../statsd')
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 process.env.DD_TRACE_STARTUP_LOGS = 'false'
@@ -29,6 +28,10 @@ const MIDDLEWARE_COUNT = Number(process.env.MIDDLEWARE_COUNT)
 const REQUESTS_PER_BATCH = Number(process.env.REQUESTS_PER_BATCH)
 const RETAINER = process.env.RETAINER
 const WARMUP_REQUESTS = Number(process.env.WARMUP_REQUESTS)
+const BASELINE_OR_CANDIDATE = process.env.BASELINE_OR_CANDIDATE
+const MAX_HEAP_GROWTH_BYTES_PER_REQUEST = Number(
+  process.env.MAX_HEAP_GROWTH_BYTES_PER_REQUEST ?? 2048
+)
 const LONG_TIMER_DELAY = 2 ** 31 - 1
 const MIDDLEWARE_SPAN_NAMES = new Set(['express.middleware', 'router.middleware'])
 const RETAINERS = []
@@ -41,6 +44,7 @@ assert.ok(MIDDLEWARE_COUNT > 0, 'MIDDLEWARE_COUNT must be positive')
 assert.ok(REQUESTS_PER_BATCH > 0, 'REQUESTS_PER_BATCH must be positive')
 assert.ok(RETAINER_NAMES.has(RETAINER), `unknown RETAINER: ${RETAINER}`)
 assert.ok(WARMUP_REQUESTS > 0, 'WARMUP_REQUESTS must be positive')
+assert.ok(MAX_HEAP_GROWTH_BYTES_PER_REQUEST > 0, 'MAX_HEAP_GROWTH_BYTES_PER_REQUEST must be positive')
 
 let exportedMiddlewareSpans = 0
 const exportedSpanNames = new Set()
@@ -188,11 +192,15 @@ async function main () {
   guard.done(0.15)
 
   const bytesPerRequest = calculateBytesPerRequest(heapSamples)
-  const statsd = new StatsD()
-  statsd.gauge('memory.heap.baseline', heapSamples[0])
-  statsd.gauge('memory.heap.final', heapSamples.at(-1))
-  statsd.gauge('memory.heap.growth_per_request', bytesPerRequest)
-  statsd.flush()
+  // The pre-fix baseline intentionally exceeds this guard; it must still run so
+  // Sirun can compare its built-in metrics with the candidate.
+  if (BASELINE_OR_CANDIDATE !== 'baseline') {
+    assert.ok(
+      bytesPerRequest <= MAX_HEAP_GROWTH_BYTES_PER_REQUEST,
+      `heap growth was ${bytesPerRequest.toFixed(1)} bytes/request, ` +
+      `expected at most ${MAX_HEAP_GROWTH_BYTES_PER_REQUEST}`
+    )
+  }
 
   if (process.env.PRINT_RESULTS === '1') {
     console.log(JSON.stringify({

@@ -13,7 +13,8 @@
         "OPERATIONS": "15000",
         "REQUESTS_PER_BATCH": "3000",
         "RETAINER": "async-resource",
-        "WARMUP_REQUESTS": "250"
+        "WARMUP_REQUESTS": "250",
+        "MAX_HEAP_GROWTH_BYTES_PER_REQUEST": "2048"
       }
     },
     "long-timer": {
@@ -23,7 +24,8 @@
         "OPERATIONS": "15000",
         "REQUESTS_PER_BATCH": "3000",
         "RETAINER": "long-timer",
-        "WARMUP_REQUESTS": "250"
+        "WARMUP_REQUESTS": "250",
+        "MAX_HEAP_GROWTH_BYTES_PER_REQUEST": "2048"
       }
     },
     "request-only": {
@@ -33,7 +35,8 @@
         "OPERATIONS": "15000",
         "REQUESTS_PER_BATCH": "3000",
         "RETAINER": "request-only",
-        "WARMUP_REQUESTS": "250"
+        "WARMUP_REQUESTS": "250",
+        "MAX_HEAP_GROWTH_BYTES_PER_REQUEST": "2048"
       }
     }
   }

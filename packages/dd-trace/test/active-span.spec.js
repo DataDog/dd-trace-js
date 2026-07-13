@@ -11,7 +11,9 @@ const {
   getLiveSpan,
   getRetiredSpanContext,
   kPendingStoreRetirements,
+  kStoreRetirement,
   retirePendingSpans,
+  retireStoreGroup,
 } = require('../src/active-span')
 const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
@@ -97,8 +99,22 @@ describe('active span retirement', () => {
     assert.strictEqual(getRetiredSpanContext(retiredSpan), context)
     assert.strictEqual(retiredSpan.context(), context)
     assert.strictEqual(retiredSpan.tracer(), tracer)
+    assert.strictEqual(retiredSpan.setOperationName('late'), retiredSpan)
     assert.strictEqual(retiredSpan.setTag('late', true), retiredSpan)
+    assert.strictEqual(retiredSpan.addTags({ late: true }), retiredSpan)
+    assert.strictEqual(retiredSpan.addLinks([]), retiredSpan)
+    assert.strictEqual(retiredSpan.log(), retiredSpan)
+    retiredSpan.removeAllBaggageItems()
     assert.strictEqual(context.late, undefined)
+  })
+
+  it('handles stores added after retirement and repeated retirement', () => {
+    const retirement = createStoreRetirement()
+    const store = { [kStoreRetirement]: retirement }
+
+    retireStoreGroup(store)
+    retireStoreGroup(store)
+    retirement.add({})
   })
 
   it('materializes the propagation context only when late work reads it', () => {
@@ -209,5 +225,19 @@ describe('active span retirement', () => {
     assert.deepStrictEqual(parent.getTags(), {})
     assert.deepStrictEqual(parent._trace.started, [])
     assert.deepStrictEqual(parent._trace.finished, [])
+  })
+
+  it('retires a pending store and ignores a stale one', () => {
+    const retirement = createStoreRetirement()
+    const store = enterSpanForRetirement(span, {}, retirement)
+    const plainStore = { span }
+    const staleSpan = {}
+    const staleStore = { span: staleSpan }
+
+    retirePendingSpans(context._trace, [store, span, plainStore, span, staleStore, span])
+
+    assert.strictEqual(getLiveSpan(store), undefined)
+    assert.strictEqual(getLiveSpan(plainStore), undefined)
+    assert.strictEqual(staleStore.span, staleSpan)
   })
 })
