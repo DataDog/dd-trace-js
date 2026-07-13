@@ -10,6 +10,7 @@ const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { withVersions } = require('../setup/mocha')
@@ -447,7 +448,17 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - cookie', () => {
-    withVersions('fastify', '@fastify/cookie', cookieVersion => {
+    withVersions('fastify', '@fastify/cookie', (cookieVersion, _, cookieLoadedVersion) => {
+      // @fastify/cookie@11.1.1 bumped its own `cookie` dependency to ^2.0.0, which ships ESM-only
+      // with no CJS entry point. Requiring it throws ERR_REQUIRE_ESM on any Node.js version without
+      // synchronous require(esm) support.
+      if (semver.gte(cookieLoadedVersion, '11.1.1') && NODE_MAJOR < 22) {
+        // eslint-disable-next-line mocha/no-pending-tests
+        describe.skip(`refusing to run tests as @fastify/cookie@${cookieLoadedVersion} depends on an ESM-only ` +
+          `cookie package incompatible with Node.js ${NODE_MAJOR}`)
+        return
+      }
+
       const hookConfigurations = [
         'onRequest',
         'preParsing',
