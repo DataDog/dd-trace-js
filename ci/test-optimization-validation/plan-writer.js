@@ -257,7 +257,7 @@ function getPreferredValidatorPath (repositoryRoot) {
   const directPath = path.join(repositoryRoot, 'node_modules', 'dd-trace', 'ci', 'validate-test-optimization.js')
   try {
     if (fs.realpathSync(directPath) === fs.realpathSync(VALIDATOR_PATH)) {
-      return path.relative(repositoryRoot, directPath)
+      return path.relative(repositoryRoot, directPath).split(path.sep).join('/')
     }
   } catch {}
   return VALIDATOR_PATH
@@ -448,7 +448,7 @@ function getRepositoryRelativePath (repositoryRoot, filename) {
   const relative = path.relative(repositoryRoot, filename)
   if (!relative) return '.'
   if (relative.startsWith('..') || path.isAbsolute(relative)) return filename
-  return relative
+  return relative.split(path.sep).join('/')
 }
 
 function getSelectedGeneratedScenario (requestedScenario) {

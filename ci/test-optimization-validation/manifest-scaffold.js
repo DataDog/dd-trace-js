@@ -413,7 +413,7 @@ function discoverCiFiles (root) {
     const stat = fs.statSync(filename)
     if (stat.isDirectory()) {
       for (const entry of fs.readdirSync(filename).sort()) {
-        if (/\.ya?ml$/.test(entry)) found.push(path.join(relativePath, entry))
+        if (/\.ya?ml$/.test(entry)) found.push(path.posix.join(relativePath, entry))
       }
     } else {
       found.push(relativePath)

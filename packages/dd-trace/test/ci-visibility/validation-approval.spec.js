@@ -85,6 +85,24 @@ describe('test optimization validation approval', () => {
       fs.rmSync(outside, { recursive: true, force: true })
     }
   })
+
+  it('refuses command output paths that escape through a repository symlink', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-outside-'))
+    const linkedDirectory = path.join(root, 'linked')
+    const manifestPath = path.join(root, 'manifest.json')
+    const manifest = getManifest(root, ['npm', 'test'])
+    manifest.frameworks[0].existingTestCommand.outputPaths = [path.join(linkedDirectory, 'coverage')]
+
+    try {
+      fs.symlinkSync(outside, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir')
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
+      assert.throws(() => loadManifest(manifestPath), /outputPaths\[0\] resolves outside repository\.root/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
 })
 
 function getManifest (root, argv) {

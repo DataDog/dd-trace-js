@@ -54,7 +54,7 @@ function getRepositoryYarnError (command, repositoryRoot) {
   }
   if (releases.length === 0) return
 
-  const release = path.join('.yarn', 'releases', releases[releases.length - 1])
+  const release = path.posix.join('.yarn', 'releases', releases[releases.length - 1])
   return `uses bare "yarn", but this repository pins ${release}. Use the structured command ` +
     `argv [process.execPath, "${release}", ...] so validation does not depend on an ambient Yarn shim.`
 }

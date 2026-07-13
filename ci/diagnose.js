@@ -78,9 +78,9 @@ const NODE_OPTIONS_RE = /\bNODE_OPTIONS\b/
 const INIT_PRELOAD_TARGET =
   String.raw`(?:dd-trace\/ci\/init|(?:[^\s'"]*[\/\\])?node_modules[\/\\]dd-trace[\/\\]ci[\/\\]init|\.\/ci\/init)`
 const INIT_PRELOAD_RE =
-  new RegExp(String.raw`(?:^|\s)(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|\s|["'])`)
+  new RegExp(String.raw`(?:^|[\s='"])(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|\s|["'])`)
 const REGISTER_PRELOAD_RE =
-  /(?:^|\s)(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|\s|["'])/
+  /(?:^|[\s='"])(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|\s|["'])/
 const WRONG_INIT_RE = /dd-trace\/(?:init|initialize\.mjs)\b|require\(['"]dd-trace['"]\)\.init\s*\(/
 const DIRECT_CI_INIT_RE = /(?:require\(|import\s+)['"]dd-trace\/ci\/init(?:\.js)?['"]/
 const CI_DISABLED_RE = /DD_CIVISIBILITY_ENABLED["'\s:=]+(?:false|0)\b/i

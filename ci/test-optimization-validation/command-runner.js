@@ -56,6 +56,7 @@ const VALIDATION_SUPPRESSION_ENV = {
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
 }
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
+const EARLY_STOP_KILL_GRACE_MS = 500
 const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
 
@@ -86,13 +87,17 @@ function runCommand (command, options = {}) {
   }
 
   ensureSafeDirectory(artifactRoot, outDir, 'command artifact directory')
+  try {
+    assertNoInlineValidationEnvOverrides(command, env)
+  } catch (error) {
+    return Promise.reject(error)
+  }
   const outputStates = prepareCommandOutputs({ command, artifactRoot, outDir, repositoryRoot })
 
   return new Promise((resolve) => {
     let finalized = false
     let processGroupCleanupPending = false
-    let timedOutCloseResult
-    assertNoInlineValidationEnvOverrides(command, env)
+    let pendingCloseResult
     const childEnv = {
       ...getBaseEnv(envMode),
       ...command.env,
@@ -149,7 +154,7 @@ function runCommand (command, options = {}) {
         signalChild(child, 'SIGKILL', useProcessGroup)
         processGroupCleanupPending = false
         finalizeTimer = setTimeout(() => {
-          finalize(timedOutCloseResult?.code ?? null, timedOutCloseResult?.signal || 'SIGKILL')
+          finalize(pendingCloseResult?.code ?? null, pendingCloseResult?.signal || 'SIGKILL')
         }, timeoutFinalizeGraceMs)
       }, timeoutKillGraceMs)
     }, timeoutMs)
@@ -164,8 +169,15 @@ function runCommand (command, options = {}) {
 
         clearInterval(stopTimer)
         result.stoppedEarly = true
+        processGroupCleanupPending = useProcessGroup
         signalChild(child, 'SIGTERM', useProcessGroup)
-        killTimer = setTimeout(() => signalChild(child, 'SIGKILL', useProcessGroup), 500)
+        killTimer = setTimeout(() => {
+          signalChild(child, 'SIGKILL', useProcessGroup)
+          processGroupCleanupPending = false
+          finalizeTimer = setTimeout(() => {
+            finalize(pendingCloseResult?.code ?? null, pendingCloseResult?.signal || 'SIGKILL')
+          }, timeoutFinalizeGraceMs)
+        }, EARLY_STOP_KILL_GRACE_MS)
       }, 25)
     }
 
@@ -185,7 +197,7 @@ function runCommand (command, options = {}) {
     })
     child.on('close', (code, signal) => {
       if (processGroupCleanupPending) {
-        timedOutCloseResult = { code, signal }
+        pendingCloseResult = { code, signal }
         return
       }
       finalize(code, signal)
@@ -375,6 +387,7 @@ function assertNoInlineValidationEnvOverrides (command, env) {
   }
 
   const parsed = parseArgv(command.argv)
+  rejectReservedEnvSplitStrings(command.argv)
   if (parsed.ignoreEnvironment) throwEnvironmentReset()
   for (const name of Object.keys(parsed.prefixEnv)) {
     if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
@@ -405,7 +418,7 @@ function rejectReservedShellAssignments (shellCommand) {
   for (const name of VALIDATION_RESERVED_ENV_NAMES) {
     const escapedName = escapeRegExp(name)
     const assignment = new RegExp(
-      String.raw`(?:^|[\s;&|()])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*=`,
+      String.raw`(?:^|[\s;&|()'"])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*=`,
       'i'
     )
     const removal = new RegExp(
@@ -415,6 +428,28 @@ function rejectReservedShellAssignments (shellCommand) {
     )
 
     if (assignment.test(source) || removal.test(source)) throwReservedEnvOverride(name)
+  }
+}
+
+/**
+ * Rejects reserved environment changes hidden inside env --split-string arguments.
+ *
+ * @param {string[]} argv structured command arguments
+ * @returns {void}
+ */
+function rejectReservedEnvSplitStrings (argv) {
+  if (!Array.isArray(argv) || !isEnvExecutable(argv[0])) return
+
+  for (let index = 1; index < argv.length; index++) {
+    const argument = argv[index]
+    if (argument === '-S' || argument === '--split-string') {
+      if (typeof argv[index + 1] === 'string') rejectReservedShellAssignments(`env ${argv[index + 1]}`)
+      index++
+      continue
+    }
+
+    const splitString = /^--split-string=(.*)$/.exec(argument)?.[1]
+    if (splitString !== undefined) rejectReservedShellAssignments(`env ${splitString}`)
   }
 }
 

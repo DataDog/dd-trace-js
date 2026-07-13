@@ -146,7 +146,7 @@ describe('test optimization validation manifest scaffold', () => {
     try {
       const manifest = createManifestScaffold({ root })
       const strategy = manifest.frameworks[0].generatedTestStrategy
-      const generatedPaths = strategy.files.map(file => path.relative(root, file.path))
+      const generatedPaths = strategy.files.map(file => path.relative(root, file.path).split(path.sep).join('/'))
 
       assert.deepStrictEqual(validateManifest(manifest), [])
       assert.strictEqual(strategy.testDirectory, sourceRoot)

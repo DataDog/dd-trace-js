@@ -283,7 +283,7 @@ describe('test optimization validation static diagnosis', () => {
       '    steps:',
       '      - run: npm test',
       '        env:',
-      '          NODE_OPTIONS: -r ./node_modules/dd-trace/ci/init.js',
+      '          NODE_OPTIONS: "-r ./node_modules/dd-trace/ci/init.js"',
       '',
     ].join('\n'))
 

@@ -235,6 +235,24 @@ describe('test optimization validation command runner', () => {
 
       await assert.rejects(runCommand({
         cwd: outDir,
+        argv: ['/usr/bin/env', '-S', 'NODE_OPTIONS=--no-warnings node test.js'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '--split-string=DD_TRACE_AGENT_URL=https://example.invalid node test.js'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
         argv: ['/usr/bin/env', '-i', 'PATH=/usr/bin', 'npm', 'test'],
       }, {
         env,
@@ -263,6 +281,36 @@ describe('test optimization validation command runner', () => {
       }), /Refusing to clear the command environment/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not move declared outputs before inline environment validation', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const coverage = path.join(repositoryRoot, 'coverage')
+    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(coverage)
+    fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')
+
+    try {
+      await assert.rejects(runCommand({
+        cwd: repositoryRoot,
+        argv: ['/usr/bin/env', 'NODE_OPTIONS=--no-warnings', process.execPath, '-e', ''],
+        outputPaths: [coverage],
+      }, {
+        artifactRoot,
+        env,
+        envMode: 'clean',
+        outDir,
+        repositoryRoot,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      assert.strictEqual(fs.readFileSync(path.join(coverage, 'original.txt'), 'utf8'), 'original')
+      assert.strictEqual(fs.existsSync(path.join(outDir, '.command-output-backup')), false)
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
     }
   })
 
@@ -423,6 +471,7 @@ describe('test optimization validation command runner', () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
     const marker = path.join(outDir, 'early-stop-child-survived')
     const childScript = [
+      'process.on("SIGTERM", () => {})',
       `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 750)`,
       'setInterval(() => {}, 1000)',
     ].join(';')
@@ -643,6 +692,31 @@ describe('test optimization validation command runner', () => {
       assert.strictEqual(fs.readFileSync(path.join(coverage, 'original.txt'), 'utf8'), 'original')
     } finally {
       fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects command outputs reached through a symlinked repository path', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-outside-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const linkedDirectory = path.join(repositoryRoot, 'linked-output')
+    const outsideCoverage = path.join(outsideRoot, 'coverage')
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(outsideCoverage)
+    fs.writeFileSync(path.join(outsideCoverage, 'original.txt'), 'original')
+    fs.symlinkSync(outsideRoot, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir')
+
+    try {
+      assert.throws(() => runCommand({
+        cwd: repositoryRoot,
+        argv: [process.execPath, '-e', ''],
+        outputPaths: [path.join(linkedDirectory, 'coverage')],
+      }, { artifactRoot, outDir, repositoryRoot }), /outside physical repository\.root/)
+      assert.strictEqual(fs.readFileSync(path.join(outsideCoverage, 'original.txt'), 'utf8'), 'original')
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+      fs.rmSync(outsideRoot, { recursive: true, force: true })
     }
   })
 

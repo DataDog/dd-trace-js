@@ -100,11 +100,32 @@ function assertSafeOutputPath ({ outputPath, repositoryRoot, artifactRoot, comma
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Command output path must be a child of repository.root: ${outputPath}`)
   }
+  assertPhysicalOutputPathInsideRepository(outputPath, repositoryRoot)
   if (isPathInside(artifactRoot, outputPath) || isPathInside(outputPath, artifactRoot)) {
     throw new Error(`Command output path must not contain or overlap validation artifacts: ${outputPath}`)
   }
   if (path.resolve(command.cwd) === outputPath) {
     throw new Error(`Command output path must not replace the command working directory: ${outputPath}`)
+  }
+}
+
+/**
+ * Rejects an output whose nearest existing ancestor resolves outside the repository.
+ *
+ * @param {string} outputPath absolute output path
+ * @param {string} repositoryRoot absolute repository root
+ * @returns {void}
+ */
+function assertPhysicalOutputPathInsideRepository (outputPath, repositoryRoot) {
+  const physicalRoot = fs.realpathSync(repositoryRoot)
+  let existingPath = outputPath
+  while (!fs.existsSync(existingPath) && path.dirname(existingPath) !== existingPath) {
+    existingPath = path.dirname(existingPath)
+  }
+
+  const physicalExistingPath = fs.realpathSync(existingPath)
+  if (!isPathInside(physicalRoot, physicalExistingPath)) {
+    throw new Error(`Command output path must not resolve outside physical repository.root: ${outputPath}`)
   }
 }
 

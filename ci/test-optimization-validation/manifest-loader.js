@@ -66,7 +66,12 @@ function getManifestPaths (manifest) {
     for (const [index, configFile] of (framework.project?.configFiles || []).entries()) {
       paths.push([`${prefix}.project.configFiles[${index}]`, configFile])
     }
-    for (const [name, command] of getCommands(framework)) paths.push([`${prefix}.${name}.cwd`, command.cwd])
+    for (const [name, command] of getCommands(framework)) {
+      paths.push([`${prefix}.${name}.cwd`, command.cwd])
+      for (const [outputIndex, outputPath] of (command.outputPaths || []).entries()) {
+        paths.push([`${prefix}.${name}.outputPaths[${outputIndex}]`, outputPath])
+      }
+    }
 
     const strategy = framework.generatedTestStrategy
     paths.push([`${prefix}.generatedTestStrategy.testDirectory`, strategy?.testDirectory])
