@@ -184,10 +184,10 @@ If a real advisory drops and the patched version is still inside the three-day w
 
 1. Pull the package's release notes and confirm the version is the advisory's fixed one.
 2. Run `bun update <pkg>@<exact-version> --minimum-release-age=0` locally to bypass the wait
-   for that one resolve, then commit the regenerated `bun.lock`.
+    for that one resolve, then commit the regenerated `bun.lock`.
 3. In the PR description, link the advisory and call out that the override was deliberate. The
-   override stays on the maintainer's machine, never in `bunfig.toml`, so every bypass shows up
-   in a reviewable diff.
+    override stays on the maintainer's machine, never in `bunfig.toml`, so every bypass shows up
+    in a reviewable diff.
 
 For a package that needs a permanently shorter window (rare — usually an internal one whose
 publish cadence is faster than three days), add its exact name to `minimumReleaseAgeExcludes` in
