@@ -89,9 +89,10 @@ describe('Native Spans Integration', () => {
 
     const linksTag = JSON.parse(span.context().getTags()['_dd.span_links'])
     assert.strictEqual(linksTag.length, 1)
-    // Native span events are on by default, so the event is queued to the native
-    // top-level `span_events` field (not the `events` meta fallback);
-    // assert the recorded event list directly.
+    // Assert the recorded event list directly rather than a serialized form:
+    // `_events` is populated by addEvent regardless of DD_TRACE_NATIVE_SPAN_EVENTS,
+    // so this holds whether events serialize to the native top-level `span_events`
+    // field (flag on) or the `events` meta fallback (flag off, the default).
     assert.strictEqual(span._events.length, 1)
     assert.strictEqual(span._events[0].name, 'event-1')
 
