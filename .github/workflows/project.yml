@@ -48,9 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: npm run lint:editorconfig
+      - run: docker run --rm --volume=$PWD:/check mstruebing/editorconfig-checker
 
   release-scripts:
     runs-on: ubuntu-latest
