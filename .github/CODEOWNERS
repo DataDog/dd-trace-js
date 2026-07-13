@@ -371,7 +371,9 @@
 /packages/dd-trace/*/profiling/ @DataDog/profiling-js
 /packages/dd-trace/src/profiler.js @DataDog/profiling-js
 /packages/dd-trace/src/storage-channels.js @DataDog/profiling-js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/web-tags-cache.js @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/profiling-js
+/packages/dd-trace/test/web-tags-cache.spec.js @DataDog/profiling-js
 
 # Language Platform
 /* @DataDog/lang-platform-js

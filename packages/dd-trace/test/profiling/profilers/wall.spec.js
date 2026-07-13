@@ -872,6 +872,41 @@ describe('profilers/native/wall', () => {
       profiler.stop()
     })
 
+    it('should only snapshot the fallback endpoint once its value has settled (non-ACF path)', () => {
+      // The endpoint snapshot on the sample context is a fallback for when the
+      // tag bag is no longer readable at serialization time, and it is never
+      // refreshed once set — so capturing it while routing tags are still
+      // arriving would pin it to an interim value like a bare `GET`.
+      const { span: webSpan, tags: webSpanTags } = makeWebSpan()
+      Object.assign(webSpanTags, { 'span.type': 'web', 'http.method': 'GET' })
+      const profiler = makeWall(WallProfiler, {
+        endpointCollectionEnabled: true,
+        asyncContextFrameEnabled: false,
+      })
+      profiler.start()
+
+      const contextHolder = localPprof.time.setContext.getCall(0).args[0]
+      currentStore = { span: webSpan }
+      enterCh.publish()
+      const sampleContext = contextHolder.ref
+      assert.strictEqual(sampleContext.webTags, webSpanTags)
+
+      // A sample was taken, so the profiler updates the context it was bound to.
+      // The route hasn't arrived: no endpoint may be snapshotted yet.
+      const profilerState = localPprof.time.getState()
+      profilerState[0] = 1
+      enterCh.publish()
+      assert.strictEqual(sampleContext.endpoint, undefined)
+
+      // Routing resolves, and the next sample picks the settled value up.
+      webSpanTags['http.route'] = '/x'
+      profilerState[0] = 2
+      enterCh.publish()
+      assert.strictEqual(sampleContext.endpoint, 'GET /x')
+
+      profiler.stop()
+    })
+
     it('should propagate webTags to child spans after tags update resolves parent (ACF path)', () => {
       const { span: webSpan, tags: webSpanTags, spanId: webSpanId } = makeWebSpan()
       const { span: childSpan } = makeChildSpan(webSpanId, webSpan)
