@@ -48,14 +48,10 @@ describe('API Security Telemetry metrics', () => {
     it('should emit api_security.request.schema with framework tag for sampled requests', async () => {
       let metricReceived = false
 
-      await axios.post('/api_security_sampling/1', { key: 'value' })
-
-      await agent.assertTelemetryReceived({
+      const checkTelemetryMetrics = agent.assertTelemetryReceived({
         fn: ({ payload }) => {
-          if (payload.payload.namespace !== 'appsec') return
-
           const schemaMetric = payload.payload.series.find(s => s.metric === 'api_security.request.schema')
-          if (!schemaMetric) return
+          assert.ok(schemaMetric, 'expected api_security.request.schema metric')
 
           assert.strictEqual(schemaMetric.type, 'count')
           assert.ok(
@@ -65,8 +61,11 @@ describe('API Security Telemetry metrics', () => {
           metricReceived = true
         },
         requestType: 'generate-metrics',
-        expectedMessageCount: 2,
+        namespace: 'appsec',
+        resolveAtFirstSuccess: true,
       })
+
+      await Promise.all([axios.post('/api_security_sampling/1', { key: 'value' }), checkTelemetryMetrics])
 
       assert.strictEqual(metricReceived, true)
     }).timeout(20_000)
@@ -100,16 +99,10 @@ describe('API Security Telemetry metrics', () => {
     it('should emit api_security.missing_route when no framework route is available', async () => {
       let metricReceived = false
 
-      // This path is served by raw http.createServer, so express has no route registered.
-      // With resource renaming disabled, there is also no http.endpoint fallback.
-      await axios.post('/api_security_sampling_resource_renaming/1', { key: 'value' })
-
-      await agent.assertTelemetryReceived({
+      const checkTelemetryMetrics = agent.assertTelemetryReceived({
         fn: ({ payload }) => {
-          if (payload.payload.namespace !== 'appsec') return
-
           const missingRouteMetric = payload.payload.series.find(s => s.metric === 'api_security.missing_route')
-          if (!missingRouteMetric) return
+          assert.ok(missingRouteMetric, 'expected api_security.missing_route metric')
 
           assert.strictEqual(missingRouteMetric.type, 'count')
           assert.ok(
@@ -119,8 +112,16 @@ describe('API Security Telemetry metrics', () => {
           metricReceived = true
         },
         requestType: 'generate-metrics',
-        expectedMessageCount: 2,
+        namespace: 'appsec',
+        resolveAtFirstSuccess: true,
       })
+
+      // This path is served by raw http.createServer, so express has no route registered.
+      // With resource renaming disabled, there is also no http.endpoint fallback.
+      await Promise.all([
+        axios.post('/api_security_sampling_resource_renaming/1', { key: 'value' }),
+        checkTelemetryMetrics,
+      ])
 
       assert.strictEqual(metricReceived, true)
     }).timeout(20_000)

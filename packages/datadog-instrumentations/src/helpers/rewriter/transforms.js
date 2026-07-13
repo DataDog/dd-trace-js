@@ -8,6 +8,10 @@
 // the library, replace the custom registration with the built-in option and
 // remove the entry here.
 
+const assert = require('node:assert')
+
+const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+
 const { parse, query } = require('./compiler')
 
 module.exports = { waitForAsyncEnd }
@@ -28,20 +32,30 @@ function waitForAsyncEnd (_state, node) {
     return
   }
 
-  const returnIndex = statements.findIndex(statement => (
-    statement.type === 'ReturnStatement' && statement.argument?.name === 'result'
-  ))
+  const returnIndex = statements.findIndex(statement =>
+    statement.type === 'ReturnStatement' && statement.argument
+  )
 
-  if (returnIndex === -1) return
+  // The generated fulfillment handler always ends in a return; a miss means the
+  // upstream template changed and the caller's try/catch falls back to the
+  // unwrapped source.
+  assert(returnIndex !== -1, 'waitForAsyncEnd: no return statement to wait on')
 
   const waitStatements = parse(`
     function wrapper () {
       const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
       if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
-        return __apm$asyncEndPromise.then(() => result, () => result);
+        return __apm$asyncEndPromise.then(() => __apm$result, () => __apm$result);
       }
     }
   `).body[0].body.body
+
+  // Resolve to whatever the fulfillment handler returns (its return argument),
+  // so a subscriber that reassigned `__apm$ctx.result` in `asyncEnd` still wins.
+  const returnArgument = statements[returnIndex].argument
+  const { arguments: onSettled } = waitStatements[1].consequent.body[0].argument
+  onSettled[0].body = clone(returnArgument)
+  onSettled[1].body = clone(returnArgument)
 
   statements.splice(returnIndex, 0, ...waitStatements)
 }

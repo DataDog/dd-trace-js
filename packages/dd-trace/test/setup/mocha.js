@@ -259,6 +259,13 @@ function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {
     cb = range
     range = undefined
+  } else if (typeof range !== 'string' || range.length === 0) {
+    // A caller passed something in the range slot that is not a version range. The usual culprit is a Node-version
+    // gate written as `NODE_MAJOR >= 25 && '>=1.3.0'`, which evaluates to `false` on older Node and silently filtered
+    // every version through `!range`. Demand a real range string (use `'*'` for "all versions") so the misuse fails
+    // loudly instead of running zero tests.
+    throw new TypeError(`withVersions: the version range must be a non-empty string, got ${util.inspect(range)}. ` +
+      "Use '*' to match every installed version.")
   }
 
   if (!process.env.DD_INJECT_FORCE &&

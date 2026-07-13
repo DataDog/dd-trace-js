@@ -37,6 +37,10 @@ for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
 }
 
+// Keep the marker split: source-map scanners can read a contiguous token in
+// string literals as this file's own inline map.
+const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
+
 function rewrite (content, filename, format) {
   if (!content) return content
   if (!filename.includes('node_modules')) return content
@@ -66,7 +70,7 @@ function rewrite (content, filename, format) {
 
     const inlineMap = Buffer.from(map).toString('base64')
 
-    return code + '\n' + `//# sourceMappingURL=data:application/json;base64,${inlineMap}`
+    return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
   } catch (e) {
     log.error(e)
   }

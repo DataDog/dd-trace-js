@@ -57,6 +57,86 @@ describe('shimmer', () => {
       assert.strictEqual(called, 1)
     })
 
+    it('should wrap a lazy getter/setter pair while preserving the accessor shape', () => {
+      // Mirrors Node 20's `fs.opendir`: a lazy accessor that resolves the real
+      // function on first read and self-replaces with a data property on write.
+      // The wrap must keep it an accessor pair so the descriptor shape stays
+      // observationally identical for downstream consumers on that Node version.
+      const target = () => 'original'
+      const obj = {}
+      Object.defineProperty(obj, 'method', {
+        configurable: true,
+        enumerable: true,
+        get () { return target },
+        set (value) {
+          Object.defineProperty(obj, 'method', { configurable: true, enumerable: true, writable: true, value })
+        },
+      })
+
+      let called = 0
+      shimmer.wrap(obj, 'method', method => (...args) => {
+        called++
+        return method(...args)
+      }, { replaceGetter: true })
+
+      // Still an accessor pair, with the original configurable/enumerable flags.
+      const descriptor = Object.getOwnPropertyDescriptor(obj, 'method')
+      assert.strictEqual(typeof descriptor.get, 'function')
+      assert.strictEqual(typeof descriptor.set, 'function')
+      assert.strictEqual(descriptor.configurable, true)
+      assert.strictEqual(descriptor.enumerable, true)
+
+      // Reading returns the wrapped method.
+      assert.strictEqual(obj.method.name, target.name)
+      assert.strictEqual(obj.method(), 'original')
+      assert.strictEqual(called, 1)
+
+      // Assignment mirrors the native lazy contract: it materializes the property
+      // as a writable data property holding exactly what was set (unwrapped).
+      const replacement = () => 'replacement'
+      obj.method = replacement
+      const afterSet = Object.getOwnPropertyDescriptor(obj, 'method')
+      assert.strictEqual(afterSet.get, undefined)
+      assert.strictEqual(afterSet.set, undefined)
+      assert.strictEqual(afterSet.writable, true)
+      assert.strictEqual(obj.method, replacement)
+      assert.strictEqual(obj.method(), 'replacement')
+      assert.strictEqual(called, 1, 'a caller-supplied replacement is not wrapped')
+    })
+
+    it('should wrap a getter/setter pair in place without the replaceGetter option', () => {
+      // Mirrors `url.js` wrapping the `URL.prototype` `host`/`hostname` getters,
+      // which are getter+setter accessor pairs. Each read must run the wrapper,
+      // and the original setter is left untouched.
+      let setValue
+      const obj = {}
+      Object.defineProperty(obj, 'method', {
+        configurable: true,
+        enumerable: true,
+        get () { return 'original' },
+        set (value) { setValue = value },
+      })
+
+      let called = 0
+      shimmer.wrap(obj, 'method', getter => function () {
+        called++
+        return getter.call(this)
+      })
+
+      const descriptor = Object.getOwnPropertyDescriptor(obj, 'method')
+      assert.strictEqual(typeof descriptor.get, 'function')
+      assert.strictEqual(typeof descriptor.set, 'function')
+
+      assert.strictEqual(obj.method, 'original')
+      assert.strictEqual(called, 1)
+      assert.strictEqual(obj.method, 'original')
+      assert.strictEqual(called, 2)
+
+      obj.method = 42
+      assert.strictEqual(setValue, 42)
+      assert.strictEqual(typeof Object.getOwnPropertyDescriptor(obj, 'method').set, 'function')
+    })
+
     it('should not wrap setter only method', () => {
       // eslint-disable-next-line accessor-pairs
       const obj = { set setter (_method_) {} }
@@ -291,6 +371,18 @@ describe('shimmer', () => {
         writable: true,
         configurable: false,
       })
+    })
+
+    it('should wrap writable non-configurable module namespace exports', async () => {
+      const namespace = await import('data:text/javascript,export function count() { return 1 }')
+
+      /** @param {Function} count */
+      const increment = count => () => count() + 1
+      const wrapped = shimmer.wrap(namespace, 'count', increment)
+
+      assert.strictEqual(namespace.count(), 1)
+      assert.strictEqual(wrapped.count(), 2)
+      assert.notStrictEqual(wrapped, namespace)
     })
 
     it('should skip non-configurable/writable string keyed methods', () => {

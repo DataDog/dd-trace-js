@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/7.0.0 ai-sdk/provider-utils/4.0.30 runtime/node.js/26",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "1839"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"input\":[{\"role\":\"system\",\"content\":\"You are a travel assistant. Check weather for all cities before making a recommendation.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"I want to visit New York, Miami, or Seattle this weekend for outdoor activities. Check the weather in all three cities, then get activity recommendations for the best destination.\"}]},{\"type\":\"function_call\",\"call_id\":\"call_ixQNyqgo2oPAgEQAuVryMbmT\",\"name\":\"getWeather\",\"arguments\":\"{\\\"city\\\":\\\"New York, NY\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_CDYXdRnSrxsuaS0BZrRuPCr2\",\"name\":\"getWeather\",\"arguments\":\"{\\\"city\\\":\\\"Miami, FL\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_I0LgBUxmcg5UiSCvolnL67k3\",\"name\":\"getWeather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle, WA\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_ixQNyqgo2oPAgEQAuVryMbmT\",\"output\":\"{\\\"city\\\":\\\"New York, NY\\\",\\\"tempF\\\":58,\\\"conditions\\\":\\\"overcast\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_CDYXdRnSrxsuaS0BZrRuPCr2\",\"output\":\"{\\\"city\\\":\\\"Miami, FL\\\",\\\"tempF\\\":84,\\\"conditions\\\":\\\"sunny\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_I0LgBUxmcg5UiSCvolnL67k3\",\"output\":\"{\\\"city\\\":\\\"Seattle, WA\\\",\\\"tempF\\\":52,\\\"conditions\\\":\\\"overcast\\\"}\"}],\"temperature\":0,\"store\":false,\"tools\":[{\"type\":\"function\",\"name\":\"getWeather\",\"description\":\"Get current temperature and sky conditions for a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"City name, e.g. \\\"Miami, FL\\\"\"}},\"required\":[\"city\"]}},{\"type\":\"function\",\"name\":\"getActivities\",\"description\":\"Get recommended activities for a city given the current temperature\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"},\"tempF\":{\"type\":\"number\",\"description\":\"Current temperature in Fahrenheit\"}},\"required\":[\"city\",\"tempF\"]}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Thu, 25 Jun 2026 15:25:42 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a114fc70bd0a0f87-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "2492",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999520",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_7aadde02825640d8aab5d00855ef1a62",
+      "set-cookie": "__cf_bm=UUDTaB4F8gSwPjllADYSWRSxvu4WoIiP8YAzAmdUAAY-1782401139.3142722-1.0.1.1-Ckl.7ZaFDvoPM0Tr5VTiYZ879.2cg4X9H4H6vBEuHOcFTVap2dxl.BuDnZHhmZ03k0nHgGeFssigfOMqgVNd9wf43kz4b51L0TT9FnvN8PnWUsSvkjM0f6okWnqrAW8P; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Thu, 25 Jun 2026 15:55:42 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"resp_0e34708269cff649016a3d4873e7e88191a7cecac1f717e0a5\",\n  \"object\": \"response\",\n  \"created_at\": 1782401139,\n  \"status\": \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\": \"developer\"\n  },\n  \"completed_at\": 1782401142,\n  \"error\": null,\n  \"frequency_penalty\": 0.0,\n  \"incomplete_details\": null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"moderation\": null,\n  \"output\": [\n    {\n      \"id\": \"fc_0e34708269cff649016a3d487652d88191bdb2b9b0c9188c20\",\n      \"type\": \"function_call\",\n      \"status\": \"completed\",\n      \"arguments\": \"{\\\"city\\\":\\\"New York, NY\\\",\\\"tempF\\\":58}\",\n      \"call_id\": \"call_xwtsQS6tRgkmqtgnSWdLquZl\",\n      \"name\": \"getActivities\"\n    },\n    {\n      \"id\": \"fc_0e34708269cff649016a3d4876531c819193ff3415eb1ec28a\",\n      \"type\": \"function_call\",\n      \"status\": \"completed\",\n      \"arguments\": \"{\\\"city\\\":\\\"Miami, FL\\\",\\\"tempF\\\":84}\",\n      \"call_id\": \"call_gM5g8phcrDowGhOO2rnwJBBv\",\n      \"name\": \"getActivities\"\n    },\n    {\n      \"id\": \"fc_0e34708269cff649016a3d48765328819193a4c396ec028407\",\n      \"type\": \"function_call\",\n      \"status\": \"completed\",\n      \"arguments\": \"{\\\"city\\\":\\\"Seattle, WA\\\",\\\"tempF\\\":52}\",\n      \"call_id\": \"call_fy0jiltGx9d6Day4QTMjTMmW\",\n      \"name\": \"getActivities\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": \"in_memory\",\n  \"reasoning\": {\n    \"context\": null,\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\": 0.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Get current temperature and sky conditions for a city\",\n      \"name\": \"getWeather\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"city\": {\n            \"type\": \"string\",\n            \"description\": \"City name, e.g. \\\"Miami, FL\\\"\"\n          }\n        },\n        \"required\": [\n          \"city\"\n        ],\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    },\n    {\n      \"type\": \"function\",\n      \"description\": \"Get recommended activities for a city given the current temperature\",\n      \"name\": \"getActivities\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"city\": {\n            \"type\": \"string\"\n          },\n          \"tempF\": {\n            \"type\": \"number\",\n            \"description\": \"Current temperature in Fahrenheit\"\n          }\n        },\n        \"required\": [\n          \"city\",\n          \"tempF\"\n        ],\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 262,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 81,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 343\n  },\n  \"user\": null,\n  \"metadata\": {}\n}"
+  }
+}
