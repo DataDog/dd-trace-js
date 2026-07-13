@@ -303,6 +303,7 @@ function withVersions (plugin, modules, range, cb) {
       const { versionList } = resolvePluginVersions({
         name: moduleName,
         declaredVersions: normalizeVersions(instrumentation.versions),
+        nodeRange: instrumentation.node,
       })
 
       for (const { versionKey, range: declaredRange } of versionList) {
