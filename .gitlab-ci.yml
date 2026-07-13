@@ -61,7 +61,7 @@ configure_system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^v\d+\.\d+\.\d+-proposal$/ || $CI_MERGE_REQUEST_LABELS =~ /run-ssi-tests/
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
       when: on_success
     - when: never
 
@@ -71,7 +71,7 @@ system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^v\d+\.\d+\.\d+-proposal$/ || $CI_MERGE_REQUEST_LABELS =~ /run-ssi-tests/
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
       when: on_success
     - when: never
 

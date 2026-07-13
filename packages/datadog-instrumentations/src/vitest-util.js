@@ -8,6 +8,7 @@ const testStartCh = channel('ci:vitest:test:start')
 const testFinishTimeCh = channel('ci:vitest:test:finish-time')
 const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
+const testDiWaitCh = channel('ci:vitest:test:di:wait')
 const testSkipCh = channel('ci:vitest:test:skip')
 const testFnCh = channel('ci:vitest:test:fn')
 
@@ -38,9 +39,9 @@ function findExportByName (pkg, name) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, frameworkVersion) {
+function getChannelPromise (channelToPublishTo, frameworkVersion, payload) {
   return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
+    channelToPublishTo.publish({ ...payload, onDone: resolve, frameworkVersion })
   })
 }
 
@@ -220,6 +221,7 @@ module.exports = {
   testFinishTimeCh,
   testPassCh,
   testErrorCh,
+  testDiWaitCh,
   testSkipCh,
   testFnCh,
   testSuiteStartCh,

@@ -838,6 +838,13 @@
         "default": "false"
       }
     ],
+    "DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null
+      }
+    ],
     "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
       {
         "implementation": "A",
@@ -1812,6 +1819,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_FLEET_CONFIG_PATH": [
       {
         "implementation": "A",
@@ -1933,6 +1948,13 @@
       }
     ],
     "DD_TRACE_ANTHROPIC_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_CLAUDE_AGENT_SDK_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2735,6 +2757,21 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GRAPHQL_COLLAPSE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_GRAPHQL_DEPTH": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "-1",
+        "allowed": "-1|\\d+"
+      }
+    ],
     "DD_TRACE_GRAPHQL_ENABLED": [
       {
         "implementation": "A",
@@ -2768,6 +2805,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_GRAPHQL_VARIABLES": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": ""
       }
     ],
     "DD_TRACE_GRAPHQL_YOGA_ENABLED": [
@@ -3130,6 +3174,14 @@
         "default": "true"
       }
     ],
+    "_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "10000",
+        "allowed": "[1-9]\\d*"
+      }
+    ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
       {
         "implementation": "A",
@@ -3352,14 +3404,14 @@
         "default": "true"
       }
     ],
-    "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+    "DD_TRACE_OTEL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
         "default": "false"
       }
     ],
-    "DD_TRACE_OTEL_ENABLED": [
+    "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -4200,6 +4252,13 @@
         "type": "decimal",
         "default": null,
         "allowed": "\\d+(\\.\\d+)?"
+      }
+    ],
+    "OTEL_TRACES_SPAN_METRICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null
       }
     ]
   }

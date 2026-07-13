@@ -1,7 +1,13 @@
 'use strict'
 
 var fs = require('fs')
-var spawn = require('child_process').spawn
+// Capture the child_process functions at load time, before the tracer wraps the module.
+// Reaching through require('child_process') at send time would route the forwarder through
+// the tracer's own child_process instrumentation once the tracer is initialized.
+var childProcess = require('child_process')
+var spawn = childProcess.spawn
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
+var spawnSync = childProcess.spawnSync
 var tracerVersion = require('../../../../package.json').version
 var log = require('./log')
 
@@ -47,7 +53,7 @@ function shouldSend (point) {
   return true
 }
 
-function sendTelemetry (name, tags, resultMetadata) {
+function sendTelemetry (name, tags, resultMetadata, synchronous) {
   var points = name
   if (typeof name === 'string') {
     points = [{ name: name, tags: tags || [] }]
@@ -74,6 +80,37 @@ function sendTelemetry (name, tags, resultMetadata) {
     }
   }
 
+  var payload = JSON.stringify({ metadata: currentMetadata, points: points })
+
+  // A forwarder spawned asynchronously can still be tearing down its stdio pipes when the
+  // injected app calls process.exit(); on Node 24.0.0/24.1.x that deadlocks the exit
+  // (fixed upstream in 24.2), hanging short-lived single-step-install processes. On the
+  // bailout path the caller passes synchronous=true, so the child is fully reaped before we
+  // return and nothing survives to race the exit. spawnSync is only reached on that path,
+  // before any instrumentation is active, so it never traces the forwarder. It exists since
+  // Node 0.11.12; the guardrails still target >=0.8, which predates the exit bug anyway.
+  if (synchronous && spawnSync) {
+    // Bound the blocking send: this telemetry is best-effort and the whole point of the
+    // synchronous path is to avoid a hung exit, so a forwarder that wedges must not become a
+    // new hard hang. On timeout spawnSync kills the child and returns error.code ETIMEDOUT.
+    var result = spawnSync(telemetryForwarderPath, ['library_entrypoint'], {
+      input: payload,
+      stdio: ['pipe', 'ignore', 'ignore'],
+      timeout: 1000,
+      killSignal: 'SIGKILL'
+    })
+    if (result.error) {
+      if (result.error.code === 'ETIMEDOUT') {
+        log.error('Telemetry forwarder timed out')
+      } else {
+        log.error('Failed to spawn telemetry forwarder')
+      }
+    } else if (result.status) {
+      log.error('Telemetry forwarder exited with code', result.status)
+    }
+    return
+  }
+
   var proc = spawn(telemetryForwarderPath, ['library_entrypoint'], {
     stdio: 'pipe'
   })
@@ -88,5 +125,5 @@ function sendTelemetry (name, tags, resultMetadata) {
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
   })
-  proc.stdin.end(JSON.stringify({ metadata: currentMetadata, points: points }))
+  proc.stdin.end(payload)
 }

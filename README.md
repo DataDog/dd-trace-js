@@ -1,6 +1,6 @@
 # `dd-trace`: Node.js APM Tracer Library
 
-[![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v5&logo=npm)](https://www.npmjs.com/package/dd-trace)
+[![npm v6](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v6&logo=npm)](https://www.npmjs.com/package/dd-trace)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
 <img align="right" src="https://user-images.githubusercontent.com/551402/208212084-1d0c07e2-4135-4c61-b2da-8f2fddbc66ed.png" alt="Bits the dog  JavaScript" width="200px"/>
@@ -28,29 +28,34 @@ Most of the documentation for `dd-trace` is available on these webpages:
 | [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | NO | NO | **EOL** | 2022-01-28     | 2023-08-15  |
 | [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | NO | YES | **EOL** | 2022-08-15     | 2024-05-15  |
 | [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square) | `>= v16` | YES | YES | **EOL**     | 2023-05-12     | 2025-01-11     |
-| [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v18` | YES | YES | **Current**     | 2024-01-11     | Unknown     |
+| [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest-node18?color=white&label=%20&style=flat-square)  | `>= v18` | YES | YES | **Maintenance** | 2024-01-11     | 2027-07-02     |
+| [`v6`](https://github.com/DataDog/dd-trace-js/tree/v6.x) | ![npm v6](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)         | `>= v22` | YES | YES | **Current**     | 2026-07-02     | Unknown     |
 
 * EOL = End-of-life
 * SSI = Single-Step Install
 
-We currently maintain one release line, namely `v5`.
+We currently maintain two release lines: `v6` (current) and `v5` (maintenance).
 
-For any new projects it is recommended to use the `v5` release line:
+For any new projects it is recommended to use the `v6` release line:
 
 ```sh
 $ npm install dd-trace
 $ yarn add dd-trace
 ```
 
-Existing projects that need to use EOL versions of Node.js may continue to use these older release lines.
-This is done by specifying the version when installing the package.
+Existing projects on `v5` may continue to use it during its maintenance window by pinning the major version:
+
+```sh
+$ npm install dd-trace@5
+$ yarn add dd-trace@5
+```
+
+Older EOL release lines are no longer maintained, but can still be pinned if needed:
 
 ```sh
 $ npm install dd-trace@4 # or whatever version you need
 $ yarn add dd-trace@4 # or whatever version you need
 ```
-
-Note, however, that the end-of-life release lines are no longer maintained and will not receive updates.
 
 Any backwards-breaking functionality that is introduced into the library will result in an increase of the major version of the library and therefore a new release line.
 Such releases are kept to a minimum to reduce the pain of upgrading the library.

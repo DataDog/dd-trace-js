@@ -442,6 +442,8 @@ jobs:
           - vitest.core
           - vitest.test-management
           - vitest.advanced
+          - vitest.msw
+          - vitest.no-worker-init
     name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})
     env:
       DD_SERVICE: dd-trace-js-integration-tests

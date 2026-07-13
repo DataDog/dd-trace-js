@@ -30,7 +30,7 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  getLibraryCapabilitiesTags,
+  getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
@@ -192,7 +192,7 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason, promises }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
@@ -202,8 +202,21 @@ class VitestPlugin extends CiPlugin {
         if (earlyFlakeAbortReason) {
           span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
-        span.finish(this.taskToFinishTime.get(task))
-        finishAllTraceSpans(span)
+        const finish = () => {
+          span.finish(this.taskToFinishTime.get(task))
+          finishAllTraceSpans(span)
+        }
+
+        if (finalStatus) {
+          if (promises && this.diBreakpointHitPromise) {
+            promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+            return
+          }
+          finish()
+          this.cancelDiBreakpointHitWait()
+          return
+        }
+        finish()
       }
     })
 
@@ -212,6 +225,7 @@ class VitestPlugin extends CiPlugin {
       duration,
       error,
       shouldSetProbe,
+      shouldWaitForHitProbe,
       promises,
       hasFailedAllRetries,
       attemptToFixFailed,
@@ -227,7 +241,8 @@ class VitestPlugin extends CiPlugin {
           const { file, line, stackIndex, setProbePromise } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
-          promises.setProbePromise = setProbePromise
+          this.prepareDiBreakpointHitWait()
+          promises.setProbePromise = this.waitForDiOperation(setProbePromise)
         }
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
@@ -248,12 +263,31 @@ class VitestPlugin extends CiPlugin {
       if (earlyFlakeAbortReason) {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
-      if (duration) {
-        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
-      } else {
-        span.finish() // `duration` is empty for retries, so we'll use clock time
+      const finish = () => {
+        if (duration) {
+          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        } else {
+          span.finish() // `duration` is empty for retries, so we'll use clock time
+        }
+        finishAllTraceSpans(span)
       }
-      finishAllTraceSpans(span)
+
+      if (!shouldSetProbe && finalStatus && promises && this.diBreakpointHitPromise) {
+        promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+        return
+      }
+      finish()
+      if (shouldWaitForHitProbe) {
+        this.prepareDiBreakpointHitWait()
+      } else if (!shouldSetProbe) {
+        this.cancelDiBreakpointHitWait()
+      }
+    })
+
+    this.addSub('ci:vitest:test:di:wait', ({ promises }) => {
+      if (this.di) {
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
+      }
     })
 
     this.addSub('ci:vitest:test:skip', ({
@@ -293,6 +327,7 @@ class VitestPlugin extends CiPlugin {
         testSuiteAbsolutePath,
         frameworkVersion,
         isTestFrameworkWorker,
+        isVitestNoWorkerInitActive,
       } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
@@ -311,13 +346,16 @@ class VitestPlugin extends CiPlugin {
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       if (this.tracer._exporter.addMetadataTags) {
+        const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, {
+          isVitestNoWorkerInitActive,
+        })
         this.tracer._exporter.addMetadataTags({
           [TEST_LEVELS_METADATA]: {
             [TEST_COMMAND]: testCommand,
             [TEST_SESSION_NAME]: testSessionName,
             ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
           },
-          test: getLibraryCapabilitiesTags(this.constructor.id),
+          test: libraryCapabilitiesTags,
         })
       }
 
@@ -401,6 +439,7 @@ class VitestPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       requestErrorTags,
       vitestPool,
+      isVitestNoWorkerInitActive,
       onFinish,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags || {})) {
@@ -433,7 +472,7 @@ class VitestPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
-        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled && !isVitestNoWorkerInitActive ? true : undefined,
       })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
@@ -445,6 +484,19 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {
       this.handleCoverageReport(rootDir, onDone)
+    })
+  }
+
+  /**
+   * Returns Vitest library capability metadata tags.
+   * @param {string} frameworkVersion - The Vitest version.
+   * @param {object} [ctx] - Diagnostic channel context.
+   * @param {boolean} [ctx.isVitestNoWorkerInitActive] - Whether no-worker init is active for this run.
+   * @returns {Record<string, string|undefined>}
+   */
+  getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
+    return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion, {
+      omitFailedTestReplay: ctx.isVitestNoWorkerInitActive,
     })
   }
 
