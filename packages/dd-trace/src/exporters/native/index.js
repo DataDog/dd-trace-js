@@ -261,7 +261,7 @@ class NativeExporter {
             done()
           })
         })
-      }
+      },
     }
   }
 
