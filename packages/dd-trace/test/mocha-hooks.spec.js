@@ -325,6 +325,26 @@ describe('mocha hooks setup', () => {
     assert.strictEqual(clearTimeoutCalls, 2)
   })
 
+  it('reports falsy callback hook errors with allow uncaught enabled', () => {
+    const hook = new Hook('before all', (done) => {
+      assert.strictEqual(typeof done, 'function')
+      // eslint-disable-next-line no-throw-literal
+      throw undefined
+    })
+    let hookError
+
+    hook.allowUncaught = true
+    hook.run((err) => {
+      hookError = err
+    })
+
+    assert.ok(hookError instanceof Error)
+    assert.strictEqual(
+      hookError.message,
+      'Runnable failed with falsy or undefined exception. Please throw an Error instead.'
+    )
+  })
+
   it('does not let a suppressed after each error change bail behavior', async () => {
     const result = await runFixture(`
       describe('suite', () => {

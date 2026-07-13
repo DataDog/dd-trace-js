@@ -5,7 +5,7 @@
 
 /** @typedef {import('mocha')} Mocha */
 
-const { Hook, Runner } = require('mocha')
+const { Hook, Runnable, Runner } = require('mocha')
 
 const patched = new WeakSet()
 const failedSuites = new WeakSet()
@@ -51,7 +51,7 @@ if (!patched.has(Runner.prototype)) {
         return fn(err && shouldSuppress(this) ? undefined : err)
       })
     } catch (err) {
-      return this.callback(shouldSuppress(this) ? undefined : err)
+      return this.callback(shouldSuppress(this) ? undefined : Runnable.toValueOrError(err))
     }
   }
 }
