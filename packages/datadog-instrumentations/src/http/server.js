@@ -13,6 +13,7 @@ const finishServerCh = channel('apm:http:server:request:finish')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
+const startInformationalResponseCh = channel('datadog:http:server:informational-response:start')
 
 const requestFinishedSet = new WeakSet()
 
@@ -223,12 +224,12 @@ function wrapAppendOrRemoveHeader (originalMethod) {
 
 function wrapInformationalResponse (originalMethod) {
   return function wrappedInformationalResponse (...args) {
-    if (!startSetHeaderCh.hasSubscribers) {
+    if (!startInformationalResponseCh.hasSubscribers) {
       return Reflect.apply(originalMethod, this, args)
     }
 
     const abortController = new AbortController()
-    startSetHeaderCh.publish({ res: this, abortController })
+    startInformationalResponseCh.publish({ res: this, abortController })
 
     if (abortController.signal.aborted) {
       return
