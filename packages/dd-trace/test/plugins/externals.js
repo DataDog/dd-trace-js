@@ -131,6 +131,14 @@ module.exports = {
       versions: ['^4.0.0'],
     },
   ],
+  '@anthropic-ai/claude-agent-sdk': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   'cookie-parser': [
     {
       name: 'express',
@@ -390,11 +398,24 @@ module.exports = {
       versions: ['^16.6.0'],
     },
   ],
+  // These packages pass schema objects across package boundaries; GraphQL rejects objects created by another copy.
+  '@apollo/gateway': [
+    {
+      name: 'graphql',
+      dep: true,
+    },
+  ],
   '@apollo/server': [
     {
       // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
       // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
+      name: 'graphql',
+      dep: true,
+    },
+  ],
+  '@apollo/subgraph': [
+    {
       name: 'graphql',
       dep: true,
     },
