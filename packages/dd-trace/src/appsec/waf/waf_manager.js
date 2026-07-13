@@ -42,7 +42,7 @@ class WAFManager {
       this.ddwafVersion = this.ddwafVersion || 'unknown'
       Reporter.reportWafInit(this.ddwafVersion, 'unknown')
 
-      log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.')
+      log.error('[ASM] AppSec could not load native package. In-app WAF features will not be available.', err)
 
       throw err
     }
