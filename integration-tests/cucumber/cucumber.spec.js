@@ -2425,6 +2425,8 @@ describe(`cucumber@${version} commonJS`, () => {
                 ddsource: 'dd_debugger',
                 level: 'error',
               })
+              assert.ok(diLog.ddtags.includes('git.repository_url:'), `Got: ${inspect(diLog.ddtags)}`)
+              assert.ok(diLog.ddtags.includes('git.commit.sha:'), `Got: ${inspect(diLog.ddtags)}`)
               assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
               assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
                 a: {

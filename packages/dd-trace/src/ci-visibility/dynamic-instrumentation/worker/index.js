@@ -51,12 +51,20 @@ const limits = {
 }
 
 /**
- * Remove empty collection arrays before sending snapshots through the Test Optimization logs path.
+ * @param {object} value - Snapshot object or sub-object.
+ * @returns {boolean}
+ */
+function isCapturedValue (value) {
+  return typeof value.type === 'string'
+}
+
+/**
+ * Remove empty capture containers before sending snapshots through the Test Optimization logs path.
  *
  * @param {object} value - Snapshot object or sub-object.
  * @returns {void}
  */
-function removeEmptyCollectionProperties (value) {
+function removeEmptyCaptureProperties (value) {
   const stack = [value]
 
   while (stack.length > 0) {
@@ -72,26 +80,25 @@ function removeEmptyCollectionProperties (value) {
       continue
     }
 
-    if (Array.isArray(current.elements)) {
-      if (current.elements.length === 0) {
+    if (isCapturedValue(current)) {
+      if (current.elements === null || (Array.isArray(current.elements) && current.elements.length === 0)) {
         delete current.elements
-      } else {
-        stack.push(current.elements)
       }
-    }
 
-    if (Array.isArray(current.entries)) {
-      if (current.entries.length === 0) {
+      if (current.entries === null || (Array.isArray(current.entries) && current.entries.length === 0)) {
         delete current.entries
-      } else {
-        stack.push(current.entries)
+      }
+
+      if (current.fields === null || (
+        current.fields &&
+        typeof current.fields === 'object' &&
+        Object.keys(current.fields).length === 0
+      )) {
+        delete current.fields
       }
     }
 
-    for (const key of Object.keys(current)) {
-      if (key === 'elements' || key === 'entries') continue
-
-      const child = current[key]
+    for (const child of Object.values(current)) {
       if (child && typeof child === 'object') {
         stack.push(child)
       }
@@ -129,7 +136,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
       language: 'javascript',
     }
 
-    removeEmptyCollectionProperties(snapshot.captures)
+    removeEmptyCaptureProperties(snapshot.captures)
 
     if (processTags) {
       snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
