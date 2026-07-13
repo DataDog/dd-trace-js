@@ -3,16 +3,16 @@
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
+const { endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 const { SAMPLING_INTERVAL } = require('../constants')
 const {
   enterCh,
   beforeCh,
   spanFinishCh,
-  tagsUpdateCh,
   getActiveSpan,
   ensureChannelsActivated,
 } = require('../../storage-channels')
+const webTagsCache = require('../../web-tags-cache')
 
 const {
   END_TIMESTAMP_LABEL,
@@ -162,7 +162,10 @@ class NativeWallProfiler {
         enterCh.subscribe(this.#boundEnter)
         spanFinishCh.subscribe(this.#boundSpanFinished)
         if (this.#endpointCollectionEnabled) {
-          tagsUpdateCh.subscribe(this.#boundSpanTagsUpdated)
+          // Web-tags cache publishes once per span at the moment its
+          // walk-result transitions from undefined to a real value —
+          // exactly when we need to refresh the ProfilingContext snapshot.
+          webTagsCache.resolvedCh.subscribe(this.#boundSpanTagsUpdated)
         }
       }
     }
@@ -245,32 +248,20 @@ class NativeWallProfiler {
     let profilingContext = span[ProfilingContext]
     if (profilingContext === undefined) {
       const context = span.context()
-      const startedSpans = getStartedSpans(context)
 
       let spanId
       let rootSpanId
       if (this.#codeHotspotsEnabled) {
+        const startedSpans = getStartedSpans(context)
         spanId = context._spanId
         rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
       }
 
-      let webTags
-      if (this.#endpointCollectionEnabled) {
-        const tags = context.getTags()
-        if (isWebServerSpan(tags)) {
-          webTags = tags
-        } else {
-          // Get parent's context's web tags
-          const parentId = context._parentId
-          for (let i = startedSpans.length; --i >= 0;) {
-            const ispan = startedSpans[i]
-            if (ispan.context()._spanId === parentId) {
-              webTags = this.#getProfilingContext(ispan).webTags
-              break
-            }
-          }
-        }
-      }
+      // webTags is snapshotted into the sample context at getProfilingContext
+      // time; if the answer turns out to be undefined and the span later gets
+      // web-server tags, #spanTagsUpdated refreshes this field via the shared
+      // cache (see web-tags-cache.js).
+      const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
       profilingContext = { spanId, rootSpanId, webTags }
       span[ProfilingContext] = profilingContext
@@ -291,14 +282,15 @@ class NativeWallProfiler {
     }
   }
 
+  // Invoked (via webTagsCache.resolvedCh) once per span at the moment the
+  // shared cache promotes a previously-undefined webTags answer into a
+  // real value. Refresh the ProfilingContext snapshot so future samples
+  // pick it up.
   #spanTagsUpdated (span) {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
-    if (profilingContext === undefined || profilingContext.webTags !== undefined) return
-    const tags = span.context().getTags()
-    if (isWebServerSpan(tags)) {
-      profilingContext.webTags = tags
-    }
+    if (profilingContext === undefined) return
+    profilingContext.webTags = webTagsCache.getCachedWebTags(span)
   }
 
   #reportV8bug (maybeBug) {
@@ -347,7 +339,7 @@ class NativeWallProfiler {
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
         if (this.#endpointCollectionEnabled) {
-          tagsUpdateCh.unsubscribe(this.#boundSpanTagsUpdated)
+          webTagsCache.resolvedCh.unsubscribe(this.#boundSpanTagsUpdated)
         }
         this.#profilerState = undefined
       }
