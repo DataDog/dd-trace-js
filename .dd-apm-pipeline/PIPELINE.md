@@ -1,0 +1,15 @@
+# Pipeline
+
+1. [plan](01-plan.md)
+2. [plan_review](02-plan-review.md)
+3. [implement](03-implement.md)
+4. [test > diagnosis](04-test-diagnosis.md)
+5. [test > fixer](05-test-fixer.md)
+6. [simplify](06-simplify.md)
+7. [post_simplify_test > diagnosis](07-post-simplify-test-diagnosis.md)
+8. [post_simplify_test > fixer](08-post-simplify-test-fixer.md)
+9. [final_review](09-final-review.md)
+10. [final > build](10-final-build.md)
+11. [final > tests](11-final-tests.md)
+12. [final > lint](12-final-lint.md)
+13. [final > observability](13-final-observability.md)
