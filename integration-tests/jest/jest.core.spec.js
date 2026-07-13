@@ -1329,7 +1329,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ddsource: 'dd_debugger',
             level: 'error',
           })
+          assert.ok(diLog.ddtags.includes('git.repository_url:'), `Got: ${inspect(diLog.ddtags)}`)
+          assert.ok(diLog.ddtags.includes('git.commit.sha:'), `Got: ${inspect(diLog.ddtags)}`)
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
+          const locals = diLog.debugger.snapshot.captures.lines['6'].locals
+          assert.strictEqual(locals.emptyObject.type, 'Object')
+          assert.strictEqual('fields' in locals.emptyObject, false)
+          assert.strictEqual(locals.emptyArray.type, 'Array')
+          assert.strictEqual('elements' in locals.emptyArray, false)
+          assert.strictEqual(locals.emptyMap.type, 'Map')
+          assert.strictEqual('entries' in locals.emptyMap, false)
+          assert.doesNotMatch(JSON.stringify(diLog.debugger.snapshot.captures), /"(fields|elements|entries)":(?:\{\}|\[\]|null)/)
           spanIdByLog = diLog.dd.span_id
           traceIdByLog = diLog.dd.trace_id
           snapshotIdByLog = diLog.debugger.snapshot.id
