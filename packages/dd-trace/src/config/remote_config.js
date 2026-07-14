@@ -202,7 +202,7 @@ function enable (rc, config, onConfigUpdated) {
       mergedLibConfig = transformRemoteConfigToLocalOption(mergedLibConfig)
     }
 
-    config.setRemoteConfig(mergedLibConfig)
+    config.setRemoteConfigFromLibConfig(mergedLibConfig)
 
     onConfigUpdated()
   })
