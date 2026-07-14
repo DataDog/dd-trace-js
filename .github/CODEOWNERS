@@ -286,6 +286,7 @@
 # CI
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
+/.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/sdlc-security
