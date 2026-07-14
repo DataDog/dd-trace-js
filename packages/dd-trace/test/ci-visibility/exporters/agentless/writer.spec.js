@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -11,9 +13,11 @@ let writer
 let span
 let request
 let encoder
+let encoderArgs
 let coverageEncoder
 let url
 let log
+let tags
 
 describe('CI Visibility Writer', () => {
   beforeEach(() => {
@@ -36,7 +40,8 @@ describe('CI Visibility Writer', () => {
       error: sinon.spy(),
     }
 
-    const AgentlessCiVisibilityEncoder = function () {
+    const AgentlessCiVisibilityEncoder = function (...args) {
+      encoderArgs = args
       return encoder
     }
 
@@ -56,7 +61,14 @@ describe('CI Visibility Writer', () => {
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../log': log,
     })
-    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
+    tags = { 'runtime-id': 'runtime-id' }
+    writer = new Writer({ url, tags, coverageUrl: url })
+  })
+
+  describe('constructor', () => {
+    it('should pass the live tags object (not a copied runtime-id) to the encoder', () => {
+      assert.strictEqual(encoderArgs[1].tags, tags)
+    })
   })
 
   describe('append', () => {

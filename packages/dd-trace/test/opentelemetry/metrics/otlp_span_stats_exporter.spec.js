@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 
 require('../../setup/core')
 
@@ -11,6 +12,8 @@ const { OtlpStatsExporter } = require('../../../src/opentelemetry/metrics/otlp_s
 const { buildResourceAttributes, createOtlpSpanStatsExporter } = require('../../../src/opentelemetry/metrics')
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const RESOURCE_ATTRS = { 'service.name': 'svc' }
 const BUCKET_SIZE_NS = 10 * 1e9
@@ -78,6 +81,42 @@ describe('createOtlpSpanStatsExporter', () => {
       service: 'svc',
     })
     assert.ok(exporter instanceof OtlpStatsExporter)
+  })
+
+  it('recomputes resource attributes when the identity-refresh channel fires', () => {
+    const config = {
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      service: 'svc',
+      tags: { 'runtime-id': 'initial-id' },
+    }
+    const exporter = createOtlpSpanStatsExporter(config)
+    const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
+
+    // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+    // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+    config.tags['runtime-id'] = 'refreshed-id'
+    identityRefreshChannel.publish(config)
+
+    sinon.assert.calledOnce(updateSpy)
+    assert.strictEqual(updateSpy.firstCall.args[0]['datadog.runtime_id'], 'refreshed-id')
+  })
+
+  it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
+    const config = {
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      service: 'svc',
+      tags: { 'runtime-id': 'a' },
+    }
+    const firstExporter = createOtlpSpanStatsExporter(config)
+    const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
+
+    const secondExporter = createOtlpSpanStatsExporter(config)
+    const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+
+    identityRefreshChannel.publish(config)
+
+    sinon.assert.notCalled(firstSpy)
+    sinon.assert.calledOnce(secondSpy)
   })
 })
 
