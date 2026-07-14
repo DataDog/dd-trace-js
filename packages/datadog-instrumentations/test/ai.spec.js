@@ -466,9 +466,9 @@ describe('createDelegatingSpan', () => {
       // TypeError; the subsequent tag assertions confirm the status was recorded on the real span.
       delegatingSpan.setStatus({ code: OTEL_STATUS_ERROR, message: 'boom' })
 
-      const tags = span._ddSpan.context()._tags
-      assert.strictEqual(tags[ERROR_MESSAGE], 'boom')
-      assert.strictEqual(tags[IGNORE_OTEL_ERROR], false)
+      const spanContext = span._ddSpan.context()
+      assert.strictEqual(spanContext.getTag(ERROR_MESSAGE), 'boom')
+      assert.strictEqual(spanContext.getTag(IGNORE_OTEL_ERROR), false)
     })
 
     it('delegates the full status precedence (OK is final) to the underlying span', () => {
@@ -478,7 +478,7 @@ describe('createDelegatingSpan', () => {
       // OK is final per the OTel spec, so a subsequent ERROR must not overwrite it.
       delegatingSpan.setStatus({ code: OTEL_STATUS_ERROR, message: 'boom' })
 
-      assert.strictEqual(span._ddSpan.context()._tags[ERROR_MESSAGE], undefined)
+      assert.strictEqual(span._ddSpan.context().getTag(ERROR_MESSAGE), undefined)
     })
 
     it('returns the wrapper (not the underlying span) from setter methods for OTel chaining', () => {

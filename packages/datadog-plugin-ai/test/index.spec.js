@@ -86,6 +86,35 @@ describe('Plugin', () => {
     })
 
     describe('patching behavior with experimental_telemetry options', () => {
+      if (semifies(realVersion, '>=6.0.0')) {
+        it('preserves the original model error with a dd-trace OTel tracer', async () => {
+          const originalError = new Error('original model error')
+          const model = {
+            specificationVersion: 'v3',
+            provider: 'test',
+            modelId: 'test',
+            supportedUrls: {},
+            doGenerate () { return Promise.reject(originalError) },
+            doStream () { return Promise.reject(originalError) },
+          }
+          const TracerProvider = require('../../dd-trace/src/opentelemetry/tracer_provider')
+          const otelTracer = new TracerProvider().getTracer('ai')
+          const checkTraces = agent.assertSomeTraces(() => {})
+
+          await assert.rejects(
+            ai.generateText({
+              model,
+              prompt: 'trigger an error',
+              maxRetries: 0,
+              experimental_telemetry: { isEnabled: true, tracer: otelTracer },
+            }),
+            error => error === originalError
+          )
+
+          await checkTraces
+        })
+      }
+
       it('should not error when `isEnabled` is false', async () => {
         const experimentalTelemetry = { isEnabled: false }
         const result = await ai.generateText({
