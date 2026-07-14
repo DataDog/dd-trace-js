@@ -52,17 +52,15 @@ function discoverCoverageReports (rootDir) {
     const fullPath = path.join(rootDir, pattern.path)
 
     try {
-      if (fs.existsSync(fullPath)) {
-        const stats = fs.statSync(fullPath)
+      const stats = fs.lstatSync(fullPath, { throwIfNoEntry: false })
 
-        // Only include regular files, not directories or symlinks
-        if (stats.isFile()) {
-          discoveredReports.push({
-            filePath: fullPath,
-            format: pattern.format,
-          })
-          log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
-        }
+      // Only include regular files, not directories or symlinks
+      if (stats?.isFile()) {
+        discoveredReports.push({
+          filePath: fullPath,
+          format: pattern.format,
+        })
+        log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
       }
     } catch (err) {
       // Log but don't fail if we can't access a file
