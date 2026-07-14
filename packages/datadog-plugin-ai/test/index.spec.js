@@ -36,10 +36,9 @@ function withAiSdkOpenAiVersions (versionRange, callback) {
   })
 }
 
-// making a different reference from the default no-op tracer in the instrumentation
-// attempted to use the DD tracer provider, but it double-traces the request
-// in practice, there is no need to pass in the DD OTel tracer provider, so this
-// case shouldn't be an issue in practice
+// Use a distinct tracer without creating additional dd-trace spans in tests that
+// only exercise custom-tracer behavior. The error-path regression below uses the
+// real dd-trace OTel provider because its private span fields are part of the bug.
 const myTracer = {
   startActiveSpan () {
     const fn = arguments[arguments.length - 1]

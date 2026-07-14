@@ -490,6 +490,50 @@ describe('createDelegatingSpan', () => {
     })
   })
 
+  describe('pass-through delegation', () => {
+    it('delegates non-publishing Span methods to the underlying receiver', () => {
+      const calls = {}
+      const spanContext = { traceId: 'trace-id', spanId: 'span-id', traceFlags: 1 }
+
+      function recordCall (method, result) {
+        return function (...args) {
+          calls[method] = { receiver: this, args }
+          return result
+        }
+      }
+
+      const span = {
+        spanContext: recordCall('spanContext', spanContext),
+        addEvent: recordCall('addEvent'),
+        addLink: recordCall('addLink'),
+        addLinks: recordCall('addLinks'),
+        updateName: recordCall('updateName'),
+        isRecording: recordCall('isRecording', true),
+      }
+      const delegatingSpan = createDelegatingSpan(span, ctx)
+      const eventAttributes = { type: 'test' }
+      const link = { context: spanContext, attributes: { type: 'parent' } }
+      const links = [link]
+
+      assert.strictEqual(delegatingSpan.spanContext(), spanContext)
+      assert.strictEqual(delegatingSpan.addEvent('event', eventAttributes, 123), delegatingSpan)
+      assert.strictEqual(delegatingSpan.addLink(link), delegatingSpan)
+      assert.strictEqual(delegatingSpan.addLinks(links), delegatingSpan)
+      assert.strictEqual(delegatingSpan.updateName('renamed'), delegatingSpan)
+      assert.strictEqual(delegatingSpan.isRecording(), true)
+
+      for (const call of Object.values(calls)) {
+        assert.strictEqual(call.receiver, span)
+      }
+      assert.deepStrictEqual(calls.spanContext.args, [])
+      assert.deepStrictEqual(calls.addEvent.args, ['event', eventAttributes, 123])
+      assert.deepStrictEqual(calls.addLink.args, [link])
+      assert.deepStrictEqual(calls.addLinks.args, [links])
+      assert.deepStrictEqual(calls.updateName.args, ['renamed'])
+      assert.deepStrictEqual(calls.isRecording.args, [])
+    })
+  })
+
   describe('channel publication and delegation', () => {
     // Underlying span whose methods record the receiver so we can prove `this === span`
     // (private-field brand preservation) and that delegation happens after publishing.
