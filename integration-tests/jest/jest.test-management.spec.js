@@ -23,6 +23,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_NAME,
   TEST_RETRY_REASON,
   TEST_SESSION_NAME,
@@ -173,6 +174,65 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
+            DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
+            LAGE_PACKAGE_NAME: 'my-initial-lage-package',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('clears test optimization policies when a later settings request fails', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+          'ci-visibility/test/ci-visibility-test-2.js': ['ci visibility 2 can report tests 2'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+        },
+        flaky_test_retries_enabled: true,
+        known_tests_enabled: true,
+        test_management: {
+          enabled: true,
+          attempt_to_fix_retries: 2,
+        },
+      })
+      receiver.setSettingsResponseStatusCodes([200, 404])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessions = events
+            .filter(event => event.type === 'test_session_end')
+            .map(event => event.content)
+          const [firstSession, secondSession] = testSessions
+
+          assert.ok(firstSession, inspect(testSessions))
+          assert.ok(secondSession, inspect(testSessions))
+          assert.strictEqual(firstSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          assert.strictEqual(firstSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in secondSession.meta), inspect(secondSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in secondSession.meta), inspect(secondSession.meta))
+          assert.ok(!(TEST_MANAGEMENT_ENABLED in secondSession.meta), inspect(secondSession.meta))
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-jest-lage-multi.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
             DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
             LAGE_PACKAGE_NAME: 'my-initial-lage-package',
           },

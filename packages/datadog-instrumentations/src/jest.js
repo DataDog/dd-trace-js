@@ -1858,6 +1858,26 @@ function resetSuiteSkippingRunState () {
   coverageBackfillFiles = undefined
 }
 
+function resetLibraryConfiguration () {
+  knownTests = {}
+  isCodeCoverageEnabled = false
+  isCoverageReportUploadEnabled = false
+  isItrEnabled = false
+  isSuitesSkippingEnabled = false
+  isEarlyFlakeDetectionEnabled = false
+  earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionFaultyThreshold = 30
+  isEarlyFlakeDetectionFaulty = false
+  isKnownTestsEnabled = false
+  isTestManagementTestsEnabled = false
+  testManagementTests = {}
+  testManagementAttemptToFixRetries = 0
+  isImpactedTestsEnabled = false
+  modifiedFiles = {}
+  repositoryRoot = undefined
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   if (!isItrEnabled || !isSuitesSkippingEnabled) return originalTests
 
@@ -2205,11 +2225,13 @@ function getCliWrapper (isNewJestVersion) {
       resetSuiteSkippingRunState()
       hasFinishedTestSession = false
 
+      let shouldResetLibraryConfiguration = true
       try {
         const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
           frameworkVersion: jestVersion,
         })
         if (!err) {
+          shouldResetLibraryConfiguration = false
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
           isItrEnabled = libraryConfig.isItrEnabled
@@ -2225,6 +2247,10 @@ function getCliWrapper (isNewJestVersion) {
         }
       } catch (err) {
         log.error('Jest library configuration error', err)
+      } finally {
+        if (shouldResetLibraryConfiguration) {
+          resetLibraryConfiguration()
+        }
       }
 
       const {
