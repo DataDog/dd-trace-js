@@ -19,6 +19,13 @@ const {
   serializeDisplayCommand,
 } = require('../../../../ci/test-optimization-validation/command-runner')
 
+function validationRouting () {
+  return {
+    fixture: { manifestPath: path.join(os.tmpdir(), 'validation-manifest.txt') },
+    outputFile: path.join(os.tmpdir(), 'validation-events.ndjson'),
+  }
+}
+
 describe('test optimization validation command runner', () => {
   it('keeps project and validator NODE_OPTIONS together', () => {
     assert.strictEqual(
@@ -110,7 +117,7 @@ describe('test optimization validation command runner', () => {
 
   it('disables unrelated Datadog side channels during forced local validation', () => {
     const env = buildDatadogEnv({
-      intake: { port: 1234 },
+      ...validationRouting(),
       scenario: 'basic-reporting',
       framework: { framework: 'mocha' },
     })
@@ -118,7 +125,27 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, 'false')
     assert.strictEqual(env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED, 'false')
     assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
+    assert.strictEqual(env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, 'false')
+    assert.strictEqual(env.DD_APPSEC_ENABLED, 'false')
+    assert.strictEqual(env.DD_CRASHTRACKING_ENABLED, 'false')
+    assert.strictEqual(env.DD_DATA_STREAMS_ENABLED, 'false')
+    assert.strictEqual(env.DD_DYNAMIC_INSTRUMENTATION_ENABLED, 'false')
+    assert.strictEqual(env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED, 'false')
+    assert.strictEqual(env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED, 'false')
+    assert.strictEqual(env.DD_HEAP_SNAPSHOT_COUNT, '0')
+    assert.strictEqual(env.DD_IAST_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
+    assert.strictEqual(env.DD_LLMOBS_ENABLED, 'false')
+    assert.strictEqual(env.DD_LOGS_OTEL_ENABLED, 'false')
+    assert.strictEqual(env.DD_METRICS_OTEL_ENABLED, 'false')
+    assert.strictEqual(env.DD_PROFILING_ENABLED, 'false')
+    assert.strictEqual(env.DD_REMOTE_CONFIGURATION_ENABLED, 'false')
+    assert.strictEqual(env.DD_RUNTIME_METRICS_ENABLED, 'false')
+    assert.strictEqual(env.DD_TRACE_OTEL_ENABLED, 'false')
+    assert.strictEqual(env.DD_TRACE_SPAN_LEAK_DEBUG, '0')
+    assert.strictEqual(env.OTEL_LOGS_EXPORTER, undefined)
+    assert.strictEqual(env.OTEL_METRICS_EXPORTER, undefined)
+    assert.strictEqual(env.OTEL_TRACES_EXPORTER, undefined)
     assert.strictEqual(env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
     assert.strictEqual(env.DD_TRACE_ENABLED, 'true')
@@ -131,7 +158,7 @@ describe('test optimization validation command runner', () => {
 
     try {
       const env = buildDatadogEnv({
-        intake: { port: 1234 },
+        ...validationRouting(),
         scenario: 'basic-reporting',
         framework: { framework: 'mocha' },
       })
@@ -147,43 +174,53 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('disables unrelated Datadog side channels during CI wiring replay', () => {
-    const env = buildCiWiringEnv({
-      intake: { port: 1234 },
-    })
+  it('uses private filesystem routing without adding Datadog initialization to CI replay', () => {
+    const env = buildCiWiringEnv(validationRouting())
 
+    assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MODE, '1')
+    assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE,
+      validationRouting().fixture.manifestPath)
+    assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE, validationRouting().outputFile)
     assert.strictEqual(env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, 'false')
-    assert.strictEqual(env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED, 'false')
-    assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
-    assert.strictEqual(env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE, 'false')
-    assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
-    assert.strictEqual(env.DD_TRACE_DEBUG, '1')
-    assert.strictEqual(env.DD_TRACE_LOG_LEVEL, 'debug')
     assert.strictEqual(env.DD_CIVISIBILITY_ENABLED, undefined)
-    assert.match(env.NODE_OPTIONS, /transport-preload\.js/)
-    assert.doesNotMatch(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
+    assert.strictEqual(env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE, undefined)
+    assert.strictEqual(env.NODE_OPTIONS, undefined)
+    assert.strictEqual(env.DD_TRACE_AGENT_URL, undefined)
+    assert.strictEqual(env.DD_API_KEY, undefined)
+    assert.strictEqual(env.DD_APP_KEY, undefined)
+    assert.strictEqual(env.DATADOG_API_KEY, undefined)
   })
 
-  it('reapplies fake-intake transport before CI-provided NODE_OPTIONS', async () => {
+  it('keeps validator-controlled offline paths when a command supplies conflicting environment values', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
-    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+    const settingsCachePath = path.join(outDir, 'project-selected-settings-cache.json')
+    const env = buildCiWiringEnv(validationRouting())
 
     try {
       const result = await runCommand({
         cwd: outDir,
-        argv: [
-          process.execPath,
-          '-e',
-          'process.stdout.write(JSON.stringify({' +
-            'agentUrl: process.env.DD_TRACE_AGENT_URL,' +
-            'agentlessUrl: process.env.DD_CIVISIBILITY_AGENTLESS_URL,' +
-            'nodeOptions: process.env.NODE_OPTIONS' +
+        argv: [process.execPath, '-e', [
+          'if (process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE) ',
+          '  require("node:fs").writeFileSync(process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE, "unexpected");',
+          'process.stdout.write(JSON.stringify({',
+          '  manifest: process.env._DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE,',
+          '  output: process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE,',
+          '  apmAgentless: process.env._DD_APM_TRACING_AGENTLESS_ENABLED,',
+          '  settingsCache: process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE,',
+          '  otelTraces: process.env.OTEL_TRACES_EXPORTER,',
+          '  profiling: process.env.DD_PROFILING_ENABLED,',
+          '  runtimeMetrics: process.env.DD_RUNTIME_METRICS_ENABLED',
           '}))',
-        ],
+        ].join('')],
         env: {
-          DD_TRACE_AGENT_URL: 'https://example.invalid',
-          NODE_OPTIONS: '--no-warnings',
+          _DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE: '/tmp/unapproved-manifest',
+          _DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE: '/tmp/unapproved-output',
+          _DD_APM_TRACING_AGENTLESS_ENABLED: 'true',
+          DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: settingsCachePath,
+          DD_PROFILING_ENABLED: 'true',
+          DD_RUNTIME_METRICS_ENABLED: 'true',
+          OTEL_TRACES_EXPORTER: 'otlp',
         },
       }, {
         env,
@@ -192,232 +229,50 @@ describe('test optimization validation command runner', () => {
       })
       const observed = JSON.parse(result.stdout)
 
-      assert.strictEqual(observed.agentUrl, 'http://127.0.0.1:43123')
-      assert.strictEqual(observed.agentlessUrl, 'http://127.0.0.1:43123')
-      assert.ok(observed.nodeOptions.indexOf('transport-preload.js') < observed.nodeOptions.indexOf('--no-warnings'))
+      assert.strictEqual(observed.manifest, validationRouting().fixture.manifestPath)
+      assert.strictEqual(observed.output, validationRouting().outputFile)
+      assert.strictEqual(observed.apmAgentless, undefined)
+      assert.strictEqual(observed.settingsCache, undefined)
+      assert.strictEqual(observed.otelTraces, undefined)
+      assert.strictEqual(observed.profiling, 'false')
+      assert.strictEqual(observed.runtimeMetrics, 'false')
+      assert.strictEqual(fs.existsSync(settingsCachePath), false)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
   })
 
-  it('reapplies fake-intake transport in descendant Node.js processes', async () => {
+  it('refuses inline offline routing, NODE_OPTIONS, and environment resets', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
-    const env = buildCiWiringEnv({ intake: { port: 43123 } })
-    const childSource = 'process.stdout.write(JSON.stringify({' +
-      'agentUrl: process.env.DD_TRACE_AGENT_URL,' +
-      'agentlessUrl: process.env.DD_CIVISIBILITY_AGENTLESS_URL' +
-    '}))'
-    const wrapperSource = 'const { spawnSync } = require("node:child_process");' +
-      'const env = { ...process.env, DD_TRACE_AGENT_URL: "https://example.invalid", ' +
-      'DD_CIVISIBILITY_AGENTLESS_URL: "https://example.invalid" };' +
-      `const child = spawnSync(process.execPath, ["-e", ${JSON.stringify(childSource)}], ` +
-      '{ env, encoding: "utf8" });' +
-      'process.stdout.write(child.stdout); process.stderr.write(child.stderr); process.exitCode = child.status;'
-
-    try {
-      const result = await runCommand({
-        cwd: outDir,
-        argv: [process.execPath, '-e', wrapperSource],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      })
-      const observed = JSON.parse(result.stdout)
-
-      assert.strictEqual(observed.agentUrl, 'http://127.0.0.1:43123')
-      assert.strictEqual(observed.agentlessUrl, 'http://127.0.0.1:43123')
-    } finally {
-      fs.rmSync(outDir, { recursive: true, force: true })
-    }
-  })
-
-  it('refuses inline fake-intake and NODE_OPTIONS overrides', async () => {
-    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
-    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+    const env = buildCiWiringEnv(validationRouting())
 
     try {
       await assert.rejects(runCommand({
         cwd: outDir,
         usesShell: true,
-        shellCommand: 'NODE_OPTIONS="-r dd-trace/ci/init" npm test',
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
+        shellCommand: '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE=/tmp/other npm test',
+      }, { env, envMode: 'clean', outDir }), /Refusing inline _DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE changes/)
 
       await assert.rejects(runCommand({
         cwd: outDir,
-        argv: ['/usr/bin/env', 'DD_TRACE_AGENT_URL=https://example.invalid', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+        usesShell: true,
+        shellCommand: 'DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE=/tmp/other npm test',
+      }, { env, envMode: 'clean', outDir }), /Refusing inline DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE changes/)
 
       await assert.rejects(runCommand({
         cwd: outDir,
         argv: ['/usr/bin/env', '--unset=NODE_OPTIONS', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
 
       await assert.rejects(runCommand({
         cwd: outDir,
-        argv: ['/usr/bin/env', '-S', 'NODE_OPTIONS=--no-warnings node test.js'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
+        argv: ['/usr/bin/env', '--unset=DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE', 'npm', 'test'],
+      }, { env, envMode: 'clean', outDir }), /Refusing inline DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE changes/)
 
       await assert.rejects(runCommand({
         cwd: outDir,
-        argv: ['/usr/bin/env', '--split-string=DD_TRACE_AGENT_URL=https://example.invalid node test.js'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', '-C', outDir, 'NODE_OPTIONS=--no-warnings', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', '--chdir=' + outDir, 'DD_TRACE_AGENT_URL=https://example.invalid', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', '-SNODE_OPTIONS=--no-warnings node test.js'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', '--future-option', 'NODE_OPTIONS=--no-warnings', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing unsupported env option --future-option/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', '-i', 'PATH=/usr/bin', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing to clear the command environment/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', '-', 'npm', 'test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing to clear the command environment/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        usesShell: true,
-        shellCommand: 'env --unset=NODE_OPTIONS npm test',
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        usesShell: true,
-        shellCommand: 'env --ignore-environment PATH=/usr/bin npm test',
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing to clear the command environment/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        usesShell: true,
-        shellCommand: 'env - npm test',
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing to clear the command environment/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['bash', '-lc', 'DD_TRACE_AGENT_URL=https://example.invalid npm test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['sh', '-ec', 'unset NODE_OPTIONS; npm test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline NODE_OPTIONS changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', 'bash', '-lc', 'DD_TRACE_AGENT_URL=https://example.invalid npm test'],
-      }, {
-        env,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
-
-      const datadogEnv = buildDatadogEnv({
-        intake: { port: 43123 },
-        scenario: 'basic-reporting',
-        framework: { framework: 'jest' },
-        command: {},
-      })
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        argv: ['/usr/bin/env', 'DD_TRACE_ENABLED=false', 'npm', 'test'],
-      }, {
-        env: datadogEnv,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_TRACE_ENABLED changes/)
-
-      await assert.rejects(runCommand({
-        cwd: outDir,
-        usesShell: true,
-        shellCommand: 'DD_CIVISIBILITY_ENABLED=0 npm test',
-      }, {
-        env: datadogEnv,
-        envMode: 'clean',
-        outDir,
-      }), /Refusing inline DD_CIVISIBILITY_ENABLED changes/)
+        argv: ['/usr/bin/env', '--ignore-environment', 'npm', 'test'],
+      }, { env, envMode: 'clean', outDir }), /Refusing to clear the command environment/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
@@ -428,7 +283,7 @@ describe('test optimization validation command runner', () => {
     const artifactRoot = path.join(repositoryRoot, 'results')
     const outDir = path.join(artifactRoot, 'run')
     const coverage = path.join(repositoryRoot, 'coverage')
-    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+    const env = buildCiWiringEnv(validationRouting())
     fs.mkdirSync(artifactRoot)
     fs.mkdirSync(coverage)
     fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')

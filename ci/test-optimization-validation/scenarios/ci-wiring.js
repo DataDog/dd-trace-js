@@ -5,11 +5,10 @@ const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
 const { buildCiRemediation } = require('../ci-remediation')
-const { buildCiWiringEnv, runCommand, serializeCommand } = require('../command-runner')
+const { serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
 const { findLateInitialization } = require('../late-initialization')
-const { normalizeRequests } = require('../payload-normalizer')
 const { sanitizeForReport } = require('../redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
@@ -22,11 +21,12 @@ const {
   hasAllBasicEventTypes,
   incomplete,
   pass,
+  runInstrumentedCommand,
   skip,
   tailInterestingLines,
 } = require('./helpers')
 
-async function runCiWiring ({ manifest, framework, intake, out, options, basicResult }) {
+async function runCiWiring ({ manifest, framework, out, options, basicResult }) {
   const scenarioName = 'ci-wiring'
 
   try {
@@ -35,46 +35,27 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
 
     const outDir = frameworkOutDir(out, framework, scenarioName)
     ensureSafeDirectory(out, outDir, 'CI wiring artifact directory')
-    intake.configure()
-    intake.resetRequests()
     const baseEvidence = getCiWiringBaseEvidence({ framework, manifest, basicResult, command })
     const conclusiveStaticResult = await maybeConcludeMissingCiInitialization({
       baseEvidence,
       basicResult,
       command,
       framework,
-      intake,
       options,
       out,
       outDir,
     })
     if (conclusiveStaticResult) return conclusiveStaticResult
 
-    const result = await runCommand(command, {
-      artifactRoot: out,
-      env: buildCiWiringEnv({ intake }),
-      envMode: 'clean',
-      outDir,
-      label: `${framework.id}:${scenarioName}`,
-      repositoryRoot: options.repositoryRoot,
-      verbose: options.verbose,
+    const run = await runInstrumentedCommand({
+      framework,
+      out,
+      scenarioName,
+      command,
+      options,
+      ciWiring: true,
     })
-
-    await wait(1000)
-    const events = normalizeRequests(intake.requests)
-    const sanitizedEvents = sanitizeForReport(events)
-    writeFileSafely(
-      out,
-      path.join(outDir, 'events.ndjson'),
-      sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n',
-      'CI wiring events artifact'
-    )
-    writeFileSafely(
-      out,
-      path.join(outDir, 'result.json'),
-      `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
-      'CI wiring result artifact'
-    )
+    const { result, events } = run
 
     const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
     const evidence = {
@@ -84,6 +65,8 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
       commandDescription: command.description,
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       preflight: summarizePreflight(ciWiringPreflight),
+      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
+      offlineExporterSummary: run.offline.summary,
       ...basicEventEvidence(events),
     }
 
@@ -93,7 +76,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
         evidence.commandFailure = commandFailure
       }
       evidence.debugSignals = summarizeCiDebugSignals(result)
-      const probe = await maybeRunInitializationProbe({ command, framework, intake, options, outDir, result, evidence })
+      const probe = await maybeRunInitializationProbe({ command, framework, options, outDir, result, evidence })
       if (probe.summary) evidence.initializationProbe = probe.summary
       evidence.monorepoFindings = getMonorepoFindings({ framework, command, probe: probe.summary })
       evidence.eventLevelFailure = getCiWiringEventFailure({ framework, result, evidence, basicResult })
@@ -156,7 +139,6 @@ async function maybeConcludeMissingCiInitialization ({
   basicResult,
   command,
   framework,
-  intake,
   options,
   out,
   outDir,
@@ -166,15 +148,13 @@ async function maybeConcludeMissingCiInitialization ({
 
   let probe
   try {
-    probe = await runInitializationProbe({ command, framework, intake, options, outDir })
+    probe = await runInitializationProbe({ command, framework, options, outDir })
   } catch (error) {
     baseEvidence.shortcutProbe = {
       ran: false,
       error: error?.message || String(error),
     }
     return
-  } finally {
-    intake.resetRequests()
   }
   if (probe.summary?.reachedTestRunnerProcess !== true) {
     baseEvidence.shortcutProbe = probe.summary
@@ -301,7 +281,7 @@ function isBourneShell (executable) {
   return basename === 'bash' || basename === 'sh' || basename === 'zsh'
 }
 
-async function maybeRunInitializationProbe ({ command, framework, intake, options, outDir, result, evidence }) {
+async function maybeRunInitializationProbe ({ command, framework, options, outDir, result, evidence }) {
   if (result.timedOut === true) return {}
   if (!commandOutputShowsTestsRan(evidence.commandOutputSummary)) return {}
   if (evidence.nodeOptionsRemoval) {
@@ -319,7 +299,6 @@ async function maybeRunInitializationProbe ({ command, framework, intake, option
     return await runInitializationProbe({
       command,
       framework,
-      intake,
       options,
       outDir,
     })
@@ -330,8 +309,6 @@ async function maybeRunInitializationProbe ({ command, framework, intake, option
         error: err && err.message ? err.message : String(err),
       },
     }
-  } finally {
-    intake.resetRequests()
   }
 }
 
@@ -428,7 +405,7 @@ function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
   }
 
   const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
-    'environment and setup described by the CI job, no Test Optimization events reached the mock intake.'
+    'environment and setup described by the CI job, no Test Optimization events reached the offline event artifact.'
   const configurationSummary = evidence.ciConfigurationDiagnosis
     ? ` Manifest CI discovery recorded: ${evidence.ciConfigurationDiagnosis}`
     : ''
@@ -503,7 +480,8 @@ function getNodeOptionsRemovalDiagnosis ({ basicResult, evidence, framework }) {
       '`NODE_OPTIONS=-r dd-trace/ci/init` supplied directly, it reports test data successfully.'
     : ''
 
-  return `The CI test command ran tests, but no Test Optimization events reached the mock intake. ${ciCommand}` +
+  return 'The CI test command ran tests, but no Test Optimization events reached the offline event artifact. ' +
+    `${ciCommand}` +
     `${source} expands to \`${finding.command}\`. The empty \`NODE_OPTIONS=\` assignment clears the Datadog ` +
     `preload before ${frameworkName} starts.${directResult}`
 }
@@ -897,10 +875,6 @@ function summarizePreflight (preflight) {
     stdoutSummary: preflight.stdoutSummary,
     stderrSummary: preflight.stderrSummary,
   }
-}
-
-function wait (ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 module.exports = {

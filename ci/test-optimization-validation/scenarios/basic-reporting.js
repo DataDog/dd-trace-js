@@ -16,14 +16,12 @@ const {
   tailInterestingLines,
 } = require('./helpers')
 
-async function runBasicReporting ({ framework, intake, out, options }) {
+async function runBasicReporting ({ framework, out, options }) {
   const scenarioName = 'basic-reporting'
   try {
     const command = getBasicReportingCommand(framework)
-    intake.configure()
-    const { result, events, outDir } = await runInstrumentedCommand({
+    const { result, events, offline, outDir } = await runInstrumentedCommand({
       framework,
-      intake,
       out,
       scenarioName,
       command,
@@ -38,7 +36,18 @@ async function runBasicReporting ({ framework, intake, out, options }) {
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
       preflight: summarizePreflight(framework.preflight),
+      settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
+      offlineExporterSummary: offline.summary,
       ...basicEventEvidence(events),
+    }
+
+    if (!evidence.settingsLoadedFromCache) {
+      return error(
+        framework,
+        scenarioName,
+        new Error('Basic Reporting settings were not loaded from the authoritative offline cache fixture.'),
+        outDir
+      )
     }
 
     if (!hasAllBasicEventTypes(events)) {
@@ -50,11 +59,9 @@ async function runBasicReporting ({ framework, intake, out, options }) {
 
       return failBasicReportingWithDebugRerun({
         command,
-        configureIntake: () => intake.configure(),
         diagnosis: eventLevelFailure.summary,
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,
@@ -91,11 +98,9 @@ async function runBasicReporting ({ framework, intake, out, options }) {
     evidence.commandExitMatchesPreflight = false
     return failBasicReportingWithDebugRerun({
       command,
-      configureIntake: () => intake.configure(),
       diagnosis: `${evidence.commandFailure.summary} The exit code did not match the dd-trace-less preflight run.`,
       evidence,
       framework,
-      intake,
       options,
       out,
       outDir,
@@ -158,7 +163,7 @@ function getDebugAwareDiagnosis (currentDiagnosis, evidence) {
   if (testsRan && debugLine && noDebugEvents) {
     return {
       kind: 'tests-ran-tracer-not-initialized',
-      summary: 'The selected command ran tests, but no Test Optimization events reached the fake intake. ' +
+      summary: 'The selected command ran tests, but no Test Optimization events reached the offline event artifact. ' +
         `The debug rerun printed "${debugLine}", which means the preload executed in the package-manager ` +
         'wrapper without producing Test Optimization events from the test process.',
       recommendation: 'Try a direct test-runner command, or verify NODE_OPTIONS with dd-trace/ci/init reaches the ' +
@@ -174,9 +179,9 @@ function getDebugAwareDiagnosis (currentDiagnosis, evidence) {
   if (testsRan && noDebugEvents) {
     return {
       kind: 'tests-ran-no-test-optimization-events',
-      summary: 'The selected command ran tests, but no Test Optimization events reached the fake intake. ' +
+      summary: 'The selected command ran tests, but no Test Optimization events reached the offline event artifact. ' +
         'The debug rerun did not emit Test Optimization events either.',
-      recommendation: 'Inspect the debug rerun excerpt for tracer initialization or intake connection errors, then ' +
+      recommendation: 'Inspect the debug rerun excerpt for tracer initialization or offline exporter errors, then ' +
         'verify NODE_OPTIONS with dd-trace/ci/init reaches the final test process.',
       signals: getDebugSignals({
         debugRerun,
@@ -350,7 +355,7 @@ function getMissingEventDiagnosis ({ framework, result, evidence }) {
       missingLevels,
       signals: frameworkSourceTreeRunner.signals,
       summary: 'The selected command ran tests from the test framework source tree, but no Test Optimization ' +
-        'events reached the fake intake. This command is not equivalent to a customer project running an ' +
+        'events reached the offline event artifact. This command is not equivalent to a customer project running an ' +
         'installed test-runner package.',
       recommendation: 'Choose a project test command that uses an installed supported framework package. If this ' +
         'repository is the framework itself, treat this entry as not runnable for Test Optimization validation.',
@@ -361,10 +366,9 @@ function getMissingEventDiagnosis ({ framework, result, evidence }) {
     return {
       kind: 'no-test-optimization-events',
       missingLevels,
-      summary: 'No Test Optimization test events reached the fake intake. The tracer may not have initialized ' +
-        'in the test process, the selected command may not have executed tests, or the process may not have ' +
-        'connected to the local intake.',
-      recommendation: 'Check the debug rerun output for tracer initialization, request, or intake connection errors.',
+      summary: 'No Test Optimization test events reached the offline event artifact. The tracer may not have ' +
+        'initialized in the test process, or the selected command may not have executed tests.',
+      recommendation: 'Check the debug rerun output for tracer initialization or offline exporter errors.',
     }
   }
 

@@ -149,7 +149,7 @@ Recognize these CI systems and extract test-command evidence when practical:
 - For CI wiring commands, record `NODE_OPTIONS` and Datadog-specific environment variables exactly
   as CI configured them, except secret values must be replaced with explicit safe dummy values.
   Record original secret variable names in CI metadata.
-- The validator may add fake-intake transport and noise-suppression variables when it executes
+- The validator may add private offline-fixture/output and noise-suppression variables when it executes
   commands. Do not copy those validator-added values back into CI evidence.
 - A generated test strategy is `verified` only if temporary files were created, at least the stable
   passing generated scenario ran without Datadog instrumentation, and the files were deleted.
@@ -166,7 +166,7 @@ you are documenting:
   represented as `ciWiringCommand.env.NODE_OPTIONS` without changing process semantics, prefer that
   structured representation. It lets the validator's `NODE_OPTIONS` probe check whether a preload
   reaches the final test runner.
-- The validator refuses inline assignments or removals for `NODE_OPTIONS` and fake-intake transport
+- The validator refuses inline assignments or removals for `NODE_OPTIONS` and private offline-validation
   variables because shell-local values can override diagnostic containment. If the CI command cannot
   be represented with equivalent structured `command.env` values, record the exact command as
   evidence and mark local CI wiring replay as requiring manual setup instead of executing it.

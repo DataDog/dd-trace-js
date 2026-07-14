@@ -4,7 +4,10 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { getFixtureRecipeDigests } = require('./offline-fixtures')
+
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
+const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
 
 /**
  * Binds an approval to the exact manifest bytes and live validator options.
@@ -14,6 +17,7 @@ const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
  * @param {string} input.out validation output directory
  * @param {string[]} [input.selectedFrameworkIds] selected framework ids
  * @param {string|null} [input.requestedScenario] selected scenario
+ * @param {string} input.offlineFixtureNonce random fixture-root nonce shown in the execution plan
  * @param {boolean} [input.keepTempFiles] whether generated files are retained
  * @param {boolean} [input.verbose] whether command progress is printed
  * @returns {string} SHA-256 approval digest
@@ -23,15 +27,25 @@ function getApprovalDigest ({
   out,
   selectedFrameworkIds = [],
   requestedScenario = null,
+  offlineFixtureNonce,
   keepTempFiles = false,
   verbose = false,
 }) {
+  if (!OFFLINE_FIXTURE_NONCE_PATTERN.test(String(offlineFixtureNonce || ''))) {
+    throw new Error('Invalid offline fixture nonce. Render a fresh plan with --print-plan.')
+  }
   const scope = {
     manifestPath: path.resolve(manifest.__path),
     manifestSha256: getManifestDigest(manifest),
     out: path.resolve(out),
     selectedFrameworkIds: [...selectedFrameworkIds],
     requestedScenario,
+    offlineFixtureNonce,
+    fixtureRecipeDigests: getFixtureRecipeDigests({
+      frameworks: manifest.frameworks || [],
+      selectedFrameworkIds,
+      requestedScenario,
+    }),
     keepTempFiles,
     verbose,
     validatorSha256: getValidatorDigest(),
@@ -49,6 +63,72 @@ function getValidatorDigest () {
     path.resolve(packageRoot, 'loader-hook.mjs'),
     path.resolve(packageRoot, 'register.js'),
     path.resolve(packageRoot, 'version.js'),
+    path.resolve(packageRoot, 'ext', 'exporters.js'),
+    path.resolve(packageRoot, 'packages', 'dd-trace', 'src', 'exporter.js'),
+    path.resolve(packageRoot, 'packages', 'dd-trace', 'src', 'proxy.js'),
+    path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'exporters',
+      'ci-visibility-exporter.js'
+    ),
+    path.resolve(packageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility', 'test-optimization-http-cache.js'),
+    path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'test-optimization-http-cache-schema.js'
+    ),
+    path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'requests',
+      'get-library-configuration.js'
+    ),
+    path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'early-flake-detection',
+      'get-known-tests.js'
+    ),
+    path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'intelligent-test-runner',
+      'get-skippable-suites.js'
+    ),
+    path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'test-management',
+      'get-test-management-tests.js'
+    ),
+    ...collectJavaScriptFiles(path.resolve(
+      packageRoot,
+      'packages',
+      'dd-trace',
+      'src',
+      'ci-visibility',
+      'exporters',
+      'ci-validation'
+    )),
     ...collectJavaScriptFiles(validationDirectory),
   ].sort()
   const hash = crypto.createHash('sha256')

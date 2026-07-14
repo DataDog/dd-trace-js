@@ -6,7 +6,7 @@ environment, or needs customer-facing diagnosis language.
 ## Validator Responsibilities
 
 The deterministic validator is the source of truth for local CI wiring replay and
-direct-initialization feature validation. Do not manually inspect raw intake payloads to decide
+direct-initialization feature validation. Do not manually inspect raw event artifacts to decide
 whether Test Optimization is correct.
 
 The validator:
@@ -14,74 +14,44 @@ The validator:
 1. Validates the manifest schema.
 2. Runs static diagnosis and stops live execution for known hard blockers.
 3. Replays required setup commands for each runnable framework.
-4. Starts a local mock intake when at least one framework is eligible for live validation.
-5. Serves Datadog Test Optimization settings responses.
+4. Creates bounded, scenario-specific Test Optimization cache fixtures outside the repository.
+5. Selects the private cache-only validation exporter.
 6. Creates temporary validation tests from the manifest.
 7. Runs test commands with Datadog instrumentation enabled.
-8. Reads and decodes intake payloads.
+8. Reads and decodes bounded local event artifacts after each test process exits.
 9. Evaluates Basic Reporting, CI wiring, EFD, ATR, and Test Management in that order.
 10. Cleans up temporary validation files.
 11. Writes a detailed Markdown validation report and run artifacts.
 
-## Execution Environment Blockers
+## Offline Validation Boundary
 
-Manifest generation and static diagnosis can run in a restricted agent sandbox. Live validation
-requires a sandbox capability that permits the local mock intake to bind to `127.0.0.1` and the test
-process to connect back to that localhost socket. Some agent sandbox modes block one or both
-directions.
+Manifest generation, static diagnosis, plan rendering, and live validation can all run in the same
+restricted agent sandbox. The dd-trace validation path uses only validator-controlled filesystem
+fixtures and event artifacts. It opens no listener, uses no network endpoint, requires no Agent or
+API key, and must not be rerun with broader permissions.
 
-Check this before live approval with `validate-test-optimization.js --check-localhost`. The check
-opens a temporary localhost listener, connects to it, closes both sockets, and exits without loading
-the manifest, running project code, or writing artifacts. Run it in the current agent environment.
-Do not request host access merely to make the capability check pass.
+Each scenario receives fixed-name JSON cache files below a validator-controlled temporary directory
+outside the repository. Missing, malformed, symlinked, or oversized fixture data fails closed and
+never falls back to HTTP. Full events are written to a bounded file below the declared results
+directory; a bounded versioned summary is written to stderr. Inspect event artifacts only for a
+specific diagnosis.
 
-If the fake intake fails with `EPERM` or `EACCES` on `listen` or `connect` for
-`127.0.0.1`/localhost, treat that as an execution-environment blocker, not as a Test Optimization
-misconfiguration.
+Running repository setup and test commands remains arbitrary project-code execution. Use the same
+sandbox and permissions as an ordinary test run, block outbound networking for the test process and
+descendants at the execution-platform level, provide a disposable home directory without reusable
+credentials, and restrict filesystem writes to the checkout, declared outputs, and disposable
+temporary directories. Disabling dd-trace network behavior does not prevent malicious project code
+from attempting its own network access.
 
-If the capability check reports the same blocker before approval, continue to render the complete
-plan. Use the platform's localhost-capable execution mode when requesting the single approval for the
-digest-bound live command. Do not first run the live validator in the known-blocked environment, and
-do not add a separate chat approval for the environment change.
-
-Tell the user:
-
-- no Test Optimization conclusion was reached
-- the current agent sandbox blocked localhost sockets
-- the manifest may still be useful
-- live validation must be rerun from CI, the host shell, or an agent mode that allows localhost
-  sockets while retaining credential, outbound-network, and filesystem restrictions
-
-Do not try to solve this by starting the fake intake outside the sandbox while tests still run
-inside the sandbox. Prefer rerunning the validator in a sandbox mode that grants localhost to both
-processes without granting unrelated network or secret access.
-
-This restriction is not specific to subagents. A user running the validator from the repository root
-inside the same restricted sandbox can hit the same blocker.
-
-If the user already approved a digest-bound live command, preserve the manifest and retry that exact
-command in an environment where binding and connecting to `127.0.0.1` are allowed. Do not render or
-approve the full plan again solely because the sandbox blocked localhost. The existing
-`--approved-plan-sha256` fails closed if the manifest, options, output path, or installed validator
-changed.
-
-Use the agent platform's host/sandbox permission prompt for this environment change. Explain that
-the local Test Optimization diagnostic bundled with `dd-trace` is rerunning the already-approved
-command with localhost listen/connect access, and that it does not contact Datadog or upload the
-report. State whether project commands ran before the blocker; if they did or this is unknown, say
-that those commands may execute again. Do not precede the platform prompt with another `Approve
-executing exactly the plan above?` question.
-
-If there is no platform permission prompt, ask one concise question about rerunning the already-
-approved command outside the restricted sandbox. Render and approve a new plan only when the exact
-approved command or digest is unavailable, or when a digest-bound input changed.
+Project code runs as the same user and can forge cache, stderr, or event evidence. Offline results are
+diagnostic evidence, not a security attestation.
 
 ## Validation Path Interpretation
 
 - Basic Reporting injects Test Optimization initialization directly into the selected command and
   proves the repository/framework can emit the required event hierarchy when configured correctly.
 - CI wiring runs `ciWiringCommand` with the CI-provided initialization recorded in the manifest,
-  plus fake-intake transport overrides and validator noise suppressions. It does not add
+  plus private offline-output routing and validator noise suppressions. It does not add
   `dd-trace/ci/init`, `dd-trace/register.js`, `DD_CIVISIBILITY_ENABLED`, or `NODE_OPTIONS` beyond
   what the manifest says CI configured.
 - Advanced features run after Basic Reporting passes.
@@ -109,8 +79,8 @@ Use this language in the console or local agent response:
 - "CI wiring failed, Basic Reporting passed" means the validator found a test command and confirmed
   that test data is reported when the required Datadog setup reaches the test runner directly. The
   validator also found the CI job that runs tests and replayed that job's command using the
-  environment configured by CI. The tests ran, but no Test Optimization data reached the mock
-  intake.
+  environment configured by CI. The tests ran, but no Test Optimization data reached the offline
+  event artifact.
 - Customer-facing summary for that case: "Test Optimization is not reaching the test runner in CI.
   The tests run, and this project can report test data when `dd-trace` is initialized correctly, but
   the CI workflow path does not pass the required Datadog setup all the way to the process running
@@ -159,7 +129,7 @@ The console or local agent response should include:
 - Basic Reporting pass/fail/skip summary by framework
 - CI wiring pass/fail/skip summary by framework or CI job
 - advanced feature pass/fail/skip summary
-- execution-environment blocker, when present
+- setup, command, or offline-fixture blocker, when present
 
 The detailed Markdown report should contain:
 

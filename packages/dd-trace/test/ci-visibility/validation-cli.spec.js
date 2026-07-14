@@ -37,14 +37,10 @@ const PASSING_VALIDATION_PHASES = {
     },
   },
 }
-const APPROVAL_ARGS = ['--approved-plan-sha256', 'a'.repeat(64)]
-
-function readMarkdownJsonSection (markdown, title) {
-  const pattern = new RegExp(`<details><summary>${title}<\\/summary>\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
-  const match = pattern.exec(markdown)
-  assert.ok(match, `Expected ${title} section`)
-  return JSON.parse(match[1])
-}
+const APPROVAL_ARGS = [
+  '--offline-fixture-nonce', 'a'.repeat(32),
+  '--approved-plan-sha256', 'a'.repeat(64),
+]
 
 describe('test optimization validation cli', () => {
   it('uses only published files and runtime dependencies', () => {
@@ -143,94 +139,11 @@ describe('test optimization validation cli', () => {
 
   it('parses a plan approval digest for live validation', () => {
     const digest = 'a'.repeat(64)
-    const options = parseArgs(['--approved-plan-sha256', digest])
+    const nonce = 'b'.repeat(32)
+    const options = parseArgs(['--offline-fixture-nonce', nonce, '--approved-plan-sha256', digest])
 
     assert.strictEqual(options.approvedPlanSha256, digest)
-  })
-
-  it('parses the localhost capability check mode', () => {
-    const options = parseArgs(['--check-localhost'])
-
-    assert.strictEqual(options.checkLocalhost, true)
-  })
-
-  it('checks localhost capability without loading a manifest or starting live validation', async () => {
-    const logs = []
-    const originalLog = console.log
-    let checked = false
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      './execution-environment': {
-        async checkLocalhostCapability () {
-          checked = true
-        },
-        isLocalSocketPermissionError () {
-          return false
-        },
-      },
-      './manifest-loader': {
-        loadManifest () {
-          throw new Error('manifest should not load')
-        },
-      },
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            throw new Error('live validation should not start')
-          }
-        },
-      },
-    })
-
-    console.log = message => logs.push(message)
-    try {
-      await main(['--check-localhost'])
-
-      assert.strictEqual(checked, true)
-      assert.deepStrictEqual(logs, [
-        'Localhost capability check passed: this environment can listen and connect on 127.0.0.1.',
-      ])
-    } finally {
-      console.log = originalLog
-    }
-  })
-
-  it('reports a blocked localhost capability check without running project commands', async () => {
-    const errors = []
-    const originalError = console.error
-    const originalExitCode = process.exitCode
-    const error = Object.assign(new Error('listen EPERM 127.0.0.1'), {
-      address: '127.0.0.1',
-      code: 'EPERM',
-      syscall: 'listen',
-    })
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      './execution-environment': {
-        async checkLocalhostCapability () {
-          throw error
-        },
-        isLocalSocketPermissionError (candidate) {
-          return candidate === error
-        },
-      },
-      './manifest-loader': {
-        loadManifest () {
-          throw new Error('manifest should not load')
-        },
-      },
-    })
-
-    console.error = message => errors.push(String(message))
-    process.exitCode = undefined
-    try {
-      await main(['--check-localhost'])
-
-      assert.strictEqual(process.exitCode, 1)
-      assert.match(errors.join('\n'), /No project commands ran/)
-      assert.match(errors.join('\n'), /execution mode that permits localhost sockets/)
-    } finally {
-      console.error = originalError
-      process.exitCode = originalExitCode
-    }
+    assert.strictEqual(options.offlineFixtureNonce, nonce)
   })
 
   it('initializes a manifest scaffold without starting live validation', async () => {
@@ -242,13 +155,6 @@ describe('test optimization validation cli', () => {
       './manifest-scaffold': {
         createManifestScaffold ({ root }) {
           return { schemaVersion: '1.0', repository: { root }, environment: {}, frameworks: [] }
-        },
-      },
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            throw new Error('live validation should not start')
-          }
         },
       },
     })
@@ -281,13 +187,6 @@ describe('test optimization validation cli', () => {
     const originalLog = console.log
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            throw new Error('live validation should not start')
-          }
-        },
-      },
       './static-diagnosis': {
         runStaticDiagnosis () {
           throw new Error('static diagnosis should not run')
@@ -318,13 +217,6 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            throw new Error('live validation should not start')
-          }
-        },
-      },
     })
 
     fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
@@ -336,7 +228,7 @@ describe('test optimization validation cli', () => {
 
       assert.strictEqual(process.exitCode, 1)
       assert.strictEqual(fs.existsSync(out), false)
-      assert.match(errors.join('\n'), /requires the --approved-plan-sha256 value/)
+      assert.match(errors.join('\n'), /requires the --offline-fixture-nonce and --approved-plan-sha256 values/)
     } finally {
       console.error = originalError
       process.exitCode = originalExitCode
@@ -353,16 +245,6 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            this.requests = []
-          }
-
-          async start () {}
-          async close () {}
-        },
-      },
       './report-writer': {
         async writeReport () {},
       },
@@ -406,8 +288,6 @@ describe('test optimization validation cli', () => {
       ])
 
       assert.deepStrictEqual(logs, [
-        '[test-optimization-validator] Starting the local mock intake.',
-        '[test-optimization-validator] Local mock intake ready.',
         '[test-optimization-validator] jest:root: Test execution without Datadog started.',
         '[test-optimization-validator] jest:root: Test execution without Datadog pass.',
         '[test-optimization-validator] jest:root: Basic Reporting started.',
@@ -455,16 +335,6 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            this.requests = []
-          }
-
-          async start () {}
-          async close () {}
-        },
-      },
       './report-writer': {
         async writeReport () {},
       },
@@ -512,100 +382,6 @@ describe('test optimization validation cli', () => {
     }
   })
 
-  for (const code of ['EPERM', 'EACCES']) {
-    it(`reports fake intake startup ${code} listen failures as execution-environment blockers`, async () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-      const out = path.join(tmpDir, 'results')
-      const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-      const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-      const error = Object.assign(new Error(`listen ${code}: operation not permitted 127.0.0.1`), {
-        address: '127.0.0.1',
-        code,
-        syscall: 'listen',
-      })
-      const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-        ...PASSING_VALIDATION_PHASES,
-        './mock-intake': {
-          MockIntake: class {
-            constructor ({ out }) {
-              this.out = out
-              this.requests = []
-            }
-
-            async start () {
-              throw error
-            }
-
-            async close () {}
-
-            writeArtifacts () {
-              const intakeDir = path.join(this.out, 'intake')
-              fs.mkdirSync(intakeDir, { recursive: true })
-              const requestsPath = path.join(intakeDir, 'requests.ndjson')
-              fs.writeFileSync(requestsPath, '')
-              return { requestsPath }
-            }
-          },
-        },
-        './setup-runner': {
-          runSetupCommands () {
-            throw new Error('setup commands should not run when the fake intake cannot start')
-          },
-        },
-        './static-diagnosis': {
-          getStaticBlocker () {
-            return null
-          },
-          runStaticDiagnosis () {
-            fs.mkdirSync(out, { recursive: true })
-            fs.writeFileSync(staticDiagnosisPath, '{}\n')
-            return {
-              report: {},
-              reportPath: staticDiagnosisPath,
-            }
-          },
-        },
-      })
-      const manifest = getRunnableManifest(tmpDir)
-      const originalExitCode = process.exitCode
-      const originalLog = console.log
-      const logs = []
-
-      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-      console.log = message => logs.push(message)
-      process.exitCode = undefined
-
-      try {
-        await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
-
-        const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-        const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
-        const validationSummaries = diagnostic.validationSummaries
-        const check = validationSummaries[0].checks[0]
-        const summary = logs.join('\n')
-
-        assert.strictEqual(process.exitCode, 1)
-        assert.strictEqual(check.evidence.blockedByExecutionEnvironment, true)
-        assert.strictEqual(check.evidence.errorCode, code)
-        assert.strictEqual(validationSummaries[0].status, 'unknown')
-        assert.strictEqual(check.id, 'execution-environment')
-        assert.strictEqual(check.status, 'unknown')
-        assert.match(summary, /Validation blocked before project commands ran/)
-        assert.match(summary, /this agent cannot open the localhost mock intake/)
-        assert.match(summary, /Run this already-approved command from the host context/)
-        assert.match(summary, /Then inspect: .*report\.md/)
-        assert.match(summary, /Detailed report: .*report\.md/)
-        assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
-        assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
-        assert.strictEqual(fs.existsSync(path.join(out, 'validation-payloads.json')), false)
-      } finally {
-        console.log = originalLog
-        process.exitCode = originalExitCode
-        fs.rmSync(tmpDir, { recursive: true, force: true })
-      }
-    })
-  }
-
   it('skips CI wiring when direct-initialization Basic Reporting fails', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
     const out = path.join(tmpDir, 'results')
@@ -614,20 +390,6 @@ describe('test optimization validation cli', () => {
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            this.requests = []
-          }
-
-          async start () {}
-          async close () {}
-
-          writeArtifacts () {
-            return writeEmptyRequestsArtifact(out)
-          }
-        },
-      },
       './setup-runner': {
         async runSetupCommands () {
           return { ok: true }
@@ -718,20 +480,6 @@ describe('test optimization validation cli', () => {
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            this.requests = []
-          }
-
-          async start () {}
-          async close () {}
-
-          writeArtifacts () {
-            return writeEmptyRequestsArtifact(out)
-          }
-        },
-      },
       './setup-runner': {
         async runSetupCommands () {
           return { ok: true }
@@ -804,20 +552,6 @@ describe('test optimization validation cli', () => {
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            this.requests = []
-          }
-
-          async start () {}
-          async close () {}
-
-          writeArtifacts () {
-            return writeEmptyRequestsArtifact(out)
-          }
-        },
-      },
       './setup-runner': {
         async runSetupCommands () {
           return { ok: true }
@@ -893,20 +627,6 @@ describe('test optimization validation cli', () => {
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          constructor () {
-            this.requests = []
-          }
-
-          async start () {}
-          async close () {}
-
-          writeArtifacts () {
-            return writeEmptyRequestsArtifact(out)
-          }
-        },
-      },
       './setup-runner': {
         async runSetupCommands () {
           return { ok: true }
@@ -1004,19 +724,6 @@ describe('test optimization validation cli', () => {
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          async start () {
-            throw new Error('intake should not start for non-runnable-only manifests')
-          }
-
-          async close () {}
-
-          writeArtifacts () {
-            return writeEmptyRequestsArtifact(out)
-          }
-        },
-      },
       './setup-runner': {
         async runSetupCommands () {
           throw new Error('setup should not run for non-runnable entries')
@@ -1093,19 +800,6 @@ describe('test optimization validation cli', () => {
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
-      './mock-intake': {
-        MockIntake: class {
-          async start () {
-            throw new Error('intake should not start for non-runnable-only manifests')
-          }
-
-          async close () {}
-
-          writeArtifacts () {
-            return writeEmptyRequestsArtifact(out)
-          }
-        },
-      },
       './setup-runner': {
         async runSetupCommands () {
           throw new Error('setup should not run for non-runnable entries')
@@ -1235,14 +929,6 @@ function setReplayableCiWiring (framework, root) {
     cwd: root,
     argv: [process.execPath, '-e', 'console.log("1 passing")'],
   }
-}
-
-function writeEmptyRequestsArtifact (out) {
-  const intakeDir = path.join(out, 'intake')
-  fs.mkdirSync(intakeDir, { recursive: true })
-  const requestsPath = path.join(intakeDir, 'requests.ndjson')
-  fs.writeFileSync(requestsPath, '')
-  return { requestsPath }
 }
 
 /**

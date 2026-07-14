@@ -210,7 +210,7 @@ describe('test optimization basic reporting diagnosis', () => {
   })
 
   it('explains when tests ran but debug output shows package-manager initialization only', () => {
-    const diagnosis = getDebugAwareDiagnosis('No Test Optimization test events reached the fake intake.', {
+    const diagnosis = getDebugAwareDiagnosis('No Test Optimization test events reached the event artifact.', {
       commandOutputSummary: ['1 passing (2ms)'],
       eventLevelFailure: {
         kind: 'no-test-optimization-events',

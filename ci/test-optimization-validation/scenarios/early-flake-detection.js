@@ -7,7 +7,6 @@ const {
   failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
-  requestsUrlIncludes,
   requireGeneratedScenario,
   runInstrumentedCommand,
   skip,
@@ -15,7 +14,7 @@ const {
   testsForDiscoveredScenario,
 } = require('./helpers')
 
-async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
+async function runEarlyFlakeDetection ({ framework, out, options }) {
   const scenarioName = 'efd'
   const skipResult = requireGeneratedScenario(framework, 'basic-pass', scenarioName)
   if (skipResult) return skipResult
@@ -27,15 +26,13 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       return skip(framework, scenarioName, 'Generated scenario "basic-pass" is not present in the manifest.')
     }
 
-    const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
+    const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: () => intake.configure(),
         diagnosis: 'The generated new-test candidate was not reported during baseline identity discovery.',
         evidence: discoveryEvidence(discovery),
         framework,
-        intake,
         options,
         out,
         outDir: discovery.outDir,
@@ -43,7 +40,7 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       })
     }
 
-    const configureEarlyFlakeDetection = () => intake.configure({
+    const fixtureConfig = {
       settings: {
         early_flake_detection: {
           enabled: true,
@@ -57,16 +54,15 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       knownTests: {
         [framework.framework]: {},
       },
-    })
-    configureEarlyFlakeDetection()
+    }
 
     const run = await runInstrumentedCommand({
       framework,
-      intake,
       out,
       scenarioName,
       command: scenario.runCommand,
       options,
+      fixtureConfig,
     })
     outDir = run.outDir
 
@@ -77,8 +73,8 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
       commandTimedOut: run.result.timedOut,
-      settingsRequested: requestsUrlIncludes(intake, '/api/v2/libraries/tests/services/setting'),
-      knownTestsRequested: requestsUrlIncludes(intake, '/api/v2/ci/libraries/tests'),
+      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
+      knownTestsLoadedFromCache: run.offline.inputs.known_tests?.status === 'loaded',
       matchingTestEvents: tests.length,
       earlyFlakeRetryEvents: earlyFlakeRetryEvents.length,
       externalRetryEvents: externalRetryEvents.length,
@@ -89,13 +85,12 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     if (run.result.exitCode !== 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureEarlyFlakeDetection,
+        fixtureConfig,
         diagnosis: 'The generated new-test command reported Early Flake Detection retry evidence, but the ' +
           `command exited ${run.result.exitCode}. Early Flake Detection is only valid when the command ` +
           'completes successfully after retries.',
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,
@@ -103,14 +98,13 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       })
     }
 
-    if (!evidence.settingsRequested || !evidence.knownTestsRequested) {
+    if (!evidence.settingsLoadedFromCache || !evidence.knownTestsLoadedFromCache) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureEarlyFlakeDetection,
-        diagnosis: 'EFD settings or known-tests endpoints were not requested.',
+        fixtureConfig,
+        diagnosis: 'EFD settings or known-tests data were not loaded from the offline cache fixture.',
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,
@@ -121,11 +115,10 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     if (tests.length < 2 || earlyFlakeRetryEvents.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureEarlyFlakeDetection,
+        fixtureConfig,
         diagnosis: 'The generated new test did not appear to be retried for Early Flake Detection.',
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,

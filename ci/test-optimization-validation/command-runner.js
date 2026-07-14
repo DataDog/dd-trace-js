@@ -12,19 +12,16 @@ const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
 const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
-const TRANSPORT_PRELOAD_PATH = path.resolve(__dirname, 'transport-preload.js')
-const VALIDATION_INTAKE_URL_ENV = 'DD_TEST_OPTIMIZATION_VALIDATION_INTAKE_URL'
+const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
+const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE'
+const APM_AGENTLESS_ENV = '_DD_APM_TRACING_AGENTLESS_ENABLED'
 const VALIDATION_RESERVED_ENV_NAMES = [
-  'DD_AGENT_HOST',
-  // Also reject the supported alias so repository commands cannot bypass the fake intake.
-  // eslint-disable-next-line eslint-rules/eslint-env-aliases
-  'DD_TRACE_AGENT_HOSTNAME',
-  'DD_TRACE_AGENT_PORT',
-  'DD_TRACE_AGENT_URL',
-  'DD_TRACE_AGENT_UNIX_DOMAIN_SOCKET',
-  'DD_CIVISIBILITY_AGENTLESS_URL',
   'NODE_OPTIONS',
-  VALIDATION_INTAKE_URL_ENV,
+  VALIDATION_MANIFEST_ENV,
+  VALIDATION_MODE_ENV,
+  VALIDATION_OUTPUT_ENV,
+  APM_AGENTLESS_ENV,
 ]
 const CLEAN_ENV_ALLOWLIST = new Set([
   'COMSPEC',
@@ -46,9 +43,25 @@ const CLEAN_ENV_ALLOWLIST = new Set([
   'windir',
 ])
 const VALIDATION_SUPPRESSION_ENV = {
+  DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'false',
+  DD_APPSEC_ENABLED: 'false',
+  DD_CRASHTRACKING_ENABLED: 'false',
+  DD_DATA_STREAMS_ENABLED: 'false',
+  DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'false',
+  DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: 'false',
+  DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'false',
+  DD_HEAP_SNAPSHOT_COUNT: '0',
+  DD_IAST_ENABLED: 'false',
   DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-  // Live validation only needs test-cycle events and explicitly configured scenario endpoints.
-  // Extra side channels can produce noisy fake-intake traffic or race the final test event flush.
+  DD_LLMOBS_ENABLED: 'false',
+  DD_LOGS_OTEL_ENABLED: 'false',
+  DD_METRICS_OTEL_ENABLED: 'false',
+  DD_PROFILING_ENABLED: 'false',
+  DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+  DD_RUNTIME_METRICS_ENABLED: 'false',
+  DD_TRACE_OTEL_ENABLED: 'false',
+  DD_TRACE_SPAN_LEAK_DEBUG: '0',
+  // Offline validation only needs test-cycle events and explicitly configured filesystem inputs.
   DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
   DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: 'false',
   DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: 'false',
@@ -105,6 +118,9 @@ function runCommand (command, options = {}) {
     }
     if (command.env?.NODE_OPTIONS && env.NODE_OPTIONS) {
       childEnv.NODE_OPTIONS = mergeNodeOptions(env.NODE_OPTIONS, command.env.NODE_OPTIONS)
+    }
+    for (const [name, value] of Object.entries(childEnv)) {
+      if (value === undefined) delete childEnv[name]
     }
 
     const useProcessGroup = shouldUseProcessGroup()
@@ -326,10 +342,10 @@ function getBaseEnv (envMode) {
   return cleanEnv
 }
 
-function buildDatadogEnv ({ intake, scenario, framework, command }) {
-  const transport = buildValidationTransportEnv(intake)
+function buildDatadogEnv ({ fixture, outputFile, scenario, framework, command }) {
+  const offline = buildOfflineValidationEnv({ fixture, outputFile })
   return {
-    ...transport,
+    ...offline,
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_CIVISIBILITY_ENABLED: '1',
     DD_TRACE_ENABLED: 'true',
@@ -338,13 +354,13 @@ function buildDatadogEnv ({ intake, scenario, framework, command }) {
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
     DD_TAGS: `test_optimization.validation.scenario:${scenario}`,
-    NODE_OPTIONS: mergeNodeOptions(transport.NODE_OPTIONS, withCiPreloads('', framework, command)),
+    NODE_OPTIONS: withCiPreloads('', framework, command),
   }
 }
 
-function buildCiWiringEnv ({ intake }) {
+function buildCiWiringEnv ({ fixture, outputFile }) {
   return {
-    ...buildValidationTransportEnv(intake),
+    ...buildOfflineValidationEnv({ fixture, outputFile }),
     DD_TRACE_DEBUG: '1',
     DD_TRACE_LOG_LEVEL: 'debug',
     ...VALIDATION_SUPPRESSION_ENV,
@@ -352,37 +368,49 @@ function buildCiWiringEnv ({ intake }) {
 }
 
 /**
- * Builds transport settings that are re-applied inside each Node.js process before dd-trace initializes.
+ * Builds the private environment used by the filesystem-only validation exporter.
  *
- * @param {{port: number}} intake fake intake
+ * @param {object} input offline validation inputs
+ * @param {{manifestPath: string}} input.fixture authoritative cache fixture
+ * @param {string} input.outputFile pre-created event artifact
  * @returns {NodeJS.ProcessEnv} validation transport environment
  */
-function buildValidationTransportEnv (intake) {
-  const url = `http://127.0.0.1:${intake.port}`
+function buildOfflineValidationEnv ({ fixture, outputFile }) {
   return {
-    DD_AGENT_HOST: '127.0.0.1',
-    DD_TRACE_AGENT_HOSTNAME: '127.0.0.1',
-    DD_TRACE_AGENT_PORT: String(intake.port),
-    DD_TRACE_AGENT_URL: url,
-    DD_CIVISIBILITY_AGENTLESS_URL: url,
-    [VALIDATION_INTAKE_URL_ENV]: url,
-    NODE_OPTIONS: `-r ${formatNodeRequire(TRANSPORT_PRELOAD_PATH)}`,
-    NO_PROXY: '127.0.0.1,localhost',
-    no_proxy: '127.0.0.1,localhost',
+    DD_AGENT_HOST: undefined,
+    DD_API_KEY: undefined,
+    DD_APP_KEY: undefined,
+    DATADOG_API_KEY: undefined,
+    [APM_AGENTLESS_ENV]: undefined,
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
+    DD_CIVISIBILITY_AGENTLESS_URL: undefined,
+    DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: undefined,
+    DD_TRACE_AGENT_HOSTNAME: undefined,
+    DD_TRACE_AGENT_PORT: undefined,
+    DD_TRACE_AGENT_UNIX_DOMAIN_SOCKET: undefined,
+    DD_TRACE_AGENT_URL: undefined,
+    OTEL_LOGS_EXPORTER: undefined,
+    OTEL_METRICS_EXPORTER: undefined,
+    OTEL_TRACES_EXPORTER: undefined,
+    [VALIDATION_MANIFEST_ENV]: fixture.manifestPath,
+    [VALIDATION_MODE_ENV]: '1',
+    [VALIDATION_OUTPUT_ENV]: outputFile,
   }
 }
 
 /**
- * Rejects command-local assignments that can bypass validator-controlled fake-intake routing.
+ * Rejects command-local assignments that can bypass validator-controlled offline routing.
  *
  * @param {object} command command to execute
  * @param {NodeJS.ProcessEnv} env validator environment overrides
  */
 function assertNoInlineValidationEnvOverrides (command, env) {
-  if (!env[VALIDATION_INTAKE_URL_ENV]) return
+  if (!env[VALIDATION_MODE_ENV]) return
   const reservedEnvNames = new Set([
     ...VALIDATION_RESERVED_ENV_NAMES,
-    ...Object.keys(env).filter(name => name.startsWith('DD_')),
+    ...Object.keys(env).filter(name => {
+      return name.startsWith('DD_') || name.startsWith('_DD_') || name.startsWith('OTEL_')
+    }),
   ])
 
   if (command.usesShell) {
@@ -480,15 +508,15 @@ function isPosixShellExecutable (value) {
  */
 function throwReservedEnvOverride (name) {
   throw new Error(
-    `Refusing inline ${name} changes during live validation because they can bypass the local fake intake. ` +
-    'Record CI-provided values in command.env so the validator can apply safe transport overrides.'
+    `Refusing inline ${name} changes during live validation because they can bypass the offline validation mode. ` +
+    'Record CI-provided values in command.env so the validator can apply its private diagnostic settings.'
   )
 }
 
 function throwEnvironmentReset () {
   throw new Error(
-    'Refusing to clear the command environment during live validation because this would remove the local fake ' +
-    'intake and Datadog initialization settings.'
+    'Refusing to clear the command environment during live validation because this would remove the offline ' +
+    'validation and Datadog initialization settings.'
   )
 }
 

@@ -24,11 +24,19 @@ describe('test optimization validation approval', () => {
       'loader-hook.mjs',
       'register.js',
       'version.js',
+      'ext/exporters.js',
+      'packages/dd-trace/src/exporter.js',
+      'packages/dd-trace/src/proxy.js',
     ]
 
     fs.cpSync(path.join(packageRoot, 'ci', 'test-optimization-validation'), copiedValidationDirectory, {
       recursive: true,
     })
+    fs.cpSync(
+      path.join(packageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
+      path.join(copiedPackageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
+      { recursive: true }
+    )
     for (const relativePath of copiedFiles) {
       const destination = path.join(copiedPackageRoot, relativePath)
       fs.mkdirSync(path.dirname(destination), { recursive: true })
@@ -38,12 +46,20 @@ describe('test optimization validation approval', () => {
     const copiedApproval = require(path.join(copiedValidationDirectory, 'approval'))
     const input = {
       manifest: { __path: path.join(root, 'manifest.json'), repository: { root } },
+      offlineFixtureNonce: '0'.repeat(32),
       out: path.join(root, 'results'),
     }
 
     try {
       let digest = copiedApproval.getApprovalDigest(input)
-      for (const relativePath of ['ci/init.js', 'register.js', 'loader-hook.mjs', 'version.js']) {
+      for (const relativePath of [
+        'ci/init.js',
+        'register.js',
+        'loader-hook.mjs',
+        'version.js',
+        'packages/dd-trace/src/proxy.js',
+        'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
+      ]) {
         fs.appendFileSync(path.join(copiedPackageRoot, relativePath), '\n// changed after approval\n')
         const changedDigest = copiedApproval.getApprovalDigest(input)
         assert.notStrictEqual(changedDigest, digest, `${relativePath} must affect the approval digest`)
@@ -60,6 +76,7 @@ describe('test optimization validation approval', () => {
     const out = path.join(root, 'results')
     const input = {
       out,
+      offlineFixtureNonce: '0'.repeat(32),
       selectedFrameworkIds: [],
       requestedScenario: null,
       keepTempFiles: false,
@@ -76,6 +93,11 @@ describe('test optimization validation approval', () => {
         manifest: approvedManifest,
         ...input,
         out: path.join(root, 'different-results'),
+      }), /changed after approval/)
+      assert.throws(() => assertApprovalDigest(digest, {
+        manifest: approvedManifest,
+        ...input,
+        offlineFixtureNonce: '1'.repeat(32),
       }), /changed after approval/)
 
       fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, ['sh', '-c', 'echo changed']))}\n`)

@@ -193,36 +193,97 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
       assert.match(plan, /Command-created outputs: `coverage` \(pre-existing paths are restored; newly created /)
-      assert.match(fullPlan, /Copy CI variables: CI, DD_API_KEY/)
+      assert.match(fullPlan, /Use variables recorded from the CI job: CI, DD_API_KEY/)
       assert.match(fullPlan, /DD_API_KEY=<redacted>/)
       assert.match(fullPlan, /bash --noprofile --norc -c "pnpm test"/)
-      assert.match(ciOnlyPlan, /Check the real CI configuration/)
+      assert.match(ciOnlyPlan, /#### CI Test Execution/)
       assert.doesNotMatch(ciOnlyPlan, /#### Temporary Tests Created for Advanced Checks/)
-      assert.match(plan, /Confirm tests run without Datadog/)
-      assert.match(plan, /Confirm tests report when Datadog is initialized/)
-      assert.doesNotMatch(plan, /Check the real CI configuration/)
+      assert.match(plan, /#### Test Execution Without Datadog/)
+      assert.match(plan, /#### Test Execution With Datadog/)
+      assert.doesNotMatch(plan, /#### CI Test Execution/)
+      assert.doesNotMatch(plan, /##### C\d|\| Check \| Command \|/)
       assert.match(plan, /#### Temporary Tests Created for Advanced Checks/)
       assert.match(plan, /Advanced Check: Auto Test Retries/)
       assert.doesNotMatch(plan, /Advanced Check: Early Flake Detection/)
       assert.doesNotMatch(plan, /Advanced Check: Test Management/)
       assert.doesNotMatch(plan, /#### Generated Test Verification:/)
       assert.match(fullPlan, /1, plus 1 short preload probe when needed/)
-      assert.match(plan, /3: isolate, discover identity, validate feature/)
+      assert.match(plan, /3: verify the test alone, discover its identity, then validate the feature/)
       assert.match(plan, /#### Temporary Test Cleanup/)
       assert.match(plan, /Paths are relative to the repository root/)
-      assert.match(plan, /<details><summary>`tests\/dd-test-optimization-validation\.test\.js`<\/summary>/)
+      assert.match(plan, /##### `tests\/dd-test-optimization-validation\.test\.js`/)
+      assert.doesNotMatch(plan, /<details>|<summary>/)
       assert.match(plan, /\/\/ generated validation test/)
       assert.match(plan, /- Working directory: `\.`/)
       assert.strictEqual(countOccurrences(fullPlan, 'bash --noprofile --norc -c "pnpm test"'), 1)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /local validator included with the installed `dd-trace` package/)
-      assert.match(plan, /starts a mock intake on `127\.0\.0\.1`/)
+      assert.match(plan, /bounded filesystem cache fixtures/)
+      assert.match(plan, /does not open a listener or use a network endpoint/)
+      assert.match(plan, /During normal operation, `dd-trace` downloads Test Optimization settings/)
+      assert.match(plan, /Temporary response root:/)
+      assert.match(plan, /\.testoptimization\/cache\/http\/settings\.json/)
+      assert.strictEqual(countOccurrences(plan, '.testoptimization/cache/http/settings.json'), 1)
+      assert.match(plan, /Test execution with Datadog, diagnostic rerun if needed/)
+      assert.match(plan, /adds `DD_TRACE_DEBUG=1`/)
+      assert.match(plan, /Exact fixture recipes and paths are included in the approval digest/)
+      assert.doesNotMatch(plan, /Fixture recipe SHA-256/)
+      assert.match(plan, /\.offline-events\.raw\.ndjson/)
+      assert.doesNotMatch(plan, /network listener|HTTP server/)
       assert.match(plan, /does not require real Datadog credentials, inspect credential stores, or upload/)
       assert.doesNotMatch(plan, /- Confirm the selected test command/)
       assert.doesNotMatch(plan, /Credential exposure: unknown/)
       assert.doesNotMatch(fullPlan, /safe-placeholder/)
       assert.doesNotMatch(plan, /plan-secret/)
+      const planNonce = plan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
+      const fullPlanNonce = fullPlan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
+      assert.match(planNonce, /^[a-f0-9]{32}$/)
+      assert.match(plan, new RegExp(`dd-test-optimization-validation-${planNonce}`))
+      assert.notStrictEqual(planNonce, fullPlanNonce)
       assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64} --framework jest:root --scenario atr/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('renders commands separately when identical argv has different execution settings', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-command-shape-'))
+    const packageRoot = path.join(root, 'package')
+    const commandArgv = [process.execPath, '-e', 'console.log("Tests: 1 passed, 1 total")']
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'generated.test.js'),
+      path.join(root, '.retry-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: commandArgv,
+      env: { SAFE_MODE: 'direct' },
+    }
+    framework.ciWiring = { status: 'unknown', reason: 'Replay selected.' }
+    framework.ciWiringCommand = {
+      cwd: packageRoot,
+      argv: commandArgv,
+      env: { SAFE_MODE: 'ci' },
+    }
+    fs.mkdirSync(packageRoot)
+
+    try {
+      const plan = formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'ci-wiring',
+      })
+      const renderedCommand = `${process.execPath} -e "console.log(\\"Tests: 1 passed, 1 total\\")"`
+
+      assert.strictEqual(countOccurrences(plan, renderedCommand), 3)
+      assert.match(plan, /SAFE_MODE=direct/)
+      assert.match(plan, /SAFE_MODE=ci/)
+      assert.match(plan, /Working directory: `package`/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -520,7 +581,7 @@ describe('test optimization validator-owned execution phases', () => {
         requestedScenario: 'basic-reporting',
       })
 
-      assert.match(plan, /Project setup: install-test-runner/)
+      assert.match(plan, /Project Setup: install-test-runner/)
       assert.match(plan, /test-runner-installed-by-setup test/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })

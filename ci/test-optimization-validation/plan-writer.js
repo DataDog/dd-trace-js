@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -9,6 +10,10 @@ const { getCommandSuitabilityError } = require('./command-suitability')
 const { serializeApprovalCommand } = require('./command-runner')
 const { getUnavailableExecutable } = require('./executable')
 const { getLocalValidationCommand } = require('./local-command')
+const {
+  getOfflineFixturePaths,
+  getOfflineScenarioNames,
+} = require('./offline-fixtures')
 const { sanitizeEnv, sanitizeString } = require('./redaction')
 const { getBasicReportingCommand } = require('./scenarios/basic-reporting')
 const { getCiWiringCommand } = require('./scenarios/ci-wiring')
@@ -19,15 +24,15 @@ const DEFAULT_RESULTS_DIRECTORY = 'dd-test-optimization-validation-results'
 const GENERATED_SCENARIO_DETAILS = {
   'basic-pass': {
     heading: 'Advanced Check: Early Flake Detection',
-    description: 'Runs a temporary passing test to verify Early Flake Detection.',
+    description: 'Runs a temporary passing test and checks that Datadog recognizes it as new and retries it.',
   },
   'atr-fail-once': {
     heading: 'Advanced Check: Auto Test Retries',
-    description: 'Runs a temporary fail-once test to verify Auto Test Retries.',
+    description: 'Runs a temporary test that fails once and checks that Datadog retries it successfully.',
   },
   'test-management-target': {
     heading: 'Advanced Check: Test Management',
-    description: 'Runs a temporary target test to verify Test Management.',
+    description: 'Runs a temporary target test and checks that Datadog applies its quarantine setting.',
   },
 }
 // eslint-disable-next-line prefer-regex-literals
@@ -54,6 +59,16 @@ function formatExecutionPlan ({
   verbose = false,
 }) {
   assertPlannedExecutablesAvailable(manifest, requestedScenario)
+  const offlineFixtureNonce = crypto.randomBytes(16).toString('hex')
+  const approvalDigest = getApprovalDigest({
+    manifest,
+    out,
+    selectedFrameworkIds,
+    requestedScenario,
+    offlineFixtureNonce,
+    keepTempFiles,
+    verbose,
+  })
 
   const lines = [
     '# Test Optimization Validation Execution Plan',
@@ -78,11 +93,18 @@ function formatExecutionPlan ({
     '## Commands and Temporary Files',
     '',
     'Command environment values are shown after secret-like values are replaced with `<redacted>`. ' +
-      'Validator-controlled fake-intake and noise-suppression settings are described collectively.',
+      'Validator-controlled offline cache and noise-suppression settings are described collectively.',
     ''
   )
   for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
-    appendFrameworkExecutions(lines, framework, requestedScenario, manifest.repository.root)
+    appendFrameworkExecutions(
+      lines,
+      framework,
+      requestedScenario,
+      manifest.repository.root,
+      out,
+      offlineFixtureNonce
+    )
   }
 
   lines.push(
@@ -90,19 +112,14 @@ function formatExecutionPlan ({
     '## Start the Validation',
     '',
     '`validate-test-optimization.js` is the local validator included with the installed `dd-trace` package. ' +
-      'After approval, it starts a mock intake on `127.0.0.1`, performs every check listed above, writes the ' +
-      'local validation report, and removes the temporary test files afterward.',
+      'After approval, it creates bounded filesystem cache fixtures, performs every check listed above, writes ' +
+      'events to local artifacts, and removes temporary fixtures and tests afterward. It does not open a listener ' +
+      'or use a network endpoint.',
     '',
     codeBlock(sanitizeString(serializeApprovalCommand({
       argv: getValidatorArgv({
-        approvedPlanSha256: getApprovalDigest({
-          manifest,
-          out,
-          selectedFrameworkIds,
-          requestedScenario,
-          keepTempFiles,
-          verbose,
-        }),
+        approvedPlanSha256: approvalDigest,
+        offlineFixtureNonce,
         repositoryRoot: manifest.repository.root,
         manifestPath: manifest.__path,
         out,
@@ -117,13 +134,14 @@ function formatExecutionPlan ({
     '',
     `Working directory: ${inlineCode(manifest.repository.root)}`,
     '',
-    'The validator requires localhost listen/connect access for the mock intake. It supplies diagnostic ' +
-      'Datadog settings only while these local checks run; those settings are not customer CI recommendations. ' +
-      'It does not require outbound networking unless a setup or test command listed above requires it.',
+    'The validator supplies diagnostic Datadog settings from cache files only while these local checks run; those ' +
+      'settings are not customer CI recommendations. dd-trace makes no network requests in this validation mode. ' +
+      'A setup or test command may still use the network unless the execution sandbox blocks it.',
     '',
     'These checks run the project commands listed above. The validator does not require real Datadog ' +
-    'credentials, inspect credential stores, or upload validation results. Review the exact commands before ' +
-      'approving them for this environment.',
+    'credentials, inspect credential stores, or upload validation results. Project tests are arbitrary code and ' +
+      'can forge diagnostic cache or event data, so this result is diagnostic evidence, not a security attestation. ' +
+      'Review the exact commands before approving them for this environment.',
     '',
     'Live validation has not started. The exact command above requires one approval before execution.'
   )
@@ -212,6 +230,7 @@ function getPlannedCommands (framework, requestedScenario) {
  *
  * @param {object} input command options
  * @param {string} input.approvedPlanSha256 digest of the approved manifest and options
+ * @param {string} input.offlineFixtureNonce random fixture-root nonce shown in the execution plan
  * @param {string} input.repositoryRoot repository root
  * @param {string} input.manifestPath manifest path
  * @param {string} input.out output directory
@@ -223,6 +242,7 @@ function getPlannedCommands (framework, requestedScenario) {
  */
 function getValidatorArgv ({
   approvedPlanSha256,
+  offlineFixtureNonce,
   repositoryRoot,
   manifestPath,
   out,
@@ -239,7 +259,10 @@ function getValidatorArgv ({
   if (path.resolve(out) !== path.join(repositoryRoot, DEFAULT_RESULTS_DIRECTORY)) {
     argv.push('--out', out)
   }
-  argv.push('--approved-plan-sha256', approvedPlanSha256)
+  argv.push(
+    '--offline-fixture-nonce', offlineFixtureNonce,
+    '--approved-plan-sha256', approvedPlanSha256
+  )
   for (const frameworkId of selectedFrameworkIds) argv.push('--framework', frameworkId)
   if (requestedScenario) argv.push('--scenario', requestedScenario)
   if (keepTempFiles) argv.push('--keep-temp-files')
@@ -263,44 +286,67 @@ function getPreferredValidatorPath (repositoryRoot) {
   return VALIDATOR_PATH
 }
 
-function appendFrameworkExecutions (lines, framework, requestedScenario, repositoryRoot) {
+function appendFrameworkExecutions (
+  lines,
+  framework,
+  requestedScenario,
+  repositoryRoot,
+  out,
+  offlineFixtureNonce
+) {
   const basicCommand = getBasicReportingCommand(framework)
-  const commands = createCommandCatalog()
-  const checks = []
+  lines.push(`### ${plainText(framework.id)}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
-    checks.push({
-      check: `Project setup: ${setupCommand.id || setupCommand.description || 'project setup'}`,
-      commandId: commands.add(setupCommand),
+    appendExecutionSection(lines, {
+      heading: `Project Setup: ${setupCommand.id || setupCommand.description || 'Project Setup'}`,
+      description: 'Prepares the project for the selected test command.',
+      command: setupCommand,
       executions: '1',
       environment: 'Manifest command environment',
+      repositoryRoot,
     })
   }
-  const basicCommandId = commands.add(basicCommand)
-  checks.push(
-    {
-      check: 'Confirm tests run without Datadog',
-      commandId: basicCommandId,
-      executions: '1',
-      environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(basicCommand)}`,
-    },
-    {
-      check: 'Confirm tests report when Datadog is initialized',
-      commandId: basicCommandId,
-      executions: '1, plus 1 debug rerun only if events are missing',
-      environment: 'Add dd-trace initialization and the localhost mock intake',
-    }
-  )
+  appendExecutionSection(lines, {
+    heading: 'Test Execution Without Datadog',
+    description: 'Runs the selected test command without Datadog to confirm that the tests can run normally.',
+    command: basicCommand,
+    executions: '1',
+    environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(basicCommand)}`,
+    repositoryRoot,
+  })
+  appendExecutionSection(lines, {
+    heading: 'Test Execution With Datadog',
+    description: 'Runs the same test command with Datadog initialized and checks that test data is reported.',
+    command: basicCommand,
+    executions: '1, plus 1 debug rerun only if test data is missing',
+    environment: 'Add Datadog initialization and validator-provided offline Datadog responses',
+    repositoryRoot,
+  })
 
   const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
   if (ciWiringSelected && framework.ciWiringCommand) {
     const ciCommand = getCiWiringCommand(framework)
-    checks.push({
-      check: 'Check the real CI configuration',
-      commandId: commands.add(ciCommand),
+    appendExecutionSection(lines, {
+      heading: 'CI Test Execution',
+      description: 'Runs the test command with the environment recorded from the identified CI job and checks ' +
+        'whether that CI configuration initializes Datadog in the final test process.',
+      command: ciCommand,
       executions: '1, plus 1 short preload probe when needed',
-      environment: `Copy CI variables: ${formatEnvironmentNames(framework.ciWiringCommand)}`,
+      environment: `Use variables recorded from the CI job: ${formatEnvironmentNames(framework.ciWiringCommand)}`,
+      repositoryRoot,
     })
+  } else if (ciWiringSelected) {
+    lines.push(
+      '#### CI Test Execution',
+      '',
+      'Not run.',
+      '',
+      `- Reason: ${plainText(
+        framework.ciWiring?.reason || framework.ciWiring?.diagnosis || 'No replayable CI test command was selected.'
+      )}`,
+      ''
+    )
   }
 
   const strategy = framework.generatedTestStrategy
@@ -316,27 +362,25 @@ function appendFrameworkExecutions (lines, framework, requestedScenario, reposit
         heading: `Advanced Check: ${scenario.id}`,
         description: 'Runs a temporary test to verify this advanced feature.',
       }
-      checks.push({
-        check: details.heading,
-        commandId: commands.add(command),
-        executions: '3: isolate, discover identity, validate feature; plus 1 debug rerun only on failure',
-        environment: 'Validator-controlled feature settings and localhost mock intake',
+      appendExecutionSection(lines, {
+        heading: details.heading,
+        description: details.description,
+        command,
+        executions: '3: verify the test alone, discover its identity, then validate the feature; ' +
+          'plus 1 debug rerun only on failure',
+        environment: 'Validator-controlled feature settings from an offline cache fixture',
+        repositoryRoot,
       })
     }
   }
 
-  lines.push(`### ${plainText(framework.id)}`, '', '#### Checks', '')
-  appendCheckTable(lines, checks)
-  if (ciWiringSelected && !framework.ciWiringCommand) {
-    lines.push(
-      '',
-      `CI configuration check not run: ${plainText(
-        framework.ciWiring?.reason || framework.ciWiring?.diagnosis || 'No replayable CI test command was selected.'
-      )}`
-    )
-  }
-  lines.push('', '#### Commands', '')
-  for (const entry of commands.entries) appendCommandDefinition(lines, entry, repositoryRoot)
+  appendOfflineArtifacts(lines, {
+    offlineFixtureNonce,
+    framework,
+    out,
+    repositoryRoot,
+    requestedScenario,
+  })
 
   if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
     lines.push(
@@ -347,11 +391,9 @@ function appendFrameworkExecutions (lines, framework, requestedScenario, reposit
     )
     for (const file of strategy.files || []) {
       lines.push(
-        `<details><summary>${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}</summary>`,
+        `##### ${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}`,
         '',
         codeBlock(file.contentLines.join('\n')),
-        '',
-        '</details>',
         ''
       )
     }
@@ -379,45 +421,124 @@ function appendFrameworkExecutions (lines, framework, requestedScenario, reposit
   lines.push('')
 }
 
-function createCommandCatalog () {
-  const entries = []
-  const identifiers = new Map()
-  return {
-    entries,
-    add (command) {
-      const key = serializeApprovalCommand(command)
-      let identifier = identifiers.get(key)
-      if (identifier) return identifier
-      identifier = `C${entries.length + 1}`
-      identifiers.set(key, identifier)
-      entries.push({ command, identifier })
-      return identifier
-    },
-  }
-}
-
-function appendCheckTable (lines, checks) {
-  lines.push('| Check | Command | Runs | Environment |', '|---|---:|---:|---|')
-  for (const check of checks) {
-    lines.push(`| ${tableText(check.check)} | ${check.commandId} | ${tableText(check.executions)} | ` +
-      `${tableText(check.environment)} |`)
-  }
-}
-
-function appendCommandDefinition (lines, entry, repositoryRoot) {
-  const { command, identifier } = entry
+/**
+ * Describes the offline Datadog responses and event outputs used by instrumented executions.
+ *
+ * @param {string[]} lines rendered plan lines
+ * @param {object} input plan inputs
+ * @param {string} input.offlineFixtureNonce random fixture-root nonce
+ * @param {object} input.framework framework manifest entry
+ * @param {string} input.out validation result directory
+ * @param {string} input.repositoryRoot repository root
+ * @param {string|null|undefined} input.requestedScenario selected scenario
+ */
+function appendOfflineArtifacts (lines, {
+  offlineFixtureNonce,
+  framework,
+  out,
+  repositoryRoot,
+  requestedScenario,
+}) {
   lines.push(
-    `##### ${identifier}`,
+    '#### Offline Datadog Responses',
+    '',
+    'During normal operation, `dd-trace` downloads Test Optimization settings and test lists from Datadog. ' +
+      'For this offline validation, the validator writes equivalent bounded responses to a private temporary ' +
+      'directory and `dd-trace` reads them from the filesystem. No Datadog backend, Agent, or network endpoint ' +
+      'is used.',
+    ''
+  )
+
+  const scenarioNames = getOfflineScenarioNames(requestedScenario)
+  const firstFixture = getOfflineFixturePaths({
+    offlineFixtureNonce,
+    framework,
+    scenarioName: scenarioNames[0],
+  })
+  const frameworkFixtureRoot = path.dirname(firstFixture.root)
+  lines.push(
+    `Temporary response root: ${inlineCode(frameworkFixtureRoot)}`,
+    '',
+    'Each execution folder below contains these files for `dd-trace` to read:',
+    '',
+    '- `.testoptimization/manifest.txt`: identifies the local cache format.',
+    '- `.testoptimization/cache/http/settings.json`: enables or disables the Test Optimization behavior being ' +
+      'checked.',
+    '- `.testoptimization/cache/http/known_tests.json`: describes tests Datadog already knows about for Early ' +
+      'Flake Detection.',
+    '- `.testoptimization/cache/http/skippable_tests.json`: provides test-skipping data when applicable.',
+    '- `.testoptimization/cache/http/test_management.json`: provides quarantine and other Test Management data.',
+    '',
+    'Execution folders:',
+    ''
+  )
+  for (const scenarioName of scenarioNames) {
+    lines.push(`- ${plainText(formatOfflineScenarioName(scenarioName))}: ${inlineCode(`${scenarioName}/`)}`)
+  }
+  lines.push(
+    '',
+    'A debug rerun uses the same Datadog response data as its corresponding check and adds `DD_TRACE_DEBUG=1`. ' +
+      'It has a separate folder so it cannot overwrite the primary execution and every possible execution stays ' +
+      'bound to the approved plan.',
+    '',
+    'A baseline run discovers the generated test identity with the feature disabled. The feature run then uses ' +
+      'that identity with the feature enabled.',
+    '',
+    `Captured event artifacts: ${inlineCode(getRepositoryRelativePath(
+      repositoryRoot,
+      path.join(out, 'runs', sanitizePathSegment(framework.id))
+    ))}`,
+    '',
+    'Each execution writes a bounded `.offline-events.raw.ndjson` file. The raw file is removed after parsing, ' +
+      'and a sanitized `events.ndjson` file remains for diagnosis. Exact fixture recipes and paths are included ' +
+      'in the approval digest even though this plan summarizes their shared layout.',
+    ''
+  )
+}
+
+function sanitizePathSegment (value) {
+  return String(value).replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
+}
+
+/**
+ * Renders one customer-facing validation step with its exact command and execution context.
+ *
+ * @param {string[]} lines rendered plan lines
+ * @param {object} input execution details
+ * @param {string} input.heading customer-facing check name
+ * @param {string} input.description reason for the execution
+ * @param {object} input.command manifest command
+ * @param {string} input.executions maximum execution count
+ * @param {string} input.environment environment changes made for this check
+ * @param {string} input.repositoryRoot repository root
+ * @returns {void}
+ */
+function appendExecutionSection (lines, {
+  heading,
+  description,
+  command,
+  executions,
+  environment,
+  repositoryRoot,
+}) {
+  lines.push(
+    `#### ${plainText(heading)}`,
+    '',
+    plainText(description),
+    '',
+    'Command:',
     '',
     codeBlock(sanitizeString(serializeApprovalCommand(command))),
     '',
     `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
+    `- Runs: ${plainText(executions)}`,
+    `- Environment changes: ${plainText(environment)}`,
     `- Timeout: ${command.timeoutMs || 300_000} ms`
   )
   if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
-  const environment = sanitizeEnv(command.env)
-  if (environment) {
-    lines.push(`- Command environment: ${Object.entries(environment).map(([name, value]) => {
+  const commandEnvironment = sanitizeEnv(command.env)
+  if (commandEnvironment) {
+    lines.push(`- Command environment: ${Object.entries(commandEnvironment).map(([name, value]) => {
       return inlineCode(`${name}=${value}`)
     }).join(', ')}`)
   }
@@ -433,8 +554,21 @@ function appendCommandDefinition (lines, entry, repositoryRoot) {
   lines.push('')
 }
 
-function tableText (value) {
-  return plainText(value).replaceAll('|', String.raw`\|`)
+function formatOfflineScenarioName (scenarioName) {
+  return {
+    'basic-reporting': 'Test execution with Datadog',
+    'basic-reporting-debug': 'Test execution with Datadog, diagnostic rerun if needed',
+    'ci-wiring': 'CI test execution',
+    'efd-baseline': 'Early Flake Detection baseline',
+    efd: 'Early Flake Detection check',
+    'efd-debug': 'Early Flake Detection diagnostic rerun if needed',
+    'atr-baseline': 'Auto Test Retries baseline',
+    atr: 'Auto Test Retries check',
+    'atr-debug': 'Auto Test Retries diagnostic rerun if needed',
+    'test-management-baseline': 'Test Management baseline',
+    'test-management': 'Test Management check',
+    'test-management-debug': 'Test Management diagnostic rerun if needed',
+  }[scenarioName] || scenarioName
 }
 
 /**

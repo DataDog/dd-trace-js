@@ -1,8 +1,9 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('path')
 
-const { buildDatadogEnv, runCommand } = require('../command-runner')
+const { buildCiWiringEnv, buildDatadogEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
   findGeneratedScenario,
@@ -11,11 +12,12 @@ const {
 const {
   eventsOfType,
   findTestsByIdentity,
-  normalizeRequests,
 } = require('../payload-normalizer')
 const { getLocalValidationCommand } = require('../local-command')
+const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
+const { parseOfflineSummary, readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport } = require('../redaction')
-const { writeFileSafely } = require('../safe-files')
+const { createFileSafely, writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
@@ -27,24 +29,61 @@ function sanitize (value) {
   return value.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
 }
 
-async function runInstrumentedCommand ({ framework, intake, out, scenarioName, command, options, extraEnv }) {
+async function runInstrumentedCommand ({
+  framework,
+  out,
+  scenarioName,
+  command,
+  options,
+  extraEnv,
+  fixtureConfig,
+  ciWiring = false,
+}) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
-  intake.resetRequests()
-  const result = await runCommand(command, {
-    env: {
-      ...buildDatadogEnv({ intake, scenario: scenarioName, framework, command }),
-      ...extraEnv,
-    },
-    artifactRoot: out,
-    envMode: 'clean',
-    outDir,
-    label: `${framework.id}:${scenarioName}`,
-    repositoryRoot: options.repositoryRoot,
-    verbose: options.verbose,
-  })
+  const rawOutputFile = path.join(outDir, '.offline-events.raw.ndjson')
+  createFileSafely(out, rawOutputFile, '', 'offline validation event output')
+  let fixture
+  let result
+  let offline
+  try {
+    fixture = createOfflineFixture({
+      approvedPlanSha256: options.approvedPlanSha256,
+      offlineFixtureNonce: options.offlineFixtureNonce,
+      framework,
+      repositoryRoot: options.repositoryRoot,
+      scenarioName,
+      ...fixtureConfig,
+    })
+    const validationEnv = ciWiring
+      ? buildCiWiringEnv({ fixture, outputFile: rawOutputFile })
+      : buildDatadogEnv({ fixture, outputFile: rawOutputFile, scenario: scenarioName, framework, command })
+    result = await runCommand(command, {
+      env: {
+        ...validationEnv,
+        ...extraEnv,
+      },
+      artifactRoot: out,
+      envMode: 'clean',
+      outDir,
+      label: `${framework.id}:${scenarioName}`,
+      repositoryRoot: options.repositoryRoot,
+      verbose: options.verbose,
+    })
+    offline = readOfflineOutput(rawOutputFile)
+    offline.summary = parseOfflineSummary(result.stderr)
+    if (offline.summary?.errors.length > 0) {
+      throw new Error(`Offline Test Optimization exporter failed: ${offline.summary.errors.join(', ')}`)
+    }
+    if (offline.summary &&
+      (offline.summary.records !== offline.recordCount || offline.summary.events !== offline.events.length)) {
+      throw new Error('Offline Test Optimization exporter summary does not match the event artifact.')
+    }
+  } finally {
+    if (fixture) cleanupOfflineFixture(fixture.root)
+    fs.rmSync(rawOutputFile, { force: true })
+  }
 
-  await wait(1000)
-  const events = normalizeRequests(intake.requests)
+  const events = offline.events
   const sanitizedEvents = sanitizeForReport(events)
   writeFileSafely(
     out,
@@ -59,16 +98,15 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
     'scenario result artifact'
   )
 
-  return { result, events, outDir }
+  return { result, events, offline, outDir }
 }
 
 async function failWithDebugRerun ({
   command,
-  configureIntake,
+  fixtureConfig,
   diagnosis,
   evidence,
   framework,
-  intake,
   options,
   out,
   outDir,
@@ -78,9 +116,8 @@ async function failWithDebugRerun ({
   if (!skipDebug && command) {
     const debugRerun = await runDebugInstrumentedCommand({
       command,
-      configureIntake,
+      fixtureConfig,
       framework,
-      intake,
       options,
       out,
       scenarioName,
@@ -99,24 +136,22 @@ async function failWithDebugRerun ({
 
 async function runDebugInstrumentedCommand ({
   command,
-  configureIntake,
+  fixtureConfig,
   framework,
-  intake,
   options,
   out,
   scenarioName,
 }) {
   try {
     cleanupGeneratedRuntimeFiles(framework)
-    if (configureIntake) configureIntake()
 
     const debug = await runInstrumentedCommand({
       framework,
-      intake,
       out,
       scenarioName: `${scenarioName}-debug`,
       command,
       options,
+      fixtureConfig,
       extraEnv: {
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'debug',
@@ -246,19 +281,13 @@ function hasAllBasicEventTypes (events) {
     evidence.testEvents > 0
 }
 
-function requestsUrlIncludes (intake, fragment) {
-  return intake.requests.some(request => request.url && request.url.includes(fragment))
-}
-
 function testsForScenario (events, scenario) {
   return findTestsByIdentity(events, scenario.testIdentities || [])
 }
 
-async function discoverScenarioTests ({ framework, intake, out, scenarioName, scenario, options }) {
-  intake.configure()
+async function discoverScenarioTests ({ framework, out, scenarioName, scenario, options }) {
   const baseline = await runInstrumentedCommand({
     framework,
-    intake,
     out,
     scenarioName: `${scenarioName}-baseline`,
     command: scenario.runCommand,
@@ -474,10 +503,6 @@ function result (framework, scenario, status, diagnosis, evidence, outDir, extra
   }
 }
 
-function wait (ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 module.exports = {
   basicEventEvidence,
   discoverScenarioTests,
@@ -491,7 +516,6 @@ module.exports = {
   incomplete,
   pass,
   prepareGeneratedScenario,
-  requestsUrlIncludes,
   requireGeneratedScenario,
   runDebugInstrumentedCommand,
   runInstrumentedCommand,

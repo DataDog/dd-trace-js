@@ -61,6 +61,14 @@ describe('test optimization validation payload decoder', () => {
     assert.throws(() => decodeMsgpack(aggregate), /aggregate collection entries/)
   })
 
+  it('accepts the last bounded MessagePack string and rejects the first oversized string', () => {
+    const accepted = msgpackString(64 * 1024)
+    const rejected = msgpackString(64 * 1024 + 1)
+
+    assert.strictEqual(decodeMsgpack(accepted).length, 64 * 1024)
+    assert.throws(() => decodeMsgpack(rejected), /MessagePack string exceeds/)
+  })
+
   it('caps JSON collection entries across the full decoded object graph', () => {
     const aggregate = Buffer.from(JSON.stringify(new Array(100_001).fill(null)))
     const invalidAggregate = Buffer.from(`[${','.repeat(100_001)}`)
@@ -74,4 +82,21 @@ describe('test optimization validation payload decoder', () => {
       'content-type': 'application/json',
     }), /JSON aggregate collection entries/)
   })
+
+  it('caps JSON nesting before parsing malformed input', () => {
+    const accepted = Buffer.from(`${'['.repeat(128)}0${']'.repeat(128)}`)
+    const rejected = Buffer.from(`${'['.repeat(129)}0${']'.repeat(129)}`)
+    const malformed = Buffer.from('{'.repeat(129))
+
+    decodeBody(accepted, { 'content-type': 'application/json' })
+    assert.throws(() => decodeBody(rejected, { 'content-type': 'application/json' }), /JSON nesting exceeds/)
+    assert.throws(() => decodeBody(malformed, { 'content-type': 'application/json' }), /JSON nesting exceeds/)
+  })
 })
+
+function msgpackString (length) {
+  const payload = Buffer.alloc(5 + length, 0x78)
+  payload[0] = 0xDB
+  payload.writeUInt32BE(length, 1)
+  return payload
+}

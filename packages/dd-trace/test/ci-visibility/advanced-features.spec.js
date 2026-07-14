@@ -66,12 +66,28 @@ describe('test optimization validation advanced features', () => {
       '../generated-files': {
         cleanupGeneratedRuntimeFiles () {},
       },
+      '../offline-fixtures': {
+        cleanupOfflineFixture () {},
+        createOfflineFixture () {
+          return {
+            manifestPath: path.join(outDir, '.testoptimization', 'manifest.txt'),
+            root: path.join(outDir, 'offline-fixture'),
+          }
+        },
+      },
+      '../offline-output': {
+        parseOfflineSummary () {},
+        readOfflineOutput () {
+          return {
+            events: [test],
+            inputs: {},
+            recordCount: 0,
+          }
+        },
+      },
       '../payload-normalizer': {
         eventsOfType,
         findTestsByIdentity,
-        normalizeRequests () {
-          return [test]
-        },
       },
       '../redaction': {
         sanitizeForReport (value) {
@@ -79,6 +95,7 @@ describe('test optimization validation advanced features', () => {
         },
       },
       '../safe-files': {
+        createFileSafely () {},
         writeFileSafely () {},
       },
     })
@@ -308,6 +325,13 @@ function buildScenarioHelpers ({ commandExitCode = 1, outDir, scenario, tests })
 
     async runInstrumentedCommand () {
       return {
+        offline: {
+          inputs: {
+            known_tests: { status: 'loaded' },
+            settings: { status: 'loaded' },
+            test_management: { status: 'loaded' },
+          },
+        },
         outDir,
         result: {
           exitCode: commandExitCode,

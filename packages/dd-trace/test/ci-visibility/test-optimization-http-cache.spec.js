@@ -366,4 +366,146 @@ describe('test-optimization-http-cache', () => {
     writeHttpCacheFile(tmpRoot, 'known_tests.json', KNOWN_TESTS_RESPONSE)
     assert.deepStrictEqual(cache.readKnownTests(), KNOWN_TESTS_RESPONSE.data.attributes.tests)
   })
+
+  it('uses the explicit validation manifest instead of a repository-local cache', () => {
+    writeCacheLayout(tmpRoot, { settings: SETTINGS_RESPONSE })
+    const validationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-validation-cache-'))
+    const { manifestPath } = writeCacheLayout(validationRoot, { settings: DISABLED_SETTINGS_RESPONSE })
+
+    try {
+      const cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+      const settings = cache.readSettings()
+
+      assert.strictEqual(settings.isCodeCoverageEnabled, false)
+      assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
+    } finally {
+      fs.rmSync(validationRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not resolve an explicit validation manifest through repository runfiles configuration', () => {
+    const validationRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-validation-cache-'))
+    const runfilesRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-validation-runfiles-'))
+    const { manifestPath } = writeCacheLayout(validationRoot, { settings: DISABLED_SETTINGS_RESPONSE })
+    const { manifestPath: runfilesManifestTarget } = writeCacheLayout(runfilesRoot, { settings: SETTINGS_RESPONSE })
+    const runfilesManifest = path.join(tmpRoot, 'RUNFILES_MANIFEST')
+
+    process.env.RUNFILES_DIR = runfilesRoot
+    process.env.RUNFILES_MANIFEST_FILE = runfilesManifest
+    process.env.TEST_SRCDIR = runfilesRoot
+    fs.writeFileSync(runfilesManifest, `validation-manifest ${runfilesManifestTarget}\n`)
+
+    try {
+      const cache = new TestOptimizationHttpCache({
+        validationManifestPath: manifestPath,
+        env: {
+          ...process.env,
+          DD_TEST_OPTIMIZATION_MANIFEST_FILE: 'validation-manifest',
+          TEST_OPTIMIZATION_MANIFEST_FILE: 'validation-manifest',
+        },
+      })
+      const settings = cache.readSettings()
+
+      assert.strictEqual(settings.isCodeCoverageEnabled, false)
+      assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
+    } finally {
+      fs.rmSync(validationRoot, { recursive: true, force: true })
+      fs.rmSync(runfilesRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('records a deterministic validation error for an unsupported manifest version', () => {
+    const { manifestPath } = writeCacheLayout(tmpRoot, { manifest: 'version=2\n' })
+    const cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /Unsupported offline Test Optimization validation manifest version: 2/)
+  })
+
+  it('records deterministic validation errors for missing and malformed fixtures', () => {
+    const { manifestPath } = writeCacheLayout(tmpRoot, { settings: undefined })
+    let cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /settings fixture is missing/)
+
+    writeHttpCacheFile(tmpRoot, 'settings.json', '{invalid json')
+    cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /Invalid offline Test Optimization settings\.json fixture/)
+  })
+
+  it('rejects oversized validation fixtures', () => {
+    const { manifestPath } = writeCacheLayout(tmpRoot)
+    const cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath, maxFileBytes: 32 })
+
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /exceeds 32 bytes/)
+  })
+
+  it('rejects out-of-range and non-integer validation retry counts', () => {
+    const settings = structuredClone(SETTINGS_RESPONSE)
+    settings.data.attributes.early_flake_detection.slow_test_retries['5s'] = 101
+    const { manifestPath } = writeCacheLayout(tmpRoot, { settings })
+    let cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /value must be between 0 and 100/)
+
+    settings.data.attributes.early_flake_detection.slow_test_retries['5s'] = 1.5
+    writeHttpCacheFile(tmpRoot, 'settings.json', settings)
+    cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+  })
+
+  it('rejects unexpected path-bearing settings and malformed retry thresholds in validation mode', () => {
+    const settings = structuredClone(SETTINGS_RESPONSE)
+    settings.data.attributes.fixture_path = '/tmp/untrusted-fixture'
+    const { manifestPath } = writeCacheLayout(tmpRoot, { settings })
+    let cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /unexpected fixture_path/)
+
+    delete settings.data.attributes.fixture_path
+    settings.data.attributes.early_flake_detection.slow_test_retries = { '../../untrusted': 2 }
+    writeHttpCacheFile(tmpRoot, 'settings.json', settings)
+    cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.match(cache.getLastError().message, /expected a duration such as 5s/)
+  })
+
+  it('rejects symlinked validation fixture files', function () {
+    if (process.platform === 'win32') this.skip()
+    const targetRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-validation-target-'))
+    const target = path.join(targetRoot, 'settings.json')
+    const { manifestPath, httpCachePath } = writeCacheLayout(tmpRoot, { settings: undefined })
+    fs.writeFileSync(target, JSON.stringify(SETTINGS_RESPONSE))
+    fs.symlinkSync(target, path.join(httpCachePath, 'settings.json'))
+
+    try {
+      const cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+      assert.strictEqual(cache.readSettings(), CACHE_MISS)
+      assert.match(cache.getLastError().message, /symbolic link/)
+    } finally {
+      fs.rmSync(targetRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a symlinked validation fixture root', function () {
+    if (process.platform === 'win32') this.skip()
+    const targetRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-validation-target-'))
+    writeCacheLayout(targetRoot)
+    const linkedRoot = path.join(tmpRoot, 'linked-validation-root')
+    fs.symlinkSync(targetRoot, linkedRoot)
+
+    try {
+      const cache = new TestOptimizationHttpCache({
+        validationManifestPath: path.join(linkedRoot, '.testoptimization', 'manifest.txt'),
+      })
+      assert.strictEqual(cache.readSettings(), CACHE_MISS)
+      assert.match(cache.getLastError().message, /fixture root must be a regular directory/)
+    } finally {
+      fs.rmSync(targetRoot, { recursive: true, force: true })
+    }
+  })
 })

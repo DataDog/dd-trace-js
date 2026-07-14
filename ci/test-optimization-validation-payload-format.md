@@ -70,9 +70,7 @@ outside trusted channels.
 }
 ```
 
-`status` is `ok`, `failed`, or `unknown`. The validator's execution results may use `blocked` for
-execution-environment blockers, but validation payloads map that to `unknown` for compatibility
-with payload consumers.
+`status` is `ok`, `failed`, or `unknown`.
 
 `framework.language` is currently hardcoded to `javascript`. `workingDirectory`, `projectRoot`,
 and `packageJson` come from the manifest framework entry so the UI can show which workspace package
@@ -183,7 +181,6 @@ Each check has this shape:
 Known check IDs:
 
 - `ci-wiring`
-- `execution-environment`
 - `basic-reporting`
 - `efd-new-test-detection-and-retry`
 - `auto-test-retries`
@@ -283,7 +280,7 @@ to four compact samples: one per event level.
   ],
   "localDiagnosis": {
     "kind": "tests-ran-tracer-not-initialized",
-    "summary": "The selected command ran tests, but no Test Optimization events reached the fake intake.",
+    "summary": "The selected command ran tests, but no Test Optimization events reached the offline event artifact.",
     "recommendation": "Try a direct test-runner command, or verify NODE_OPTIONS reaches the final test process."
   },
   "samples": [
@@ -295,39 +292,10 @@ to four compact samples: one per event level.
 }
 ```
 
-The payload only includes user-facing validation steps. It does not include fake-intake setup as a
-step; that setup is validator plumbing. If the fake intake cannot bind or connect to localhost
-because the execution environment blocks local sockets, the affected framework is reported as an
-execution-environment blocker instead of an ordinary Basic Reporting failure:
-
-```json
-{
-  "id": "execution-environment",
-  "name": "Local fake intake",
-  "status": "unknown",
-  "reason": "The current agent sandbox blocks localhost sockets, so the validator could not start the fake Datadog intake.",
-  "remediation": [
-    "Rerun the validator command shown below from the host shell",
-    "Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and filesystem restrictions",
-    "Rerun in CI"
-  ],
-  "evidence": {
-    "blockedByExecutionEnvironment": true,
-    "localNetworkingBlocked": true,
-    "manifestMayBeReused": true,
-    "intakeStarted": false,
-    "errorCode": "EPERM",
-    "errorSyscall": "listen",
-    "errorAddress": "127.0.0.1",
-    "rerunCommand": "node /absolute/path/to/validate-test-optimization.js --manifest ./dd-test-optimization-validation-manifest.json --out ./dd-test-optimization-validation-results --approved-plan-sha256 <digest-from-approved-plan>"
-  },
-  "steps": []
-}
-```
-
-This means no Test Optimization conclusion was reached. The UI should tell the user to preserve the
-manifest/artifacts and rerun live validation from a host shell, CI, or an agent mode that allows
-localhost sockets for the validator command.
+The payload only includes user-facing validation steps. Validator-controlled cache and output-file
+setup is diagnostic plumbing rather than a separate check. Missing, malformed, symlinked, or
+oversized offline fixture/output data is reported on the affected check and never falls back to a
+network request.
 
 When live basic reporting runs and fails, the `basic-reporting` check and its `check-events` step
 evidence include a concise local diagnosis in `reason`. Examples:
@@ -350,8 +318,8 @@ contains a structured local cause:
   receive per-test events. The runner name and source file are present in
   `eventLevelFailure.customTestRunner`. This should be shown as a runner-compatibility diagnosis, not
   as a CI wiring failure.
-- `kind: "no-test-optimization-events"` means no Test Optimization event levels reached the local
-  fake intake.
+- `kind: "no-test-optimization-events"` means no Test Optimization event levels reached the offline
+  event artifact.
 - `kind: "framework-source-tree-runner"` means the selected command ran the test framework's own
   source-tree runner, such as `node ./bin/mocha.js` inside the Mocha repository, rather than an
   installed framework package in a customer project.
@@ -438,9 +406,9 @@ includes a result such as `exited 1, matching dd-trace-less preflight`.
 
 ## Static-Only Payloads
 
-When the runbook stops before starting the fake intake because no eligible supported framework or
-test command exists, the payload still contains a failed `basic-reporting` check. Since no intake
-or test command was executed, `steps` is empty and the local diagnosis is carried by `reason`:
+When the runbook stops before live validation because no eligible supported framework or test
+command exists, the payload still contains a failed `basic-reporting` check. Since no test command
+was executed, `steps` is empty and the local diagnosis is carried by `reason`:
 
 ```json
 {

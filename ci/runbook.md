@@ -84,7 +84,7 @@ path/status list only as the cleanup baseline; do not inspect or alter pre-exist
 
 ## Privacy and Sharing Warning
 
-The generated Markdown report and run artifacts, including low-level intake request artifacts, are
+The generated Markdown report and run artifacts, including offline event artifacts, are
 local/internal diagnostic outputs. They may include repository paths, package names, CI
 workflow/job/step names, commands, runner/tool chains, compact validation summary JSON, and sanitized
 environment variable structure. Secret-like values are redacted on a best-effort basis, but these
@@ -103,7 +103,7 @@ run live validation on untrusted code with production secrets available.
 Discovery does not execute repository code. Do not run package-manager or test-runner `--version`
 commands. You may write the draft manifest and run the installed validator with `--validate-manifest`
 or `--print-plan`; those modes validate and render declared data without running project commands or
-opening localhost sockets. Before dependency installation, setup, preflight, generated-test, or live
+using network access. Before dependency installation, setup, preflight, generated-test, or live
 validation commands run, use `--print-plan` to print the validator-owned `Execution plan` checkpoint.
 It contains:
 
@@ -112,7 +112,7 @@ It contains:
   execute during the approved phase
 - each command's exact executable arguments or shell replay, working directory, shell executable,
   and command-specific environment values after secret-like values are replaced with `<redacted>`;
-  describe validator-controlled fake-intake and noise-suppression variables collectively as
+  describe validator-controlled offline-fixture and noise-suppression variables collectively as
   diagnostic plumbing instead of reading validator source to enumerate them; do not enumerate the
   ambient process environment
 - whether dependency installation, external network access, services, browsers, or additional
@@ -151,8 +151,8 @@ Use this checkpoint order:
     command that runs each advanced-feature check, each verification/baseline/feature execution and
     conditional debug rerun, and the files that will be removed afterward.
 4. **Command the agent runs after approval**: show the exact installed validator command and explain
-    that it starts the local mock intake, runs the listed checks, writes the report, and removes the
-    temporary tests.
+    that it writes bounded filesystem fixtures, runs the listed checks with the offline exporter,
+    writes the report, and removes the temporary tests and fixtures.
 
 Finalize framework/package scope before rendering the checkpoint. A scope choice is not an approval
 choice. Self-check the `--print-plan` output. Do not ask for approval if it contains `...`,
@@ -175,16 +175,15 @@ Use exactly one approval surface:
 
 - **Agent platform with a command-approval dialog**: first send the complete plan as a normal
   user-visible message, then immediately request execution of the exact digest-bound live command.
-  The platform dialog is the single approval for the displayed plan and the required localhost
-  access. Do not ask `Approve executing exactly the plan above?` in chat before opening it.
+  The platform dialog is the single approval for the displayed plan. Do not ask `Approve executing
+  exactly the plan above?` in chat before opening it.
 - **Agent platform without a command-approval dialog**: after showing the complete plan, ask one
   binary chat question: `Approve executing exactly the plan above?` Run the exact command only after
   that answer.
 
 Never use both a chat approval question and a command-approval dialog for the same unchanged plan.
-Run `--print-plan` in the current restricted environment; because that mode runs no project code and
-opens no sockets, do not move it to a host shell or request localhost access merely to render the
-plan.
+Run `--print-plan` in the current restricted environment; because that mode runs no project code or
+network operations, do not request broader permissions merely to render the plan.
 
 When the agent platform asks for permission to run the validator, explain what the specific mode
 does instead of referring only to `the validator` or a `runbook-required command`:
@@ -192,20 +191,21 @@ does instead of referring only to `the validator` or a `runbook-required command
 - **Plan rendering (`--print-plan`)**: this is the local diagnostic bundled with the installed
   `dd-trace` package. In this mode it reads and validates the local manifest, then prints the exact
   commands, temporary files, cleanup, and live command proposed for approval. It does not run tests,
-  create temporary tests, open localhost sockets, contact Datadog, or write validation results.
+  create temporary tests, contact Datadog, or write validation results.
 - **Digest-bound live validation**: this is the same local diagnostic running the approved plan. It
-  starts a mock intake on `127.0.0.1`, runs only the displayed project commands, creates and removes
-  the displayed temporary tests, and writes local diagnostic artifacts. It does not require real
-  Datadog credentials or upload the report.
+  creates validator-controlled cache fixtures outside the repository, runs only the displayed
+  project commands with a private offline exporter, creates and removes the displayed temporary
+  tests, and writes bounded local diagnostic artifacts. The dd-trace validation path opens no
+  listener, uses no network endpoint, requires no real Datadog credentials, and uploads nothing.
 
-Use that context in the normal user-visible message and in any separate host/sandbox permission
-reason. A permission prompt that only says `run validate-test-optimization.js` does not give the user
-enough information to make an informed choice.
+Use that context in the normal user-visible message and command-approval reason. A permission prompt
+that only says `run validate-test-optimization.js` does not give the user enough information to make
+an informed choice.
 
 Proceed without another user interaction only when the current execution environment is known to:
 
 - expose no production, cloud, Git, package-registry, or other reusable credentials
-- block outbound networking while allowing localhost listen/connect
+- block outbound networking for the test process and descendants
 - restrict filesystem writes to the repository, temporary directories, and declared test outputs
 
 Never inspect the ambient environment, shell configuration, credential files, keychains, agents, or
@@ -279,15 +279,15 @@ when the CI-shaped command itself cannot be replayed safely or its required setu
 An `unknown` CI-wiring disposition without a replay command is incomplete and makes validation exit
 unsuccessfully; use `skip` only with the concrete technical reason replay is not eligible.
 
-During live validation, the validator may overlay fake-intake transport variables,
+During live validation, the validator may overlay private offline-fixture/output variables,
 noise-suppression variables, and for CI wiring dd-trace debug logging. Those overlays are diagnostic
-plumbing for the local mock intake. They are not customer CI recommendations and must not be
+plumbing for the offline validator. They are not customer CI recommendations and must not be
 interpreted as proof that CI had those settings.
 
 Record CI-provided `NODE_OPTIONS` and Datadog environment values in the command `env` object. Do not
 encode assignments or removals for `NODE_OPTIONS`, `DD_TRACE_AGENT_URL`, `DD_AGENT_HOST`,
 `DD_TRACE_AGENT_PORT`, or `DD_CIVISIBILITY_AGENTLESS_URL` inside `shellCommand` or argv. The
-validator reserves those inline forms because they can bypass fake-intake containment. Preserve the
+validator reserves those inline forms because they can bypass offline validation controls. Preserve the
 original CI command shape in `displayCommand` and CI discovery evidence when normalization is
 needed.
 
@@ -324,15 +324,12 @@ Basic Reporting passes.
 6. Record CI initialization as `configured`, `not_configured`, or `unknown` in
     `ciWiring.initialization`, with short static evidence strings. Do not infer it from validator overlays.
 7. Run the validator with `--validate-manifest` and fix every contract error.
-8. Run `--check-localhost` in the intended execution environment. This temporary listen/connect probe runs no
-    project code and needs no manifest. If it is blocked, do not rerun the probe outside the sandbox; use the
-    platform's localhost-capable execution mode for the approved live command in step 10.
-9. Run the validator with `--print-plan`, show its exact output, and use exactly one approval surface.
-10. After that single approval, run the exact live validator command printed by `--print-plan`. It owns setup,
+8. Run the validator with `--print-plan`, show its exact output, and use exactly one approval surface.
+9. After that single approval, run the exact live validator command printed by `--print-plan`. It owns setup,
     Datadog-clean preflight execution, generated file creation and verification, live scenarios, and
     cleanup. For local Jest validation it may add `--no-watchman` to avoid home-directory writes;
     this local adjustment is shown in the plan and is never added to the CI wiring replay.
-11. Report Basic Reporting, CI wiring, and advanced feature results separately, including the
+10. Report Basic Reporting, CI wiring, and advanced feature results separately, including the
     detailed Markdown report path.
 
 ## Discovery Rules
@@ -430,7 +427,7 @@ node ./node_modules/dd-trace/ci/validate-test-optimization.js --init-manifest
 ```
 
 For non-standard package layouts, run the resolved validator path instead. This mode performs static discovery and
-writes the manifest only; it does not run project code, create temporary tests, or open localhost sockets. Do not
+writes the manifest only; it does not run project code, create temporary tests, or use network access. Do not
 read the full JSON schema or example unless `--validate-manifest` reports a field-specific error that the reference
 docs do not explain.
 
@@ -534,7 +531,7 @@ node /absolute/path/to/validate-test-optimization.js \
   --out ./dd-test-optimization-validation-results
 ```
 
-First validate the manifest without opening localhost sockets or running project code:
+First validate the manifest without running project code:
 
 ```bash
 node /absolute/path/to/validate-test-optimization.js \
@@ -542,22 +539,7 @@ node /absolute/path/to/validate-test-optimization.js \
   --validate-manifest
 ```
 
-Before rendering the approval checkpoint, check whether the intended live execution environment
-allows the validator's localhost mock intake:
-
-```bash
-node /absolute/path/to/validate-test-optimization.js --check-localhost
-```
-
-This opens one temporary listener on `127.0.0.1`, connects back to it, closes both sockets, and exits.
-It does not load the manifest, run repository code, contact Datadog, or write validation artifacts.
-Run it in the current agent environment without requesting broader access. If it reports `EPERM` or
-`EACCES`, keep that result and render the plan normally. After the plan's single approval, request the
-platform's localhost-capable execution mode for the digest-bound live command. Do not ask the user to
-approve the plan again and do not separately rerun this capability check outside the sandbox.
-
-Then render the exact approval checkpoint without opening localhost sockets or running project
-code:
+Then render the exact approval checkpoint without running project code:
 
 ```bash
 node /absolute/path/to/validate-test-optimization.js \
@@ -591,44 +573,14 @@ For Yarn Plug'n'Play, pnpm, workspaces, or another non-standard module layout, e
 validator through the package-manager mechanism that works in this repository, such as `yarn node`
 or `pnpm exec node`.
 
-Live validation requires localhost sockets. If the fake intake fails with `EPERM` or `EACCES` on
-`127.0.0.1`/localhost, this is an execution-environment blocker, not a Test Optimization
-misconfiguration. Preserve the manifest and artifacts and emit this single handoff without rendering or approving
-the plan again:
-
-```text
-Validation blocked before project commands ran.
-Reason: this agent cannot open the localhost mock intake.
-Run this already-approved command from the host context:
-<the exact digest-bound command>
-Then inspect: ./dd-test-optimization-validation-results/report.md
-```
-
-Run it from CI, the host shell, or an agent mode that allows localhost sockets. See
-`ci/test-optimization-validation-runbook-troubleshooting.md`.
-
-Do not broadly disable sandboxing. Prefer a mode that grants localhost listen/connect while keeping
-outbound networking, credentials, and unrelated filesystem locations unavailable.
-
-When an already-approved digest-bound live command is blocked only by localhost permissions, do not
-render the plan again or ask `Approve executing exactly the plan above?` a second time. Retry the
-exact same command through the agent platform's host/sandbox permission mechanism. The existing
-`--approved-plan-sha256` binds the manifest, selected options, output path, and validator
-implementation; the retry fails closed if any of them changed.
-
-Make the permission request distinct from plan approval. State that the already-approved local
-validator was blocked by localhost restrictions and that the same digest-bound command needs
-localhost listen/connect access. Include the validator context above and state whether any listed
-project commands ran before the blocker; if they did or this cannot be determined, disclose that
-they may run again. The platform permission prompt is the approval for this execution-environment
-change. Do not precede it with another copy of the plan or another identical approval question.
-
-If the platform has no separate permission mechanism, ask one concise environment-change question:
-`Approve rerunning the already-approved validation command with localhost access outside the
-restricted sandbox?` Do not ask the user to approve the full plan again.
-
-Only render and approve a new plan when the exact approved command or digest is unavailable, or when
-the manifest, commands, selected options, output path, or installed validator changed.
+Live validation uses validator-controlled JSON cache fixtures outside the repository and a bounded
+event artifact inside the declared results directory. Missing, malformed, symlinked, or oversized
+fixtures fail closed; they never fall back to an Agent or Datadog endpoint. Run the validator in the
+same sandbox and with the same permissions as an ordinary test run. Do not request broader access.
+The execution platform should block outbound networking and provide a disposable home directory
+without reusable credentials. Offline validation does not make untrusted project tests safe, and
+project code running as the same user can forge cache or event evidence. Treat the result as a
+diagnostic, not a security attestation.
 
 ## Report Results
 
@@ -656,7 +608,7 @@ Include:
 - Basic Reporting pass/fail/skip summary by framework
 - CI wiring pass/fail/skip summary by framework or CI job
 - advanced feature pass/fail/skip summary
-- any execution-environment blocker
+- any setup, command, or offline-fixture blocker
 - a short `How to fix` section copied from the validator output for every failed, errored, or blocked check
 
 Lead with the validator's verdict and checks table. Include one scope sentence naming live-validated framework

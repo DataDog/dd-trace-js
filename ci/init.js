@@ -3,12 +3,13 @@
 /* eslint-disable no-console */
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
-const { isTrue } = require('../packages/dd-trace/src/util')
+const { isFalse, isTrue } = require('../packages/dd-trace/src/util')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const EXPORTER_MAP = {
   jest: 'jest_worker',
   cucumber: 'cucumber_worker',
@@ -43,9 +44,12 @@ const baseOptions = {
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL,
 }
 
+const isValidationMode = isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV))
 // skipDefault: CI visibility stays on unless DD_CIVISIBILITY_ENABLED is explicitly false; the
 // registered default (false) would otherwise turn it off whenever the variable is unset.
-let shouldInit = getValueFromEnvSources('DD_CIVISIBILITY_ENABLED', true) !== false
+let shouldInit = isValidationMode
+  ? !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
+  : getValueFromEnvSources('DD_CIVISIBILITY_ENABLED', true) !== false
 const isAgentlessEnabled = getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
 
 if (!isTestWorker && isPackageManager()) {
@@ -57,6 +61,11 @@ if (isTestWorker) {
   baseOptions.telemetry = { enabled: false }
   baseOptions.experimental = {
     exporter: EXPORTER_MAP[testWorkerType],
+  }
+} else if (isValidationMode) {
+  baseOptions.telemetry = { enabled: false }
+  baseOptions.experimental = {
+    exporter: 'ci_validation',
   }
 } else {
   if (isAgentlessEnabled) {

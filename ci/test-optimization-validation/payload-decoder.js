@@ -4,6 +4,8 @@ const zlib = require('zlib')
 
 const MAX_MSGPACK_COLLECTION_ENTRIES = 100_000
 const MAX_MSGPACK_TOTAL_COLLECTION_ENTRIES = 100_000
+const MAX_JSON_NESTING_DEPTH = 128
+const MAX_MSGPACK_STRING_BYTES = 64 * 1024
 
 function decodeBody (body, headers, options = {}) {
   return decodeBodyWithMetadata(body, headers, options).value
@@ -78,8 +80,10 @@ function assertJsonCollectionEntryLimit (buffer) {
     }
 
     if (byte === 0x5B) {
+      assertJsonNestingLimit(containers.length)
       containers.push({ type: 'array', hasEntry: false })
     } else if (byte === 0x7B) {
+      assertJsonNestingLimit(containers.length)
       containers.push({ type: 'object' })
     } else if (byte === 0x5D || byte === 0x7D) {
       containers.pop()
@@ -89,6 +93,12 @@ function assertJsonCollectionEntryLimit (buffer) {
       collectionEntries++
       assertCollectionEntryLimit(collectionEntries, 'JSON')
     }
+  }
+}
+
+function assertJsonNestingLimit (depth) {
+  if (depth >= MAX_JSON_NESTING_DEPTH) {
+    throw new Error('JSON nesting exceeds validation limit')
   }
 }
 
@@ -144,7 +154,7 @@ class MsgpackDecoder {
   }
 
   read (depth = 0) {
-    if (depth > 128) throw new Error('MessagePack nesting exceeds validation intake limit')
+    if (depth > 128) throw new Error('MessagePack nesting exceeds validation payload limit')
     const byte = this.uint8()
 
     if (byte <= 0x7F) return byte
@@ -199,6 +209,9 @@ class MsgpackDecoder {
   }
 
   string (length) {
+    if (length > MAX_MSGPACK_STRING_BYTES) {
+      throw new Error('MessagePack string exceeds validation payload limit')
+    }
     this.assertAvailable(length)
     const end = this.offset + length
     const value = this.buffer.toString('utf8', this.offset, end)

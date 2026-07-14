@@ -17,19 +17,12 @@ const { runTestManagement } = require('./scenarios/test-management')
 const { runCiWiring } = require('./scenarios/ci-wiring')
 const { cleanupGeneratedFiles } = require('./generated-files')
 const { verifyGeneratedTestStrategy } = require('./generated-verifier')
-const { serializeDisplayCommand } = require('./command-runner')
 const {
   annotateCiDiscovery,
   getFrameworkCiDiscoveryContradiction,
 } = require('./ci-discovery')
-const {
-  buildExecutionEnvironmentBlockerResult,
-  checkLocalhostCapability,
-  isLocalSocketPermissionError,
-} = require('./execution-environment')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
-const { MockIntake } = require('./mock-intake')
 const { formatExecutionPlan } = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
@@ -95,11 +88,11 @@ function parseArgs (argv) {
       case '--print-plan':
         options.printPlan = true
         break
-      case '--check-localhost':
-        options.checkLocalhost = true
-        break
       case '--approved-plan-sha256':
         options.approvedPlanSha256 = requireValue(argv, ++i, arg)
+        break
+      case '--offline-fixture-nonce':
+        options.offlineFixtureNonce = requireValue(argv, ++i, arg)
         break
       case '--help':
       case '-h':
@@ -140,8 +133,8 @@ Options:
   --verbose               Print command progress.
   --validate-manifest     Validate the manifest and exit without running project code.
   --init-manifest         Create a schema-valid manifest scaffold without running project code.
-  --check-localhost       Check localhost listen/connect capability without running project code.
   --print-plan            Print the normalized execution plan without running project code.
+  --offline-fixture-nonce Random fixture-root nonce emitted by --print-plan for the approved live run.
   --approved-plan-sha256  Bind live execution to the exact manifest and options shown by --print-plan.
   --help                  Show this help.
 `)
@@ -152,23 +145,6 @@ async function main (argv) {
     const options = parseArgs(argv)
     if (options.help) {
       printHelp()
-      return
-    }
-
-    if (options.checkLocalhost) {
-      try {
-        await checkLocalhostCapability()
-        console.log('Localhost capability check passed: this environment can listen and connect on 127.0.0.1.')
-      } catch (error) {
-        if (!isLocalSocketPermissionError(error)) throw error
-
-        process.exitCode = 1
-        console.error(sanitizeConsoleText(
-          'Localhost capability check blocked: this environment does not allow the validator to listen and ' +
-          'connect on 127.0.0.1. No project commands ran and no Test Optimization conclusion was reached. ' +
-          'Run the approved live validation in an execution mode that permits localhost sockets.'
-        ))
-      }
       return
     }
 
@@ -207,9 +183,10 @@ async function main (argv) {
       console.log(sanitizeConsoleText(`Validation manifest is valid: ${manifest.__path}`))
       return
     }
-    if (!options.approvedPlanSha256) {
+    if (!options.approvedPlanSha256 || !options.offlineFixtureNonce) {
       throw new Error(
-        'Live validation requires the --approved-plan-sha256 value emitted by --print-plan. ' +
+        'Live validation requires the --offline-fixture-nonce and --approved-plan-sha256 values emitted by ' +
+        '--print-plan. ' +
         'Render and approve a fresh execution plan first.'
       )
     }
@@ -223,6 +200,7 @@ async function main (argv) {
         ? selectedFrameworks.map(framework => framework.id)
         : [],
       requestedScenario: options.requestedScenario,
+      offlineFixtureNonce: options.offlineFixtureNonce,
       keepTempFiles: options.keepTempFiles,
       verbose: options.verbose,
     })
@@ -231,9 +209,7 @@ async function main (argv) {
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
     annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
 
-    const intake = new MockIntake({ out, verbose: options.verbose })
     const results = []
-    let intakeStarted = false
 
     try {
       const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
@@ -253,23 +229,6 @@ async function main (argv) {
         }
 
         liveReadyFrameworks.push(framework)
-      }
-
-      if (liveReadyFrameworks.length > 0) {
-        try {
-          logValidationProgress('Starting the local mock intake.')
-          await intake.start()
-          intakeStarted = true
-          logValidationProgress('Local mock intake ready.')
-        } catch (err) {
-          for (const framework of liveReadyFrameworks) {
-            results.push(getIntakeStartupFailure(framework, err, {
-              approvedPlanSha256: options.approvedPlanSha256,
-              workingDirectory: manifest.repository.root,
-            }))
-          }
-          liveReadyFrameworks.length = 0
-        }
       }
 
       for (const framework of liveReadyFrameworks) {
@@ -299,11 +258,11 @@ async function main (argv) {
             'Test execution without Datadog',
             preflight.ok ? 'pass' : preflight.failure?.status
           )
-          // Scenarios intentionally run in order so each one can reset and configure the shared intake.
+          // Scenarios intentionally run in order so each one can use an isolated offline fixture.
           if (preflight.ok) {
             logPhaseStart(framework, 'Basic Reporting')
             // eslint-disable-next-line no-await-in-loop
-            basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
+            basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, out, options })
             logPhaseComplete(framework, 'Basic Reporting', basicResult.status)
           } else {
             basicResult = preflight.failure
@@ -319,7 +278,7 @@ async function main (argv) {
             // CI wiring runs after Basic Reporting proves this framework can report when initialized directly.
             logPhaseStart(framework, 'CI wiring')
             // eslint-disable-next-line no-await-in-loop
-            const ciWiringResult = await runCiWiring({ manifest, framework, intake, out, options, basicResult })
+            const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
             results.push(ciWiringResult)
             logPhaseComplete(framework, 'CI wiring', ciWiringResult.status)
           }
@@ -357,16 +316,15 @@ async function main (argv) {
 
         for (const scenario of advancedScenarios) {
           const runScenario = SCENARIOS[scenario]
-          // Scenarios intentionally run in order so each one can reset and configure the shared intake.
+          // Scenarios intentionally run in order so each one can use an isolated offline fixture.
           logPhaseStart(framework, getScenarioDisplayName(scenario))
           // eslint-disable-next-line no-await-in-loop
-          const result = await runScenario({ manifest, framework, intake, out, options })
+          const result = await runScenario({ manifest, framework, out, options })
           results.push(result)
           logPhaseComplete(framework, getScenarioDisplayName(scenario), result.status)
         }
       }
     } finally {
-      if (intakeStarted) await intake.close()
       await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
     }
 
@@ -375,7 +333,6 @@ async function main (argv) {
       manifest,
       results,
       out,
-      intake,
       staticDiagnosis,
       runSummary: {
         runCompleted: true,
@@ -515,45 +472,6 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
     },
     artifacts: [],
   }
-}
-
-function getIntakeStartupFailure (framework, err, options = {}) {
-  const message = err && err.message ? err.message : String(err)
-  const permissionError = isLocalSocketPermissionError(err)
-  if (permissionError) {
-    return buildExecutionEnvironmentBlockerResult({
-      framework,
-      error: err,
-      rerunCommand: getCurrentRerunCommand(),
-      approvedPlanSha256: options.approvedPlanSha256,
-      workingDirectory: options.workingDirectory,
-    })
-  }
-
-  const diagnosis = `The local fake intake could not start, so live validation was not run: ${message}`
-  const recommendation = 'Allow the validator to bind to 127.0.0.1, then rerun validation.'
-
-  return {
-    frameworkId: framework.id,
-    scenario: 'all',
-    status: 'error',
-    diagnosis,
-    evidence: {
-      intakeStarted: false,
-      error: message,
-      errorCode: err?.code,
-      errorSyscall: err?.syscall,
-      recommendation,
-    },
-    artifacts: [],
-  }
-}
-
-function getCurrentRerunCommand () {
-  return serializeDisplayCommand({
-    argv: [process.execPath, ...process.argv.slice(1)],
-    usesShell: false,
-  })
 }
 
 function isUnsuccessfulResult (result) {

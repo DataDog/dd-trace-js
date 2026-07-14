@@ -160,18 +160,6 @@ function buildCheck ({ result }) {
 }
 
 function buildStaticOnlyCheck (result) {
-  if (result.evidence?.blockedByExecutionEnvironment) {
-    return {
-      id: 'execution-environment',
-      name: 'Local fake intake',
-      status: 'unknown',
-      reason: result.evidence.reason || result.diagnosis,
-      remediation: result.evidence.remediation,
-      evidence: getExecutionEnvironmentEvidence(result),
-      steps: [],
-    }
-  }
-
   return {
     id: 'basic-reporting',
     name: 'Basic reporting',
@@ -369,22 +357,6 @@ function getPayloadStatus (checks) {
   if (checks.some(check => check.status === 'unknown')) return 'unknown'
   if (checks.length > 0 && checks.every(check => check.status === 'skipped')) return 'unknown'
   return 'ok'
-}
-
-function getExecutionEnvironmentEvidence (result) {
-  const evidence = result.evidence || {}
-
-  return {
-    blockedByExecutionEnvironment: true,
-    localNetworkingBlocked: evidence.localNetworkingBlocked,
-    manifestMayBeReused: evidence.manifestMayBeReused,
-    intakeStarted: evidence.intakeStarted,
-    error: evidence.error,
-    errorCode: evidence.errorCode,
-    errorSyscall: evidence.errorSyscall,
-    errorAddress: evidence.errorAddress,
-    rerunCommand: evidence.rerunCommand,
-  }
 }
 
 function isProblemStatus (status) {

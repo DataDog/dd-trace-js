@@ -6,6 +6,17 @@ const os = require('node:os')
 const path = require('node:path')
 
 const { runCiWiring } = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
+const { AgentlessCiVisibilityEncoder } = require('../../src/encode/agentless-ci-visibility')
+const id = require('../../src/id')
+
+function validationOptions (repositoryRoot) {
+  return {
+    approvedPlanSha256: '0'.repeat(64),
+    offlineFixtureNonce: '0'.repeat(32),
+    repositoryRoot,
+    verbose: false,
+  }
+}
 
 describe('test optimization CI wiring validation', () => {
   it('does not turn a failed CI wiring classification into a skip when its command is missing', async () => {
@@ -97,15 +108,6 @@ describe('test optimization CI wiring validation', () => {
       }
       console.log('1 passing')
     `
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     process.env.NODE_OPTIONS = '--require /tmp/dd-validation-ambient-ci-init.js'
     process.env.DD_CIVISIBILITY_ENABLED = 'ambient-ci-visibility-enabled'
 
@@ -124,9 +126,8 @@ describe('test optimization CI wiring validation', () => {
             observedTestCount: 1,
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -152,14 +153,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('preserves the manifest CI diagnosis and recommends an existing Datadog test script', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
     fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
       scripts: {
         test: 'jest',
@@ -182,9 +175,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, '-e', 'console.log("1 passing")'],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic Reporting passed.',
@@ -208,14 +200,6 @@ describe('test optimization CI wiring validation', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const setupFile = path.join(out, 'datadog-setup.ts')
     const configFile = path.join(out, 'vitest.config.ts')
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
     fs.writeFileSync(setupFile, 'import "dd-trace/ci/init"\n')
     fs.writeFileSync(configFile, 'export default { test: { setupFiles: ["datadog-setup.ts"] } }\n')
 
@@ -231,9 +215,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, '-e', 'console.log("Tests 1 passed")'],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
       })
 
@@ -249,15 +232,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('diagnoses a package script that explicitly removes NODE_OPTIONS', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const packageJson = path.join(out, 'package.json')
       fs.writeFileSync(packageJson, `${JSON.stringify({
@@ -282,9 +256,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, '-e', 'console.log("Tests 1 passed")'],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
       })
 
@@ -314,15 +287,6 @@ describe('test optimization CI wiring validation', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const marker = path.join(out, 'ci-shell-used')
     const shell = path.join(out, 'ci-shell')
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     fs.writeFileSync(shell, [
       '#!/bin/sh',
       `echo yes > ${JSON.stringify(marker)}`,
@@ -345,9 +309,8 @@ describe('test optimization CI wiring validation', () => {
             shellCommand: 'echo "1 passing"',
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
 
       assert.strictEqual(result.evidence.commandExitCode, 0)
@@ -361,15 +324,6 @@ describe('test optimization CI wiring validation', () => {
     if (process.platform === 'win32') this.skip()
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -384,9 +338,8 @@ describe('test optimization CI wiring validation', () => {
             shellCommand: 'false | true',
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
 
       assert.strictEqual(result.status, 'fail')
@@ -400,15 +353,6 @@ describe('test optimization CI wiring validation', () => {
     if (process.platform === 'win32') this.skip()
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -423,9 +367,8 @@ describe('test optimization CI wiring validation', () => {
             shellCommand: 'false | true',
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
 
       assert.strictEqual(result.status, 'fail')
@@ -437,18 +380,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('redacts secret-like event data in CI wiring events artifacts', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [
-        testIntakeRequest({
-          API_KEY: 'ci-wiring-event-api-key-secret',
-          command: 'TOKEN=ci-wiring-event-token-secret npm test',
-          message: 'SECRET=ci-wiring-event-secret',
-        }),
-      ],
-      configure () {},
-      resetRequests () {},
-    }
 
     try {
       await runCiWiring({
@@ -457,12 +388,18 @@ describe('test optimization CI wiring validation', () => {
           framework: 'vitest',
           ciWiringCommand: {
             cwd: out,
-            argv: [process.execPath, '-e', 'console.log("no tests selected")'],
+            argv: [process.execPath, '-e', offlineEventScript([{
+              type: 'test',
+              meta: {
+                API_KEY: 'ci-wiring-event-api-key-secret',
+                command: 'TOKEN=ci-wiring-event-token-secret npm test',
+                message: 'SECRET=ci-wiring-event-secret',
+              },
+            }])],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
 
       const events = fs.readFileSync(path.join(out, 'runs', 'vitest-root', 'ci-wiring', 'events.ndjson'), 'utf8')
@@ -483,15 +420,6 @@ describe('test optimization CI wiring validation', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const nxScript = path.join(out, 'nx.js')
     const jestScript = path.join(out, 'jest.js')
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     fs.writeFileSync(jestScript, 'console.log("1 passing")\n')
     fs.writeFileSync(nxScript, `
       const { spawnSync } = require('node:child_process')
@@ -527,9 +455,8 @@ describe('test optimization CI wiring validation', () => {
             observedTestCount: 1,
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -553,15 +480,6 @@ describe('test optimization CI wiring validation', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const wrapperScript = path.join(out, 'run-tests.js')
     const vitestScript = path.join(out, 'vitest.mjs')
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     fs.writeFileSync(vitestScript, 'console.log("Tests 1 passed")\n')
     fs.writeFileSync(wrapperScript, `
       const { spawnSync } = require('node:child_process')
@@ -580,9 +498,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, wrapperScript],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
       })
 
@@ -603,14 +520,6 @@ describe('test optimization CI wiring validation', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const vitestScript = path.join(out, 'vitest.mjs')
     const fullReplayMarker = path.join(out, 'full-replay-ran')
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
     fs.writeFileSync(vitestScript, `
       import fs from 'node:fs'
       setTimeout(() => {
@@ -643,9 +552,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, vitestScript],
           },
         },
-        intake,
         out,
-        options: { repositoryRoot: out, verbose: false },
+        options: validationOptions(out),
         basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
       })
 
@@ -663,15 +571,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('treats monorepo runner success summaries as evidence that tests ran', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -682,9 +581,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, '-e', 'console.log("success: 2, skipped: 0, pending: 0, failed: 0")'],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -701,15 +599,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('treats monorepo runner failure summaries as evidence that tests ran', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -724,9 +613,8 @@ describe('test optimization CI wiring validation', () => {
             ],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -745,15 +633,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('probes CI wiring when test output shows failing tests', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -764,9 +643,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, '-e', 'console.log("Tests  1 failed | 2 passed (3)"); process.exit(1)'],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -787,14 +665,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('does not match CI wiring exit codes against unrelated existing-command preflight', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [
-        allBasicEventsRequest(),
-      ],
-      configure () {},
-      resetRequests () {},
-    }
 
     try {
       const result = await runCiWiring({
@@ -807,7 +677,12 @@ describe('test optimization CI wiring validation', () => {
           },
           ciWiringCommand: {
             cwd: out,
-            argv: [process.execPath, '-e', 'process.exit(7)'],
+            argv: [process.execPath, '-e', offlineEventScript([
+              { type: 'test_session_end' },
+              { type: 'test_module_end' },
+              { type: 'test_suite_end' },
+              { type: 'test' },
+            ], 7)],
           },
           preflight: {
             ran: true,
@@ -815,9 +690,8 @@ describe('test optimization CI wiring validation', () => {
             observedTestCount: 1,
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -838,15 +712,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('does not report preload resolution failure when output proves tests ran', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -862,9 +727,8 @@ describe('test optimization CI wiring validation', () => {
             ],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -883,15 +747,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('classifies dd-trace preload resolution failures before test execution', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -905,9 +760,8 @@ describe('test optimization CI wiring validation', () => {
             },
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
         basicResult: {
           status: 'pass',
           diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -929,15 +783,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('classifies CI-shaped command failures before observed test output', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -948,9 +793,8 @@ describe('test optimization CI wiring validation', () => {
             argv: [process.execPath, '-e', 'console.error("No test files found"); process.exit(3)'],
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
 
       assert.strictEqual(result.status, 'fail')
@@ -959,7 +803,7 @@ describe('test optimization CI wiring validation', () => {
       assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-command-failed-before-tests')
       assert.match(result.diagnosis, /exited 3 before the validator observed any tests running/)
       assert.match(result.diagnosis, /No CI wiring conclusion/)
-      assert.doesNotMatch(result.diagnosis, /process may not have connected to the local intake/)
+      assert.doesNotMatch(result.diagnosis, /process may not have written the event artifact/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -967,15 +811,6 @@ describe('test optimization CI wiring validation', () => {
 
   it('does not classify unrelated preload failures as dd-trace preload failures', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const intake = {
-      port: 8126,
-      requests: [],
-      configure () {},
-      resetRequests () {
-        this.requests = []
-      },
-    }
-
     try {
       const result = await runCiWiring({
         framework: {
@@ -989,9 +824,8 @@ describe('test optimization CI wiring validation', () => {
             },
           },
         },
-        intake,
         out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
 
       assert.strictEqual(result.status, 'fail')
@@ -1011,54 +845,44 @@ function restoreEnv (name, value) {
   }
 }
 
-function testIntakeRequest (meta) {
-  return {
-    method: 'POST',
-    url: '/api/v2/citestcycle',
-    payload: {
-      events: [
-        {
-          type: 'test',
-          content: {
-            name: 'example test',
-            meta: {
-              'test.name': 'example test',
-              'test.status': 'pass',
-              ...meta,
-            },
-            metrics: {},
-          },
-        },
-      ],
-    },
+function offlineEventScript (events, exitCode = 0) {
+  const encoder = new AgentlessCiVisibilityEncoder({ flush () {} }, {})
+  encoder.encode(events.map(({ type, meta }) => basicSpan(type, meta)))
+  const record = {
+    version: 1,
+    kind: 'test_cycle',
+    encoding: 'msgpack-base64',
+    payload: encoder.makePayload().toString('base64'),
   }
+  const summary = `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
+    events: events.length,
+    records: 1,
+    input: 'filesystem-cache',
+    errors: [],
+  })}\n`
+  return 'require(\'node:fs\').appendFileSync(' +
+    `process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE, ${JSON.stringify(`${JSON.stringify(record)}\n`)});` +
+    `process.stderr.write(${JSON.stringify(summary)});` +
+    `process.exit(${exitCode})`
 }
 
-function allBasicEventsRequest () {
-  return {
-    method: 'POST',
-    url: '/api/v2/citestcycle',
-    payload: {
-      events: [
-        basicEvent('test_session_end'),
-        basicEvent('test_module_end'),
-        basicEvent('test_suite_end'),
-        basicEvent('test'),
-      ],
-    },
-  }
-}
-
-function basicEvent (type) {
+function basicSpan (type, meta = {}) {
   return {
     type,
-    content: {
-      name: 'example test',
-      meta: {
-        'test.name': 'example test',
-        'test.status': 'pass',
-      },
-      metrics: {},
+    trace_id: id('1234abcd1234abcd'),
+    span_id: id('1234abcd1234abcd'),
+    parent_id: id('0000000000000000'),
+    name: 'example test',
+    resource: 'example test',
+    service: 'validation',
+    error: 0,
+    meta: {
+      'test.name': 'example test',
+      'test.status': 'pass',
+      ...meta,
     },
+    metrics: {},
+    start: 123,
+    duration: 456,
   }
 }

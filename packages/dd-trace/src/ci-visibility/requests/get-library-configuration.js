@@ -26,7 +26,7 @@ function parseJsonResponse (rawJson) {
 function parseLibraryConfigurationResponse (rawJson, config = getConfig(), options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateSettingsResponse(parsedResponse)
+    validateSettingsResponse(parsedResponse, options)
   }
   const {
     code_coverage: isCodeCoverageEnabled,

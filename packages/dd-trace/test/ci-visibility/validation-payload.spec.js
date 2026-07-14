@@ -8,7 +8,7 @@ const path = require('node:path')
 const { buildValidationPayloads } = require('../../../../ci/test-optimization-validation/validation-payload')
 
 describe('test optimization validation payload', () => {
-  it('omits fake intake setup from successful live-run steps', () => {
+  it('omits validator plumbing from successful live-run steps', () => {
     const [{ payload }] = buildValidationPayloads({
       manifest: {
         frameworks: [
@@ -169,76 +169,6 @@ describe('test optimization validation payload', () => {
     }
   })
 
-  it('reports localhost socket blockers as execution-environment checks', () => {
-    const reason = 'The current agent sandbox blocks localhost sockets, so the validator could not start the fake ' +
-      'Datadog intake.'
-    const [{ payload }] = buildValidationPayloads({
-      manifest: {
-        frameworks: [
-          {
-            id: 'mocha:root',
-            framework: 'mocha',
-            frameworkVersion: '11.7.6',
-          },
-        ],
-      },
-      results: [
-        {
-          frameworkId: 'mocha:root',
-          scenario: 'all',
-          status: 'blocked',
-          diagnosis: 'No Test Optimization conclusion was reached.',
-          evidence: {
-            intakeStarted: false,
-            blockedByExecutionEnvironment: true,
-            localNetworkingBlocked: true,
-            manifestMayBeReused: true,
-            reason,
-            error: 'listen EPERM: operation not permitted 127.0.0.1',
-            errorCode: 'EPERM',
-            errorSyscall: 'listen',
-            errorAddress: '127.0.0.1',
-            remediation: [
-              'Rerun the validator command shown below from the host shell',
-              'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, ' +
-                'and filesystem restrictions',
-              'Rerun in CI',
-            ],
-            rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
-          },
-          artifacts: [],
-        },
-      ],
-      artifacts: {
-        reportPath: '/tmp/report.md',
-      },
-    })
-
-    assert.strictEqual(payload.status, 'unknown')
-    assert.strictEqual(payload.checks[0].id, 'execution-environment')
-    assert.strictEqual(payload.checks[0].name, 'Local fake intake')
-    assert.strictEqual(payload.checks[0].status, 'unknown')
-    assert.strictEqual(payload.checks[0].reason, reason)
-    assert.deepStrictEqual(payload.checks[0].remediation, [
-      'Rerun the validator command shown below from the host shell',
-      'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and ' +
-        'filesystem restrictions',
-      'Rerun in CI',
-    ])
-    assert.deepStrictEqual(payload.checks[0].evidence, {
-      blockedByExecutionEnvironment: true,
-      localNetworkingBlocked: true,
-      manifestMayBeReused: true,
-      intakeStarted: false,
-      error: 'listen EPERM: operation not permitted 127.0.0.1',
-      errorCode: 'EPERM',
-      errorSyscall: 'listen',
-      errorAddress: '127.0.0.1',
-      rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
-    })
-    assert.deepStrictEqual(payload.checks[0].steps, [])
-  })
-
   it('preserves generated test verification failures in the payload status', () => {
     const [{ payload }] = buildValidationPayloads({
       manifest: {
@@ -352,7 +282,7 @@ describe('test optimization validation payload', () => {
           frameworkId: 'mocha:root',
           scenario: 'basic-reporting',
           status: 'fail',
-          diagnosis: 'The selected command ran tests, but no Test Optimization events reached the fake intake.',
+          diagnosis: 'The selected command ran tests, but no Test Optimization events reached the event artifact.',
           evidence: {
             commandExitCode: 0,
             commandOutputSummary: ['1 passing (2ms)'],
@@ -469,7 +399,7 @@ describe('test optimization validation payload', () => {
           frameworkId: 'vitest:root',
           scenario: 'ci-wiring',
           status: 'fail',
-          diagnosis: 'The CI job ran tests but no Test Optimization events reached the intake.',
+          diagnosis: 'The CI job ran tests but no Test Optimization events reached the event artifact.',
           evidence: {
             commandExitCode: 0,
             commandOutputSummary: ['DD_API_KEY=payload-output-secret Tests 1 passed'],

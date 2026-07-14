@@ -6,18 +6,12 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { Readable } = require('node:stream')
-const zlib = require('node:zlib')
 
 const { buildCiRemediation } = require('../../../../ci/test-optimization-validation/ci-remediation')
-const executionEnvironment = require('../../../../ci/test-optimization-validation/execution-environment')
-const { MockIntake } = require('../../../../ci/test-optimization-validation/mock-intake')
 const {
   writePendingReport,
   writeReport,
 } = require('../../../../ci/test-optimization-validation/report-writer')
-
-const { buildExecutionEnvironmentBlockerResult } = executionEnvironment
 
 function readMarkdownJsonSection (markdown, title) {
   const pattern = new RegExp(`<details><summary>${title}<\\/summary>\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
@@ -45,132 +39,6 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /"validatorExitCode": null/)
       assert.match(markdown, /"validationSummaries": \[\]/)
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('prints rerun remediation and preserves execution-environment blockers in report payloads', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const packageJsonPath = path.join(tmpDir, 'package.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    const error = Object.assign(new Error('listen EPERM: operation not permitted 127.0.0.1'), {
-      address: '127.0.0.1',
-      code: 'EPERM',
-      syscall: 'listen',
-    })
-    const results = [
-      buildExecutionEnvironmentBlockerResult({
-        framework: { id: 'jest:root' },
-        error,
-        rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
-      }),
-    ]
-    const manifest = {
-      __path: manifestPath,
-      repository: {
-        root: tmpDir,
-      },
-      omitted: ['A secondary command shape was not selected.'],
-      frameworks: [
-        {
-          id: 'jest:root',
-          framework: 'jest',
-          frameworkVersion: '30.1.3',
-          project: {
-            name: 'example',
-            root: tmpDir,
-            packageJson: packageJsonPath,
-          },
-        },
-      ],
-    }
-    const intake = {
-      requests: [],
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
-    const originalLog = console.log
-    const logs = []
-
-    fs.mkdirSync(out, { recursive: true })
-    fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    fs.writeFileSync(staticDiagnosisPath, '{}\n')
-    console.log = message => logs.push(message)
-
-    try {
-      writeReport({
-        manifest,
-        results,
-        out,
-        intake,
-        runSummary: { runCompleted: true, validatorExitCode: 1 },
-        staticDiagnosis: {
-          reportPath: staticDiagnosisPath,
-        },
-      })
-
-      const summary = logs.join('\n')
-      assert.match(summary, /not validated blocked by execution environment: example \(Jest\)/)
-      assert.match(summary, /not evidence that Test Optimization is misconfigured/)
-      assert.match(summary, /manifest and generated artifacts may still be useful/)
-      assert.match(summary, /Rerun the validator command shown below from the host shell/)
-      assert.match(summary, /Rerun in CI/)
-      assert.match(summary, /Host command: node \/repo\/node_modules\/dd-trace\/ci\/validate-test-optimization\.js/)
-      assert.match(summary, /Detailed report: .*report\.md/)
-
-      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-      const humanReadableReport = markdown.split('<details><summary>Diagnostic JSON</summary>')[0]
-      assert.match(markdown, /Sanitized intake requests/)
-      assert.doesNotMatch(markdown, /Raw intake requests/)
-      assert.match(markdown, /## Failed and Blocked Result Details/)
-      assert.match(markdown, /Reason: The current agent sandbox blocks localhost sockets/)
-      assert.strictEqual(humanReadableReport.includes(tmpDir), false)
-      assert.match(markdown, /Error code: `EPERM`/)
-      assert.match(markdown, /Rerun command: `node \/repo\/node_modules\/dd-trace\/ci\/validate-test-optimization/)
-      assert.match(markdown, /1 additional command shape was outside the selected validation scope/)
-
-      const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
-      assert.deepStrictEqual(diagnostic.runSummary, { runCompleted: true, validatorExitCode: 1 })
-      assert.strictEqual(diagnostic.version, 2)
-      assert.strictEqual(diagnostic.normalizedManifest, undefined)
-      assert.strictEqual(diagnostic.staticDiagnosis, undefined)
-      const validationSummaries = diagnostic.validationSummaries
-      const check = validationSummaries[0].checks[0]
-      assert.strictEqual(check.evidence.blockedByExecutionEnvironment, true)
-      assert.strictEqual(check.evidence.manifestMayBeReused, true)
-      assert.deepStrictEqual(check.remediation, [
-        'Rerun the validator command shown below from the host shell',
-        'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and ' +
-          'filesystem restrictions',
-        'Rerun in CI',
-      ])
-
-      assert.deepStrictEqual(Object.keys(validationSummaries[0]).sort(), [
-        'checks',
-        'framework',
-        'frameworkId',
-        'status',
-      ])
-      assert.strictEqual(validationSummaries[0].status, 'unknown')
-      assert.strictEqual(check.id, 'execution-environment')
-      assert.strictEqual(check.status, 'unknown')
-      assert.notStrictEqual(check.id, 'basic-reporting')
-      assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
-      assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
-      assert.strictEqual(fs.existsSync(path.join(out, 'manifest.normalized.json')), false)
-      assert.strictEqual(fs.existsSync(path.join(out, 'validation-payloads.json')), false)
-      assert.strictEqual(fs.existsSync(path.join(out, 'validation-url.txt')), false)
-      assert.strictEqual(fs.existsSync(path.join(out, 'validation-urls.txt')), false)
-    } finally {
-      console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
@@ -267,16 +135,6 @@ describe('test optimization validation report writer', () => {
         artifacts: [],
       },
     ]
-    const intake = {
-      requests: [],
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
     const originalLog = console.log
 
     fs.mkdirSync(out, { recursive: true })
@@ -289,7 +147,6 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        intake,
         runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           reportPath: staticDiagnosisPath,
@@ -311,6 +168,10 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Command failure recommendation: Make sure dd-trace is installed/)
       assert.match(markdown, /Command failure signals: `Error: Cannot find module 'dd-trace\/ci\/init'`/)
       assert.match(markdown, /CI debug lines: `dd-trace debug line`/)
+      assert.strictEqual(
+        readMarkdownJsonSection(markdown, 'Diagnostic JSON').artifacts.scenarioEventArtifacts,
+        'runs'
+      )
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -413,50 +274,6 @@ describe('test optimization validation report writer', () => {
         ],
       },
     ]
-    const intakeRequests = [
-      {
-        method: 'POST',
-        url: '/api/v2/citestcycle',
-        headers: {
-          'dd-api-key': 'request-dd-api-key-secret',
-          'x-api-key': 'request-x-api-key-secret',
-          authorization: 'Bearer request-bearer-secret',
-          'proxy-authorization': 'Basic request-proxy-secret',
-          token: 'request-token-secret',
-          cookie: 'session=request-cookie-secret',
-          'set-cookie': 'session=request-set-cookie-secret',
-        },
-        payload: {
-          events: [
-            {
-              type: 'test',
-              content: {
-                name: 'example test',
-                meta: {
-                  'test.name': 'example test',
-                  'dd-api-key': 'normalized-dd-api-key-secret',
-                  'x-api-key': 'normalized-x-api-key-secret',
-                  authorization: 'Bearer normalized-bearer-secret',
-                  cookie: 'normalized-cookie-secret',
-                  message: 'api-key: normalized-header-secret',
-                },
-                metrics: {},
-              },
-            },
-          ],
-        },
-      },
-    ]
-    const intake = {
-      requests: intakeRequests,
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
     const originalLog = console.log
     const logs = []
 
@@ -475,7 +292,6 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        intake,
         runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           reportPath: staticDiagnosisPath,
@@ -489,8 +305,6 @@ describe('test optimization validation report writer', () => {
       assert.match(reportFacingOutput, /best-effort/)
       assert.strictEqual(diagnostic.normalizedManifest, undefined)
       assert.strictEqual(diagnostic.staticDiagnosis, undefined)
-      const normalizedPayloads = fs.readFileSync(path.join(out, 'intake', 'payloads.normalized.ndjson'), 'utf8')
-      assert.match(normalizedPayloads, /<redacted>/)
       assert.match(reportFacingOutput, /<redacted>/)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
@@ -517,7 +331,6 @@ describe('test optimization validation report writer', () => {
         'normalized-header-secret',
       ]) {
         assert.doesNotMatch(reportFacingOutput, new RegExp(secret))
-        assert.doesNotMatch(normalizedPayloads, new RegExp(secret))
         assert.doesNotMatch(JSON.stringify(diagnostic), new RegExp(secret))
       }
     } finally {
@@ -526,188 +339,14 @@ describe('test optimization validation report writer', () => {
     }
   })
 
-  it('redacts secret-like values from mock intake request artifacts', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const intake = new MockIntake({ out: tmpDir })
-
-    try {
-      intake.requests = [
-        {
-          method: 'POST',
-          url: '/api/v2/citestcycle',
-          headers: {
-            'dd-api-key': 'dd-api-key-secret',
-            'x-api-key': 'x-api-key-secret',
-            'api-key': 'api-key-secret',
-            authorization: 'Bearer authorization-secret',
-            'proxy-authorization': 'Basic proxy-authorization-secret',
-            token: 'token-secret',
-            cookie: 'cookie-secret',
-            'set-cookie': 'set-cookie-secret',
-          },
-          payload: {
-            message: 'dd-api-key: header-secret\nAuthorization: Bearer bearer-secret',
-            token: 'payload-token-secret',
-            cookie: 'payload-cookie-secret',
-          },
-        },
-      ]
-
-      const { requestsPath } = intake.writeArtifacts()
-      const requests = fs.readFileSync(requestsPath, 'utf8')
-
-      assert.match(requests, /<redacted>/)
-      for (const secret of [
-        'dd-api-key-secret',
-        'x-api-key-secret',
-        'api-key-secret',
-        'authorization-secret',
-        'proxy-authorization-secret',
-        'token-secret',
-        'cookie-secret',
-        'set-cookie-secret',
-        'header-secret',
-        'bearer-secret',
-        'payload-token-secret',
-        'payload-cookie-secret',
-      ]) {
-        assert.doesNotMatch(requests, new RegExp(secret))
-      }
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('does not write raw request bodies when intake decoding fails', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const intake = new MockIntake({ out: tmpDir })
-    const secret = 'decode-body-secret'
-    const rawBody = Buffer.from(`{"message":"API_KEY=${secret}"`)
-    const rawBodyBase64 = rawBody.toString('base64')
-
-    try {
-      await postToIntake(intake, rawBody, {
-        'content-type': 'application/json',
-      })
-
-      const { requestsPath } = intake.writeArtifacts()
-      const requests = fs.readFileSync(requestsPath, 'utf8')
-
-      assert.match(requests, /decodeError/)
-      assert.match(requests, /bodyBytesRead/)
-      assert.doesNotMatch(requests, /rawBodyBase64/)
-      assert.doesNotMatch(requests, new RegExp(secret))
-      assert.doesNotMatch(requests, new RegExp(rawBodyBase64))
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('caps oversized mock intake request body artifacts', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const intake = new MockIntake({ out: tmpDir, maxBodyBytes: 16 })
-    const secret = 'oversized-body-secret'
-
-    try {
-      await postToIntake(intake, Buffer.from(`{"message":"TOKEN=${secret}"}`), {
-        'content-type': 'application/json',
-      })
-
-      const { requestsPath } = intake.writeArtifacts()
-      const [request] = fs.readFileSync(requestsPath, 'utf8')
-        .trim()
-        .split('\n')
-        .map(line => JSON.parse(line))
-
-      assert.strictEqual(request.payload.bodyTruncated, true)
-      assert.strictEqual(request.payload.bodyBytesCaptured, 16)
-      assert.strictEqual(request.payload.maxBodyBytes, 16)
-      assert.doesNotMatch(JSON.stringify(request), new RegExp(secret))
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('caps decompressed intake payloads and total request count', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const intake = new MockIntake({
-      out: tmpDir,
-      maxDecompressedBodyBytes: 1024,
-      maxRequests: 1,
-    })
-    const compressed = zlib.gzipSync(Buffer.alloc(1024 * 1024, 0x20))
-
-    try {
-      await postToIntake(intake, compressed, {
-        'content-encoding': 'gzip',
-        'content-type': 'text/plain',
-      })
-      const rejected = await postToIntake(intake, Buffer.from('{}'), {
-        'content-type': 'application/json',
-      })
-
-      assert.match(intake.requests[0].payload.decodeError, /larger than|output length|Cannot create a Buffer/i)
-      assert.strictEqual(intake.allRequests.length, 1)
-      assert.strictEqual(rejected.statusCode, 429)
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('caps aggregate retained intake payload bytes', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const intake = new MockIntake({
-      out: tmpDir,
-      maxRetainedPayloadBytes: 40,
-    })
-
-    try {
-      await postToIntake(intake, Buffer.from('{"one":1}'), {
-        'content-type': 'application/json',
-      })
-      await postToIntake(intake, Buffer.from('{"two":2}'), {
-        'content-type': 'application/json',
-      })
-
-      assert.deepStrictEqual(intake.requests[0].payload, { one: 1 })
-      assert.strictEqual(intake.requests[1].payload.payloadRetained, false)
-      assert.match(intake.requests[1].payload.decodeError, /retained-payload limit/)
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('charges aggregate intake retention for decoded collection entries', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const intake = new MockIntake({
-      out: tmpDir,
-      maxRetainedPayloadBytes: 1000,
-    })
-
-    try {
-      await postToIntake(intake, Buffer.from(JSON.stringify(new Array(40).fill(null))), {
-        'content-type': 'application/json',
-      })
-
-      assert.strictEqual(intake.requests[0].payload.payloadRetained, false)
-      assert.strictEqual(intake.requests[0].payload.collectionEntries, 40)
-      assert.strictEqual(intake.requests[0].payload.estimatedRetainedBytes, 1280)
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
   it('escapes active Markdown and HTML from repository-derived report text', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
-    const intakeDir = path.join(out, 'intake')
-    const requestsPath = path.join(intakeDir, 'requests.ndjson')
     const originalLog = console.log
     const maliciousText = '<img src="https://example.invalid/track"> ![track](https://example.invalid/track) ```'
     const maliciousProvider = '<script>alert("provider")</script>'
 
-    fs.mkdirSync(intakeDir, { recursive: true })
-    fs.writeFileSync(requestsPath, '')
+    fs.mkdirSync(out, { recursive: true })
     console.log = () => {}
 
     try {
@@ -732,11 +371,6 @@ describe('test optimization validation report writer', () => {
           status: 'fail',
         }],
         out,
-        intake: {
-          requests: [],
-          getArtifactRequests () { return [] },
-          writeArtifacts () { return { requestsPath } },
-        },
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
@@ -759,13 +393,10 @@ describe('test optimization validation report writer', () => {
   it('escapes leading Markdown block syntax in repository-derived report text', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
-    const intakeDir = path.join(out, 'intake')
-    const requestsPath = path.join(intakeDir, 'requests.ndjson')
     const originalLog = console.log
     const diagnoses = ['# heading', '---', '- list item', '+ list item', '1. ordered item', '~~~']
 
-    fs.mkdirSync(intakeDir, { recursive: true })
-    fs.writeFileSync(requestsPath, '')
+    fs.mkdirSync(out, { recursive: true })
     console.log = () => {}
 
     try {
@@ -783,11 +414,6 @@ describe('test optimization validation report writer', () => {
           status: 'fail',
         })),
         out,
-        intake: {
-          requests: [],
-          getArtifactRequests () { return [] },
-          writeArtifacts () { return { requestsPath } },
-        },
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
@@ -811,10 +437,8 @@ describe('test optimization validation report writer', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const outside = path.join(tmpDir, 'outside')
     const out = path.join(tmpDir, 'results')
-    const requestsPath = path.join(outside, 'requests.ndjson')
 
     fs.mkdirSync(outside)
-    fs.writeFileSync(requestsPath, '')
     fs.symlinkSync(outside, out)
 
     try {
@@ -825,70 +449,8 @@ describe('test optimization validation report writer', () => {
         },
         results: [],
         out,
-        intake: {
-          requests: [],
-          getArtifactRequests () { return [] },
-          writeArtifacts () { return { requestsPath } },
-        },
       }), /allowed root is a symbolic link/)
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('writes report-level intake artifacts from all scenario request windows', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const out = path.join(tmpDir, 'results')
-    const packageJsonPath = path.join(tmpDir, 'package.json')
-    const intake = new MockIntake({ out })
-    const originalLog = console.log
-
-    fs.mkdirSync(out, { recursive: true })
-    fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
-    intake.record(
-      { method: 'POST', url: '/api/v2/citestcycle', headers: {} },
-      testPayload('first scenario test')
-    )
-    intake.resetRequests()
-    intake.record(
-      { method: 'POST', url: '/api/v2/citestcycle', headers: {} },
-      testPayload('second scenario test')
-    )
-    console.log = () => {}
-
-    try {
-      writeReport({
-        manifest: {
-          repository: {
-            root: tmpDir,
-          },
-          frameworks: [
-            {
-              id: 'jest:root',
-              framework: 'jest',
-              frameworkVersion: '30.1.3',
-              project: {
-                name: 'example',
-                root: tmpDir,
-                packageJson: packageJsonPath,
-              },
-            },
-          ],
-        },
-        results: [],
-        out,
-        intake,
-      })
-
-      const requests = fs.readFileSync(path.join(out, 'intake', 'requests.ndjson'), 'utf8')
-      const normalizedPayloads = fs.readFileSync(path.join(out, 'intake', 'payloads.normalized.ndjson'), 'utf8')
-
-      assert.match(requests, /first scenario test/)
-      assert.match(requests, /second scenario test/)
-      assert.match(normalizedPayloads, /first scenario test/)
-      assert.match(normalizedPayloads, /second scenario test/)
-    } finally {
-      console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
@@ -1046,16 +608,6 @@ describe('test optimization validation report writer', () => {
         artifacts: [],
       },
     ]
-    const intake = {
-      requests: [],
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
     const originalLog = console.log
     const logs = []
 
@@ -1079,7 +631,6 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        intake,
         runSummary: { runCompleted: true, validatorExitCode: 1 },
         staticDiagnosis: {
           report: {
@@ -1193,19 +744,10 @@ describe('test optimization validation report writer', () => {
       },
       artifacts: [],
     }]
-    const intake = {
-      requests: [],
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
     const originalLog = console.log
     const logs = []
     fs.writeFileSync(packageJsonPath, '{}\n')
+    fs.mkdirSync(out)
     console.log = message => logs.push(message)
 
     try {
@@ -1213,7 +755,6 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        intake,
         runSummary: { runCompleted: true, validatorExitCode: 1 },
       })
 
@@ -1265,16 +806,6 @@ describe('test optimization validation report writer', () => {
         artifacts: [],
       },
     ]
-    const intake = {
-      requests: [],
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
     const originalLog = console.log
 
     fs.mkdirSync(out, { recursive: true })
@@ -1286,7 +817,6 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        intake,
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
@@ -1335,16 +865,6 @@ describe('test optimization validation report writer', () => {
         artifacts: [],
       },
     ]
-    const intake = {
-      requests: [],
-      writeArtifacts () {
-        const intakeDir = path.join(out, 'intake')
-        fs.mkdirSync(intakeDir, { recursive: true })
-        const requestsPath = path.join(intakeDir, 'requests.ndjson')
-        fs.writeFileSync(requestsPath, '')
-        return { requestsPath }
-      },
-    }
     const originalLog = console.log
 
     fs.mkdirSync(out, { recursive: true })
@@ -1356,7 +876,6 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        intake,
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
@@ -1372,38 +891,3 @@ describe('test optimization validation report writer', () => {
     }
   })
 })
-
-async function postToIntake (intake, body, headers) {
-  const req = Readable.from([body])
-  req.method = 'POST'
-  req.url = '/api/v2/citestcycle'
-  req.headers = headers
-
-  const res = {
-    setHeader () {},
-    end (body) {
-      this.body = body
-    },
-  }
-
-  await intake.handle(req, res)
-  return res
-}
-
-function testPayload (name) {
-  return {
-    events: [
-      {
-        type: 'test',
-        content: {
-          name,
-          meta: {
-            'test.name': name,
-            'test.status': 'pass',
-          },
-          metrics: {},
-        },
-      },
-    ],
-  }
-}

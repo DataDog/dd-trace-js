@@ -4,7 +4,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const {
-  buildCiWiringEnv,
   mergeNodeOptions,
   runCommand,
 } = require('./command-runner')
@@ -21,12 +20,11 @@ const MAX_PROBE_RECORD_BYTES = 1024 * 1024
  * @param {object} options probe options
  * @param {object} options.command manifest command to run
  * @param {object} options.framework manifest framework entry
- * @param {object} options.intake fake intake used for local transport overrides
  * @param {string} options.outDir scenario output directory
  * @param {object} options.options CLI options
  * @returns {Promise<{ artifacts: object, summary: object }>} probe artifacts and summary
  */
-async function runInitializationProbe ({ command, framework, intake, outDir, options }) {
+async function runInitializationProbe ({ command, framework, outDir, options }) {
   const probeOutDir = path.join(outDir, 'initialization-probe')
   const recordsPath = path.join(probeOutDir, 'records.ndjson')
   const rawRecordsPath = path.join(probeOutDir, '.records.raw.ndjson')
@@ -35,17 +33,14 @@ async function runInitializationProbe ({ command, framework, intake, outDir, opt
   ensureSafeDirectory(outDir, probeOutDir, 'initialization probe artifact directory')
   createFileSafely(outDir, rawRecordsPath, '', 'raw initialization probe records')
 
-  const transportEnv = buildCiWiringEnv({ intake })
   let result
   let records
   try {
     result = await runCommand(probeCommand, {
       artifactRoot: outDir,
       env: {
-        ...transportEnv,
         [PROBE_FILE_ENV]: rawRecordsPath,
         NODE_OPTIONS: mergeNodeOptions(
-          transportEnv.NODE_OPTIONS,
           `-r ${formatNodeRequire(PROBE_PRELOAD)}`
         ),
       },

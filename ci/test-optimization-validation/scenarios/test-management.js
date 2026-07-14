@@ -9,14 +9,13 @@ const {
   failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
-  requestsUrlIncludes,
   requireGeneratedScenario,
   runInstrumentedCommand,
   testEventSamples,
   testsForDiscoveredScenario,
 } = require('./helpers')
 
-async function runTestManagement ({ framework, intake, out, options }) {
+async function runTestManagement ({ framework, out, options }) {
   const scenarioName = 'test-management'
   const skipResult = requireGeneratedScenario(framework, 'test-management-target', scenarioName)
   if (skipResult) return skipResult
@@ -24,15 +23,13 @@ async function runTestManagement ({ framework, intake, out, options }) {
   let outDir
   try {
     const { scenario } = await prepareGeneratedScenario(framework, 'test-management-target')
-    const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
+    const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: () => intake.configure(),
         diagnosis: 'The test-management target was not reported during baseline identity discovery.',
         evidence: discoveryEvidence(discovery),
         framework,
-        intake,
         options,
         out,
         outDir: discovery.outDir,
@@ -41,7 +38,7 @@ async function runTestManagement ({ framework, intake, out, options }) {
     }
 
     const testManagementTests = buildQuarantinedResponse(framework, scenario, discovery.testIdentities)
-    const configureTestManagement = () => intake.configure({
+    const fixtureConfig = {
       settings: {
         test_management: {
           enabled: true,
@@ -49,16 +46,15 @@ async function runTestManagement ({ framework, intake, out, options }) {
         },
       },
       testManagementTests,
-    })
-    configureTestManagement()
+    }
 
     const run = await runInstrumentedCommand({
       framework,
-      intake,
       out,
       scenarioName,
       command: scenario.runCommand,
       options,
+      fixtureConfig,
     })
     outDir = run.outDir
 
@@ -68,8 +64,8 @@ async function runTestManagement ({ framework, intake, out, options }) {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
       commandTimedOut: run.result.timedOut,
-      settingsRequested: requestsUrlIncludes(intake, '/api/v2/libraries/tests/services/setting'),
-      testManagementTestsRequested: requestsUrlIncludes(intake, '/api/v2/test/libraries/test-management/tests'),
+      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
+      testManagementLoadedFromCache: run.offline.inputs.test_management?.status === 'loaded',
       configuredManagedTests: summarizeManagedTests(testManagementTests),
       matchingTestEvents: tests.length,
       quarantinedEvents: quarantinedTests.length,
@@ -79,13 +75,26 @@ async function runTestManagement ({ framework, intake, out, options }) {
     if (run.result.exitCode !== 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureTestManagement,
+        fixtureConfig,
         diagnosis: 'The generated Test Management command reported quarantined-test evidence, but the command ' +
           `exited ${run.result.exitCode}. Test Management is only valid when the command completes successfully ` +
           'with the managed test applied.',
         evidence,
         framework,
-        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
+    }
+
+    if (!evidence.settingsLoadedFromCache || !evidence.testManagementLoadedFromCache) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        fixtureConfig,
+        diagnosis: 'Test Management settings or managed-test data were not loaded from the offline cache fixture.',
+        evidence,
+        framework,
         options,
         out,
         outDir,
@@ -96,11 +105,10 @@ async function runTestManagement ({ framework, intake, out, options }) {
     if (tests.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureTestManagement,
+        fixtureConfig,
         diagnosis: 'The test-management target test was not reported.',
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,
@@ -111,11 +119,10 @@ async function runTestManagement ({ framework, intake, out, options }) {
     if (quarantinedTests.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureTestManagement,
+        fixtureConfig,
         diagnosis: 'Test Management was enabled, but the generated target was not tagged as quarantined.',
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,

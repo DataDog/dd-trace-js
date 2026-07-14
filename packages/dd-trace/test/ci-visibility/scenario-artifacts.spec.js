@@ -10,49 +10,240 @@ const {
   runInitializationProbe,
 } = require('../../../../ci/test-optimization-validation/init-probe')
 const {
+  cleanupGeneratedFiles,
+} = require('../../../../ci/test-optimization-validation/generated-files')
+const {
+  runAutoTestRetries,
+} = require('../../../../ci/test-optimization-validation/scenarios/auto-test-retries')
+const {
+  runBasicReporting,
+} = require('../../../../ci/test-optimization-validation/scenarios/basic-reporting')
+const {
+  runCiWiring,
+} = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
+const {
+  runEarlyFlakeDetection,
+} = require('../../../../ci/test-optimization-validation/scenarios/early-flake-detection')
+const {
   runInstrumentedCommand,
 } = require('../../../../ci/test-optimization-validation/scenarios/helpers')
+const {
+  runTestManagement,
+} = require('../../../../ci/test-optimization-validation/scenarios/test-management')
 
 const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
 const PROBE_PRELOAD = path.resolve(__dirname, '../../../../ci/test-optimization-validation/init-probe-preload.js')
 
+function validationOptions (repositoryRoot) {
+  return {
+    approvedPlanSha256: '0'.repeat(64),
+    offlineFixtureNonce: '0'.repeat(32),
+    repositoryRoot,
+    verbose: false,
+  }
+}
+
 describe('test optimization validation scenario artifacts', () => {
-  it('redacts secret-like event data in direct-initialization events artifacts', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-scenario-artifacts-'))
-    const intake = {
-      port: 8126,
-      requests: [
-        testIntakeRequest({
-          API_KEY: 'direct-event-api-key-secret',
-          command: 'TOKEN=direct-event-token-secret npm test',
-          message: 'SECRET=direct-event-secret',
-        }),
+  it('validates reporting, CI wiring, EFD, ATR, and Test Management with all socket operations blocked', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-offline-scenarios-'))
+    const existingTest = path.join(out, 'existing.spec.js')
+    const generatedTest = path.join(out, 'dd-test-optimization-validation.spec.js')
+    const retryState = path.join(out, '.dd-test-optimization-validation-atr-state')
+    const networkBlocker = path.join(out, 'block-network.js')
+    const mocha = path.resolve('node_modules/.bin/mocha')
+    const init = path.resolve('ci/init.js')
+
+    fs.writeFileSync(existingTest, "describe('existing suite', () => { it('works', () => {}) })\n")
+    fs.writeFileSync(networkBlocker, [
+      "const fail = () => { throw new Error('validation attempted a network operation') }",
+      "for (const name of ['node:http', 'node:https']) {",
+      '  const client = require(name)',
+      '  client.get = fail',
+      '  client.request = fail',
+      '}',
+      "const net = require('node:net')",
+      'net.connect = fail',
+      'net.createConnection = fail',
+      'net.createServer = fail',
+      "require('node:tls').connect = fail",
+      "require('node:dgram').createSocket = fail",
+    ].join('\n'))
+
+    const command = file => ({
+      cwd: out,
+      argv: [mocha, '--reporter', 'spec', file],
+      env: { NODE_OPTIONS: `-r ${networkBlocker}` },
+      timeoutMs: 10_000,
+      usesShell: false,
+    })
+    const scenarioCommand = name => ({
+      ...command(generatedTest),
+      argv: [
+        mocha,
+        '--reporter',
+        'spec',
+        '--grep',
+        `^dd-test-optimization-validation ${name}$`,
+        generatedTest,
       ],
-      resetRequests () {},
+    })
+    const framework = {
+      id: 'mocha:offline-scenarios',
+      framework: 'mocha',
+      project: { root: out },
+      existingTestCommand: command(existingTest),
+      ciWiring: {
+        status: 'unknown',
+        provider: 'test',
+        diagnosis: 'The test CI command includes the Datadog preload.',
+      },
+      ciWiringCommand: {
+        ...command(existingTest),
+        env: { NODE_OPTIONS: `-r ${networkBlocker} -r ${init}` },
+      },
+      preflight: { ran: true, exitCode: 0, observedTestCount: 1 },
+      generatedTestStrategy: {
+        status: 'verified',
+        files: [{
+          path: generatedTest,
+          contentLines: [
+            "const fs = require('node:fs')",
+            `const retryState = ${JSON.stringify(retryState)}`,
+            "describe('dd-test-optimization-validation', () => {",
+            "  it('basic-pass', () => {})",
+            "  it('atr-fail-once', () => {",
+            '    if (!fs.existsSync(retryState)) {',
+            "      fs.writeFileSync(retryState, 'failed-once')",
+            "      throw new Error('expected first failure')",
+            '    }',
+            '  })',
+            "  it('test-management-target', () => {})",
+            '})',
+          ],
+        }],
+        scenarios: [
+          generatedScenario('basic-pass', generatedTest, scenarioCommand('basic-pass')),
+          generatedScenario('atr-fail-once', generatedTest, scenarioCommand('atr-fail-once')),
+          generatedScenario('test-management-target', generatedTest, scenarioCommand('test-management-target')),
+        ],
+        cleanupPaths: [generatedTest, retryState],
+      },
+      notes: [],
     }
+    const options = validationOptions(out)
 
     try {
-      await runInstrumentedCommand({
+      const basic = await runBasicReporting({ framework, out, options })
+      const ciWiring = await runCiWiring({
+        manifest: { repository: { root: out }, frameworks: [framework] },
+        framework,
+        out,
+        options,
+        basicResult: basic,
+      })
+      const efd = await runEarlyFlakeDetection({ framework, out, options })
+      const atr = await runAutoTestRetries({ framework, out, options })
+      const testManagement = await runTestManagement({ framework, out, options })
+
+      assert.deepStrictEqual({
+        basic: basic.status,
+        ciWiring: ciWiring.status,
+        efd: efd.status,
+        atr: atr.status,
+        testManagement: testManagement.status,
+      }, {
+        basic: 'pass',
+        ciWiring: 'pass',
+        efd: 'pass',
+        atr: 'pass',
+        testManagement: 'pass',
+      })
+    } finally {
+      cleanupGeneratedFiles({ frameworks: [framework] })
+      assert.strictEqual(fs.existsSync(generatedTest), false)
+      assert.strictEqual(fs.existsSync(retryState), false)
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('collects Mocha worker events without sockets and redacts their secret-like data', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-scenario-artifacts-'))
+    const testFile = path.join(out, 'validation.spec.js')
+    const networkBlocker = path.join(out, 'block-network.js')
+    fs.writeFileSync(testFile, [
+      "describe('SECRET=direct-event-secret', () => {",
+      "  const execution = process.env.MOCHA_WORKER_ID === undefined ? 'main' : 'worker'",
+      "  it('API_KEY=direct-event-api-key-secret ' + execution, () => {})",
+      '})',
+    ].join('\n'))
+    fs.writeFileSync(networkBlocker, [
+      "const fail = () => { throw new Error('validation attempted a network operation') }",
+      "for (const name of ['node:http', 'node:https']) {",
+      '  const client = require(name)',
+      '  client.get = fail',
+      '  client.request = fail',
+      '}',
+      "const net = require('node:net')",
+      'net.connect = fail',
+      'net.createConnection = fail',
+      'net.createServer = fail',
+      "require('node:tls').connect = fail",
+      "require('node:dgram').createSocket = fail",
+    ].join('\n'))
+
+    try {
+      const command = {
+        cwd: out,
+        argv: [path.resolve('node_modules/.bin/mocha'), testFile],
+        timeoutMs: 10_000,
+      }
+      const workerCommand = {
+        ...command,
+        argv: [path.resolve('node_modules/.bin/mocha'), '--parallel', '--jobs', '2', testFile],
+      }
+      const ciWiring = await runInstrumentedCommand({
         framework: {
-          id: 'jest:root',
-          framework: 'jest',
+          id: 'mocha:root',
+          framework: 'mocha',
         },
-        intake,
+        out,
+        scenarioName: 'ci-wiring',
+        command: {
+          ...command,
+          env: {
+            NODE_OPTIONS: `-r ${networkBlocker} -r ${path.resolve('ci/init.js')}`,
+          },
+        },
+        options: validationOptions(out),
+        ciWiring: true,
+      })
+      const direct = await runInstrumentedCommand({
+        framework: {
+          id: 'mocha:root',
+          framework: 'mocha',
+        },
         out,
         scenarioName: 'basic-reporting',
-        command: {
-          cwd: out,
-          argv: [process.execPath, '-e', 'console.log("1 passing")'],
-          timeoutMs: 10_000,
+        command: workerCommand,
+        options: validationOptions(out),
+        extraEnv: {
+          NODE_OPTIONS: `-r ${networkBlocker} -r ${path.resolve('ci/init.js')}`,
         },
-        options: { verbose: false },
       })
 
-      const events = fs.readFileSync(path.join(out, 'runs', 'jest-root', 'basic-reporting', 'events.ndjson'), 'utf8')
+      assert(direct.events.some(event => event.type === 'test' && event.testName.endsWith('worker')))
+      assert(
+        ciWiring.events.some(event => event.type === 'test'),
+        `CI wiring output did not contain a test event: ${JSON.stringify({
+          events: ciWiring.events,
+          result: ciWiring.result,
+        })}`
+      )
+
+      const events = fs.readFileSync(path.join(out, 'runs', 'mocha-root', 'basic-reporting', 'events.ndjson'), 'utf8')
       assert.match(events, /<redacted>/)
       for (const secret of [
         'direct-event-api-key-secret',
-        'direct-event-token-secret',
         'direct-event-secret',
       ]) {
         assert.doesNotMatch(events, new RegExp(secret))
@@ -150,9 +341,8 @@ describe('test optimization validation scenario artifacts', () => {
           argv: [process.execPath, '-e', script],
         },
         framework: { id: 'node:probe' },
-        intake: { port: 8126 },
         outDir: out,
-        options: { verbose: false },
+        options: validationOptions(out),
       })
       const records = fs.readFileSync(probe.artifacts.records, 'utf8')
 
@@ -166,25 +356,15 @@ describe('test optimization validation scenario artifacts', () => {
   })
 })
 
-function testIntakeRequest (meta) {
+function generatedScenario (id, file, runCommand) {
   return {
-    method: 'POST',
-    url: '/api/v2/citestcycle',
-    payload: {
-      events: [
-        {
-          type: 'test',
-          content: {
-            name: 'example test',
-            meta: {
-              'test.name': 'example test',
-              'test.status': 'pass',
-              ...meta,
-            },
-            metrics: {},
-          },
-        },
-      ],
-    },
+    id,
+    runCommand,
+    testIdentities: [{
+      suite: 'dd-test-optimization-validation',
+      name: id,
+      file,
+      parameters: null,
+    }],
   }
 }

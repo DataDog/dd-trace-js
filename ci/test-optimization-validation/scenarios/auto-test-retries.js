@@ -13,7 +13,7 @@ const {
   testsForDiscoveredScenario,
 } = require('./helpers')
 
-async function runAutoTestRetries ({ framework, intake, out, options }) {
+async function runAutoTestRetries ({ framework, out, options }) {
   const scenarioName = 'atr'
   const skipResult = requireGeneratedScenario(framework, 'atr-fail-once', scenarioName)
   if (skipResult) return skipResult
@@ -21,15 +21,13 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
   let outDir
   try {
     const { scenario } = await prepareGeneratedScenario(framework, 'atr-fail-once')
-    const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
+    const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: () => intake.configure(),
         diagnosis: 'The fail-once generated test was not reported during baseline identity discovery.',
         evidence: discoveryEvidence(discovery),
         framework,
-        intake,
         options,
         out,
         outDir: discovery.outDir,
@@ -37,20 +35,19 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
       })
     }
 
-    const configureAutoTestRetries = () => intake.configure({
+    const fixtureConfig = {
       settings: {
         flaky_test_retries_enabled: true,
       },
-    })
-    configureAutoTestRetries()
+    }
 
     const run = await runInstrumentedCommand({
       framework,
-      intake,
       out,
       scenarioName,
       command: scenario.runCommand,
       options,
+      fixtureConfig,
     })
     outDir = run.outDir
 
@@ -60,6 +57,7 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
     const evidence = {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
+      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
       matchingTestEvents: tests.length,
       autoTestRetryEvents: autoTestRetryEvents.length,
       externalRetryEvents: externalRetryEvents.length,
@@ -68,14 +66,27 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
       samples: testEventSamples(tests),
     }
 
+    if (!evidence.settingsLoadedFromCache) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        fixtureConfig,
+        diagnosis: 'Auto Test Retries settings were not loaded from the offline cache fixture.',
+        evidence,
+        framework,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
+    }
+
     if (run.result.exitCode !== 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureAutoTestRetries,
+        fixtureConfig,
         diagnosis: getAutoTestRetriesFailureDiagnosis(framework, evidence),
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,
@@ -86,11 +97,10 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
     if (tests.length < 2 || autoTestRetryEvents.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
-        configureIntake: configureAutoTestRetries,
+        fixtureConfig,
         diagnosis: getAutoTestRetriesFailureDiagnosis(framework, evidence),
         evidence,
         framework,
-        intake,
         options,
         out,
         outDir,
