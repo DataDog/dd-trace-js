@@ -6,9 +6,8 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { bindApprovedExecutable, getApprovedExecutable } = require('./executable-approval')
 const { getCiWiringCommand, getLocalValidationCommand } = require('./local-command')
-
-const APPROVED_EXECUTABLE = Symbol('approvedValidationExecutable')
 
 /**
  * Returns an executable that is unavailable for a structured command.
@@ -102,33 +101,27 @@ function bindManifestExecutables (manifest) {
   for (const [label, command, sourceCommand] of getManifestCommands(manifest)) {
     const identity = getExecutableIdentity(command, identitiesByPath)
     if (!identity) continue
-    bindExecutableIdentity(command, identity)
-    if (sourceCommand !== command) bindExecutableIdentity(sourceCommand, identity)
+    bindApprovedExecutable(command, identity)
+    if (sourceCommand !== command) bindApprovedExecutable(sourceCommand, identity)
     identities.push({ label, ...identity })
   }
   return identities.sort((left, right) => left.label.localeCompare(right.label))
 }
 
 /**
- * Returns the executable identity already bound to one command.
- *
- * @param {object} command manifest or derived command
- * @returns {object|undefined} approved identity
- */
-function getApprovedExecutable (command) {
-  return command?.[APPROVED_EXECUTABLE]
-}
-
-/**
  * Verifies and returns the canonical executable and approved invocation name used to spawn it.
  *
  * @param {object} command command about to execute
+ * @param {{requireApproval?: boolean}} [options] verification options
  * @returns {{argv0: string, path: string}} approved launch identity
  */
-function getExecutableForSpawn (command) {
+function getExecutableForSpawn (command, options = {}) {
   const approved = getApprovedExecutable(command)
   const current = getExecutableIdentity(command)
   if (!approved) {
+    if (options.requireApproval) {
+      throw new Error('The selected command executable was not covered by the approved execution plan.')
+    }
     if (!current) throw new Error(`Command executable is unavailable: ${getExecutable(command)}`)
     return getLaunchIdentity(current)
   }
@@ -176,15 +169,6 @@ function getExecutableIdentity (command, identitiesByPath) {
   }
   identitiesByPath?.set(canonicalPath, canonicalIdentity)
   return { invocationPath: resolved, ...canonicalIdentity }
-}
-
-function bindExecutableIdentity (command, identity) {
-  Object.defineProperty(command, APPROVED_EXECUTABLE, {
-    configurable: true,
-    enumerable: true,
-    value: identity,
-    writable: false,
-  })
 }
 
 /**

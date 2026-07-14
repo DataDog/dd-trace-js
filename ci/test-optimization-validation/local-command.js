@@ -2,6 +2,8 @@
 
 const path = require('path')
 
+const { inheritApprovedExecutable } = require('./executable-approval')
+
 const JEST_NO_WATCHMAN_ADJUSTMENT = 'Disable Watchman for local validation to avoid home-directory writes.'
 
 /**
@@ -22,14 +24,14 @@ function getLocalValidationCommand (framework, command) {
   if (executable === 'npm' && !argv.includes('--')) argv.push('--')
   argv.push('--no-watchman')
 
-  return {
+  return inheritApprovedExecutable(command, {
     ...command,
     argv,
     localAdjustments: [
       ...(command.localAdjustments || []),
       JEST_NO_WATCHMAN_ADJUSTMENT,
     ],
-  }
+  })
 }
 
 /**
@@ -60,10 +62,10 @@ function getDatadogCleanCommand (command) {
     env[name] = value
   }
 
-  return {
+  return inheritApprovedExecutable(command, {
     ...command,
     env,
-  }
+  })
 }
 
 /**
@@ -77,15 +79,15 @@ function getCiWiringCommand (framework) {
   if (!command || !command.usesShell || command.shell || !framework.ciWiring?.shell) return command
 
   const replayCommand = getShellReplayCommand(command, framework.ciWiring.shell)
-  if (replayCommand) return replayCommand
+  if (replayCommand) return inheritApprovedExecutable(command, replayCommand)
 
   const shell = getReplayShell(framework.ciWiring.shell)
   if (!shell) return command
 
-  return {
+  return inheritApprovedExecutable(command, {
     ...command,
     shell,
-  }
+  })
 }
 
 function getShellReplayCommand (command, shell) {

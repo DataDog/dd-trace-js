@@ -7,6 +7,7 @@ const {
   mergeNodeOptions,
   runCommand,
 } = require('./command-runner')
+const { inheritApprovedExecutable } = require('./executable-approval')
 const { sanitizeForReport } = require('./redaction')
 const { createFileSafely, ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
@@ -47,6 +48,7 @@ async function runInitializationProbe ({ command, framework, outDir, options }) 
       envMode: 'clean',
       outDir: probeOutDir,
       repositoryRoot: options.repositoryRoot,
+      requireExecutableApproval: options.requireExecutableApproval,
       label: `${framework.id}:ci-wiring:init-probe`,
       stopWhen: () => probeReachedFramework(rawRecordsPath, framework.framework),
       verbose: options.verbose,
@@ -84,10 +86,10 @@ function getProbeCommand (command) {
     delete env.NODE_OPTIONS
   }
 
-  return {
+  return inheritApprovedExecutable(command, {
     ...command,
     env,
-  }
+  })
 }
 
 function removeDatadogPreloads (nodeOptions) {

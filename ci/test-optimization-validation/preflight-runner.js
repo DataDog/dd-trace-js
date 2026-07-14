@@ -24,6 +24,7 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     label: `${framework.id}:preflight`,
     outDir,
     repositoryRoot: options.repositoryRoot,
+    requireExecutableApproval: options.requireExecutableApproval,
     verbose: options.verbose,
   })
   const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)

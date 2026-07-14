@@ -25,6 +25,7 @@ async function runSetupCommands ({ framework, out, options }) {
       outDir,
       label: `${framework.id}:setup:${command.id || index + 1}`,
       repositoryRoot: options.repositoryRoot,
+      requireExecutableApproval: options.requireExecutableApproval,
       verbose: options.verbose,
     })
     const summary = summarizeSetupCommand(command, result, outDir)

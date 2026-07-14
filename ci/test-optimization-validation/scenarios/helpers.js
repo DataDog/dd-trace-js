@@ -64,6 +64,7 @@ async function runInstrumentedCommand ({
       outDir,
       label: `${framework.id}:${scenarioName}`,
       repositoryRoot: options.repositoryRoot,
+      requireExecutableApproval: options.requireExecutableApproval,
       verbose: options.verbose,
     })
     offline = readOfflineOutput(rawOutputRoot)

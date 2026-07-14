@@ -13,6 +13,10 @@ const {
 } = require('../../../../ci/test-optimization-validation/executable')
 const { runCommand } = require('../../../../ci/test-optimization-validation/command-runner')
 const {
+  getCiWiringCommand,
+  getLocalValidationCommand,
+} = require('../../../../ci/test-optimization-validation/local-command')
+const {
   cleanupGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
 const {
@@ -449,6 +453,72 @@ describe('test optimization validator-owned execution phases', () => {
       )
       assert.match(result.stderr, /changed after approval/)
       assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves executable approval on a derived local Jest command', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-derived-jest-'))
+    const executable = path.join(root, 'jest')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [executable],
+    }
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+    fs.writeFileSync(executable, 'approved executable', { mode: 0o755 })
+
+    try {
+      formatExecutionPlan({ manifest, out: path.join(root, 'results'), requestedScenario: 'basic-reporting' })
+      fs.writeFileSync(executable, 'changed executable', { mode: 0o755 })
+
+      assert.throws(
+        () => getExecutableForSpawn(getLocalValidationCommand(framework, framework.existingTestCommand)),
+        /changed after approval/
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves executable approval on a derived CI shell replay', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-derived-ci-'))
+    const shell = path.join(root, 'bash')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.ciWiring = {
+      shell: `${shell} --noprofile --norc {0}`,
+      status: 'unknown',
+    }
+    framework.ciWiringCommand = {
+      cwd: root,
+      usesShell: true,
+      shellCommand: 'npm test',
+    }
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+    fs.writeFileSync(shell, 'approved shell', { mode: 0o755 })
+
+    try {
+      formatExecutionPlan({ manifest, out: path.join(root, 'results'), requestedScenario: 'ci-wiring' })
+      fs.writeFileSync(shell, 'changed shell', { mode: 0o755 })
+
+      assert.throws(() => getExecutableForSpawn(getCiWiringCommand(framework)), /changed after approval/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

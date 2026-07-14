@@ -231,6 +231,7 @@ async function main (argv) {
       keepTempFiles: options.keepTempFiles,
       verbose: options.verbose,
     })
+    options.requireExecutableApproval = true
     ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
     if (writePendingReport) writePendingReport({ manifest, out })
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })

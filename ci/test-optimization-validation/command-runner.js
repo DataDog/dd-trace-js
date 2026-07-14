@@ -77,7 +77,16 @@ const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
 
 function runCommand (command, options = {}) {
-  const { env = {}, envMode = 'inherit', outDir, label, repositoryRoot, stopWhen, verbose = false } = options
+  const {
+    env = {},
+    envMode = 'inherit',
+    outDir,
+    label,
+    repositoryRoot,
+    requireExecutableApproval = false,
+    stopWhen,
+    verbose = false,
+  } = options
   const artifactRoot = options.artifactRoot || path.dirname(outDir)
   const startedAt = Date.now()
   const timeoutMs = command.timeoutMs || 300_000
@@ -129,7 +138,7 @@ function runCommand (command, options = {}) {
     const useProcessGroup = shouldUseProcessGroup()
     let child
     try {
-      const executable = getExecutableForSpawn(command)
+      const executable = getExecutableForSpawn(command, { requireApproval: requireExecutableApproval })
       const argv0 = process.platform === 'win32' ? {} : { argv0: executable.argv0 }
       child = command.usesShell
         ? spawn(command.shellCommand, {
@@ -250,34 +259,41 @@ function runCommand (command, options = {}) {
       result.artifacts.stderr = path.join(outDir, 'stderr.txt')
       result.artifacts.command = path.join(outDir, 'command.json')
 
-      writeFileSafely(
-        artifactRoot,
-        result.artifacts.stdout,
-        sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes)),
-        'command stdout artifact'
-      )
-      writeFileSafely(
-        artifactRoot,
-        result.artifacts.stderr,
-        sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes)),
-        'command stderr artifact'
-      )
-      writeFileSafely(artifactRoot, result.artifacts.command, `${JSON.stringify({
-        command: sanitizeString(result.command),
-        displayCommand: sanitizeString(result.displayCommand),
-        commandDetails: result.commandDetails,
-        cwd: result.cwd,
-        exitCode: result.exitCode,
-        signal: result.signal,
-        durationMs: result.durationMs,
-        timedOut: result.timedOut,
-        stoppedEarly: result.stoppedEarly,
-        stdoutTruncated: result.stdoutTruncated,
-        stderrTruncated: result.stderrTruncated,
-        maxOutputBytes,
-        commandOutputPaths: result.commandOutputPaths,
-        outputCleanupError: result.outputCleanupError,
-      }, null, 2)}\n`, 'command metadata artifact')
+      try {
+        writeFileSafely(
+          artifactRoot,
+          result.artifacts.stdout,
+          sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes)),
+          'command stdout artifact'
+        )
+        writeFileSafely(
+          artifactRoot,
+          result.artifacts.stderr,
+          sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes)),
+          'command stderr artifact'
+        )
+        writeFileSafely(artifactRoot, result.artifacts.command, `${JSON.stringify({
+          command: sanitizeString(result.command),
+          displayCommand: sanitizeString(result.displayCommand),
+          commandDetails: result.commandDetails,
+          cwd: result.cwd,
+          exitCode: result.exitCode,
+          signal: result.signal,
+          durationMs: result.durationMs,
+          timedOut: result.timedOut,
+          stoppedEarly: result.stoppedEarly,
+          stdoutTruncated: result.stdoutTruncated,
+          stderrTruncated: result.stderrTruncated,
+          maxOutputBytes,
+          commandOutputPaths: result.commandOutputPaths,
+          outputCleanupError: result.outputCleanupError,
+        }, null, 2)}\n`, 'command metadata artifact')
+      } catch (error) {
+        result.artifactWriteError = error?.message || String(error)
+        result.stderr += '\n[test-optimization-validator] could not write command artifacts: ' +
+          `${result.artifactWriteError}\n`
+        if (!Number.isInteger(result.exitCode) || result.exitCode === 0) result.exitCode = 1
+      }
 
       resolve(result)
     }
@@ -467,7 +483,8 @@ function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
       'i'
     )
     const removal = new RegExp(
-      String.raw`(?:\bunset\s+|\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-u\s*|--unset(?:=|\s+))|` +
+      String.raw`(?:\bunset(?:\s+(?:-[A-Za-z]+|[A-Za-z_][A-Za-z0-9_]*))*\s+|` +
+      String.raw`\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-u\s*|--unset(?:=|\s+))|` +
       String.raw`\bRemove-Item\s+(?:[^;&|]*\s)?env:)${escapedName}\b`,
       'i'
     )

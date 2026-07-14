@@ -53,6 +53,7 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
         label: `${framework.id}:generated-verification:${scenario.id}`,
         outDir,
         repositoryRoot: options.repositoryRoot,
+        requireExecutableApproval: options.requireExecutableApproval,
         verbose: options.verbose,
       })
       const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)

@@ -314,8 +314,42 @@ describe('test optimization validation command runner', () => {
         cwd: outDir,
         argv: ['/usr/bin/env', '--ignore-environment', 'npm', 'test'],
       }, { env, envMode: 'clean', outDir }), /Refusing to clear the command environment/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'unset UNRELATED NODE_OPTIONS; npm test',
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns a failed result when command artifacts cannot be written after exit', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-artifact-write-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    fs.mkdirSync(artifactRoot)
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          `require('node:fs').rmSync(${JSON.stringify(artifactRoot)}, { recursive: true, force: true })`,
+        ],
+      }, {
+        artifactRoot,
+        outDir,
+        repositoryRoot,
+      })
+
+      assert.strictEqual(result.exitCode, 1)
+      assert.match(result.artifactWriteError, /ENOENT|no such file or directory/i)
+      assert.match(result.stderr, /could not write command artifacts/)
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
     }
   })
 
@@ -398,6 +432,25 @@ describe('test optimization validation command runner', () => {
       assert.match(result.stderr, /Command executable is unavailable/)
       assert.strictEqual(fs.existsSync(path.join(outDir, 'command.json')), false)
       assert.strictEqual(fs.existsSync(path.join(outDir, 'stderr.txt')), false)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses an executable that is not covered by a required approval', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [process.execPath, '-e', 'process.exit(0)'],
+      }, {
+        outDir,
+        requireExecutableApproval: true,
+      })
+
+      assert.strictEqual(result.exitCode, null)
+      assert.match(result.stderr, /not covered by the approved execution plan/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
