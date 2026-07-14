@@ -1304,11 +1304,12 @@ describe('Plugin', () => {
 
           app.use(function twice (req, res, next) {
             next()
-            next(null)
-            next(false)
-            next(0)
-            // Publish route sentinels and a truthy error directly so they do not
-            // re-enter the router after the response has ended.
+            next()
+            // Isolate plugin classification from the router control flow after
+            // the response has ended.
+            repeatChannel.publish({ req, name: 'twice', error: null })
+            repeatChannel.publish({ req, name: 'twice', error: false })
+            repeatChannel.publish({ req, name: 'twice', error: 0 })
             repeatChannel.publish({ req, name: 'twice', error: 'route' })
             repeatChannel.publish({ req, name: 'twice', error: 'router' })
             repeatChannel.publish({ req, name: 'twice', error: new Error('boom') })
@@ -1326,7 +1327,7 @@ describe('Plugin', () => {
               // (non-native) encoder path the test agent uses.
               const events = JSON.parse(spans[0].meta.events)
               const repeats = events.filter(event => event.name === 'middleware.next_called_again')
-              const expectedErrors = [false, false, false, false, false, true]
+              const expectedErrors = [false, false, false, false, false, false, true]
               assert.strictEqual(repeats.length, expectedErrors.length)
               for (let i = 0; i < repeats.length; i++) {
                 assertObjectContains(repeats[i], {

@@ -744,7 +744,7 @@ describe('createWrapRouterMethod', () => {
   })
 
   describe('repeated continuation (double next)', () => {
-    it('publishes repeat with the layer name every time the continuation is called again', () => {
+    it('publishes the first repeat with the layer name and suppresses later repeats', () => {
       subscribeAll()
       const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
       const router = { stack: [] }
@@ -758,13 +758,9 @@ describe('createWrapRouterMethod', () => {
 
       router.stack[0].handle_request({}, {}, () => {})
 
-      // All three `next` calls run synchronously inside the dispatch, so both
-      // repeats publish before the `finally` emits `exit`.
-      assert.deepStrictEqual(events.map(e => e.label), ['enter', 'next', 'finish', 'repeat', 'repeat', 'exit'])
-      const repeats = events.filter(e => e.label === 'repeat')
-      assert.strictEqual(repeats[0].data.name, 'named')
-      assert.strictEqual(repeats[0].data.error, undefined)
-      assert.strictEqual(repeats[1].data.error, 'route')
+      assert.deepStrictEqual(events.map(e => e.label), ['enter', 'next', 'finish', 'repeat', 'exit'])
+      assert.strictEqual(events[3].data.name, 'named')
+      assert.strictEqual(events[3].data.error, undefined)
     })
   })
 

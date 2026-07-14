@@ -90,21 +90,21 @@ function createLayerDispatchWrappers (name) {
   // Bound per name so express and a bare router keep independent guards.
   const publishError = createErrorPublisher(errorChannel)
 
+  /**
+   * @param {import('node:http').IncomingMessage} req
+   * @param {string | undefined} layerName
+   * @param {(error?: unknown) => void} originalNext
+   */
   function wrapNext (req, layerName, originalNext) {
     // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
     // router continuation so wrapCallback skips its name/length rewrite.
-    let published = false
+    let calls = 0
     return shimmer.wrapCallback(originalNext, original => function next (error) {
       // A handler that calls `next()` and then rejects (`next(); await bg()`)
       // makes the host call this continuation twice. Publish once so the second
       // pass cannot tag the already-finished span's parent with a late error.
-      if (published) {
-        // Surface the repeat as a diagnostic on the still-live request span. The
-        // host cannot tell a legitimate `next(); await bg()` from a buggy double
-        // `next()`, so this only records that it happened, not that it is wrong.
-        repeatChannel.publish({ req, name: layerName, error })
-      } else {
-        published = true
+      if (calls === 0) {
+        calls = 1
 
         if (error && error !== 'route' && error !== 'router') {
           publishError({ req, error })
@@ -112,6 +112,12 @@ function createLayerDispatchWrappers (name) {
 
         nextChannel.publish({ req })
         finishChannel.publish({ req })
+      } else if (calls === 1) {
+        calls = 2
+        // Surface the repeat as a diagnostic on the still-live request span. The
+        // host cannot tell a legitimate `next(); await bg()` from a buggy double
+        // `next()`, so this only records that it happened, not that it is wrong.
+        repeatChannel.publish({ req, name: layerName, error })
       }
 
       original.apply(this, arguments)
