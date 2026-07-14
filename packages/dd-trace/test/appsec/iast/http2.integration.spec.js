@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { closeSync, openSync } = require('node:fs')
 const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -138,15 +139,41 @@ describe('IAST HTTP/2 server', () => {
       agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
       request('/').catch(done)
     })
+
+    it('reports a response-side vulnerability from writeHead headers', done => {
+      handler = (req, res) => res.writeHead(200, 'OK', { 'set-cookie': 'session=abc' })
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('reports a response-side vulnerability from duplicate writeHead header pairs', done => {
+      handler = (req, res) => {
+        res.writeHead(200, [
+          ['set-cookie', 'session=abc'],
+          ['set-cookie', ['second=value', 'third=value']],
+          ['set-cookie', 'fourth=value'],
+        ])
+      }
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('reports a response-side vulnerability from raw writeHead headers', done => {
+      handler = (req, res) => res.writeHead(200, ['set-cookie', 'session=abc'])
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
+      request('/').catch(done)
+    })
   })
 
   describe('core API (server.on(\'stream\'))', () => {
     beforeEach(() => listen(() => {
       const coreServer = http2.createServer()
       coreServer.on('stream', (stream, headers) => {
-        handler({ headers, url: headers[':path'] }, stream)
-        if (!stream.headersSent) stream.respond({ ':status': 200 })
-        stream.end()
+        const responseHandled = handler({ headers, url: headers[':path'] }, stream)
+        if (!responseHandled) {
+          if (!stream.headersSent) stream.respond({ ':status': 200 })
+          stream.end()
+        }
       })
       return coreServer
     }))
@@ -188,6 +215,92 @@ describe('IAST HTTP/2 server', () => {
         const iastJson = span.meta['_dd.iast.json'] || ''
         assert.ok(!iastJson.includes('NO_HTTPONLY_COOKIE'), `Unexpected report: ${iastJson}`)
       }).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('reports a response-side vulnerability from respondWithFile headers', done => {
+      handler = (req, stream) => {
+        stream.respondWithFile(__filename, { ':status': 200, 'set-cookie': 'session=abc' })
+        return true
+      }
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('does not inspect respondWithFile headers when opening the file fails', done => {
+      handler = (req, stream) => {
+        stream.respondWithFile(`${__filename}.missing`, { ':status': 200, 'set-cookie': 'session=abc' }, {
+          onError () {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          },
+        })
+        return true
+      }
+      agent.assertSomeTraces(traces => {
+        const span = getWebSpanFrom(traces)
+        const iastJson = span.meta['_dd.iast.json'] || ''
+        assert.ok(!iastJson.includes('NO_HTTPONLY_COOKIE'), `Unexpected report: ${iastJson}`)
+      }).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('inspects respondWithFile headers after statCheck mutates them', done => {
+      handler = (req, stream) => {
+        stream.respondWithFile(__filename, { ':status': 200 }, {
+          statCheck (stat, headers) {
+            headers['set-cookie'] = 'session=abc'
+            return true
+          },
+        })
+        return true
+      }
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('does not inspect replaced respondWithFile headers before statCheck returns', done => {
+      handler = (req, stream) => {
+        stream.respondWithFile(__filename, { ':status': 200, 'set-cookie': 'session=abc' }, {
+          statCheck (stat, headers) {
+            delete headers['set-cookie']
+            return true
+          },
+        })
+        return true
+      }
+      agent.assertSomeTraces(traces => {
+        const span = getWebSpanFrom(traces)
+        const iastJson = span.meta['_dd.iast.json'] || ''
+        assert.ok(!iastJson.includes('NO_HTTPONLY_COOKIE'), `Unexpected report: ${iastJson}`)
+      }).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('reports a response-side vulnerability from respondWithFD headers', done => {
+      handler = (req, stream) => {
+        const fileDescriptor = openSync(__filename, 'r')
+        stream.once('close', () => closeSync(fileDescriptor))
+        stream.respondWithFD(fileDescriptor, { ':status': 200, 'set-cookie': 'session=abc' })
+        return true
+      }
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
+      request('/').catch(done)
+    })
+
+    it('inspects respondWithFD headers after statCheck mutates them', done => {
+      handler = (req, stream) => {
+        const fileDescriptor = openSync(__filename, 'r')
+        stream.once('close', () => closeSync(fileDescriptor))
+        stream.respondWithFD(fileDescriptor, { ':status': 200 }, {
+          statCheck (stat, headers) {
+            headers['set-cookie'] = 'session=abc'
+            return true
+          },
+        })
+        return true
+      }
+      agent.assertSomeTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE')).then(done, done)
       request('/').catch(done)
     })
   })
