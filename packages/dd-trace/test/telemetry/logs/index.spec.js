@@ -1,14 +1,12 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { match } = sinon
 
 require('../../setup/core')
-
-const { Log } = require('../../../src/log/log')
 
 describe('telemetry logs', () => {
   let defaultConfig
@@ -146,43 +144,114 @@ describe('telemetry logs', () => {
     })
 
     describe('datadog:log:error', () => {
-      it('should be called when an Error object is published to datadog:log:error', () => {
+      it('should be called when cause has a reported error code', () => {
         const error = new Error('message')
+        error.code = 'DD_TRACER_INIT_ERROR'
         const stack = error.stack
-        errorLog.publish({ cause: error, sendViaTelemetry: true })
+        errorLog.publish({ message: 'something failed', cause: error })
 
         sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
-          message: 'Generic Error',
+          message: 'something failed',
           level: 'ERROR',
           errorType: 'Error',
           stack_trace: stack,
         }))
       })
 
-      it('should be called when an error string is published to datadog:log:error', () => {
-        errorLog.publish({ message: 'custom error message', sendViaTelemetry: true })
+      it('should not be called when cause has no code', () => {
+        const error = new Error('message')
+        errorLog.publish({ message: 'something failed', cause: error })
 
-        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
-          message: 'custom error message',
+        sinon.assert.notCalled(logCollectorAdd)
+      })
+
+      it('should not be called when there is no cause', () => {
+        errorLog.publish({ message: 'custom error message' })
+
+        sinon.assert.notCalled(logCollectorAdd)
+      })
+
+      it('should not be called when cause has an unreported DD_ code', () => {
+        const error = new Error('message')
+        error.code = 'DD_SOME_FUTURE_CODE'
+        errorLog.publish({ cause: error })
+
+        sinon.assert.notCalled(logCollectorAdd)
+      })
+
+      it('should not be called when cause has a non-DD_ code', () => {
+        const error = new Error('network error')
+        error.code = 'ECONNREFUSED'
+        errorLog.publish({ cause: error })
+
+        sinon.assert.notCalled(logCollectorAdd)
+      })
+    })
+
+    describe('log module integration', () => {
+      let log
+      let logCollectorAdd
+
+      beforeEach(() => {
+        logCollectorAdd = sinon.stub()
+        const logs = proxyquire('../../../src/telemetry/logs', {
+          './log-collector': { add: logCollectorAdd },
+        })
+        logs.start(defaultConfig)
+        log = require('../../../src/log')
+        log.configure({ logger: { error: () => {}, warn: () => {}, debug: () => {} } })
+      })
+
+      afterEach(() => {
+        log.configure({})
+      })
+
+      it('should report errors from log.error when cause has a DD_ code', () => {
+        const cause = new Error('the cause')
+        cause.code = 'DD_TRACER_INIT_ERROR'
+
+        log.error('something broke', cause)
+
+        sinon.assert.calledOnce(logCollectorAdd)
+        sinon.assert.calledWith(logCollectorAdd, match({
+          message: 'something broke',
           level: 'ERROR',
-          stack_trace: undefined,
+          stack_trace: cause.stack,
+          errorType: 'Error',
         }))
       })
 
-      it('should not be called when an invalid object is published to datadog:log:error', () => {
-        errorLog.publish({ invalid: 'field', sendViaTelemetry: true })
+      it('should report errors from log.error(error) when error has a DD_ code', () => {
+        const cause = new Error('the cause')
+        cause.code = 'DD_TRACER_INIT_ERROR'
+
+        log.error(cause)
+
+        sinon.assert.calledOnce(logCollectorAdd)
+        sinon.assert.calledWith(logCollectorAdd, match({
+          level: 'ERROR',
+          stack_trace: cause.stack,
+          errorType: 'Error',
+        }))
+      })
+
+      it('should not report errors from log.error when cause has no DD_ code', () => {
+        log.error('something broke', new Error('plain error'))
 
         sinon.assert.notCalled(logCollectorAdd)
       })
 
-      it('should not be called when an object without message and stack is published to datadog:log:error', () => {
-        errorLog.publish(Log.parse(() => new Error('error')))
+      it('should not report errors from log.error when cause has a non-DD_ code', () => {
+        const cause = new Error('network error')
+        cause.code = 'ECONNREFUSED'
+
+        log.error('sending failed', cause)
 
         sinon.assert.notCalled(logCollectorAdd)
       })
 
-      it('should not be called when an error contains sendViaTelemetry:false', () => {
-        errorLog.publish({ message: 'custom error message', sendViaTelemetry: false })
+      it('should not report errors from log.error with no cause', () => {
+        log.error('plain message with no error')
 
         sinon.assert.notCalled(logCollectorAdd)
       })
