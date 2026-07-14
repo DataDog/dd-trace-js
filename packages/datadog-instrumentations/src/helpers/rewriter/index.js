@@ -41,7 +41,16 @@ for (const matcher of [matcherCjs, matcherEsm]) {
 // string literals as this file's own inline map.
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
-function rewrite (content, filename, format) {
+/**
+ * Rewrites a matching module and optionally reports successful transformation metadata.
+ *
+ * @param {string|Buffer} content
+ * @param {string} filename
+ * @param {string} format
+ * @param {(metadata: { name: string, version: string, file: string }) => void} [onTransformation]
+ * @returns {string|Buffer}
+ */
+function rewrite (content, filename, format, onTransformation) {
   if (!content) return content
   if (!filename.includes('node_modules')) return content
 
@@ -65,12 +74,13 @@ function rewrite (content, filename, format) {
   try {
     // TODO: pass existing sourcemap as input for remapping
     const { code, map } = transformer.transform(content, moduleType)
+    const rewritten = map
+      ? code + '\n' + SOURCE_MAP_PREFIX + Buffer.from(map).toString('base64')
+      : code
 
-    if (!map) return code
+    onTransformation?.({ name: moduleName, version, file: filePath })
 
-    const inlineMap = Buffer.from(map).toString('base64')
-
-    return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
+    return rewritten
   } catch (e) {
     log.error(e)
   }

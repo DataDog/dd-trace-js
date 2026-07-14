@@ -33,6 +33,9 @@ export const iitmExclusionRegExp = /middle|langsmith|openai\/_shims|openai\/reso
 const includeModuleNames = new Set()
 let moduleNameAlternation = ''
 for (const moduleName of Object.keys(hooks)) {
+  const hook = hooks[moduleName]
+  // Orchestrion-only modules are rewritten directly and do not need IITM export proxies.
+  if (hook && typeof hook === 'object' && hook.orchestrion) continue
   // Relative hooks resolve outside node_modules and are not instrumented here.
   if (isRelativeRequire(moduleName)) continue
   includeModuleNames.add(moduleName)

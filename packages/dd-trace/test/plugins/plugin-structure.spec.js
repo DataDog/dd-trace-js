@@ -8,6 +8,8 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
+const orchestrionInstrumentations = require('../../../datadog-instrumentations/src/helpers/rewriter/instrumentations')
+const runtimePlugins = require('../../src/plugins')
 
 const abstractPlugins = [
   'web', // web is an abstract plugin, and will not have an instrumentation file
@@ -173,6 +175,17 @@ describe('Plugin Structure Validation', () => {
     })
 
     assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
+  })
+
+  it('should map every Orchestrion package name to a runtime plugin', () => {
+    const missingPlugins = []
+    const packageNames = new Set(orchestrionInstrumentations.map(instrumentation => instrumentation.module.name))
+
+    for (const packageName of packageNames) {
+      if (!Object.hasOwn(runtimePlugins, packageName)) missingPlugins.push(packageName)
+    }
+
+    assert.deepStrictEqual(missingPlugins, [])
   })
 
   it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {

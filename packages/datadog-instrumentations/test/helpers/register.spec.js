@@ -4,6 +4,7 @@ const Module = require('module')
 const assert = require('node:assert/strict')
 
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 
 describe('register', () => {
   let hooksMock
@@ -24,6 +25,15 @@ describe('register', () => {
         fn: sinon.stub().returns('hooked'),
       },
       'mongodb-core': {
+        fn: sinon.stub().returns('hooked'),
+      },
+      bullmq: {
+        orchestrion: true,
+        fn: sinon.stub().returns('hooked'),
+      },
+      hybrid: {
+        orchestrion: true,
+        activate: true,
         fn: sinon.stub().returns('hooked'),
       },
     }
@@ -71,6 +81,20 @@ describe('register', () => {
       assert.strictEqual(result, 'original')
     }
   }
+
+  it('does not register RITM or IITM hooks for Orchestrion-only integrations', () => {
+    loadRegisterWithEnv()
+
+    assert.strictEqual(HookMock.callCount, 2)
+    assert.deepStrictEqual(HookMock.args.map(args => args[0]), [
+      ['@confluentinc/kafka-javascript'],
+      ['mongodb-core'],
+    ])
+    sinon.assert.notCalled(hooksMock.bullmq.fn)
+
+    channel('dd-trace:instrumentation:load').publish({ name: 'hybrid' })
+    sinon.assert.calledOnce(hooksMock.hybrid.fn)
+  })
 
   it('should disable hooks that are disabled by DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
     loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: 'mongodb-core,@confluentinc/kafka-javascript' })
