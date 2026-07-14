@@ -116,8 +116,8 @@ const apiLogs = holder.getApiLogs()`
     ? `if (api.trace !== globalThis.__ddRuntimeApi.trace || apiLogs.logs !== globalThis.__ddRuntimeApiLogs.logs) {
   throw new Error('Application OpenTelemetry APIs were bundled instead of loaded at runtime')
 }
-if (api.trace === holder.getApi().trace || apiLogs.logs === holder.getApiLogs().logs) {
-  throw new Error('Application and bridge APIs unexpectedly share a bundled module')
+if (api.trace !== holder.getApi().trace || apiLogs.logs !== holder.getApiLogs().logs) {
+  throw new Error('The bridge did not capture the application OpenTelemetry APIs')
 }
 `
     : ''

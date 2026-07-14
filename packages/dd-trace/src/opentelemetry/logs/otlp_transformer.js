@@ -1,12 +1,11 @@
 'use strict'
 
-const { getApi, getApiLogs } = require('../api')
+const { getApiBinding, getApiLogsOwner } = require('../api')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
 // SeverityNumber is a fixed spec enum available from every supported Logs API.
-const { SeverityNumber } = getApiLogs()
-const { trace } = getApi()
+const { SeverityNumber } = getApiLogsOwner()
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -50,6 +49,8 @@ const SEVERITY_MAP = {
  * @augments OtlpTransformerBase
  */
 class OtlpTransformer extends OtlpTransformerBase {
+  #apiBinding
+
   /**
    * Creates a new OtlpTransformer instance.
    *
@@ -58,6 +59,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    */
   constructor (resourceAttributes, protocol) {
     super(resourceAttributes, protocol, 'logs')
+    this.#apiBinding = getApiBinding()
   }
 
   /**
@@ -185,7 +187,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   #extractSpanContext (logContext) {
     if (!logContext) return null
 
-    const activeSpan = trace.getSpan(logContext)
+    const activeSpan = this.#apiBinding.current.trace.getSpan(logContext)
     if (activeSpan) {
       return activeSpan.spanContext()
     }

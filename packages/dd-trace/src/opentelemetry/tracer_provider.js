@@ -3,7 +3,7 @@
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
-const { getApiOwner } = require('./api')
+const { getApiBinding, getApiOwner } = require('./api')
 
 const ContextManager = require('./context_manager')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
@@ -11,6 +11,7 @@ const Tracer = require('./tracer')
 
 class TracerProvider {
   #activeProcessor = new NoopSpanProcessor()
+  #apiBinding
   #contextManager
   #processors = []
   #registered = false
@@ -34,12 +35,14 @@ class TracerProvider {
   }
 
   getTracer (name = 'opentelemetry', version = '0.0.0', options) {
+    const apiBinding = this.#getApiBinding()
     const key = `${name}@${version}`
     if (!this.#tracers.has(key)) {
       this.#tracers.set(key, new Tracer(
         { ...options, name, version },
         this.config,
-        this
+        this,
+        apiBinding
       ))
     }
     return this.#tracers.get(key)
@@ -71,7 +74,7 @@ class TracerProvider {
 
     this.#registered = true
     this.#registrationConfig = config
-    this.#contextManager = new ContextManager()
+    this.#getApiBinding()
     this.#activate(getApiOwner())
   }
 
@@ -91,6 +94,17 @@ class TracerProvider {
     } else {
       propagation.setGlobalPropagator(new W3CTraceContextPropagator())
     }
+  }
+
+  /**
+   * @returns {import('./api').ApiBinding}
+   */
+  #getApiBinding () {
+    if (!this.#apiBinding) {
+      this.#apiBinding = getApiBinding()
+      this.#contextManager = new ContextManager(this.#apiBinding)
+    }
+    return this.#apiBinding
   }
 
   forceFlush () {

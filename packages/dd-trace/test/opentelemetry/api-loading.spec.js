@@ -9,7 +9,7 @@ const path = require('node:path')
 const { describe, it, afterEach } = require('mocha')
 
 const DD_TRACE_PATH = path.join(__dirname, '..', '..', '..', '..')
-const API_OWNER_VERSION = require(path.join(DD_TRACE_PATH, 'package.json')).dependencies['@opentelemetry/api']
+const API_OWNER_VERSION = require(path.join(DD_TRACE_PATH, 'package.json')).optionalDependencies['@opentelemetry/api']
 const API_DIRECTORY = findPackageDirectory(require.resolve('@opentelemetry/api-v14'))
 const API_VERSION = require(path.join(API_DIRECTORY, 'package.json')).version
 const API_LOGS_DIRECTORIES = [
@@ -166,22 +166,31 @@ const tracer = require(${JSON.stringify(DD_TRACE_PATH)}).init({ startupLogs: fal
 const provider = new tracer.TracerProvider()
 provider.register()
 const ownerApi = holder.getApiOwner()
+const ownerApiLogs = holder.getApiLogsOwner()
 const tracerProvider = ownerApi.trace.getTracerProvider()
 const meterProvider = ownerApi.metrics.getMeterProvider()
-const loggerProvider = holder.getApiLogs().logs.getLoggerProvider()
+const loggerProvider = ownerApiLogs.logs.getLoggerProvider()
 
 async function main () {
   const { api, apiLogs } = await ${load}
   if (api.trace.getTracerProvider().getDelegate?.() !== provider) {
     throw new Error('Application API copy did not receive the tracer provider')
   }
-  if (holder.getApi() !== ownerApi || ownerApi.trace.getTracerProvider() !== tracerProvider) {
+  if (holder.getApi().trace !== api.trace) {
+    throw new Error('The bridge did not capture the application core API copy')
+  }
+  if (holder.getApiLogs().logs !== apiLogs.logs) {
+    throw new Error('The bridge did not capture the application Logs API copy')
+  }
+  if (holder.getApiOwner() !== ownerApi || ownerApi.trace.getTracerProvider() !== tracerProvider) {
     throw new Error('The bridge changed its pinned API owner')
   }
   if (ownerApi.metrics.getMeterProvider() !== meterProvider || !meterProvider.reader) {
     throw new Error('The bridge changed its pinned meter provider')
   }
-  if (holder.getApiLogs().logs.getLoggerProvider() !== loggerProvider || !loggerProvider.processor) {
+  if (holder.getApiLogsOwner() !== ownerApiLogs ||
+      ownerApiLogs.logs.getLoggerProvider() !== loggerProvider ||
+      !loggerProvider.processor) {
     throw new Error('The bridge changed its pinned logger provider')
   }
   if (apiLogs.logs.getLoggerProvider() !== loggerProvider) {
@@ -242,7 +251,7 @@ provider.register()
 
 const globalApi = globalThis[Symbol.for('opentelemetry.js.api.1')]
 if (globalApi?.version !== ${JSON.stringify(API_OWNER_VERSION)}) {
-  throw new Error('The compatibility owner did not adopt the diagnostic-only global')
+  throw new Error('The compatibility owner did not adopt the diagnostic-only global: ' + globalApi?.version)
 }
 if (api.trace.getTracerProvider().getDelegate?.() !== provider) {
   throw new Error('API ${API_VERSION} did not receive the tracer provider')

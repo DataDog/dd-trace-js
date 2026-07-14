@@ -51,6 +51,8 @@ function addModuleOfInterest (name, file) {
 const modulesOfInterest = new Set()
 
 for (const [name, instrumentation] of Object.entries(instrumentations)) {
+  if (OTEL_API_PACKAGE_PATTERN.test(name)) continue
+
   for (const entry of instrumentation) {
     addModuleOfInterest(name, entry.file)
   }

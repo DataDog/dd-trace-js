@@ -26,6 +26,8 @@ for (const hook of Object.values(hooks)) {
 const modulesOfInterest = new Set()
 
 for (const [name, instrumentation] of Object.entries(instrumentations)) {
+  if (OTEL_API_PACKAGE_PATTERN.test(name)) continue
+
   for (const entry of instrumentation) {
     if (entry.file) {
       modulesOfInterest.add(`${name}/${entry.file}`) // e.g. "redis/my/file.js"
