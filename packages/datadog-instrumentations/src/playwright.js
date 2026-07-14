@@ -2080,7 +2080,7 @@ function generateSummaryWrapper (generateSummary) {
     for (const test of this.suite.allTests()) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
       const shouldReportAsSkipped = test.outcome() === 'skipped' &&
-        (test._ddIsDisabled || !test.results.length || test.expectedStatus !== 'skipped')
+        (disabledTestIds.has(test.id) || !test.results.length || test.expectedStatus !== 'skipped')
       if (shouldReportAsSkipped && !testsReportedInGenerateSummary.has(test)) {
         testsReportedInGenerateSummary.add(test)
         const {
