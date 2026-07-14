@@ -1,6 +1,7 @@
 'use strict'
 
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
+const MCP_SESSION_ID_HEADER = 'mcp-session-id'
 
 /**
  * @param {object} toolArguments - The arguments passed to the tool
@@ -30,6 +31,7 @@ function formatOutput (result) {
   const processed = []
   if (Array.isArray(content)) {
     for (const item of content) {
+      if (!item || typeof item !== 'object') continue
       if (item.type !== 'text') continue
       const contentBlock = {
         type: item.type,
@@ -53,7 +55,7 @@ function formatOutput (result) {
  * @returns {string} The tool name, or `unknown_tool` if not found.
  */
 function getRequestToolName (params) {
-  return params?.name || 'unknown_tool'
+  return typeof params?.name === 'string' && params.name ? params.name : 'unknown_tool'
 }
 
 function safeStringify (value) {
@@ -81,11 +83,28 @@ function getInitializeClientInfo (request) {
   }
 }
 
+/**
+ * @param {object|undefined} ctx - MCP request context, or transport metadata passed with the request.
+ * @returns {string|undefined} The MCP session id from transport metadata or headers.
+ */
+function getServerRequestSessionId (ctx) {
+  if (typeof ctx?.sessionId === 'string' && ctx.sessionId) return ctx.sessionId
+
+  const extra = ctx?.extra || ctx
+  const headers = extra?.requestInfo?.headers
+  if (!headers || typeof headers !== 'object') return
+
+  const header = headers[MCP_SESSION_ID_HEADER] || headers['Mcp-Session-Id'] || headers['MCP-Session-Id']
+  const value = Array.isArray(header) ? header[0] : header
+
+  return typeof value === 'string' && value ? value : undefined
+}
+
 function sanitizeRequestParams (params) {
   if (!params || typeof params !== 'object') return params
 
   const meta = params._meta
-  if (!meta || meta[DISTRIBUTED_TRACE_META_KEY] === undefined) return params
+  if (!meta || typeof meta !== 'object' || meta[DISTRIBUTED_TRACE_META_KEY] === undefined) return params
 
   const input = {}
   let hasInput = false
@@ -149,4 +168,5 @@ module.exports = {
   formatToolInput,
   getInitializeClientInfo,
   getRequestToolName,
+  getServerRequestSessionId,
 }

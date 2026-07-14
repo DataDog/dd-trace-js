@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const path = require('node:path')
 
 const { channel } = require('dc-polyfill')
 
@@ -158,9 +157,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   describe('Client.connect() - mcp.request', () => {
     it('should generate client and server initialize spans', async () => {
       const { Client } = meta.mod
-      const clientEntryPath = meta.versionMod.getPath('@modelcontextprotocol/sdk/client')
-      const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
-      const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
+      const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
       const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
 
       const initializeServer = new McpServer({ name: 'initialize-server', version: '2.0.0' })

@@ -8,6 +8,7 @@ const {
   formatToolInput,
   getInitializeClientInfo,
   getRequestToolName,
+  getServerRequestSessionId,
 } = require('./utils')
 
 class McpClientInitializeLLMObsPlugin extends LLMObsPlugin {
@@ -77,7 +78,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
 
     const cursor = ctx.arguments?.[0]?.cursor ?? null
 
-    this._tagger.tagTextIO(span, JSON.stringify({ cursor }), JSON.stringify(ctx.result))
+    this._tagger.tagTextIO(span, JSON.stringify({ cursor }), formatServerRequestOutput(ctx.result))
   }
 }
 
@@ -114,6 +115,8 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
 
     const method = ctx.request?.method || 'unknown'
     const spanTags = { mcp_method: method }
+    const sessionId = getServerRequestSessionId(ctx)
+    if (sessionId) spanTags.mcp_session_id = sessionId
 
     const input = formatServerRequestInput(ctx.request)
     const output = formatServerRequestOutput(ctx.result)

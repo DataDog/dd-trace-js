@@ -34,6 +34,8 @@ describe('integrations', () => {
   let Client
   let McpServer
   let InMemoryTransport
+  let EmptyResultSchema
+  let ListResourceTemplatesRequestSchema
 
   let client
   let server
@@ -43,19 +45,15 @@ describe('integrations', () => {
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
-        const path = require('path')
         const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
 
         // Require the client submodule first so RITM patches it before the server loads it transitively
         Client = versionModule.get('@modelcontextprotocol/sdk/client').Client
-
-        // The package exports map remaps package.json to dist/cjs/package.json, so navigate
-        // up from the resolved client entry path to find the SDK root directory
-        const clientEntryPath = versionModule.getPath('@modelcontextprotocol/sdk/client')
-        const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
-        McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
-
+        McpServer = versionModule.get('@modelcontextprotocol/sdk/server/mcp.js').McpServer
         InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+        const types = versionModule.get('@modelcontextprotocol/sdk/types.js')
+        EmptyResultSchema = types.EmptyResultSchema
+        ListResourceTemplatesRequestSchema = types.ListResourceTemplatesRequestSchema
 
         server = new McpServer({ name: 'test-server', version: '1.0.0' })
 
@@ -83,6 +81,23 @@ describe('integrations', () => {
               { type: 'text', text: 'First part' },
               { type: 'text', text: 'Second part' },
             ],
+          })
+        )
+
+        server.registerResource(
+          'test-resource',
+          'file:///test-resource.txt',
+          { description: 'A test resource', mimeType: 'text/plain' },
+          async () => ({
+            contents: [{ uri: 'file:///test-resource.txt', text: 'resource content' }],
+          })
+        )
+
+        server.registerPrompt(
+          'test-prompt',
+          { description: 'A test prompt', argsSchema: {} },
+          async () => ({
+            messages: [{ role: 'user', content: { type: 'text', text: 'test prompt message' } }],
           })
         )
 
@@ -224,7 +239,6 @@ describe('integrations', () => {
             error: {
               type: MOCK_STRING,
               message: MOCK_STRING,
-              stack: MOCK_STRING,
             },
             tags: {
               ml_app: 'test',
@@ -415,6 +429,68 @@ describe('integrations', () => {
             assert.strictEqual(input.params._meta, undefined)
           })
 
+          it('tags server request spans with transport session id', async () => {
+            let sessionClient
+            let sessionServer
+
+            try {
+              sessionServer = new McpServer({ name: 'session-server', version: '1.0.0' })
+              sessionServer.registerTool(
+                'session-tool',
+                { description: 'A session tool', inputSchema: {} },
+                async () => ({ content: [{ type: 'text', text: 'session result' }] })
+              )
+
+              const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+              serverTransport.sessionId = 'session-123'
+              await sessionServer.connect(serverTransport)
+
+              sessionClient = new Client({ name: 'session-client', version: '1.0.0' })
+              await sessionClient.connect(clientTransport)
+
+              // Drain the initialize spans from both APM and LLMObs before asserting the tool call.
+              await getEvents(2)
+
+              const result = await sessionClient.callTool({ name: 'session-tool', arguments: {} })
+              const { apmSpans, llmobsSpans } = await getEvents(2)
+              const clientTool = findSpanByToolName(
+                llmobsSpans,
+                'MCP Client Tool Call: session-tool',
+                'session-tool'
+              )
+              const serverTool = findSpanByToolName(llmobsSpans, 'session-tool', 'session-tool')
+
+              assert.ok(clientTool)
+              assert.ok(serverTool)
+
+              const clientApmSpan = findApmSpanForLlmObsSpan(apmSpans, clientTool)
+              const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverTool)
+
+              assert.ok(clientApmSpan)
+              assert.ok(serverApmSpan)
+
+              assertLlmObsSpanEvent(serverTool, {
+                span: serverApmSpan,
+                parentId: clientApmSpan.span_id,
+                spanKind: 'tool',
+                name: 'session-tool',
+                inputValue: serverTool.meta.input.value,
+                outputValue: JSON.stringify(result),
+                tags: {
+                  ml_app: 'test',
+                  integration: 'modelcontextprotocol-sdk',
+                  mcp_method: 'tools/call',
+                  mcp_tool: 'session-tool',
+                  mcp_tool_kind: 'server',
+                  mcp_session_id: 'session-123',
+                },
+              })
+            } finally {
+              if (sessionClient) await sessionClient.close()
+              if (sessionServer) await sessionServer.close()
+            }
+          })
+
           it('creates a tool span for a tools/call server request with arguments', async () => {
             const result = await client.callTool({
               name: 'test-tool',
@@ -465,7 +541,6 @@ describe('integrations', () => {
               error: {
                 type: MOCK_STRING,
                 message: MOCK_STRING,
-                stack: MOCK_STRING,
               },
               tags: {
                 ml_app: 'test',
@@ -505,6 +580,243 @@ describe('integrations', () => {
             const output = JSON.parse(outputValue)
             assert.ok(output.tools)
             assert.ok(output.tools.some(tool => tool.name === 'test-tool'))
+          })
+
+          it('creates a task span for a resources/list server request', async () => {
+            await client.listResources()
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverRequest = llmobsSpans.find(span => span.name === 'MCP Server Request: resources/list')
+            const outputValue = serverRequest?.meta.output.value
+
+            assert.ok(serverRequest)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverRequest)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverRequest, {
+              span: serverApmSpan,
+              spanKind: 'task',
+              name: 'MCP Server Request: resources/list',
+              inputValue: serverRequest.meta.input.value,
+              outputValue,
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'resources/list',
+              },
+            })
+
+            const input = JSON.parse(serverRequest.meta.input.value)
+            assert.strictEqual(input.method, 'resources/list')
+            assert.strictEqual(input.params?._meta, undefined)
+
+            const output = JSON.parse(outputValue)
+            assert.ok(output.resources.some(resource => resource.uri === 'file:///test-resource.txt'))
+          })
+
+          it('creates a task span for a resources/read server request', async () => {
+            await client.readResource({ uri: 'file:///test-resource.txt' })
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverRequest = llmobsSpans.find(span => span.name === 'MCP Server Request: resources/read')
+            const outputValue = serverRequest?.meta.output.value
+
+            assert.ok(serverRequest)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverRequest)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverRequest, {
+              span: serverApmSpan,
+              spanKind: 'task',
+              name: 'MCP Server Request: resources/read',
+              inputValue: serverRequest.meta.input.value,
+              outputValue,
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'resources/read',
+              },
+            })
+
+            const input = JSON.parse(serverRequest.meta.input.value)
+            assert.strictEqual(input.method, 'resources/read')
+            assert.strictEqual(input.params.uri, 'file:///test-resource.txt')
+            assert.strictEqual(input.params._meta, undefined)
+
+            const output = JSON.parse(outputValue)
+            assert.strictEqual(output.contents[0].uri, 'file:///test-resource.txt')
+            assert.strictEqual(output.contents[0].text, 'resource content')
+          })
+
+          it('creates a task span for a prompts/list server request', async () => {
+            await client.listPrompts()
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverRequest = llmobsSpans.find(span => span.name === 'MCP Server Request: prompts/list')
+            const outputValue = serverRequest?.meta.output.value
+
+            assert.ok(serverRequest)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverRequest)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverRequest, {
+              span: serverApmSpan,
+              spanKind: 'task',
+              name: 'MCP Server Request: prompts/list',
+              inputValue: serverRequest.meta.input.value,
+              outputValue,
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'prompts/list',
+              },
+            })
+
+            const input = JSON.parse(serverRequest.meta.input.value)
+            assert.strictEqual(input.method, 'prompts/list')
+            assert.strictEqual(input.params?._meta, undefined)
+
+            const output = JSON.parse(outputValue)
+            assert.ok(output.prompts.some(prompt => prompt.name === 'test-prompt'))
+          })
+
+          it('creates a task span for a prompts/get server request', async () => {
+            await client.getPrompt({ name: 'test-prompt', arguments: {} })
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverRequest = llmobsSpans.find(span => span.name === 'MCP Server Request: prompts/get')
+            const outputValue = serverRequest?.meta.output.value
+
+            assert.ok(serverRequest)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverRequest)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverRequest, {
+              span: serverApmSpan,
+              spanKind: 'task',
+              name: 'MCP Server Request: prompts/get',
+              inputValue: serverRequest.meta.input.value,
+              outputValue,
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'prompts/get',
+              },
+            })
+
+            const input = JSON.parse(serverRequest.meta.input.value)
+            assert.strictEqual(input.method, 'prompts/get')
+            assert.strictEqual(input.params.name, 'test-prompt')
+            assert.strictEqual(input.params._meta, undefined)
+
+            const output = JSON.parse(outputValue)
+            assert.strictEqual(output.messages[0].content.text, 'test prompt message')
+          })
+
+          it('creates an error span when tools/call validation fails', async () => {
+            await assert.rejects(
+              () => client.request({ method: 'tools/call', params: { arguments: {} } }, EmptyResultSchema),
+              { message: /expected string/ }
+            )
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverTool = llmobsSpans.find(span => span.name === 'unknown_tool')
+
+            assert.ok(serverTool)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverTool)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverTool, {
+              span: serverApmSpan,
+              spanKind: 'tool',
+              name: 'unknown_tool',
+              inputValue: serverTool.meta.input.value,
+              error: {
+                type: MOCK_STRING,
+                message: MOCK_STRING,
+              },
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'tools/call',
+                mcp_tool: 'unknown_tool',
+                mcp_tool_kind: 'server',
+              },
+            })
+          })
+
+          it('creates an error span when a custom server handler rejects', async () => {
+            server.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+              throw new Error('template handler failed')
+            })
+
+            await assert.rejects(
+              () => client.listResourceTemplates(),
+              { message: /template handler failed/ }
+            )
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverRequest = llmobsSpans.find(span => {
+              return span.name === 'MCP Server Request: resources/templates/list'
+            })
+
+            assert.ok(serverRequest)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverRequest)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverRequest, {
+              span: serverApmSpan,
+              spanKind: 'task',
+              name: 'MCP Server Request: resources/templates/list',
+              inputValue: serverRequest.meta.input.value,
+              error: {
+                type: MOCK_STRING,
+                message: MOCK_STRING,
+              },
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'resources/templates/list',
+              },
+            })
+          })
+
+          it('creates an error span for allowlisted unknown methods', async () => {
+            try {
+              await client.request({ method: 'tools/unknown' }, EmptyResultSchema)
+            } catch {
+              // Expected: the server returns MethodNotFound.
+            }
+
+            const { apmSpans, llmobsSpans } = await getEvents(1)
+            const serverRequest = llmobsSpans.find(span => span.name === 'MCP Server Request: tools/unknown')
+
+            assert.ok(serverRequest)
+
+            const serverApmSpan = findApmSpanForLlmObsSpan(apmSpans, serverRequest)
+            assert.ok(serverApmSpan)
+
+            assertLlmObsSpanEvent(serverRequest, {
+              span: serverApmSpan,
+              spanKind: 'task',
+              name: 'MCP Server Request: tools/unknown',
+              inputValue: serverRequest.meta.input.value,
+              error: {
+                type: MOCK_STRING,
+                message: MOCK_STRING,
+              },
+              tags: {
+                ml_app: 'test',
+                integration: 'modelcontextprotocol-sdk',
+                mcp_method: 'tools/unknown',
+              },
+            })
           })
         })
       })

@@ -70,6 +70,8 @@ function wrapRequestHandler (protocol, handler) {
     const ctx = getPendingContext(protocol, extra?.requestId)
     if (!ctx) return handler.apply(this, arguments)
 
+    if (typeof extra?.sessionId === 'string' && extra.sessionId) ctx.sessionId = extra.sessionId
+
     let result
     try {
       result = handler.apply(this, arguments)
@@ -199,12 +201,19 @@ function wrapProtocol (Protocol) {
         }
         pending.set(request.id, ctx)
 
+        let error
         try {
           original.call(this, request, extra)
         } catch (err) {
           ctx.error = err
+          error = err
+        } finally {
+          serverRequestCh.end.publish(ctx)
+        }
+
+        if (error) {
           finishServerRequest(this, request.id)
-          throw err
+          throw error
         }
 
         // The SDK registers an AbortController only when it actually dispatches a handler.
