@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "stage": "31-final-build-repair",
+  "status": "passed",
+  "scope": "generated supported-integration artifacts only",
+  "head": "2858540854daf3a9de106a259fd99ccd7c3b8a70",
+  "changed_files": [
+    "supported_versions_output.json",
+    "supported_versions_table.csv"
+  ],
+  "genkit_row": {
+    "dependency": "@genkit-ai/core",
+    "integration": "genkit",
+    "minimum_tracer_supported": "1.21.0",
+    "max_tracer_supported": "1.21.0",
+    "auto-instrumented": "True"
+  },
+  "row_diff": {
+    "before_count": 113,
+    "after_count": 114,
+    "added_count": 2,
+    "removed_count": 1,
+    "changed_count": 25,
+    "genkit_additions": 1,
+    "non_genkit_canonical_catch_up": {
+      "added": ["mercurius/graphql"],
+      "removed": ["@vitest/runner/vitest"],
+      "updated_count": 25,
+      "reason": "The canonical generator reconciles the persisted artifacts with the repository's already-pinned versions manifest and current Node engine range. These differences predate the Genkit source change and were not hand-edited."
+    }
+  },
+  "commands": [
+    {
+      "command": "npm run generate:supported-integrations",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run verify:supported-integrations",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check HEAD -- supported_versions_output.json supported_versions_table.csv",
+      "exit_code": 0
+    }
+  ],
+  "hashes": {
+    "before": {
+      "supported_versions_output.json": "e07769220ad374010c1d3ec4ae7845939fb59ecb05b1dd2c99f15a4d1f4126f8",
+      "supported_versions_table.csv": "f604394e688971b4e6510db9218ae59805ed7a9d4c1c8f924f54711f23838cc8"
+    },
+    "after": {
+      "supported_versions_output.json": "891ccbd8e77911d7b18dc630e7df8608e472ccb0cc244e28139488545b530399",
+      "supported_versions_table.csv": "c0e0f9cb52d620ec8c87db83ea5485b00b9f5bee0ae05950d801902ffdfb92f9"
+    }
+  },
+  "source_or_test_logic_modified": false,
+  "tsconfig_modified": false,
+  "progress_modified": false,
+  "stage_31_gate_advanced": false
+}

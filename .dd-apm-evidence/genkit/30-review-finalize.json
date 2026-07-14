@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "stage": "30-review-finalize",
+  "status": "passed",
+  "decision": "approved",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "source_diff_sha256": "7ae72584fa94013b2e3db0f5bc465064a81aa77560d4978261b6a54559bf3abd",
+  "changed_source_and_test_file_count": 24,
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "findings": {
+    "stage_25_fixed": [
+      "GENKIT-BATCH-001",
+      "GENKIT-BATCH-002",
+      "GENKIT-BATCH-003"
+    ],
+    "stage_27_missing_cases_added": [
+      "unrelated_otel_child_inside_genkit",
+      "context_manager_preserve_marker_contract",
+      "googleai_unowned_identity"
+    ],
+    "stage_29_fixed": [
+      "GENKIT-HUMAN-001"
+    ],
+    "unresolved_review_findings": []
+  },
+  "human_approval": {
+    "approved": true,
+    "approver": "William Conti",
+    "approval_text": "continue, approved",
+    "evidence": "29-human-approval.md"
+  },
+  "contract": {
+    "instrumentation": "exact-version Orchestrion Async runInNewSpan hooks for CJS and MJS",
+    "llmobs_kinds": [
+      "llm",
+      "workflow",
+      "tool",
+      "retrieval",
+      "embedding"
+    ],
+    "provider_ownership": "source-proven googleai actions demote only when google-genai LLMObs is enabled",
+    "otel_topology": "only the genkit-tracer scope is non-recording; unrelated OTel children remain exported",
+    "privacy": "native duplicate input/output/vector attributes are suppressed; LLMObs vectors are summarized"
+  },
+  "validation": {
+    "default_genkit": {
+      "passing": 23,
+      "failing": 0,
+      "pending": 0
+    },
+    "otel_enabled_genkit": {
+      "passing": 23,
+      "failing": 0,
+      "pending": 0
+    },
+    "otel_context_manager_and_tracer": {
+      "passing": 49,
+      "failing": 0,
+      "pending": 0
+    },
+    "plugin_structure": {
+      "passing": 171,
+      "failing": 0,
+      "pending": 0
+    },
+    "syntax": "passed for 12 changed/new JavaScript source and test files",
+    "diff_check": "passed"
+  },
+  "downstream_obligations": [
+    "Stage 31 final build gate",
+    "Stage 32 final test gate",
+    "Stage 33 final lint gate",
+    "Stage 34 instrumented real-app observability gate"
+  ],
+  "limitations": [
+    "Compatibility remains intentionally exact at genkit and @genkit-ai/core 1.21.0.",
+    "The unrelated registry-dependent verify-ci-config E404 remains recorded for the final lint gate."
+  ],
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "progress_modified_by_stage_worker": false
+}

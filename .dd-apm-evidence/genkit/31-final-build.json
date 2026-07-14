@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "stage": "31-final-build",
+  "status": "failed",
+  "gate_passed": false,
+  "head": "2858540854daf3a9de106a259fd99ccd7c3b8a70",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "stage_30_source_diff_sha256": "7ae72584fa94013b2e3db0f5bc465064a81aa77560d4978261b6a54559bf3abd",
+  "stage_31_source_diff_sha256": "7ae72584fa94013b2e3db0f5bc465064a81aa77560d4978261b6a54559bf3abd",
+  "source_state_unchanged": true,
+  "commands": [
+    {
+      "command": "npm run type:check",
+      "exit_code": 2,
+      "status": "failed",
+      "classification": "repository_wide_typescript_6_configuration_blocker",
+      "errors": [
+        "TS5107: alwaysStrict=false is deprecated; ignoreDeprecations 6.0 is not configured",
+        "TS5101: baseUrl is deprecated; ignoreDeprecations 6.0 is not configured"
+      ]
+    },
+    {
+      "command": "npm run verify:config:types",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    {
+      "command": "npm run verify:supported-integrations",
+      "exit_code": 1,
+      "status": "failed",
+      "classification": "genkit_owned_generated_artifacts_stale",
+      "stale_files": [
+        "supported_versions_output.json",
+        "supported_versions_table.csv"
+      ]
+    },
+    {
+      "command": "node --check for 16 changed/new JavaScript production and test files",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check against original base excluding pipeline/evidence",
+      "exit_code": 0,
+      "status": "passed"
+    }
+  ],
+  "working_tree_changed_by_stage": false,
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "generated_files_modified": false,
+  "progress_modified_by_stage_worker": false,
+  "blockers": [
+    "Generated supported-integration artifacts are stale and must be regenerated before restarting Stage 31.",
+    "The canonical full project type-check exits non-zero on pre-existing TypeScript 6 tsconfig deprecations before project source checking."
+  ],
+  "next_stage_authorized": false,
+  "evidence": [
+    "31-final-build.md"
+  ]
+}
