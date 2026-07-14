@@ -318,6 +318,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
   sendGitMetadata (repositoryUrl) {
     if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
+      this._resolveGit()
       return
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
