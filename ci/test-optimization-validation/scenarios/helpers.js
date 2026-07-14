@@ -17,7 +17,7 @@ const {
 const { getLocalValidationCommand } = require('../local-command')
 const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
 const { readOfflineOutput } = require('../offline-output')
-const { sanitizeForReport } = require('../redaction')
+const { sanitizeForReport, sanitizeString } = require('../redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
@@ -68,7 +68,12 @@ async function runInstrumentedCommand ({
     })
     offline = readOfflineOutput(rawOutputRoot)
     if (!offline.initialized && !ciWiring) {
-      throw new Error('Offline Test Optimization exporter did not initialize or write completion evidence.')
+      const stderr = sanitizeString(result.stderr).trim().slice(-2000)
+      throw new Error(
+        'Offline Test Optimization exporter did not initialize or write completion evidence. ' +
+        `The test command exited ${result.exitCode}${result.signal ? ` with signal ${result.signal}` : ''}` +
+        `${result.timedOut ? ' after timing out' : ''}.${stderr ? ` Sanitized stderr tail: ${stderr}` : ''}`
+      )
     }
     if (offline.summary?.errors.length > 0) {
       throw new Error(`Offline Test Optimization exporter failed: ${offline.summary.errors.join(', ')}`)

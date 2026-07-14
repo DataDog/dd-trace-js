@@ -50,7 +50,7 @@ describe('test optimization validation scenario artifacts', () => {
     const generatedTest = path.join(out, 'dd-test-optimization-validation.spec.js')
     const retryState = path.join(out, '.dd-test-optimization-validation-atr-state')
     const networkBlocker = path.join(out, 'block-network.js')
-    const mocha = path.resolve('node_modules/.bin/mocha')
+    const mocha = path.resolve('node_modules/mocha/bin/mocha.js')
     const init = path.resolve('ci/init.js')
 
     fs.writeFileSync(existingTest, "describe('existing suite', () => { it('works', () => {}) })\n")
@@ -71,7 +71,7 @@ describe('test optimization validation scenario artifacts', () => {
 
     const command = file => ({
       cwd: out,
-      argv: [mocha, '--reporter', 'spec', file],
+      argv: [process.execPath, mocha, '--reporter', 'spec', file],
       env: { NODE_OPTIONS: `-r ${networkBlocker}` },
       timeoutMs: 10_000,
       usesShell: false,
@@ -79,6 +79,7 @@ describe('test optimization validation scenario artifacts', () => {
     const scenarioCommand = name => ({
       ...command(generatedTest),
       argv: [
+        process.execPath,
         mocha,
         '--reporter',
         'spec',
@@ -145,19 +146,23 @@ describe('test optimization validation scenario artifacts', () => {
       const atr = await runAutoTestRetries({ framework, out, options })
       const testManagement = await runTestManagement({ framework, out, options })
 
-      assert.deepStrictEqual({
+      const actual = {
         basic: basic.status,
         ciWiring: ciWiring.status,
         efd: efd.status,
         atr: atr.status,
         testManagement: testManagement.status,
-      }, {
+      }
+      const expected = {
         basic: 'pass',
         ciWiring: 'pass',
         efd: 'pass',
         atr: 'pass',
         testManagement: 'pass',
-      })
+      }
+      const diagnoses = { basic, ciWiring, efd, atr, testManagement }
+
+      assert.deepStrictEqual(actual, expected, JSON.stringify(diagnoses, null, 2))
     } finally {
       cleanupGeneratedFiles({ frameworks: [framework] })
       assert.strictEqual(fs.existsSync(generatedTest), false)
@@ -194,12 +199,19 @@ describe('test optimization validation scenario artifacts', () => {
     try {
       const command = {
         cwd: out,
-        argv: [path.resolve('node_modules/.bin/mocha'), testFile],
+        argv: [process.execPath, path.resolve('node_modules/mocha/bin/mocha.js'), testFile],
         timeoutMs: 10_000,
       }
       const workerCommand = {
         ...command,
-        argv: [path.resolve('node_modules/.bin/mocha'), '--parallel', '--jobs', '2', testFile],
+        argv: [
+          process.execPath,
+          path.resolve('node_modules/mocha/bin/mocha.js'),
+          '--parallel',
+          '--jobs',
+          '2',
+          testFile,
+        ],
       }
       const ciWiring = await runInstrumentedCommand({
         framework: {
