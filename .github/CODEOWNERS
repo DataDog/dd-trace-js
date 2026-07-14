@@ -109,6 +109,7 @@
 /integration-tests/pino/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
 
+/versions/bunfig.toml @DataDog/apm-idm-js @DataDog/lang-platform-js
 /packages/datadog-esbuild/ @DataDog/apm-idm-js
 /packages/datadog-turbopack/ @DataDog/apm-idm-js
 /packages/datadog-webpack/ @DataDog/apm-idm-js
