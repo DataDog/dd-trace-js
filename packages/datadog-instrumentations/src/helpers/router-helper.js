@@ -4,7 +4,7 @@ const shimmer = require('../../../datadog-shimmer')
 const { channel } = require('./instrument')
 
 const routerMountPaths = new WeakMap() // to track mount paths for router instances
-const layerMatchers = new WeakMap() // to store layer matchers
+const layerMeta = new WeakMap() // per-layer middleware dispatch metadata (resolved name + route matchers)
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
@@ -70,7 +70,7 @@ function collectRoutesFromRouter (router, prefix) {
       // Extract mount path from layer
       const mountPath = typeof layer.path === 'string'
         ? layer.path
-        : getLayerMatchers(layer)?.[0]?.path || ''
+        : getLayerMeta(layer)?.matchers?.[0]?.path || ''
 
       const nestedPrefix = joinPath(prefix, mountPath)
       if (nestedPrefix === null) continue
@@ -121,12 +121,12 @@ function getRouterMountPaths (router) {
   return [...paths]
 }
 
-function setLayerMatchers (layer, matchers) {
-  layerMatchers.set(layer, matchers)
+function setLayerMeta (layer, meta) {
+  layerMeta.set(layer, meta)
 }
 
-function getLayerMatchers (layer) {
-  return layerMatchers.get(layer)
+function getLayerMeta (layer) {
+  return layerMeta.get(layer)
 }
 
 function normalizeMethodName (method) {
@@ -224,8 +224,8 @@ module.exports = {
   setRouterMountPath,
   getRouterMountPaths,
   joinPath,
-  setLayerMatchers,
-  getLayerMatchers,
+  setLayerMeta,
+  getLayerMeta,
   markAppMounted,
   isAppMounted,
   normalizeRoutePath,
