@@ -2,6 +2,7 @@
 
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
+const { storage } = require('../../../datadog-core')
 
 const tracer = require('../../')
 
@@ -13,6 +14,9 @@ const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
 const { normalizeLinkContext } = require('./span-helpers')
+const { suppressOtelInstrumentation } = require('./suppression')
+
+const legacyStorage = storage('legacy')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -92,6 +96,12 @@ class Tracer {
   }
 
   startSpan (name, options = {}, context = api.context.active()) {
+    const store = legacyStorage.getStore()
+    const suppressedInstrumentation = store?.[suppressOtelInstrumentation]
+    if (suppressedInstrumentation !== undefined && suppressedInstrumentation === this.instrumentationLibrary?.name) {
+      return api.trace.wrapSpanContext(new SpanContext(store.span?.context()))
+    }
+
     // remove span from context in case a root span is requested via options
     if (options.root) {
       context = api.trace.deleteSpan(context)

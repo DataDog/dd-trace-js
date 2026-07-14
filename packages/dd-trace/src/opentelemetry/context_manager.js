@@ -6,6 +6,7 @@ const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = requir
 
 const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')
+const { preserveOtelContext } = require('./suppression')
 
 class ContextManager {
   constructor () {
@@ -16,7 +17,8 @@ class ContextManager {
   active () {
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
-    const activeSpan = storage('legacy').getStore()?.span
+    const activeDatadogStore = storage('legacy').getStore()
+    const activeSpan = activeDatadogStore?.span
 
     const storedSpan = store ? trace.getSpan(store) : null
 
@@ -34,6 +36,14 @@ class ContextManager {
 
     // If stored span wraps the active DD span, prefer the stored context
     if (storedSpan && storedSpan._ddSpan === activeSpan) {
+      if (otelBaggages) return propagation.setBaggage(store, otelBaggages)
+      return store
+    }
+
+    // Some framework integrations own the authoritative Datadog span while retaining a
+    // framework-native OTel span only for in-process context. Preserve that OTel context
+    // for the marked operation store instead of replacing it with a Datadog span proxy.
+    if (storedSpan && activeDatadogStore?.[preserveOtelContext]) {
       if (otelBaggages) return propagation.setBaggage(store, otelBaggages)
       return store
     }

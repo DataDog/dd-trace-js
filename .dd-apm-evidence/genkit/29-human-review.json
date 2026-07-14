@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "stage": "29-review-human-quality",
+  "gate_status": "blocked",
+  "automated_review": {
+    "completed": true,
+    "decision": "changes_required",
+    "blocking_finding_count": 1
+  },
+  "human_approval": {
+    "available": false,
+    "approved": false,
+    "reason": "No human reviewer or approval mechanism is available in this execution environment. Automated agent review is not human approval."
+  },
+  "findings": [
+    {
+      "id": "GENKIT-HUMAN-001",
+      "severity": "high",
+      "blocking": true,
+      "file": "packages/datadog-plugin-genkit/src/tracing.js",
+      "line": 78,
+      "description": "Ignored Genkit spans with OTel enabled permanently set preserveOtelContext on an ambient user-owned Datadog span. ContextManager.active later honors that stale marker, so a completed ignored Genkit operation can alter unrelated OTel context resolution for the remainder of the user span.",
+      "reproduction": {
+        "package": "genkit@1.21.0",
+        "hook_package": "@genkit-ai/core@1.21.0",
+        "before": "undefined (JSON output {})",
+        "after": true
+      },
+      "required_fix": "Scope preservation to the Genkit operation store or restore it deterministically; add an ignored-operation marker-lifetime regression."
+    }
+  ],
+  "validation": {
+    "default_genkit": "22 passing",
+    "otel_enabled_genkit": "22 passing",
+    "otel_context_manager_and_tracer": "49 passing",
+    "diff_check": "passed"
+  },
+  "reviewed_areas": [
+    "exact-version Orchestrion hook and registration",
+    "APM lifecycle, tags, errors, streaming, and parenting",
+    "LLMObs five-kind semantics, metrics, provider ownership, and privacy",
+    "OTel scope suppression and user OTel child behavior",
+    "types, docs, fixtures, configuration, and CI registration",
+    "exact 1.21.0 compatibility scope"
+  ],
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "progress_modified_by_stage_reviewer": false,
+  "stage_30_handoff": "Do not finalize until GENKIT-HUMAN-001 is fixed and actual human approval is supplied or explicitly waived/replaced by the workflow owner."
+}

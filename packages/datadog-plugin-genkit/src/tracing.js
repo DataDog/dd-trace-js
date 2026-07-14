@@ -2,8 +2,13 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const {
+  preserveOtelContext,
+  suppressOtelInstrumentation,
+} = require('../../dd-trace/src/opentelemetry/suppression')
 
 const legacyStorage = storage('legacy')
+const GENKIT_TRACER_NAME = 'genkit-tracer'
 
 const operations = {
   embedder: { kind: 'client', spanName: 'genkit.request', type: 'embedding' },
@@ -33,7 +38,13 @@ class GenkitTracingPlugin extends TracingPlugin {
       ? { kind: 'internal', spanName: 'genkit.workflow', type: 'flowStep' }
       : operations[subtype]
 
-    if (!operation) return legacyStorage.getStore()
+    if (!operation) {
+      const currentStore = legacyStorage.getStore()
+      if (this._tracerConfig.DD_TRACE_OTEL_ENABLED) {
+        return this.#suppressNativeGenkitSpan(currentStore)
+      }
+      return currentStore
+    }
 
     const actionName = options?.metadata?.name
 
@@ -50,7 +61,25 @@ class GenkitTracingPlugin extends TracingPlugin {
       },
     }, ctx)
 
+    if (this._tracerConfig.DD_TRACE_OTEL_ENABLED) {
+      ctx.currentStore = this.#suppressNativeGenkitSpan(ctx.currentStore)
+    }
+
     return ctx.currentStore
+  }
+
+  /**
+   * Prevent the Genkit OTel bridge span from duplicating this integration's authoritative span.
+   *
+   * @param {object|undefined} authoritativeStore Datadog context to retain for the operation.
+   * @returns {object} Store configured to suppress only Genkit's native OTel instrumentation scope.
+   */
+  #suppressNativeGenkitSpan (authoritativeStore) {
+    return {
+      ...authoritativeStore,
+      [preserveOtelContext]: true,
+      [suppressOtelInstrumentation]: GENKIT_TRACER_NAME,
+    }
   }
 
   /**

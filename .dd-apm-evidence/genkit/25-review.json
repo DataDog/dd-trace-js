@@ -1,0 +1,33 @@
+{
+  "check_id": "stage25-batch-review",
+  "todos": [
+    {
+      "id": "GENKIT-BATCH-001",
+      "check_id": "llmobs-model-metadata",
+      "priority": "high",
+      "description": "Register the real Genkit model/embedder identity instead of accepting LLMObs's generic `custom` fallback. Use the registered action name as the proven modelName and derive modelProvider only from explicitly supported, proven action-name prefixes; update tests to assert meaningful identity.",
+      "file": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+      "line": 273,
+      "fixable": true
+    },
+    {
+      "id": "GENKIT-BATCH-002",
+      "check_id": "llmobs-provider-ownership",
+      "priority": "high",
+      "description": "Implement provider ownership/demotion. Genkit currently always emits an `llm` span and token metrics even when an enabled supported provider LLMObs integration owns the underlying request. Follow the LangChain precedent: map proven provider prefixes, check the provider plugin, demote Genkit to `workflow`, and omit duplicate token/cost metrics; keep custom models as Genkit `llm` spans.",
+      "file": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+      "line": 268,
+      "fixable": true
+    },
+    {
+      "id": "GENKIT-BATCH-003",
+      "check_id": "otel-duplicate-and-privacy",
+      "priority": "high",
+      "description": "Resolve and test DD_TRACE_OTEL_ENABLED behavior. Exact-version runtime evidence produces a duplicate native Genkit OTel span, and that span carries raw `genkit:input`/`genkit:output`; the embedder case serializes its numeric vector into ordinary APM metadata. Establish one authoritative topology and prevent prompts/documents/vectors from leaking through the native duplicate before the live gate.",
+      "file": "packages/datadog-plugin-genkit/src/tracing.js",
+      "line": 28,
+      "fixable": true
+    }
+  ],
+  "summary": "Changes required. Default exact-version APM+LLMObs tests pass 18/18 and the Orchestrion/composite lifecycle is coherent, but model identity, provider span ownership, and OTel-enabled duplicate/privacy behavior are PR blockers. Detailed evidence is in 25-review.md and 25-attempts/."
+}

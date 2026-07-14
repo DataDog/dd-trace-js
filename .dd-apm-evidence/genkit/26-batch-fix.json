@@ -1,0 +1,26 @@
+{
+  "stage": "26-review-batch-fix",
+  "package": "genkit@1.21.0",
+  "todo_ids_fixed": [
+    "GENKIT-BATCH-001",
+    "GENKIT-BATCH-002",
+    "GENKIT-BATCH-003"
+  ],
+  "todo_ids_failed": [],
+  "todo_ids_skipped": [],
+  "tests_passing": true,
+  "validation": {
+    "default_focused_suites": "20 passing",
+    "otel_enabled_focused_suites": "20 passing",
+    "otel_context_manager": "26 passing",
+    "targeted_lint": "passed",
+    "syntax": "passed",
+    "diff_check": "passed"
+  },
+  "evidence": [
+    "26-batch-fix.md",
+    "26-attempts/focused-default.log",
+    "26-attempts/focused-otel-enabled-final.log",
+    "26-attempts/context-manager.log"
+  ]
+}

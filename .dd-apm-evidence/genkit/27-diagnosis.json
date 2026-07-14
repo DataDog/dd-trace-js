@@ -1,0 +1,50 @@
+{
+  "success": true,
+  "integration_complete": false,
+  "failure_mode": null,
+  "suggestions": [
+    "Add a Genkit OTel-enabled regression where a user-created OTel span runs inside a selected Genkit action. Assert the native Genkit bridge span stays suppressed while the unrelated user span remains recorded with the intended parent. The current record=false suppression is trace-wide, so this boundary must be proven and may require narrowing the implementation if the new test fails.",
+    "Add direct context-manager unit tests for the preserve-context symbol branch, pinning both prerequisites: a stored native OTel span and a marked active Datadog span. Also pin that unmarked or missing-stored-span cases keep the normal Datadog-to-OTel proxy behavior.",
+    "Add the complementary googleai ownership test with google-genai disabled: a source-proven googleai/ action should remain an llm span with model_provider=google, the registered model_name, and Genkit token metrics. The current test covers only the enabled-provider demotion branch."
+  ],
+  "files_to_check": [
+    "packages/datadog-plugin-genkit/src/tracing.js",
+    "packages/datadog-plugin-genkit/test/index.spec.js",
+    "packages/datadog-plugin-genkit/test/llmobs.spec.js",
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+    "packages/dd-trace/src/opentelemetry/context_manager.js",
+    "packages/dd-trace/test/opentelemetry/context_manager.spec.js"
+  ],
+  "test_output_summary": "Three independent env-scrubbed processes all passed: default exact-version Genkit APM+LLMObs 20 passing/0 failing/0 pending; DD_TRACE_OTEL_ENABLED=true exact-version Genkit APM+LLMObs 20 passing/0 failing/0 pending; OTel context-manager 26 passing/0 failing/0 pending. The repaired tests prove named custom model/embedder identity, enabled googleai provider demotion without metrics, and one safe authoritative Genkit span with native raw input/output/vector omission. Coverage remains incomplete because the shared context-manager branch has no direct unit test, unrelated user OTel spans inside the suppressed native Genkit trace are not exercised, and the googleai provider-disabled identity/metrics branch is not exercised.",
+  "passing": 66,
+  "failing": 0,
+  "skipped": 0,
+  "missing_test_cases": [
+    {
+      "name": "unrelated_otel_child_inside_genkit",
+      "description": "With DD_TRACE_OTEL_ENABLED=true, create an unrelated user OTel span inside a selected Genkit action and prove only the native Genkit bridge span is suppressed. The user OTel span must remain recorded and correctly parented; trace-wide record=false suppression makes this a high-risk boundary.",
+      "priority": "high"
+    },
+    {
+      "name": "context_manager_preserve_marker_contract",
+      "description": "Directly test ContextManager.active() for marked active Datadog spans with and without a stored native OTel span, plus the unmarked control case, so the new shared-core symbol contract is pinned independently of Genkit integration behavior.",
+      "priority": "high"
+    },
+    {
+      "name": "googleai_unowned_identity",
+      "description": "With the google-genai LLMObs integration disabled, verify googleai/provider-model remains kind llm with provider google, registered model name, and Genkit token metrics. The enabled-provider workflow-demotion branch is already covered.",
+      "priority": "medium"
+    }
+  ],
+  "skills_for_fixer": [
+    "apm-integrations",
+    "llmobs-integration",
+    "llmobs-testing"
+  ],
+  "evidence": [
+    "27-diagnosis.md",
+    "27-attempts/focused-default.log",
+    "27-attempts/focused-otel-enabled.log",
+    "27-attempts/context-manager.log"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "check_id": "stage25-batch-review",
+  "todos": [
+    {
+      "id": "GENKIT-BATCH-001",
+      "check_id": "llmobs-model-metadata",
+      "priority": "high",
+      "description": "Register the real Genkit model/embedder identity instead of allowing LLMObs to report model_name/model_provider as the generic `custom` fallback. `runInNewSpan` exposes the registered action name in options.metadata.name, and @genkit-ai/core@1.21.0 constructs object action names as pluginId/actionId. Pass a proven modelName (at minimum the registered model/embedder action name) and derive modelProvider only for an explicitly supported, proven prefix; add assertions that do not accept `custom` for named Genkit models/embedders.",
+      "file": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+      "line": 273,
+      "fixable": true
+    },
+    {
+      "id": "GENKIT-BATCH-002",
+      "check_id": "llmobs-provider-ownership",
+      "priority": "high",
+      "description": "Implement and test provider ownership for model actions. The plugin currently always registers Genkit model actions as `llm` and always tags their token metrics, even when an enabled supported provider integration emits the authoritative provider `llm` span. Follow the LangChain precedent: map only proven Genkit action-name prefixes to supported provider integrations, inspect the plugin manager, and demote the Genkit span to `workflow` (without duplicate token/cost metrics) when that provider LLMObs plugin is enabled. Keep custom/uninstrumented models as Genkit `llm` spans.",
+      "file": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+      "line": 268,
+      "fixable": true
+    },
+    {
+      "id": "GENKIT-BATCH-003",
+      "check_id": "otel-duplicate-and-privacy",
+      "priority": "high",
+      "description": "Resolve the duplicate native Genkit OpenTelemetry span path when DD_TRACE_OTEL_ENABLED=true, and add an exact-version regression test. The focused flow test observes three spans instead of the two selected Datadog spans, while the native span carries raw `genkit:input` and `genkit:output`; the embedder reproduction includes the numeric vector `[1,2,3]` in ordinary APM metadata. Define one authoritative APM/LLMObs topology for OTel-enabled users and ensure prompts/documents/vectors are not leaked through the duplicate native span. This must be fixed or an explicitly approved suppression/ownership design must be implemented before the live observability gate can pass.",
+      "file": "packages/datadog-plugin-genkit/src/tracing.js",
+      "line": 28,
+      "fixable": true
+    }
+  ],
+  "summary": "Blocking review result: changes required. The exact-version default configuration passes 18 focused APM+LLMObs tests, and the Orchestrion target, composite ordering, ignored-context propagation, async completion/errors/streaming, five-kind normalization, vector summarization in the Genkit LLMObs event, exact compatibility, and repository registrations are otherwise coherent. Three PR-blocking gaps remain: missing model identity, missing provider-span demotion/token ownership, and proven native OTel duplication with raw payload/vector leakage when DD_TRACE_OTEL_ENABLED=true."
+}

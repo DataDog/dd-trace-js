@@ -1,0 +1,30 @@
+{
+  "stage": "28-review-test-fixer",
+  "package": "genkit@1.21.0",
+  "tests_passing": true,
+  "tests_deleted": false,
+  "missing_cases_added": [
+    "unrelated_otel_child_inside_genkit",
+    "context_manager_preserve_marker_contract",
+    "googleai_unowned_identity"
+  ],
+  "changes_made": [
+    "Replaced trace-wide native Genkit suppression with exact OTel instrumentation-scope suppression.",
+    "Added a shared internal suppression-symbol contract used by the Genkit plugin, OTel context manager, and OTel tracer.",
+    "Added exact-version Genkit, provider-ownership, context-manager, and tracer boundary tests."
+  ],
+  "validation": {
+    "default_genkit": "22 passing",
+    "otel_enabled_genkit": "22 passing",
+    "otel_context_manager_and_tracer": "49 passing",
+    "targeted_lint": "passed",
+    "syntax": "passed",
+    "diff_check": "passed"
+  },
+  "evidence": [
+    "28-test-fixer.md",
+    "28-attempts/focused-default.log",
+    "28-attempts/focused-otel-enabled.log",
+    "28-attempts/otel-core-final.log"
+  ]
+}

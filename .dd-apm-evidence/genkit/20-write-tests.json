@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "stage": "20-llmobs-write-tests",
+  "success": true,
+  "package_category": "orchestration",
+  "strategy": "pure exact-version local Genkit actions without VCR, network, provider APIs, clients, or credentials",
+  "test_file_path": "packages/datadog-plugin-genkit/test/llmobs.spec.js",
+  "methods_covered": [
+    "model action success and error",
+    "generateStream success and error",
+    "flow and flowStep success and error",
+    "tool success, error, and interrupt",
+    "retrieval success and error",
+    "embedding success and error",
+    "ignored runInNewSpan labels",
+    "serialized output fallback",
+    "three-argument runInNewSpan overload"
+  ],
+  "span_kinds": ["llm", "workflow", "tool", "retrieval", "embedding"],
+  "cassettes_created": [],
+  "validation": {
+    "tests": { "passing": 13, "failing": 0, "pending": 0 },
+    "syntax": "passed",
+    "targeted_lint": "passed",
+    "diff_check": "passed"
+  },
+  "environment_removed_for_test": [
+    "OTEL_TRACES_EXPORTER",
+    "OTEL_LOGS_EXPORTER",
+    "OTEL_METRICS_EXPORTER",
+    "DD_AGENT_HOST"
+  ],
+  "production_files_modified": false,
+  "progress_modified": false,
+  "evidence": [
+    "20-test-strategy.md",
+    "20-write-tests.md",
+    "20-attempts/test-output-final.log",
+    "20-attempts/node-check.log",
+    "20-attempts/eslint.log",
+    "20-attempts/diff-check.log"
+  ]
+}

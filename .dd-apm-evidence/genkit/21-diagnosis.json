@@ -1,0 +1,62 @@
+{
+  "integration_complete": true,
+  "tests_passing": true,
+  "passing": 13,
+  "failing": 0,
+  "skipped": 0,
+  "failure_mode": null,
+  "failure_details": "The exact environment-scrubbed Genkit LLMObs suite passed in one run. All five selected LLMObs kinds and their reviewed exact-version behavior are covered. The non-failing module load-order diagnostics are emitted by the repository test harness; the Genkit integration loaded and all assertions completed.",
+  "files_to_fix": [],
+  "span_event_issues": [],
+  "tag_mismatches": [],
+  "test_output": "13 passing (1s), 0 failing, 0 pending; TEST_EXIT_CODE=0. Full output: .dd-apm-evidence/genkit/21-test-output.log",
+  "error": null,
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0",
+    "llmobs_category": "ORCHESTRATION"
+  },
+  "coverage_assessment": {
+    "complete_for_stage_implementation_contract": true,
+    "span_kinds": [
+      "llm",
+      "workflow",
+      "tool",
+      "retrieval",
+      "embedding"
+    ],
+    "covered": [
+      "model message, role, tool-call, and tool-result normalization",
+      "numeric token metrics and scalar metadata allowlist",
+      "model success and runner error with empty output",
+      "streaming chunks through final response and streaming rejection",
+      "flow and flow-step success, error, and direct parenting",
+      "tool success, runner error, and ToolInterruptError with successful outer generation",
+      "retrieval conversion, error behavior, and reviewed metadata allowlist",
+      "embedding conversion, error behavior, vector summarization, and vector omission",
+      "selected parenting through ignored native labels",
+      "serialized output fallback and malformed fallback JSON",
+      "two-argument public action paths and source-supported three-argument overload"
+    ],
+    "privacy_assertions": [
+      "unsafe media and data parts are absent",
+      "arbitrary secrets and metadata are absent",
+      "unsupported token fields are absent",
+      "numeric embedding vectors are absent"
+    ],
+    "missing_test_cases": []
+  },
+  "outside_stage_21": [
+    "Native Genkit OpenTelemetry versus Datadog APM duplicate-span behavior requires the final instrumented real-app observability gate.",
+    "Supported-provider LLMObs duplication and token ownership require a trustworthy provider identity and final live trace evidence; action names alone are insufficient.",
+    "A compatibility range broader than exact 1.21.0 requires separate cross-version evidence."
+  ],
+  "command": "env -u OTEL_TRACES_EXPORTER -u OTEL_LOGS_EXPORTER -u OTEL_METRICS_EXPORTER -u DD_AGENT_HOST ./node_modules/.bin/mocha --timeout 20000 packages/datadog-plugin-genkit/test/llmobs.spec.js",
+  "test_run_count": 1,
+  "evidence": [
+    "21-test-output.log",
+    "21-diagnosis.md"
+  ]
+}

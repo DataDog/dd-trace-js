@@ -15,6 +15,7 @@ require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
+const { suppressOtelInstrumentation } = require('../../src/opentelemetry/suppression')
 const NoopTracer = require('../../src/noop/tracer')
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
@@ -72,6 +73,32 @@ describe('OTel Tracer', () => {
 
     const ddSpanContext = span._ddSpan.context()
     assert.strictEqual(ddSpanContext.getTag('foo'), 'bar')
+  })
+
+  it('suppresses only the instrumentation scope selected by the active store', () => {
+    const tracerProvider = new TracerProvider()
+    const suppressedTracer = new Tracer({ name: 'suppressed-library' }, {}, tracerProvider)
+    const userTracer = new Tracer({ name: 'user-library' }, {}, tracerProvider)
+    const legacyStorage = storage('legacy')
+
+    tracer.trace('authoritative', authoritativeSpan => {
+      const store = {
+        ...legacyStorage.getStore(),
+        [suppressOtelInstrumentation]: 'suppressed-library',
+      }
+
+      legacyStorage.run(store, () => {
+        const suppressedSpan = suppressedTracer.startSpan('suppressed')
+        const userSpan = userTracer.startSpan('user')
+
+        assert.strictEqual(suppressedSpan instanceof Span, false)
+        assert.strictEqual(suppressedSpan.isRecording(), false)
+        assert.strictEqual(suppressedSpan.spanContext().spanId, authoritativeSpan.context().toSpanId(true))
+        assert.ok(userSpan instanceof Span)
+        isChildOf(userSpan._ddSpan, authoritativeSpan)
+        userSpan.end()
+      })
+    })
   })
 
   it('returns a non-recording span when the inner tracer is the noop', () => {

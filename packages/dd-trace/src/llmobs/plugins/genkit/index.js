@@ -2,6 +2,10 @@
 
 const LLMObsPlugin = require('../base')
 
+const providerIntegrations = {
+  googleai: { integration: 'google-genai', provider: 'google' },
+}
+
 const operationKinds = {
   embedder: { kind: 'embedding', type: 'embedding' },
   flow: { kind: 'workflow', type: 'flow' },
@@ -33,6 +37,32 @@ function getOperation (options) {
   }
 
   return operationKinds[labels?.['genkit:metadata:subtype']]
+}
+
+/**
+ * Resolve a source-proven provider prefix from a registered Genkit action name.
+ *
+ * @param {unknown} actionName Registered Genkit action name.
+ * @returns {{integration: string, provider: string}|undefined} Supported provider definition.
+ */
+function getProvider (actionName) {
+  if (typeof actionName !== 'string') return
+
+  const separator = actionName.indexOf('/')
+  if (separator === -1) return
+
+  return providerIntegrations[actionName.slice(0, separator)]
+}
+
+/**
+ * Determine whether a supported provider owns the authoritative LLMObs span.
+ *
+ * @param {{integration: string}|undefined} provider Supported provider definition.
+ * @returns {boolean} Whether the provider LLMObs plugin is enabled.
+ */
+function isProviderIntegrationEnabled (provider) {
+  const pluginManager = require('../../../../../..')._pluginManager
+  return !!provider && pluginManager?._pluginsByName[provider.integration]?.llmobs?._enabled === true
 }
 
 /**
@@ -270,9 +300,19 @@ class GenkitLLMObsPlugin extends LLMObsPlugin {
     const operation = getOperation(options)
     if (!ctx.genkit || !operation) return
 
+    const actionName = ctx.genkit.actionName || options?.metadata?.name
+    const provider = getProvider(actionName)
+    const providerOwned = operation.type === 'generation' && isProviderIntegrationEnabled(provider)
+    const kind = providerOwned ? 'workflow' : operation.kind
+
+    ctx.genkit.llmobsKind = kind
+
     return {
-      kind: operation.kind,
-      name: ctx.genkit.actionName || options?.metadata?.name || `genkit.${operation.type}`,
+      kind,
+      name: actionName || `genkit.${operation.type}`,
+      ...(kind === 'llm' || kind === 'embedding'
+        ? { modelName: actionName, modelProvider: provider?.provider }
+        : undefined),
     }
   }
 
@@ -290,6 +330,11 @@ class GenkitLLMObsPlugin extends LLMObsPlugin {
 
     const input = options?.metadata?.input
     const result = getResult(ctx, options)
+
+    if (operation.kind === 'llm' && ctx.genkit.llmobsKind === 'workflow') {
+      this._tagger.tagTextIO(span, input, ctx.error ? '' : result)
+      return
+    }
 
     switch (operation.kind) {
       case 'llm':

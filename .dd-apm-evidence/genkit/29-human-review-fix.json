@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "stage": "29-human-review-fix",
+  "finding": "GENKIT-HUMAN-001",
+  "status": "resolved",
+  "test_first": {
+    "regression": "ignored Genkit span inside an ambient user Datadog span does not persist preserveOtelContext",
+    "before_fix": {
+      "passing": 0,
+      "failing": 1,
+      "actual": true,
+      "expected": "undefined"
+    },
+    "after_fix": {
+      "passing": 1,
+      "failing": 0
+    }
+  },
+  "fix": {
+    "description": "Moved preserveOtelContext from the Datadog span object to the copied, operation-scoped legacy store and made ContextManager.active read the store flag.",
+    "production_files": [
+      "packages/datadog-plugin-genkit/src/tracing.js",
+      "packages/dd-trace/src/opentelemetry/context_manager.js"
+    ],
+    "test_files": [
+      "packages/datadog-plugin-genkit/test/index.spec.js",
+      "packages/dd-trace/test/opentelemetry/context_manager.spec.js"
+    ]
+  },
+  "validation": {
+    "targeted_regression": "1 passing",
+    "default_genkit": "23 passing",
+    "otel_enabled_genkit": "23 passing",
+    "otel_context_manager_and_tracer": "49 passing",
+    "targeted_lint": "passed",
+    "syntax": "passed",
+    "diff_check": "passed"
+  },
+  "human_approval": {
+    "available": false,
+    "approved": false,
+    "status_changed_by_fix": false,
+    "reason": "This was automated remediation; it is not literal human approval."
+  },
+  "source_sha256": {
+    "packages/datadog-plugin-genkit/src/tracing.js": "e8b9db7b95f2eca09cf15f28ce90829a856acaed75f031d14f12c4ec20585e96",
+    "packages/datadog-plugin-genkit/test/index.spec.js": "4528b7d8c854284f0e9c96add9d8c385ee4d0a36955f62d4b9f04dfc07608bc5",
+    "packages/dd-trace/src/opentelemetry/context_manager.js": "d43809462bd6c7b07cb8c330164557f5ac5a3b0d34870947a1fab450a0ad32e8",
+    "packages/dd-trace/test/opentelemetry/context_manager.spec.js": "133972c660828bdfd593cb0e010c740a8e4fb1f60bad44663a576ea8bd7765b8"
+  },
+  "progress_modified_by_worker": false,
+  "commit_created": false
+}

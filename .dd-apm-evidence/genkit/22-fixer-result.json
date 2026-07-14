@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "stage": "22-llmobs-test-fixer",
+  "success": true,
+  "tests_passing": true,
+  "files_modified": [],
+  "tests_deleted": false,
+  "fix_description": "No fix was required. Stage 21 reported 13 passing, 0 failing, failure_mode null, no span-event or tag mismatches, and an empty files_to_fix list.",
+  "error": null,
+  "test_execution": {
+    "tests_run_by_stage_22": false,
+    "reason": "Stage 22 explicitly prohibits running tests; the passing state is inherited from the authoritative Stage 21 diagnosis."
+  },
+  "source_sha256": {
+    "packages/datadog-plugin-genkit/src/index.js": "b33a3cd4af7f491aef3178445fc00f5e47cf8690c7071e8dbb596fc2db0ba9b2",
+    "packages/datadog-plugin-genkit/src/tracing.js": "0569b94d50de63415bebb02dc7d23143c816aa7a10c312806fd098b10d2eb681",
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js": "df2ddd373a215859081287b3da6e39f8fb5c7f4460683dfa9935c6cfecc31d75",
+    "packages/datadog-plugin-genkit/test/llmobs.spec.js": "59aa6c2d5a0b7e241d08c1711e81da2d6ce2782ecec5367fc7ffccd99207b6e4"
+  },
+  "source_hashes_unchanged": true,
+  "progress_modified_by_stage_worker": false
+}

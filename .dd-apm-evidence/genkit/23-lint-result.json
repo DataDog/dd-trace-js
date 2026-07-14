@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "stage": "23-lint-get-lint-failures",
+  "status": "passed_with_external_verifier_blocker",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "fixable_failure_count": 0,
+  "changed_javascript_files": [
+    "packages/datadog-instrumentations/src/genkit.js",
+    "packages/datadog-instrumentations/src/helpers/hooks.js",
+    "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js",
+    "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js",
+    "packages/datadog-plugin-genkit/src/index.js",
+    "packages/datadog-plugin-genkit/src/tracing.js",
+    "packages/datadog-plugin-genkit/test/index.spec.js",
+    "packages/datadog-plugin-genkit/test/llmobs.spec.js",
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+    "packages/dd-trace/src/plugins/index.js",
+    "packages/dd-trace/test/plugins/externals.js"
+  ],
+  "checks": {
+    "targeted_eslint": {
+      "exit_code": 0,
+      "errors": 0,
+      "warnings": 0,
+      "file_count": 11
+    },
+    "node_check": {
+      "exit_code": 0,
+      "file_count": 11
+    },
+    "diff_check": {
+      "exit_code": 0
+    },
+    "verify_config_types": {
+      "exit_code": 0
+    },
+    "json_yaml_parse": {
+      "exit_code": 0,
+      "files": [
+        "packages/dd-trace/src/config/supported-configurations.json",
+        "packages/dd-trace/test/plugins/versions/package.json",
+        ".github/workflows/apm-integrations.yml"
+      ]
+    },
+    "codeowners": {
+      "exit_code": 0,
+      "unknown_files": 0
+    },
+    "verify_exercised_tests": {
+      "exit_code": 0
+    },
+    "verify_ci_config": {
+      "exit_code": 1,
+      "classification": "external_repository_wide_verifier_blocker",
+      "blocked_package": "confluentinc-kafka-javascript",
+      "error": "npm E404 while scripts/verify-ci-config.js queried all integration versions"
+    }
+  },
+  "diagnostic_non_applicable_inputs": {
+    "eslint_exit_code": 1,
+    "errors": 0,
+    "ignored_file_warnings": 4,
+    "files": [
+      "docs/test.ts",
+      "index.d.ts",
+      "index.d.v5.ts",
+      "packages/dd-trace/src/config/generated-config-types.d.ts"
+    ],
+    "classification": "outside_repository_eslint_configuration"
+  },
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "progress_modified_by_stage_worker": false,
+  "stage_24_handoff": "No Genkit lint fixes are required unless source changes after this evidence."
+}

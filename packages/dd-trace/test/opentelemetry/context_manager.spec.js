@@ -6,10 +6,12 @@ const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
 const { assertObjectContains, ANY_STRING } = require('../../../../integration-tests/helpers')
+const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, removeAllBaggageItems, removeBaggageItem, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
 const ContextManager = require('../../src/opentelemetry/context_manager')
+const { preserveOtelContext } = require('../../src/opentelemetry/suppression')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 require('../../').init()
 
@@ -210,6 +212,53 @@ describe('OTel Context Manager', () => {
 
   describe('with an active Datadog span', () => {
     const ddTracer = require('../../')
+
+    it('preserves a stored OTel span when the active Datadog store is marked', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const legacyStorage = storage('legacy')
+        const markedStore = { ...legacyStorage.getStore(), [preserveOtelContext]: true }
+        const storedSpan = trace.wrapSpanContext({
+          traceId: '0123456789abcdef0123456789abcdef',
+          spanId: '0123456789abcdef',
+          traceFlags: 1,
+        })
+        const storedContext = trace.setSpan(ROOT_CONTEXT, storedSpan)
+
+        legacyStorage.run(markedStore, () => {
+          context.with(storedContext, () => {
+            assert.strictEqual(trace.getActiveSpan(), storedSpan)
+          })
+        })
+      })
+    })
+
+    it('uses the active Datadog span when a marked store has no stored OTel span', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const legacyStorage = storage('legacy')
+        const markedStore = { ...legacyStorage.getStore(), [preserveOtelContext]: true }
+        legacyStorage.run(markedStore, () => {
+          const activeSpan = trace.getActiveSpan()
+          assert.strictEqual(activeSpan._ddSpan, ddSpan)
+        })
+      })
+    })
+
+    it('uses the active Datadog span instead of stored OTel for an unmarked span', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const storedSpan = trace.wrapSpanContext({
+          traceId: 'fedcba9876543210fedcba9876543210',
+          spanId: 'fedcba9876543210',
+          traceFlags: 1,
+        })
+        const storedContext = trace.setSpan(ROOT_CONTEXT, storedSpan)
+
+        context.with(storedContext, () => {
+          const activeSpan = trace.getActiveSpan()
+          assert.notStrictEqual(activeSpan, storedSpan)
+          assert.strictEqual(activeSpan._ddSpan, ddSpan)
+        })
+      })
+    })
 
     it('exposes the active span via trace.getActiveSpan() and forwards writes', () => {
       ddTracer.trace('dd-active', (ddSpan) => {

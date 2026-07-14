@@ -2,17 +2,22 @@
 
 const assert = require('node:assert/strict')
 
+const { trace } = require('@opentelemetry/api')
+
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { preserveOtelContext } = require('../../dd-trace/src/opentelemetry/suppression')
 
 describe('Plugin', () => {
   describe('genkit', () => {
     withVersions('genkit', ['@genkit-ai/core'], version => {
       let ai
+      let runInNewSpan
 
       before(async () => {
         await agent.load('genkit')
         const { genkit } = require(`../../../versions/genkit@${version}`).get('genkit/beta')
+        ;({ runInNewSpan } = require(`../../../versions/genkit@${version}`).get('@genkit-ai/core/tracing'))
         ai = genkit({ name: 'datadog-genkit-test' })
       })
 
@@ -117,6 +122,70 @@ describe('Plugin', () => {
 
         await embedder({ input: [{ content: [{ text: 'hello' }] }] })
         await spanPromise
+      })
+
+      it('keeps one safe authoritative span when the OTel bridge is enabled', async () => {
+        const embedder = ai.defineEmbedder({ name: 'safeOtelEmbedder' }, async documents => ({
+          embeddings: documents.map(() => ({ embedding: [1, 2, 3] })),
+        }))
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          assert.strictEqual(spans.length, 1)
+          assert.strictEqual(spans[0].name, 'genkit.request')
+          assert.strictEqual(spans[0].resource, 'safeOtelEmbedder')
+          assert.strictEqual(spans[0].meta['genkit.operation.type'], 'embedding')
+
+          const serialized = JSON.stringify({ meta: spans[0].meta, metrics: spans[0].metrics })
+          assert.doesNotMatch(serialized, /genkit:input|genkit:output|\[1,2,3\]/)
+        })
+
+        await embedder({ input: [{ content: [{ text: 'safe input' }] }] })
+        await tracesPromise
+      })
+
+      it('records an unrelated user OTel child under the authoritative Genkit span', async () => {
+        if (process.env.DD_TRACE_OTEL_ENABLED !== 'true') return
+
+        const userTracer = trace.getTracer('user-library')
+        const model = ai.defineModel({ name: 'modelWithUserOtelChild' }, async () => {
+          return userTracer.startActiveSpan('user.otel.child', span => {
+            span.setAttribute('user.attribute', 'preserved')
+            span.end()
+            return {
+              message: { role: 'model', content: [{ text: 'done' }] },
+              finishReason: 'stop',
+            }
+          })
+        })
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          assert.strictEqual(spans.length, 2)
+
+          const genkitSpan = spans.find(span => span.name === 'genkit.request')
+          const userSpan = spans.find(span => span.resource === 'user.otel.child')
+          assert.ok(genkitSpan)
+          assert.ok(userSpan)
+          assert.strictEqual(userSpan.parent_id.toString(), genkitSpan.span_id.toString())
+          assert.strictEqual(userSpan.meta['user.attribute'], 'preserved')
+          assert.strictEqual(spans.some(span => span.meta['genkit:input'] !== undefined), false)
+        })
+
+        await model({ messages: [{ role: 'user', content: [{ text: 'hello' }] }] })
+        await tracesPromise
+      })
+
+      it('does not leave OTel context preservation on an ambient user span', async () => {
+        if (process.env.DD_TRACE_OTEL_ENABLED !== 'true') return
+
+        const tracer = require('../../dd-trace')
+        await tracer.trace('user-owned-parent', async span => {
+          await runInNewSpan({
+            metadata: { name: 'ignoredUtil' },
+            labels: { 'genkit:type': 'util' },
+          }, async () => {})
+
+          assert.strictEqual(span[preserveOtelContext], undefined)
+        })
       })
     })
   })
