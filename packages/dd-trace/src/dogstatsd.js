@@ -4,14 +4,65 @@ const dgram = require('dgram')
 const isIP = require('net').isIP
 
 const { storage } = require('../../datadog-core')
-const request = require('./exporters/common/request')
-const log = require('./log')
-const Histogram = require('./histogram')
+const { fetchAgentInfo } = require('./agent/info')
 const { entityId } = require('./exporters/common/docker')
+const request = require('./exporters/common/request')
+const { isLoopbackHost } = require('./exporters/common/url')
+const Histogram = require('./histogram')
+const log = require('./log')
 
 const legacyStorage = storage('legacy')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
+
+const DOGSTATSD_PROXY_PATH = '/dogstatsd/v2/proxy'
+const DOGSTATSD_PROXY_PATH_DEPRECATED = '/dogstatsd/v1/proxy'
+
+/**
+ * @param {string} dogstatsdHost
+ * @param {URL} agentUrl
+ */
+function isDivergentFromAgent (dogstatsdHost, agentUrl) {
+  const agentHost = agentUrl.hostname
+  if (!agentHost) {
+    return true
+  }
+
+  const normalizedDogstatsdHost = dogstatsdHost.toLowerCase()
+  const normalizedAgentHost = agentHost.toLowerCase()
+  if (normalizedDogstatsdHost === normalizedAgentHost) {
+    return false
+  }
+
+  return !(isLoopbackHost(normalizedDogstatsdHost) && isLoopbackHost(normalizedAgentHost))
+}
+
+/**
+ * @param {URL|string} metricsProxyUrl
+ * @param {() => void} onUnsupported
+ */
+function detectUnsupportedProxy (metricsProxyUrl, onUnsupported) {
+  const url = metricsProxyUrl instanceof URL ? metricsProxyUrl : new URL(metricsProxyUrl.toString())
+
+  /**
+   * @param {Error|null} error
+   * @param {{ endpoints?: string[] }} [agentInfo]
+   */
+  function onAgentInfo (error, agentInfo) {
+    if (error) return
+
+    const endpoints = agentInfo?.endpoints
+    const supportsProxy = Array.isArray(endpoints) &&
+      (endpoints.includes(DOGSTATSD_PROXY_PATH) || endpoints.includes(DOGSTATSD_PROXY_PATH_DEPRECATED))
+
+    if (!supportsProxy) {
+      log.debug('DogStatsDClient: agent does not advertise %s, sending metrics via UDP', DOGSTATSD_PROXY_PATH)
+      onUnsupported()
+    }
+  }
+
+  fetchAgentInfo(url, onAgentInfo)
+}
 
 const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
@@ -31,8 +82,11 @@ class DogStatsDClient {
       this._httpOptions = {
         method: 'POST',
         url: options.metricsProxyUrl.toString(),
-        path: '/dogstatsd/v2/proxy',
+        path: DOGSTATSD_PROXY_PATH,
       }
+      detectUnsupportedProxy(options.metricsProxyUrl, () => {
+        this._httpOptions = undefined
+      })
     }
 
     this._host = options.host
@@ -197,8 +251,13 @@ class DogStatsDClient {
       lookup: config.lookup,
     }
 
+    // A port override does not prove direct UDP is reachable; only a divergent host bypasses the proxy.
     if (config.url) {
-      clientConfig.metricsProxyUrl = config.url
+      const hostIsExplicit = config.getOrigin('dogstatsd.hostname') !== 'default'
+
+      if (!hostIsExplicit || !isDivergentFromAgent(config.dogstatsd.hostname, config.url)) {
+        clientConfig.metricsProxyUrl = config.url
+      }
     }
 
     return clientConfig

@@ -32,6 +32,8 @@ describe('dogstatsd', () => {
   let assertData
   let docker
   let log
+  let agentInfo
+  let request
 
   beforeEach((done) => {
     udp6 = {
@@ -75,11 +77,24 @@ describe('dogstatsd', () => {
     docker = {}
     log = { debug: sinon.stub(), error: sinon.stub() }
 
+    agentInfo = { error: null, info: { endpoints: ['/dogstatsd/v2/proxy'] } }
+    /**
+     * @param {URL} agentUrl
+     * @param {(error: Error|null, info?: { endpoints?: string[] }) => void} callback
+     */
+    const fetchAgentInfo = sinon.stub().callsFake((agentUrl, callback) => {
+      assert.ok(agentUrl instanceof URL)
+      callback(agentInfo.error, agentInfo.info)
+    })
+    request = sinon.stub().callsFake(require('../src/exporters/common/request'))
+
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       '../../datadog-core': datadogCore,
       './exporters/common/docker': docker,
+      './exporters/common/request': request,
       './log': log,
+      './agent/info': { fetchAgentInfo },
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
@@ -432,21 +447,11 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should fail over to UDP when receiving network error from agent', (done) => {
-    udp4.send = sinon.stub().callsFake(() => {
-      try {
-        sinon.assert.called(udp4.send)
-        assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.foo:10|c\n')
-        assert.strictEqual(udp4.send.firstCall.args[2], 14)
-        done()
-      } catch (e) {
-        done(e)
-      }
-    })
+  it('should fail over to UDP when receiving network error from agent', () => {
+    const error = new Error('connection refused')
+    error.code = 'ECONNREFUSED'
+    request.yields(error)
 
-    statusCode = null
-
-    // host exists but port does not, ECONNREFUSED
     client = createDogStatsDClient({
       metricsProxyUrl: 'http://localhost:32700',
       host: 'localhost',
@@ -456,6 +461,196 @@ describe('dogstatsd', () => {
     client.increment('test.foo', 10)
 
     client.flush()
+
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.foo:10|c\n')
+    assert.strictEqual(udp4.send.firstCall.args[2], 14)
+  })
+
+  describe('agent /info proxy detection', () => {
+    it('keeps using the proxy when the agent advertises the proxy endpoint', (done) => {
+      agentInfo = { error: null, info: { endpoints: ['/dogstatsd/v2/proxy'] } }
+
+      assertData = () => {
+        try {
+          assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
+          sinon.assert.notCalled(udp4.send)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+
+      client.gauge('test.avg', 1)
+      client.flush()
+    })
+
+    it('accepts the deprecated v1 proxy endpoint', (done) => {
+      agentInfo = { error: null, info: { endpoints: ['/dogstatsd/v1/proxy'] } }
+
+      assertData = () => {
+        try {
+          assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
+          sinon.assert.notCalled(udp4.send)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+
+      client.gauge('test.avg', 1)
+      client.flush()
+    })
+
+    it('falls back to UDP when the agent does not advertise the proxy endpoint', () => {
+      agentInfo = { error: null, info: { endpoints: ['/v0.4/traces'] } }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+
+      client.gauge('test.avg', 1)
+      client.flush()
+
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g\n')
+      assert.strictEqual(httpData.length, 0)
+      sinon.assert.calledWithMatch(
+        log.debug,
+        'DogStatsDClient: agent does not advertise %s, sending metrics via UDP'
+      )
+    })
+
+    it('falls back to UDP when the /info response has no endpoint list', () => {
+      agentInfo = { error: null, info: {} }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+
+      client.gauge('test.avg', 1)
+      client.flush()
+
+      sinon.assert.called(udp4.send)
+    })
+
+    it('keeps the proxy when /info fails, so the HTTP-error fallback can still act', (done) => {
+      agentInfo = { error: new Error('unreachable'), info: undefined }
+
+      assertData = () => {
+        try {
+          assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\n')
+          sinon.assert.notCalled(udp4.send)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      }
+
+      client = createDogStatsDClient({
+        metricsProxyUrl: `http://localhost:${httpPort}`,
+      })
+
+      client.gauge('test.avg', 1)
+      client.flush()
+    })
+  })
+
+  describe('generateClientConfig transport routing', () => {
+    /**
+     * @param {{
+     *   hostname: string,
+     *   port?: number,
+     *   url?: string,
+     *   hostnameOrigin?: string
+     * }} options
+     */
+    function buildConfig ({ hostname, port = 8125, url, hostnameOrigin = 'default' }) {
+      return {
+        dogstatsd: { hostname, port },
+        url: url === undefined ? undefined : new URL(url),
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: false,
+        /**
+         * @param {string} name
+         */
+        getOrigin (name) {
+          return name === 'dogstatsd.hostname' ? hostnameOrigin : 'default'
+        },
+      }
+    }
+
+    it('keeps the proxy when the host is agent-derived (default origin)', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'some-other-host', url: 'http://127.0.0.1:8126' })
+      )
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://127.0.0.1:8126'))
+    })
+
+    it('keeps the proxy when an explicit host equals the agent host case-insensitively', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'AGENT.EXAMPLE.COM', url: 'http://agent.example.com:8126', hostnameOrigin: 'env_var' })
+      )
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://agent.example.com:8126'))
+    })
+
+    it('keeps the proxy when an explicit uppercase localhost matches an agent on 127.0.0.1', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'LOCALHOST', url: 'http://127.0.0.1:8126', hostnameOrigin: 'code' })
+      )
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://127.0.0.1:8126'))
+    })
+
+    it('keeps the proxy when an explicit localhost matches an agent on ::1', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'localhost', url: 'http://[::1]:8126', hostnameOrigin: 'code' })
+      )
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://[::1]:8126'))
+    })
+
+    it('keeps the proxy when only the port is explicitly overridden', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: '127.0.0.1', port: 9999, url: 'http://127.0.0.1:8126' })
+      )
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://127.0.0.1:8126'))
+    })
+
+    it('drops to UDP when an explicit host diverges from the agent host', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'otel-collector', url: 'http://127.0.0.1:8126', hostnameOrigin: 'env_var' })
+      )
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+
+    it('drops to UDP when an explicit host is set against a UDS agent', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'otel-collector', url: 'unix:///var/run/datadog/apm.socket', hostnameOrigin: 'code' })
+      )
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+
+    it('sends direct UDP when no agent url is configured', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig(
+        buildConfig({ hostname: 'localhost', url: undefined })
+      )
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
   })
 
   describe('CustomMetrics', () => {

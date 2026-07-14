@@ -6,12 +6,11 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-const net = require('net')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { parseUrl } = require('./url')
+const { isLoopbackHost, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
@@ -26,17 +25,6 @@ const legacyStorage = storage('legacy')
 const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
-
-/**
- * @param {string} hostname Host as resolved by {@link parseUrl}; IPv6 is unbracketed (`::1`).
- */
-function isLoopbackHost (hostname) {
-  // The 127.0.0.0/8 block is loopback, but only when the host is an actual IPv4 literal: a
-  // hostname like `127.evil.com` shares the prefix yet resolves anywhere, so net.isIPv4 gates it.
-  return hostname === 'localhost' ||
-    hostname === '::1' ||
-    (hostname.startsWith('127.') && net.isIPv4(hostname))
-}
 
 /**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
