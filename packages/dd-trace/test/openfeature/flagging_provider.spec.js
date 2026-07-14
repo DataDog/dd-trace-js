@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -267,14 +268,18 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
     })
 
-    it('does not statically require `@datadog/openfeature-node-server`', () => {
-      const fs = require('node:fs')
+    it('keeps the provider load opaque to bundlers', () => {
       const source = fs.readFileSync(providerModulePath, 'utf8')
 
       assert.doesNotMatch(
         source,
         /require\(\s*['"]@datadog\/openfeature-node-server['"]\s*\)/,
         'a literal require would let bundlers resolve the optional peer chain at build time'
+      )
+      assert.doesNotMatch(
+        source,
+        /\brequire\(\s*[^'"\s]/,
+        'a dynamic require would create a webpack expression dependency'
       )
     })
   })
