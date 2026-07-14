@@ -157,3 +157,6 @@ __queuestorage__/AzuriteConfig
 
 # Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
 .husky/_/
+
+# Generated at prepare time by scripts/generate-electron-package.js
+/package.electron.json
