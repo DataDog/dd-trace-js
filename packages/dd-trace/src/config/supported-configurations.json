@@ -2722,6 +2722,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GENKIT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_GIT_METADATA_ENABLED": [
       {
         "implementation": "A",
