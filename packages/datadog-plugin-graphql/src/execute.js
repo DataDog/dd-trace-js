@@ -432,14 +432,19 @@ function wrapResolve (resolve) {
     }
 
     const fieldKey = config.collapse ? pathString : infoPath
+    const parentTypeName = info.parentType.name
     let field = rootCtx.fields.get(fieldKey)
+    const collapsedField = field
+    if (config.collapse && field?.parentTypeName !== parentTypeName) {
+      field = field?.fieldsByParentType?.get(parentTypeName)
+    }
     const isFirst = !field
 
     if (isFirst) {
       field = {
         fieldNode: info.fieldNodes?.[0],
         fieldName: info.fieldName,
-        parentTypeName: info.parentType.name,
+        parentTypeName,
         returnType: info.returnType,
         baseTypeName: getBaseTypeName(info.returnType),
         variableValues: info.variableValues,
@@ -453,7 +458,18 @@ function wrapResolve (resolve) {
         parentStore: null,
         currentStore: null,
       }
-      rootCtx.fields.set(fieldKey, field)
+      if (config.collapse && collapsedField) {
+        if (collapsedField.fieldsByParentType) {
+          collapsedField.fieldsByParentType.set(parentTypeName, field)
+        } else {
+          collapsedField.fieldsByParentType = new Map([
+            [collapsedField.parentTypeName, collapsedField],
+            [parentTypeName, field],
+          ])
+        }
+      } else {
+        rootCtx.fields.set(fieldKey, field)
+      }
     }
 
     // Collapsed siblings still publish updateField (master's contract: one
@@ -624,7 +640,7 @@ function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
     const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
     const innerField = rootCtx.fields.get(fieldKey)
-    if (innerField) return innerField
+    if (innerField) return innerField.fieldsByParentType?.get(curr.typename) ?? innerField
   }
 
   return null

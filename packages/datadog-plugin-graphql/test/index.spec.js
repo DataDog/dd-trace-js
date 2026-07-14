@@ -1074,6 +1074,134 @@ describe('Plugin', () => {
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
+        it('keeps collapsed abstract list fields distinct by schema coordinate', () => {
+          /**
+           * @param {{ __typename: string }} value
+           */
+          function resolveType (value) {
+            return value.__typename
+          }
+
+          const Profile = new graphql.GraphQLInterfaceType({
+            name: 'Profile',
+            fields: {
+              value: { type: graphql.GraphQLString },
+            },
+            resolveType,
+          })
+          const Named = new graphql.GraphQLInterfaceType({
+            name: 'Named',
+            fields: {
+              name: { type: graphql.GraphQLString },
+              profile: { type: Profile },
+            },
+            resolveType,
+          })
+
+          /**
+           * @param {string} name
+           */
+          function makeProfileType (name) {
+            return new graphql.GraphQLObjectType({
+              name: `${name}Profile`,
+              interfaces: [Profile],
+              fields: {
+                value: { type: graphql.GraphQLString },
+              },
+            })
+          }
+
+          /**
+           * @param {string} name
+           */
+          function makeNamedType (name) {
+            return new graphql.GraphQLObjectType({
+              name,
+              interfaces: [Named],
+              fields: {
+                name: { type: graphql.GraphQLString },
+                profile: { type: Profile },
+              },
+            })
+          }
+
+          const names = ['Human', 'Pet', 'Robot']
+          const namedTypes = names.map(makeNamedType)
+          const profileTypes = names.map(makeProfileType)
+          const abstractSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                results: {
+                  type: new graphql.GraphQLList(Named),
+                  resolve: () => [
+                    {
+                      __typename: 'Human',
+                      name: 'alice',
+                      profile: { __typename: 'HumanProfile', value: 'person' },
+                    },
+                    {
+                      __typename: 'Pet',
+                      name: 'spot',
+                      profile: { __typename: 'PetProfile', value: 'animal' },
+                    },
+                    {
+                      __typename: 'Robot',
+                      name: 'r2d2',
+                      profile: { __typename: 'RobotProfile', value: 'machine' },
+                    },
+                    {
+                      __typename: 'Human',
+                      name: 'bob',
+                      profile: { __typename: 'HumanProfile', value: 'person' },
+                    },
+                  ],
+                },
+              },
+            }),
+            types: [...namedTypes, ...profileTypes],
+          })
+
+          /**
+           * @param {Array<Array<{ name: string, meta: Record<string, string> }>>} traces
+           */
+          function assertCoordinates (traces) {
+            const coordinatesByPath = {
+              'results.*.name': [],
+              'results.*.profile': [],
+              'results.*.profile.value': [],
+            }
+            for (const span of sort(traces[0])) {
+              const coordinates = coordinatesByPath[span.meta['graphql.field.path']]
+              if (span.name === 'graphql.resolve' && coordinates) {
+                coordinates.push(span.meta['graphql.field.coordinates'])
+              }
+            }
+
+            assert.deepStrictEqual(coordinatesByPath['results.*.name'].sort(), [
+              'Human.name',
+              'Pet.name',
+              'Robot.name',
+            ])
+            assert.deepStrictEqual(coordinatesByPath['results.*.profile'].sort(), [
+              'Human.profile',
+              'Pet.profile',
+              'Robot.profile',
+            ])
+            assert.deepStrictEqual(coordinatesByPath['results.*.profile.value'].sort(), [
+              'HumanProfile.value',
+              'PetProfile.value',
+              'RobotProfile.value',
+            ])
+          }
+
+          const assertion = agent.assertSomeTraces(assertCoordinates, { spanResourceMatch: /results:\[Named\]/ })
+          return Promise.all([
+            assertion,
+            graphql.graphql({ schema: abstractSchema, source: '{ results { name profile { value } } }' }),
+          ])
+        })
+
         it('caches path strings across nested list-of-lists items', async () => {
           // `[[Cell]]` puts two synthetic array-index nodes back-to-back; the
           // `friends { pets { name } }` sibling has a `pets` field between.
