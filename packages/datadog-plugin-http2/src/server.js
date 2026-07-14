@@ -56,7 +56,7 @@ class Http2ServerPlugin extends ServerPlugin {
     // single-listener request, which never adopts.
     if (ctx.adoptable) web.linkContextToStream(req.stream, context)
 
-    instrumentWriteHead(context)
+    if (!ctx.isStream) instrumentWriteHead(context)
 
     if (incomingHttpRequestStart.hasSubscribers) {
       // AppSec and IAST observe both HTTP/2 APIs through the same bridge the
@@ -65,6 +65,7 @@ class Http2ServerPlugin extends ServerPlugin {
       // here first — subscribers resolve their context from the active store.
       ctx.currentStore = withRequest(ctx.currentStore, req)
       legacyStorage.enterWith(ctx.currentStore)
+      ctx.abortController = new AbortController()
       incomingHttpRequestStart.publish(ctx)
     }
 

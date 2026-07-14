@@ -12,6 +12,7 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { FOREIGN_HTTP2_SERVER } = require('../../dd-trace/src/constants')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -71,6 +72,15 @@ async function runThrowingStreamHandler () {
   ])
 
   return { code, stderr }
+}
+
+/**
+ * @param {{ res: { writeHead: Function, end: Function }, abortController: AbortController }} ctx
+ */
+function abortWithBlockedResponse ({ res, abortController }) {
+  res.writeHead(403, { 'content-type': 'text/plain' })
+  res.end('blocked')
+  abortController.abort()
 }
 
 describe('Plugin', () => {
@@ -328,6 +338,34 @@ describe('Plugin', () => {
             .catch(done)
 
           request(http2, `http://localhost:${port}/user`).catch(done)
+        })
+
+        it('preserves setHeader without security subscribers', async () => {
+          app = (req, res) => {
+            assert.strictEqual(res.setHeader('x-test', 'value'), undefined)
+            assert.strictEqual(res.getHeader('x-test'), 'value')
+          }
+
+          await Promise.all([
+            agent.assertFirstTraceSpan({ name: 'web.request' }),
+            request(http2, `http://localhost:${port}/user`),
+          ])
+        })
+
+        it('stops the request handler when a request subscriber aborts', async () => {
+          app = sinon.spy()
+          incomingHttpRequestStart.subscribe(abortWithBlockedResponse)
+
+          try {
+            const [, body] = await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request', meta: { 'http.status_code': '403' } }),
+              request(http2, `http://localhost:${port}/user`),
+            ])
+            assert.strictEqual(body.toString(), 'blocked')
+            sinon.assert.notCalled(app)
+          } finally {
+            incomingHttpRequestStart.unsubscribe(abortWithBlockedResponse)
+          }
         })
 
         it('should run the request\'s close event in the correct context', done => {
@@ -592,6 +630,28 @@ describe('Plugin', () => {
             })
 
             request(http2, `http://localhost:${port}/user`).catch(done)
+          })
+
+          it('stops the stream handler when a request subscriber aborts', async () => {
+            const server = appListener
+            server.removeAllListeners('stream')
+            let handlerCalled = false
+            server.on('stream', () => {
+              handlerCalled = true
+            })
+
+            incomingHttpRequestStart.subscribe(abortWithBlockedResponse)
+
+            try {
+              const [, body] = await Promise.all([
+                agent.assertFirstTraceSpan({ name: 'web.request', meta: { 'http.status_code': '403' } }),
+                request(http2, `http://localhost:${port}/user`),
+              ])
+              assert.strictEqual(body.toString(), 'blocked')
+              assert.strictEqual(handlerCalled, false)
+            } finally {
+              incomingHttpRequestStart.unsubscribe(abortWithBlockedResponse)
+            }
           })
 
           it('reports status 200 for a stream aborted before it responded', done => {
