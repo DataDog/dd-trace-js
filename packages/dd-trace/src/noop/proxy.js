@@ -83,7 +83,7 @@ class NoopProxy {
   }
 
   inject () {
-    return this._tracer.inject.apply(this._tracer, arguments)
+    this._tracer.inject.apply(this._tracer, arguments)
   }
 
   extract () {
