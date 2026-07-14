@@ -7,7 +7,17 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const LLMObsTagger = require('../../src/llmobs/tagger')
+const sourceMapRemapping = require('../../src/source-maps/remap')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
+/**
+ * @template Value
+ * @param {Value} value
+ * @returns {Value}
+ */
+function identity (value) {
+  return value
+}
 
 describe('span processor', () => {
   let LLMObsSpanProcessor
@@ -16,6 +26,7 @@ describe('span processor', () => {
   let log
 
   beforeEach(() => {
+    sourceMapRemapping.errorStack = identity
     writer = {
       append: sinon.stub(),
     }
@@ -409,6 +420,7 @@ describe('span processor', () => {
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
       })
+      sourceMapRemapping.errorStack = () => 'mapped stack'
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
@@ -417,7 +429,7 @@ describe('span processor', () => {
         meta: {
           'error.message': 'error message',
           'error.type': 'error type',
-          'error.stack': 'error stack',
+          'error.stack': 'mapped stack',
         },
         status: 'error',
         tags: ['error_type:error type'],

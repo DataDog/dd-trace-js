@@ -16,7 +16,7 @@ const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let clock, statusproxy, request, jsonBuffer
+  let clock, statusproxy, request, jsonBuffer, sourceMapRemapping
 
   /** @type {Array<[string, string] | [string, string, Error]>} */
   const acks = [
@@ -33,6 +33,9 @@ describe('diagnostic message http requests', function () {
 
     request = sinon.spy()
     request['@noCallThru'] = true
+    sourceMapRemapping = {
+      errorStack: sinon.stub().returns('mapped stack'),
+    }
 
     class JSONBufferSpy extends JSONBuffer {
       constructor (...args) {
@@ -54,6 +57,7 @@ describe('diagnostic message http requests', function () {
       },
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
+      '../../source-maps/remap': sourceMapRemapping,
     })
   })
 
@@ -70,7 +74,7 @@ describe('diagnostic message http requests', function () {
           ackFn = statusproxy[ackFnName].bind(null, err)
           exception = {
             message: err.message,
-            stacktrace: err.stack,
+            stacktrace: 'mapped stack',
           }
         } else {
           ackFn = statusproxy[ackFnName]

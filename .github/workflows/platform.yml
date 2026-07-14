@@ -151,7 +151,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [22.14.0, 23.7.0]
+        version: [oldest, maintenance, 22.14.0, 23.7.0, active, latest]
     name: ${{ github.workflow }} / source-maps (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     permissions:
@@ -162,7 +162,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: ./node_modules/.bin/mocha packages/dd-trace/test/source-maps/index.spec.js
+      - run: ./node_modules/.bin/mocha packages/dd-trace/test/source-maps/*.spec.js
       - run: ./node_modules/.bin/mocha --timeout 60000 integration-tests/source-maps.spec.js
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"

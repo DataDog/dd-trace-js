@@ -129,9 +129,8 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
-      // Node only parses maps for modules loaded after support is enabled.
-      if (config.DD_TRACE_SOURCE_MAPS_ENABLED) {
-        require('./source-maps').enable()
+      if (config.DD_TRACE_SOURCE_MAPS_MODE !== 'off') {
+        require('./source-maps/remap').configure(config.DD_TRACE_SOURCE_MAPS_MODE)
       }
 
       telemetry.start(config, this._pluginManager)

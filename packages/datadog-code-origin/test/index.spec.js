@@ -8,13 +8,24 @@ const { describe, it, afterEach } = require('mocha')
 require('../../dd-trace/test/setup/core')
 const { entryTags, exitTags } = require('../index')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
+const sourceMapRemapping = require('../../dd-trace/src/source-maps/remap')
 
 const testedFile = resolve(__dirname, '..', 'index.js')
 const originalLimit = Error.stackTraceLimit
 
+/**
+ * @template Value
+ * @param {Value} value
+ * @returns {Value}
+ */
+function identity (value) {
+  return value
+}
+
 describe('code origin', () => {
   afterEach(() => {
     Error.stackTraceLimit = originalLimit
+    sourceMapRemapping.errorStack = identity
   })
 
   describe('entryTags', () => {
@@ -50,6 +61,24 @@ describe('code origin', () => {
         '_dd.code_origin.frames.0.method': '<anonymous>',
         '_dd.code_origin.frames.0.type': 'Context',
       })
+    })
+
+    it('collects remapped entry locations', () => {
+      /**
+       * @param {unknown} stack
+       * @returns {string}
+       */
+      function remapStack (stack) {
+        return String(stack).replace(__filename, '/source/original.ts')
+      }
+      function fn () {
+        return entryTags(fn)
+      }
+      sourceMapRemapping.errorStack = remapStack
+
+      const tags = fn()
+
+      assert.strictEqual(tags['_dd.code_origin.frames.0.file'], '/source/original.ts')
     })
 
     it('should find a user frame if the stack trace limit is set to 0', () => {

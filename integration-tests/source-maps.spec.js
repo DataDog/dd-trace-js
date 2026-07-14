@@ -8,17 +8,14 @@ const Axios = require('axios')
 
 const { FakeAgent, sandboxCwd, spawnProc, stopProc, useSandbox } = require('./helpers')
 
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const describeOrSkip = typeof Module.setSourceMapsSupport === 'function' ? describe : describe.skip
-
-describeOrSkip('source map support without --enable-source-maps', function () {
+describe('source map support', function () {
   let agent
   let appFile
   let axios
   let childProcess
   let workingDirectory
 
-  useSandbox(['fastify'])
+  useSandbox()
 
   before(function () {
     workingDirectory = sandboxCwd()
@@ -46,6 +43,7 @@ describeOrSkip('source map support without --enable-source-maps', function () {
         _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         DD_TRACE_FLUSH_INTERVAL: '0',
+        ...(process.env.DD_INJECT_FORCE === undefined ? {} : { DD_INJECT_FORCE: process.env.DD_INJECT_FORCE }),
         ...environment,
       },
       stdio: 'pipe',
@@ -63,23 +61,23 @@ describeOrSkip('source map support without --enable-source-maps', function () {
      *   payload: Array<Array<{ error: number, meta: Record<string, string>, name: string }>>
      * }} message
      */
-    function assertFastifyErrorSpan ({ payload }) {
+    function assertErrorSpan ({ payload }) {
       let requestSpan
       for (const trace of payload) {
         for (const span of trace) {
-          if (span.name === 'fastify.request') {
+          if (span.name === 'source-map.request') {
             requestSpan = span
             break
           }
         }
         if (requestSpan !== undefined) break
       }
-      assert.ok(requestSpan, 'fastify.request span should be present')
+      assert.ok(requestSpan, 'source-map.request span should be present')
       assert.strictEqual(requestSpan.error, 1)
       stack = requestSpan.meta['error.stack']
     }
     const [, response] = await Promise.all([
-      agent.assertMessageReceived(assertFastifyErrorSpan),
+      agent.assertMessageReceived(assertErrorSpan),
       axios.get('/', { validateStatus: () => true }),
     ])
     assert.strictEqual(response.status, 500)
@@ -87,21 +85,71 @@ describeOrSkip('source map support without --enable-source-maps', function () {
     return stack
   }
 
-  it('maps an error span stack to the original TypeScript source by default', async function () {
+  /**
+   * @returns {Promise<string>}
+   */
+  async function requestApplicationStack () {
+    const response = await axios.get('/stack')
+    assert.strictEqual(response.status, 200)
+    assert.strictEqual(typeof response.data.stack, 'string')
+    return response.data.stack
+  }
+
+  it('maps only the exported error span stack by default', async function () {
     await startApp()
 
-    const stack = await requestErrorStack()
+    const [errorStack, applicationStack] = await Promise.all([
+      requestErrorStack(),
+      requestApplicationStack(),
+    ])
 
-    assert.match(stack, /throws\.ts:4:/)
-    assert.doesNotMatch(stack, /throws\.js:/)
+    assert.match(errorStack, /throws\.ts:7:/)
+    assert.doesNotMatch(errorStack, /throws\.js:/)
+    assert.match(applicationStack, /throws\.js:6:/)
+    assert.doesNotMatch(applicationStack, /throws\.ts:/)
   })
 
-  it('can be disabled with DD_TRACE_SOURCE_MAPS_ENABLED', async function () {
-    await startApp({ DD_TRACE_SOURCE_MAPS_ENABLED: 'false' })
+  it('leaves both stack representations generated in off mode', async function () {
+    await startApp({ DD_TRACE_SOURCE_MAPS_MODE: 'off' })
 
-    const stack = await requestErrorStack()
+    const [errorStack, applicationStack] = await Promise.all([
+      requestErrorStack(),
+      requestApplicationStack(),
+    ])
 
-    assert.match(stack, /throws\.js:5:/)
-    assert.doesNotMatch(stack, /throws\.ts:/)
+    assert.match(errorStack, /throws\.js:6:/)
+    assert.doesNotMatch(errorStack, /throws\.ts:/)
+    assert.match(applicationStack, /throws\.js:6:/)
+    assert.doesNotMatch(applicationStack, /throws\.ts:/)
+  })
+
+  it('maps both stack representations in all mode', async function () {
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+    if (typeof Module.setSourceMapsSupport !== 'function') this.skip()
+    await startApp({ DD_TRACE_SOURCE_MAPS_MODE: 'all' })
+
+    const [errorStack, applicationStack] = await Promise.all([
+      requestErrorStack(),
+      requestApplicationStack(),
+    ])
+
+    assert.match(errorStack, /throws\.ts:7:/)
+    assert.doesNotMatch(errorStack, /throws\.js:/)
+    assert.match(applicationStack, /throws\.ts:7:/)
+    assert.doesNotMatch(applicationStack, /throws\.js:/)
+  })
+
+  it('defers to source maps enabled by Node', async function () {
+    await startApp({ NODE_OPTIONS: '--enable-source-maps' })
+
+    const [errorStack, applicationStack] = await Promise.all([
+      requestErrorStack(),
+      requestApplicationStack(),
+    ])
+
+    assert.match(errorStack, /throws\.ts:7:/)
+    assert.doesNotMatch(errorStack, /throws\.js:/)
+    assert.match(applicationStack, /throws\.ts:7:/)
+    assert.doesNotMatch(applicationStack, /throws\.js:/)
   })
 })

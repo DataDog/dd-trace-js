@@ -3805,12 +3805,14 @@
         "default": "true"
       }
     ],
-    "DD_TRACE_SOURCE_MAPS_ENABLED": [
+    "DD_TRACE_SOURCE_MAPS_MODE": [
       {
         "implementation": "A",
-        "type": "boolean",
-        "default": "true",
-        "description": "Whether the tracer should enable source maps and remap error stack traces to original sources. Modules must load after tracer initialization; runtimes without programmatic source-map support require --enable-source-maps. Disabling this setting does not disable source maps enabled by Node.js or another library."
+        "type": "string",
+        "default": "datadog",
+        "allowed": "off|datadog|all",
+        "transform": "toLowerCase",
+        "description": "Controls source-map remapping for error stack traces. \"off\" disables tracer source-map processing, \"datadog\" remaps only stacks exported by the tracer, and \"all\" remaps every stack read by the application. This setting does not disable source maps enabled by Node.js or another library."
       }
     ],
     "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [

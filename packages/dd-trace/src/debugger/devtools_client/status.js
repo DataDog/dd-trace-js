@@ -3,6 +3,7 @@
 const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
+const sourceMapRemapping = require('../../source-maps/remap')
 const { DEBUGGER_DIAGNOSTICS_V1 } = require('../constants')
 const config = require('./config')
 const JSONBuffer = require('./json-buffer')
@@ -62,16 +63,21 @@ function ackEmitting ({ id: probeId, version }) {
   )
 }
 
-function ackError (err, { id: probeId, version }) {
-  log.error('[debugger:devtools_client] ackError', err)
+/**
+ * @param {Error & { code?: string }} error
+ * @param {{ id: string, version: number }} probe
+ * @returns {void}
+ */
+function ackError (error, { id: probeId, version }) {
+  log.error('[debugger:devtools_client] ackError', error)
 
   onlyUniqueUpdates(STATUSES.ERROR, probeId, version, () => {
     const payload = statusPayload(probeId, version, STATUSES.ERROR)
 
     payload.debugger.diagnostics.exception = {
-      type: err.code,
-      message: err.message,
-      stacktrace: err.stack,
+      type: error.code,
+      message: error.message,
+      stacktrace: sourceMapRemapping.errorStack(error.stack),
     }
 
     send(payload)

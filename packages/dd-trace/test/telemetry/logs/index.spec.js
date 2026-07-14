@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -9,6 +11,16 @@ const { match } = sinon
 require('../../setup/core')
 
 const { Log } = require('../../../src/log/log')
+const sourceMapRemapping = require('../../../src/source-maps/remap')
+
+/**
+ * @template Value
+ * @param {Value} value
+ * @returns {Value}
+ */
+function identity (value) {
+  return value
+}
 
 describe('telemetry logs', () => {
   let defaultConfig
@@ -16,6 +28,7 @@ describe('telemetry logs', () => {
   let dc
 
   beforeEach(() => {
+    sourceMapRemapping.errorStack = identity
     defaultConfig = {
       telemetry: {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
@@ -133,6 +146,19 @@ describe('telemetry logs', () => {
       )
     })
 
+    it('remaps an explicit telemetry stack without mutating the log entry', () => {
+      const logEntry = { message: 'message', stack_trace: 'generated stack', level: 'ERROR' }
+      sourceMapRemapping.errorStack = () => 'mapped stack'
+
+      telemetryLog.publish(logEntry)
+
+      sinon.assert.calledOnceWithExactly(
+        logCollectorAdd,
+        match({ stack_trace: 'mapped stack' })
+      )
+      assert.strictEqual(logEntry.stack_trace, 'generated stack')
+    })
+
     it('should not be called with no defined level', () => {
       telemetryLog.publish({ message: 'message' })
 
@@ -156,6 +182,17 @@ describe('telemetry logs', () => {
           level: 'ERROR',
           errorType: 'Error',
           stack_trace: stack,
+        }))
+      })
+
+      it('remaps an Error stack before adding the telemetry log', () => {
+        const error = new Error('message')
+        sourceMapRemapping.errorStack = () => 'mapped stack'
+
+        errorLog.publish({ cause: error, sendViaTelemetry: true })
+
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+          stack_trace: 'mapped stack',
         }))
       })
 

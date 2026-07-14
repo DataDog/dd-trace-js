@@ -10,6 +10,7 @@ const {
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
+const sourceMapRemapping = require('./source-maps/remap')
 const { TRACING_FIELD_NAME } = require('./process-tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
@@ -158,7 +159,37 @@ function extractSpanEvents (formattedSpan, span) {
   if (!span._events?.length) {
     return
   }
-  formattedSpan.span_events = span._events
+  formattedSpan.span_events = remapSpanEvents(span._events)
+}
+
+/**
+ * @param {Array<SpanEvent>} events
+ * @returns {Array<SpanEvent>}
+ */
+function remapSpanEvents (events) {
+  let remappedEvents
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i]
+    const attributes = event.attributes
+    if (attributes === undefined) continue
+
+    const stacktrace = attributes.stacktrace
+    const exceptionStacktrace = attributes['exception.stacktrace']
+    const remappedStacktrace = stacktrace === undefined ? stacktrace : sourceMapRemapping.errorStack(stacktrace)
+    const remappedExceptionStacktrace = exceptionStacktrace === undefined
+      ? exceptionStacktrace
+      : sourceMapRemapping.errorStack(exceptionStacktrace)
+    if (remappedStacktrace === stacktrace && remappedExceptionStacktrace === exceptionStacktrace) continue
+
+    remappedEvents ??= [...events]
+    const remappedAttributes = { ...attributes }
+    if (remappedStacktrace !== stacktrace) remappedAttributes.stacktrace = remappedStacktrace
+    if (remappedExceptionStacktrace !== exceptionStacktrace) {
+      remappedAttributes['exception.stacktrace'] = remappedExceptionStacktrace
+    }
+    remappedEvents[i] = { ...event, attributes: remappedAttributes }
+  }
+  return remappedEvents ?? events
 }
 
 function extractTags (formattedSpan, span) {
@@ -246,7 +277,9 @@ function extractTags (formattedSpan, span) {
         if (!tags[IGNORE_OTEL_ERROR]) {
           formattedSpan.error = 1
         }
-        if (value != null) writeErrorMeta(meta, tag, value)
+        if (value != null) {
+          writeErrorMeta(meta, tag, tag === ERROR_STACK ? sourceMapRemapping.errorStack(value) : value)
+        }
         break
       }
       default: {
@@ -364,7 +397,8 @@ function extractError (formattedSpan, error) {
     const message = error.message || error.code
     if (message != null) writeErrorMeta(meta, ERROR_MESSAGE, message)
     if (error.name != null) writeErrorMeta(meta, ERROR_TYPE, error.name)
-    if (error.stack != null) writeErrorMeta(meta, ERROR_STACK, error.stack)
+    const stack = error.stack
+    if (stack != null) writeErrorMeta(meta, ERROR_STACK, sourceMapRemapping.errorStack(stack))
   }
 }
 

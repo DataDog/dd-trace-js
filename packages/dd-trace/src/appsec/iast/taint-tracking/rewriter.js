@@ -98,6 +98,7 @@ function getPrepareStackTraceAccessor () {
   }
   originalPrepareStackTrace = Error.prepareStackTrace
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
+  sourceMaps.registerPrepareStackTrace(actual, originalPrepareStackTrace)
   return {
     configurable: true,
     get () {
@@ -105,6 +106,7 @@ function getPrepareStackTraceAccessor () {
     },
     set (value) {
       actual = getPrepareStackTrace(value)
+      sourceMaps.registerPrepareStackTrace(actual, value)
       originalPrepareStackTrace = value
     },
   }

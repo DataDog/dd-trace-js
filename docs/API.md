@@ -519,9 +519,13 @@ duration-based retry policy applies.
 
 <h3 id="source-mapped-stack-traces">Source-mapped stack traces</h3>
 
-On Node.js 22.x starting at 22.14.0, 23.x starting at 23.7.0, and later release lines, the tracer enables source-map parsing during initialization and maps error stack traces back to their original source when the stack is read. Only modules loaded after tracer initialization can be mapped, so preload `dd-trace/init` to map frames from the application's entry module. Set the environment variable `DD_TRACE_SOURCE_MAPS_ENABLED=false` before the tracer initializes to prevent the tracer from enabling source maps. It does not disable source maps already enabled by Node.js or another library. This setting is not available as an `init()` option.
+The `DD_TRACE_SOURCE_MAPS_MODE` environment variable controls source-map processing. It is not available as an `init()` option.
 
-On runtimes without programmatic source-map support, start Node with `--enable-source-maps` to enable parsing.
+- `datadog` (default) maps stack traces and structured stack locations only when the tracer exports them. When the tracer owns source-map processing, application reads of `error.stack` remain unchanged. This mode supports local inline and external source maps on every supported Node.js version and does not process dependency files under `node_modules`.
+- `all` maps every stack trace read by the application. Without source maps already enabled by Node.js or another library, it requires Node.js 22.14.0, 23.7.0, or a later release with programmatic source-map support. Source maps must be enabled before a module loads, so preload `dd-trace/init` to map frames from the application's entry module. On older releases, start Node with `--enable-source-maps`.
+- `off` disables source-map processing by the tracer.
+
+The tracer defers to source maps already enabled by Node.js and to an existing custom `Error.prepareStackTrace` formatter. `off` does not disable source maps owned by Node.js or another library.
 
 <h3 id="custom-logging">Custom Logging</h3>
 

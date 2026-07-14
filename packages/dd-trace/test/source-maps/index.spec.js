@@ -14,6 +14,7 @@ const sinon = require('sinon')
 const { SourceMapGenerator } = require('../../../../vendor/dist/source-map')
 require('../setup/mocha')
 
+const sourceMapRemapping = require('../../src/source-maps/remap')
 const sourceMapsPath = require.resolve('../../src/source-maps')
 /** @typedef {(error: Error, callSites: NodeJS.CallSite[]) => unknown} PrepareStackTrace */
 /**
@@ -30,6 +31,7 @@ const sourceMapsModule = /** @type {SourceMapsModule} */ (/** @type {unknown} */
 const canResolveSourceMaps = typeof sourceMapsModule.setSourceMapsSupport === 'function' ||
   process.execArgv.includes('--enable-source-maps') ||
   process.env.NODE_OPTIONS?.includes('--enable-source-maps') === true
+const testPrepareStackTrace = Error.prepareStackTrace ?? formatCallSites
 /** @type {('inline' | 'external')[]} */
 const mapKinds = ['inline', 'external']
 
@@ -42,6 +44,7 @@ let temporaryDirectory
  * @param {string} [sourceName]
  * @param {boolean} [mapNames]
  * @param {string} [sourceURL]
+ * @param {string} [sourceRoot]
  * @returns {string}
  */
 function writeTranspiledCommonJS (
@@ -49,9 +52,10 @@ function writeTranspiledCommonJS (
   mapKind,
   sourceName = `${name}.ts`,
   mapNames = false,
-  sourceURL
+  sourceURL,
+  sourceRoot
 ) {
-  const generator = new SourceMapGenerator({ file: `${name}.js` })
+  const generator = new SourceMapGenerator({ file: `${name}.js`, sourceRoot })
   const lines = [
     '"use strict";',
     'Object.defineProperty(exports, "__esModule", { value: true });',
@@ -294,23 +298,37 @@ function createCallSite (fileName, lineNumber = 1, columnNumber = 1) {
 
 /**
  * @param {(fileName: string) => object | undefined} findSourceMap
- * @param {{ warn: (...args: unknown[]) => unknown }} [log]
+ * @param {{ debug?: (...args: unknown[]) => unknown, warn: (...args: unknown[]) => unknown }} [log]
  * @param {() => { enabled: boolean, generatedCode: boolean, nodeModules: boolean }} [getSourceMapsSupport]
- * @returns {{ enable: () => void }}
+ * @returns {{
+ *   configure: (mode: 'off' | 'datadog' | 'all') => void,
+ *   registerPrepareStackTrace: (prepareStackTrace: PrepareStackTrace, delegate?: PrepareStackTrace) => void
+ * }}
  */
 function loadStubbedSourceMaps (
   findSourceMap,
-  log = { warn: sinon.stub() },
+  log = { debug: sinon.stub(), warn: sinon.stub() },
   getSourceMapsSupport = () => ({ enabled: true, generatedCode: false, nodeModules: false })
 ) {
-  return proxyquire.noPreserveCache()('../../src/source-maps', {
+  let firstSupportRead = true
+  const sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
     'node:module': {
       findSourceMap,
-      getSourceMapsSupport,
+      getSourceMapsSupport: () => {
+        if (firstSupportRead) {
+          firstSupportRead = false
+          return { enabled: false, generatedCode: false, nodeModules: false }
+        }
+        return getSourceMapsSupport()
+      },
       setSourceMapsSupport: () => {},
     },
     '../log': log,
   })
+  if (typeof Error.prepareStackTrace === 'function') {
+    sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
+  }
+  return sourceMaps
 }
 
 describe('source maps', function () {
@@ -324,8 +342,10 @@ describe('source maps', function () {
   let originalSourceMapsSupport
   /**
    * @type {{
-   *   enable: () => void,
+   *   configure: (mode: 'off' | 'datadog' | 'all') => void,
    *   isNativeSourceMapSupportEnabled: () => boolean,
+   *   registerPrepareStackTrace: (prepareStackTrace: PrepareStackTrace, delegate?: PrepareStackTrace) => void,
+   *   remapErrorStack: (stack: unknown) => unknown,
    *   syncSourceMapSupport: () => boolean
    * }}
    */
@@ -342,14 +362,21 @@ describe('source maps', function () {
 
   beforeEach(function () {
     originalPrepareStackTraceDescriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')
-    if (Error.prepareStackTrace === undefined && canResolveSourceMaps) {
-      Error.prepareStackTrace = formatCallSites
+    if (canResolveSourceMaps) {
+      Object.defineProperty(Error, 'prepareStackTrace', {
+        configurable: true,
+        value: testPrepareStackTrace,
+        writable: true,
+      })
     }
     originalExecArgv = process.execArgv
     originalNodeOptions = process.env.NODE_OPTIONS
     // eslint-disable-next-line n/no-unsupported-features/node-builtins
     originalSourceMapsSupport = sourceMapsModule.getSourceMapsSupport?.()
     sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
+    if (typeof Error.prepareStackTrace === 'function') {
+      sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
+    }
   })
 
   afterEach(function () {
@@ -369,6 +396,7 @@ describe('source maps', function () {
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
       sourceMapsModule.setSourceMapsSupport?.(enabled, { generatedCode, nodeModules })
     }
+    sourceMapRemapping.configure('off')
     delete require.cache[sourceMapsPath]
     for (const modulePath of cachedModulePaths) {
       delete require.cache[modulePath]
@@ -379,7 +407,7 @@ describe('source maps', function () {
   describe('enable', function () {
     it('installs the formatter once', function () {
       const previousPrepareStackTrace = Error.prepareStackTrace
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       if (!canResolveSourceMaps) {
         assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
@@ -388,7 +416,7 @@ describe('source maps', function () {
 
       const installedPrepareStackTrace = Error.prepareStackTrace
       assert.notStrictEqual(installedPrepareStackTrace, previousPrepareStackTrace)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       assert.strictEqual(Error.prepareStackTrace, installedPrepareStackTrace)
     })
 
@@ -406,7 +434,7 @@ describe('source maps', function () {
 
       assert.strictEqual(sourceMaps.syncSourceMapSupport(), false)
       assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), false)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
     })
@@ -420,8 +448,11 @@ describe('source maps', function () {
           setSourceMapsSupport,
         },
       })
+      if (typeof Error.prepareStackTrace === 'function') {
+        sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
+      }
 
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       sinon.assert.calledOnceWithExactly(setSourceMapsSupport, true, {
         nodeModules: false,
@@ -443,12 +474,12 @@ describe('source maps', function () {
         },
       })
 
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       sinon.assert.notCalled(setSourceMapsSupport)
     })
 
-    it('installs on older runtimes started with --enable-source-maps', function () {
+    it('defers to source maps enabled by a process flag on older runtimes', function () {
       process.execArgv = ['--enable-source-maps']
       const previousPrepareStackTrace = formatCallSites
       Error.prepareStackTrace = previousPrepareStackTrace
@@ -462,13 +493,13 @@ describe('source maps', function () {
 
       assert.strictEqual(sourceMaps.syncSourceMapSupport(), true)
       assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), true)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
-      assert.notStrictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
       assert.strictEqual(typeof Error.prepareStackTrace(new Error('boom'), []), 'string')
     })
 
-    it('installs on older runtimes configured through NODE_OPTIONS', function () {
+    it('defers to source maps enabled through NODE_OPTIONS on older runtimes', function () {
       process.execArgv = []
       process.env.NODE_OPTIONS = '--enable-source-maps'
       const previousPrepareStackTrace = formatCallSites
@@ -481,9 +512,9 @@ describe('source maps', function () {
         },
       })
 
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
-      assert.notStrictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
     })
 
     it('follows Node option token and override semantics on older runtimes', function () {
@@ -565,19 +596,37 @@ describe('source maps', function () {
 
         assert.strictEqual(sourceMaps.syncSourceMapSupport(), expected)
         assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), expected)
-        sourceMaps.enable()
+        sourceMaps.configure('all')
 
-        if (expected) {
-          assert.notStrictEqual(Error.prepareStackTrace, customPrepareStackTrace)
-        } else {
-          assert.strictEqual(Error.prepareStackTrace, customPrepareStackTrace)
-        }
+        assert.strictEqual(Error.prepareStackTrace, customPrepareStackTrace)
       }
     })
 
-    it('does not interrupt initialization when Node rejects source map support', function () {
+    it('does not interrupt initialization when Node rejects enabling source maps', function () {
       const log = { warn: sinon.stub() }
       const previousPrepareStackTrace = Error.prepareStackTrace
+      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
+        'node:module': {
+          findSourceMap: sinon.stub(),
+          getSourceMapsSupport: () => ({ enabled: false }),
+          setSourceMapsSupport: () => {
+            throw new Error('source maps unavailable')
+          },
+        },
+        '../log': log,
+      })
+      if (typeof Error.prepareStackTrace === 'function') {
+        sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
+      }
+
+      sourceMaps.configure('all')
+
+      assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
+      sinon.assert.calledOnce(log.warn)
+    })
+
+    it('does not interrupt initialization when source map support cannot be read', function () {
+      const log = { warn: sinon.stub() }
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
         'node:module': {
           findSourceMap: sinon.stub(),
@@ -589,9 +638,8 @@ describe('source maps', function () {
         '../log': log,
       })
 
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
-      assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
       sinon.assert.calledOnce(log.warn)
     })
 
@@ -603,7 +651,7 @@ describe('source maps', function () {
       }
       Error.prepareStackTrace = ErrorPrepareStackTrace
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), []), 'custom stack')
     })
@@ -624,13 +672,13 @@ describe('source maps', function () {
         return 'custom stack'
       }
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(new Error().stack, 'custom stack')
       assert.strictEqual(receiver, Error)
     })
 
-    it('composes with an accessor that wraps assigned formatters', function () {
+    it('defers to an accessor that wraps assigned formatters', function () {
       if (!canResolveSourceMaps) this.skip()
 
       let assignedPrepareStackTrace
@@ -651,25 +699,39 @@ describe('source maps', function () {
       })
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
 
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
-      assert.strictEqual(typeof assignedPrepareStackTrace, 'function')
+      assert.strictEqual(assignedPrepareStackTrace, undefined)
       assert.strictEqual(Error.prepareStackTrace(new Error(), []), 'custom stack')
     })
 
     it('does not throw when the formatter cannot be replaced', function () {
       if (!canResolveSourceMaps) this.skip()
 
-      const customPrepareStackTrace = () => 'custom stack'
       Object.defineProperty(Error, 'prepareStackTrace', {
         configurable: true,
-        value: customPrepareStackTrace,
+        value: testPrepareStackTrace,
         writable: false,
       })
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
 
-      sourceMaps.enable()
-      assert.strictEqual(Error.prepareStackTrace, customPrepareStackTrace)
+      sourceMaps.configure('all')
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
+    })
+
+    it('disables all mode when formatter assignment is ignored', function () {
+      if (!canResolveSourceMaps) this.skip()
+
+      const setPrepareStackTrace = sinon.stub()
+      Object.defineProperty(Error, 'prepareStackTrace', {
+        configurable: true,
+        get: () => testPrepareStackTrace,
+        set: setPrepareStackTrace,
+      })
+
+      sourceMaps.configure('all')
+
+      sinon.assert.calledOnce(setPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
     })
 
     it('does not interrupt initialization when the formatter cannot be read', function () {
@@ -691,13 +753,445 @@ describe('source maps', function () {
         '../log': log,
       })
 
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       sinon.assert.calledOnceWithExactly(
         log.warn,
-        'Unable to install the source map stack trace formatter: %s',
+        'Unable to read the source map stack trace formatter: %s',
         'Unknown error'
       )
+    })
+  })
+
+  describe('datadog mode', function () {
+    for (const mapKind of mapKinds) {
+      it(`remaps an exported stack with a ${mapKind} source map`, function () {
+        const modulePath = writeTranspiledCommonJS(`datadog-${mapKind}`, mapKind)
+        const previousPrepareStackTrace = Error.prepareStackTrace
+        const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+        sourceMaps.configure('datadog')
+
+        const remapped = sourceMaps.remapErrorStack(stack)
+
+        assert.match(remapped, new RegExp(`datadog-${mapKind}\\.ts:1:1`))
+        assert.doesNotMatch(remapped, new RegExp(`datadog-${mapKind}\\.js:3:1`))
+        assert.strictEqual(Error.prepareStackTrace, previousPrepareStackTrace)
+      })
+    }
+
+    it('remaps a percent-encoded inline source map', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-percent-inline', 'inline')
+      const source = fs.readFileSync(modulePath, 'utf8')
+      const match = source.match(/sourceMappingURL=data:application\/json;base64,([^\n]+)/)
+      assert.ok(match)
+      const payload = Buffer.from(match[1], 'base64').toString('utf8')
+      fs.writeFileSync(
+        modulePath,
+        source.replace(
+          `data:application/json;base64,${match[1]}`,
+          `data:application/json,${encodeURIComponent(payload)}`
+        )
+      )
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /datadog-percent-inline\.ts:1:1/)
+    })
+
+    it('resolves a relative source root from the source map file', function () {
+      const modulePath = writeTranspiledCommonJS(
+        'datadog-source-root',
+        'external',
+        'original.ts',
+        false,
+        undefined,
+        '../source'
+      )
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+      const remapped = sourceMaps.remapErrorStack(stack)
+
+      assert.strictEqual(typeof remapped, 'string')
+      assert.ok(remapped.includes(`${path.resolve(temporaryDirectory, '../source/original.ts')}:1:1`))
+    })
+
+    it('resolves a source root URL from the source map file', function () {
+      const originalDirectory = path.join(temporaryDirectory, 'original')
+      const modulePath = writeTranspiledCommonJS(
+        'datadog-source-root-url',
+        'external',
+        'original.ts',
+        false,
+        undefined,
+        `${pathToFileURL(originalDirectory).href}/`
+      )
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      const remapped = sourceMaps.remapErrorStack(stack)
+      assert.strictEqual(typeof remapped, 'string')
+      assert.ok(remapped.includes(`${path.join(originalDirectory, 'original.ts')}:1:1`))
+    })
+
+    it('remaps structured source locations', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-location', 'external')
+      sourceMaps.configure('datadog')
+
+      assert.deepStrictEqual(sourceMapRemapping.location({
+        file: modulePath,
+        line: 3,
+        column: 1,
+      }), {
+        file: path.join(temporaryDirectory, 'datadog-location.ts'),
+        line: 1,
+        column: 1,
+      })
+      const unresolved = { file: 'node:internal', line: 1, column: 1 }
+      assert.strictEqual(sourceMapRemapping.location(unresolved), unresolved)
+      const incomplete = { file: modulePath, line: null, column: null }
+      assert.strictEqual(sourceMapRemapping.location(incomplete), incomplete)
+    })
+
+    it('ignores the query and fragment on an absolute source map path', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-absolute-map', 'external')
+      const source = fs.readFileSync(modulePath, 'utf8')
+      fs.writeFileSync(
+        modulePath,
+        source.replace(
+          'datadog-absolute-map.js.map',
+          `${modulePath}.map?cache=1#fragment`
+        )
+      )
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /datadog-absolute-map\.ts:1:1/)
+    })
+
+    it('remaps a generated file URL', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-file-url', 'external')
+      const generatedURL = pathToFileURL(modulePath).href
+      const stack = `Error: boom\n    at run (${generatedURL}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /datadog-file-url\.ts:1:1/)
+    })
+
+    it('ignores unsupported generated and source-map URLs', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-remote-map', 'external')
+      const source = fs.readFileSync(modulePath, 'utf8')
+      fs.writeFileSync(
+        modulePath,
+        source.replace('datadog-remote-map.js.map', 'https://example.com/generated.js.map')
+      )
+      const remoteStack = 'Error: boom\n    at run (webpack://application/generated.js:3:1)'
+      const localStack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(remoteStack), remoteStack)
+      assert.strictEqual(sourceMaps.remapErrorStack(localStack), localStack)
+    })
+
+    it('leaves application-visible stacks generated', function () {
+      const modulePath = writeTranspiledCommonJS('datadogVisible', 'external')
+      cachedModulePaths.add(modulePath)
+      sourceMaps.configure('datadog')
+      const { run } = require(modulePath)
+
+      const stack = getThrownStack(run)
+
+      assert.match(stack, /datadogVisible\.js:3:/)
+      assert.doesNotMatch(stack, /datadogVisible\.ts:/)
+      assert.match(sourceMaps.remapErrorStack(stack), /datadogVisible\.ts:1:1/)
+    })
+
+    it('preserves CRLF stack delimiters', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-crlf', 'external')
+      const stack = `Error: boom\r\n    at run (${modulePath}:3:1)\r\n    at next (next.js:1:1)`
+      sourceMaps.configure('datadog')
+
+      const remapped = sourceMaps.remapErrorStack(stack)
+
+      assert.strictEqual(typeof remapped, 'string')
+      assert.match(remapped, /datadog-crlf\.ts:1:1/)
+      assert.strictEqual(remapped.split('\r\n').length, 3)
+    })
+
+    it('does not process dependency source maps', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-dependency', 'external')
+      const dependencyDirectory = path.join(temporaryDirectory, 'node_modules', 'dependency')
+      fs.mkdirSync(dependencyDirectory, { recursive: true })
+      const dependencyPath = path.join(dependencyDirectory, path.basename(modulePath))
+      fs.renameSync(modulePath, dependencyPath)
+      fs.renameSync(`${modulePath}.map`, `${dependencyPath}.map`)
+      const stack = `Error: boom\n    at run (${dependencyPath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('preserves non-frame locations and non-string stacks', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-message', 'external')
+      const stack = `Error: see ${modulePath}:3:1\n    at <anonymous>`
+      const structuredStack = [createCallSite(modulePath, 3, 1)]
+      const invalidLine = `Error: boom\n    at run (${modulePath}:0:0)`
+      const missingFile = 'Error: boom\n    at run (:1:1)'
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+      assert.strictEqual(sourceMaps.remapErrorStack(structuredStack), structuredStack)
+      assert.strictEqual(sourceMaps.remapErrorStack(invalidLine), invalidLine)
+      assert.strictEqual(sourceMaps.remapErrorStack(missingFile), missingFile)
+    })
+
+    it('remaps a frame without a generated column number', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-line-only', 'external')
+      const stack = `Error: boom\n    at run (${modulePath}:3)`
+      sourceMaps.configure('datadog')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /datadog-line-only\.ts:1:1/)
+    })
+
+    it('defers to a custom formatter installed before initialization', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-custom', 'external')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      const customPrepareStackTrace = () => 'custom stack'
+      Error.prepareStackTrace = customPrepareStackTrace
+
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+      assert.strictEqual(Error.prepareStackTrace, customPrepareStackTrace)
+    })
+
+    it('stops remapping after a custom formatter takes ownership', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-late-custom', 'external')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      const previousPrepareStackTrace = Error.prepareStackTrace
+      sourceMaps.configure('datadog')
+      const location = { file: modulePath, line: 3, column: 1 }
+      const remapLocation = sourceMapRemapping.location
+      assert.deepStrictEqual(remapLocation(location), {
+        file: path.join(temporaryDirectory, 'datadog-late-custom.ts'),
+        line: 1,
+        column: 1,
+      })
+
+      Error.prepareStackTrace = () => 'custom stack'
+
+      assert.strictEqual(remapLocation(location), location)
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+      Error.prepareStackTrace = previousPrepareStackTrace
+      assert.strictEqual(sourceMapRemapping.errorStack(stack), stack)
+    })
+
+    it('stops remapping when the current formatter cannot be read', function () {
+      const stack = 'Error: boom\n    at run (generated.js:1:1)'
+      sourceMaps.configure('datadog')
+      Object.defineProperty(Error, 'prepareStackTrace', {
+        configurable: true,
+        get () {
+          throw new Error('formatter unavailable')
+        },
+      })
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('stops remapping when current source map support cannot be read', function () {
+      const stack = 'Error: boom\n    at run (generated.js:1:1)'
+      const getSourceMapsSupport = () => {
+        throw new Error('source maps unavailable')
+      }
+      sourceMaps = loadStubbedSourceMaps(sinon.stub(), undefined, getSourceMapsSupport)
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('stops remapping after Node source maps are enabled', function () {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
+      if (typeof sourceMapsModule.setSourceMapsSupport !== 'function') this.skip()
+
+      const modulePath = writeTranspiledCommonJS('datadog-late-native', 'external')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
+      sourceMapsModule.setSourceMapsSupport(true, { generatedCode: false, nodeModules: false })
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('keeps remapping through a registered Datadog formatter', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-registered', 'external')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      const datadogPrepareStackTrace = () => 'datadog stack'
+      sourceMaps.configure('datadog')
+      sourceMaps.registerPrepareStackTrace(datadogPrepareStackTrace)
+      Error.prepareStackTrace = datadogPrepareStackTrace
+
+      assert.match(sourceMaps.remapErrorStack(stack), /datadog-registered\.ts:1:1/)
+    })
+
+    it('defers to an external formatter wrapped by a Datadog formatter', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-wrapped-external', 'external')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      const externalPrepareStackTrace = () => 'external stack'
+      const datadogPrepareStackTrace = () => externalPrepareStackTrace()
+      sourceMaps.configure('datadog')
+      sourceMaps.registerPrepareStackTrace(datadogPrepareStackTrace, externalPrepareStackTrace)
+      Error.prepareStackTrace = datadogPrepareStackTrace
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('bounds the direct source map cache', function () {
+      const modulePaths = []
+      for (let i = 0; i <= 256; i++) {
+        const modulePath = writeTranspiledCommonJS(`datadogCache${i}`, 'external', `before-${i}.ts`)
+        modulePaths.push(modulePath)
+        require.cache[modulePath] = /** @type {NodeModule} */ ({})
+        cachedModulePaths.add(modulePath)
+      }
+      sourceMaps.configure('datadog')
+
+      for (let i = 0; i < 256; i++) {
+        sourceMaps.remapErrorStack(`Error: boom\n    at run (${modulePaths[i]}:3:1)`)
+      }
+      writeTranspiledCommonJS('datadogCache0', 'external', 'after-0.ts')
+      assert.match(
+        sourceMaps.remapErrorStack(`Error: boom\n    at run (${modulePaths[0]}:3:1)`),
+        /before-0\.ts:1:1/
+      )
+
+      writeTranspiledCommonJS('datadogCache1', 'external', 'after-1.ts')
+      sourceMaps.remapErrorStack(`Error: boom\n    at run (${modulePaths[256]}:3:1)`)
+
+      assert.match(
+        sourceMaps.remapErrorStack(`Error: boom\n    at run (${modulePaths[1]}:3:1)`),
+        /after-1\.ts:1:1/
+      )
+    })
+
+    it('caches direct source maps without a CommonJS module entry', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-uncached-module', 'external', 'before.ts')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /before\.ts:1:1/)
+      writeTranspiledCommonJS('datadog-uncached-module', 'external', 'after.ts')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /before\.ts:1:1/)
+    })
+
+    it('reloads a direct source map when a CommonJS module entry appears', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-late-module', 'external', 'before.ts')
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+      assert.match(sourceMaps.remapErrorStack(stack), /before\.ts:1:1/)
+
+      writeTranspiledCommonJS('datadog-late-module', 'external', 'after.ts')
+      require.cache[modulePath] = /** @type {NodeModule} */ ({})
+      cachedModulePaths.add(modulePath)
+
+      assert.match(sourceMaps.remapErrorStack(stack), /after\.ts:1:1/)
+    })
+
+    it('resolves cached relative frames from the current working directory', function () {
+      const originalWorkingDirectory = process.cwd()
+      const beforeDirectory = path.join(temporaryDirectory, 'relative-before')
+      const afterDirectory = path.join(temporaryDirectory, 'relative-after')
+      const beforePath = writeTranspiledCommonJS('relative-before', 'external', 'before.ts')
+      const afterPath = writeTranspiledCommonJS('relative-after', 'external', 'after.ts')
+      fs.mkdirSync(beforeDirectory)
+      fs.mkdirSync(afterDirectory)
+      fs.copyFileSync(beforePath, path.join(beforeDirectory, 'generated.js'))
+      fs.copyFileSync(`${beforePath}.map`, path.join(beforeDirectory, 'relative-before.js.map'))
+      fs.copyFileSync(afterPath, path.join(afterDirectory, 'generated.js'))
+      fs.copyFileSync(`${afterPath}.map`, path.join(afterDirectory, 'relative-after.js.map'))
+      const stack = 'Error: boom\n    at run (generated.js:3:1)'
+      sourceMaps.configure('datadog')
+
+      try {
+        process.chdir(beforeDirectory)
+        assert.match(sourceMaps.remapErrorStack(stack), /before\.ts:1:1/)
+        process.chdir(afterDirectory)
+        assert.match(sourceMaps.remapErrorStack(stack), /after\.ts:1:1/)
+      } finally {
+        process.chdir(originalWorkingDirectory)
+      }
+    })
+
+    it('bounds cached direct stack frames', function () {
+      sourceMaps.configure('datadog')
+
+      for (let i = 0; i <= 4096; i++) {
+        const stack = `Error: boom\n    at run (webpack://application/generated-${i}.js:1:1)`
+        assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+      }
+    })
+
+    it('caches an invalid generated file URL', function () {
+      const stack = 'Error: boom\n    at run (file:///%E0%A4%A:1:1)'
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('ignores an oversized external source map', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-oversized-map', 'external')
+      fs.truncateSync(`${modulePath}.map`, 64 * 1024 * 1024 + 1)
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('ignores inline source map data without a comma', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-invalid-inline-map', 'inline')
+      const source = fs.readFileSync(modulePath, 'utf8')
+      const marker = '//# sourceMappingURL='
+      const markerIndex = source.indexOf(marker)
+      fs.writeFileSync(modulePath, `${source.slice(0, markerIndex)}${marker}data:application/json;base64\n`)
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+    })
+
+    it('recognizes Windows source map paths', function () {
+      const sourceMappingURLs = [
+        'C:\\source-map.js.map',
+        '\\\\server\\source-map.js.map',
+      ]
+      sourceMaps.configure('datadog')
+
+      for (let i = 0; i < sourceMappingURLs.length; i++) {
+        const modulePath = writeTranspiledCommonJS(`datadog-windows-map-${i}`, 'external')
+        const source = fs.readFileSync(modulePath, 'utf8')
+        fs.writeFileSync(
+          modulePath,
+          source.replace(`datadog-windows-map-${i}.js.map`, sourceMappingURLs[i])
+        )
+        const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+        assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
+      }
+    })
+
+    it('keeps a relative source when its URL source root is invalid', function () {
+      const modulePath = writeTranspiledCommonJS(
+        'datadog-invalid-source-root',
+        'external',
+        'original.ts',
+        false,
+        undefined,
+        'https://[invalid'
+      )
+      const stack = `Error: boom\n    at run (${modulePath}:3:1)`
+      sourceMaps.configure('datadog')
+
+      assert.match(sourceMaps.remapErrorStack(stack), /original\.ts:1:1/)
     })
   })
 
@@ -710,7 +1204,7 @@ describe('source maps', function () {
       it(`remaps ${mapKind} CommonJS source maps`, function () {
         const modulePath = writeTranspiledCommonJS(`${mapKind}app`, mapKind)
         cachedModulePaths.add(modulePath)
-        sourceMaps.enable()
+        sourceMaps.configure('all')
         const { run } = require(modulePath)
 
         const frames = getThrownStack(run).split('\n').slice(1, 4)
@@ -721,6 +1215,23 @@ describe('source maps', function () {
       })
     }
 
+    it('remaps structured source locations through Node source maps', function () {
+      const modulePath = writeTranspiledCommonJS('allLocation', 'external')
+      cachedModulePaths.add(modulePath)
+      sourceMaps.configure('all')
+      require(modulePath)
+
+      assert.deepStrictEqual(sourceMapRemapping.location({
+        file: modulePath,
+        line: 3,
+        column: 1,
+      }), {
+        file: path.join(temporaryDirectory, 'allLocation.ts'),
+        line: 1,
+        column: 1,
+      })
+    })
+
     it('remaps a CommonJS frame rendered with sourceURL', function () {
       const modulePath = writeTranspiledCommonJS(
         'sourceurl',
@@ -730,7 +1241,7 @@ describe('source maps', function () {
         'virtual-sourceurl.js'
       )
       cachedModulePaths.add(modulePath)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const { run } = require(modulePath)
 
       const frame = getThrownStack(run).split('\n')[1]
@@ -741,7 +1252,7 @@ describe('source maps', function () {
 
     it('remaps ES modules', async function () {
       const modulePath = writeTranspiledESM('esmapp')
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const { run } = await import(`${pathToFileURL(modulePath).href}?test=${Date.now()}`)
 
       const frames = getThrownStack(run).split('\n').slice(1, 4)
@@ -761,14 +1272,14 @@ describe('source maps', function () {
       ]
       const nativePrepareStackTrace = Error.prepareStackTrace
       if (typeof nativePrepareStackTrace !== 'function') {
-        sourceMaps.enable()
+        sourceMaps.configure('all')
         assert.strictEqual(Error.prepareStackTrace, undefined)
         return
       }
       const expected = errors.map(error => typeof nativePrepareStackTrace === 'function'
         ? nativePrepareStackTrace.call(Error, error, [])
         : Error.prototype.toString.call(error))
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       for (let i = 0; i < errors.length; i++) {
         assert.strictEqual(
@@ -793,7 +1304,7 @@ describe('source maps', function () {
         assert.ok(nativeError instanceof Error)
         const expectedHeader = nativeError.stack?.split('\n')[0]
         sourceMaps = loadStubbedSourceMaps(sinon.stub())
-        sourceMaps.enable()
+        sourceMaps.configure('all')
 
         assert.strictEqual(Error.prepareStackTrace, undefined)
         let actualError
@@ -814,7 +1325,7 @@ describe('source maps', function () {
     it('uses original symbol names from the source map', function () {
       const modulePath = writeTranspiledCommonJS('named', 'inline', 'named.ts', true)
       cachedModulePaths.add(modulePath)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const { run } = require(modulePath)
 
       const frame = getThrownStack(run).split('\n')[1]
@@ -838,7 +1349,7 @@ describe('source maps', function () {
       require.cache[fileName] = /** @type {NodeModule} */ ({})
       cachedModulePaths.add(fileName)
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
       callSite.getFunctionName = () => 'foo'
       callSite.toString = () => `foo.foo [as foobar] (${fileName}:1:1)`
@@ -865,13 +1376,42 @@ describe('source maps', function () {
       require.cache[fileName] = /** @type {NodeModule} */ ({})
       cachedModulePaths.add(fileName)
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
 
       Error.prepareStackTrace(new Error('first'), [callSite])
       Error.prepareStackTrace(new Error('second'), [callSite])
 
       assert.strictEqual(payloadReads, 1)
+    })
+
+    it('maps locations when source map symbol names cannot be read', function () {
+      const fileName = path.join(temporaryDirectory, 'throwing-names-map.js')
+      const failure = new Error('invalid names')
+      const log = { debug: sinon.stub(), warn: sinon.stub() }
+      const sourceMap = {
+        get payload () {
+          throw failure
+        },
+        findEntry: sinon.stub().returns({
+          originalColumn: 0,
+          originalLine: 0,
+          originalSource: 'throwing-names-map.ts',
+        }),
+      }
+      require.cache[fileName] = /** @type {NodeModule} */ ({})
+      cachedModulePaths.add(fileName)
+      sourceMaps = loadStubbedSourceMaps(() => sourceMap, log)
+      sourceMaps.configure('all')
+
+      const stack = Error.prepareStackTrace(new Error('boom'), [createCallSite(fileName)])
+
+      assert.match(String(stack), /run \(throwing-names-map\.ts:1:1\)$/)
+      sinon.assert.calledOnceWithExactly(
+        log.debug,
+        'Unable to read source map symbol names: %s',
+        failure.message
+      )
     })
 
     it('uses a caller mapping when the enclosing mapping has no symbol name', function () {
@@ -896,7 +1436,7 @@ describe('source maps', function () {
       require.cache[fileName] = /** @type {NodeModule} */ ({})
       cachedModulePaths.add(fileName)
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       const stack = Error.prepareStackTrace(new Error('boom'), [
         createCallSite(fileName, 1, 1),
@@ -928,7 +1468,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstCallSite
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       const stack = Error.prepareStackTrace(new Error('boom'), [
         createCallSite(fileName, 1, 1),
@@ -953,14 +1493,14 @@ describe('source maps', function () {
       require.cache[fileName] = /** @type {NodeModule} */ ({})
       cachedModulePaths.add(fileName)
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       const stack = Error.prepareStackTrace(new Error('boom'), [createCallSite(fileName)])
 
       assert.match(String(stack), /run \(mapped\.ts:1:1\)$/)
     })
 
-    it('remaps generated code when another component enabled it', function () {
+    it('defers generated code to source maps enabled by another component', function () {
       const setSourceMapsSupport = sinon.stub()
       const sourceMap = {
         payload: { names: [] },
@@ -982,15 +1522,15 @@ describe('source maps', function () {
           setSourceMapsSupport,
         },
       })
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(null, 1, 2)
       callSite.getEvalOrigin = () => 'generated.js'
       callSite.toString = () => 'run (generated.js:1:2)'
 
       const stack = Error.prepareStackTrace(new Error('boom'), [callSite])
 
-      assert.match(String(stack), /run \(generated\.ts:4:5\)$/)
-      assert.doesNotMatch(String(stack), /generated\.js:1:2/)
+      assert.match(String(stack), /run \(generated\.js:1:2\)$/)
+      sinon.assert.notCalled(findSourceMap)
       sinon.assert.notCalled(setSourceMapsSupport)
     })
 
@@ -1009,11 +1549,38 @@ describe('source maps', function () {
         undefined,
         () => ({ enabled: true, generatedCode: true, nodeModules: false })
       )
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(null, 1, 2)
       callSite.getEvalOrigin = () => 'generated.js'
 
       assert.strictEqual(Error.prepareStackTrace(new Error('boom'), [callSite]), 'generated.ts')
+    })
+
+    it('exposes every remapped location field to a custom formatter', function () {
+      const sourceMap = {
+        findEntry: sinon.stub().returns({
+          originalColumn: 4,
+          originalLine: 3,
+          originalSource: 'original.ts',
+        }),
+      }
+      const findSourceMap = sinon.stub().withArgs('generated.js').returns(sourceMap)
+      Error.prepareStackTrace = (_error, callSites) => {
+        const callSite = callSites[0]
+        return [
+          callSite.getFileName(),
+          callSite.getLineNumber(),
+          callSite.getColumnNumber(),
+          callSite.getTypeName(),
+        ]
+      }
+      sourceMaps = loadStubbedSourceMaps(findSourceMap)
+      sourceMaps.configure('all')
+
+      assert.deepStrictEqual(
+        Error.prepareStackTrace(new Error('boom'), [createCallSite('generated.js', 1, 2)]),
+        ['original.ts', 4, 5, null]
+      )
     })
 
     it('preserves programmatic source maps for evaluated code', function () {
@@ -1035,7 +1602,7 @@ describe('source maps', function () {
       ].join('\n')
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
       sourceMapsModule.setSourceMapsSupport(true, { generatedCode: true, nodeModules: false })
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       // eslint-disable-next-line no-eval
       const stack = getThrownStack(() => eval(code))
@@ -1050,7 +1617,7 @@ describe('source maps', function () {
 
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
       sourceMapsModule.setSourceMapsSupport(true, { generatedCode: true, nodeModules: false })
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const evaluators = [
         ['eval', evaluateCode],
         ['function', runFunctionCode],
@@ -1067,38 +1634,37 @@ describe('source maps', function () {
       }
     })
 
-    it('delegates to a custom formatter with original call-site locations', function () {
+    it('defers to a custom formatter without changing call-site locations', function () {
       const modulePath = writeTranspiledCommonJS('userhandler', 'inline')
       cachedModulePaths.add(modulePath)
       Error.prepareStackTrace = returnCallSites
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const { run } = require(modulePath)
 
       /**
        * @param {unknown} error
        * @returns {boolean}
        */
-      function hasOriginalCallSiteLocation (error) {
+      function hasGeneratedCallSiteLocation (error) {
         assert.ok(hasCallSiteStack(error))
         const callSite = error.stack[0]
         const fileName = callSite.getFileName()
         const scriptName = callSite.getScriptNameOrSourceURL()
         assert.ok(fileName)
         assert.ok(scriptName)
-        assert.match(fileName, /userhandler\.ts$/)
-        assert.match(scriptName, /userhandler\.ts$/)
-        assert.strictEqual(callSite.getLineNumber(), 1)
-        assert.strictEqual(callSite.getColumnNumber(), 1)
+        assert.match(fileName, /userhandler\.js$/)
+        assert.match(scriptName, /userhandler\.js$/)
+        assert.strictEqual(callSite.getLineNumber(), 3)
         assert.strictEqual(callSite.getFunctionName(), 'userhandlerInner')
         assert.strictEqual(Reflect.get(callSite, 'missing'), undefined)
-        assert.match(callSite.toString(), /userhandler\.ts:1:1/)
+        assert.match(callSite.toString(), /userhandler\.js:3:/)
         return true
       }
-      assert.throws(run, hasOriginalCallSiteLocation)
+      assert.throws(run, hasGeneratedCallSiteLocation)
     })
 
-    it('composes remapping with a formatter accessor', function () {
+    it('defers to a custom formatter accessor', function () {
       const modulePath = writeTranspiledCommonJS('accessorhandler', 'inline')
       cachedModulePaths.add(modulePath)
       /** @type {PrepareStackTrace} */
@@ -1116,7 +1682,7 @@ describe('source maps', function () {
         },
       })
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const { run } = require(modulePath)
 
       /**
@@ -1127,7 +1693,7 @@ describe('source maps', function () {
         assert.ok(hasCallSiteStack(error))
         const fileName = error.stack[0].getFileName()
         assert.ok(fileName)
-        assert.match(fileName, /accessorhandler\.ts$/)
+        assert.match(fileName, /accessorhandler\.js$/)
         return true
       }
       assert.throws(run, hasAccessorCallSiteLocation)
@@ -1137,7 +1703,7 @@ describe('source maps', function () {
       const modulePath = path.join(temporaryDirectory, 'nomap.js')
       fs.writeFileSync(modulePath, 'exports.run = function run () { throw new Error("plain"); }\n')
       cachedModulePaths.add(modulePath)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const { run } = require(modulePath)
 
       assert.match(getThrownStack(run).split('\n')[1], /nomap\.js/)
@@ -1145,12 +1711,24 @@ describe('source maps', function () {
 
     it('preserves a formatted frame without a file name', function () {
       const findSourceMap = sinon.stub()
-      sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.enable()
+      let generatedCode = true
+      sourceMaps = loadStubbedSourceMaps(
+        findSourceMap,
+        undefined,
+        () => ({ enabled: true, generatedCode, nodeModules: false })
+      )
+      sourceMaps.configure('all')
       const callSite = createCallSite(null)
+      delete callSite.getEvalOrigin
       callSite.toString = () => 'run (<anonymous>)'
 
       assert.match(String(Error.prepareStackTrace(new Error('boom'), [callSite])), /at run \(<anonymous>\)$/)
+      generatedCode = false
+      const disabledCallSite = createCallSite(null)
+      const getEvalOrigin = sinon.stub()
+      disabledCallSite.getEvalOrigin = getEvalOrigin
+      Error.prepareStackTrace(new Error('boom'), [disabledCallSite])
+      sinon.assert.notCalled(getEvalOrigin)
       sinon.assert.notCalled(findSourceMap)
     })
 
@@ -1160,7 +1738,7 @@ describe('source maps', function () {
       const withoutLineNumber = createCallSite('/without-line.js', null)
       Error.prepareStackTrace = returnCallSites
       sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       const callSites = Error.prepareStackTrace(new Error('boom'), [withoutFileName, withoutLineNumber])
       assert.ok(Array.isArray(callSites))
@@ -1177,7 +1755,7 @@ describe('source maps', function () {
           originalColumn: 4,
         }),
       }))
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       const stack = Error.prepareStackTrace(new Error('boom'), [
         createCallSite('/line-only.js', 1, null),
@@ -1189,7 +1767,7 @@ describe('source maps', function () {
     it('reloads the map when a cached CommonJS module is replaced', function () {
       const modulePath = writeTranspiledCommonJS('reloadable', 'external', 'before.ts')
       cachedModulePaths.add(modulePath)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       let loadedModule = require(modulePath)
       assert.match(getThrownStack(loadedModule.run), /before\.ts:1:1/)
 
@@ -1203,7 +1781,7 @@ describe('source maps', function () {
     it('does not retain a stale map after a module throws while loading', function () {
       const modulePath = writeThrowingCommonJS('throwing-load', 'before.ts')
       cachedModulePaths.add(modulePath)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       assert.match(getThrownStack(() => require(modulePath)), /before\.ts:1:1/)
       assert.strictEqual(require.cache[modulePath], undefined)
 
@@ -1228,13 +1806,46 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName, 3, 4)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'cached.ts')
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'cached.ts')
       sinon.assert.calledOnceWithExactly(findSourceMap, fileName)
       sinon.assert.calledOnceWithExactly(sourceMap.findEntry, 2, 3)
+    })
+
+    it('bounds cached locations for each source map', function () {
+      const fileName = path.join(temporaryDirectory, 'location-cache.js')
+      /**
+       * @param {number} lineNumber
+       * @param {number} columnNumber
+       * @returns {{ originalColumn: number, originalLine: number, originalSource: string }}
+       */
+      function findEntry (lineNumber, columnNumber) {
+        return {
+          originalColumn: columnNumber,
+          originalLine: lineNumber,
+          originalSource: 'location-cache.ts',
+        }
+      }
+      const sourceMap = {
+        findEntry: sinon.stub().callsFake(findEntry),
+      }
+      require.cache[fileName] = /** @type {NodeModule} */ ({})
+      cachedModulePaths.add(fileName)
+      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
+      sourceMaps.configure('all')
+
+      for (let line = 1; line <= 4096; line++) {
+        sourceMapRemapping.location({ file: fileName, line, column: 1 })
+      }
+      sourceMapRemapping.location({ file: fileName, line: 1, column: 1 })
+      assert.strictEqual(sourceMap.findEntry.callCount, 4096)
+
+      sourceMapRemapping.location({ file: fileName, line: 4097, column: 1 })
+      sourceMapRemapping.location({ file: fileName, line: 1, column: 1 })
+      assert.strictEqual(sourceMap.findEntry.callCount, 4098)
     })
 
     it('invalidates cached maps when the source map support options change', function () {
@@ -1265,7 +1876,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap, undefined, () => support)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'before.ts')
@@ -1288,12 +1899,14 @@ describe('source maps', function () {
         nodeModules: false,
       }
       sourceMaps = loadStubbedSourceMaps(findSourceMap, undefined, () => support)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       support = { enabled: false, generatedCode: false, nodeModules: false }
 
       const stack = Error.prepareStackTrace(new Error('boom'), [createCallSite(fileName)])
+      const location = { file: fileName, line: 1, column: 1 }
 
       assert.match(String(stack), /disabled\.js:1:1/)
+      assert.strictEqual(sourceMapRemapping.location(location), location)
       sinon.assert.notCalled(findSourceMap)
     })
 
@@ -1309,7 +1922,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
@@ -1328,7 +1941,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
@@ -1351,7 +1964,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'before.ts')
@@ -1371,7 +1984,7 @@ describe('source maps', function () {
         })
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'before.ts')
@@ -1387,7 +2000,7 @@ describe('source maps', function () {
       sourceMaps = loadStubbedSourceMaps(() => {
         throw failure
       }, log)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [createCallSite(fileName)]), fileName)
       sinon.assert.calledOnceWithExactly(
@@ -1410,7 +2023,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(() => sourceMap, log)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [createCallSite(fileName)]), fileName)
       sinon.assert.calledOnce(log.warn)
@@ -1430,7 +2043,7 @@ describe('source maps', function () {
       const findSourceMap = sinon.stub()
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap, log, getSourceMapsSupport)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [createCallSite(fileName)]), fileName)
       sinon.assert.notCalled(findSourceMap)
@@ -1438,6 +2051,29 @@ describe('source maps', function () {
         log.warn,
         'Unable to read source map support: %s',
         'Symbol(support failed)'
+      )
+    })
+
+    it('uses the generated file name when a call site has no script name', function () {
+      const fileName = path.join(temporaryDirectory, 'without-script-name.js')
+      const sourceMap = {
+        findEntry: () => ({
+          originalColumn: 0,
+          originalLine: 0,
+          originalSource: 'without-script-name.ts',
+        }),
+      }
+      require.cache[fileName] = /** @type {NodeModule} */ ({})
+      cachedModulePaths.add(fileName)
+      Error.prepareStackTrace = formatCallSites
+      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
+      sourceMaps.configure('all')
+      const callSite = createCallSite(fileName)
+      callSite.getScriptNameOrSourceURL = () => null
+
+      assert.match(
+        String(Error.prepareStackTrace(new Error('boom'), [callSite])),
+        /without-script-name\.ts:1:1/
       )
     })
 
@@ -1454,7 +2090,7 @@ describe('source maps', function () {
       cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatCallSites
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
       const callSite = createCallSite(fileName)
       callSite.toString = () => 'unexpected frame'
 
@@ -1475,7 +2111,7 @@ describe('source maps', function () {
       cachedModulePaths.add(generatedFileName)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       assert.strictEqual(
         Error.prepareStackTrace(new Error(), [createCallSite(generatedFileName)]),
@@ -1494,7 +2130,7 @@ describe('source maps', function () {
       const findSourceMap = sinon.stub().returns(sourceMap)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.enable()
+      sourceMaps.configure('all')
 
       for (let i = 0; i < 1024; i++) {
         const fileName = `file:///module-${i}.mjs`

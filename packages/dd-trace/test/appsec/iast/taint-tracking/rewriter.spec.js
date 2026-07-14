@@ -59,6 +59,7 @@ describe('IAST Rewriter', () => {
       }
       sourceMaps = {
         isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
+        registerPrepareStackTrace: sinon.stub(),
         syncSourceMapSupport: sinon.stub().returns(false),
       }
 
@@ -126,6 +127,8 @@ describe('IAST Rewriter', () => {
       rewriter.enable(iastEnabledConfig)
       sinon.assert.calledOnce(shimmer.wrap)
       assert.strictEqual(shimmer.wrap.getCall(0).args[1], '_compile')
+      sinon.assert.calledOnce(sourceMaps.registerPrepareStackTrace)
+      assert.strictEqual(typeof sourceMaps.registerPrepareStackTrace.firstCall.firstArg, 'function')
 
       rewriter.disable()
     })
@@ -386,6 +389,7 @@ describe('IAST Rewriter', () => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       sourceMaps = {
         isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
+        registerPrepareStackTrace: sinon.stub(),
         syncSourceMapSupport: sinon.stub().returns(false),
       }
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {

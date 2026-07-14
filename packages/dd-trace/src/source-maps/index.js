@@ -1,10 +1,12 @@
 'use strict'
 
 const Module = require('node:module')
-const { fileURLToPath } = require('node:url')
+const path = require('node:path')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 
 const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
+const remap = require('./remap')
 
 /** @typedef {{ enabled: boolean, nodeModules: boolean, generatedCode: boolean }} SourceMapsSupport */
 /**
@@ -22,6 +24,7 @@ const log = require('../log')
  */
 
 const { findSourceMap } = Module
+const { SourceMap } = Module
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
 const { getSourceMapsSupport, setSourceMapsSupport } =
   /** @type {ProgrammaticSourceMaps} */ (/** @type {unknown} */ (Module))
@@ -29,7 +32,18 @@ const { getSourceMapsSupport, setSourceMapsSupport } =
 const supportsProgrammaticSourceMaps = typeof setSourceMapsSupport === 'function'
 const nativeSourceMapsEnabled = isNativeSourceMapSupportEnabled()
 const legacySourceMapsEnabled = !supportsProgrammaticSourceMaps && nativeSourceMapsEnabled
+const MODE_ALL = 'all'
+const MODE_DATADOG = 'datadog'
+const MODE_OFF = 'off'
+const DIRECT_SOURCE_MAP_CACHE_BYTES_LIMIT = 128 * 1024 * 1024
+const DIRECT_SOURCE_MAP_CACHE_LIMIT = 256
+const MAX_SOURCE_MAP_BYTES = 64 * 1024 * 1024
+const SOURCE_MAPPING_URL_BYTES = 16 * 1024 * 1024
+const SOURCE_MAPPING_URL = /^[ \t]*\/\/[#@][ \t]*sourceMappingURL=([^\r\n]+?)[ \t]*$/gm
 const SOURCE_MAP_URL_CACHE_LIMIT = 1024
+const SOURCE_MAP_LOCATION_CACHE_LIMIT = 4096
+const URL_SCHEME = /^[a-z][a-z\d+.-]*:/i
+const WINDOWS_DRIVE_PATH = /^[a-z]:[\\/]/i
 
 /** @type {WeakMap<NodeModule, import('node:module').SourceMap | null>} */
 let sourceMapByModule = new WeakMap()
@@ -39,22 +53,83 @@ const sourceMapByURL = new Map()
 let locationsBySourceMap = new WeakMap()
 /** @type {WeakMap<import('node:module').SourceMap, boolean>} */
 const sourceMapHasNames = new WeakMap()
+/** @type {WeakMap<import('node:module').SourceMap, { directory: string, sourceRoot: string }>} */
+const directSourceMapMetadata = new WeakMap()
+/**
+ * @typedef {object} DirectStackFrameCacheEntry
+ * @property {string | undefined} generatedFileName
+ * @property {NodeModule | undefined} module
+ * @property {string} remappedFrame
+ * @property {string | undefined} workingDirectory
+ */
+/** @type {Map<string, DirectStackFrameCacheEntry>} */
+const directStackFrameCache = new Map()
+/**
+ * @typedef {object} DirectSourceMapCacheEntry
+ * @property {number} bytes
+ * @property {NodeModule | undefined} module
+ * @property {import('node:module').SourceMap | null} sourceMap
+ */
+/** @type {Map<string, DirectSourceMapCacheEntry>} */
+const directSourceMapByFile = new Map()
+/** @type {Map<string, string | null>} */
+const generatedFileNameByStackName = new Map()
+/** @type {WeakSet<Function>} */
+const datadogPrepareStackTraces = new WeakSet()
 
+/** @type {import('./file-system').DirectFileSystem | undefined} */
+let directFileSystem
 let installed = false
+let directSourceMapBytes = 0
+/** @type {string | undefined} */
+let mostRecentDirectSourceMapFileName
 let generatedCodeEnabled = legacySourceMapsEnabled
+let mode = MODE_OFF
 let sourceMapsSupportState = -1
+/** @type {Function | undefined} */
+let prepareStackTraceAtConfiguration
 /** @type {((error: Error, callSites: NodeJS.CallSite[]) => unknown) | undefined} */
 let delegatePrepareStackTrace
 /** @type {((error: Error, callSites: NodeJS.CallSite[]) => unknown) | undefined} */
 let defaultPrepareStackTrace
 
 /**
- * Enable source-map support and install the lazy stack-trace remapper.
- *
- * @returns {void}
+ * @param {'off' | 'datadog' | 'all'} selectedMode
+ * @param {import('./file-system').DirectFileSystem} [fileSystem]
  */
-function enable () {
-  if (installed || !canResolveSourceMaps()) return
+function configure (selectedMode, fileSystem) {
+  if (selectedMode === MODE_OFF || mode !== MODE_OFF) return
+
+  const externalSupport = getExternalSourceMapSupport()
+  if (externalSupport !== false) return
+
+  prepareStackTraceAtConfiguration = Error.prepareStackTrace
+  if (selectedMode === MODE_DATADOG) {
+    directFileSystem = fileSystem ?? require('./file-system')()
+    mode = MODE_DATADOG
+    remap.errorStack = remapErrorStack
+    remap.location = remapSourceLocation
+  } else if (selectedMode === MODE_ALL) {
+    mode = MODE_ALL
+    enableAll()
+    if (installed) remap.location = remapSourceLocation
+  }
+}
+
+/**
+ * @template Value
+ * @param {Value} value
+ * @returns {Value}
+ */
+function identity (value) {
+  return value
+}
+
+function enableAll () {
+  if (!canResolveSourceMaps()) {
+    mode = MODE_OFF
+    return
+  }
 
   if (supportsProgrammaticSourceMaps) {
     try {
@@ -66,6 +141,7 @@ function enable () {
         'Unable to enable source map support: %s',
         getErrorMessage(error)
       )
+      mode = MODE_OFF
       return
     }
   }
@@ -86,7 +162,8 @@ function enable () {
       delegatePrepareStackTrace = previousPrepareStackTrace
     }
     Error.prepareStackTrace = prepareStackTrace
-    installed = true
+    installed = Error.prepareStackTrace === prepareStackTrace
+    if (!installed) mode = MODE_OFF
   } catch (error) {
     defaultPrepareStackTrace = undefined
     delegatePrepareStackTrace = undefined
@@ -94,14 +171,56 @@ function enable () {
       'Unable to install the source map stack trace formatter: %s',
       getErrorMessage(error)
     )
+    mode = MODE_OFF
   }
 }
 
 /**
- * @returns {boolean} Whether this runtime can resolve source maps.
+ * @param {Function} prepareStackTrace
+ * @param {Function | undefined} [delegate]
  */
+function registerPrepareStackTrace (prepareStackTrace, delegate) {
+  if (delegate === undefined ||
+      delegate === prepareStackTraceAtConfiguration ||
+      datadogPrepareStackTraces.has(delegate) ||
+      isNodeDefaultPrepareStackTrace(delegate)) {
+    datadogPrepareStackTraces.add(prepareStackTrace)
+  }
+}
+
 function canResolveSourceMaps () {
   return supportsProgrammaticSourceMaps || legacySourceMapsEnabled
+}
+
+/**
+ * @returns {boolean | undefined}
+ */
+function getExternalSourceMapSupport () {
+  if (isNativeSourceMapSupportEnabled()) return true
+
+  if (supportsProgrammaticSourceMaps) {
+    try {
+      if (getSourceMapsSupport().enabled) return true
+    } catch (error) {
+      log.warn(
+        'Unable to read source map support: %s',
+        getErrorMessage(error)
+      )
+      return
+    }
+  }
+
+  try {
+    const prepareStackTrace = Error.prepareStackTrace
+    return typeof prepareStackTrace === 'function' &&
+      !isNodeDefaultPrepareStackTrace(prepareStackTrace) &&
+      !datadogPrepareStackTraces.has(prepareStackTrace)
+  } catch (error) {
+    log.warn(
+      'Unable to read the source map stack trace formatter: %s',
+      getErrorMessage(error)
+    )
+  }
 }
 
 /**
@@ -217,6 +336,174 @@ function isNodeDefaultPrepareStackTrace (handler) {
 }
 
 /**
+ * @param {unknown} stack
+ * @returns {unknown}
+ */
+function remapErrorStack (stack) {
+  if (typeof stack !== 'string' || !stack.includes('\n')) return stack
+  if (shouldDeferDatadogRemapping()) return stack
+
+  let output
+  let lineStart = 0
+  while (lineStart < stack.length) {
+    const newline = stack.indexOf('\n', lineStart)
+    const lineEnd = newline === -1 ? stack.length : newline
+    const line = stack.slice(lineStart, lineEnd)
+    const remappedLine = remapStackFrame(line)
+    if (remappedLine !== line) {
+      output ??= stack.slice(0, lineStart)
+      output += remappedLine
+    } else if (output !== undefined) {
+      output += line
+    }
+    if (newline === -1) break
+    if (output !== undefined) output += '\n'
+    lineStart = newline + 1
+  }
+  return output ?? stack
+}
+
+/**
+ * @param {import('./remap').SourceLocation} location
+ * @returns {import('./remap').SourceLocation}
+ */
+function remapSourceLocation (location) {
+  if (mode === MODE_DATADOG && shouldDeferDatadogRemapping()) return location
+  if (mode === MODE_ALL && !syncSourceMapSupport()) return location
+
+  const original = resolveLocation(location.file, location.line ?? null, location.column ?? null, true)
+  if (original === undefined) return location
+  return {
+    file: original.fileName,
+    line: original.lineNumber,
+    column: original.columnNumber,
+  }
+}
+
+function shouldDeferDatadogRemapping () {
+  if (mode !== MODE_DATADOG) return true
+
+  try {
+    const prepareStackTrace = Error.prepareStackTrace
+    if (prepareStackTrace !== prepareStackTraceAtConfiguration &&
+        (typeof prepareStackTrace !== 'function' || !datadogPrepareStackTraces.has(prepareStackTrace))) {
+      disableDatadogRemapping()
+      return true
+    }
+  } catch (error) {
+    log.warn(
+      'Unable to read the source map stack trace formatter: %s',
+      getErrorMessage(error)
+    )
+    disableDatadogRemapping()
+    return true
+  }
+
+  if (supportsProgrammaticSourceMaps) {
+    try {
+      if (getSourceMapsSupport().enabled) {
+        disableDatadogRemapping()
+        return true
+      }
+    } catch (error) {
+      log.warn(
+        'Unable to read source map support: %s',
+        getErrorMessage(error)
+      )
+      disableDatadogRemapping()
+      return true
+    }
+  }
+  return false
+}
+
+function disableDatadogRemapping () {
+  mode = MODE_OFF
+  remap.errorStack = identity
+  remap.location = identity
+  directStackFrameCache.clear()
+  directSourceMapByFile.clear()
+  directSourceMapBytes = 0
+  generatedFileNameByStackName.clear()
+  mostRecentDirectSourceMapFileName = undefined
+  locationsBySourceMap = new WeakMap()
+}
+
+/**
+ * @param {string} frame
+ * @returns {string}
+ */
+function remapStackFrame (frame) {
+  const cached = directStackFrameCache.get(frame)
+  if (cached !== undefined &&
+      (cached.workingDirectory === undefined || cached.workingDirectory === process.cwd()) &&
+      (cached.generatedFileName === undefined || require.cache[cached.generatedFileName] === cached.module)) {
+    if (cached.generatedFileName !== undefined) {
+      const sourceMapEntry = directSourceMapByFile.get(cached.generatedFileName)
+      if (sourceMapEntry !== undefined) touchDirectSourceMap(cached.generatedFileName, sourceMapEntry)
+    }
+    return cached.remappedFrame
+  }
+
+  let frameEnd = frame.endsWith('\r') ? frame.length - 1 : frame.length
+  if (frame.charCodeAt(frameEnd - 1) === 41) frameEnd--
+
+  let lastNumberStart = frameEnd
+  while (lastNumberStart > 0 && isDecimalDigit(frame.charCodeAt(lastNumberStart - 1))) lastNumberStart--
+  if (lastNumberStart === frameEnd || frame.charCodeAt(lastNumberStart - 1) !== 58) return frame
+
+  const lineEnd = lastNumberStart - 1
+  let lineStart = lineEnd
+  while (lineStart > 0 && isDecimalDigit(frame.charCodeAt(lineStart - 1))) lineStart--
+  let lineNumber
+  let columnNumber
+  let fileEnd
+  if (lineStart !== lineEnd && frame.charCodeAt(lineStart - 1) === 58) {
+    lineNumber = Number(frame.slice(lineStart, lineEnd))
+    columnNumber = Number(frame.slice(lastNumberStart, frameEnd))
+    fileEnd = lineStart - 1
+  } else {
+    lineNumber = Number(frame.slice(lastNumberStart, frameEnd))
+    columnNumber = 1
+    fileEnd = lastNumberStart - 1
+  }
+  if (lineNumber < 1 || columnNumber < 1) return frame
+
+  let atIndex = 0
+  while (frame.charCodeAt(atIndex) === 32 || frame.charCodeAt(atIndex) === 9) atIndex++
+  if (frame.slice(atIndex, atIndex + 3) !== 'at ') return frame
+  const parenthesis = frame.lastIndexOf('(', fileEnd - 1)
+  const fileStart = parenthesis > atIndex ? parenthesis + 1 : atIndex + 3
+  if (fileStart >= fileEnd) return frame
+
+  const fileName = frame.slice(fileStart, fileEnd)
+  const original = resolveLocation(fileName, lineNumber, columnNumber, true)
+  const remappedFrame = original === undefined
+    ? frame
+    : frame.slice(0, fileStart) + original.formatted + frame.slice(frameEnd)
+  const generatedFileName = toGeneratedFileName(fileName)
+  if (directStackFrameCache.size >= SOURCE_MAP_LOCATION_CACHE_LIMIT) {
+    const oldestFrame = directStackFrameCache.keys().next().value
+    if (oldestFrame !== undefined) directStackFrameCache.delete(oldestFrame)
+  }
+  directStackFrameCache.set(frame, {
+    generatedFileName,
+    module: generatedFileName === undefined ? undefined : require.cache[generatedFileName],
+    remappedFrame,
+    workingDirectory: path.isAbsolute(fileName) || fileName.startsWith('file:') ? undefined : process.cwd(),
+  })
+  return remappedFrame
+}
+
+/**
+ * @param {number} character
+ * @returns {boolean}
+ */
+function isDecimalDigit (character) {
+  return character >= 48 && character <= 57
+}
+
+/**
  * @param {Error} error
  * @param {NodeJS.CallSite[]} callSites
  * @returns {unknown}
@@ -329,8 +616,8 @@ function getOriginalSymbolName (original, callSite, callerCallSite) {
         return callerEntry.name
       }
     }
-  } catch {
-    // A malformed name mapping must not make an otherwise formattable stack throw.
+  } catch (error) {
+    log.debug('Unable to resolve a source map symbol name: %s', getErrorMessage(error))
   }
 }
 
@@ -347,8 +634,8 @@ function hasSourceMapNames (sourceMap) {
   let hasNames = false
   try {
     hasNames = Boolean(sourceMap.payload?.names?.length)
-  } catch {
-    // Symbol names are optional; location remapping can continue without the payload.
+  } catch (error) {
+    log.debug('Unable to read source map symbol names: %s', getErrorMessage(error))
   }
   sourceMapHasNames.set(sourceMap, hasNames)
   return hasNames
@@ -402,7 +689,7 @@ function resolveLocation (fileName, lineNumber, columnNumber, cacheSourceMapByUR
   if (entry?.originalSource !== undefined &&
       entry.originalLine !== undefined &&
       entry.originalColumn !== undefined) {
-    const originalFileName = toOriginalFileName(entry.originalSource)
+    const originalFileName = toOriginalFileName(entry.originalSource, sourceMap)
     const originalLineNumber = entry.originalLine + 1
     const originalColumnNumber = entry.originalColumn + 1
     original = {
@@ -414,6 +701,7 @@ function resolveLocation (fileName, lineNumber, columnNumber, cacheSourceMapByUR
     }
   }
 
+  if (locations.size >= SOURCE_MAP_LOCATION_CACHE_LIMIT) locations.clear()
   locations.set(cacheKey, original)
   return original ?? undefined
 }
@@ -428,6 +716,7 @@ function resolveLocation (fileName, lineNumber, columnNumber, cacheSourceMapByUR
  */
 function getSourceMap (fileName, cacheByURL) {
   if (fileName.startsWith('node:')) return null
+  if (mode === MODE_DATADOG) return getDirectSourceMap(fileName)
 
   const cachedModule = require.cache[fileName]
   if (cachedModule !== undefined) {
@@ -461,6 +750,197 @@ function getSourceMap (fileName, cacheByURL) {
  * @param {string} fileName
  * @returns {import('node:module').SourceMap | null}
  */
+function getDirectSourceMap (fileName) {
+  const generatedFileName = toGeneratedFileName(fileName)
+  if (generatedFileName === undefined || generatedFileName.includes(`${path.sep}node_modules${path.sep}`)) return null
+
+  const cachedModule = require.cache[generatedFileName]
+  const cached = directSourceMapByFile.get(generatedFileName)
+  if (cached !== undefined && cached.module === cachedModule) {
+    touchDirectSourceMap(generatedFileName, cached)
+    return cached.sourceMap
+  }
+  if (cached !== undefined) {
+    directSourceMapByFile.delete(generatedFileName)
+    directSourceMapBytes -= cached.bytes
+  }
+
+  const loaded = loadDirectSourceMap(generatedFileName)
+  const sourceMap = loaded?.sourceMap ?? null
+  const bytes = loaded?.bytes ?? 0
+  directSourceMapByFile.set(generatedFileName, {
+    bytes,
+    module: cachedModule,
+    sourceMap,
+  })
+  mostRecentDirectSourceMapFileName = generatedFileName
+  directSourceMapBytes += bytes
+  evictDirectSourceMaps()
+  return sourceMap
+}
+
+/**
+ * @param {string} fileName
+ * @param {DirectSourceMapCacheEntry} entry
+ */
+function touchDirectSourceMap (fileName, entry) {
+  if (mostRecentDirectSourceMapFileName !== fileName) {
+    directSourceMapByFile.delete(fileName)
+    directSourceMapByFile.set(fileName, entry)
+    mostRecentDirectSourceMapFileName = fileName
+  }
+}
+
+/**
+ * @param {string} fileName
+ * @returns {string | undefined}
+ */
+function toGeneratedFileName (fileName) {
+  const cacheResult = fileName.startsWith('file:') || path.isAbsolute(fileName)
+  if (cacheResult) {
+    const cached = generatedFileNameByStackName.get(fileName)
+    if (cached !== undefined) return cached ?? undefined
+  }
+
+  let generatedFileName
+  if (fileName.startsWith('file:')) {
+    try {
+      generatedFileName = fileURLToPath(fileName)
+    } catch (error) {
+      log.debug(
+        'Unable to convert generated source URL %s to a path: %s',
+        fileName,
+        getErrorMessage(error)
+      )
+      generatedFileName = null
+    }
+  } else if (URL_SCHEME.test(fileName) && !WINDOWS_DRIVE_PATH.test(fileName)) {
+    return
+  } else {
+    generatedFileName = path.resolve(fileName)
+  }
+
+  if (cacheResult) {
+    if (generatedFileNameByStackName.size >= DIRECT_SOURCE_MAP_CACHE_LIMIT) {
+      const oldestStackName = generatedFileNameByStackName.keys().next().value
+      if (oldestStackName !== undefined) generatedFileNameByStackName.delete(oldestStackName)
+    }
+    generatedFileNameByStackName.set(fileName, generatedFileName)
+  }
+  return generatedFileName ?? undefined
+}
+
+function evictDirectSourceMaps () {
+  let evicted = false
+  while (directSourceMapByFile.size > DIRECT_SOURCE_MAP_CACHE_LIMIT ||
+         directSourceMapBytes > DIRECT_SOURCE_MAP_CACHE_BYTES_LIMIT) {
+    const [oldestFileName, oldest] = directSourceMapByFile.entries().next().value
+    directSourceMapByFile.delete(oldestFileName)
+    directSourceMapBytes -= oldest.bytes
+    evicted = true
+  }
+  if (evicted) directStackFrameCache.clear()
+}
+
+/**
+ * @param {string} fileName
+ * @returns {{ bytes: number, sourceMap: import('node:module').SourceMap } | undefined}
+ */
+function loadDirectSourceMap (fileName) {
+  const fileSystem = directFileSystem
+
+  try {
+    const sourceMappingURL = readSourceMappingURL(fileName, fileSystem)
+    if (sourceMappingURL === undefined) return
+
+    let bytes
+    let directory = path.dirname(fileName)
+    if (sourceMappingURL.startsWith('data:')) {
+      bytes = decodeInlineSourceMap(sourceMappingURL)
+    } else {
+      const mapFileName = toSourceMapFileName(sourceMappingURL, directory)
+      if (mapFileName === undefined) return
+      const size = fileSystem.statSync(mapFileName).size
+      if (size > MAX_SOURCE_MAP_BYTES) return
+      bytes = fileSystem.readFileSync(mapFileName)
+      directory = path.dirname(mapFileName)
+    }
+    if (bytes === undefined || bytes.length > MAX_SOURCE_MAP_BYTES) return
+
+    const payload = JSON.parse(bytes.toString('utf8'))
+    const sourceMap = new SourceMap(payload)
+    directSourceMapMetadata.set(sourceMap, {
+      directory,
+      sourceRoot: typeof payload.sourceRoot === 'string' ? payload.sourceRoot : '',
+    })
+    return { bytes: bytes.length, sourceMap }
+  } catch (error) {
+    log.debug(
+      'Unable to load the source map for %s: %s',
+      fileName,
+      getErrorMessage(error)
+    )
+  }
+}
+
+/**
+ * @param {string} fileName
+ * @param {import('./file-system').DirectFileSystem} fileSystem
+ * @returns {string | undefined}
+ */
+function readSourceMappingURL (fileName, fileSystem) {
+  let fileDescriptor
+  try {
+    fileDescriptor = fileSystem.openSync(fileName, 'r')
+    const size = fileSystem.fstatSync(fileDescriptor).size
+    const bytesToRead = Math.min(size, SOURCE_MAPPING_URL_BYTES)
+    const buffer = Buffer.allocUnsafe(bytesToRead)
+    const bytesRead = fileSystem.readSync(fileDescriptor, buffer, 0, bytesToRead, size - bytesToRead)
+    const tail = buffer.toString('utf8', 0, bytesRead)
+    let match
+    let sourceMappingURL
+    SOURCE_MAPPING_URL.lastIndex = 0
+    while ((match = SOURCE_MAPPING_URL.exec(tail)) !== null) {
+      sourceMappingURL = match[1]
+    }
+    return sourceMappingURL
+  } finally {
+    if (fileDescriptor !== undefined) fileSystem.closeSync(fileDescriptor)
+  }
+}
+
+/**
+ * @param {string} sourceMappingURL
+ * @returns {Buffer | undefined}
+ */
+function decodeInlineSourceMap (sourceMappingURL) {
+  const comma = sourceMappingURL.indexOf(',')
+  if (comma === -1) return
+  const metadata = sourceMappingURL.slice(5, comma)
+  const data = sourceMappingURL.slice(comma + 1)
+  return metadata.split(';').includes('base64')
+    ? Buffer.from(data, 'base64')
+    : Buffer.from(decodeURIComponent(data))
+}
+
+/**
+ * @param {string} sourceMappingURL
+ * @param {string} directory
+ * @returns {string | undefined}
+ */
+function toSourceMapFileName (sourceMappingURL, directory) {
+  if (WINDOWS_DRIVE_PATH.test(sourceMappingURL) || sourceMappingURL.startsWith('\\\\')) return sourceMappingURL
+  const sourceMapURL = new URL(sourceMappingURL, pathToFileURL(`${directory}${path.sep}`))
+  if (sourceMapURL.protocol !== 'file:') return
+  sourceMapURL.search = ''
+  sourceMapURL.hash = ''
+  return fileURLToPath(sourceMapURL)
+}
+
+/**
+ * @param {string} fileName
+ * @returns {import('node:module').SourceMap | null}
+ */
 function loadSourceMap (fileName) {
   try {
     return findSourceMap(fileName) ?? null
@@ -476,9 +956,27 @@ function loadSourceMap (fileName) {
 
 /**
  * @param {string} source
+ * @param {import('node:module').SourceMap} sourceMap
  * @returns {string}
  */
-function toOriginalFileName (source) {
+function toOriginalFileName (source, sourceMap) {
+  const metadata = directSourceMapMetadata.get(sourceMap)
+  if (metadata !== undefined && !URL_SCHEME.test(source) && !WINDOWS_DRIVE_PATH.test(source)) {
+    const { directory, sourceRoot } = metadata
+    if (URL_SCHEME.test(sourceRoot) && !WINDOWS_DRIVE_PATH.test(sourceRoot)) {
+      try {
+        source = new URL(source, sourceRoot.endsWith('/') ? sourceRoot : `${sourceRoot}/`).href
+      } catch (error) {
+        log.debug(
+          'Unable to resolve original source URL %s: %s',
+          source,
+          getErrorMessage(error)
+        )
+      }
+    } else {
+      source = path.resolve(directory, sourceRoot, source)
+    }
+  }
   if (!source.startsWith('file:')) return source
 
   try {
@@ -554,7 +1052,9 @@ function toOriginalCallSite (callSite, index, callSites) {
 }
 
 module.exports = {
-  enable,
+  configure,
   isNativeSourceMapSupportEnabled,
+  registerPrepareStackTrace,
+  remapErrorStack,
   syncSourceMapSupport,
 }

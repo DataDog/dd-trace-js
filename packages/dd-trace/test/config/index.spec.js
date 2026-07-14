@@ -278,18 +278,18 @@ describe('Config', () => {
 
   describe('source map configuration', () => {
     it('does not expose a programmatic option', () => {
-      const config = getConfig({ sourceMapsEnabled: false })
+      const config = getConfig({ sourceMaps: 'off' })
 
-      assert.strictEqual(config.DD_TRACE_SOURCE_MAPS_ENABLED, true)
-      assert.strictEqual(Object.hasOwn(config, 'sourceMapsEnabled'), false)
+      assert.strictEqual(config.DD_TRACE_SOURCE_MAPS_MODE, 'datadog')
+      assert.strictEqual(Object.hasOwn(config, 'sourceMaps'), false)
     })
 
     it('reads the environment variable', () => {
-      process.env.DD_TRACE_SOURCE_MAPS_ENABLED = 'false'
+      process.env.DD_TRACE_SOURCE_MAPS_MODE = 'all'
 
       const config = getConfig()
 
-      assert.strictEqual(config.DD_TRACE_SOURCE_MAPS_ENABLED, false)
+      assert.strictEqual(config.DD_TRACE_SOURCE_MAPS_MODE, 'all')
     })
   })
 

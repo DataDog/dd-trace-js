@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -12,6 +13,7 @@ const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
 const { getExtraServices } = require('../src/service-naming/extra-services')
+const sourceMapRemapping = require('../src/source-maps/remap')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED
@@ -34,6 +36,23 @@ const spanId = id('0234567812345678')
 const spanId2 = id('0254567812345678')
 const spanId3 = id('0264567812345678')
 
+/**
+ * @template Value
+ * @param {Value} value
+ * @returns {Value}
+ */
+function identity (value) {
+  return value
+}
+
+/**
+ * @param {unknown} stack
+ * @returns {string}
+ */
+function remapGeneratedStack (stack) {
+  return String(stack).replace('generated', 'mapped')
+}
+
 describe('spanFormat', () => {
   let spanFormat
   let span
@@ -44,6 +63,8 @@ describe('spanFormat', () => {
   let TraceState
 
   beforeEach(() => {
+    sourceMapRemapping.errorStack = identity
+    sourceMapRemapping.location = identity
     TraceState = require('../src/opentracing/propagation/tracestate')
     spanContext = {
       _traceId: spanId,
@@ -95,7 +116,9 @@ describe('spanFormat', () => {
       toSpanId: sinon.stub().returns(spanId3.toString(16)),
     }
 
-    spanFormat = require('../src/span_format')
+    spanFormat = proxyquire.noPreserveCache()('../src/span_format', {
+      './source-maps/remap': sourceMapRemapping,
+    })
   })
 
   describe('spanFormat', () => {
@@ -115,6 +138,38 @@ describe('spanFormat', () => {
       trace = spanFormat(span)
 
       assert.strictEqual(trace.span_events, span._events)
+    })
+
+    it('remaps known span event stack attributes without mutating the events', () => {
+      const unchangedEvent = {
+        name: 'unchanged',
+        attributes: { value: 'same' },
+        startTime: 1,
+      }
+      const errorEvent = {
+        name: 'error',
+        attributes: {
+          stacktrace: 'generated graphql stack',
+          'exception.stacktrace': 'generated otel stack',
+        },
+        startTime: 2,
+      }
+      span._events = [unchangedEvent, errorEvent]
+      sourceMapRemapping.errorStack = remapGeneratedStack
+
+      trace = spanFormat(span)
+
+      assert.notStrictEqual(trace.span_events, span._events)
+      assert.strictEqual(trace.span_events[0], unchangedEvent)
+      assert.notStrictEqual(trace.span_events[1], errorEvent)
+      assert.deepStrictEqual(trace.span_events[1].attributes, {
+        stacktrace: 'mapped graphql stack',
+        'exception.stacktrace': 'mapped otel stack',
+      })
+      assert.deepStrictEqual(errorEvent.attributes, {
+        stacktrace: 'generated graphql stack',
+        'exception.stacktrace': 'generated otel stack',
+      })
     })
 
     it('should convert a span to the correct trace format', () => {
@@ -704,6 +759,34 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
       assert.strictEqual(trace.meta[ERROR_TYPE], error.name)
       assert.strictEqual(trace.meta[ERROR_STACK], error.stack)
+    })
+
+    it('reads and remaps an Error stack once without mutating the Error', () => {
+      const error = new Error('boom')
+      let stackReads = 0
+      Object.defineProperty(error, 'stack', {
+        configurable: true,
+        get () {
+          stackReads++
+          return 'generated stack'
+        },
+      })
+      spanContext._tags.error = error
+      sourceMapRemapping.errorStack = remapGeneratedStack
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_STACK], 'mapped stack')
+      assert.strictEqual(stackReads, 1)
+    })
+
+    it('remaps an explicit error.stack tag', () => {
+      spanContext._tags[ERROR_STACK] = 'generated stack'
+      sourceMapRemapping.errorStack = remapGeneratedStack
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta[ERROR_STACK], 'mapped stack')
     })
 
     it('should skip error properties without a value', () => {

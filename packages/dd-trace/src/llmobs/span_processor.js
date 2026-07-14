@@ -4,6 +4,7 @@ const util = require('node:util')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const sourceMapRemapping = require('../source-maps/remap')
 const {
   ERROR_MESSAGE,
   ERROR_TYPE,
@@ -184,7 +185,7 @@ class LLMObsSpanProcessor {
     if (error) {
       meta[ERROR_MESSAGE] = spanTags[ERROR_MESSAGE] || error.message || error.code
       meta[ERROR_TYPE] = spanTags[ERROR_TYPE] || error.name
-      meta[ERROR_STACK] = spanTags[ERROR_STACK] || error.stack
+      meta[ERROR_STACK] = sourceMapRemapping.errorStack(spanTags[ERROR_STACK] || error.stack)
     }
 
     const metrics = mlObsTags[METRICS] || {}

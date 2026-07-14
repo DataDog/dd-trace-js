@@ -376,7 +376,7 @@ export interface GeneratedConfig {
   DD_TRACE_SEQUELIZE_ENABLED: boolean;
   DD_TRACE_SHAREDB_ENABLED: boolean;
   DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED: boolean;
-  DD_TRACE_SOURCE_MAPS_ENABLED: boolean;
+  DD_TRACE_SOURCE_MAPS_MODE: "off" | "datadog" | "all";
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
@@ -1067,7 +1067,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_SEQUELIZE_ENABLED: boolean;
   DD_TRACE_SHAREDB_ENABLED: boolean;
   DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED: boolean;
-  DD_TRACE_SOURCE_MAPS_ENABLED: boolean;
+  DD_TRACE_SOURCE_MAPS_MODE: "off" | "datadog" | "all";
   DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: "v0" | "v1";
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;

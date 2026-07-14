@@ -2,6 +2,7 @@
 
 const dc = require('dc-polyfill')
 const { sendData } = require('../send-data')
+const sourceMapRemapping = require('../../source-maps/remap')
 const logCollector = require('./log-collector')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
@@ -30,6 +31,11 @@ function isValidLevel (level) {
 
 function onLog (log) {
   if (isLevelEnabled(log?.level?.toUpperCase())) {
+    const stack = log.stack_trace
+    if (stack !== undefined) {
+      const remappedStack = sourceMapRemapping.errorStack(stack)
+      if (remappedStack !== stack) log = { ...log, stack_trace: remappedStack }
+    }
     logCollector.add(log)
   }
 }
