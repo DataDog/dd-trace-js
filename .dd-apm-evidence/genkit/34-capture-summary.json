@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-14T02:36:11.936Z",
+  "sourceDiffSha256": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "package": "genkit",
+  "version": "1.21.0",
+  "ddTraceVersion": "7.0.0-pre",
+  "nodeVersion": "v22.23.1",
+  "otelEnabled": true,
+  "samplePath": "/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js",
+  "sampleOperationCount": 14,
+  "unexpectedErrorCount": 0,
+  "apmRequestCount": 15,
+  "apmSpanCount": 21,
+  "llmobsRequestCount": 2,
+  "llmobsSpanCount": 21
+}

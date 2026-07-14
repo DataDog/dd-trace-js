@@ -1,0 +1,538 @@
+[
+  {
+    "traceId": "6a55a09a00000000725d32dd0907202c",
+    "spanId": "8240798818078498860",
+    "parentId": "undefined",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "ok",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Generate a deterministic offline response."
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "Offline generation complete."
+        }
+      ]
+    },
+    "metadata": {
+      "finish_reason": "stop",
+      "latency_ms": 0.20113800000012816
+    },
+    "metrics": {
+      "input_tokens": 11,
+      "output_tokens": 7,
+      "total_tokens": 18
+    }
+  },
+  {
+    "traceId": "6a55a09a0000000057abac76ea4b0a78",
+    "spanId": "6317332529054157432",
+    "parentId": "undefined",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "error",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "MODEL_RUNNER_ERROR"
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "",
+          "content": ""
+        }
+      ]
+    },
+    "metadata": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional model runner failure"
+    }
+  },
+  {
+    "traceId": "6a55a09a00000000596a29cbeb1b2b63",
+    "spanId": "6443008172706442083",
+    "parentId": "undefined",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "ok",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Stream offline."
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "Offline generation complete."
+        }
+      ]
+    },
+    "metadata": {
+      "finish_reason": "stop",
+      "latency_ms": 26.528023000000076
+    },
+    "metrics": {
+      "input_tokens": 11,
+      "output_tokens": 7,
+      "total_tokens": 18
+    }
+  },
+  {
+    "traceId": "6a55a09a000000005473cd3810cec47a",
+    "spanId": "6085433162191520890",
+    "parentId": "undefined",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "error",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "MODEL_RUNNER_ERROR"
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "",
+          "content": ""
+        }
+      ]
+    },
+    "metadata": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional model runner failure"
+    }
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "6844073397543299519",
+    "parentId": "4169964900330121175",
+    "name": "localRetriever",
+    "kind": "retrieval",
+    "status": "ok",
+    "input": {
+      "value": "Genkit tracing"
+    },
+    "output": {
+      "documents": [
+        {
+          "text": "Retrieved context for: Genkit tracing",
+          "name": "offline-document",
+          "id": "doc-1",
+          "score": 0.91
+        }
+      ]
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "4573928345240082180",
+    "parentId": "4169964900330121175",
+    "name": "localEmbedder",
+    "kind": "embedding",
+    "status": "ok",
+    "modelName": "localEmbedder",
+    "modelProvider": "custom",
+    "input": {
+      "documents": [
+        {
+          "text": "first embedding input"
+        },
+        {
+          "text": "second embedding input"
+        }
+      ]
+    },
+    "output": {
+      "value": "[2 embedding(s) returned with size 3]"
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "720202423448802115",
+    "parentId": "4169964900330121175",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "ok",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Use a tool for Paris"
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "name": "lookupWeather",
+              "arguments": {
+                "city": "Paris"
+              },
+              "tool_id": "weather-1"
+            }
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "finish_reason": "stop",
+      "latency_ms": 0.06579099999999016
+    },
+    "metrics": {
+      "input_tokens": 8,
+      "output_tokens": 4,
+      "total_tokens": 12
+    }
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "7245646368879370682",
+    "parentId": "4169964900330121175",
+    "name": "lookupWeather",
+    "kind": "tool",
+    "status": "ok",
+    "input": {
+      "value": "{\"city\":\"Paris\"}"
+    },
+    "output": {
+      "value": "{\"city\":\"Paris\",\"forecast\":\"sunny\",\"temperatureCelsius\":21}"
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "1801945858302432336",
+    "parentId": "4169964900330121175",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "ok",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Use a tool for Paris"
+        },
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "name": "lookupWeather",
+              "arguments": {
+                "city": "Paris"
+              },
+              "tool_id": "weather-1"
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_results": [
+            {
+              "result": "{\"city\":\"Paris\",\"forecast\":\"sunny\",\"temperatureCelsius\":21}",
+              "tool_id": "weather-1",
+              "name": "lookupWeather"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "The Paris forecast is sunny at 21C."
+        }
+      ]
+    },
+    "metadata": {
+      "finish_reason": "stop",
+      "latency_ms": 0.024183999999877415
+    },
+    "metrics": {
+      "input_tokens": 11,
+      "output_tokens": 7,
+      "total_tokens": 18
+    }
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "4169964900330121175",
+    "parentId": "9118969867863512626",
+    "name": "offlineFlowStep",
+    "kind": "workflow",
+    "status": "ok",
+    "input": {
+      "value": "{\"query\":\"Genkit tracing\",\"city\":\"Paris\"}"
+    },
+    "output": {
+      "value": "{\"answer\":\"The Paris forecast is sunny at 21C.\",\"documentCount\":1,\"embeddingCount\":2,\"toolLoopEvents\":[\"model-turn-1\",\"tool-lookupWeather\",\"model-turn-2\"]}"
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a000000007e8d16c7cb7ed632",
+    "spanId": "9118969867863512626",
+    "parentId": "undefined",
+    "name": "offlineWorkflow",
+    "kind": "workflow",
+    "status": "ok",
+    "input": {
+      "value": "{\"query\":\"Genkit tracing\",\"city\":\"Paris\"}"
+    },
+    "output": {
+      "value": "{\"answer\":\"The Paris forecast is sunny at 21C.\",\"documentCount\":1,\"embeddingCount\":2,\"toolLoopEvents\":[\"model-turn-1\",\"tool-lookupWeather\",\"model-turn-2\"]}"
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a00000000662256839fbcca94",
+    "spanId": "7359539864397466260",
+    "parentId": "undefined",
+    "name": "failingWorkflow",
+    "kind": "workflow",
+    "status": "error",
+    "input": {
+      "value": "{\"reason\":\"exercise error path\"}"
+    },
+    "output": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional flow runner failure"
+    }
+  },
+  {
+    "traceId": "6a55a09a0000000064ed2d9344221ac4",
+    "spanId": "7272519083799747268",
+    "parentId": "undefined",
+    "name": "failingFlowStep",
+    "kind": "workflow",
+    "status": "error",
+    "input": {
+      "value": "{\"requested\":true}"
+    },
+    "output": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional flow step failure"
+    }
+  },
+  {
+    "traceId": "6a55a09a0000000008d93d522b2bd062",
+    "spanId": "637608245370540130",
+    "parentId": "undefined",
+    "name": "lookupWeather",
+    "kind": "tool",
+    "status": "ok",
+    "input": {
+      "value": "{\"city\":\"Berlin\"}"
+    },
+    "output": {
+      "value": "{\"city\":\"Berlin\",\"forecast\":\"sunny\",\"temperatureCelsius\":21}"
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a00000000020d73f240356ebf",
+    "spanId": "147901847069617855",
+    "parentId": "undefined",
+    "name": "failingTool",
+    "kind": "tool",
+    "status": "error",
+    "input": {
+      "value": "{\"requested\":true}"
+    },
+    "output": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional tool runner failure"
+    }
+  },
+  {
+    "traceId": "6a55a09a0000000021823601a48f4965",
+    "spanId": "2414551730907728229",
+    "parentId": "undefined",
+    "name": "local/offline-model",
+    "kind": "llm",
+    "status": "ok",
+    "modelName": "local/offline-model",
+    "modelProvider": "custom",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Request approval."
+        }
+      ]
+    },
+    "output": {
+      "messages": [
+        {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "name": "approvalRequired",
+              "arguments": {
+                "task": "deploy"
+              },
+              "tool_id": "approval-1"
+            }
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "finish_reason": "stop",
+      "latency_ms": 0.033179999999902066
+    },
+    "metrics": {
+      "input_tokens": 6,
+      "output_tokens": 3,
+      "total_tokens": 9
+    }
+  },
+  {
+    "traceId": "6a55a09a000000005f9cf6d0433b2b05",
+    "spanId": "6889652904311597829",
+    "parentId": "undefined",
+    "name": "approvalRequired",
+    "kind": "tool",
+    "status": "error",
+    "input": {
+      "value": "{\"task\":\"deploy\"}"
+    },
+    "output": {},
+    "metrics": {},
+    "error": {
+      "type": "ToolInterruptError"
+    }
+  },
+  {
+    "traceId": "6a55a09a0000000000aa89319db44330",
+    "spanId": "48001592233050928",
+    "parentId": "undefined",
+    "name": "localRetriever",
+    "kind": "retrieval",
+    "status": "ok",
+    "input": {
+      "value": "offline retrieval query"
+    },
+    "output": {
+      "documents": [
+        {
+          "text": "Retrieved context for: offline retrieval query",
+          "name": "offline-document",
+          "id": "doc-1",
+          "score": 0.91
+        }
+      ]
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a000000002125ace494a2794b",
+    "spanId": "2388505275136112971",
+    "parentId": "undefined",
+    "name": "failingRetriever",
+    "kind": "retrieval",
+    "status": "error",
+    "input": {
+      "value": "trigger failure"
+    },
+    "output": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional retriever runner failure"
+    }
+  },
+  {
+    "traceId": "6a55a09a000000000441c6c0fc6009f7",
+    "spanId": "306744781808077303",
+    "parentId": "undefined",
+    "name": "localEmbedder",
+    "kind": "embedding",
+    "status": "ok",
+    "modelName": "localEmbedder",
+    "modelProvider": "custom",
+    "input": {
+      "documents": [
+        {
+          "text": "first input document"
+        },
+        {
+          "text": "second input document"
+        }
+      ]
+    },
+    "output": {
+      "value": "[2 embedding(s) returned with size 3]"
+    },
+    "metrics": {}
+  },
+  {
+    "traceId": "6a55a09a0000000078cf6cd3420f792e",
+    "spanId": "8705296259332667694",
+    "parentId": "undefined",
+    "name": "failingEmbedder",
+    "kind": "embedding",
+    "status": "error",
+    "modelName": "failingEmbedder",
+    "modelProvider": "custom",
+    "input": {
+      "documents": [
+        {
+          "text": "trigger failure"
+        }
+      ]
+    },
+    "output": {},
+    "metrics": {},
+    "error": {
+      "type": "Error",
+      "message": "intentional embedder runner failure"
+    }
+  }
+]

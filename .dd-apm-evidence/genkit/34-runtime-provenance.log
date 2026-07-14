@@ -1,0 +1,17 @@
+v22.23.1
+10.9.8
+1.22.22
+dd-apm-genkit-1.21.0-sample@1.0.0 /workspace/repo/.dd-apm-evidence/genkit/09-sample-app
+└── genkit@1.21.0
+
+{
+  "resolvedEntry": "/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/genkit/lib/index.js",
+  "resolvedPackageRoot": "/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/genkit",
+  "resolvedVersion": "1.21.0"
+}
+{
+  "dependency": "@genkit-ai/core",
+  "resolvedEntry": "/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/index.js",
+  "resolvedPackageRoot": "/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core",
+  "resolvedVersion": "1.21.0"
+}

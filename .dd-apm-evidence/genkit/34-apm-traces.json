@@ -1,0 +1,863 @@
+[
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "8240798818078498860",
+        "span_id": "8240798818078498860",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570706024448",
+        "duration": 3291748,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a00000000725d32dd0907202c",
+          "llmobs_parent_id": "8240798818078498860",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "6317332529054157432",
+        "span_id": "6317332529054157432",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570796003072",
+        "duration": 776367,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a0000000057abac76ea4b0a78",
+          "llmobs_parent_id": "6317332529054157432",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "error.message": "intentional model runner failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional model runner failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:55:15\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/model.js:92:14\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:50\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at runInActionRuntimeContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:270:54)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:18\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:27\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:26",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "6443008172706442083",
+        "span_id": "6443008172706442083",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570799002368",
+        "duration": 27207275,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a00000000596a29cbeb1b2b63",
+          "llmobs_parent_id": "6443008172706442083",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "6085433162191520890",
+        "span_id": "6085433162191520890",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570829003776",
+        "duration": 634766,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a000000005473cd3810cec47a",
+          "llmobs_parent_id": "6085433162191520890",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "error.message": "intentional model runner failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional model runner failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:55:15\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/model.js:92:14\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:50\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at runInActionRuntimeContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:270:54)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:18\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:27\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:26\n    at async __apm$wrapped (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:79:14)",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "9118969867863512626",
+        "parent_id": "0",
+        "name": "genkit.workflow",
+        "resource": "offlineWorkflow",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570831005440",
+        "duration": 36676758,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a000000007e8d16c7cb7ed632",
+          "llmobs_parent_id": "9118969867863512626",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "flow",
+          "genkit.action.name": "offlineWorkflow",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      },
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "4169964900330121175",
+        "parent_id": "9118969867863512626",
+        "name": "genkit.workflow",
+        "resource": "offlineFlowStep",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570831938048",
+        "duration": 35440186,
+        "meta": {
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "flowStep",
+          "genkit.action.name": "offlineFlowStep",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      },
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "6844073397543299519",
+        "parent_id": "4169964900330121175",
+        "name": "genkit.request",
+        "resource": "localRetriever",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570844319488",
+        "duration": 1046387,
+        "meta": {
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "retrieval",
+          "genkit.action.name": "localRetriever",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      },
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "4573928345240082180",
+        "parent_id": "4169964900330121175",
+        "name": "genkit.request",
+        "resource": "localEmbedder",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570859644672",
+        "duration": 605469,
+        "meta": {
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "embedding",
+          "genkit.action.name": "localEmbedder",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      },
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "720202423448802115",
+        "parent_id": "4169964900330121175",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570863230976",
+        "duration": 761963,
+        "meta": {
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      },
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "7245646368879370682",
+        "parent_id": "4169964900330121175",
+        "name": "genkit.tool",
+        "resource": "lookupWeather",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570864665856",
+        "duration": 519043,
+        "meta": {
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "tool",
+          "genkit.action.name": "lookupWeather",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      },
+      {
+        "type": "genkit",
+        "trace_id": "9118969867863512626",
+        "span_id": "1801945858302432336",
+        "parent_id": "4169964900330121175",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570866125312",
+        "duration": 580322,
+        "meta": {
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "7359539864397466260",
+        "span_id": "7359539864397466260",
+        "parent_id": "0",
+        "name": "genkit.workflow",
+        "resource": "failingWorkflow",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570869003008",
+        "duration": 372559,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a00000000662256839fbcca94",
+          "llmobs_parent_id": "7359539864397466260",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "flow",
+          "genkit.action.name": "failingWorkflow",
+          "error.message": "intentional flow runner failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional flow runner failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:144:13\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/flow.js:54:14\n    at actFn (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:126:31)\n    at runWithContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/context.js:32:12)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:67\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:119\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:76\n    at DatadogStorage.run (/workspace/repo/packages/datadog-core/src/storage.js:104:22)",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "7272519083799747268",
+        "span_id": "7272519083799747268",
+        "parent_id": "0",
+        "name": "genkit.workflow",
+        "resource": "failingFlowStep",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570870001408",
+        "duration": 266846,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a0000000064ed2d9344221ac4",
+          "llmobs_parent_id": "7272519083799747268",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "flowStep",
+          "genkit.action.name": "failingFlowStep",
+          "error.message": "intentional flow step failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional flow step failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:238:15\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/flow.js:83:39\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:119\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:76\n    at DatadogStorage.run (/workspace/repo/packages/datadog-core/src/storage.js:104:22)\n    at run (/workspace/repo/packages/dd-trace/src/opentelemetry/context_manager.js:95:26)\n    at ContextManager.with (/workspace/repo/packages/dd-trace/src/opentelemetry/context_manager.js:114:12)\n    at ContextAPI.with (/workspace/repo/node_modules/@opentelemetry/api/build/src/api/context.js:60:46)",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "637608245370540130",
+        "span_id": "637608245370540130",
+        "parent_id": "0",
+        "name": "genkit.tool",
+        "resource": "lookupWeather",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570871001344",
+        "duration": 192383,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a0000000008d93d522b2bd062",
+          "llmobs_parent_id": "637608245370540130",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "tool",
+          "genkit.action.name": "lookupWeather",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "147901847069617855",
+        "span_id": "147901847069617855",
+        "parent_id": "0",
+        "name": "genkit.tool",
+        "resource": "failingTool",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570871001344",
+        "duration": 349609,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a00000000020d73f240356ebf",
+          "llmobs_parent_id": "147901847069617855",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "tool",
+          "genkit.action.name": "failingTool",
+          "error.message": "intentional tool runner failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional tool runner failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:34:13\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/tool.js:115:14\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:50\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at runInActionRuntimeContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:270:54)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:18\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:27\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:26\n    at async __apm$wrapped (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:79:14)",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "2414551730907728229",
+        "span_id": "2414551730907728229",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "local/offline-model",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570873001472",
+        "duration": 318848,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a0000000021823601a48f4965",
+          "llmobs_parent_id": "2414551730907728229",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "generation",
+          "genkit.action.name": "local/offline-model",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "6889652904311597829",
+        "span_id": "6889652904311597829",
+        "parent_id": "0",
+        "name": "genkit.tool",
+        "resource": "approvalRequired",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570874001152",
+        "duration": 383789,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a000000005f9cf6d0433b2b05",
+          "llmobs_parent_id": "6889652904311597829",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "internal",
+          "genkit.operation.type": "tool",
+          "genkit.action.name": "approvalRequired",
+          "error.type": "ToolInterruptError",
+          "error.stack": "ToolInterruptError\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/tool.js:214:11\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:41:7\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/tool.js:115:14\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:50\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at runInActionRuntimeContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:270:54)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:18\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:27\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:26",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "48001592233050928",
+        "span_id": "48001592233050928",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "localRetriever",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570875001344",
+        "duration": 203125,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a0000000000aa89319db44330",
+          "llmobs_parent_id": "48001592233050928",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "retrieval",
+          "genkit.action.name": "localRetriever",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "2388505275136112971",
+        "span_id": "2388505275136112971",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "failingRetriever",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570876001536",
+        "duration": 311768,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a000000002125ace494a2794b",
+          "llmobs_parent_id": "2388505275136112971",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "retrieval",
+          "genkit.action.name": "failingRetriever",
+          "error.message": "intentional retriever runner failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional retriever runner failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:103:13\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/retriever.js:93:12\n    at actFn (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:126:31)\n    at runWithContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/context.js:32:12)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:67\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:119\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:76\n    at DatadogStorage.run (/workspace/repo/packages/datadog-core/src/storage.js:104:22)",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "306744781808077303",
+        "span_id": "306744781808077303",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "localEmbedder",
+        "service": "test",
+        "error": 0,
+        "start": "1783996570877001728",
+        "duration": 230225,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a000000000441c6c0fc6009f7",
+          "llmobs_parent_id": "306744781808077303",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "embedding",
+          "genkit.action.name": "localEmbedder",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ],
+  [
+    [
+      {
+        "type": "genkit",
+        "trace_id": "8705296259332667694",
+        "span_id": "8705296259332667694",
+        "parent_id": "0",
+        "name": "genkit.request",
+        "resource": "failingEmbedder",
+        "service": "test",
+        "error": 1,
+        "start": "1783996570878001152",
+        "duration": 355225,
+        "meta": {
+          "_dd.tags.process": "entrypoint.basedir:genkit,entrypoint.name:34-live-capture,entrypoint.type:script,entrypoint.workdir:repo,package.json.name:dd-trace,svc.user:true",
+          "_dd.p.tid": "6a55a09a00000000",
+          "llmobs_trace_id": "6a55a09a0000000078cf6cd3420f792e",
+          "llmobs_parent_id": "8705296259332667694",
+          "_dd.p.dm": "-0",
+          "_dd.git.commit.sha": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+          "_dd.git.repository_url": "https://code-gen-sandbox.datadog.com/githttp/2/Z2l0aHViLmNvbS9kYXRhZG9nL2RkLXRyYWNlLWpz",
+          "version": "7.0.0-pre",
+          "service": "test",
+          "env": "tester",
+          "runtime-id": "5fb0b491-1df7-457f-9f88-121c78b30326",
+          "_dd.rc.client_id": "6f3a7b03-3776-4383-8d33-5bc0e5c2b08a",
+          "component": "genkit",
+          "span.kind": "client",
+          "genkit.operation.type": "embedding",
+          "genkit.action.name": "failingEmbedder",
+          "error.message": "intentional embedder runner failure",
+          "error.type": "Error",
+          "error.stack": "Error: intentional embedder runner failure\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-app.js:117:13\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/ai/lib/embedder.js:87:12\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:50\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)\n    at NodeAsyncContext.run (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/node-async-context.js:36:27)\n    at runInActionRuntimeContext (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:270:54)\n    at /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:222:18\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/action.js:142:27\n    at async /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:87:26\n    at async __apm$wrapped (/workspace/repo/.dd-apm-evidence/genkit/09-sample-app/node_modules/@genkit-ai/core/lib/tracing/instrumentation.js:79:14)",
+          "_dd.integration": "genkit",
+          "_dd.llmobs.submitted": "1",
+          "language": "javascript"
+        },
+        "metrics": {
+          "_dd.agent_psr": 1,
+          "_dd.top_level": 1,
+          "_dd.measured": 1,
+          "process_id": 2617,
+          "_sampling_priority_v1": 1
+        }
+      }
+    ]
+  ]
+]

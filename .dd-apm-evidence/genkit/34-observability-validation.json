@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "validatedAt": "2026-07-14T02:39:14.400Z",
+  "sourceDiffSha256": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "passed": true,
+  "package": "genkit@1.21.0",
+  "otelEnabled": true,
+  "sample": {
+    "operationCount": 14,
+    "successfulOperations": 7,
+    "expectedErrorOperations": 7,
+    "unexpectedErrors": 0
+  },
+  "apm": {
+    "requestCount": 15,
+    "spanCount": 21,
+    "errorSpanCount": 8,
+    "operationNames": [
+      "genkit.request",
+      "genkit.tool",
+      "genkit.workflow"
+    ]
+  },
+  "llmobs": {
+    "requestCount": 2,
+    "spanCount": 21,
+    "errorSpanCount": 8,
+    "kindCounts": {
+      "llm": 7,
+      "retrieval": 3,
+      "embedding": 3,
+      "tool": 4,
+      "workflow": 4
+    },
+    "modelEventCount": 7,
+    "modelEventsWithTokenMetrics": 5
+  },
+  "invariants": {
+    "everyLlmObsEventMatchesExactlyOneApmSpanId": true,
+    "workflowParentChildRelationshipsMatch": true,
+    "streamingChunksAndFinalResponseComplete": true,
+    "errorsRetainTypeAndStack": true,
+    "nativeGenkitDuplicateSpansAbsent": true,
+    "rawNativeGenkitInputOutputTagsAbsent": true,
+    "embeddingVectorsAndExcludedSecretsAbsent": true
+  }
+}

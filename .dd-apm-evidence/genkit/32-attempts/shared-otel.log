@@ -1,0 +1,73 @@
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'mocha' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'lodash' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'express' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'body-parser' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'router' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'path-to-regexp' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'cookie' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'multer' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Please ensure dd-trace is loaded before other modules.
+DATADOG TRACER CONFIGURATION - {"date":"2026-07-14T02:26:46.591Z","os_name":"Linux","os_version":"6.8.0","architecture":"x64","version":"7.0.0-pre","lang":"nodejs","lang_version":"22.23.1","env":"","service":"mocha","agent_url":"http://127.0.0.1:8126/","debug":false,"sampling_rules":[],"tags":{"version":"11.7.6","service":"mocha","runtime-id":"e7f52ad9-31f5-4665-b958-ddf437747f47","_dd.rc.client_id":"2e4534f2-81ca-475a-8e2c-40b2441abf3b"},"dd_version":"11.7.6","log_injection_enabled":true,"runtime_metrics_enabled":true,"profiling_enabled":false,"data_streams_enabled":false}
+
+[0m[0m
+[0m  OTel Context Manager[0m
+  [32m  ✔[0m[90m should create a new context[0m
+  [32m  ✔[0m[90m should delete a context[0m
+  [32m  ✔[0m[90m should create a new root context[0m
+  [32m  ✔[0m[90m should return root context[0m
+  [32m  ✔[0m[90m should set active context[0m
+  [32m  ✔[0m[90m should set active context on an asynchronous callback and return the result synchronously[0m[31m (100ms)[0m
+  [32m  ✔[0m[90m should set active contexts in nested functions[0m
+  [32m  ✔[0m[90m should not modify contexts, instead it should create new context objects[0m
+  [32m  ✔[0m[90m should propagate baggage from an otel span to a datadog span[0m
+  [32m  ✔[0m[90m should propagate baggage from a datadog span to an otel span[0m
+  [32m  ✔[0m[90m should handle dd-otel baggage conflict[0m
+  [32m  ✔[0m[90m should handle dd-otel baggage removal[0m
+  [32m  ✔[0m[90m should clear dd baggage when entering an otel context with no baggage[0m
+  [32m  ✔[0m[90m should silently drop otel baggage that targets Object.prototype.__proto__[0m
+  [32m  ✔[0m[90m should return active span[0m
+[0m    with an active Datadog span[0m
+    [32m  ✔[0m[90m preserves a stored OTel span when the active Datadog store is marked[0m
+    [32m  ✔[0m[90m uses the active Datadog span when a marked store has no stored OTel span[0m
+    [32m  ✔[0m[90m uses the active Datadog span instead of stored OTel for an unmarked span[0m
+    [32m  ✔[0m[90m exposes the active span via trace.getActiveSpan() and forwards writes[0m
+    [32m  ✔[0m[90m addEvent normalizes OTel time/attribute inputs onto the Datadog span[0m
+    [32m  ✔[0m[90m recordException forwards a user-supplied hrTime timestamp as ms[0m
+    [32m  ✔[0m[90m end() on the proxy does not finish the Datadog span[0m
+    [32m  ✔[0m[90m addLinks forwards every valid link and skips invalid contexts[0m
+    [32m  ✔[0m[90m addLinks ignores non-array input[0m
+    [32m  ✔[0m[90m caches the proxy so repeated calls return the same object[0m
+    [32m  ✔[0m[90m updateName updates resource.name on the DD span, not the operation name[0m
+    [32m  ✔[0m[90m mutation methods are all no-ops once the underlying DD span has finished[0m
+[0m      setStatus precedence (OTel spec)[0m
+      [32m  ✔[0m[90m OK locks subsequent ERROR and UNSET writes[0m
+      [32m  ✔[0m[90m ERROR can be replaced by a later ERROR with a fresh message[0m
+
+[0m  OTel Tracer[0m
+  [32m  ✔[0m[90m should get resource[0m
+  [32m  ✔[0m[90m should get active span processor[0m
+  [32m  ✔[0m[90m should create a span[0m
+  [32m  ✔[0m[90m should create a span with attributes (tags)[0m
+  [32m  ✔[0m[90m suppresses only the instrumentation scope selected by the active store[0m
+  [32m  ✔[0m[90m returns a non-recording span when the inner tracer is the noop[0m
+  [32m  ✔[0m[90m should pass through span kind[0m
+  [32m  ✔[0m[90m should use given start time[0m
+  [32m  ✔[0m[90m should create an active span[0m
+  [32m  ✔[0m[90m should auto-nest otel spans in dd spans[0m
+  [32m  ✔[0m[90m should auto-nest dd spans in otel spans[0m
+  [32m  ✔[0m[90m should auto-nest otel spans within other otel spans[0m
+  [32m  ✔[0m[90m should make manual root span[0m
+  [32m  ✔[0m[90m test otel context span parenting[0m
+  [32m  ✔[0m[90m reflects the sampling decision in traceFlags before the span ends[0m
+  [32m  ✔[0m[90m test otel context mixed span parenting[0m
+[0m    _convertOtelContextToDatadog (traceparent/tracestate extraction)[0m
+    [32m  ✔[0m[90m writes sampling priority onto the wrapped Datadog context[0m
+    [32m  ✔[0m[90m preserves the existing _trace.started/finished/tags when writing origin[0m
+    [32m  ✔[0m[90m falls back to AUTO_REJECT/AUTO_KEEP when tracestate has no s: field[0m
+    [32m  ✔[0m[90m falls back to AUTO_KEEP for RUM traces without a priority[0m
+
+
+[92m [0m[32m 49 passing[0m[90m (143ms)[0m
+
+
+TEST_EXIT_CODE=0

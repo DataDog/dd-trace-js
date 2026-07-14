@@ -1,0 +1,90 @@
+npm error code E404
+npm error 404 Not Found - GET https://registry.npmjs.org/confluentinc-kafka-javascript - Not found
+npm error 404
+npm error 404  'confluentinc-kafka-javascript@*' is not in this registry.
+npm error 404
+npm error 404 Note that you can also install from a
+npm error 404 tarball, folder, http url, or git url.
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-07-14T02_31_35_773Z-debug-0.log
+node:child_process:991
+    throw err;
+    ^
+
+Error: Command failed: npm show confluentinc-kafka-javascript versions --json
+npm error code E404
+npm error 404 Not Found - GET https://registry.npmjs.org/confluentinc-kafka-javascript - Not found
+npm error 404
+npm error 404  'confluentinc-kafka-javascript@*' is not in this registry.
+npm error 404
+npm error 404 Note that you can also install from a
+npm error 404 tarball, folder, http url, or git url.
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-07-14T02_31_35_773Z-debug-0.log
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at checkExecSyncError (node:child_process:916:11)
+    at execSync (node:child_process:988:15)
+    at getMatchingVersions (/workspace/repo/scripts/verify-ci-config.js:113:33)
+    at checkPlugins (/workspace/repo/scripts/verify-ci-config.js:73:26)
+    at Object.<anonymous> (/workspace/repo/scripts/verify-ci-config.js:137:1)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32) {
+  status: 1,
+  signal: null,
+  output: [
+    null,
+    Buffer(300) [Uint8Array] [
+      123,  10,  32,  32,  34, 101, 114, 114, 111, 114,  34,  58,
+       32, 123,  10,  32,  32,  32,  32,  34,  99, 111, 100, 101,
+       34,  58,  32,  34,  69,  52,  48,  52,  34,  44,  10,  32,
+       32,  32,  32,  34, 115, 117, 109, 109,  97, 114, 121,  34,
+       58,  32,  34,  78, 111, 116,  32,  70, 111, 117, 110, 100,
+       32,  45,  32,  71,  69,  84,  32, 104, 116, 116, 112, 115,
+       58,  47,  47, 114, 101, 103, 105, 115, 116, 114, 121,  46,
+      110, 112, 109, 106, 115,  46, 111, 114, 103,  47,  99, 111,
+      110, 102, 108, 117,
+      ... 200 more items
+    ],
+    Buffer(434) [Uint8Array] [
+      110, 112, 109,  32, 101, 114, 114, 111, 114,  32,  99, 111,
+      100, 101,  32,  69,  52,  48,  52,  10, 110, 112, 109,  32,
+      101, 114, 114, 111, 114,  32,  52,  48,  52,  32,  78, 111,
+      116,  32,  70, 111, 117, 110, 100,  32,  45,  32,  71,  69,
+       84,  32, 104, 116, 116, 112, 115,  58,  47,  47, 114, 101,
+      103, 105, 115, 116, 114, 121,  46, 110, 112, 109, 106, 115,
+       46, 111, 114, 103,  47,  99, 111, 110, 102, 108, 117, 101,
+      110, 116, 105, 110,  99,  45, 107,  97, 102, 107,  97,  45,
+      106,  97, 118,  97,
+      ... 334 more items
+    ]
+  ],
+  pid: 320,
+  stdout: Buffer(300) [Uint8Array] [
+    123,  10,  32,  32,  34, 101, 114, 114, 111, 114,  34,  58,
+     32, 123,  10,  32,  32,  32,  32,  34,  99, 111, 100, 101,
+     34,  58,  32,  34,  69,  52,  48,  52,  34,  44,  10,  32,
+     32,  32,  32,  34, 115, 117, 109, 109,  97, 114, 121,  34,
+     58,  32,  34,  78, 111, 116,  32,  70, 111, 117, 110, 100,
+     32,  45,  32,  71,  69,  84,  32, 104, 116, 116, 112, 115,
+     58,  47,  47, 114, 101, 103, 105, 115, 116, 114, 121,  46,
+    110, 112, 109, 106, 115,  46, 111, 114, 103,  47,  99, 111,
+    110, 102, 108, 117,
+    ... 200 more items
+  ],
+  stderr: Buffer(434) [Uint8Array] [
+    110, 112, 109,  32, 101, 114, 114, 111, 114,  32,  99, 111,
+    100, 101,  32,  69,  52,  48,  52,  10, 110, 112, 109,  32,
+    101, 114, 114, 111, 114,  32,  52,  48,  52,  32,  78, 111,
+    116,  32,  70, 111, 117, 110, 100,  32,  45,  32,  71,  69,
+     84,  32, 104, 116, 116, 112, 115,  58,  47,  47, 114, 101,
+    103, 105, 115, 116, 114, 121,  46, 110, 112, 109, 106, 115,
+     46, 111, 114, 103,  47,  99, 111, 110, 102, 108, 117, 101,
+    110, 116, 105, 110,  99,  45, 107,  97, 102, 107,  97,  45,
+    106,  97, 118,  97,
+    ... 334 more items
+  ]
+}
+
+Node.js v22.23.1
+VERIFY_CI_CONFIG_EXIT_CODE=1

@@ -1,0 +1,19 @@
+
+> dd-trace@7.0.0-pre lint:codeowners:ci
+> codeowners-audit --glob='**/*.spec.js' --glob='benchmark/sirun/**' --glob='.agents/**' --glob='.claude/**' --glob='integration-tests/**'
+
+Standard input is non-interactive; defaulting to --no-open --list-unowned --fail-on-unowned.
+Coverage summary:
+globs: ["**/*.spec.js","benchmark/sirun/**",".agents/**",".claude/**","integration-tests/**"]
+codeowners file: .github/CODEOWNERS
+analyzed files: 1640
+unknown files: 0
+oversized CODEOWNERS warnings: 0
+missing path warnings: 0
+invalid owner warnings: 0
+owner validation warnings: 0
+location warnings: 4
+directory slash warnings: 1
+fragile coverage directories: 4
+Report ready at /tmp/codeowners-audit/codeowners-gaps-report.html
+CODEOWNERS_EXIT_CODE=0

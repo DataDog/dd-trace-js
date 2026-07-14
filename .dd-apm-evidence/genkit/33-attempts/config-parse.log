@@ -1,0 +1,6 @@
+valid JSON: packages/dd-trace/src/config/supported-configurations.json
+valid JSON: packages/dd-trace/test/plugins/versions/package.json
+valid YAML: .github/workflows/apm-integrations.yml
+genkit supported row count: 1
+{"dependency":"@genkit-ai/core","integration":"genkit","minimum_tracer_supported":"1.21.0","max_tracer_supported":"1.21.0","auto-instrumented":"True"}
+CONFIG_PARSE_EXIT_CODE=0

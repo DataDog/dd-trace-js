@@ -1,0 +1,5 @@
+
+> dd-trace@7.0.0-pre verify:supported-integrations
+> node scripts/generate-supported-integrations.js --check
+
+VERIFY_SUPPORTED_INTEGRATIONS_EXIT_CODE=0

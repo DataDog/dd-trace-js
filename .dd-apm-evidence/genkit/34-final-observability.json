@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "stage": "34-final-live-observability",
+  "status": "passed",
+  "package": "genkit@1.21.0",
+  "core_package": "@genkit-ai/core@1.21.0",
+  "source_diff_sha256": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "sample_source_sha256": "f8d67bb23ad652d69b88fcfdf9045ac06af65e98498775abb33531ac42821e14",
+  "capture": {
+    "real_sample": ".dd-apm-evidence/genkit/09-sample-app/sample-app.js",
+    "otel_enabled": true,
+    "sample_operations": 14,
+    "successful_operations": 7,
+    "expected_error_operations": 7,
+    "unexpected_errors": 0,
+    "apm_requests": 15,
+    "apm_spans": 21,
+    "llmobs_requests": 2,
+    "llmobs_spans": 21
+  },
+  "llmobs_kind_counts": {
+    "llm": 7,
+    "workflow": 4,
+    "tool": 4,
+    "retrieval": 3,
+    "embedding": 3
+  },
+  "model": {
+    "name": "local/offline-model",
+    "provider": "custom",
+    "event_count": 7,
+    "events_with_numeric_token_metrics": 5
+  },
+  "errors": {
+    "apm_error_spans": 8,
+    "llmobs_error_spans": 8,
+    "all_have_type_and_stack": true
+  },
+  "validation": {
+    "every_llmobs_event_matches_exactly_one_apm_span_id": true,
+    "workflow_parent_child_relationships_match": true,
+    "streaming_chunks_and_final_response_complete": true,
+    "native_genkit_duplicate_spans_absent": true,
+    "raw_native_genkit_input_output_tags_absent": true,
+    "embedding_vectors_and_excluded_secrets_absent": true
+  },
+  "evidence": [
+    "34-live-capture.js",
+    "34-validate-capture.js",
+    "34-live-run.log",
+    "34-runtime-provenance.log",
+    "34-sample-results.json",
+    "34-apm-traces.json",
+    "34-llmobs-requests.json",
+    "34-llmobs-span-index.json",
+    "34-observability-validation.json",
+    "34-validation.log"
+  ],
+  "blockers": []
+}

@@ -1,0 +1,28 @@
+SOURCE_HASH_AFTER_TESTS
+2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422  -
+CHANGED_TEST_FILES
+packages/datadog-plugin-genkit/test/index.spec.js
+packages/datadog-plugin-genkit/test/llmobs.spec.js
+packages/dd-trace/test/opentelemetry/context_manager.spec.js
+packages/dd-trace/test/opentelemetry/tracer.spec.js
+packages/dd-trace/test/plugins/externals.js
+packages/dd-trace/test/plugins/versions/package.json
+CHANGED_TEST_NUMSTAT
+192	0	packages/datadog-plugin-genkit/test/index.spec.js
+608	0	packages/datadog-plugin-genkit/test/llmobs.spec.js
+49	0	packages/dd-trace/test/opentelemetry/context_manager.spec.js
+27	0	packages/dd-trace/test/opentelemetry/tracer.spec.js
+FOCUSED_SKIP_ONLY_SCAN
+DELETED_TEST_DECLARATIONS
+LOG_SUMMARIES
+.dd-apm-evidence/genkit/32-attempts/direct-default.log: 23 passing,TEST_EXIT_CODE=0
+.dd-apm-evidence/genkit/32-attempts/direct-otel-enabled.log: 23 passing,TEST_EXIT_CODE=0
+.dd-apm-evidence/genkit/32-attempts/integrity-and-coverage.log: 23 passing,TEST_EXIT_CODE=0 23 passing,TEST_EXIT_CODE=0
+.dd-apm-evidence/genkit/32-attempts/plugin-structure.log: 171 passing,TEST_EXIT_CODE=0
+.dd-apm-evidence/genkit/32-attempts/shared-otel.log: 49 passing,TEST_EXIT_CODE=0
+.dd-apm-evidence/genkit/32-attempts/test-plugins-ci-authoritative.log: 23 passing,TEST_EXIT_CODE=0
+.dd-apm-evidence/genkit/32-attempts/test-plugins-ci-inherited-agent-host.log: 2 passing,21 failing TEST_EXIT_CODE=21
+WORKTREE_STATUS
+ M .dd-apm-pipeline/PROGRESS.md
+?? .dd-apm-evidence/genkit/31-final-build-final.json
+?? .dd-apm-evidence/genkit/31-final-build-final.md

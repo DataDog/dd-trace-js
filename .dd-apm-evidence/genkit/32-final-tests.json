@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "stage": "32-final-tests",
+  "status": "passed",
+  "gate_passed": true,
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "source_diff_sha256_before": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "source_diff_sha256_after": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "environment_diagnosis": {
+    "inherited_dd_agent_host": "",
+    "initial_command_order": "required targeted command ran first",
+    "initial_result": {
+      "exit_code": 21,
+      "passing": 2,
+      "failing": 21,
+      "failure_shape": "span-wait timeouts"
+    },
+    "classification": "known sandbox environment-only empty DD_AGENT_HOST failure",
+    "authoritative_adjustment": "unset DD_AGENT_HOST in addition to the required OTel exporter variables",
+    "source_changed": false
+  },
+  "tests": [
+    {
+      "name": "targeted_plugin_ci",
+      "command": "unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER DD_AGENT_HOST && PLUGINS=genkit npm run test:plugins:ci",
+      "exit_code": 0,
+      "passing": 23,
+      "failing": 0,
+      "pending": 0,
+      "log": "32-attempts/test-plugins-ci-authoritative.log"
+    },
+    {
+      "name": "direct_default_genkit",
+      "exit_code": 0,
+      "passing": 23,
+      "failing": 0,
+      "pending": 0,
+      "log": "32-attempts/direct-default.log"
+    },
+    {
+      "name": "direct_otel_enabled_genkit",
+      "exit_code": 0,
+      "passing": 23,
+      "failing": 0,
+      "pending": 0,
+      "log": "32-attempts/direct-otel-enabled.log"
+    },
+    {
+      "name": "shared_otel_context_manager_and_tracer",
+      "exit_code": 0,
+      "passing": 49,
+      "failing": 0,
+      "pending": 0,
+      "log": "32-attempts/shared-otel.log"
+    },
+    {
+      "name": "plugin_structure",
+      "exit_code": 0,
+      "passing": 171,
+      "failing": 0,
+      "pending": 0,
+      "log": "32-attempts/plugin-structure.log"
+    }
+  ],
+  "coverage_integrity": {
+    "changed_behavioral_spec_additions": 876,
+    "changed_behavioral_spec_deletions": 0,
+    "deleted_test_declarations": 0,
+    "skip_or_only_markers": 0,
+    "tests_deleted": false,
+    "tests_skipped": false,
+    "tests_weakened": false
+  },
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "progress_modified_by_stage_worker": false,
+  "stage_33_authorized": true,
+  "evidence": [
+    "32-final-tests.md",
+    "32-attempts/test-plugins-ci-inherited-agent-host.log",
+    "32-attempts/test-plugins-ci-authoritative.log",
+    "32-attempts/direct-default.log",
+    "32-attempts/direct-otel-enabled.log",
+    "32-attempts/shared-otel.log",
+    "32-attempts/plugin-structure.log",
+    "32-attempts/integrity-and-coverage.log"
+  ]
+}

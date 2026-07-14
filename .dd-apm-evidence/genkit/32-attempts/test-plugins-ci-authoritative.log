@@ -1,0 +1,64 @@
+
+> dd-trace@7.0.0-pre test:plugins:ci
+> yarn services && node scripts/c8-ci.js test:plugins
+
+yarn run v1.22.22
+$ node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services
+[1;90m$ yarn --ignore-engines[0m
+[1/4] Resolving packages...
+success Already up-to-date.
+Done in 0.79s.
+DATADOG TRACER CONFIGURATION - {"date":"2026-07-14T02:26:18.432Z","os_name":"Linux","os_version":"6.8.0","architecture":"x64","version":"7.0.0-pre","lang":"nodejs","lang_version":"22.23.1","env":"","service":"dd-trace","agent_url":"http://127.0.0.1:8126/","debug":false,"sampling_rules":[],"tags":{"version":"7.0.0-pre","service":"dd-trace","runtime-id":"dc7ab454-ca82-49b2-a570-91e6d406fbe5","_dd.rc.client_id":"6ea279f5-e234-43e5-a919-b0032d9f10eb"},"dd_version":"7.0.0-pre","log_injection_enabled":true,"runtime_metrics_enabled":true,"profiling_enabled":false,"data_streams_enabled":false}
+
+> dd-trace@7.0.0-pre test:plugins
+> node --expose-gc ./node_modules/mocha/bin/mocha.js "packages/datadog-plugin-@(${PLUGINS})/test/**/${SPEC:-*}*.spec.js"
+
+
+[0m[0m
+[0m  Plugin[0m
+[0m    genkit[0m
+[0m      with @genkit-ai/core 1.21.0 (1.21.0)[0m
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'mocha' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'lodash' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'body-parser' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'express' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'router' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'path-to-regexp' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'cookie' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'multer' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Please ensure dd-trace is loaded before other modules.
+DATADOG TRACER CONFIGURATION - {"date":"2026-07-14T02:26:19.468Z","os_name":"Linux","os_version":"6.8.0","architecture":"x64","version":"7.0.0-pre","lang":"nodejs","lang_version":"22.23.1","env":"tester","service":"test","agent_url":"http://127.0.0.1:39525/","debug":false,"sampling_rules":[],"tags":{"version":"11.7.6","service":"test","env":"tester","runtime-id":"fee7f9f4-8c04-425e-89ce-fc94d64bcd9e","_dd.rc.client_id":"acd08fbc-4946-4981-8819-8c0f4a60438d"},"dd_version":"11.7.6","log_injection_enabled":true,"runtime_metrics_enabled":true,"profiling_enabled":false,"data_streams_enabled":false}
+      [32m  ✔[0m[90m instruments model actions[0m[31m (244ms)[0m
+DATADOG TRACER INTEGRATIONS LOADED - ["fs","net","dns","child_process","genkit","http","express"]
+      [32m  ✔[0m[90m instruments flows and named flow steps[0m
+      [32m  ✔[0m[90m instruments tool actions[0m
+      [32m  ✔[0m[90m instruments retriever actions[0m
+      [32m  ✔[0m[90m instruments embedder actions[0m
+      [32m  ✔[0m[90m keeps one safe authoritative span when the OTel bridge is enabled[0m
+      [32m  ✔[0m[90m records an unrelated user OTel child under the authoritative Genkit span[0m
+      [32m  ✔[0m[90m does not leave OTel context preservation on an ambient user span[0m
+
+[0m  genkit LLMObs[0m
+[0m    with @genkit-ai/core 1.21.0 (1.21.0)[0m
+    [32m  ✔[0m[90m normalizes model messages, tools, metrics, and allowlisted metadata[0m
+    [32m  ✔[0m[90m records model runner errors with input and an empty output[0m
+    [32m  ✔[0m[90m finishes streaming model spans after chunks and the final response[0m
+    [32m  ✔[0m[90m records streaming model errors[0m
+    [32m  ✔[0m[90m creates workflow spans for flows and named steps with correct parenting[0m
+    [32m  ✔[0m[90m records workflow, flow-step, retrieval, and embedding runner errors[0m
+    [32m  ✔[0m[90m records tool success and runner errors[0m
+    [32m  ✔[0m[90m records tool interrupts as tool errors and the outer generation as successful[0m
+    [32m  ✔[0m[90m normalizes retrieval documents and allowlists reviewed metadata[0m
+    [32m  ✔[0m[90m summarizes embedding vectors without recording vector values or arbitrary metadata[0m
+    [32m  ✔[0m[90m demotes models owned by an enabled provider integration without duplicate metrics[0m
+    [32m  ✔[0m[90m keeps googleai models authoritative when the provider integration is disabled[0m
+    [32m  ✔[0m[90m preserves selected parenting through ignored native labels[0m
+    [32m  ✔[0m[90m uses serialized output fallback and ignores malformed fallback JSON[0m
+    [32m  ✔[0m[90m extracts options from the three-argument runInNewSpan overload[0m
+
+
+[92m [0m[32m 23 passing[0m[90m (2s)[0m
+
+Converted 556 V8 script entries across 3 profile(s) into 304 file section(s).
+
+TEST_EXIT_CODE=0

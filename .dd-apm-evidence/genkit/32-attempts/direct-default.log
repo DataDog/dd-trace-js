@@ -1,0 +1,48 @@
+
+[0m[0m
+[0m  Plugin[0m
+[0m    genkit[0m
+[0m      with @genkit-ai/core 1.21.0 (1.21.0)[0m
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'mocha' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'lodash' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'body-parser' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'express' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'router' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'path-to-regexp' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'cookie' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Package 'multer' was loaded before dd-trace! This may break instrumentation.
+DATADOG TRACER DIAGNOSTIC - Warning: Please ensure dd-trace is loaded before other modules.
+DATADOG TRACER CONFIGURATION - {"date":"2026-07-14T02:26:30.038Z","os_name":"Linux","os_version":"6.8.0","architecture":"x64","version":"7.0.0-pre","lang":"nodejs","lang_version":"22.23.1","env":"tester","service":"test","agent_url":"http://127.0.0.1:41479/","debug":false,"sampling_rules":[],"tags":{"version":"11.7.6","service":"test","env":"tester","runtime-id":"bb3c9530-bdf1-491a-ac78-50b1fb7a2602","_dd.rc.client_id":"accacd8c-e634-4515-8d0c-9931ecf1eddc"},"dd_version":"11.7.6","log_injection_enabled":true,"runtime_metrics_enabled":true,"profiling_enabled":false,"data_streams_enabled":false}
+      [32m  ✔[0m[90m instruments model actions[0m[31m (172ms)[0m
+DATADOG TRACER INTEGRATIONS LOADED - ["fs","net","dns","child_process","genkit","http","express"]
+      [32m  ✔[0m[90m instruments flows and named flow steps[0m
+      [32m  ✔[0m[90m instruments tool actions[0m
+      [32m  ✔[0m[90m instruments retriever actions[0m
+      [32m  ✔[0m[90m instruments embedder actions[0m
+      [32m  ✔[0m[90m keeps one safe authoritative span when the OTel bridge is enabled[0m
+      [32m  ✔[0m[90m records an unrelated user OTel child under the authoritative Genkit span[0m
+      [32m  ✔[0m[90m does not leave OTel context preservation on an ambient user span[0m
+
+[0m  genkit LLMObs[0m
+[0m    with @genkit-ai/core 1.21.0 (1.21.0)[0m
+    [32m  ✔[0m[90m normalizes model messages, tools, metrics, and allowlisted metadata[0m
+    [32m  ✔[0m[90m records model runner errors with input and an empty output[0m
+    [32m  ✔[0m[90m finishes streaming model spans after chunks and the final response[0m
+    [32m  ✔[0m[90m records streaming model errors[0m
+    [32m  ✔[0m[90m creates workflow spans for flows and named steps with correct parenting[0m
+    [32m  ✔[0m[90m records workflow, flow-step, retrieval, and embedding runner errors[0m
+    [32m  ✔[0m[90m records tool success and runner errors[0m
+    [32m  ✔[0m[90m records tool interrupts as tool errors and the outer generation as successful[0m
+    [32m  ✔[0m[90m normalizes retrieval documents and allowlists reviewed metadata[0m
+    [32m  ✔[0m[90m summarizes embedding vectors without recording vector values or arbitrary metadata[0m
+    [32m  ✔[0m[90m demotes models owned by an enabled provider integration without duplicate metrics[0m
+    [32m  ✔[0m[90m keeps googleai models authoritative when the provider integration is disabled[0m
+    [32m  ✔[0m[90m preserves selected parenting through ignored native labels[0m
+    [32m  ✔[0m[90m uses serialized output fallback and ignores malformed fallback JSON[0m
+    [32m  ✔[0m[90m extracts options from the three-argument runInNewSpan overload[0m
+
+
+[92m [0m[32m 23 passing[0m[90m (1s)[0m
+
+
+TEST_EXIT_CODE=0

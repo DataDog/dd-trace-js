@@ -1,0 +1,11 @@
+
+> dd-trace@7.0.0-pre verify-exercised-tests
+> node scripts/verify-exercised-tests.js
+
+All test files are covered by at least one package.json script glob.
+All CI workflows reference valid scripts, and plugin setup looks consistent.
+Test files: 799
+Extracted globs: 71
+Runtime(ms): 849.5
+Glob cache: size=225 hits=253 misses=225
+VERIFY_EXERCISED_TESTS_EXIT_CODE=0

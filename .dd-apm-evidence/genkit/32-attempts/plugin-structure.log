@@ -1,0 +1,263 @@
+
+[0m[0m
+[0m  Plugin Structure Validation[0m
+  [32m  ✔[0m[90m should have all plugins accounted for with an instrumentation file[0m
+  [32m  ✔[0m[90m should have all plugins accounted for with a hook[0m
+  [32m  ✔[0m[90m should include all canonical plugin ids used by the runtime plugin registry in index.d.ts[0m
+  [32m  ✔[0m[90m should keep docs/API.md plugin list aligned with index.d.ts[0m
+  [32m  ✔[0m[90m should keep docs/API.md <h5> plugin anchors aligned with index.d.ts[0m
+[0m    Plugin: datadog-plugin-aerospike[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-ai[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-amqp10[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-amqplib[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-anthropic[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-apollo[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-avsc[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-aws-durable-execution-sdk-js[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-aws-sdk[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-azure-cosmos[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-azure-durable-functions[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-azure-event-hubs[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-azure-functions[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-azure-service-bus[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-bullmq[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-bunyan[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-cassandra-driver[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-child_process[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-claude-agent-sdk[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-confluentinc-kafka-javascript[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-connect[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-couchbase[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-cucumber[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-cypress[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-dd-trace-api[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-dns[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-elasticsearch[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-electron[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-express[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-fastify[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-fetch[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-find-my-way[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-fs[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-genkit[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-google-cloud-pubsub[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-google-cloud-vertexai[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-google-genai[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-graphql[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-grpc[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-hapi[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-hono[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-http[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-http2[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-ioredis[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-iovalkey[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-jest[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-kafkajs[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-koa[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-langchain[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-langgraph[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-mariadb[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-memcached[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-microgateway-core[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-mocha[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-modelcontextprotocol-sdk[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-moleculer[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-mongodb-core[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-mysql[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-mysql2[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-nats[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-net[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-next[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-nyc[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-openai[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-opensearch[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-oracledb[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-pg[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-pino[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-playwright[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-prisma[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-protobufjs[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-redis[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-restify[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-rhea[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-router[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-selenium[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-sharedb[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-tedious[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-undici[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-vitest[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-web[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-winston[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+[0m    Plugin: datadog-plugin-ws[0m
+    [32m  ✔[0m[90m should have an id that matches the directory name[0m
+    [32m  ✔[0m[90m should have a corresponding instrumentation file[0m
+
+
+[92m [0m[32m 171 passing[0m[90m (46ms)[0m
+
+
+TEST_EXIT_CODE=0

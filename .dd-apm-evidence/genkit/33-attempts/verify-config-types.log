@@ -1,0 +1,5 @@
+
+> dd-trace@7.0.0-pre verify:config:types
+> node scripts/generate-config-types.js --check
+
+VERIFY_CONFIG_TYPES_EXIT_CODE=0

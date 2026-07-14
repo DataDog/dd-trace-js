@@ -1,0 +1,148 @@
+{
+  "changedProductionFileCount": 11,
+  "newProductionFiles": [
+    "packages/datadog-instrumentations/src/genkit.js",
+    "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js",
+    "packages/datadog-plugin-genkit/src/index.js",
+    "packages/datadog-plugin-genkit/src/tracing.js",
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+    "packages/dd-trace/src/opentelemetry/suppression.js"
+  ],
+  "newProductionFilesWithDiagnostics": [],
+  "changedProductionDiagnosticCount": 11,
+  "introducedProductionDiagnostics": [],
+  "unchangedBaseStatementDiagnostics": [
+    {
+      "file": "packages/dd-trace/src/opentelemetry/context_manager.js",
+      "line": 46,
+      "column": 48,
+      "code": "TS2345",
+      "message": "Argument of type '{}' is not assignable to parameter of type 'Record<string, BaggageEntry>'.",
+      "raw": "packages/dd-trace/src/opentelemetry/context_manager.js(46,48): error TS2345: Argument of type '{}' is not assignable to parameter of type 'Record<string, BaggageEntry>'.",
+      "currentStatement": "otelBaggages = propagation.createBaggage(entries)",
+      "onAddedLine": false,
+      "identicalBaseLine": 32,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/context_manager.js",
+      "line": 50,
+      "column": 34,
+      "code": "TS2339",
+      "message": "Property '_ddSpan' does not exist on type 'Span'.",
+      "raw": "packages/dd-trace/src/opentelemetry/context_manager.js(50,34): error TS2339: Property '_ddSpan' does not exist on type 'Span'.",
+      "currentStatement": "if (storedSpan && storedSpan._ddSpan === activeSpan) {",
+      "onAddedLine": false,
+      "identicalBaseLine": 36,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/context_manager.js",
+      "line": 51,
+      "column": 55,
+      "code": "TS2345",
+      "message": "Argument of type 'Context | undefined' is not assignable to parameter of type 'Context'.",
+      "raw": "packages/dd-trace/src/opentelemetry/context_manager.js(51,55): error TS2345: Argument of type 'Context | undefined' is not assignable to parameter of type 'Context'.",
+      "currentStatement": "if (otelBaggages) return propagation.setBaggage(store, otelBaggages)",
+      "onAddedLine": false,
+      "identicalBaseLine": 37,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/context_manager.js",
+      "line": 109,
+      "column": 22,
+      "code": "TS2339",
+      "message": "Property '_ddSpan' does not exist on type 'Span'.",
+      "raw": "packages/dd-trace/src/opentelemetry/context_manager.js(109,22): error TS2339: Property '_ddSpan' does not exist on type 'Span'.",
+      "currentStatement": "if (span && span._ddSpan) {",
+      "onAddedLine": false,
+      "identicalBaseLine": 87,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/context_manager.js",
+      "line": 110,
+      "column": 27,
+      "code": "TS2339",
+      "message": "Property '_ddSpan' does not exist on type 'Span'.",
+      "raw": "packages/dd-trace/src/opentelemetry/context_manager.js(110,27): error TS2339: Property '_ddSpan' does not exist on type 'Span'.",
+      "currentStatement": "const ddSpan = span._ddSpan",
+      "onAddedLine": false,
+      "identicalBaseLine": 88,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/tracer.js",
+      "line": 77,
+      "column": 53,
+      "code": "TS2339",
+      "message": "Property 'get' does not exist on type 'never'.",
+      "raw": "packages/dd-trace/src/opentelemetry/tracer.js(77,53): error TS2339: Property 'get' does not exist on type 'never'.",
+      "currentStatement": "const samplingPriorityTs = ddTraceStateData.get('s')",
+      "onAddedLine": false,
+      "identicalBaseLine": 70,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/tracer.js",
+      "line": 78,
+      "column": 35,
+      "code": "TS2339",
+      "message": "Property 'get' does not exist on type 'never'.",
+      "raw": "packages/dd-trace/src/opentelemetry/tracer.js(78,35): error TS2339: Property 'get' does not exist on type 'never'.",
+      "currentStatement": "origin = ddTraceStateData.get('o') ?? null",
+      "onAddedLine": false,
+      "identicalBaseLine": 71,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/tracer.js",
+      "line": 80,
+      "column": 73,
+      "code": "TS2339",
+      "message": "Property 'entries' does not exist on type 'never'.",
+      "raw": "packages/dd-trace/src/opentelemetry/tracer.js(80,73): error TS2339: Property 'entries' does not exist on type 'never'.",
+      "currentStatement": "const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())",
+      "onAddedLine": false,
+      "identicalBaseLine": 73,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/tracer.js",
+      "line": 116,
+      "column": 39,
+      "code": "TS2339",
+      "message": "Property '_ddContext' does not exist on type 'SpanContext'.",
+      "raw": "packages/dd-trace/src/opentelemetry/tracer.js(116,39): error TS2339: Property '_ddContext' does not exist on type 'SpanContext'.",
+      "currentStatement": "spanContext = parentSpanContext._ddContext",
+      "onAddedLine": false,
+      "identicalBaseLine": 103,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/tracer.js",
+      "line": 117,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property '_ddContext' does not exist on type 'SpanContext'.",
+      "raw": "packages/dd-trace/src/opentelemetry/tracer.js(117,63): error TS2339: Property '_ddContext' does not exist on type 'SpanContext'.",
+      "currentStatement": "? this._createSpanContextFromParent(parentSpanContext._ddContext)",
+      "onAddedLine": false,
+      "identicalBaseLine": 104,
+      "introduced": false
+    },
+    {
+      "file": "packages/dd-trace/src/opentelemetry/tracer.js",
+      "line": 152,
+      "column": 7,
+      "code": "TS2345",
+      "message": "Argument of type '{ context: DatadogSpanContext; attributes: any; }[]' is not assignable to parameter of type 'Link[]'.",
+      "raw": "packages/dd-trace/src/opentelemetry/tracer.js(152,7): error TS2345: Argument of type '{ context: DatadogSpanContext; attributes: any; }[]' is not assignable to parameter of type 'Link[]'.",
+      "currentStatement": "links,",
+      "onAddedLine": false,
+      "identicalBaseLine": 139,
+      "introduced": false
+    }
+  ]
+}

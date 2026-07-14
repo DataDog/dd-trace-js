@@ -1,0 +1,17 @@
+PASS packages/datadog-instrumentations/src/genkit.js
+PASS packages/datadog-instrumentations/src/helpers/hooks.js
+PASS packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js
+PASS packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js
+PASS packages/datadog-plugin-genkit/src/index.js
+PASS packages/datadog-plugin-genkit/src/tracing.js
+PASS packages/datadog-plugin-genkit/test/index.spec.js
+PASS packages/datadog-plugin-genkit/test/llmobs.spec.js
+PASS packages/dd-trace/src/llmobs/plugins/genkit/index.js
+PASS packages/dd-trace/src/opentelemetry/context_manager.js
+PASS packages/dd-trace/src/opentelemetry/suppression.js
+PASS packages/dd-trace/src/opentelemetry/tracer.js
+PASS packages/dd-trace/src/plugins/index.js
+PASS packages/dd-trace/test/opentelemetry/context_manager.spec.js
+PASS packages/dd-trace/test/opentelemetry/tracer.spec.js
+PASS packages/dd-trace/test/plugins/externals.js
+NODE_CHECK_EXIT_CODE=0

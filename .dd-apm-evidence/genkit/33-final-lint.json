@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "stage": "33-final-lint",
+  "status": "passed_with_documented_repository_debt",
+  "gate_passed": true,
+  "head": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "source_diff_sha256_before": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "source_diff_sha256_after": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "source_state_unchanged": true,
+  "actionable_change_owned_diagnostic_count": 0,
+  "checks": {
+    "targeted_eslint": {
+      "command": "npm exec -- eslint --max-warnings 0 <all 16 changed/new JavaScript production and test files>",
+      "exit_code": 0,
+      "file_count": 16,
+      "errors": 0,
+      "warnings": 0
+    },
+    "node_check": {
+      "exit_code": 0,
+      "file_count": 16
+    },
+    "diff_check": {
+      "command": "git diff --check 372e5eb61c4c6a13662ad2f8780a87275b50314d -- . ':(exclude).dd-apm-pipeline/**' ':(exclude).dd-apm-evidence/**'",
+      "exit_code": 0
+    },
+    "verify_config_types": {
+      "command": "npm run verify:config:types",
+      "exit_code": 0
+    },
+    "verify_supported_integrations": {
+      "command": "npm run verify:supported-integrations",
+      "exit_code": 0,
+      "genkit_row_count": 1
+    },
+    "json_yaml_parse": {
+      "exit_code": 0,
+      "files": [
+        "packages/dd-trace/src/config/supported-configurations.json",
+        "packages/dd-trace/test/plugins/versions/package.json",
+        ".github/workflows/apm-integrations.yml"
+      ]
+    },
+    "codeowners": {
+      "command": "npm run lint:codeowners:ci",
+      "exit_code": 0,
+      "analyzed_files": 1640,
+      "unknown_files": 0
+    },
+    "verify_exercised_tests": {
+      "command": "npm run verify-exercised-tests",
+      "exit_code": 0,
+      "test_files": 799
+    },
+    "canonical_type_check": {
+      "command": "npm run type:check",
+      "exit_code": 2,
+      "classification": "unchanged_repository_typescript_6_configuration_debt",
+      "diagnostic_codes": [
+        "TS5107",
+        "TS5101"
+      ],
+      "source_check_started": false
+    },
+    "ts6_bypassed_type_check": {
+      "command": "./node_modules/.bin/tsc --noEmit -p tsconfig.dev.json --ignoreDeprecations 6.0 --pretty false",
+      "exit_code": 2,
+      "classification": "repository_debt_with_change_owned_production_clean",
+      "total_diagnostics": 6539,
+      "files_with_diagnostics": 988,
+      "changed_file_diagnostics": 103,
+      "changed_production_diagnostics": 11,
+      "introduced_production_diagnostics": 0,
+      "new_production_files_with_diagnostics": 0
+    },
+    "verify_ci_config": {
+      "command": "timeout 45s node scripts/verify-ci-config.js",
+      "exit_code": 1,
+      "classification": "external_repository_wide_verifier_blocker",
+      "blocked_package": "confluentinc-kafka-javascript",
+      "error": "npm E404 while the verifier queried all integration versions before reaching Genkit"
+    }
+  },
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "generated_files_modified": false,
+  "progress_modified_by_stage_worker": false,
+  "next_stage_authorized": true,
+  "evidence": [
+    "33-final-lint.md",
+    "33-attempts/"
+  ]
+}

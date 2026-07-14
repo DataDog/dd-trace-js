@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "stage": "31-final-build-final",
+  "status": "passed_with_documented_repository_type_debt",
+  "gate_passed": true,
+  "head": "4e59eb6c39c23038aff961848d83cb908bfe8195",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "source_diff_sha256_before": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "source_diff_sha256_after": "2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422",
+  "source_state_unchanged": true,
+  "commands": [
+    {
+      "command": "npm run verify:config:types",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    {
+      "command": "npm run verify:supported-integrations",
+      "exit_code": 0,
+      "status": "passed",
+      "genkit_row_count": 1
+    },
+    {
+      "command": "node --check for all 16 changed/new packages JavaScript files",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    {
+      "command": "npm run type:check",
+      "exit_code": 2,
+      "status": "blocked_before_source_check",
+      "classification": "unchanged_repository_typescript_6_configuration_debt",
+      "diagnostic_count": 2,
+      "diagnostic_codes": ["TS5107", "TS5101"]
+    },
+    {
+      "command": "./node_modules/.bin/tsc --noEmit -p tsconfig.dev.json --ignoreDeprecations 6.0 --pretty false",
+      "exit_code": 2,
+      "status": "repository_debt_with_change_owned_production_clean",
+      "total_diagnostics": 6539,
+      "files_with_diagnostics": 988,
+      "changed_file_diagnostics": 103,
+      "changed_production_diagnostics": 11,
+      "introduced_production_diagnostics": 0
+    },
+    {
+      "command": "git diff --check against original base excluding pipeline/evidence",
+      "exit_code": 0,
+      "status": "passed"
+    }
+  ],
+  "changed_file_diagnostic_counts": {
+    "packages/datadog-plugin-genkit/test/llmobs.spec.js": 52,
+    "packages/dd-trace/src/opentelemetry/context_manager.js": 5,
+    "packages/dd-trace/src/opentelemetry/tracer.js": 6,
+    "packages/dd-trace/test/opentelemetry/context_manager.spec.js": 32,
+    "packages/dd-trace/test/opentelemetry/tracer.spec.js": 8
+  },
+  "production_diagnostic_classification": {
+    "new_production_files_with_diagnostics": 0,
+    "introduced_statements_with_diagnostics": 0,
+    "unchanged_base_statements_with_diagnostics": 11,
+    "comparison_method": "Current zero-context added-line ranges plus exact statement matching against original-base blobs"
+  },
+  "type_repair_behavior_audit": {
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js": "Equivalent for ordinary Genkit DocumentData; added presence guard supplies static narrowing",
+    "packages/dd-trace/src/opentelemetry/context_manager.js": "JSDoc/cached singleton storage types are erased; baseContext is identical to store in the reached branch",
+    "packages/dd-trace/src/opentelemetry/tracer.js": "JSDoc is erased; optional span access is equivalent because the preceding condition proves store existence"
+  },
+  "generated_artifacts": {
+    "config_types_current": true,
+    "supported_integrations_current": true,
+    "genkit_supported_row_count": 1
+  },
+  "working_tree_before": [" M .dd-apm-pipeline/PROGRESS.md"],
+  "working_tree_after_commands": [" M .dd-apm-pipeline/PROGRESS.md"],
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "generated_files_modified": false,
+  "progress_modified_by_stage_worker": false,
+  "next_stage_authorized": true,
+  "evidence": ["31-final-build-final.md"]
+}

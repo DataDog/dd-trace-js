@@ -1,0 +1,208 @@
+
+> dd-trace@7.0.0-pre test:plugins:ci
+> yarn services && node scripts/c8-ci.js test:plugins
+
+yarn run v1.22.22
+$ node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services
+[1;90m$ yarn --ignore-engines[0m
+[1/4] Resolving packages...
+success Already up-to-date.
+Done in 0.80s.
+
+> dd-trace@7.0.0-pre test:plugins
+> node --expose-gc ./node_modules/mocha/bin/mocha.js "packages/datadog-plugin-@(${PLUGINS})/test/**/${SPEC:-*}*.spec.js"
+
+
+[0m[0m
+[0m  Plugin[0m
+[0m    genkit[0m
+[0m      with @genkit-ai/core 1.21.0 (1.21.0)[0m
+      [31m  1) instruments model actions[0m
+      [31m  2) instruments flows and named flow steps[0m
+      [31m  3) instruments tool actions[0m
+      [31m  4) instruments retriever actions[0m
+      [31m  5) instruments embedder actions[0m
+      [31m  6) keeps one safe authoritative span when the OTel bridge is enabled[0m
+      [32m  ✔[0m[90m records an unrelated user OTel child under the authoritative Genkit span[0m
+      [32m  ✔[0m[90m does not leave OTel context preservation on an ambient user span[0m
+
+[0m  genkit LLMObs[0m
+[0m    with @genkit-ai/core 1.21.0 (1.21.0)[0m
+    [31m  7) normalizes model messages, tools, metrics, and allowlisted metadata[0m
+    [31m  8) records model runner errors with input and an empty output[0m
+    [31m  9) finishes streaming model spans after chunks and the final response[0m
+    [31m  10) records streaming model errors[0m
+    [31m  11) creates workflow spans for flows and named steps with correct parenting[0m
+    [31m  12) records workflow, flow-step, retrieval, and embedding runner errors[0m
+    [31m  13) records tool success and runner errors[0m
+    [31m  14) records tool interrupts as tool errors and the outer generation as successful[0m
+    [31m  15) normalizes retrieval documents and allowlists reviewed metadata[0m
+    [31m  16) summarizes embedding vectors without recording vector values or arbitrary metadata[0m
+    [31m  17) demotes models owned by an enabled provider integration without duplicate metrics[0m
+    [31m  18) keeps googleai models authoritative when the provider integration is disabled[0m
+    [31m  19) preserves selected parenting through ignored native labels[0m
+    [31m  20) uses serialized output fallback and ignores malformed fallback JSON[0m
+    [31m  21) extracts options from the three-argument runInNewSpan overload[0m
+
+
+[92m [0m[32m 2 passing[0m[90m (2m)[0m
+[31m  21 failing[0m
+
+[0m  1) Plugin
+       genkit
+         with @genkit-ai/core 1.21.0 (1.21.0)
+           instruments model actions:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/index.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  2) Plugin
+       genkit
+         with @genkit-ai/core 1.21.0 (1.21.0)
+           instruments flows and named flow steps:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/index.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  3) Plugin
+       genkit
+         with @genkit-ai/core 1.21.0 (1.21.0)
+           instruments tool actions:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/index.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  4) Plugin
+       genkit
+         with @genkit-ai/core 1.21.0 (1.21.0)
+           instruments retriever actions:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/index.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  5) Plugin
+       genkit
+         with @genkit-ai/core 1.21.0 (1.21.0)
+           instruments embedder actions:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/index.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  6) Plugin
+       genkit
+         with @genkit-ai/core 1.21.0 (1.21.0)
+           keeps one safe authoritative span when the OTel bridge is enabled:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/index.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  7) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         normalizes model messages, tools, metrics, and allowlisted metadata:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  8) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         records model runner errors with input and an empty output:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  9) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         finishes streaming model spans after chunks and the final response:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  10) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         records streaming model errors:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  11) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         creates workflow spans for flows and named steps with correct parenting:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  12) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         records workflow, flow-step, retrieval, and embedding runner errors:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  13) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         records tool success and runner errors:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  14) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         records tool interrupts as tool errors and the outer generation as successful:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  15) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         normalizes retrieval documents and allowlists reviewed metadata:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  16) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         summarizes embedding vectors without recording vector values or arbitrary metadata:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  17) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         demotes models owned by an enabled provider integration without duplicate metrics:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  18) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         keeps googleai models authoritative when the provider integration is disabled:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  19) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         preserves selected parenting through ignored native labels:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  20) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         uses serialized output fallback and ignores malformed fallback JSON:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+[0m  21) genkit LLMObs
+       with @genkit-ai/core 1.21.0 (1.21.0)
+         extracts options from the three-argument runInNewSpan overload:
+[0m[31m     Error: Timeout of 5000ms exceeded. For async tests and hooks, ensure "done()" is called; if returning a Promise, ensure it resolves. (/workspace/repo/packages/datadog-plugin-genkit/test/llmobs.spec.js)[0m[90m
+      at listOnTimeout (node:internal/timers:585:17)
+      at process.processTimers (node:internal/timers:521:7)
+[0m
+
+
+Converted 359 V8 script entries across 3 profile(s) into 213 file section(s).
+
+TEST_EXIT_CODE=21

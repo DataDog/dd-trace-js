@@ -1,0 +1,16 @@
+packages/datadog-instrumentations/src/genkit.js
+packages/datadog-instrumentations/src/helpers/hooks.js
+packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js
+packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js
+packages/datadog-plugin-genkit/src/index.js
+packages/datadog-plugin-genkit/src/tracing.js
+packages/datadog-plugin-genkit/test/index.spec.js
+packages/datadog-plugin-genkit/test/llmobs.spec.js
+packages/dd-trace/src/llmobs/plugins/genkit/index.js
+packages/dd-trace/src/opentelemetry/context_manager.js
+packages/dd-trace/src/opentelemetry/suppression.js
+packages/dd-trace/src/opentelemetry/tracer.js
+packages/dd-trace/src/plugins/index.js
+packages/dd-trace/test/opentelemetry/context_manager.spec.js
+packages/dd-trace/test/opentelemetry/tracer.spec.js
+packages/dd-trace/test/plugins/externals.js
