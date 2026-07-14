@@ -1,0 +1,677 @@
+'use strict'
+
+/* eslint-disable eslint-rules/eslint-process-env */
+
+const fs = require('node:fs')
+const path = require('node:path')
+
+const { runDiagnosis } = require('../diagnose')
+const { validateManifest } = require('./manifest-schema')
+
+const SUPPORTED_SCAFFOLD_FRAMEWORKS = new Set(['jest', 'mocha', 'vitest'])
+const CI_PATHS = [
+  '.github/workflows',
+  '.gitlab-ci.yml',
+  '.circleci/config.yml',
+  '.buildkite/pipeline.yml',
+  'bitbucket-pipelines.yml',
+  'azure-pipelines.yml',
+  'Jenkinsfile',
+]
+
+/**
+ * Creates a schema-valid starting manifest without executing project code.
+ *
+ * @param {object} input scaffold inputs
+ * @param {string} input.root repository root
+ * @param {Set<string>} [input.frameworks] selected framework ids or kinds
+ * @returns {object} validation manifest scaffold
+ */
+function createManifestScaffold ({ root, frameworks = new Set() }) {
+  const repositoryRoot = path.resolve(root)
+  const diagnosis = runDiagnosis({ root: repositoryRoot, env: {} })
+  const selected = diagnosis.eligibleFrameworks.filter(framework => {
+    return SUPPORTED_SCAFFOLD_FRAMEWORKS.has(framework.id) &&
+      (frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0]))
+  })
+  const unsupported = diagnosis.unsupportedFrameworks.filter(framework => {
+    return frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0])
+  })
+  if (selected.length === 0 && unsupported.length === 0) {
+    throw new Error('No test framework was detected for manifest scaffolding.')
+  }
+
+  const manifest = {
+    schemaVersion: '1.0',
+    generatedAt: new Date().toISOString(),
+    repository: {
+      root: repositoryRoot,
+      gitRemote: null,
+      gitSha: null,
+      packageManager: detectPackageManager(repositoryRoot),
+      workspaceManager: detectWorkspaceManager(repositoryRoot),
+    },
+    environment: {
+      os: getManifestOs(process.platform),
+      shell: process.env.SHELL || null,
+      nodeVersion: process.version,
+      requiredEnvVars: [],
+      safeEnv: {},
+    },
+    ciDiscovery: discoverCiFiles(repositoryRoot),
+    frameworks: [
+      ...selected.map(framework => buildFrameworkScaffold(repositoryRoot, framework)),
+      ...unsupported.map(framework => buildUnsupportedFrameworkScaffold(repositoryRoot, framework)),
+    ],
+    omitted: [],
+  }
+
+  const errors = validateManifest(manifest)
+  if (errors.length > 0) {
+    throw new Error(`Generated manifest scaffold is invalid:\n- ${errors.join('\n- ')}`)
+  }
+  return manifest
+}
+
+/**
+ * Builds a diagnostic-only entry for a detected runner the validator cannot execute.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} detection static framework detection
+ * @returns {object} non-runnable framework manifest entry
+ */
+function buildUnsupportedFrameworkScaffold (repositoryRoot, detection) {
+  const packageJsonPath = getDetectionPackageJson(repositoryRoot, detection.locations)
+  const projectRoot = path.dirname(packageJsonPath)
+  const packageJson = readJson(packageJsonPath) || {}
+  const framework = detection.id === 'node-test' ? 'node:test' : detection.id
+
+  return {
+    id: `${detection.id}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+    framework,
+    frameworkVersion: getInstalledFrameworkVersion(detection.id, projectRoot, packageJson),
+    language: 'unknown',
+    status: 'unsupported_by_validator',
+    supportLevel: 'detected_only',
+    project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+    notes: [
+      `${detection.name} was detected at ${detection.locations.join(', ') || 'an unknown location'}, but is not ` +
+        'supported by this Test Optimization validator.',
+    ],
+  }
+}
+
+function buildFrameworkScaffold (repositoryRoot, detection) {
+  const packageJsonPath = path.resolve(repositoryRoot, detection.commandLocation || 'package.json')
+  const projectRoot = path.dirname(packageJsonPath)
+  const packageJson = readJson(packageJsonPath) || {}
+  const framework = detection.id
+  const runner = tryResolveRunner(framework, projectRoot)
+
+  if (!runner) {
+    return {
+      id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+      framework,
+      frameworkVersion: detection.version,
+      status: 'requires_manual_setup',
+      project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+      notes: [
+        `${detection.name} was detected, but its executable package could not be resolved from ` +
+          `${path.relative(repositoryRoot, projectRoot) || 'the repository root'}.`,
+      ],
+    }
+  }
+  const scriptName = getPackageScriptName(packageJson, detection.command)
+  const preserveProjectWrapper = Boolean(scriptName) && !usesDirectFrameworkRunner(detection.command, framework)
+  const baseCommand = buildExistingCommand({
+    framework,
+    projectRoot,
+    repositoryRoot,
+    scriptName,
+  })
+  const representative = findRepresentativeTestFile(projectRoot)
+  const command = representative
+    ? buildFocusedCommand(baseCommand, framework, representative, Boolean(scriptName), preserveProjectWrapper)
+    : baseCommand
+
+  if (!SUPPORTED_SCAFFOLD_FRAMEWORKS.has(framework)) {
+    return {
+      id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+      framework,
+      frameworkVersion: detection.version,
+      status: 'detected_not_runnable',
+      project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+      notes: [`${detection.name} was detected, but automatic generated-test scaffolding is not available.`],
+    }
+  }
+
+  const generatedTestStrategy = buildGeneratedTestStrategy({
+    baseCommand: preserveProjectWrapper ? baseCommand : undefined,
+    framework,
+    packageJson,
+    projectRoot,
+    representative,
+    runner,
+  })
+
+  return {
+    id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+    framework,
+    frameworkVersion: detection.version,
+    language: generatedTestStrategy.fileExtension.endsWith('ts') ? 'typescript' : 'javascript',
+    status: 'runnable',
+    supportLevel: 'validator_supported',
+    project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+    setup: { commands: [], services: [] },
+    existingTestCommand: command,
+    preflight: { status: 'pending' },
+    ciWiring: {
+      status: 'unknown',
+      diagnosis: 'Select one replayable CI test step and record its exact command and environment before live CI ' +
+        'wiring validation.',
+      initialization: {
+        status: 'unknown',
+        evidence: [],
+      },
+    },
+    generatedTestStrategy,
+    notes: [
+      representative
+        ? `Generated by --init-manifest using representative test ${path.relative(repositoryRoot, representative)}.`
+        : 'Generated by --init-manifest. Narrow existingTestCommand if the detected command runs a broad suite.',
+      'CI command selection still requires repository-specific evidence.',
+    ],
+  }
+}
+
+function getProject ({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }) {
+  return {
+    name: packageJson.name || getProjectIdentifier(packageJson, projectRoot, repositoryRoot),
+    root: projectRoot,
+    packageJson: packageJsonPath,
+    configFiles: findConfigFiles(projectRoot, framework),
+    evidence: [`Detected ${framework} from ${path.relative(repositoryRoot, packageJsonPath) || 'package.json'}.`],
+  }
+}
+
+function buildExistingCommand ({ framework, projectRoot, repositoryRoot, scriptName }) {
+  const packageManager = detectPackageManager(repositoryRoot)
+  const argv = scriptName
+    ? getPackageScriptArgv(packageManager, scriptName, repositoryRoot)
+    : getDirectRunnerArgv(packageManager, framework)
+  return {
+    description: scriptName ? `Detected package script ${scriptName}` : `Detected ${framework} runner`,
+    cwd: projectRoot,
+    argv,
+    env: {},
+    requiredEnvVars: [],
+    timeoutMs: 300_000,
+    usesShell: false,
+  }
+}
+
+function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, projectRoot, representative, runner }) {
+  const convention = getGeneratedTestConvention(representative, projectRoot)
+  const moduleSystem = getGeneratedModuleSystem(framework, convention.fileExtension, packageJson.type)
+  const definitions = getGeneratedDefinitions({ framework, convention, moduleSystem })
+
+  return {
+    status: 'planned',
+    reason: 'Standard isolated scenarios generated by the validator manifest scaffold.',
+    adapter: framework,
+    testDirectory: convention.testDirectory,
+    moduleSystem,
+    fileExtension: convention.fileExtension,
+    supportsFocusedSingleFileRun: true,
+    usesMultipleFiles: true,
+    files: definitions.map(definition => ({
+      path: definition.file,
+      role: 'test',
+      contentLines: definition.content.split('\n'),
+    })),
+    scenarios: definitions.map(definition => ({
+      id: definition.id,
+      purpose: definition.purpose,
+      runCommand: baseCommand
+        ? buildFocusedCommand(baseCommand, framework, definition.file, true, true)
+        : buildGeneratedRunCommand(framework, projectRoot, definition.file, runner),
+      expectedWithoutDatadog: {
+        exitCode: definition.id === 'atr-fail-once' ? 1 : 0,
+        observedTestCount: 1,
+      },
+      testIdentities: [{
+        suite: null,
+        name: definition.testName,
+        file: definition.file,
+        parameters: null,
+      }],
+    })),
+    cleanupPaths: [
+      ...definitions.map(definition => definition.file),
+      path.join(path.dirname(definitions.find(definition => definition.id === 'atr-fail-once').file),
+        '.dd-test-optimization-validation-atr-state'),
+    ],
+  }
+}
+
+function getGeneratedModuleSystem (framework, fileExtension, packageType) {
+  if (framework === 'vitest' || /\.(?:mjs|mts)$/.test(fileExtension)) return 'module'
+  if (/\.(?:cjs|cts)$/.test(fileExtension)) return 'commonjs'
+  return packageType === 'module' ? 'module' : 'commonjs'
+}
+
+function getGeneratedTestConvention (representative, projectRoot) {
+  if (!representative) {
+    return {
+      exactFilename: undefined,
+      fileExtension: '.test.js',
+      testDirectory: path.join(projectRoot, 'test'),
+    }
+  }
+
+  const basename = path.basename(representative)
+  if (/^test\.[cm]?[jt]s$/.test(basename)) {
+    const representativeDirectory = path.dirname(representative)
+    return {
+      exactFilename: basename,
+      fileExtension: path.extname(basename),
+      testDirectory: representativeDirectory === projectRoot
+        ? projectRoot
+        : path.dirname(representativeDirectory),
+    }
+  }
+
+  return {
+    exactFilename: undefined,
+    fileExtension: getTestExtension(representative),
+    testDirectory: path.dirname(representative),
+  }
+}
+
+function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
+  const stateFileExpression = moduleSystem === 'module'
+    ? "fileURLToPath(new URL('./.dd-test-optimization-validation-atr-state', import.meta.url))"
+    : "path.join(__dirname, '.dd-test-optimization-validation-atr-state')"
+  const definitions = [
+    { id: 'basic-pass', purpose: 'basic_reporting|efd_candidate', testName: 'basic-pass' },
+    { id: 'atr-fail-once', purpose: 'auto_test_retries_candidate', testName: 'atr-fail-once' },
+    { id: 'test-management-target', purpose: 'test_management_candidate', testName: 'test-management-target' },
+  ]
+
+  return definitions.map(definition => {
+    const prefix = `dd-test-optimization-validation-${definition.id}`
+    const filename = convention.exactFilename
+      ? path.join(prefix, convention.exactFilename)
+      : `${prefix}${convention.fileExtension}`
+    return {
+      ...definition,
+      file: path.join(convention.testDirectory, filename),
+      content: getGeneratedTestContent({ framework, definition, moduleSystem, stateFileExpression }),
+    }
+  })
+}
+
+function getGeneratedTestContent ({ framework, definition, moduleSystem, stateFileExpression }) {
+  const imports = []
+  if (framework === 'vitest') imports.push("import { describe, expect, it } from 'vitest'")
+  if (framework === 'mocha') {
+    imports.push(moduleSystem === 'module'
+      ? "import assert from 'node:assert/strict'"
+      : "const assert = require('node:assert/strict')")
+  }
+  if (definition.id === 'atr-fail-once') {
+    if (moduleSystem === 'module') {
+      imports.push("import { existsSync, writeFileSync } from 'node:fs'", "import { fileURLToPath } from 'node:url'")
+    } else {
+      imports.push("const fs = require('node:fs')", "const path = require('node:path')")
+    }
+  }
+  const assertion = framework === 'mocha' ? 'assert.equal(1, 1)' : 'expect(true).toBe(true)'
+  const testFunction = framework === 'jest' ? 'test' : 'it'
+  const body = definition.id === 'atr-fail-once'
+    ? getAtrBody({ moduleSystem, stateFileExpression, assertion })
+    : `    ${assertion}`
+
+  return [
+    ...imports,
+    imports.length > 0 ? '' : undefined,
+    "describe('dd-test-optimization-validation', () => {",
+    `  ${testFunction}('${definition.testName}', () => {`,
+    body,
+    '  })',
+    '})',
+    '',
+  ].filter(line => line !== undefined).join('\n')
+}
+
+function getAtrBody ({ moduleSystem, stateFileExpression, assertion }) {
+  const exists = moduleSystem === 'module' ? 'existsSync' : 'fs.existsSync'
+  const write = moduleSystem === 'module' ? 'writeFileSync' : 'fs.writeFileSync'
+  return [
+    `    const stateFile = ${stateFileExpression}`,
+    `    if (!${exists}(stateFile)) {`,
+    `      ${write}(stateFile, 'failed-once')`,
+    "      throw new Error('dd-test-optimization-validation atr first failure')",
+    '    }',
+    `    ${assertion}`,
+  ].join('\n')
+}
+
+function buildGeneratedRunCommand (framework, projectRoot, filename, runner) {
+  const args = {
+    jest: ['--runTestsByPath', filename, '--runInBand', '--silent', '--no-watchman'],
+    mocha: ['--reporter', 'spec', filename],
+    vitest: ['run', filename],
+  }[framework]
+  return {
+    cwd: projectRoot,
+    argv: [process.execPath, runner, ...args],
+    env: {},
+    requiredEnvVars: [],
+    timeoutMs: 300_000,
+    usesShell: false,
+  }
+}
+
+/**
+ * Adds a single test file selection to a detected project command.
+ *
+ * @param {object} baseCommand detected project command
+ * @param {string} framework detected test framework
+ * @param {string} filename selected test file
+ * @param {boolean} packageScript whether the command invokes a package script
+ * @param {boolean} preserveDefaultReporter whether a repository wrapper owns reporter selection
+ * @returns {object} focused project command
+ */
+function buildFocusedCommand (baseCommand, framework, filename, packageScript, preserveDefaultReporter) {
+  const argv = [...baseCommand.argv]
+  if (packageScript && path.basename(argv[0]).toLowerCase() === 'npm') argv.push('--')
+  argv.push(...getFocusedTestArgs(framework, filename, preserveDefaultReporter))
+
+  return {
+    ...baseCommand,
+    description: `${baseCommand.description} targeting ${path.basename(filename)}`,
+    argv,
+  }
+}
+
+/**
+ * Returns framework arguments that select exactly one test file.
+ *
+ * @param {string} framework detected test framework
+ * @param {string} filename selected test file
+ * @param {boolean} preserveDefaultReporter whether a repository wrapper owns reporter selection
+ * @returns {string[]} focused test arguments
+ */
+function getFocusedTestArgs (framework, filename, preserveDefaultReporter) {
+  if (framework === 'jest') {
+    return [
+      '--runTestsByPath',
+      filename,
+      '--runInBand',
+      ...(preserveDefaultReporter ? [] : ['--silent']),
+      '--no-watchman',
+    ]
+  }
+  return [filename]
+}
+
+/**
+ * Resolves an installed framework executable without making the whole scaffold fail when a nested package only
+ * declares the dependency.
+ *
+ * @param {string} framework detected framework
+ * @param {string} projectRoot detected project root
+ * @returns {string|undefined} resolved executable path
+ */
+function tryResolveRunner (framework, projectRoot) {
+  try {
+    return resolveRunner(framework, projectRoot)
+  } catch {}
+}
+
+function resolveRunner (framework, projectRoot) {
+  const packageName = framework === 'jest' ? 'jest' : framework
+  const packageJsonPath = require.resolve(`${packageName}/package.json`, { paths: [projectRoot] })
+  const packageJson = readJson(packageJsonPath)
+  const bin = typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin[packageName]
+  return path.resolve(path.dirname(packageJsonPath), bin)
+}
+
+function getPackageScriptArgv (packageManager, scriptName, repositoryRoot) {
+  if (packageManager === 'yarn') {
+    const release = findYarnRelease(repositoryRoot)
+    return release ? [process.execPath, release, 'run', scriptName] : ['yarn', 'run', scriptName]
+  }
+  return [packageManager, 'run', scriptName]
+}
+
+/**
+ * Finds the package script whose value produced the detected framework command.
+ *
+ * @param {object} packageJson project package metadata
+ * @param {string} command detected framework command
+ * @returns {string|undefined} package script name
+ */
+function getPackageScriptName (packageJson, command) {
+  return Object.entries(packageJson.scripts || {}).find(([, value]) => value === command)?.[0]
+}
+
+/**
+ * Reports whether a package script invokes the framework binary without a repository wrapper.
+ *
+ * @param {string} command detected framework command
+ * @param {string} framework detected test framework
+ * @returns {boolean} whether the command starts with the framework binary
+ */
+function usesDirectFrameworkRunner (command, framework) {
+  const [executable = ''] = String(command || '').trim().split(/\s+/)
+  return path.basename(executable).replace(/\.cmd$/i, '').toLowerCase() === framework
+}
+
+function getDirectRunnerArgv (packageManager, framework) {
+  if (packageManager === 'npm') return ['npm', 'exec', '--', framework, ...(framework === 'vitest' ? ['run'] : [])]
+  return [packageManager, 'exec', framework, ...(framework === 'vitest' ? ['run'] : [])]
+}
+
+function findRepresentativeTestFile (root) {
+  const stack = [root]
+  const candidates = []
+  const packageRanks = new Map()
+  let visited = 0
+  while (stack.length > 0 && visited < 5000) {
+    const directory = stack.pop()
+    let entries
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true })
+        .sort((left, right) => left.name.localeCompare(right.name))
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (['.git', 'node_modules', 'coverage', 'dist', 'build'].includes(entry.name)) continue
+      const filename = path.join(directory, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(filename)
+        continue
+      }
+      visited++
+      if (/^(?:test\.[cm]?[jt]s|.+[.-](?:test|spec)\.[cm]?[jt]s)$/.test(entry.name)) {
+        candidates.push(filename)
+      }
+    }
+  }
+
+  candidates.sort((left, right) => {
+    return getTestDirectoryRank(left, root) - getTestDirectoryRank(right, root) ||
+      getTestAreaRank(left, root) - getTestAreaRank(right, root) ||
+      getIndependentTestProjectRank(left, root, packageRanks) -
+        getIndependentTestProjectRank(right, root, packageRanks) ||
+      left.localeCompare(right)
+  })
+  return candidates[0]
+}
+
+/**
+ * Ranks established test directories ahead of source-adjacent test-looking files.
+ *
+ * @param {string} filename candidate test file
+ * @param {string} root detected project root
+ * @returns {number} directory preference rank
+ */
+function getTestDirectoryRank (filename, root) {
+  const directories = path.relative(root, path.dirname(filename)).split(path.sep)
+  if (directories.includes('__tests__')) return 0
+  if (directories.some(directory => directory === 'test' || directory === 'tests')) return 1
+  return 2
+}
+
+/**
+ * Ranks conventional project areas ahead of auxiliary repository trees.
+ *
+ * @param {string} filename candidate test file
+ * @param {string} root detected project root
+ * @returns {number} project area preference rank
+ */
+function getTestAreaRank (filename, root) {
+  const [topLevelDirectory] = path.relative(root, filename).split(path.sep)
+  return ['packages', 'src', 'test', 'tests'].includes(topLevelDirectory) ? 0 : 1
+}
+
+/**
+ * Ranks independently tested nested packages behind tests owned by the detected root command.
+ *
+ * @param {string} filename candidate test file
+ * @param {string} root detected project root
+ * @param {Map<string, number>} cache package-directory rank cache
+ * @returns {number} independent test project rank
+ */
+function getIndependentTestProjectRank (filename, root, cache) {
+  let directory = path.dirname(filename)
+  while (directory !== root && directory.startsWith(`${root}${path.sep}`)) {
+    if (cache.has(directory)) return cache.get(directory)
+
+    const packageJson = readJson(path.join(directory, 'package.json'))
+    if (packageJson) {
+      const rank = typeof packageJson.scripts?.test === 'string' ? 1 : 0
+      cache.set(directory, rank)
+      return rank
+    }
+    directory = path.dirname(directory)
+  }
+  return 0
+}
+
+function getTestExtension (filename) {
+  const match = /((?:\.test|\.spec)\.(?:[cm]?[jt]s))$/.exec(filename)
+  return match?.[1] || '.test.js'
+}
+
+function findConfigFiles (root, framework) {
+  const patterns = {
+    jest: /^jest\.config\./,
+    mocha: /^\.mocharc\./,
+    vitest: /^(?:vite|vitest)\.config\./,
+  }[framework]
+  if (!patterns) return []
+  try {
+    return fs.readdirSync(root).filter(filename => patterns.test(filename)).map(filename => path.join(root, filename))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Resolves the package.json associated with a framework detection.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {string[]} locations detected evidence paths
+ * @returns {string} absolute package.json path
+ */
+function getDetectionPackageJson (repositoryRoot, locations = []) {
+  const location = locations.find(value => path.basename(value) === 'package.json')
+  return path.resolve(repositoryRoot, location || 'package.json')
+}
+
+/**
+ * Resolves a detected runner version without executing repository code.
+ *
+ * @param {string} framework detected framework package name
+ * @param {string} projectRoot detected project root
+ * @param {object} packageJson detected project package.json
+ * @returns {string|null} installed or declared framework version
+ */
+function getInstalledFrameworkVersion (framework, projectRoot, packageJson) {
+  if (framework === 'node-test') return process.version
+  try {
+    const filename = require.resolve(`${framework}/package.json`, { paths: [projectRoot] })
+    return readJson(filename)?.version || null
+  } catch {}
+
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+    if (typeof packageJson[field]?.[framework] === 'string') return packageJson[field][framework]
+  }
+  return null
+}
+
+function discoverCiFiles (root) {
+  const found = []
+  for (const relativePath of CI_PATHS) {
+    const filename = path.join(root, relativePath)
+    if (!fs.existsSync(filename)) continue
+    const stat = fs.statSync(filename)
+    if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(filename).sort()) {
+        if (/\.ya?ml$/.test(entry)) found.push(path.posix.join(relativePath, entry))
+      }
+    } else {
+      found.push(relativePath)
+    }
+  }
+  return {
+    searched: [...CI_PATHS],
+    found,
+    method: 'deterministic-known-ci-paths',
+    warnings: [],
+    notes: ['Generated by --init-manifest; select and record one replayable CI test step before live validation.'],
+  }
+}
+
+function detectPackageManager (root) {
+  if (fs.existsSync(path.join(root, 'pnpm-lock.yaml'))) return 'pnpm'
+  if (fs.existsSync(path.join(root, 'yarn.lock'))) return 'yarn'
+  return 'npm'
+}
+
+function detectWorkspaceManager (root) {
+  if (fs.existsSync(path.join(root, 'pnpm-workspace.yaml'))) return 'pnpm'
+  const packageJson = readJson(path.join(root, 'package.json'))
+  return packageJson?.workspaces ? detectPackageManager(root) : 'none'
+}
+
+function getManifestOs (platform) {
+  if (platform === 'win32') return 'windows'
+  if (platform === 'darwin' || platform === 'linux') return platform
+  return 'unknown'
+}
+
+function findYarnRelease (root) {
+  const directory = path.join(root, '.yarn', 'releases')
+  try {
+    const release = fs.readdirSync(directory).find(filename => /^yarn-.+\.cjs$/.test(filename))
+    return release && path.join(directory, release)
+  } catch {}
+}
+
+function getProjectIdentifier (packageJson, projectRoot, repositoryRoot) {
+  if (packageJson.name) return packageJson.name.replaceAll(/[^A-Za-z0-9._-]+/g, '-')
+  return (path.relative(repositoryRoot, projectRoot) || 'root').replaceAll(path.sep, '-')
+}
+
+function readJson (filename) {
+  try {
+    return JSON.parse(fs.readFileSync(filename, 'utf8'))
+  } catch {}
+}
+
+module.exports = { createManifestScaffold }

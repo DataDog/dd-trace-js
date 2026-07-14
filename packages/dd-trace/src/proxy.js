@@ -3,6 +3,7 @@
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
+const { getEnvironmentVariable } = require('./config/helper')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
@@ -13,6 +14,7 @@ const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
 const processTags = require('./process-tags')
+const { isTrue } = require('./util')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -123,7 +125,7 @@ class Tracer extends NoopProxy {
 
       telemetry.start(config, this._pluginManager)
 
-      if (config.dogstatsd) {
+      if (config.dogstatsd && !isOfflineTestOptimizationValidation()) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
@@ -386,6 +388,15 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
+}
+
+/**
+ * Checks the private filesystem-only Test Optimization validation mode.
+ *
+ * @returns {boolean} whether network-capable tracer side channels must stay disabled
+ */
+function isOfflineTestOptimizationValidation () {
+  return isTrue(getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MODE'))
 }
 
 module.exports = Tracer

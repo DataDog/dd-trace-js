@@ -22,11 +22,16 @@ function parseJsonResponse (rawJson) {
 
 function parseSkippableSuitesResponse (
   rawJson,
-  { testLevel = 'suite', isCoverageReportUploadEnabled = false, validateRequiredFields = false } = {}
+  {
+    testLevel = 'suite',
+    isCoverageReportUploadEnabled = false,
+    validateRequiredFields = false,
+    validationMode = false,
+  } = {}
 ) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (validateRequiredFields) {
-    validateSkippableTestsResponse(parsedResponse)
+    validateSkippableTestsResponse(parsedResponse, { validationMode })
   }
   const coverage = parsedResponse.meta?.coverage || {}
 

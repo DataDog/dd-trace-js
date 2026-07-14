@@ -1,0 +1,2188 @@
+'use strict'
+
+/* eslint-disable no-console */
+
+const fs = require('node:fs')
+const path = require('node:path')
+const { execFileSync } = require('node:child_process')
+
+const satisfies = require('../vendor/dist/semifies')
+const { getEnvironmentVariables } = require('../packages/dd-trace/src/config/helper')
+const { DD_MAJOR, VERSION } = require('../version')
+const {
+  sanitizeConsoleText,
+  sanitizeForReport,
+} = require('./test-optimization-validation/redaction')
+
+const MAX_TEXT_FILE_SIZE = 512 * 1024
+const MAX_SCANNED_FILES = 1500
+const MAX_SCANNED_TEXT_BYTES = 32 * 1024 * 1024
+
+const PACKAGE_SECTIONS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+]
+
+const SKIPPED_DIRECTORIES = new Set([
+  '.cache',
+  '.git',
+  '.hg',
+  '.next',
+  '.nuxt',
+  '.output',
+  '.parcel-cache',
+  '.serverless',
+  '.svn',
+  '.turbo',
+  '.yarn',
+  'build',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target',
+  'tmp',
+  'vendor',
+])
+
+const SKIPPED_FILES = new Set([
+  'ci/diagnose.js',
+])
+
+const TEXT_EXTENSIONS = new Set([
+  '.cjs',
+  '.cts',
+  '.js',
+  '.json',
+  '.mjs',
+  '.mts',
+  '.sh',
+  '.ts',
+  '.tsx',
+  '.yaml',
+  '.yml',
+])
+
+const TEXT_FILE_NAMES = new Set([
+  'Dockerfile',
+  'Jenkinsfile',
+  'Makefile',
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'package.json',
+])
+
+const NODE_OPTIONS_RE = /\bNODE_OPTIONS\b/
+const INIT_PRELOAD_TARGET =
+  String.raw`(?:dd-trace\/ci\/init|(?:[^\s'"]*[\/\\])?node_modules[\/\\]dd-trace[\/\\]ci[\/\\]init|\.\/ci\/init)`
+const INIT_PRELOAD_RE =
+  new RegExp(String.raw`(?:^|[\s='"])(?:-r|--require)(?:=|\s+)['"]?${INIT_PRELOAD_TARGET}(?:\.js)?['"]?(?=$|\s|["'])`)
+const REGISTER_PRELOAD_RE =
+  /(?:^|[\s='"])(?:--import|-r|--require)(?:=|\s+)['"]?dd-trace\/register(?:\.js)?['"]?(?=$|\s|["'])/
+const WRONG_INIT_RE = /dd-trace\/(?:init|initialize\.mjs)\b|require\(['"]dd-trace['"]\)\.init\s*\(/
+const DIRECT_CI_INIT_RE = /(?:require\(|import\s+)['"]dd-trace\/ci\/init(?:\.js)?['"]/
+const CI_DISABLED_RE = /DD_CIVISIBILITY_ENABLED["'\s:=]+(?:false|0)\b/i
+const ITR_DISABLED_RE = /DD_CIVISIBILITY_ITR_ENABLED["'\s:=]+(?:false|0)\b/i
+const GIT_UPLOAD_DISABLED_RE = /DD_CIVISIBILITY_GIT_UPLOAD_ENABLED["'\s:=]+(?:false|0)\b/i
+const AGENTLESS_ENABLED_RE = /DD_CIVISIBILITY_AGENTLESS_ENABLED["'\s:=]+(?:true|1)\b/i
+const API_KEY_RE = /\b(?:DD_API_KEY|DATADOG_API_KEY)\b/
+const SERVICE_RE = /\bDD_SERVICE\b/
+const OTEL_OTLP_RE = /OTEL_TRACES_EXPORTER["'\s:=]+otlp\b/i
+const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!(?:=false)(?:\s|$))(?:\s|=|$)/
+
+const CYPRESS_MANUAL_PLUGIN_RE = /dd-trace\/ci\/cypress\/(?:plugin|after-run|after-spec)\b/
+const CYPRESS_SUPPORT_RE = /dd-trace\/ci\/cypress\/support\b/
+const CYPRESS_SUPPORT_DISABLED_RE = /supportFile\s*:\s*false|"supportFile"\s*:\s*false/
+const CUCUMBER_PARALLEL_RE =
+  /\bcucumber(?:-js)?\b[\s\S]{0,200}\s--parallel\b|--parallel\b[\s\S]{0,200}\bcucumber(?:-js)?\b/
+const JEST_FORCE_EXIT_RE = /\bforceExit\s*:\s*true\b|--forceExit\b|"forceExit"\s*:\s*true/
+const JEST_JASMINE_RE = /jest-jasmine2/
+
+const CURRENT_ENV_PROVIDER_KEYS = [
+  'GITHUB_ACTIONS',
+  'GITLAB_CI',
+  'CIRCLECI',
+  'JENKINS_URL',
+  'BUILDKITE',
+  'TRAVIS',
+  'TF_BUILD',
+  'BITBUCKET_BUILD_NUMBER',
+  'DRONE',
+  'TEAMCITY_VERSION',
+]
+
+/**
+ * Builds the framework support table for the tracer major version that is running this script.
+ *
+ * @param {number} ddMajor dd-trace major version
+ * @returns {Array<object>} supported framework definitions
+ */
+function getFrameworkDefinitions (ddMajor) {
+  return [
+    {
+      id: 'jest',
+      name: 'Jest',
+      packages: ['jest', '@jest/core'],
+      commandPatterns: [/\bjest\b/],
+      configPatterns: [/^jest\.config\./, /^config-jest\./],
+      supportedRange: ddMajor >= 6 ? '>=28.0.0' : '>=24.8.0',
+      recommendation: ddMajor >= 6
+        ? 'Upgrade Jest to >=28.0.0, or use dd-trace v5 for older Jest versions.'
+        : 'Upgrade Jest to >=24.8.0.',
+    },
+    {
+      id: 'mocha',
+      name: 'Mocha',
+      packages: ['mocha'],
+      commandPatterns: [/\bmocha\b/],
+      configPatterns: [/^\.mocharc\./],
+      supportedRange: ddMajor >= 6 ? '>=8.0.0' : '>=5.2.0',
+      recommendation: ddMajor >= 6
+        ? 'Upgrade Mocha to >=8.0.0, or use dd-trace v5 for older Mocha versions.'
+        : 'Upgrade Mocha to >=5.2.0.',
+      notes: [
+        'Impacted tests are detected at suite level for Mocha.',
+      ],
+    },
+    {
+      id: 'cucumber',
+      name: 'Cucumber',
+      packages: ['@cucumber/cucumber'],
+      commandPatterns: [/\bcucumber-js\b/, /\bcucumber\b/],
+      configPatterns: [/^cucumber\./],
+      supportedRange: '>=7.0.0',
+      recommendation: 'Upgrade @cucumber/cucumber to >=7.0.0.',
+    },
+    {
+      id: 'cypress',
+      name: 'Cypress',
+      packages: ['cypress'],
+      commandPatterns: [/\bcypress\s+(?:run|open)\b/],
+      configPatterns: [/^cypress\.config\./, /^cypress\.json$/],
+      supportedRange: ddMajor >= 6 ? '>=12.0.0' : '>=6.7.0',
+      autoInstrumentationRange: ddMajor >= 6 ? '>=12.0.0' : '>=10.2.0',
+      recommendation: ddMajor >= 6
+        ? 'Upgrade Cypress to >=12.0.0, or use dd-trace v5 for older Cypress versions.'
+        : 'Upgrade Cypress to >=6.7.0.',
+    },
+    {
+      id: 'playwright',
+      name: 'Playwright',
+      packages: ['@playwright/test'],
+      commandPatterns: [/\bplaywright\s+test\b/],
+      configPatterns: [/^playwright\.config\./],
+      supportedRange: ddMajor >= 6 ? '>=1.38.0' : '>=1.18.0',
+      recommendation: ddMajor >= 6
+        ? 'Upgrade Playwright to >=1.38.0, or use dd-trace v5 for older Playwright versions.'
+        : 'Upgrade Playwright to >=1.18.0.',
+      notes: [
+        'Test Impact Analysis suite skipping is not supported for Playwright.',
+        'Impacted tests are detected at suite level for Playwright.',
+      ],
+    },
+    {
+      id: 'vitest',
+      name: 'Vitest',
+      packages: ['vitest'],
+      commandPatterns: [/\bvitest\b/],
+      configPatterns: [/^vitest\.config\./, /^vite\.config\./],
+      supportedRange: '>=1.6.0',
+      recommendation: 'Upgrade Vitest to >=1.6.0.',
+      notes: [
+        'Test Impact Analysis suite skipping is not supported for Vitest.',
+        'Impacted tests are detected at suite level for Vitest.',
+      ],
+      esmInitialization: true,
+    },
+  ]
+}
+
+const UNSUPPORTED_FRAMEWORKS = [
+  {
+    id: 'node-test',
+    name: 'Node.js test runner',
+    packages: [],
+    commandPatterns: [/\bnode\s+--test\b/, /\bnode\s+--experimental-test-coverage\b/],
+  },
+  { id: 'ava', name: 'AVA', packages: ['ava'], commandPatterns: [/\bava\b/] },
+  { id: 'tap', name: 'tap', packages: ['tap'], commandPatterns: [/\btap\b/] },
+  { id: 'jasmine', name: 'Jasmine', packages: ['jasmine'], commandPatterns: [/\bjasmine\b/] },
+  { id: 'karma', name: 'Karma', packages: ['karma'], commandPatterns: [/\bkarma\b/] },
+  { id: 'uvu', name: 'uvu', packages: ['uvu'], commandPatterns: [/\buvu\b/] },
+  {
+    id: 'testcafe',
+    name: 'TestCafe',
+    packages: ['testcafe'],
+    commandPatterns: [/\btestcafe\b/],
+  },
+]
+
+/**
+ * Runs all static checks for a repository.
+ *
+ * @param {object} [options] diagnosis options
+ * @param {string} [options.root] repository path to inspect
+ * @param {NodeJS.ProcessEnv} [options.env] environment to inspect
+ * @param {Function} [options.execFile] command runner used for git checks
+ * @param {string} [options.gitExecutable] trusted git executable used for git checks
+ * @param {number} [options.maxFiles] maximum number of text files to scan
+ * @param {number} [options.maxTotalBytes] maximum aggregate bytes of text files to scan
+ * @param {string[]} [options.excludePaths] repository paths to exclude from the text scan
+ * @returns {object} diagnosis report
+ */
+function runDiagnosis (options = {}) {
+  const root = path.resolve(options.root || process.cwd())
+  const env = options.env || getEnvironmentVariables()
+  const execFile = options.execFile || execFileSync
+  const maxFiles = options.maxFiles || MAX_SCANNED_FILES
+  const maxTotalBytes = options.maxTotalBytes || MAX_SCANNED_TEXT_BYTES
+  const results = []
+  const files = collectTextFiles(root, maxFiles, options.excludePaths)
+  const textFiles = readTextFiles(root, files, maxTotalBytes)
+  const truncatedFileScan = files.truncated || textFiles.truncated
+  const manifests = readPackageManifests(root, textFiles)
+  const rootManifest = manifests.find(manifest => manifest.relativePath === 'package.json')
+  const rootPackageJsonState = getRootPackageJsonState(root)
+  const scripts = collectScripts(manifests)
+  const workflowFiles = textFiles.filter(file => isWorkflowFile(file.relativePath))
+  const definitions = getFrameworkDefinitions(DD_MAJOR)
+  const supportedFrameworks = detectSupportedFrameworks(root, definitions, manifests, scripts, textFiles)
+  const eligibleFrameworks = getEligibleFrameworks(supportedFrameworks)
+  const unsupportedFrameworks = detectUnsupportedFrameworks(UNSUPPORTED_FRAMEWORKS, manifests, scripts)
+  const evidence = collectEvidence(textFiles, env)
+
+  checkPackageManifest(results, rootManifest, rootPackageJsonState)
+  checkDdTraceDependency(results, manifests, { root, truncatedFileScan, rootPackageJsonState })
+  checkSupportedFrameworks(results, supportedFrameworks)
+  checkUnsupportedFrameworks(results, unsupportedFrameworks, supportedFrameworks)
+  checkInitialization(results, supportedFrameworks, evidence, env)
+  checkFrameworkConfiguration(results, supportedFrameworks, evidence, textFiles, manifests)
+  checkCiConfiguration(results, workflowFiles, evidence, env)
+  const gitExecutable = options.gitExecutable || (options.execFile ? 'git' : findTrustedGitExecutable())
+  checkGit(results, root, env, execFile, gitExecutable)
+  checkCurrentEnvironment(results, env, evidence)
+
+  return {
+    root,
+    ddTraceVersion: VERSION,
+    ddTraceMajor: DD_MAJOR,
+    scannedFileCount: textFiles.length,
+    truncatedFileScan,
+    supportedFrameworks: supportedFrameworks.map(serializeSupportedFramework),
+    eligibleFrameworks: eligibleFrameworks.map(serializeEligibleFramework),
+    unsupportedFrameworks: unsupportedFrameworks.map(serializeUnsupportedFramework),
+    results,
+  }
+}
+
+/**
+ * Turns a diagnosis report into human-readable text.
+ *
+ * @param {object} report diagnosis report
+ * @returns {string} formatted report
+ */
+function renderText (report) {
+  const counts = countByStatus(report.results)
+  const lines = [
+    'Datadog Test Optimization diagnosis',
+    `Repository: ${report.root}`,
+    `dd-trace: ${report.ddTraceVersion}`,
+    `Files scanned: ${report.scannedFileCount}${report.truncatedFileScan ? ' (truncated)' : ''}`,
+    '',
+  ]
+
+  if (report.results.length === 0) {
+    lines.push('[ok] No issues found.')
+  } else {
+    for (const result of report.results) {
+      lines.push(`[${result.status}] ${result.title}`)
+      if (result.message) {
+        lines.push(`  ${result.message}`)
+      }
+      if (result.locations?.length) {
+        lines.push(`  Locations: ${formatLocations(result.locations)}`)
+      }
+      if (result.recommendation) {
+        lines.push(`  Recommendation: ${result.recommendation}`)
+      }
+      lines.push('')
+    }
+  }
+
+  lines.push(`Summary: ${counts.error} error(s), ${counts.warning} warning(s), ${counts.info} info, ${counts.ok} ok`)
+  return lines.join('\n').trimEnd()
+}
+
+/**
+ * Computes the CLI exit code for a report and fail policy.
+ *
+ * @param {object} report diagnosis report
+ * @param {string} failOn one of "error", "warning", or "never"
+ * @returns {number} process exit code
+ */
+function getExitCode (report, failOn) {
+  if (failOn === 'never') return 0
+
+  for (const result of report.results) {
+    if (result.status === 'error') return 1
+    if (failOn === 'warning' && result.status === 'warning') return 1
+  }
+  return 0
+}
+
+/**
+ * Parses CLI arguments.
+ *
+ * @param {string[]} args command-line arguments
+ * @returns {object} parsed options
+ */
+function parseArgs (args) {
+  const parsed = {
+    root: process.cwd(),
+    json: false,
+    failOn: 'error',
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+
+    if (arg === '--json') {
+      parsed.json = true
+    } else if (arg === '--path' || arg === '--root') {
+      parsed.root = args[++i]
+    } else if (arg.startsWith('--path=')) {
+      parsed.root = arg.slice('--path='.length)
+    } else if (arg.startsWith('--root=')) {
+      parsed.root = arg.slice('--root='.length)
+    } else if (arg === '--fail-on') {
+      parsed.failOn = args[++i]
+    } else if (arg.startsWith('--fail-on=')) {
+      parsed.failOn = arg.slice('--fail-on='.length)
+    } else if (arg === '--help' || arg === '-h') {
+      parsed.help = true
+    } else {
+      parsed.unknown = arg
+    }
+  }
+
+  return parsed
+}
+
+/**
+ * Returns help text for the CLI.
+ *
+ * @returns {string} help text
+ */
+function getHelpText () {
+  return [
+    'Usage: dd-trace-ci-diagnose [--path <repository>] [--json] [--fail-on error|warning|never]',
+    '',
+    'Static checks only. The script reads repository files, package manifests, CI config,',
+    'and the current environment. It does not contact Datadog or any package registry.',
+  ].join('\n')
+}
+
+/**
+ * Adds a normalized result to the list.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {string} status result status
+ * @param {string} title short title
+ * @param {string} message result details
+ * @param {object} [extra] optional fields
+ */
+function addResult (results, status, title, message, extra = {}) {
+  results.push({
+    status,
+    title,
+    message,
+    ...extra,
+  })
+}
+
+/**
+ * Reads package.json files collected by the repository scan.
+ *
+ * @param {string} root repository root
+ * @param {Array<object>} textFiles scanned text files
+ * @returns {Array<object>} parsed package manifests
+ */
+function readPackageManifests (root, textFiles) {
+  const manifests = []
+
+  for (const file of textFiles) {
+    if (path.basename(file.relativePath) !== 'package.json') continue
+
+    const json = parseJson(file.content)
+    if (!json) continue
+
+    manifests.push({
+      path: path.join(root, file.relativePath),
+      relativePath: file.relativePath,
+      json,
+    })
+  }
+
+  return manifests
+}
+
+/**
+ * Checks whether the repository root has a package.json independently from the text-file scan.
+ *
+ * @param {string} root repository root
+ * @returns {{ exists: boolean }} root package.json state
+ */
+function getRootPackageJsonState (root) {
+  try {
+    return {
+      exists: fs.statSync(path.join(root, 'package.json')).isFile(),
+    }
+  } catch {
+    return {
+      exists: false,
+    }
+  }
+}
+
+/**
+ * Checks that a root package.json exists.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {object|undefined} rootManifest parsed root package manifest
+ * @param {object} rootPackageJsonState root package.json filesystem state
+ */
+function checkPackageManifest (results, rootManifest, rootPackageJsonState) {
+  if (rootManifest) {
+    addResult(results, 'ok', 'Root package.json found', 'Dependency and script checks can inspect package metadata.')
+    return
+  }
+
+  if (rootPackageJsonState.exists) {
+    addResult(
+      results,
+      'warning',
+      'Root package.json not determined',
+      'A root package.json file exists, but static diagnosis could not parse it as scanned text.',
+      {
+        recommendation:
+          'Check whether package.json is readable UTF-8 JSON and smaller than the static diagnosis file limit.',
+      }
+    )
+    return
+  }
+
+  addResult(
+    results,
+    'warning',
+    'No root package.json found',
+    'The diagnosis could not inspect root dependencies or package scripts.',
+    { recommendation: 'Run this script from the JavaScript repository root, or pass --path <repository>.' }
+  )
+}
+
+/**
+ * Checks whether dd-trace is declared in repository manifests.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {Array<object>} manifests package manifests
+ * @param {object} options dependency check options
+ * @param {string} [options.root] repository root
+ * @param {boolean} [options.truncatedFileScan] whether static file discovery was truncated
+ * @param {object} [options.rootPackageJsonState] root package manifest state
+ */
+function checkDdTraceDependency (results, manifests, options = {}) {
+  const entries = findDependencyEntries(manifests, ['dd-trace'])
+
+  if (entries.length) {
+    addResult(
+      results,
+      'ok',
+      'dd-trace dependency found',
+      `Detected dd-trace in ${formatLocations(entries.map(entry => entry.relativePath))}.`
+    )
+    return
+  }
+
+  const installedPackageJson = options.root && path.join(options.root, 'node_modules', 'dd-trace', 'package.json')
+  let installed = false
+  try {
+    installed = installedPackageJson && fs.statSync(installedPackageJson).isFile()
+  } catch {}
+  if (installed) {
+    addResult(
+      results,
+      'ok',
+      'dd-trace package installed',
+      'Detected an installed dd-trace package even though it was not declared in the scanned package manifests.'
+    )
+    return
+  }
+
+  if (options.truncatedFileScan || (options.rootPackageJsonState?.exists && !hasParsedRootManifest(manifests))) {
+    addResult(
+      results,
+      'warning',
+      'dd-trace dependency not determined',
+      'Static diagnosis did not confirm a dd-trace dependency, but the file scan was incomplete or root package ' +
+        'metadata could not be parsed.',
+      { recommendation: 'Inspect the package that runs tests and install dd-trace there if it is absent.' }
+    )
+    return
+  }
+
+  addResult(
+    results,
+    'warning',
+    'dd-trace dependency not found in package.json',
+    'The script did not find dd-trace in dependencies or devDependencies.',
+    { recommendation: 'Install dd-trace in the project that runs the tests.' }
+  )
+}
+
+/**
+ * Checks whether static diagnosis parsed the repository root package manifest.
+ *
+ * @param {Array<object>} manifests parsed package manifests
+ * @returns {boolean} true when the root package.json was parsed
+ */
+function hasParsedRootManifest (manifests) {
+  return manifests.some(manifest => manifest.relativePath === 'package.json')
+}
+
+/**
+ * Checks supported framework detections and versions.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {Array<object>} frameworks detected supported frameworks
+ */
+function checkSupportedFrameworks (results, frameworks) {
+  if (!frameworks.length) {
+    addResult(
+      results,
+      'warning',
+      'No supported test framework detected',
+      'No supported Test Optimization framework was found in dependencies, scripts, or config files.',
+      {
+        recommendation:
+          'Use Jest, Mocha, Cucumber, Cypress, Playwright, or Vitest with a supported version.',
+      }
+    )
+    return
+  }
+
+  for (const framework of frameworks) {
+    if (!framework.versionDetections.length) {
+      addResult(
+        results,
+        'warning',
+        `${framework.name} detected but version is unknown`,
+        `${framework.name} appears in scripts or config, but no package version could be determined.`,
+        {
+          locations: framework.locations,
+          recommendation:
+            `Ensure ${framework.packages.join(' or ')} is installed and matches ${framework.supportedRange}.`,
+        }
+      )
+    }
+
+    for (const detection of framework.versionDetections) {
+      if (!detection.version) {
+        addResult(
+          results,
+          'warning',
+          `${framework.name} version could not be determined`,
+          `Detected ${detection.packageName}@${detection.rawVersion}, but the version is not statically comparable.`,
+          {
+            locations: [detection.relativePath],
+            recommendation: `Verify ${framework.name} satisfies ${framework.supportedRange}.`,
+          }
+        )
+        continue
+      }
+
+      const status = satisfies(detection.version, framework.supportedRange) ? 'ok' : 'error'
+      const source = detection.source === 'installed' ? 'installed package' : 'package manifest'
+      addResult(
+        results,
+        status,
+        `${framework.name} ${detection.version} ${status === 'ok' ? 'is supported' : 'is not supported'}`,
+        `Detected ${detection.packageName}@${detection.rawVersion} from ${source}; supported range is ` +
+          `${framework.supportedRange}.`,
+        {
+          locations: detection.relativePath ? [detection.relativePath] : undefined,
+          recommendation: status === 'error' ? framework.recommendation : undefined,
+        }
+      )
+    }
+
+    for (const note of framework.notes || []) {
+      addResult(results, 'info', `${framework.name} capability note`, note)
+    }
+  }
+}
+
+/**
+ * Checks unsupported framework detections.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {Array<object>} unsupported detected unsupported frameworks
+ * @param {Array<object>} supported detected supported frameworks
+ */
+function checkUnsupportedFrameworks (results, unsupported, supported) {
+  for (const framework of unsupported) {
+    const status = supported.length ? 'warning' : 'error'
+    addResult(
+      results,
+      status,
+      `${framework.name} is not supported by Test Optimization`,
+      `${framework.name} was detected in dependencies or test scripts.`,
+      {
+        locations: framework.locations,
+        recommendation:
+          'Use a supported JavaScript test framework for automatic Test Optimization instrumentation.',
+      }
+    )
+  }
+}
+
+/**
+ * Checks Test Optimization initialization.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {Array<object>} frameworks detected supported frameworks
+ * @param {object} evidence repository evidence
+ * @param {NodeJS.ProcessEnv} env environment
+ */
+function checkInitialization (results, frameworks, evidence, env) {
+  if (!frameworks.length) return
+
+  const hasCiInit = evidence.hasCiInit || hasCiInitInNodeOptions(env.NODE_OPTIONS)
+  const hasCypressOnly = frameworks.length === 1 && frameworks[0].id === 'cypress'
+  const hasCypressManualPlugin = evidence.cypressManualPluginLocations.length > 0
+
+  if (hasCiInit) {
+    addResult(
+      results,
+      'ok',
+      'Test Optimization initialization found',
+      'Found dd-trace/ci/init preloaded through NODE_OPTIONS in repository files or the current environment.',
+      { locations: evidence.ciInitLocations }
+    )
+  } else if (hasCypressOnly && hasCypressManualPlugin) {
+    addResult(
+      results,
+      'ok',
+      'Cypress manual plugin initialization found',
+      'Found the Cypress-specific dd-trace Test Optimization plugin setup.',
+      { locations: evidence.cypressManualPluginLocations }
+    )
+  } else {
+    addResult(
+      results,
+      'error',
+      'Missing Test Optimization initialization',
+      'No NODE_OPTIONS preload for dd-trace/ci/init was found in repository files or the current environment.',
+      {
+        recommendation:
+          'Run tests with NODE_OPTIONS="-r dd-trace/ci/init". For ESM test runners, also include ' +
+          '--import dd-trace/register.js.',
+      }
+    )
+  }
+
+  if (evidence.directCiInitLocations.length) {
+    addResult(
+      results,
+      'error',
+      'Test Optimization initialization is imported directly',
+      'The diagnosis found require("dd-trace/ci/init") or import "dd-trace/ci/init". ' +
+        'That does not preload the tracer early enough for Test Optimization setup.',
+      {
+        locations: evidence.directCiInitLocations,
+        recommendation: 'Set NODE_OPTIONS="-r dd-trace/ci/init" on the test process instead.',
+      }
+    )
+  }
+
+  if (evidence.wrongInitLocations.length) {
+    addResult(
+      results,
+      'error',
+      'Plain dd-trace initialization found in test setup',
+      'The diagnosis found dd-trace/init, dd-trace/initialize.mjs, or require("dd-trace").init(). ' +
+        'That does not initialize the tracer in Test Optimization mode.',
+      {
+        locations: evidence.wrongInitLocations,
+        recommendation: 'Use dd-trace/ci/init for test commands instead of the plain tracing initializer.',
+      }
+    )
+  }
+
+  if (frameworks.some(framework => framework.esmInitialization) && hasCiInit && !evidence.hasRegister &&
+    !hasRegisterInNodeOptions(env.NODE_OPTIONS)) {
+    addResult(
+      results,
+      'warning',
+      'ESM loader registration not found',
+      'Vitest and other ESM-heavy test runners often need dd-trace/register.js before dd-trace/ci/init.',
+      {
+        recommendation:
+          'Use NODE_OPTIONS="--import dd-trace/register.js -r dd-trace/ci/init" for ESM test runs.',
+      }
+    )
+  }
+}
+
+/**
+ * Checks framework-specific configuration pitfalls.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {Array<object>} frameworks detected supported frameworks
+ * @param {object} evidence repository evidence
+ * @param {Array<object>} textFiles scanned text files
+ * @param {Array<object>} manifests package manifests
+ */
+function checkFrameworkConfiguration (results, frameworks, evidence, textFiles, manifests) {
+  if (hasFramework(frameworks, 'vitest') && !hasFramework(frameworks, 'playwright') &&
+    findDependencyEntries(manifests, ['playwright']).length > 0) {
+    addResult(
+      results,
+      'info',
+      'Playwright package is not a Playwright Test runner',
+      'The repository uses Vitest and has the playwright package, but no @playwright/test runner was detected. ' +
+        'Treat Playwright as Vitest browser-provider infrastructure, not as another test framework.',
+      {}
+    )
+  }
+
+  if (hasFramework(frameworks, 'cypress')) {
+    checkCypressConfiguration(results, evidence)
+  }
+
+  if (hasFramework(frameworks, 'jest')) {
+    const jestLocations = findLocations(textFiles, JEST_FORCE_EXIT_RE)
+    if (jestLocations.length) {
+      addResult(
+        results,
+        'warning',
+        'Jest forceExit can drop Test Optimization data',
+        'Jest\'s forceExit option can terminate before dd-trace flushes all test data.',
+        {
+          locations: jestLocations,
+          recommendation: 'Remove --forceExit or forceExit: true from Jest configuration when possible.',
+        }
+      )
+    }
+
+    const jasmineLocations = findLocations(textFiles, JEST_JASMINE_RE)
+    if (jasmineLocations.length) {
+      addResult(
+        results,
+        'info',
+        'Jest is configured with jest-jasmine2',
+        'dd-trace can avoid crashing with jest-jasmine2, but jest-circus is the better-supported runner.',
+        {
+          locations: jasmineLocations,
+          recommendation: 'Prefer the default jest-circus runner on supported Jest versions.',
+        }
+      )
+    }
+
+    const tsConfigLocations = findJestTypescriptConfigLocations(textFiles)
+    const hasTsNode = findDependencyEntries(manifests, ['ts-node']).length > 0
+    if (tsConfigLocations.length && !hasTsNode) {
+      addResult(
+        results,
+        'warning',
+        'Jest TypeScript config may need ts-node',
+        'Jest loads TypeScript configuration files before test transforms. Without ts-node or an equivalent ' +
+          'precompiled config, the selected command can fail before collecting tests.',
+        {
+          locations: tsConfigLocations,
+          recommendation:
+            'Install ts-node for the diagnostic run, or use a temporary JSON/CommonJS Jest config generated ' +
+            'from the repository config.',
+        }
+      )
+    }
+  }
+
+  if (hasFramework(frameworks, 'cucumber')) {
+    const cucumber = frameworks.find(framework => framework.id === 'cucumber')
+    const parallelLocations = findLocations(textFiles, CUCUMBER_PARALLEL_RE)
+    const hasOldParallel = cucumber.versionDetections.some(detection =>
+      detection.version && !satisfies(detection.version, '>=11.0.0')
+    )
+
+    if (parallelLocations.length && hasOldParallel) {
+      addResult(
+        results,
+        'warning',
+        'Cucumber parallel mode has feature limits before version 11',
+        'Some Test Optimization features for Cucumber parallel mode require @cucumber/cucumber >=11.0.0.',
+        {
+          locations: parallelLocations,
+          recommendation: 'Upgrade @cucumber/cucumber to >=11.0.0 when using --parallel.',
+        }
+      )
+    }
+  }
+}
+
+/**
+ * Checks Cypress-specific setup.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {object} evidence repository evidence
+ */
+function checkCypressConfiguration (results, evidence) {
+  if (evidence.cypressSupportDisabledLocations.length) {
+    addResult(
+      results,
+      'warning',
+      'Cypress support file is disabled',
+      'Cypress browser-side hooks cannot be injected when supportFile is false.',
+      {
+        locations: evidence.cypressSupportDisabledLocations,
+        recommendation: 'Use a Cypress support file, or manually require dd-trace/ci/cypress/support.',
+      }
+    )
+    return
+  }
+
+  if (evidence.cypressSupportLocations.length) {
+    addResult(
+      results,
+      'ok',
+      'Cypress support hook found',
+      'Found dd-trace/ci/cypress/support in the repository.',
+      { locations: evidence.cypressSupportLocations }
+    )
+  } else {
+    addResult(
+      results,
+      'info',
+      'Cypress support hook not explicitly configured',
+      'For supported Cypress versions, dd-trace can inject a temporary support wrapper when dd-trace/ci/init is used.',
+      {
+        recommendation:
+          'If browser-side test events are missing, add require("dd-trace/ci/cypress/support") to the ' +
+          'Cypress support file.',
+      }
+    )
+  }
+}
+
+/**
+ * Checks static CI workflow files.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {Array<object>} workflowFiles scanned CI workflow files
+ * @param {object} evidence repository evidence
+ * @param {NodeJS.ProcessEnv} env environment
+ */
+function checkCiConfiguration (results, workflowFiles, evidence, env) {
+  if (!workflowFiles.length) {
+    addResult(
+      results,
+      'info',
+      'No CI workflow files found',
+      'The diagnosis did not find common CI configuration files to inspect.'
+    )
+    return
+  }
+
+  addResult(
+    results,
+    'ok',
+    'CI workflow files found',
+    `Inspected ${workflowFiles.length} CI workflow file(s).`,
+    { locations: workflowFiles.map(file => file.relativePath) }
+  )
+
+  if (!evidence.hasCiInit && !hasCiInitInNodeOptions(env.NODE_OPTIONS)) {
+    addResult(
+      results,
+      'warning',
+      'CI workflows do not show Test Optimization initialization',
+      'No CI workflow file shows NODE_OPTIONS preloading dd-trace/ci/init.',
+      {
+        recommendation:
+          'Set NODE_OPTIONS="-r dd-trace/ci/init" in the CI job that runs the supported JavaScript test framework.',
+      }
+    )
+  }
+
+  const shallowGithubLocations = []
+  const containerGithubLocations = []
+
+  for (const file of workflowFiles) {
+    if (!file.relativePath.startsWith('.github/workflows/')) continue
+
+    if (/actions\/checkout/.test(file.content) && !/fetch-depth\s*:\s*0\b/.test(file.content)) {
+      shallowGithubLocations.push(file.relativePath)
+    }
+
+    if (/\bcontainer\s*:/.test(file.content) && !/safe\.directory/.test(file.content)) {
+      containerGithubLocations.push(file.relativePath)
+    }
+  }
+
+  if (shallowGithubLocations.length) {
+    addResult(
+      results,
+      'warning',
+      'GitHub Actions checkout may be shallow',
+      'actions/checkout defaults to a shallow checkout, which can limit git metadata and impacted-test detection.',
+      {
+        locations: shallowGithubLocations,
+        recommendation: 'Set fetch-depth: 0 for the checkout step, or keep git unshallowing enabled.',
+      }
+    )
+  }
+
+  if (containerGithubLocations.length) {
+    addResult(
+      results,
+      'info',
+      'Containerized GitHub jobs may need Git safe.directory',
+      'Git can reject metadata commands in containerized jobs when checkout ownership differs from the container user.',
+      {
+        locations: containerGithubLocations,
+        recommendation: 'Run git config --global --add safe.directory "$GITHUB_WORKSPACE" when needed.',
+      }
+    )
+  }
+
+  if (evidence.hasAgentlessEnabled && !evidence.hasApiKey && !env.DD_API_KEY && !env.DATADOG_API_KEY) {
+    addResult(
+      results,
+      'warning',
+      'Agentless mode is enabled but no API key reference was found',
+      'DD_CIVISIBILITY_AGENTLESS_ENABLED requires DD_API_KEY or DATADOG_API_KEY at runtime.',
+      {
+        recommendation: 'Provide DD_API_KEY or DATADOG_API_KEY as a CI secret in the test job.',
+      }
+    )
+  }
+
+  if (evidence.gitStrategyNoneLocations.length) {
+    addResult(
+      results,
+      'warning',
+      'CI configuration disables git checkout',
+      'Git metadata extraction cannot work when the CI job does not check out the repository.',
+      {
+        locations: evidence.gitStrategyNoneLocations,
+        recommendation: 'Enable repository checkout for Test Optimization jobs.',
+      }
+    )
+  }
+}
+
+/**
+ * Checks local git availability and repository metadata.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {string} root repository root
+ * @param {NodeJS.ProcessEnv} env environment
+ * @param {Function} execFile command runner
+ * @param {string|undefined} gitExecutable trusted git executable
+ */
+function checkGit (results, root, env, execFile, gitExecutable) {
+  const gitEnv = getGitEnvironment(gitExecutable, env)
+  if (!canRunGit(execFile, root, gitExecutable, gitEnv)) {
+    addResult(
+      results,
+      'error',
+      'git executable is not available',
+      'Test Optimization uses git to extract repository metadata and impacted files.',
+      { recommendation: 'Install git in the CI image or runner that executes tests.' }
+    )
+    return
+  }
+
+  addResult(results, 'ok', 'git executable found', 'The current environment can execute git.')
+
+  const insideWorktree = runGit(execFile, root, gitExecutable, gitEnv, ['rev-parse', '--is-inside-work-tree'])
+  if (insideWorktree !== 'true') {
+    addResult(
+      results,
+      'warning',
+      'Current path is not inside a git worktree',
+      'Git metadata extraction needs the checked-out repository.',
+      { recommendation: 'Run the test command from inside the checked-out repository.' }
+    )
+    return
+  }
+
+  const head = runGit(execFile, root, gitExecutable, gitEnv, ['rev-parse', 'HEAD'])
+  const remote = runGit(execFile, root, gitExecutable, gitEnv, ['config', '--get', 'remote.origin.url'])
+  const branch = runGit(execFile, root, gitExecutable, gitEnv, ['branch', '--show-current'])
+  const shallow = runGit(execFile, root, gitExecutable, gitEnv, ['rev-parse', '--is-shallow-repository'])
+
+  if (head) {
+    addResult(results, 'ok', 'git commit SHA detected', `Current HEAD is ${head.slice(0, 12)}.`)
+  } else {
+    addResult(
+      results,
+      'warning',
+      'git commit SHA could not be detected',
+      'The diagnosis could not read git rev-parse HEAD.',
+      { recommendation: 'Ensure the CI checkout includes a valid git repository.' }
+    )
+  }
+
+  if (!remote) {
+    addResult(
+      results,
+      'warning',
+      'git remote origin is not configured',
+      'Repository URL metadata may be missing.',
+      { recommendation: 'Configure remote.origin.url or provide DD_GIT_REPOSITORY_URL.' }
+    )
+  }
+
+  if (!branch && !hasBranchMetadata(env)) {
+    addResult(
+      results,
+      'warning',
+      'git branch metadata could not be detected',
+      'The checkout appears detached and no CI branch metadata was found in the current environment.',
+      { recommendation: 'Provide branch metadata through CI provider variables or DD_GIT_BRANCH.' }
+    )
+  }
+
+  if (shallow === 'true') {
+    addResult(
+      results,
+      'warning',
+      'Repository is shallow',
+      'A shallow repository can limit metadata upload and impacted-test detection.',
+      { recommendation: 'Use a full checkout, or keep DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED enabled.' }
+    )
+  }
+}
+
+/**
+ * Checks current environment variables relevant to Test Optimization.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {NodeJS.ProcessEnv} env environment
+ * @param {object} evidence repository evidence
+ */
+function checkCurrentEnvironment (results, env, evidence) {
+  if (isFalseLike(env.DD_CIVISIBILITY_ENABLED) || evidence.hasCiVisibilityDisabled) {
+    addResult(
+      results,
+      'error',
+      'Test Optimization is explicitly disabled',
+      'DD_CIVISIBILITY_ENABLED is set to false or 0.',
+      { recommendation: 'Remove DD_CIVISIBILITY_ENABLED=false from the test job.' }
+    )
+  }
+
+  if (isFalseLike(env.DD_CIVISIBILITY_ITR_ENABLED) || evidence.hasItrDisabled) {
+    addResult(
+      results,
+      'warning',
+      'Test Impact Analysis is disabled',
+      'DD_CIVISIBILITY_ITR_ENABLED is set to false or 0.',
+      { recommendation: 'Remove DD_CIVISIBILITY_ITR_ENABLED=false if suite skipping should be enabled.' }
+    )
+  }
+
+  if (isFalseLike(env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) || evidence.hasGitUploadDisabled) {
+    addResult(
+      results,
+      'warning',
+      'Git metadata upload is disabled',
+      'DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false or 0.',
+      { recommendation: 'Remove DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false unless this is intentional.' }
+    )
+  }
+
+  if (isTrueLike(env.DD_CIVISIBILITY_AGENTLESS_ENABLED) && !env.DD_API_KEY && !env.DATADOG_API_KEY) {
+    addResult(
+      results,
+      'error',
+      'Agentless mode is missing an API key',
+      'The current environment has DD_CIVISIBILITY_AGENTLESS_ENABLED set, but no DD_API_KEY or DATADOG_API_KEY.',
+      { recommendation: 'Set DD_API_KEY or DATADOG_API_KEY in the CI job.' }
+    )
+  }
+
+  if (!env.DD_SERVICE && !evidence.hasService) {
+    addResult(
+      results,
+      'warning',
+      'DD_SERVICE was not found',
+      'A missing service name makes Test Optimization data harder to find and group.',
+      { recommendation: 'Set DD_SERVICE in the test job.' }
+    )
+  }
+
+  if ((env.OTEL_TRACES_EXPORTER || '').toLowerCase() === 'otlp' || evidence.hasOtelOtlpExporter) {
+    addResult(
+      results,
+      'warning',
+      'OTEL_TRACES_EXPORTER=otlp was found',
+      'An OTLP traces exporter can interfere with dd-trace test payloads in instrumented shells.',
+      { recommendation: 'Unset OTEL_TRACES_EXPORTER for dd-trace Test Optimization jobs.' }
+    )
+  }
+
+  if (env.CI) {
+    checkCurrentCiMetadata(results, env)
+  } else {
+    addResult(
+      results,
+      'info',
+      'Current process is not running in CI',
+      'Runtime CI metadata checks were skipped because CI is not set in the current environment.'
+    )
+  }
+}
+
+/**
+ * Checks current CI provider metadata.
+ *
+ * @param {Array<object>} results mutable result list
+ * @param {NodeJS.ProcessEnv} env environment
+ */
+function checkCurrentCiMetadata (results, env) {
+  const providerDetected = CURRENT_ENV_PROVIDER_KEYS.some(key => env[key])
+  if (!providerDetected) {
+    addResult(
+      results,
+      'warning',
+      'Current CI provider is not recognized',
+      'The current environment has CI set, but no known CI provider variables were found.',
+      { recommendation: 'Provide CI and git metadata with DD_GIT_* variables if the provider is custom.' }
+    )
+  }
+
+  if (!hasShaMetadata(env)) {
+    addResult(
+      results,
+      'warning',
+      'Current CI commit SHA metadata is missing',
+      'The current CI environment does not expose a recognized commit SHA variable.',
+      { recommendation: 'Provide DD_GIT_COMMIT_SHA when the CI provider does not expose one.' }
+    )
+  }
+
+  if (!hasBranchMetadata(env)) {
+    addResult(
+      results,
+      'warning',
+      'Current CI branch metadata is missing',
+      'The current CI environment does not expose a recognized branch or tag variable.',
+      { recommendation: 'Provide DD_GIT_BRANCH or DD_GIT_TAG when the CI provider does not expose one.' }
+    )
+  }
+}
+
+/**
+ * Collects package scripts from all manifests.
+ *
+ * @param {Array<object>} manifests package manifests
+ * @returns {Array<object>} scripts
+ */
+function collectScripts (manifests) {
+  const scripts = []
+
+  for (const manifest of manifests) {
+    const manifestScripts = manifest.json.scripts || {}
+    for (const [name, command] of Object.entries(manifestScripts)) {
+      if (typeof command !== 'string') continue
+
+      scripts.push({
+        name,
+        command,
+        relativePath: manifest.relativePath,
+      })
+    }
+  }
+
+  return scripts
+}
+
+/**
+ * Detects supported test frameworks.
+ *
+ * @param {string} root repository root
+ * @param {Array<object>} definitions framework definitions
+ * @param {Array<object>} manifests package manifests
+ * @param {Array<object>} scripts package scripts
+ * @param {Array<object>} textFiles scanned text files
+ * @returns {Array<object>} detected supported frameworks
+ */
+function detectSupportedFrameworks (root, definitions, manifests, scripts, textFiles) {
+  const frameworks = []
+
+  for (const definition of definitions) {
+    const dependencyEntries = findDependencyEntries(manifests, definition.packages)
+    const scriptMatches = findScriptMatches(scripts, definition.commandPatterns)
+    const configMatches = findConfigMatches(textFiles, definition.configPatterns)
+
+    if (!dependencyEntries.length && !scriptMatches.length && !configMatches.length) continue
+
+    frameworks.push({
+      ...definition,
+      dependencyEntries,
+      scriptMatches,
+      configMatches,
+      locations: unique([
+        ...dependencyEntries.map(entry => entry.relativePath),
+        ...scriptMatches.map(script => script.relativePath),
+        ...configMatches,
+      ]),
+      versionDetections: getVersionDetections(root, definition.packages, dependencyEntries),
+    })
+  }
+
+  return frameworks
+}
+
+/**
+ * Gets frameworks that are eligible live-validation candidates.
+ *
+ * @param {Array<object>} frameworks detected supported frameworks
+ * @returns {Array<object>} eligible frameworks with eligibility details
+ */
+function getEligibleFrameworks (frameworks) {
+  const eligible = []
+
+  for (const framework of frameworks) {
+    const version = getSupportedVersionDetection(framework)
+    const command = getEligibleCommandMatch(framework)
+    const reasons = []
+
+    if (!version) reasons.push(`No statically supported ${framework.name} version was found.`)
+    if (!command) reasons.push(`No eligible ${framework.name} test command was found.`)
+
+    if (!version || !command) continue
+
+    eligible.push({
+      ...framework,
+      eligibleCommand: command,
+      eligibleVersion: version,
+      eligibility: {
+        command: command.command,
+        commandLocation: command.relativePath,
+        version: version.version,
+        versionLocation: version.relativePath,
+      },
+      ineligibleReasons: reasons,
+    })
+  }
+
+  return eligible
+}
+
+/**
+ * Gets the first supported version detection for a framework.
+ *
+ * @param {object} framework detected framework
+ * @returns {object|undefined} supported version detection
+ */
+function getSupportedVersionDetection (framework) {
+  for (const detection of framework.versionDetections || []) {
+    if (detection.version && satisfies(detection.version, framework.supportedRange)) return detection
+  }
+}
+
+/**
+ * Gets an eligible script command for a framework.
+ *
+ * @param {object} framework detected framework
+ * @returns {object|undefined} eligible command match
+ */
+function getEligibleCommandMatch (framework) {
+  const scriptMatches = framework.scriptMatches || []
+
+  for (const script of scriptMatches) {
+    if (isIneligibleFrameworkCommand(framework.id, script.command)) continue
+    return script
+  }
+
+  if (scriptMatches.length > 0) return
+
+  if (framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest') {
+    return framework.dependencyEntries?.[0] && {
+      command: `direct ${framework.id} binary`,
+      relativePath: framework.dependencyEntries[0].relativePath,
+    }
+  }
+}
+
+/**
+ * Checks whether a framework command is ineligible for live validation.
+ *
+ * @param {string} frameworkId framework id
+ * @param {string} command package script command
+ * @returns {boolean} whether the command is ineligible
+ */
+function isIneligibleFrameworkCommand (frameworkId, command) {
+  if (frameworkId === 'vitest' && /\bvitest\s+bench\b/.test(command)) return true
+  if (WATCH_MODE_RE.test(command)) return true
+
+  return false
+}
+
+/**
+ * Detects unsupported test frameworks.
+ *
+ * @param {Array<object>} definitions unsupported framework definitions
+ * @param {Array<object>} manifests package manifests
+ * @param {Array<object>} scripts package scripts
+ * @returns {Array<object>} detected unsupported frameworks
+ */
+function detectUnsupportedFrameworks (definitions, manifests, scripts) {
+  const frameworks = []
+
+  for (const definition of definitions) {
+    const dependencyEntries = findDependencyEntries(manifests, definition.packages)
+    const scriptMatches = findScriptMatches(scripts, definition.commandPatterns)
+
+    if (!dependencyEntries.length && !scriptMatches.length) continue
+
+    frameworks.push({
+      ...definition,
+      locations: unique([
+        ...dependencyEntries.map(entry => entry.relativePath),
+        ...scriptMatches.map(script => script.relativePath),
+      ]),
+    })
+  }
+
+  return frameworks
+}
+
+/**
+ * Collects useful boolean evidence from scanned files and environment.
+ *
+ * @param {Array<object>} textFiles scanned text files
+ * @param {NodeJS.ProcessEnv} env environment
+ * @returns {object} evidence object
+ */
+function collectEvidence (textFiles, env) {
+  const ciInitLocations = findNodeOptionsPreloadLocations(textFiles, INIT_PRELOAD_RE)
+  const registerLocations = findNodeOptionsPreloadLocations(textFiles, REGISTER_PRELOAD_RE)
+
+  return {
+    ciInitLocations,
+    directCiInitLocations: findLocations(textFiles, DIRECT_CI_INIT_RE),
+    wrongInitLocations: findLocations(textFiles.filter(isTestSetupOrCiFile), WRONG_INIT_RE),
+    cypressManualPluginLocations: findLocations(textFiles, CYPRESS_MANUAL_PLUGIN_RE),
+    cypressSupportLocations: findLocations(textFiles, CYPRESS_SUPPORT_RE),
+    cypressSupportDisabledLocations: findLocations(textFiles, CYPRESS_SUPPORT_DISABLED_RE),
+    gitStrategyNoneLocations: findLocations(textFiles, /GIT_STRATEGY\s*:\s*none\b/i),
+    hasCiInit: ciInitLocations.length > 0,
+    hasRegister: registerLocations.length > 0,
+    hasCiVisibilityDisabled: findLocations(textFiles, CI_DISABLED_RE).length > 0,
+    hasItrDisabled: findLocations(textFiles, ITR_DISABLED_RE).length > 0,
+    hasGitUploadDisabled: findLocations(textFiles, GIT_UPLOAD_DISABLED_RE).length > 0,
+    hasAgentlessEnabled: findLocations(textFiles, AGENTLESS_ENABLED_RE).length > 0 ||
+      isTrueLike(env.DD_CIVISIBILITY_AGENTLESS_ENABLED),
+    hasApiKey: findLocations(textFiles, API_KEY_RE).length > 0,
+    hasService: findLocations(textFiles, SERVICE_RE).length > 0,
+    hasOtelOtlpExporter: findLocations(textFiles, OTEL_OTLP_RE).length > 0,
+  }
+}
+
+/**
+ * Finds dependency entries in package manifests.
+ *
+ * @param {Array<object>} manifests package manifests
+ * @param {string[]} packageNames package names
+ * @returns {Array<object>} matching dependency entries
+ */
+function findDependencyEntries (manifests, packageNames) {
+  const entries = []
+  const packageSet = new Set(packageNames)
+
+  for (const manifest of manifests) {
+    for (const section of PACKAGE_SECTIONS) {
+      const dependencies = manifest.json[section]
+      if (!dependencies) continue
+
+      for (const [name, range] of Object.entries(dependencies)) {
+        if (!packageSet.has(name)) continue
+
+        entries.push({
+          packageName: name,
+          rawVersion: String(range),
+          section,
+          relativePath: manifest.relativePath,
+        })
+      }
+    }
+  }
+
+  return entries
+}
+
+/**
+ * Resolves framework package versions from installed modules and manifest ranges.
+ *
+ * @param {string} root repository root
+ * @param {string[]} packageNames package names
+ * @param {Array<object>} dependencyEntries dependency entries
+ * @returns {Array<object>} version detections
+ */
+function getVersionDetections (root, packageNames, dependencyEntries) {
+  const detections = []
+  const installed = []
+
+  for (const packageName of packageNames) {
+    const version = getInstalledPackageVersion(root, packageName)
+    if (version) {
+      installed.push({
+        packageName,
+        rawVersion: version,
+        version,
+        source: 'installed',
+      })
+    }
+  }
+
+  if (installed.length) return installed
+
+  for (const entry of dependencyEntries) {
+    detections.push({
+      packageName: entry.packageName,
+      rawVersion: entry.rawVersion,
+      version: coerceVersion(entry.rawVersion),
+      relativePath: entry.relativePath,
+      source: 'manifest',
+    })
+  }
+
+  return uniqueVersionDetections(detections)
+}
+
+/**
+ * Reads an installed package version from node_modules.
+ *
+ * @param {string} root repository root
+ * @param {string} packageName package name
+ * @returns {string|undefined} installed version
+ */
+function getInstalledPackageVersion (root, packageName) {
+  const packageJsonPath = path.join(root, 'node_modules', ...packageName.split('/'), 'package.json')
+  const json = readJsonFile(packageJsonPath)
+  return typeof json?.version === 'string' ? json.version : undefined
+}
+
+/**
+ * Finds scripts matching any pattern.
+ *
+ * @param {Array<object>} scripts package scripts
+ * @param {RegExp[]} patterns command patterns
+ * @returns {Array<object>} matching scripts
+ */
+function findScriptMatches (scripts, patterns) {
+  const matches = []
+
+  for (const script of scripts) {
+    if (!/test|spec|e2e|integration|unit/i.test(script.name) &&
+      !patterns.some(pattern => pattern.test(script.command))) {
+      continue
+    }
+
+    if (patterns.some(pattern => pattern.test(script.command))) {
+      matches.push(script)
+    }
+  }
+
+  return matches
+}
+
+/**
+ * Finds scanned config files that match definition patterns.
+ *
+ * @param {Array<object>} textFiles scanned text files
+ * @param {RegExp[]} patterns filename patterns
+ * @returns {string[]} matching relative paths
+ */
+function findConfigMatches (textFiles, patterns) {
+  const matches = []
+
+  for (const file of textFiles) {
+    const basename = path.basename(file.relativePath)
+    if (patterns.some(pattern => pattern.test(basename))) {
+      matches.push(file.relativePath)
+    }
+  }
+
+  return matches
+}
+
+/**
+ * Finds Jest TypeScript config files.
+ *
+ * @param {Array<object>} textFiles scanned text files
+ * @returns {string[]} matching relative paths
+ */
+function findJestTypescriptConfigLocations (textFiles) {
+  return textFiles
+    .map(file => file.relativePath)
+    .filter(relativePath => /(?:^|\/)jest\.config\.(?:ts|mts|cts)$/.test(relativePath))
+}
+
+/**
+ * Finds files where NODE_OPTIONS appears close to a supported Node preload option.
+ *
+ * @param {Array<object>} textFiles scanned text files
+ * @param {RegExp} preloadPattern Node preload option pattern
+ * @returns {string[]} matching relative paths
+ */
+function findNodeOptionsPreloadLocations (textFiles, preloadPattern) {
+  const locations = []
+
+  for (const file of textFiles) {
+    const lines = file.content.split(/\r?\n/)
+    for (let i = 0; i < lines.length; i++) {
+      if (!NODE_OPTIONS_RE.test(lines[i])) continue
+
+      const window = lines.slice(i, i + 4).join('\n')
+      preloadPattern.lastIndex = 0
+      if (preloadPattern.test(window)) {
+        locations.push(file.relativePath)
+        break
+      }
+    }
+  }
+
+  return unique(locations)
+}
+
+/**
+ * Finds files whose content matches a pattern.
+ *
+ * @param {Array<object>} textFiles scanned text files
+ * @param {RegExp} pattern content pattern
+ * @returns {string[]} matching relative paths
+ */
+function findLocations (textFiles, pattern) {
+  const locations = []
+
+  for (const file of textFiles) {
+    pattern.lastIndex = 0
+    if (pattern.test(file.content)) {
+      locations.push(file.relativePath)
+    }
+  }
+
+  return unique(locations)
+}
+
+/**
+ * Collects text-like repository files.
+ *
+ * @param {string} root repository root
+ * @param {number} maxFiles maximum number of files
+ * @param {string[]} [excludePaths] repository paths excluded from the scan
+ * @returns {Array<string> & {truncated?: boolean}} relative paths
+ */
+function collectTextFiles (root, maxFiles, excludePaths = []) {
+  const files = []
+  const seen = new Set()
+  const exclusions = getScanExclusions(root, excludePaths)
+  files.truncated = false
+
+  addTextFileIfPresent('package.json')
+
+  function walk (dir, relativeDir) {
+    if (files.length >= maxFiles) {
+      files.truncated = true
+      return
+    }
+
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    entries.sort((a, b) => a.name.localeCompare(b.name))
+
+    for (const entry of entries) {
+      if (files.length >= maxFiles) {
+        files.truncated = true
+        return
+      }
+
+      const relativePath = relativeDir ? path.join(relativeDir, entry.name) : entry.name
+      const absolutePath = path.join(root, relativePath)
+      if (isScanPathExcluded(relativePath, exclusions)) continue
+
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRECTORIES.has(entry.name)) {
+          walk(absolutePath, relativePath)
+        }
+        continue
+      }
+
+      if (entry.isFile() && isTextFileName(entry.name)) {
+        addTextFile(relativePath)
+      }
+    }
+  }
+
+  function addTextFileIfPresent (relativePath) {
+    try {
+      if (!fs.statSync(path.join(root, relativePath)).isFile()) return
+    } catch {
+      return
+    }
+
+    addTextFile(relativePath)
+  }
+
+  function addTextFile (relativePath) {
+    const normalizedPath = normalizeRelativePath(relativePath)
+    if (seen.has(normalizedPath) || SKIPPED_FILES.has(normalizedPath)) return
+
+    if (files.length >= maxFiles) {
+      files.truncated = true
+      return
+    }
+
+    seen.add(normalizedPath)
+    files.push(relativePath)
+  }
+
+  walk(root, '')
+  return files
+}
+
+/**
+ * Normalizes caller-provided scan exclusions to repository-relative paths.
+ *
+ * @param {string} root repository root
+ * @param {string[]} excludePaths paths to exclude
+ * @returns {Set<string>} normalized repository-relative exclusions
+ */
+function getScanExclusions (root, excludePaths) {
+  const exclusions = new Set()
+  for (const candidate of excludePaths) {
+    if (typeof candidate !== 'string') continue
+    const relative = path.relative(root, path.resolve(root, candidate))
+    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) continue
+    exclusions.add(normalizeRelativePath(relative))
+  }
+  return exclusions
+}
+
+/**
+ * Checks whether a scanned path is inside a caller-provided exclusion.
+ *
+ * @param {string} relativePath repository-relative path
+ * @param {Set<string>} exclusions normalized exclusions
+ * @returns {boolean} whether the path must be skipped
+ */
+function isScanPathExcluded (relativePath, exclusions) {
+  const normalizedPath = normalizeRelativePath(relativePath)
+  for (const exclusion of exclusions) {
+    if (normalizedPath === exclusion || normalizedPath.startsWith(`${exclusion}/`)) return true
+  }
+  return false
+}
+
+/**
+ * Reads scanned text files within the size limit.
+ *
+ * @param {string} root repository root
+ * @param {string[]} files relative file paths
+ * @param {number} maxTotalBytes maximum aggregate bytes to retain
+ * @returns {Array<object>} text file records
+ */
+function readTextFiles (root, files, maxTotalBytes) {
+  const textFiles = []
+  let totalBytes = 0
+  textFiles.truncated = false
+
+  for (const relativePath of files) {
+    const absolutePath = path.join(root, relativePath)
+    let stat
+    try {
+      stat = fs.statSync(absolutePath)
+    } catch {
+      continue
+    }
+
+    if (stat.size > MAX_TEXT_FILE_SIZE) continue
+    if (totalBytes + stat.size > maxTotalBytes) {
+      textFiles.truncated = true
+      break
+    }
+
+    try {
+      textFiles.push({
+        relativePath: normalizeRelativePath(relativePath),
+        content: fs.readFileSync(absolutePath, 'utf8'),
+      })
+      totalBytes += stat.size
+    } catch {
+      // Ignore files that cannot be read as UTF-8.
+    }
+  }
+
+  return textFiles
+}
+
+/**
+ * Checks whether a filename should be scanned as text.
+ *
+ * @param {string} name filename
+ * @returns {boolean} true if the file is text-like
+ */
+function isTextFileName (name) {
+  return TEXT_FILE_NAMES.has(name) || TEXT_EXTENSIONS.has(path.extname(name))
+}
+
+/**
+ * Checks whether a file is a common CI workflow file.
+ *
+ * @param {string} relativePath relative path
+ * @returns {boolean} true if the path is a workflow file
+ */
+function isWorkflowFile (relativePath) {
+  return relativePath.startsWith('.github/workflows/') ||
+    relativePath === '.gitlab-ci.yml' ||
+    relativePath === '.gitlab-ci.yaml' ||
+    relativePath === 'bitbucket-pipelines.yml' ||
+    relativePath === 'bitbucket-pipelines.yaml' ||
+    relativePath === 'azure-pipelines.yml' ||
+    relativePath === 'azure-pipelines.yaml' ||
+    /^\.azure-pipelines\/.+\.ya?ml$/.test(relativePath) ||
+    relativePath === 'Jenkinsfile' ||
+    relativePath === '.circleci/config.yml' ||
+    relativePath === '.circleci/config.yaml' ||
+    relativePath === '.buildkite/pipeline.yml' ||
+    relativePath === '.buildkite/pipeline.yaml'
+}
+
+/**
+ * Checks whether a scanned file is likely to configure test process initialization.
+ *
+ * @param {object} file scanned text file
+ * @returns {boolean} true when plain dd-trace init should be treated as test setup evidence
+ */
+function isTestSetupOrCiFile (file) {
+  const relativePath = file.relativePath
+  const basename = path.basename(relativePath)
+
+  if (isWorkflowFile(relativePath)) return true
+  if (basename === 'package.json') return true
+  if (/^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename)) return true
+  if (/^\.mocharc\./.test(basename)) return true
+  if (basename === 'cypress.json') return true
+  if (/(?:setup|bootstrap)/i.test(basename)) return true
+  if (relativePath.startsWith('cypress/support/')) return true
+
+  return false
+}
+
+/**
+ * Runs git --version to check availability.
+ *
+ * @param {Function} execFile command runner
+ * @param {string} root repository root
+ * @param {string|undefined} gitExecutable trusted git executable
+ * @param {NodeJS.ProcessEnv} env credential-free git environment
+ * @returns {boolean} true if git runs
+ */
+function canRunGit (execFile, root, gitExecutable, env) {
+  if (!gitExecutable) return false
+
+  try {
+    execFile(gitExecutable, ['--version'], { cwd: root, env, stdio: 'pipe', timeout: 2000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Runs a git command and trims output.
+ *
+ * @param {Function} execFile command runner
+ * @param {string} root repository root
+ * @param {string} gitExecutable trusted git executable
+ * @param {NodeJS.ProcessEnv} env credential-free git environment
+ * @param {string[]} args git arguments
+ * @returns {string} command output
+ */
+function runGit (execFile, root, gitExecutable, env, args) {
+  try {
+    return String(execFile(gitExecutable, args, { cwd: root, env, stdio: 'pipe', timeout: 2000 })).trim()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Resolves git without trusting repository-controlled PATH entries.
+ *
+ * @returns {string|undefined} trusted absolute git path
+ */
+function findTrustedGitExecutable () {
+  const candidates = process.platform === 'win32'
+    ? [
+        String.raw`C:\Program Files\Git\cmd\git.exe`,
+        String.raw`C:\Program Files\Git\bin\git.exe`,
+        String.raw`C:\Program Files (x86)\Git\cmd\git.exe`,
+        String.raw`C:\Program Files (x86)\Git\bin\git.exe`,
+      ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git']
+
+  for (const candidate of candidates) {
+    let resolved
+    try {
+      resolved = fs.realpathSync(candidate)
+      fs.accessSync(resolved, fs.constants.X_OK)
+    } catch {
+      continue
+    }
+
+    return resolved
+  }
+}
+
+/**
+ * Creates the minimal environment needed by read-only local git metadata commands.
+ *
+ * @param {string|undefined} gitExecutable trusted git executable
+ * @param {NodeJS.ProcessEnv} sourceEnv source environment
+ * @returns {NodeJS.ProcessEnv} credential-free git environment
+ */
+function getGitEnvironment (gitExecutable, sourceEnv) {
+  const env = {
+    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_TERMINAL_PROMPT: '0',
+  }
+
+  for (const name of ['COMSPEC', 'ComSpec', 'PATHEXT', 'SystemRoot', 'WINDIR', 'windir']) {
+    if (sourceEnv[name] !== undefined) env[name] = sourceEnv[name]
+  }
+  if (gitExecutable && path.isAbsolute(gitExecutable)) env.PATH = path.dirname(gitExecutable)
+  return env
+}
+
+/**
+ * Reads a JSON file.
+ *
+ * @param {string} filePath absolute file path
+ * @returns {object|undefined} parsed JSON
+ */
+function readJsonFile (filePath) {
+  try {
+    return parseJson(fs.readFileSync(filePath, 'utf8'))
+  } catch {
+    // File is absent or unreadable.
+  }
+}
+
+/**
+ * Parses JSON safely.
+ *
+ * @param {string} content JSON content
+ * @returns {object|undefined} parsed JSON
+ */
+function parseJson (content) {
+  try {
+    return JSON.parse(content)
+  } catch {
+    // Invalid JSON is reported by the checks that depend on it.
+  }
+}
+
+/**
+ * Extracts a comparable semantic version from a package range.
+ *
+ * @param {string} rawVersion raw package version or range
+ * @returns {string|undefined} comparable version
+ */
+function coerceVersion (rawVersion) {
+  const aliasedVersion = rawVersion.match(/^npm:[^@]+@(.+)$/)?.[1] || rawVersion
+  if (isAmbiguousRange(aliasedVersion)) return
+
+  const match = aliasedVersion.match(/\d+(?:\.\d+){0,2}/)
+  if (!match) return
+
+  const parts = match[0].split('.')
+  while (parts.length < 3) {
+    parts.push('0')
+  }
+  return parts.slice(0, 3).join('.')
+}
+
+/**
+ * Checks whether a manifest dependency range cannot be represented by one comparable version.
+ *
+ * @param {string} rawVersion package manifest version/range
+ * @returns {boolean} true when static diagnosis should ask the user to verify the range
+ */
+function isAmbiguousRange (rawVersion) {
+  const version = String(rawVersion || '').trim()
+  if (!version) return true
+  if (version.includes('||')) return true
+  return /<=?\s*\d/.test(version)
+}
+
+/**
+ * Checks whether a framework id is present.
+ *
+ * @param {Array<object>} frameworks detected frameworks
+ * @param {string} id framework id
+ * @returns {boolean} true if present
+ */
+function hasFramework (frameworks, id) {
+  return frameworks.some(framework => framework.id === id)
+}
+
+/**
+ * Checks whether NODE_OPTIONS preloads dd-trace/ci/init.
+ *
+ * @param {string|undefined} nodeOptions NODE_OPTIONS value
+ * @returns {boolean} true if dd-trace/ci/init is present
+ */
+function hasCiInitInNodeOptions (nodeOptions) {
+  return !!nodeOptions && INIT_PRELOAD_RE.test(nodeOptions)
+}
+
+/**
+ * Checks whether NODE_OPTIONS preloads dd-trace/register.js.
+ *
+ * @param {string|undefined} nodeOptions NODE_OPTIONS value
+ * @returns {boolean} true if dd-trace/register.js is present
+ */
+function hasRegisterInNodeOptions (nodeOptions) {
+  return !!nodeOptions && REGISTER_PRELOAD_RE.test(nodeOptions)
+}
+
+/**
+ * Checks whether environment contains branch or tag metadata.
+ *
+ * @param {NodeJS.ProcessEnv} env environment
+ * @returns {boolean} true if branch metadata exists
+ */
+function hasBranchMetadata (env) {
+  return !!(
+    env.DD_GIT_BRANCH ||
+    env.DD_GIT_TAG ||
+    env.GITHUB_HEAD_REF ||
+    env.GITHUB_REF_NAME ||
+    env.CI_COMMIT_REF_NAME ||
+    env.CIRCLE_BRANCH ||
+    env.GIT_BRANCH ||
+    env.BUILDKITE_BRANCH ||
+    env.TRAVIS_BRANCH ||
+    env.BITBUCKET_BRANCH ||
+    env.DRONE_BRANCH ||
+    env.BUDDY_EXECUTION_BRANCH ||
+    env.BITRISE_GIT_BRANCH
+  )
+}
+
+/**
+ * Checks whether environment contains commit SHA metadata.
+ *
+ * @param {NodeJS.ProcessEnv} env environment
+ * @returns {boolean} true if SHA metadata exists
+ */
+function hasShaMetadata (env) {
+  return !!(
+    env.DD_GIT_COMMIT_SHA ||
+    env.GITHUB_SHA ||
+    env.CI_COMMIT_SHA ||
+    env.CIRCLE_SHA1 ||
+    env.GIT_COMMIT ||
+    env.BUILDKITE_COMMIT ||
+    env.TRAVIS_COMMIT ||
+    env.BITBUCKET_COMMIT ||
+    env.DRONE_COMMIT ||
+    env.BUDDY_EXECUTION_REVISION
+  )
+}
+
+/**
+ * Checks truthy string env values.
+ *
+ * @param {string|undefined} value value to inspect
+ * @returns {boolean} true if value is true-like
+ */
+function isTrueLike (value) {
+  return /^(?:1|true)$/i.test(String(value || ''))
+}
+
+/**
+ * Checks false-like string env values.
+ *
+ * @param {string|undefined} value value to inspect
+ * @returns {boolean} true if value is false-like
+ */
+function isFalseLike (value) {
+  return /^(?:0|false)$/i.test(String(value || ''))
+}
+
+/**
+ * Counts result statuses.
+ *
+ * @param {Array<object>} results diagnosis results
+ * @returns {object} counts by status
+ */
+function countByStatus (results) {
+  const counts = { error: 0, warning: 0, info: 0, ok: 0 }
+  for (const result of results) {
+    counts[result.status]++
+  }
+  return counts
+}
+
+/**
+ * Formats a list of locations for text output.
+ *
+ * @param {string[]} locations relative paths
+ * @returns {string} formatted locations
+ */
+function formatLocations (locations) {
+  const uniqueLocations = unique(locations).slice(0, 5)
+  const suffix = locations.length > uniqueLocations.length
+    ? `, and ${locations.length - uniqueLocations.length} more`
+    : ''
+  return uniqueLocations.join(', ') + suffix
+}
+
+/**
+ * Serializes a supported framework for JSON output.
+ *
+ * @param {object} framework detected framework
+ * @returns {object} serializable framework summary
+ */
+function serializeSupportedFramework (framework) {
+  return {
+    id: framework.id,
+    name: framework.name,
+    packages: framework.packages,
+    supportedRange: framework.supportedRange,
+    locations: framework.locations,
+    versionDetections: framework.versionDetections,
+  }
+}
+
+/**
+ * Serializes an eligible framework for JSON output.
+ *
+ * @param {object} framework eligible framework
+ * @returns {object} serializable eligible framework summary
+ */
+function serializeEligibleFramework (framework) {
+  return {
+    id: framework.id,
+    name: framework.name,
+    command: framework.eligibility.command,
+    commandLocation: framework.eligibility.commandLocation,
+    supportedRange: framework.supportedRange,
+    version: framework.eligibility.version,
+    versionLocation: framework.eligibility.versionLocation,
+  }
+}
+
+/**
+ * Serializes an unsupported framework for JSON output.
+ *
+ * @param {object} framework detected unsupported framework
+ * @returns {object} serializable framework summary
+ */
+function serializeUnsupportedFramework (framework) {
+  return {
+    id: framework.id,
+    name: framework.name,
+    locations: framework.locations,
+  }
+}
+
+/**
+ * Deduplicates values.
+ *
+ * @param {Array<string>} values values
+ * @returns {string[]} unique values
+ */
+function unique (values) {
+  return [...new Set(values.filter(Boolean))]
+}
+
+/**
+ * Deduplicates version detections.
+ *
+ * @param {Array<object>} detections version detections
+ * @returns {Array<object>} unique detections
+ */
+function uniqueVersionDetections (detections) {
+  const seen = new Set()
+  const uniqueDetections = []
+
+  for (const detection of detections) {
+    const key = `${detection.packageName}:${detection.rawVersion}:${detection.relativePath || ''}`
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    uniqueDetections.push(detection)
+  }
+
+  return uniqueDetections
+}
+
+/**
+ * Normalizes relative paths to POSIX separators for stable output.
+ *
+ * @param {string} relativePath relative path
+ * @returns {string} normalized path
+ */
+function normalizeRelativePath (relativePath) {
+  return relativePath.split(path.sep).join('/')
+}
+
+if (require.main === module) {
+  const args = parseArgs(process.argv.slice(2))
+  const hasValidFailOn = ['error', 'warning', 'never'].includes(args.failOn)
+
+  if (args.help) {
+    console.log(getHelpText())
+  } else if (args.unknown) {
+    console.error(sanitizeConsoleText(`Unknown argument: ${args.unknown}`))
+    console.error(getHelpText())
+    process.exitCode = 1
+  } else if (hasValidFailOn) {
+    const report = runDiagnosis({ root: args.root })
+    const sanitizedReport = sanitizeForReport(report)
+    if (args.json) {
+      console.log(JSON.stringify(sanitizedReport, null, 2))
+    } else {
+      console.log(sanitizeConsoleText(renderText(sanitizedReport)))
+    }
+    process.exitCode = getExitCode(report, args.failOn)
+  } else {
+    console.error(sanitizeConsoleText(`Invalid --fail-on value: ${args.failOn}`))
+    console.error(getHelpText())
+    process.exitCode = 1
+  }
+}
+
+module.exports = {
+  getExitCode,
+  getFrameworkDefinitions,
+  parseArgs,
+  renderText,
+  runDiagnosis,
+}
