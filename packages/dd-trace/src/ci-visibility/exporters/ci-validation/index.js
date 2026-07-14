@@ -9,7 +9,7 @@ const { CiValidationSink } = require('./sink')
 const CiValidationWriter = require('./writer')
 
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
-const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
 
 class CiValidationExporter extends CiVisibilityExporter {
   /**
@@ -19,19 +19,19 @@ class CiValidationExporter extends CiVisibilityExporter {
    */
   constructor (config) {
     const validationManifestPath = process.env[VALIDATION_MANIFEST_ENV]
-    const validationOutputPath = process.env[VALIDATION_OUTPUT_ENV]
+    const validationOutputRoot = process.env[VALIDATION_OUTPUT_ENV]
     if (!validationManifestPath) {
       throw new Error('Offline Test Optimization validation requires an explicit private manifest path.')
     }
-    if (!validationOutputPath) {
-      throw new Error('Offline Test Optimization validation requires an explicit private output path.')
+    if (!validationOutputRoot) {
+      throw new Error('Offline Test Optimization validation requires an explicit private output root.')
     }
     const cache = new TestOptimizationHttpCache({
       validationManifestPath,
     })
     super(config, { cacheOnly: true, testOptimizationHttpCache: cache })
 
-    this._sink = new CiValidationSink(validationOutputPath)
+    this._sink = new CiValidationSink(validationOutputRoot)
     this._writer = new CiValidationWriter({ sink: this._sink, tags: config.tags })
     this._coverageWriter = new CiValidationCoverageWriter(this._sink)
     this._isInitialized = true

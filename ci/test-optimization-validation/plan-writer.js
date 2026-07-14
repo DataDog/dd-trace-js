@@ -489,9 +489,10 @@ function appendOfflineArtifacts (lines, {
       path.join(out, 'runs', sanitizePathSegment(framework.id))
     ))}`,
     '',
-    'Each execution writes a bounded `.offline-events.raw.ndjson` file. The raw file is removed after parsing, ' +
-      'and a sanitized `events.ndjson` file remains for diagnosis. Exact fixture recipes and paths are included ' +
-      'in the approval digest even though this plan summarizes their shared layout.',
+    'Each execution writes bounded temporary JSON payload files under `.offline-payloads/payloads/tests/`, using ' +
+      'the Test Optimization payload-file layout. The temporary payload directory is removed after parsing, and a ' +
+      'sanitized `events.ndjson` file remains for diagnosis. Exact fixture recipes and paths are included in the ' +
+      'approval digest even though this plan summarizes their shared layout.',
     ''
   )
 }

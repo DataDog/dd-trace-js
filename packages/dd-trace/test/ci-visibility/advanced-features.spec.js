@@ -79,9 +79,10 @@ describe('test optimization validation advanced features', () => {
         parseOfflineSummary () {},
         readOfflineOutput () {
           return {
+            coverageFileCount: 0,
             events: [test],
             inputs: {},
-            recordCount: 0,
+            payloadFileCount: 0,
           }
         },
       },
@@ -96,6 +97,7 @@ describe('test optimization validation advanced features', () => {
       },
       '../safe-files': {
         createFileSafely () {},
+        ensureSafeDirectory () {},
         writeFileSafely () {},
       },
     })

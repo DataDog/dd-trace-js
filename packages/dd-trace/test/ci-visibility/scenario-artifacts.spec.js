@@ -276,12 +276,14 @@ describe('test optimization validation scenario artifacts', () => {
 
       assert.strictEqual(run.events.length, 2)
       assert.deepStrictEqual(run.offline.summary, {
+        coverageFiles: 0,
         errors: [],
         events: 2,
         input: 'filesystem-cache',
-        records: 2,
+        inputs: {},
+        payloadFiles: 2,
       })
-      assert.strictEqual(run.offline.recordCount, 2)
+      assert.strictEqual(run.offline.payloadFileCount, 2)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -438,7 +440,7 @@ function writeEventExporter (filename) {
     `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
     `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
     `const id = require(${JSON.stringify(idPath)})`,
-    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE)',
+    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR)',
     'const writer = new CiValidationWriter({ sink, tags: {} })',
     'writer.append([{',
     "  trace_id: id('1234abcd1234abcd'),",
@@ -457,7 +459,7 @@ function writeFailingExporter (filename) {
   const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
   fs.writeFileSync(filename, [
     `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
-    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE)',
+    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR)',
     'const circular = {}',
     'circular.value = circular',
     'sink.writeCoverage(circular)',

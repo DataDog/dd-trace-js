@@ -3,71 +3,95 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const MAX_OUTPUT_BYTES = 16 * 1024 * 1024
-const MAX_OUTPUT_RECORDS = 10_000
+const { MAX_OUTPUT_BYTES, msgpackToJson } = require('./msgpack-to-json')
+
+const MAX_OUTPUT_FILES = 10_000
 const MAX_SUMMARY_ERRORS = 20
 const SUMMARY_PREFIX = 'DD_TEST_OPTIMIZATION_VALIDATION_V1 '
 
+let payloadFileSequence = 0
+
 class CiValidationSink {
   #bytesWritten = 0
+  #coverageDirectory
+  #coverageFileCount = 0
   #errors = []
   #eventCount = 0
-  #file
-  #recordCount = 0
+  #fileCount = 0
+  #inputs = Object.create(null)
+  #outputRoot
+  #outputRootDirectory
+  #payloadsDirectory
   #summaryWritten = false
+  #testsDirectory
+  #testPayloadFileCount = 0
 
   /**
-   * Creates a bounded append-only sink for offline validation records.
+   * Creates a bounded payload-file sink under a validator-owned output root.
    *
-   * @param {string} outputFile absolute validator-owned output file
+   * @param {string} outputRoot absolute validator-owned output directory
    */
-  constructor (outputFile) {
-    if (typeof outputFile !== 'string' || !path.isAbsolute(outputFile)) {
-      throw new Error('Offline Test Optimization validation output path must be absolute.')
+  constructor (outputRoot) {
+    if (typeof outputRoot !== 'string' || !path.isAbsolute(outputRoot)) {
+      throw new Error('Offline Test Optimization validation output root must be absolute.')
     }
 
-    const stat = fs.lstatSync(outputFile)
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1) {
-      throw new Error('Offline Test Optimization validation output must be a regular, unlinked file.')
-    }
-    if (stat.size > MAX_OUTPUT_BYTES) {
-      throw new Error('Offline Test Optimization validation output already exceeds its size limit.')
-    }
-
-    const flags = fs.constants.O_WRONLY | fs.constants.O_APPEND | (fs.constants.O_NOFOLLOW || 0)
-    this.#file = fs.openSync(outputFile, flags)
-    const openedStat = fs.fstatSync(this.#file)
-    if (!openedStat.isFile() || openedStat.dev !== stat.dev || openedStat.ino !== stat.ino) {
-      fs.closeSync(this.#file)
-      this.#file = undefined
-      throw new Error('Offline Test Optimization validation output changed while it was opened.')
-    }
-    this.#bytesWritten = stat.size
+    this.#outputRoot = outputRoot
+    this.#outputRootDirectory = captureDirectory(outputRoot, 'output root')
+    const payloadsRoot = path.join(outputRoot, 'payloads')
+    this.#payloadsDirectory = createDirectory(outputRoot, this.#outputRootDirectory, payloadsRoot, 'payloads')
+    this.#testsDirectory = createDirectory(
+      payloadsRoot,
+      this.#payloadsDirectory,
+      path.join(payloadsRoot, 'tests'),
+      'tests'
+    )
+    this.#coverageDirectory = createDirectory(
+      payloadsRoot,
+      this.#payloadsDirectory,
+      path.join(payloadsRoot, 'coverage'),
+      'coverage'
+    )
   }
 
   /**
-   * Writes one encoded Test Optimization payload.
+   * Converts and writes one Test Optimization payload using the Bazel-compatible JSON layout.
    *
-   * @param {Buffer} payload encoded CI Visibility payload
+   * @param {Buffer} payload encoded Test Optimization payload
    * @param {number} eventCount number of events represented by the payload
    */
   writeTestCycle (payload, eventCount) {
-    this.#eventCount += eventCount
-    this.#writeRecord({
-      version: 1,
-      kind: 'test_cycle',
-      encoding: 'msgpack-base64',
-      payload: payload.toString('base64'),
-    })
+    let json
+    try {
+      json = msgpackToJson(payload)
+    } catch {
+      this.#fail('output_payload_conversion_failed')
+      return
+    }
+
+    if (this.#writePayloadFile('tests', json)) {
+      this.#eventCount += eventCount
+      this.#testPayloadFileCount++
+    }
   }
 
   /**
-   * Writes one coverage payload without enabling coverage-report upload.
+   * Writes one coverage payload in the corresponding payload-file directory.
    *
    * @param {object|object[]} payload formatted coverage payload
    */
   writeCoverage (payload) {
-    this.#writeRecord({ version: 1, kind: 'coverage', payload })
+    let json
+    try {
+      const serialized = JSON.stringify(payload)
+      if (serialized === undefined) throw new Error('Coverage payload is not serializable.')
+      json = Buffer.from(serialized)
+    } catch {
+      this.#fail('output_record_serialization_failed')
+      return
+    }
+
+    if (this.#writePayloadFile('coverage', json)) this.#coverageFileCount++
   }
 
   /**
@@ -78,15 +102,7 @@ class CiValidationSink {
    */
   writeInputResult (name, error) {
     if (error) this.#addError(`invalid_${name}`)
-    this.#writeRecord({
-      version: 1,
-      kind: 'input',
-      payload: {
-        name,
-        status: error ? 'error' : 'loaded',
-        error: error ? boundedErrorMessage(error) : undefined,
-      },
-    })
+    this.#inputs[name] = { status: error ? 'error' : 'loaded' }
   }
 
   /**
@@ -96,58 +112,74 @@ class CiValidationSink {
     if (this.#summaryWritten) return
     this.#summaryWritten = true
     const summary = {
+      coverageFiles: this.#coverageFileCount,
       events: this.#eventCount,
-      records: this.#recordCount,
+      payloadFiles: this.#testPayloadFileCount,
       input: 'filesystem-cache',
+      inputs: this.#inputs,
       errors: this.#errors,
     }
     process.stderr.write(`${SUMMARY_PREFIX}${JSON.stringify(summary)}\n`)
-    if (this.#file !== undefined) {
-      fs.closeSync(this.#file)
-      this.#file = undefined
-    }
   }
 
   /**
-   * Appends one bounded versioned record.
+   * Writes one completed JSON payload to a unique file.
    *
-   * @param {object} record output record
-   * @returns {void}
+   * @param {'tests'|'coverage'} kind payload kind
+   * @param {Buffer} payload JSON payload
+   * @returns {boolean} whether the payload was written
    */
-  #writeRecord (record) {
-    if (this.#file === undefined) return
-    if (this.#recordCount >= MAX_OUTPUT_RECORDS) {
-      this.#fail('output_record_limit_exceeded')
-      return
+  #writePayloadFile (kind, payload) {
+    if (this.#fileCount >= MAX_OUTPUT_FILES) {
+      this.#fail('output_file_limit_exceeded')
+      return false
     }
-
-    let line
-    try {
-      line = `${JSON.stringify(record)}\n`
-    } catch {
-      this.#fail('output_record_serialization_failed')
-      return
-    }
-    const bytes = Buffer.byteLength(line)
-    if (this.#bytesWritten + bytes > MAX_OUTPUT_BYTES) {
+    if (this.#bytesWritten + payload.length > MAX_OUTPUT_BYTES) {
       this.#fail('output_byte_limit_exceeded')
-      return
+      return false
     }
 
+    const directory = kind === 'tests' ? this.#testsDirectory : this.#coverageDirectory
+    const directoryPath = path.join(this.#outputRoot, 'payloads', kind)
+    const sequence = ++payloadFileSequence
+    const timestamp = BigInt(Date.now()) * 1_000_000n + process.hrtime.bigint() % 1_000_000n
+    const filename = path.join(directoryPath, `${kind}-${timestamp}-${process.pid}-${sequence}.json`)
+    let file
+    let writeFailed = false
     try {
-      fs.writeSync(this.#file, line)
-      this.#bytesWritten += bytes
-      this.#recordCount++
+      assertDirectoryUnchanged(this.#outputRoot, this.#outputRootDirectory, 'output root')
+      assertDirectoryUnchanged(path.join(this.#outputRoot, 'payloads'), this.#payloadsDirectory, 'payloads')
+      assertDirectoryUnchanged(directoryPath, directory, kind)
+      const flags = fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        (fs.constants.O_NOFOLLOW || 0)
+      file = fs.openSync(filename, flags, 0o600)
+      const stat = fs.fstatSync(file)
+      if (!stat.isFile() || stat.nlink > 1) {
+        throw new Error('Offline Test Optimization payload output is not a regular, unlinked file.')
+      }
+      fs.writeFileSync(file, payload)
     } catch {
-      this.#fail('output_write_failed')
+      writeFailed = true
+    } finally {
+      if (file !== undefined) fs.closeSync(file)
     }
+    if (writeFailed) {
+      this.#fail('output_write_failed')
+      removePartialFile(filename)
+      return false
+    }
+
+    this.#bytesWritten += payload.length
+    this.#fileCount++
+    return true
   }
 
   /**
    * Records a sink failure and makes the process unsuccessful.
    *
    * @param {string} code stable failure code
-   * @returns {void}
    */
   #fail (code) {
     this.#addError(code)
@@ -158,7 +190,6 @@ class CiValidationSink {
    * Adds one unique bounded summary error.
    *
    * @param {string} code stable failure code
-   * @returns {void}
    */
   #addError (code) {
     if (this.#errors.length >= MAX_SUMMARY_ERRORS || this.#errors.includes(code)) return
@@ -167,24 +198,68 @@ class CiValidationSink {
 }
 
 /**
- * Formats a bounded single-line cache error for the output artifact.
+ * Captures the identity of one existing non-symbolic directory.
  *
- * @param {Error} error cache error
- * @returns {string} bounded error message
+ * @param {string} directory directory path
+ * @param {string} label directory label
+ * @returns {{dev: number, ino: number}} stable directory identity
  */
-function boundedErrorMessage (error) {
-  const message = error?.message || String(error)
-  let bounded = ''
-  for (const character of message.slice(0, 1024)) {
-    const code = character.charCodeAt(0)
-    bounded += code < 0x20 || code === 0x7F ? ' ' : character
+function captureDirectory (directory, label) {
+  const stat = fs.lstatSync(directory)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(`Offline Test Optimization validation ${label} must be a regular directory.`)
   }
-  return bounded
+  return { dev: stat.dev, ino: stat.ino }
+}
+
+/**
+ * Creates or validates one child directory without accepting symbolic links.
+ *
+ * @param {string} parent parent directory path
+ * @param {{dev: number, ino: number}} parentIdentity expected parent identity
+ * @param {string} directory child directory path
+ * @param {string} label directory label
+ * @returns {{dev: number, ino: number}} stable child identity
+ */
+function createDirectory (parent, parentIdentity, directory, label) {
+  assertDirectoryUnchanged(parent, parentIdentity, 'parent output')
+  try {
+    fs.mkdirSync(directory, { mode: 0o700 })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+  }
+  return captureDirectory(directory, `${label} output directory`)
+}
+
+/**
+ * Rejects a directory that changed after sink construction.
+ *
+ * @param {string} directory directory path
+ * @param {{dev: number, ino: number}} identity expected directory identity
+ * @param {string} label directory label
+ */
+function assertDirectoryUnchanged (directory, identity, label) {
+  const current = captureDirectory(directory, label)
+  if (current.dev !== identity.dev || current.ino !== identity.ino) {
+    throw new Error(`Offline Test Optimization validation ${label} changed during execution.`)
+  }
+}
+
+/**
+ * Removes a partially written final path without following symbolic links.
+ *
+ * @param {string} filename partial payload path
+ */
+function removePartialFile (filename) {
+  try {
+    const stat = fs.lstatSync(filename)
+    if (stat.isFile() || stat.isSymbolicLink()) fs.unlinkSync(filename)
+  } catch {}
 }
 
 module.exports = {
   CiValidationSink,
   MAX_OUTPUT_BYTES,
-  MAX_OUTPUT_RECORDS,
+  MAX_OUTPUT_FILES,
   SUMMARY_PREFIX,
 }

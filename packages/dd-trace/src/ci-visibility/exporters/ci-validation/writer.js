@@ -29,7 +29,7 @@ class CiValidationWriter {
   }
 
   /**
-   * Flushes encoded events synchronously to the offline artifact.
+   * Flushes encoded events synchronously to an offline payload file.
    *
    * @param {Function} [done] completion callback
    */

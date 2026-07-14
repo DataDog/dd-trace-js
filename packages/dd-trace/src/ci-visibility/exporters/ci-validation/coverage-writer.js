@@ -11,7 +11,7 @@ class CiValidationCoverageWriter {
   }
 
   /**
-   * Writes coverage data to the shared offline artifact.
+   * Writes coverage data to its offline payload-file directory.
    *
    * @param {object|object[]} payload formatted coverage payload
    */
@@ -20,7 +20,7 @@ class CiValidationCoverageWriter {
   }
 
   /**
-   * Completes synchronously because coverage records are written on append.
+   * Completes synchronously because coverage payload files are written on append.
    *
    * @param {Function} [done] completion callback
    */

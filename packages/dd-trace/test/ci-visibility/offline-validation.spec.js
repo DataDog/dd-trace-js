@@ -13,7 +13,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/offline-fixtures')
 const {
   MAX_OUTPUT_BYTES,
-  MAX_OUTPUT_RECORDS,
+  MAX_OUTPUT_FILES,
   parseOfflineSummary,
   readOfflineOutput,
 } = require('../../../../ci/test-optimization-validation/offline-output')
@@ -138,97 +138,121 @@ describe('test optimization offline validation artifacts', () => {
     }), /fixture exceeds .* bytes/)
   })
 
-  it('rejects malformed, deeply nested, and oversized event artifacts', () => {
-    const outputFile = path.join(repositoryRoot, 'events.ndjson')
+  it('rejects malformed, deeply nested, and oversized payload files', () => {
+    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    const outputFile = path.join(testsDirectory, 'tests-1-1-1.json')
 
-    fs.writeFileSync(outputFile, '{not-json}\n')
-    assert.throws(() => readOfflineOutput(outputFile), /JSON|Unexpected token/)
+    fs.writeFileSync(outputFile, '{not-json}')
+    assert.throws(() => readOfflineOutput(outputRoot), /JSON|Unexpected token/)
 
-    fs.writeFileSync(outputFile, `${'{'.repeat(129)}\n`)
-    assert.throws(() => readOfflineOutput(outputFile), /JSON nesting exceeds/)
+    fs.writeFileSync(outputFile, '{'.repeat(129))
+    assert.throws(() => readOfflineOutput(outputRoot), /JSON nesting exceeds/)
 
     fs.writeFileSync(outputFile, Buffer.alloc(MAX_OUTPUT_BYTES + 1))
-    assert.throws(() => readOfflineOutput(outputFile), /exceeds .* bytes/)
+    assert.throws(() => readOfflineOutput(outputRoot), /exceeds .* bytes/)
   })
 
-  it('rejects the first event record beyond the limit', () => {
-    const outputFile = path.join(repositoryRoot, 'events.ndjson')
-    const record = `${JSON.stringify({
-      version: 1,
-      kind: 'input',
-      payload: { name: 'settings', status: 'loaded' },
-    })}\n`
+  it('rejects the first payload file beyond the limit before reading file bodies', () => {
+    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    const readdirSync = fs.readdirSync
+    const filenames = Array.from({ length: MAX_OUTPUT_FILES + 1 }, (_, index) => `tests-${index}-1-1.json`)
 
-    fs.writeFileSync(outputFile, record.repeat(MAX_OUTPUT_RECORDS))
-    assert.strictEqual(readOfflineOutput(outputFile).recordCount, MAX_OUTPUT_RECORDS)
-    fs.appendFileSync(outputFile, record)
-    assert.throws(() => readOfflineOutput(outputFile), /exceeds .* records/)
+    fs.readdirSync = directory => directory === testsDirectory ? filenames : readdirSync(directory)
+    try {
+      assert.throws(() => readOfflineOutput(outputRoot), /exceeds .* payload files/)
+    } finally {
+      fs.readdirSync = readdirSync
+    }
   })
 
-  it('accepts the last bounded artifact string and rejects the first oversized string', () => {
-    const outputFile = path.join(repositoryRoot, 'events.ndjson')
-    const record = error => `${JSON.stringify({
-      version: 1,
-      kind: 'input',
-      payload: { name: 'settings', status: 'error', error },
-    })}\n`
+  it('accepts the last bounded payload string and rejects the first oversized string', () => {
+    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    const outputFile = path.join(testsDirectory, 'tests-1-1-1.json')
+    const payload = value => createTestCyclePayload([{ type: 'test', content: { meta: { value } } }])
 
-    fs.writeFileSync(outputFile, record('x'.repeat(64 * 1024)))
-    assert.strictEqual(readOfflineOutput(outputFile).recordCount, 1)
-    fs.writeFileSync(outputFile, record('x'.repeat(64 * 1024 + 1)))
-    assert.throws(() => readOfflineOutput(outputFile), /oversized string/)
+    fs.writeFileSync(outputFile, JSON.stringify(payload('x'.repeat(64 * 1024))))
+    assert.strictEqual(readOfflineOutput(outputRoot).payloadFileCount, 1)
+    fs.writeFileSync(outputFile, JSON.stringify(payload('x'.repeat(64 * 1024 + 1))))
+    assert.throws(() => readOfflineOutput(outputRoot), /oversized string/)
+  })
+
+  it('rejects unexpected payload entries', () => {
+    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    fs.writeFileSync(path.join(testsDirectory, 'unexpected.json'), '{}')
+
+    assert.throws(() => readOfflineOutput(outputRoot), /unexpected entry/)
+  })
+
+  it('rejects symbolic-link and hard-linked payload files', function () {
+    if (process.platform === 'win32') this.skip()
+    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    const source = path.join(repositoryRoot, 'source.json')
+    fs.writeFileSync(source, JSON.stringify(createTestCyclePayload()))
+    const outputFile = path.join(testsDirectory, 'tests-1-1-1.json')
+
+    fs.symlinkSync(source, outputFile)
+    assert.throws(() => readOfflineOutput(outputRoot), /regular, unlinked file/)
+
+    fs.unlinkSync(outputFile)
+    fs.linkSync(source, outputFile)
+    assert.throws(() => readOfflineOutput(outputRoot), /regular, unlinked file/)
   })
 
   it('accepts only bounded versioned stderr summaries', () => {
-    const summary = parseOfflineSummary(
-      'runner output\nDD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
-      '{"events":4,"records":2,"input":"filesystem-cache","errors":[]}\n'
-    )
+    const summary = parseOfflineSummary(`runner output\n${createSummary({
+      events: 4,
+      inputs: { settings: { status: 'loaded' } },
+      payloadFiles: 2,
+    })}\n`)
 
     assert.deepStrictEqual(summary, {
+      coverageFiles: 0,
       errors: [],
       events: 4,
       input: 'filesystem-cache',
-      records: 2,
+      inputs: { settings: { status: 'loaded' } },
+      payloadFiles: 2,
     })
-    assert.throws(() => parseOfflineSummary(
-      'DD_TEST_OPTIMIZATION_VALIDATION_V1 {"events":-1,"records":2,"input":"filesystem-cache","errors":[]}'
-    ), /Invalid offline Test Optimization exporter summary/)
+    assert.throws(() => parseOfflineSummary(createSummary({ events: -1 })),
+      /Invalid offline Test Optimization exporter summary/)
   })
 
-  it('aggregates every valid process-local exporter summary', () => {
+  it('aggregates every valid process-local exporter summary and cache input status', () => {
     const summary = parseOfflineSummary([
-      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
-        '{"events":4,"records":2,"input":"filesystem-cache","errors":[]}',
+      createSummary({
+        events: 4,
+        inputs: { settings: { status: 'loaded' } },
+        payloadFiles: 2,
+      }),
       'runner output',
-      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
-        '{"events":3,"records":1,"input":"filesystem-cache","errors":["output_write_failed"]}',
+      createSummary({
+        coverageFiles: 1,
+        errors: ['output_write_failed'],
+        events: 3,
+        inputs: { settings: { status: 'error' } },
+        payloadFiles: 1,
+      }),
     ].join('\n'))
 
     assert.deepStrictEqual(summary, {
+      coverageFiles: 1,
       errors: ['output_write_failed'],
       events: 7,
       input: 'filesystem-cache',
-      records: 3,
+      inputs: { settings: { status: 'error' } },
+      payloadFiles: 3,
     })
   })
 
   it('rejects all exporter summaries when any process summary is malformed', () => {
     assert.throws(() => parseOfflineSummary([
-      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
-        '{"events":4,"records":2,"input":"filesystem-cache","errors":[]}',
-      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
-        '{"events":-1,"records":0,"input":"filesystem-cache","errors":[]}',
+      createSummary({ events: 4, payloadFiles: 2 }),
+      createSummary({ events: -1 }),
     ].join('\n')), /Invalid offline Test Optimization exporter summary/)
   })
 
   it('accepts the last aggregate summary error and rejects the first error beyond the limit', () => {
-    const getSummary = errors => `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
-      events: 0,
-      records: 0,
-      input: 'filesystem-cache',
-      errors,
-    })}`
+    const getSummary = errors => createSummary({ errors })
     const firstErrors = Array.from({ length: 10 }, (_, index) => `first_${index}`)
     const secondErrors = Array.from({ length: 10 }, (_, index) => `second_${index}`)
 
@@ -242,3 +266,32 @@ describe('test optimization offline validation artifacts', () => {
     ].join('\n')), /Invalid offline Test Optimization exporter summary/)
   })
 })
+
+function createPayloadRoot (repositoryRoot) {
+  const outputRoot = path.join(repositoryRoot, 'output')
+  const payloadsRoot = path.join(outputRoot, 'payloads')
+  const testsDirectory = path.join(payloadsRoot, 'tests')
+  fs.mkdirSync(testsDirectory, { recursive: true })
+  fs.mkdirSync(path.join(payloadsRoot, 'coverage'))
+  return { outputRoot, testsDirectory }
+}
+
+function createTestCyclePayload (events = []) {
+  return {
+    version: 1,
+    metadata: { '*': { language: 'javascript' } },
+    events,
+  }
+}
+
+function createSummary (overrides = {}) {
+  return `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
+    coverageFiles: 0,
+    events: 0,
+    payloadFiles: 0,
+    input: 'filesystem-cache',
+    inputs: {},
+    errors: [],
+    ...overrides,
+  })}`
+}

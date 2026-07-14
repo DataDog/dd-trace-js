@@ -22,7 +22,7 @@ const {
 function validationRouting () {
   return {
     fixture: { manifestPath: path.join(os.tmpdir(), 'validation-manifest.txt') },
-    outputFile: path.join(os.tmpdir(), 'validation-events.ndjson'),
+    outputRoot: path.join(os.tmpdir(), 'validation-payloads'),
   }
 }
 
@@ -180,7 +180,7 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MODE, '1')
     assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE,
       validationRouting().fixture.manifestPath)
-    assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE, validationRouting().outputFile)
+    assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR, validationRouting().outputRoot)
     assert.strictEqual(env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
     assert.strictEqual(env.DD_CIVISIBILITY_ENABLED, undefined)
@@ -205,7 +205,7 @@ describe('test optimization validation command runner', () => {
           '  require("node:fs").writeFileSync(process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE, "unexpected");',
           'process.stdout.write(JSON.stringify({',
           '  manifest: process.env._DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE,',
-          '  output: process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE,',
+          '  output: process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR,',
           '  apmAgentless: process.env._DD_APM_TRACING_AGENTLESS_ENABLED,',
           '  settingsCache: process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE,',
           '  otelTraces: process.env.OTEL_TRACES_EXPORTER,',
@@ -215,7 +215,7 @@ describe('test optimization validation command runner', () => {
         ].join('')],
         env: {
           _DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE: '/tmp/unapproved-manifest',
-          _DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE: '/tmp/unapproved-output',
+          _DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR: '/tmp/unapproved-output',
           _DD_APM_TRACING_AGENTLESS_ENABLED: 'true',
           DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: settingsCachePath,
           DD_PROFILING_ENABLED: 'true',
@@ -230,7 +230,7 @@ describe('test optimization validation command runner', () => {
       const observed = JSON.parse(result.stdout)
 
       assert.strictEqual(observed.manifest, validationRouting().fixture.manifestPath)
-      assert.strictEqual(observed.output, validationRouting().outputFile)
+      assert.strictEqual(observed.output, validationRouting().outputRoot)
       assert.strictEqual(observed.apmAgentless, undefined)
       assert.strictEqual(observed.settingsCache, undefined)
       assert.strictEqual(observed.otelTraces, undefined)
@@ -250,8 +250,8 @@ describe('test optimization validation command runner', () => {
       await assert.rejects(runCommand({
         cwd: outDir,
         usesShell: true,
-        shellCommand: '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE=/tmp/other npm test',
-      }, { env, envMode: 'clean', outDir }), /Refusing inline _DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE changes/)
+        shellCommand: '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR=/tmp/other npm test',
+      }, { env, envMode: 'clean', outDir }), /Refusing inline _DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR changes/)
 
       await assert.rejects(runCommand({
         cwd: outDir,

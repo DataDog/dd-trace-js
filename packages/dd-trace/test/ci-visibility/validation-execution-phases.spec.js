@@ -228,7 +228,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /adds `DD_TRACE_DEBUG=1`/)
       assert.match(plan, /Exact fixture recipes and paths are included in the approval digest/)
       assert.doesNotMatch(plan, /Fixture recipe SHA-256/)
-      assert.match(plan, /\.offline-events\.raw\.ndjson/)
+      assert.match(plan, /\.offline-payloads\/payloads\/tests/)
       assert.doesNotMatch(plan, /network listener|HTTP server/)
       assert.match(plan, /does not require real Datadog credentials, inspect credential stores, or upload/)
       assert.doesNotMatch(plan, /- Confirm the selected test command/)

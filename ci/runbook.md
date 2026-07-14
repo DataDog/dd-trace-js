@@ -581,10 +581,11 @@ For Yarn Plug'n'Play, pnpm, workspaces, or another non-standard module layout, e
 validator through the package-manager mechanism that works in this repository, such as `yarn node`
 or `pnpm exec node`.
 
-Live validation uses validator-controlled JSON cache fixtures outside the repository and a bounded
-event artifact inside the declared results directory. Missing, malformed, symlinked, or oversized
-fixtures fail closed; they never fall back to an Agent or Datadog endpoint. Run the validator in the
-same sandbox and with the same permissions as an ordinary test run. Do not request broader access.
+Live validation uses validator-controlled JSON cache fixtures outside the repository and bounded
+temporary JSON payload files inside the declared results directory. Missing, malformed, symlinked,
+or oversized fixtures and payload files fail closed; they never fall back to an Agent or Datadog
+endpoint. Run the validator in the same sandbox and with the same permissions as an ordinary test
+run. Do not request broader access.
 The execution platform should block outbound networking and provide a disposable home directory
 without reusable credentials. Offline validation does not make untrusted project tests safe, and
 project code running as the same user can forge cache or event evidence. Treat the result as a

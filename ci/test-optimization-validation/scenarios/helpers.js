@@ -17,7 +17,7 @@ const { getLocalValidationCommand } = require('../local-command')
 const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
 const { parseOfflineSummary, readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport } = require('../redaction')
-const { createFileSafely, writeFileSafely } = require('../safe-files')
+const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
@@ -40,8 +40,8 @@ async function runInstrumentedCommand ({
   ciWiring = false,
 }) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
-  const rawOutputFile = path.join(outDir, '.offline-events.raw.ndjson')
-  createFileSafely(out, rawOutputFile, '', 'offline validation event output')
+  const rawOutputRoot = path.join(outDir, '.offline-payloads')
+  ensureSafeDirectory(out, rawOutputRoot, 'offline validation payload output')
   let fixture
   let result
   let offline
@@ -55,8 +55,8 @@ async function runInstrumentedCommand ({
       ...fixtureConfig,
     })
     const validationEnv = ciWiring
-      ? buildCiWiringEnv({ fixture, outputFile: rawOutputFile })
-      : buildDatadogEnv({ fixture, outputFile: rawOutputFile, scenario: scenarioName, framework, command })
+      ? buildCiWiringEnv({ fixture, outputRoot: rawOutputRoot })
+      : buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework, command })
     result = await runCommand(command, {
       env: {
         ...validationEnv,
@@ -69,18 +69,21 @@ async function runInstrumentedCommand ({
       repositoryRoot: options.repositoryRoot,
       verbose: options.verbose,
     })
-    offline = readOfflineOutput(rawOutputFile)
+    offline = readOfflineOutput(rawOutputRoot)
     offline.summary = parseOfflineSummary(result.stderr)
+    offline.inputs = offline.summary?.inputs || {}
     if (offline.summary?.errors.length > 0) {
       throw new Error(`Offline Test Optimization exporter failed: ${offline.summary.errors.join(', ')}`)
     }
     if (offline.summary &&
-      (offline.summary.records !== offline.recordCount || offline.summary.events !== offline.events.length)) {
-      throw new Error('Offline Test Optimization exporter summary does not match the event artifact.')
+      (offline.summary.payloadFiles !== offline.payloadFileCount ||
+        offline.summary.coverageFiles !== offline.coverageFileCount ||
+        offline.summary.events !== offline.events.length)) {
+      throw new Error('Offline Test Optimization exporter summary does not match the payload artifacts.')
     }
   } finally {
     if (fixture) cleanupOfflineFixture(fixture.root)
-    fs.rmSync(rawOutputFile, { force: true })
+    fs.rmSync(rawOutputRoot, { force: true, recursive: true })
   }
 
   const events = offline.events

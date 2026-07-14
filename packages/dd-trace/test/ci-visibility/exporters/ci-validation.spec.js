@@ -22,23 +22,23 @@ const {
 } = require('../../../../../ci/test-optimization-validation/offline-output')
 const id = require('../../../src/id')
 const CiValidationCoverageWriter = require('../../../src/ci-visibility/exporters/ci-validation/coverage-writer')
-const { CiValidationSink, MAX_OUTPUT_BYTES, MAX_OUTPUT_RECORDS, SUMMARY_PREFIX } =
+const { CiValidationSink, MAX_OUTPUT_BYTES, MAX_OUTPUT_FILES, SUMMARY_PREFIX } =
   require('../../../src/ci-visibility/exporters/ci-validation/sink')
 const CiValidationWriter = require('../../../src/ci-visibility/exporters/ci-validation/writer')
 const CiValidationExporter = require('../../../src/ci-visibility/exporters/ci-validation')
 
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
-const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
 
 describe('CI validation offline output', () => {
-  let outputFile
+  let outputRoot
   let root
   let stderrWrite
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-ci-validation-output-'))
-    outputFile = path.join(root, 'events.ndjson')
-    fs.writeFileSync(outputFile, '', { mode: 0o600 })
+    outputRoot = path.join(root, 'output')
+    fs.mkdirSync(outputRoot)
     stderrWrite = sinon.stub(process.stderr, 'write').returns(true)
   })
 
@@ -48,8 +48,8 @@ describe('CI validation offline output', () => {
     process.exitCode = undefined
   })
 
-  it('writes deterministic CI Visibility events without an HTTP writer', () => {
-    const sink = new CiValidationSink(outputFile)
+  it('writes direct JSON payloads using the Bazel-compatible tests layout', () => {
+    const sink = new CiValidationSink(outputRoot)
     const writer = new CiValidationWriter({ sink, tags: {} })
     let flushed = false
     writer.append([createTestSpan()])
@@ -57,7 +57,16 @@ describe('CI validation offline output', () => {
     sink.writeSummary()
 
     assert.strictEqual(flushed, true)
-    const output = readOfflineOutput(outputFile)
+    const files = getPayloadFiles(outputRoot, 'tests')
+    assert.strictEqual(files.length, 1)
+    assert.match(path.basename(files[0]), /^tests-[0-9]+-[0-9]+-[0-9]+\.json$/)
+    const raw = fs.readFileSync(files[0], 'utf8')
+    const payload = JSON.parse(raw)
+    assert.deepStrictEqual(Object.keys(payload), ['version', 'metadata', 'events'])
+    assert.doesNotMatch(raw, /"(?:encoding|kind|payload)":/)
+    assert.match(raw, new RegExp(`"trace_id":${BigInt('0x1234abcd1234abcd')}`))
+
+    const output = readOfflineOutput(outputRoot)
     assert.strictEqual(output.events.length, 1)
     assert.strictEqual(output.events[0].type, 'test')
     assert.strictEqual(output.events[0].meta['test.name'], 'offline test')
@@ -65,40 +74,42 @@ describe('CI validation offline output', () => {
   })
 
   it('fails closed when the output byte limit is exceeded', () => {
-    const sink = new CiValidationSink(outputFile)
-    sink.writeTestCycle(Buffer.alloc(MAX_OUTPUT_BYTES), 1)
+    const sink = new CiValidationSink(outputRoot)
+    sink.writeCoverage('x'.repeat(MAX_OUTPUT_BYTES))
     sink.writeSummary()
 
-    assert.strictEqual(fs.statSync(outputFile).size, 0)
+    assert.strictEqual(getPayloadFiles(outputRoot, 'coverage').length, 0)
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
     assert.deepStrictEqual(summary.errors, ['output_byte_limit_exceeded'])
   })
 
-  it('rejects relative and already oversized output files', () => {
-    assert.throws(() => new CiValidationSink('events.ndjson'), /path must be absolute/)
+  it('rejects relative and non-directory output roots', () => {
+    assert.throws(() => new CiValidationSink('payloads'), /root must be absolute/)
 
-    fs.truncateSync(outputFile, MAX_OUTPUT_BYTES + 1)
-    assert.throws(() => new CiValidationSink(outputFile), /already exceeds its size limit/)
+    const outputFile = path.join(root, 'not-a-directory')
+    fs.writeFileSync(outputFile, '')
+    assert.throws(() => new CiValidationSink(outputFile), /must be a regular directory/)
   })
 
-  it('rejects an output file that changes while it is opened', () => {
-    const stat = fs.statSync(outputFile)
-    const fstatSync = sinon.stub(fs, 'fstatSync').returns({
-      dev: stat.dev + 1,
-      ino: stat.ino,
-      isFile: () => true,
-    })
+  it('fails closed when a payload directory changes during execution', () => {
+    const sink = new CiValidationSink(outputRoot)
+    const writer = new CiValidationWriter({ sink, tags: {} })
+    const testsDirectory = path.join(outputRoot, 'payloads', 'tests')
+    fs.renameSync(testsDirectory, `${testsDirectory}-original`)
+    fs.mkdirSync(testsDirectory)
 
-    try {
-      assert.throws(() => new CiValidationSink(outputFile), /changed while it was opened/)
-    } finally {
-      fstatSync.restore()
-    }
+    writer.append([createTestSpan()])
+    writer.flush()
+    sink.writeSummary()
+
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['output_write_failed'])
   })
 
-  it('writes coverage and bounded cache input results before one summary', () => {
-    const sink = new CiValidationSink(outputFile)
+  it('writes coverage separately and reports bounded cache input results in one summary', () => {
+    const sink = new CiValidationSink(outputRoot)
     const coverageWriter = new CiValidationCoverageWriter(sink)
     let flushed = false
 
@@ -111,52 +122,66 @@ describe('CI validation offline output', () => {
     sink.writeSummary()
 
     assert.strictEqual(flushed, true)
-    const records = fs.readFileSync(outputFile, 'utf8').trim().split('\n').map(JSON.parse)
-    assert.deepStrictEqual(records[0], {
-      version: 1,
-      kind: 'coverage',
-      payload: [{ test_session_id: 1 }],
-    })
-    assert.deepStrictEqual(records[1], {
-      version: 1,
-      kind: 'input',
-      payload: { name: 'settings', status: 'loaded' },
-    })
-    assert.strictEqual(records[2].payload.name, 'known_tests')
-    assert.strictEqual(records[2].payload.status, 'error')
-    assert.strictEqual(records[2].payload.error.length, 1024)
-    assert.doesNotMatch(records[2].payload.error, /[\r\n]/)
+    const output = readOfflineOutput(outputRoot)
+    assert.deepStrictEqual(output.coverage, [[{ test_session_id: 1 }]])
     assert.strictEqual(stderrWrite.callCount, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
     assert.deepStrictEqual(summary.errors, ['invalid_known_tests'])
+    assert.deepStrictEqual(summary.inputs, {
+      known_tests: { status: 'error' },
+      settings: { status: 'loaded' },
+    })
+    assert.strictEqual(summary.coverageFiles, 1)
+    assert.strictEqual(summary.payloadFiles, 0)
   })
 
   it('fails closed when an output record cannot be serialized', () => {
-    const sink = new CiValidationSink(outputFile)
+    const sink = new CiValidationSink(outputRoot)
     const circularPayload = {}
     circularPayload.circular = circularPayload
 
     sink.writeCoverage(circularPayload)
     sink.writeSummary()
 
-    assert.strictEqual(fs.statSync(outputFile).size, 0)
+    assert.strictEqual(getPayloadFiles(outputRoot, 'coverage').length, 0)
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
     assert.deepStrictEqual(summary.errors, ['output_record_serialization_failed'])
   })
 
-  it('accepts the last output record and rejects the first record beyond the limit', () => {
-    const sink = new CiValidationSink(outputFile)
+  it('fails closed when an encoded test payload cannot be converted', () => {
+    const sink = new CiValidationSink(outputRoot)
 
-    for (let index = 0; index <= MAX_OUTPUT_RECORDS; index++) {
-      sink.writeInputResult('settings')
-    }
+    sink.writeTestCycle(Buffer.from([0xC1]), 1)
     sink.writeSummary()
 
-    assert.strictEqual(fs.readFileSync(outputFile, 'utf8').trim().split('\n').length, MAX_OUTPUT_RECORDS)
+    assert.strictEqual(getPayloadFiles(outputRoot, 'tests').length, 0)
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
-    assert.deepStrictEqual(summary.errors, ['output_record_limit_exceeded'])
+    assert.deepStrictEqual(summary.errors, ['output_payload_conversion_failed'])
+  })
+
+  it('accepts the last output file and rejects the first file beyond the limit', () => {
+    const sink = new CiValidationSink(outputRoot)
+    const openSync = sinon.stub(fs, 'openSync').returns(42)
+    const fstatSync = sinon.stub(fs, 'fstatSync').returns({ isFile: () => true, nlink: 1 })
+    const writeFileSync = sinon.stub(fs, 'writeFileSync')
+    const closeSync = sinon.stub(fs, 'closeSync')
+
+    try {
+      for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeCoverage({})
+      sink.writeSummary()
+    } finally {
+      openSync.restore()
+      fstatSync.restore()
+      writeFileSync.restore()
+      closeSync.restore()
+    }
+
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.strictEqual(summary.coverageFiles, MAX_OUTPUT_FILES)
+    assert.deepStrictEqual(summary.errors, ['output_file_limit_exceeded'])
   })
 
   it('accepts the last allowed and rejects the first excessive module, suite, and test event', () => {
@@ -165,38 +190,38 @@ describe('CI validation offline output', () => {
       ['test_suite_end', MAX_OUTPUT_SUITES],
       ['test', MAX_OUTPUT_TESTS],
     ]) {
-      const accepted = path.join(root, `${type}-accepted.ndjson`)
+      const accepted = path.join(root, `${type}-accepted`)
       writeEvents(accepted, type, limit)
       assert.strictEqual(readOfflineOutput(accepted).events.length, limit)
 
-      const rejected = path.join(root, `${type}-rejected.ndjson`)
+      const rejected = path.join(root, `${type}-rejected`)
       writeEvents(rejected, type, limit + 1)
       assert.throws(() => readOfflineOutput(rejected), new RegExp(`exceeds ${limit} test`))
     }
   })
 
-  it('rejects symbolic-link output files', function () {
+  it('rejects symbolic-link output roots', function () {
     if (process.platform === 'win32') this.skip()
-    const target = path.join(root, 'target.ndjson')
-    const link = path.join(root, 'link.ndjson')
-    fs.writeFileSync(target, '')
+    const target = path.join(root, 'target')
+    const link = path.join(root, 'link')
+    fs.mkdirSync(target)
     fs.symlinkSync(target, link)
 
-    assert.throws(() => new CiValidationSink(link), /regular, unlinked file/)
+    assert.throws(() => new CiValidationSink(link), /regular directory/)
   })
 })
 
 describe('CI validation exporter', () => {
   let networkStubs
-  let outputFile
+  let outputRoot
   let previousEnvironment
   let root
   let stderrWrite
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-ci-validation-exporter-'))
-    outputFile = path.join(root, 'events.ndjson')
-    fs.writeFileSync(outputFile, '', { mode: 0o600 })
+    outputRoot = path.join(root, 'output')
+    fs.mkdirSync(outputRoot)
     const manifestPath = writeValidationCache(root)
     previousEnvironment = {
       DD_API_KEY: process.env.DD_API_KEY,
@@ -205,7 +230,7 @@ describe('CI validation exporter', () => {
     }
     delete process.env.DD_API_KEY
     process.env[VALIDATION_MANIFEST_ENV] = manifestPath
-    process.env[VALIDATION_OUTPUT_ENV] = outputFile
+    process.env[VALIDATION_OUTPUT_ENV] = outputRoot
     networkStubs = [
       sinon.stub(http, 'request').throws(new Error('unexpected HTTP request')),
       sinon.stub(https, 'request').throws(new Error('unexpected HTTPS request')),
@@ -276,7 +301,7 @@ describe('CI validation exporter', () => {
       env: {
         ...process.env,
         [VALIDATION_MANIFEST_ENV]: path.join(root, '.testoptimization', 'manifest.txt'),
-        [VALIDATION_OUTPUT_ENV]: outputFile,
+        [VALIDATION_OUTPUT_ENV]: outputRoot,
       },
       encoding: 'utf8',
     })
@@ -295,12 +320,12 @@ describe('CI validation exporter', () => {
     assert(networkStubs.every(stub => stub.notCalled))
   })
 
-  it('requires an explicit private event output path', () => {
+  it('requires an explicit private payload output root', () => {
     delete process.env[VALIDATION_OUTPUT_ENV]
 
     assert.throws(
       () => new CiValidationExporter(createExporterConfig()),
-      /requires an explicit private output path/
+      /requires an explicit private output root/
     )
     assert(networkStubs.every(stub => stub.notCalled))
   })
@@ -398,14 +423,14 @@ describe('CI validation exporter', () => {
       env: {
         ...process.env,
         [VALIDATION_MANIFEST_ENV]: path.join(root, '.testoptimization', 'manifest.txt'),
-        [VALIDATION_OUTPUT_ENV]: outputFile,
+        [VALIDATION_OUTPUT_ENV]: outputRoot,
       },
       encoding: 'utf8',
     })
 
     assert.strictEqual(child.status, 0, child.stderr)
     assert.match(child.stderr, new RegExp(SUMMARY_PREFIX))
-    assert.strictEqual(readOfflineOutput(outputFile).events.length, 1)
+    assert.strictEqual(readOfflineOutput(outputRoot).events.length, 1)
   })
 })
 
@@ -430,9 +455,9 @@ function createTestSpan () {
   }
 }
 
-function writeEvents (filename, type, count) {
-  fs.writeFileSync(filename, '', { mode: 0o600 })
-  const sink = new CiValidationSink(filename)
+function writeEvents (outputRoot, type, count) {
+  fs.mkdirSync(outputRoot)
+  const sink = new CiValidationSink(outputRoot)
   const writer = new CiValidationWriter({ sink, tags: {} })
   const spans = []
   for (let index = 0; index < count; index++) {
@@ -450,6 +475,11 @@ function writeEvents (filename, type, count) {
   writer.append(spans)
   writer.flush()
   sink.writeSummary()
+}
+
+function getPayloadFiles (outputRoot, kind) {
+  const directory = path.join(outputRoot, 'payloads', kind)
+  return fs.readdirSync(directory).map(filename => path.join(directory, filename))
 }
 
 function writeValidationCache (root) {

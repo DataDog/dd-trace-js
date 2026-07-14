@@ -609,7 +609,9 @@ describe('test optimization validation cli', () => {
         'basic-reporting:pass',
         'ci-wiring:error',
       ])
-      assert.match(capturedResults[1].diagnosis, /manifest is incomplete: No replayable CI command was identified/)
+      assert.strictEqual(capturedResults[1].diagnosis,
+        'CI wiring was not replayed: No replayable CI command was identified. ' +
+        'No live CI-wiring conclusion was reached.')
       assert.strictEqual(capturedResults[1].evidence.manifestIncomplete, true)
       assert.strictEqual(capturedResults[1].evidence.recommendation, 'Add ciWiringCommand to the manifest when ' +
         'a CI test step can be safely replayed locally.')

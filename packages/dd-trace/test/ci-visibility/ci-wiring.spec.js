@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const { runCiWiring } = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
 const { AgentlessCiVisibilityEncoder } = require('../../src/encode/agentless-ci-visibility')
+const { msgpackToJson } = require('../../src/ci-visibility/exporters/ci-validation/msgpack-to-json')
 const id = require('../../src/id')
 
 function validationOptions (repositoryRoot) {
@@ -887,22 +888,25 @@ function restoreEnv (name, value) {
 function offlineEventScript (events, exitCode = 0) {
   const encoder = new AgentlessCiVisibilityEncoder({ flush () {} }, {})
   encoder.encode(events.map(({ type, meta }) => basicSpan(type, meta)))
-  const record = {
-    version: 1,
-    kind: 'test_cycle',
-    encoding: 'msgpack-base64',
-    payload: encoder.makePayload().toString('base64'),
-  }
+  const payload = msgpackToJson(encoder.makePayload()).toString()
   const summary = `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
+    coverageFiles: 0,
     events: events.length,
-    records: 1,
+    payloadFiles: 1,
     input: 'filesystem-cache',
+    inputs: {},
     errors: [],
   })}\n`
-  return 'require(\'node:fs\').appendFileSync(' +
-    `process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE, ${JSON.stringify(`${JSON.stringify(record)}\n`)});` +
-    `process.stderr.write(${JSON.stringify(summary)});` +
-    `process.exit(${exitCode})`
+  return [
+    "const fs = require('node:fs')",
+    "const path = require('node:path')",
+    'const outputRoot = process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR',
+    "const testsDirectory = path.join(outputRoot, 'payloads', 'tests')",
+    'fs.mkdirSync(testsDirectory, { recursive: true })',
+    `fs.writeFileSync(path.join(testsDirectory, 'tests-1-' + process.pid + '-1.json'), ${JSON.stringify(payload)})`,
+    `process.stderr.write(${JSON.stringify(summary)})`,
+    `process.exit(${exitCode})`,
+  ].join(';')
 }
 
 function basicSpan (type, meta = {}) {

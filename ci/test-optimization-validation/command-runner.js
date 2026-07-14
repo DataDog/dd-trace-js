@@ -14,7 +14,7 @@ const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
 const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
-const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
 const APM_AGENTLESS_ENV = '_DD_APM_TRACING_AGENTLESS_ENABLED'
 const VALIDATION_RESERVED_ENV_NAMES = [
   'NODE_OPTIONS',
@@ -342,8 +342,8 @@ function getBaseEnv (envMode) {
   return cleanEnv
 }
 
-function buildDatadogEnv ({ fixture, outputFile, scenario, framework, command }) {
-  const offline = buildOfflineValidationEnv({ fixture, outputFile })
+function buildDatadogEnv ({ fixture, outputRoot, scenario, framework, command }) {
+  const offline = buildOfflineValidationEnv({ fixture, outputRoot })
   return {
     ...offline,
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
@@ -358,9 +358,9 @@ function buildDatadogEnv ({ fixture, outputFile, scenario, framework, command })
   }
 }
 
-function buildCiWiringEnv ({ fixture, outputFile }) {
+function buildCiWiringEnv ({ fixture, outputRoot }) {
   return {
-    ...buildOfflineValidationEnv({ fixture, outputFile }),
+    ...buildOfflineValidationEnv({ fixture, outputRoot }),
     DD_TRACE_DEBUG: '1',
     DD_TRACE_LOG_LEVEL: 'debug',
     ...VALIDATION_SUPPRESSION_ENV,
@@ -372,10 +372,10 @@ function buildCiWiringEnv ({ fixture, outputFile }) {
  *
  * @param {object} input offline validation inputs
  * @param {{manifestPath: string}} input.fixture authoritative cache fixture
- * @param {string} input.outputFile pre-created event artifact
+ * @param {string} input.outputRoot pre-created payload output root
  * @returns {NodeJS.ProcessEnv} validation transport environment
  */
-function buildOfflineValidationEnv ({ fixture, outputFile }) {
+function buildOfflineValidationEnv ({ fixture, outputRoot }) {
   return {
     DD_AGENT_HOST: undefined,
     DD_API_KEY: undefined,
@@ -394,7 +394,7 @@ function buildOfflineValidationEnv ({ fixture, outputFile }) {
     OTEL_TRACES_EXPORTER: undefined,
     [VALIDATION_MANIFEST_ENV]: fixture.manifestPath,
     [VALIDATION_MODE_ENV]: '1',
-    [VALIDATION_OUTPUT_ENV]: outputFile,
+    [VALIDATION_OUTPUT_ENV]: outputRoot,
   }
 }
 
