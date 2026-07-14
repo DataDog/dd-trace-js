@@ -1773,6 +1773,9 @@ addHook({
   return processHostPackage
 })
 
+/**
+ * @param {import('playwright-core').Page} page
+ */
 async function handlePageGoto (page) {
   try {
     if (page && typeof page.evaluate === 'function') {
@@ -1782,15 +1785,32 @@ async function handlePageGoto (page) {
       }
 
       if (isRumActive) {
+        let testExecutionId
+        /**
+         * @param {string} traceId
+         */
+        const onDone = (traceId) => {
+          testExecutionId = traceId
+        }
         testPageGotoCh.publish({
           isRumActive,
-          page,
+          browserVersion: page.context().browser()?.version(),
+          onDone,
         })
+        if (testExecutionId) {
+          const domain = new URL(page.url()).hostname
+          await page.context().addCookies([{
+            name: 'datadog-ci-visibility-test-execution-id',
+            value: testExecutionId,
+            domain,
+            path: '/',
+          }])
+        }
       }
     }
-  } catch (e) {
+  } catch (error) {
     // ignore errors such as redirects, context destroyed, etc
-    log.error('goto hook error', e)
+    log.error('goto hook error', error)
   }
 }
 

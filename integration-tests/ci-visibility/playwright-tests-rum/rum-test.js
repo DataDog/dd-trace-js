@@ -3,6 +3,11 @@
 const { test, expect } = require('@playwright/test')
 
 test.beforeEach(async ({ page }) => {
+  if (process.env.REJECT_RUM_COOKIE === 'true') {
+    page.context().addCookies = async () => {
+      throw new Error('RUM correlation cookie rejected')
+    }
+  }
   await page.goto(process.env.PW_BASE_URL)
 })
 

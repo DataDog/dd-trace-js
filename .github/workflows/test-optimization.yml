@@ -252,6 +252,19 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
+  # Unit tests for the Playwright instrumentation/plugin boundary. The integration matrix above only
+  # runs `integration-tests/playwright/*.spec.js`, so it cannot exercise these focused contract specs.
+  playwright:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: playwright
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/plugins/test
+      - run: npm run test:instrumentations
+
   integration-cucumber:
     strategy:
       fail-fast: false
