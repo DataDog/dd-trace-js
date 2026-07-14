@@ -1,7 +1,5 @@
 'use strict'
 
-/* eslint-disable no-console */
-
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
@@ -9,10 +7,6 @@ const { execFileSync } = require('node:child_process')
 const satisfies = require('../vendor/dist/semifies')
 const { getEnvironmentVariables } = require('../packages/dd-trace/src/config/helper')
 const { DD_MAJOR, VERSION } = require('../version')
-const {
-  sanitizeConsoleText,
-  sanitizeForReport,
-} = require('./test-optimization-validation/redaction')
 
 const MAX_TEXT_FILE_SIZE = 512 * 1024
 const MAX_SCANNED_FILES = 1500
@@ -275,113 +269,6 @@ function runDiagnosis (options = {}) {
     unsupportedFrameworks: unsupportedFrameworks.map(serializeUnsupportedFramework),
     results,
   }
-}
-
-/**
- * Turns a diagnosis report into human-readable text.
- *
- * @param {object} report diagnosis report
- * @returns {string} formatted report
- */
-function renderText (report) {
-  const counts = countByStatus(report.results)
-  const lines = [
-    'Datadog Test Optimization diagnosis',
-    `Repository: ${report.root}`,
-    `dd-trace: ${report.ddTraceVersion}`,
-    `Files scanned: ${report.scannedFileCount}${report.truncatedFileScan ? ' (truncated)' : ''}`,
-    '',
-  ]
-
-  if (report.results.length === 0) {
-    lines.push('[ok] No issues found.')
-  } else {
-    for (const result of report.results) {
-      lines.push(`[${result.status}] ${result.title}`)
-      if (result.message) {
-        lines.push(`  ${result.message}`)
-      }
-      if (result.locations?.length) {
-        lines.push(`  Locations: ${formatLocations(result.locations)}`)
-      }
-      if (result.recommendation) {
-        lines.push(`  Recommendation: ${result.recommendation}`)
-      }
-      lines.push('')
-    }
-  }
-
-  lines.push(`Summary: ${counts.error} error(s), ${counts.warning} warning(s), ${counts.info} info, ${counts.ok} ok`)
-  return lines.join('\n').trimEnd()
-}
-
-/**
- * Computes the CLI exit code for a report and fail policy.
- *
- * @param {object} report diagnosis report
- * @param {string} failOn one of "error", "warning", or "never"
- * @returns {number} process exit code
- */
-function getExitCode (report, failOn) {
-  if (failOn === 'never') return 0
-
-  for (const result of report.results) {
-    if (result.status === 'error') return 1
-    if (failOn === 'warning' && result.status === 'warning') return 1
-  }
-  return 0
-}
-
-/**
- * Parses CLI arguments.
- *
- * @param {string[]} args command-line arguments
- * @returns {object} parsed options
- */
-function parseArgs (args) {
-  const parsed = {
-    root: process.cwd(),
-    json: false,
-    failOn: 'error',
-  }
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-
-    if (arg === '--json') {
-      parsed.json = true
-    } else if (arg === '--path' || arg === '--root') {
-      parsed.root = args[++i]
-    } else if (arg.startsWith('--path=')) {
-      parsed.root = arg.slice('--path='.length)
-    } else if (arg.startsWith('--root=')) {
-      parsed.root = arg.slice('--root='.length)
-    } else if (arg === '--fail-on') {
-      parsed.failOn = args[++i]
-    } else if (arg.startsWith('--fail-on=')) {
-      parsed.failOn = arg.slice('--fail-on='.length)
-    } else if (arg === '--help' || arg === '-h') {
-      parsed.help = true
-    } else {
-      parsed.unknown = arg
-    }
-  }
-
-  return parsed
-}
-
-/**
- * Returns help text for the CLI.
- *
- * @returns {string} help text
- */
-function getHelpText () {
-  return [
-    'Usage: dd-trace-ci-diagnose [--path <repository>] [--json] [--fail-on error|warning|never]',
-    '',
-    'Static checks only. The script reads repository files, package manifests, CI config,',
-    'and the current environment. It does not contact Datadog or any package registry.',
-  ].join('\n')
 }
 
 /**
@@ -2036,20 +1923,6 @@ function isFalseLike (value) {
 }
 
 /**
- * Counts result statuses.
- *
- * @param {Array<object>} results diagnosis results
- * @returns {object} counts by status
- */
-function countByStatus (results) {
-  const counts = { error: 0, warning: 0, info: 0, ok: 0 }
-  for (const result of results) {
-    counts[result.status]++
-  }
-  return counts
-}
-
-/**
  * Formats a list of locations for text output.
  *
  * @param {string[]} locations relative paths
@@ -2153,36 +2026,7 @@ function normalizeRelativePath (relativePath) {
   return relativePath.split(path.sep).join('/')
 }
 
-if (require.main === module) {
-  const args = parseArgs(process.argv.slice(2))
-  const hasValidFailOn = ['error', 'warning', 'never'].includes(args.failOn)
-
-  if (args.help) {
-    console.log(getHelpText())
-  } else if (args.unknown) {
-    console.error(sanitizeConsoleText(`Unknown argument: ${args.unknown}`))
-    console.error(getHelpText())
-    process.exitCode = 1
-  } else if (hasValidFailOn) {
-    const report = runDiagnosis({ root: args.root })
-    const sanitizedReport = sanitizeForReport(report)
-    if (args.json) {
-      console.log(JSON.stringify(sanitizedReport, null, 2))
-    } else {
-      console.log(sanitizeConsoleText(renderText(sanitizedReport)))
-    }
-    process.exitCode = getExitCode(report, args.failOn)
-  } else {
-    console.error(sanitizeConsoleText(`Invalid --fail-on value: ${args.failOn}`))
-    console.error(getHelpText())
-    process.exitCode = 1
-  }
-}
-
 module.exports = {
-  getExitCode,
   getFrameworkDefinitions,
-  parseArgs,
-  renderText,
   runDiagnosis,
 }

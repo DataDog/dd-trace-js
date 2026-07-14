@@ -6,7 +6,8 @@ const path = require('path')
 const { spawn } = require('child_process')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../version')
-const { prepareCommandOutputs, restoreCommandOutputs } = require('./command-output-policy')
+const { cleanupCommandOutputs, prepareCommandOutputs } = require('./command-output-policy')
+const { getExecutableForSpawn } = require('./executable')
 const { sanitizeConsoleText, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
@@ -15,12 +16,14 @@ const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const VALIDATION_CAPTURE_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE'
 const APM_AGENTLESS_ENV = '_DD_APM_TRACING_AGENTLESS_ENABLED'
 const VALIDATION_RESERVED_ENV_NAMES = [
   'NODE_OPTIONS',
   VALIDATION_MANIFEST_ENV,
   VALIDATION_MODE_ENV,
   VALIDATION_OUTPUT_ENV,
+  VALIDATION_CAPTURE_MODE_ENV,
   APM_AGENTLESS_ENV,
 ]
 const CLEAN_ENV_ALLOWLIST = new Set([
@@ -126,15 +129,16 @@ function runCommand (command, options = {}) {
     const useProcessGroup = shouldUseProcessGroup()
     let child
     try {
+      const executable = getExecutableForSpawn(command)
       child = command.usesShell
         ? spawn(command.shellCommand, {
           cwd: command.cwd,
           detached: useProcessGroup,
           env: childEnv,
-          shell: command.shell || true,
+          shell: executable,
           stdio: ['ignore', 'pipe', 'pipe'],
         })
-        : spawn(command.argv[0], command.argv.slice(1), {
+        : spawn(executable, command.argv.slice(1), {
           cwd: command.cwd,
           detached: useProcessGroup,
           env: childEnv,
@@ -145,7 +149,7 @@ function runCommand (command, options = {}) {
       result.stderr = `${error.stack || error}\n`
       result.durationMs = Date.now() - startedAt
       try {
-        result.commandOutputPaths = restoreCommandOutputs(outputStates)
+        result.commandOutputPaths = cleanupCommandOutputs(outputStates)
       } catch (cleanupError) {
         result.outputCleanupError = cleanupError?.message || String(cleanupError)
       }
@@ -231,10 +235,10 @@ function runCommand (command, options = {}) {
       result.durationMs = Date.now() - startedAt
 
       try {
-        result.commandOutputPaths = restoreCommandOutputs(outputStates)
+        result.commandOutputPaths = cleanupCommandOutputs(outputStates)
       } catch (err) {
         result.outputCleanupError = err && err.message ? err.message : String(err)
-        result.stderr += '\n[test-optimization-validator] could not restore command outputs: ' +
+        result.stderr += '\n[test-optimization-validator] could not clean up command outputs: ' +
           `${result.outputCleanupError}\n`
         if (result.exitCode === 0) result.exitCode = 1
       }
@@ -361,6 +365,7 @@ function buildDatadogEnv ({ fixture, outputRoot, scenario, framework, command })
 function buildCiWiringEnv ({ fixture, outputRoot }) {
   return {
     ...buildOfflineValidationEnv({ fixture, outputRoot }),
+    [VALIDATION_CAPTURE_MODE_ENV]: 'sample',
     DD_TRACE_DEBUG: '1',
     DD_TRACE_LOG_LEVEL: 'debug',
     ...VALIDATION_SUPPRESSION_ENV,

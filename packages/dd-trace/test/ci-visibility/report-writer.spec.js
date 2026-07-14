@@ -43,6 +43,41 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('replaces a hard-linked report without modifying its external inode and completes a pending report', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-hardlink-'))
+    const out = path.join(tmpDir, 'results')
+    const external = path.join(tmpDir, 'external-report.md')
+    const reportPath = path.join(out, 'report.md')
+    const manifest = {
+      __path: path.join(tmpDir, 'dd-test-optimization-validation-manifest.json'),
+      repository: { root: tmpDir },
+      frameworks: [],
+    }
+    const originalLog = console.log
+
+    fs.mkdirSync(out)
+    fs.writeFileSync(external, 'external content\n')
+    fs.linkSync(external, reportPath)
+    console.log = () => {}
+    try {
+      writePendingReport({ manifest, out })
+      assert.strictEqual(fs.readFileSync(external, 'utf8'), 'external content\n')
+      assert.match(fs.readFileSync(reportPath, 'utf8'), /Validation completed: no/)
+
+      writeReport({
+        manifest,
+        results: [],
+        out,
+        runSummary: { runCompleted: true, validatorExitCode: 0 },
+      })
+      assert.strictEqual(fs.readFileSync(external, 'utf8'), 'external content\n')
+      assert.match(fs.readFileSync(reportPath, 'utf8'), /Validation completed: yes/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('includes actionable CI command candidate details in the human report', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')

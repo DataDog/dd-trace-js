@@ -6,9 +6,12 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  getExecutableForSpawn,
   getResolvedExecutable,
   getUnavailableExecutable,
+  isExplicitExecutablePath,
 } = require('../../../../ci/test-optimization-validation/executable')
+const { runCommand } = require('../../../../ci/test-optimization-validation/command-runner')
 const {
   cleanupGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
@@ -192,7 +195,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /npm test -- --runInBand --token <redacted> --no-watchman/)
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
-      assert.match(plan, /Command-created outputs: `coverage` \(pre-existing paths are restored; newly created /)
+      assert.match(plan, /Command-created outputs: `coverage` \(must not exist before validation; newly created /)
       assert.match(fullPlan, /Use variables recorded from the CI job: CI, DD_API_KEY/)
       assert.match(fullPlan, /DD_API_KEY=<redacted>/)
       assert.match(fullPlan, /bash --noprofile --norc -c "pnpm test"/)
@@ -215,6 +218,8 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /<details>|<summary>/)
       assert.match(plan, /\/\/ generated validation test/)
       assert.match(plan, /- Working directory: `\.`/)
+      assert.match(plan, /- Approved executable: `/)
+      assert.match(plan, /- Executable SHA-256: `[a-f0-9]{64}`/)
       assert.strictEqual(countOccurrences(fullPlan, 'bash --noprofile --norc -c "pnpm test"'), 1)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /local validator included with the installed `dd-trace` package/)
@@ -378,6 +383,91 @@ describe('test optimization validator-owned execution phases', () => {
       assert.strictEqual(getUnavailableExecutable(command), undefined)
       assert.strictEqual(getResolvedExecutable(command), executable)
     } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('detects an executable replaced after approval before it can be spawned', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-executable-approval-'))
+    const bin = path.join(root, 'bin')
+    const executable = path.join(bin, 'test-runner')
+    const marker = path.join(root, 'changed-executable-ran')
+    const out = path.join(root, 'results')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: ['test-runner'],
+      env: { PATH: bin },
+    }
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+    fs.mkdirSync(bin)
+    fs.mkdirSync(out)
+    fs.writeFileSync(executable, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+    try {
+      formatExecutionPlan({ manifest, out, requestedScenario: 'basic-reporting' })
+      fs.writeFileSync(executable, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`, { mode: 0o755 })
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+      const result = await runCommand(
+        framework.existingTestCommand,
+        { artifactRoot: out, outDir: path.join(out, 'run'), repositoryRoot: root }
+      )
+      assert.match(result.stderr, /changed after approval/)
+      assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves Windows forward-slash relative executable paths consistently for planning and execution', () => {
+    assert.strictEqual(isExplicitExecutablePath('./node_modules/.bin/jest.cmd', 'win32'), true)
+    assert.strictEqual(isExplicitExecutablePath('.\\node_modules\\.bin\\jest.cmd', 'win32'), true)
+    assert.strictEqual(isExplicitExecutablePath('.\\node_modules\\.bin\\jest.cmd', 'linux'), false)
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-relative-executable-'))
+    const bin = path.join(root, 'node_modules', '.bin')
+    const executable = path.join(bin, 'jest.cmd')
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: ['./node_modules/.bin/jest.cmd'],
+    }
+    fs.mkdirSync(bin, { recursive: true })
+    fs.writeFileSync(executable, '')
+    fs.chmodSync(executable, 0o755)
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+
+      assert.strictEqual(getResolvedExecutable(framework.existingTestCommand), executable)
+      assert.strictEqual(getExecutableForSpawn(framework.existingTestCommand), fs.realpathSync(executable))
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
@@ -551,7 +641,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('allows approved setup to provide executables used by later validation commands', () => {
+  it('requires setup-provided executables to exist before approval', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-setup-plan-'))
     const framework = getPlannedFramework(
       root,
@@ -571,7 +661,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
 
     try {
-      const plan = formatExecutionPlan({
+      assert.throws(() => formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
           repository: { root },
@@ -579,10 +669,7 @@ describe('test optimization validator-owned execution phases', () => {
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
         requestedScenario: 'basic-reporting',
-      })
-
-      assert.match(plan, /Project Setup: install-test-runner/)
-      assert.match(plan, /test-runner-installed-by-setup test/)
+      }), /test-runner-installed-by-setup.*not available/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

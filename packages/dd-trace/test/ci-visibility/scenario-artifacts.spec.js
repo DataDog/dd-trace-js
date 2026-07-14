@@ -240,7 +240,7 @@ describe('test optimization validation scenario artifacts', () => {
         })}`
       )
 
-      const events = fs.readFileSync(path.join(out, 'runs', 'mocha-root', 'basic-reporting', 'events.ndjson'), 'utf8')
+      const events = fs.readFileSync(path.join(direct.outDir, 'events.ndjson'), 'utf8')
       assert.match(events, /<redacted>/)
       for (const secret of [
         'direct-event-api-key-secret',
@@ -276,14 +276,54 @@ describe('test optimization validation scenario artifacts', () => {
 
       assert.strictEqual(run.events.length, 2)
       assert.deepStrictEqual(run.offline.summary, {
-        coverageFiles: 0,
+        coverageFilesObserved: 0,
+        coverageFilesRetained: 0,
         errors: [],
-        events: 2,
-        input: 'filesystem-cache',
+        eventsObserved: 2,
+        eventsRetained: 2,
         inputs: {},
         payloadFiles: 2,
       })
       assert.strictEqual(run.offline.payloadFileCount, 2)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('completes a large multi-process CI replay with bounded early and late evidence', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-large-multi-process-'))
+    const firstExporter = path.join(out, 'first-exporter.js')
+    const secondExporter = path.join(out, 'second-exporter.js')
+    const runner = path.join(out, 'runner.js')
+    writeEventExporter(firstExporter, { eventCount: 2_100, includeLifecycle: true, namePrefix: 'first' })
+    writeEventExporter(secondExporter, { eventCount: 2_100, includeLifecycle: true, namePrefix: 'second' })
+    writeExporterRunner(runner)
+
+    try {
+      const run = await runInstrumentedCommand({
+        framework: { id: 'node:large-multi-process', framework: 'node' },
+        out,
+        scenarioName: 'ci-wiring',
+        command: {
+          cwd: out,
+          argv: [process.execPath, runner, firstExporter, secondExporter],
+          timeoutMs: 10_000,
+        },
+        options: validationOptions(out),
+        ciWiring: true,
+      })
+
+      assert.strictEqual(run.result.exitCode, 0)
+      assert.strictEqual(run.offline.captureMode, 'sample')
+      assert.strictEqual(run.offline.completionCount, 2)
+      assert.strictEqual(run.offline.observedEventCount, 4_206)
+      assert(run.offline.retainedEventCount <= 22)
+      assert(run.offline.retainedEventCount < run.offline.observedEventCount)
+      for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+        assert(run.events.some(event => event.type === type), `Missing retained ${type} evidence`)
+      }
+      assert(run.events.some(event => event.testName === 'first-0'))
+      assert(run.events.some(event => event.testName === 'second-2099'))
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -432,24 +472,44 @@ function generatedScenario (id, file, runCommand) {
   }
 }
 
-function writeEventExporter (filename) {
+function writeEventExporter (
+  filename,
+  { eventCount = 1, includeLifecycle = false, namePrefix = 'multi-process test' } = {}
+) {
   const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
   const writerPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/writer.js')
   const idPath = path.resolve('packages/dd-trace/src/id.js')
+  const lifecycleLines = includeLifecycle
+    ? [
+        "for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) spans.push({",
+        "  trace_id: id('1234abcd1234abcd'),",
+        "  span_id: id('1234abcd1234abcd'),",
+        "  parent_id: id('0000000000000000'),",
+        "  name: type, resource: type, service: 'validation', type, error: 0,",
+        "  meta: { 'test.status': 'pass' }, metrics: {}, start: 123, duration: 456,",
+        '})',
+      ]
+    : []
   fs.writeFileSync(filename, [
     `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
     `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
     `const id = require(${JSON.stringify(idPath)})`,
-    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR)',
+    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR, {',
+    "  captureMode: process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE || 'strict',",
+    '})',
     'const writer = new CiValidationWriter({ sink, tags: {} })',
-    'writer.append([{',
+    'const spans = []',
+    `for (let index = 0; index < ${eventCount}; index++) spans.push({`,
     "  trace_id: id('1234abcd1234abcd'),",
     "  span_id: id('1234abcd1234abcd'),",
     "  parent_id: id('0000000000000000'),",
-    "  name: 'test', resource: 'multi-process test', service: 'validation', type: 'test', error: 0,",
-    "  meta: { 'test.name': 'multi-process test', 'test.status': 'pass' },",
+    `  name: 'test', resource: ${JSON.stringify(namePrefix)} + '-' + index, service: 'validation',`,
+    "  type: 'test', error: 0,",
+    `  meta: { 'test.name': ${JSON.stringify(namePrefix)} + '-' + index, 'test.status': 'pass' },`,
     '  metrics: {}, start: 123, duration: 456,',
-    '}])',
+    '})',
+    ...lifecycleLines,
+    'writer.append(spans)',
     'writer.flush()',
     'sink.writeSummary()',
   ].join('\n'))
@@ -459,10 +519,10 @@ function writeFailingExporter (filename) {
   const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
   fs.writeFileSync(filename, [
     `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
-    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR)',
-    'const circular = {}',
-    'circular.value = circular',
-    'sink.writeCoverage(circular)',
+    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR, {',
+    "  captureMode: process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE || 'strict',",
+    '})',
+    'sink.writeCoverage("unsupported")',
     'sink.writeSummary()',
   ].join('\n'))
 }

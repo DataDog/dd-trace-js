@@ -11,10 +11,12 @@ const {
   getOfflineFixturePaths,
   getOfflineScenarioNames,
 } = require('../../../../ci/test-optimization-validation/offline-fixtures')
+const { getArtifactId } = require('../../../../ci/test-optimization-validation/artifact-id')
 const {
+  MAX_COMPLETION_FILES,
+  MAX_DECODED_COLLECTION_ENTRIES,
   MAX_OUTPUT_BYTES,
   MAX_OUTPUT_FILES,
-  parseOfflineSummary,
   readOfflineOutput,
 } = require('../../../../ci/test-optimization-validation/offline-output')
 
@@ -27,6 +29,16 @@ describe('test optimization offline validation artifacts', () => {
 
   afterEach(() => {
     fs.rmSync(repositoryRoot, { recursive: true, force: true })
+  })
+
+  it('distinguishes an exporter that never initialized from one that did not complete', () => {
+    const outputRoot = path.join(repositoryRoot, 'not-initialized')
+    fs.mkdirSync(outputRoot)
+
+    assert.strictEqual(readOfflineOutput(outputRoot).initialized, false)
+
+    fs.mkdirSync(path.join(outputRoot, 'payloads'))
+    assert.throws(() => readOfflineOutput(outputRoot), /did not write completion evidence/)
   })
 
   it('creates fixed cache files in a random root outside the repository and removes them', () => {
@@ -58,6 +70,25 @@ describe('test optimization offline validation artifacts', () => {
     cleanupOfflineFixture(fixture.root)
     cleanupOfflineFixture(otherFixture.root)
     assert.strictEqual(fs.existsSync(fixture.root), false)
+  })
+
+  it('maps colliding sanitized framework ids to distinct stable fixture and artifact paths', () => {
+    const firstFramework = { id: 'jest:a/b' }
+    const secondFramework = { id: 'jest:a?b' }
+    const input = {
+      offlineFixtureNonce: 'd'.repeat(32),
+      scenarioName: 'basic-reporting',
+    }
+    const firstId = getArtifactId(firstFramework.id)
+    const secondId = getArtifactId(secondFramework.id)
+
+    assert.notStrictEqual(firstId, secondId)
+    assert.strictEqual(firstId, getArtifactId(firstFramework.id))
+    assert(firstId.length <= 85)
+    assert.notStrictEqual(
+      getOfflineFixturePaths({ ...input, framework: firstFramework }).root,
+      getOfflineFixturePaths({ ...input, framework: secondFramework }).root
+    )
   })
 
   it('does not enforce POSIX mode bits when ownership APIs are unavailable', () => {
@@ -139,23 +170,26 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('rejects malformed, deeply nested, and oversized payload files', () => {
-    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
-    const outputFile = path.join(testsDirectory, 'tests-1-1-1.json')
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
+    const outputFile = path.join(testsDirectory, `tests-${processId}-1-1-1.json`)
 
     fs.writeFileSync(outputFile, '{not-json}')
     assert.throws(() => readOfflineOutput(outputRoot), /JSON|Unexpected token/)
 
     fs.writeFileSync(outputFile, '{'.repeat(129))
-    assert.throws(() => readOfflineOutput(outputRoot), /JSON nesting exceeds/)
+    assert.throws(() => readOfflineOutput(outputRoot), /payload nesting exceeds/)
 
     fs.writeFileSync(outputFile, Buffer.alloc(MAX_OUTPUT_BYTES + 1))
     assert.throws(() => readOfflineOutput(outputRoot), /exceeds .* bytes/)
   })
 
   it('rejects the first payload file beyond the limit before reading file bodies', () => {
-    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
     const readdirSync = fs.readdirSync
-    const filenames = Array.from({ length: MAX_OUTPUT_FILES + 1 }, (_, index) => `tests-${index}-1-1.json`)
+    const filenames = Array.from(
+      { length: MAX_OUTPUT_FILES + 1 },
+      (_, index) => `tests-${processId}-${index}-1-1.json`
+    )
 
     fs.readdirSync = directory => directory === testsDirectory ? filenames : readdirSync(directory)
     try {
@@ -166,14 +200,15 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('accepts the last bounded payload string and rejects the first oversized string', () => {
-    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
-    const outputFile = path.join(testsDirectory, 'tests-1-1-1.json')
-    const payload = value => createTestCyclePayload([{ type: 'test', content: { meta: { value } } }])
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
+    const outputFile = path.join(testsDirectory, `tests-${processId}-1-1-1.json`)
+    const payload = value => createTestCyclePayload([createProjectedEvent({ 'test.name': value })])
 
-    fs.writeFileSync(outputFile, JSON.stringify(payload('x'.repeat(64 * 1024))))
+    fs.writeFileSync(outputFile, JSON.stringify(payload('x'.repeat(64 * 1024 - 1))))
+    writeCompletion(outputRoot, processId, { eventsObserved: 1, eventsRetained: 1, payloadFiles: 1 })
     assert.strictEqual(readOfflineOutput(outputRoot).payloadFileCount, 1)
     fs.writeFileSync(outputFile, JSON.stringify(payload('x'.repeat(64 * 1024 + 1))))
-    assert.throws(() => readOfflineOutput(outputRoot), /oversized string/)
+    assert.throws(() => readOfflineOutput(outputRoot), /string larger/)
   })
 
   it('rejects unexpected payload entries', () => {
@@ -185,10 +220,10 @@ describe('test optimization offline validation artifacts', () => {
 
   it('rejects symbolic-link and hard-linked payload files', function () {
     if (process.platform === 'win32') this.skip()
-    const { outputRoot, testsDirectory } = createPayloadRoot(repositoryRoot)
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
     const source = path.join(repositoryRoot, 'source.json')
     fs.writeFileSync(source, JSON.stringify(createTestCyclePayload()))
-    const outputFile = path.join(testsDirectory, 'tests-1-1-1.json')
+    const outputFile = path.join(testsDirectory, `tests-${processId}-1-1-1.json`)
 
     fs.symlinkSync(source, outputFile)
     assert.throws(() => readOfflineOutput(outputRoot), /regular, unlinked file/)
@@ -198,72 +233,120 @@ describe('test optimization offline validation artifacts', () => {
     assert.throws(() => readOfflineOutput(outputRoot), /regular, unlinked file/)
   })
 
-  it('accepts only bounded versioned stderr summaries', () => {
-    const summary = parseOfflineSummary(`runner output\n${createSummary({
-      events: 4,
-      inputs: { settings: { status: 'loaded' } },
-      payloadFiles: 2,
-    })}\n`)
+  it('requires and aggregates per-process completion records independently of stderr', () => {
+    const first = createPayloadRoot(repositoryRoot)
+    const secondProcessId = 'b'.repeat(32)
+    fs.writeFileSync(
+      path.join(first.testsDirectory, `tests-${first.processId}-1-1-1.json`),
+      JSON.stringify(createTestCyclePayload([createProjectedEvent({ 'test.name': 'first' })]))
+    )
+    fs.writeFileSync(
+      path.join(first.testsDirectory, `tests-${secondProcessId}-1-2-1.json`),
+      JSON.stringify(createTestCyclePayload([createProjectedEvent({ 'test.name': 'second' })]))
+    )
+    writeCompletion(first.outputRoot, first.processId, {
+      eventsObserved: 1,
+      eventsRetained: 1,
+      payloadFiles: 1,
+    }, { settings: { status: 'loaded' } })
+    writeCompletion(first.outputRoot, secondProcessId, {
+      eventsObserved: 1,
+      eventsRetained: 1,
+      payloadFiles: 1,
+    }, { settings: { status: 'error' } }, ['fixture_error'])
 
-    assert.deepStrictEqual(summary, {
-      coverageFiles: 0,
-      errors: [],
-      events: 4,
-      input: 'filesystem-cache',
-      inputs: { settings: { status: 'loaded' } },
+    const output = readOfflineOutput(first.outputRoot)
+    assert.strictEqual(output.completionCount, 2)
+    assert.strictEqual(output.events.length, 2)
+    assert.strictEqual(output.summary.eventsObserved, 2)
+    assert.strictEqual(output.summary.eventsRetained, 2)
+    assert.deepStrictEqual(output.summary.inputs, { settings: { status: 'error' } })
+    assert.deepStrictEqual(output.summary.errors, ['fixture_error'])
+  })
+
+  it('detects a process killed after writing a payload and rejects mismatched completion evidence', () => {
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
+    fs.writeFileSync(
+      path.join(testsDirectory, `tests-${processId}-1-1-1.json`),
+      JSON.stringify(createTestCyclePayload([createProjectedEvent()]))
+    )
+    assert.throws(() => readOfflineOutput(outputRoot), /did not write completion evidence/)
+
+    writeCompletion(outputRoot, processId, { eventsObserved: 2, eventsRetained: 2, payloadFiles: 1 })
+    assert.throws(() => readOfflineOutput(outputRoot), /does not match retained payload artifacts/)
+  })
+
+  it('rejects the first completion record beyond the limit before reading record bodies', () => {
+    const { outputRoot } = createPayloadRoot(repositoryRoot)
+    const completionsDirectory = path.join(outputRoot, 'completions')
+    const readdirSync = fs.readdirSync
+    const filenames = Array.from(
+      { length: MAX_COMPLETION_FILES + 1 },
+      (_, index) => `completion-${index.toString(16).padStart(32, '0')}.json`
+    )
+
+    fs.readdirSync = directory => directory === completionsDirectory ? filenames : readdirSync(directory)
+    try {
+      assert.throws(() => readOfflineOutput(outputRoot), /exceeds .* completion records/)
+    } finally {
+      fs.readdirSync = readdirSync
+    }
+  })
+
+  it('rejects malformed and hard-linked completion records', function () {
+    if (process.platform === 'win32') this.skip()
+    const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
+    const completionPath = path.join(outputRoot, 'completions', `completion-${processId}.json`)
+
+    fs.writeFileSync(completionPath, '{}')
+    assert.throws(() => readOfflineOutput(outputRoot), /Invalid offline Test Optimization exporter completion/)
+
+    fs.unlinkSync(completionPath)
+    const outside = path.join(repositoryRoot, 'outside-completion.json')
+    fs.writeFileSync(outside, '{}')
+    fs.linkSync(outside, completionPath)
+    assert.throws(() => readOfflineOutput(outputRoot), /regular, unlinked file/)
+  })
+
+  it('rejects unsupported event shapes before normalization', () => {
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
+    fs.writeFileSync(
+      path.join(testsDirectory, `tests-${processId}-1-1-1.json`),
+      JSON.stringify(createTestCyclePayload([{ type: 'unsupported', content: { meta: {}, metrics: {} } }]))
+    )
+    writeCompletion(outputRoot, processId, { eventsObserved: 1, eventsRetained: 1, payloadFiles: 1 })
+    assert.throws(() => readOfflineOutput(outputRoot), /unsupported event shape/)
+  })
+
+  it('rejects unsupported projected coverage fields before retaining them', () => {
+    const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
+    const coverageDirectory = path.join(outputRoot, 'payloads', 'coverage')
+    fs.writeFileSync(
+      path.join(coverageDirectory, `coverage-${processId}-1-1-1.json`),
+      JSON.stringify([{ test_session_id: 1, sourcePath: 'API_KEY=raw-secret-value' }])
+    )
+    writeCompletion(outputRoot, processId, {
+      coverageFilesObserved: 1,
+      coverageFilesRetained: 1,
+    })
+
+    assert.throws(() => readOfflineOutput(outputRoot), /unsupported JSON shape/)
+  })
+
+  it('applies the decoded-entry budget across payload files', () => {
+    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
+    const eventCount = Math.floor(MAX_DECODED_COLLECTION_ENTRIES / 8)
+    const payload = JSON.stringify(createTestCyclePayload(
+      Array.from({ length: eventCount }, () => createProjectedEvent())
+    ))
+    fs.writeFileSync(path.join(testsDirectory, `tests-${processId}-1-1-1.json`), payload)
+    fs.writeFileSync(path.join(testsDirectory, `tests-${processId}-1-1-2.json`), payload)
+    writeCompletion(outputRoot, processId, {
+      eventsObserved: eventCount * 2,
+      eventsRetained: eventCount * 2,
       payloadFiles: 2,
     })
-    assert.throws(() => parseOfflineSummary(createSummary({ events: -1 })),
-      /Invalid offline Test Optimization exporter summary/)
-  })
-
-  it('aggregates every valid process-local exporter summary and cache input status', () => {
-    const summary = parseOfflineSummary([
-      createSummary({
-        events: 4,
-        inputs: { settings: { status: 'loaded' } },
-        payloadFiles: 2,
-      }),
-      'runner output',
-      createSummary({
-        coverageFiles: 1,
-        errors: ['output_write_failed'],
-        events: 3,
-        inputs: { settings: { status: 'error' } },
-        payloadFiles: 1,
-      }),
-    ].join('\n'))
-
-    assert.deepStrictEqual(summary, {
-      coverageFiles: 1,
-      errors: ['output_write_failed'],
-      events: 7,
-      input: 'filesystem-cache',
-      inputs: { settings: { status: 'error' } },
-      payloadFiles: 3,
-    })
-  })
-
-  it('rejects all exporter summaries when any process summary is malformed', () => {
-    assert.throws(() => parseOfflineSummary([
-      createSummary({ events: 4, payloadFiles: 2 }),
-      createSummary({ events: -1 }),
-    ].join('\n')), /Invalid offline Test Optimization exporter summary/)
-  })
-
-  it('accepts the last aggregate summary error and rejects the first error beyond the limit', () => {
-    const getSummary = errors => createSummary({ errors })
-    const firstErrors = Array.from({ length: 10 }, (_, index) => `first_${index}`)
-    const secondErrors = Array.from({ length: 10 }, (_, index) => `second_${index}`)
-
-    assert.strictEqual(parseOfflineSummary([
-      getSummary(firstErrors),
-      getSummary(secondErrors),
-    ].join('\n')).errors.length, 20)
-    assert.throws(() => parseOfflineSummary([
-      getSummary(firstErrors),
-      getSummary([...secondErrors, 'too_many']),
-    ].join('\n')), /Invalid offline Test Optimization exporter summary/)
+    assert.throws(() => readOfflineOutput(outputRoot), /aggregate decoded entries/)
   })
 })
 
@@ -271,27 +354,39 @@ function createPayloadRoot (repositoryRoot) {
   const outputRoot = path.join(repositoryRoot, 'output')
   const payloadsRoot = path.join(outputRoot, 'payloads')
   const testsDirectory = path.join(payloadsRoot, 'tests')
+  const completionsDirectory = path.join(outputRoot, 'completions')
   fs.mkdirSync(testsDirectory, { recursive: true })
   fs.mkdirSync(path.join(payloadsRoot, 'coverage'))
-  return { outputRoot, testsDirectory }
+  fs.mkdirSync(completionsDirectory)
+  return { outputRoot, testsDirectory, processId: 'a'.repeat(32) }
 }
 
 function createTestCyclePayload (events = []) {
   return {
     version: 1,
-    metadata: { '*': { language: 'javascript' } },
     events,
   }
 }
 
-function createSummary (overrides = {}) {
-  return `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
-    coverageFiles: 0,
-    events: 0,
+function createProjectedEvent (meta = {}) {
+  return { type: 'test', content: { meta, metrics: {} } }
+}
+
+function writeCompletion (outputRoot, processId, countOverrides, inputs = {}, errors = []) {
+  const counts = {
+    coverageFilesObserved: 0,
+    coverageFilesRetained: 0,
+    eventsObserved: 0,
+    eventsRetained: 0,
     payloadFiles: 0,
-    input: 'filesystem-cache',
-    inputs: {},
-    errors: [],
-    ...overrides,
-  })}`
+    ...countOverrides,
+  }
+  fs.writeFileSync(path.join(outputRoot, 'completions', `completion-${processId}.json`), JSON.stringify({
+    version: 1,
+    processId,
+    captureMode: 'strict',
+    counts,
+    inputs,
+    errors,
+  }))
 }

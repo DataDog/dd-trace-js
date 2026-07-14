@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 const path = require('path')
 
+const { getArtifactId } = require('../artifact-id')
 const { buildCiWiringEnv, buildDatadogEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
@@ -15,18 +16,14 @@ const {
 } = require('../payload-normalizer')
 const { getLocalValidationCommand } = require('../local-command')
 const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
-const { parseOfflineSummary, readOfflineOutput } = require('../offline-output')
+const { readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport } = require('../redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
 function frameworkOutDir (out, framework, scenario) {
-  return path.join(out, 'runs', sanitize(framework.id), scenario)
-}
-
-function sanitize (value) {
-  return value.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
+  return path.join(out, 'runs', getArtifactId(framework.id), scenario)
 }
 
 async function runInstrumentedCommand ({
@@ -70,16 +67,11 @@ async function runInstrumentedCommand ({
       verbose: options.verbose,
     })
     offline = readOfflineOutput(rawOutputRoot)
-    offline.summary = parseOfflineSummary(result.stderr)
-    offline.inputs = offline.summary?.inputs || {}
+    if (!offline.initialized && !ciWiring) {
+      throw new Error('Offline Test Optimization exporter did not initialize or write completion evidence.')
+    }
     if (offline.summary?.errors.length > 0) {
       throw new Error(`Offline Test Optimization exporter failed: ${offline.summary.errors.join(', ')}`)
-    }
-    if (offline.summary &&
-      (offline.summary.payloadFiles !== offline.payloadFileCount ||
-        offline.summary.coverageFiles !== offline.coverageFileCount ||
-        offline.summary.events !== offline.events.length)) {
-      throw new Error('Offline Test Optimization exporter summary does not match the payload artifacts.')
     }
   } finally {
     if (fixture) cleanupOfflineFixture(fixture.root)
@@ -335,7 +327,6 @@ function testToIdentity (test) {
     suite: test.testSuite,
     name: test.testName,
     file: test.testSourceFile,
-    parameters: test.meta?.['test.parameters'],
   }
 }
 

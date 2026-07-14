@@ -5,6 +5,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const { getArtifactId } = require('./artifact-id')
 const { createFileSafely, ensureSafeDirectory } = require('./safe-files')
 
 const MAX_FIXTURE_FILE_BYTES = 1024 * 1024
@@ -134,7 +135,7 @@ function getOfflineFixturePaths ({ offlineFixtureNonce, framework, scenarioName 
   const base = path.join(fs.realpathSync(os.tmpdir()), `dd-test-optimization-validation-${offlineFixtureNonce}`)
   return {
     base,
-    root: path.join(base, sanitize(framework.id), sanitize(scenarioName)),
+    root: path.join(base, getArtifactId(framework.id), getArtifactId(scenarioName)),
   }
 }
 
@@ -308,10 +309,6 @@ function removeEmptyParents (directory, stop) {
  * @param {string} value identifier
  * @returns {string} safe path segment
  */
-function sanitize (value) {
-  return String(value).replaceAll(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 100)
-}
-
 /**
  * Checks lexical path containment.
  *

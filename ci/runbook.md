@@ -37,7 +37,7 @@ Write the manifest to:
 ## Record Installed Package Location
 
 Use the same installed `dd-trace` package for this runbook, its reference docs, the manifest schema,
-the example manifest, and the validator. If you are already reading this file from an installed
+the manifest schema, reference documentation, and validator. If you are already reading this file from an installed
 `dd-trace` package, record that `ci/` directory and skip package discovery.
 
 The first package-location check must be the direct repository path
@@ -446,7 +446,7 @@ tests first. If any framework is incomplete, write it as `requires_manual_setup`
 The published manifest contract remains available for targeted troubleshooting:
 
 - schema: `./node_modules/dd-trace/ci/test-optimization-validation-manifest.schema.json`
-- example: `./node_modules/dd-trace/ci/test-optimization-validation-manifest.example.json`
+- scaffold: `node ./node_modules/dd-trace/ci/validate-test-optimization.js --init-manifest`
 
 If `./node_modules/dd-trace` is absent because the repository uses Yarn Plug'n'Play, pnpm, portals,
 or another layout, locate the installed `dd-trace` package first and read those files from its
@@ -562,7 +562,11 @@ planned executable. It also rejects bare Yarn commands when the repository conta
 release, and rejects generated Vitest runtime tests that use `--typecheck` or a typecheck-enabled
 config. If it reports an unavailable or unsuitable command, do not ask for approval: use the
 repository-pinned package manager, choose a typecheck-disabled generated-test command, add the
-required approved setup, or mark the affected check with its concrete setup blocker.
+required approved setup, or mark the affected check with its concrete setup blocker. The plan records
+the canonical executable path and SHA-256 used for each command, and live execution refuses an
+executable that changed after approval. This binds executable selection for reproducibility only. It
+does not attest project scripts, packages, modules, subprocesses, or other code loaded by `node`,
+`npm`, `yarn`, or the selected test runner.
 
 Copy the complete rendered plan into the user-facing response. A collapsed command transcript or
 agent-written summary is not a displayed plan. Use the agent platform's command-approval dialog as
@@ -582,10 +586,19 @@ validator through the package-manager mechanism that works in this repository, s
 or `pnpm exec node`.
 
 Live validation uses validator-controlled JSON cache fixtures outside the repository and bounded
-temporary JSON payload files inside the declared results directory. Missing, malformed, symlinked,
-or oversized fixtures and payload files fail closed; they never fall back to an Agent or Datadog
-endpoint. Run the validator in the same sandbox and with the same permissions as an ordinary test
-run. Do not request broader access.
+temporary JSON event artifacts inside the declared results directory. Before any event artifact is
+written, dd-trace projects it to the small allowlist needed by these checks. Each exporter process
+atomically records bounded completion evidence after flushing. Basic Reporting and advanced checks
+retain strict bounded output; a complete CI replay observes the whole command but retains only a
+bounded early/late sample and reports observed and retained counts separately. Missing, malformed,
+symlinked, hard-linked, incomplete, or oversized artifacts fail closed; they never fall back to an
+Agent or Datadog endpoint.
+
+Run the validator in the same sandbox and with the same permissions as an ordinary test run. The
+validator's filesystem cache and output transport must never be a reason to request broader access.
+If an exact approved project command independently requires additional access in normal development,
+surface that requirement separately under the agent platform's normal approval policy; if it is
+denied, report a blocker.
 The execution platform should block outbound networking and provide a disposable home directory
 without reusable credentials. Offline validation does not make untrusted project tests safe, and
 project code running as the same user can forge cache or event evidence. Treat the result as a

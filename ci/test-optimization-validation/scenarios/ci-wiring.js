@@ -9,6 +9,7 @@ const { serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
 const { findLateInitialization } = require('../late-initialization')
+const { getCiWiringCommand } = require('../local-command')
 const { ensureSafeDirectory } = require('../safe-files')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
@@ -57,6 +58,13 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
       },
       preflight: summarizePreflight(ciWiringPreflight),
       settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
+      offlineExporterCapture: {
+        mode: run.offline.captureMode,
+        completionCount: run.offline.completionCount,
+        observedEventCount: run.offline.observedEventCount,
+        retainedEventCount: run.offline.retainedEventCount,
+        sampled: run.offline.sampled,
+      },
       offlineExporterSummary: run.offline.summary,
       ...basicEventEvidence(events),
     }
@@ -123,89 +131,6 @@ function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command })
     lateInitialization: findLateInitialization(manifest, framework),
     forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
   }
-}
-
-/**
- * Returns the CI wiring command with the replay shell recorded by CI discovery when available.
- *
- * @param {object} framework manifest framework entry
- * @returns {object|undefined} command to run
- */
-function getCiWiringCommand (framework) {
-  const command = framework.ciWiringCommand
-  if (!command || !command.usesShell || command.shell || !framework.ciWiring?.shell) return command
-
-  const replayCommand = getShellReplayCommand(command, framework.ciWiring.shell)
-  if (replayCommand) return replayCommand
-
-  const shell = getReplayShell(framework.ciWiring.shell)
-  if (!shell) return command
-
-  return {
-    ...command,
-    shell,
-  }
-}
-
-/**
- * Translates a CI shell with flags into a local argv command.
- *
- * @param {object} command shell command from the manifest
- * @param {string} shell recorded CI shell
- * @returns {object|undefined} argv command preserving the recorded shell flags
- */
-function getShellReplayCommand (command, shell) {
-  const tokens = tokenizeShellTemplate(shell)
-  const hasTemplate = tokens.includes('{0}')
-  if (tokens.length <= 1 && !hasTemplate) return
-
-  const argv = hasTemplate ? tokens.filter(token => token !== '{0}') : tokens
-  const executable = argv[0]
-  if (!isBourneShell(executable)) return
-
-  return {
-    ...command,
-    argv: [...argv, '-c', command.shellCommand],
-    shell: undefined,
-    shellCommand: undefined,
-    usesShell: false,
-  }
-}
-
-/**
- * Resolves a CI shell description to a local shell executable.
- *
- * @param {string} shell recorded CI shell
- * @returns {string|undefined} local shell executable
- */
-function getReplayShell (shell) {
-  const value = String(shell || '').trim()
-  if (!value) return
-
-  const firstToken = value.split(/\s+/)[0]
-  if (firstToken && value.includes('{0}')) return firstToken
-  if (!/\s/.test(value)) return value
-}
-
-/**
- * Splits a CI shell template into tokens for common unquoted shell templates.
- *
- * @param {string} shell recorded CI shell template
- * @returns {string[]} shell template tokens
- */
-function tokenizeShellTemplate (shell) {
-  return String(shell || '').trim().split(/\s+/).filter(Boolean)
-}
-
-/**
- * Checks whether a shell executable accepts POSIX -c command replay.
- *
- * @param {string|undefined} executable shell executable
- * @returns {boolean} true for Bourne-style shells
- */
-function isBourneShell (executable) {
-  const basename = path.basename(String(executable || ''))
-  return basename === 'bash' || basename === 'sh' || basename === 'zsh'
 }
 
 async function maybeRunInitializationProbe ({ command, framework, options, outDir, result, evidence }) {

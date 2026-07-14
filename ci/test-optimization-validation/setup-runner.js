@@ -2,6 +2,7 @@
 
 const path = require('path')
 
+const { getArtifactId } = require('./artifact-id')
 const { runCommand } = require('./command-runner')
 
 async function runSetupCommands ({ framework, out, options }) {
@@ -11,7 +12,12 @@ async function runSetupCommands ({ framework, out, options }) {
 
   for (let index = 0; index < commands.length; index++) {
     const command = commands[index]
-    const outDir = path.join(out, 'setup', sanitize(framework.id), `${index + 1}-${sanitize(command.id || 'setup')}`)
+    const outDir = path.join(
+      out,
+      'setup',
+      getArtifactId(framework.id),
+      `${index + 1}-${getArtifactId(command.id || 'setup')}`
+    )
     // eslint-disable-next-line no-await-in-loop
     const result = await runCommand(command, {
       artifactRoot: out,
@@ -85,10 +91,6 @@ function summarizeSetupCommand (command, result, outDir) {
 
 function tail (value) {
   return String(value || '').trim().split(/\r?\n/).slice(-20).join('\n')
-}
-
-function sanitize (value) {
-  return String(value).replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
 }
 
 module.exports = { runSetupCommands }

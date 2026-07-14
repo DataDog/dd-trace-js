@@ -59,12 +59,11 @@ describe('CI validation offline output', () => {
     assert.strictEqual(flushed, true)
     const files = getPayloadFiles(outputRoot, 'tests')
     assert.strictEqual(files.length, 1)
-    assert.match(path.basename(files[0]), /^tests-[0-9]+-[0-9]+-[0-9]+\.json$/)
+    assert.match(path.basename(files[0]), /^tests-[a-f0-9]{32}-[0-9]+-[0-9]+-[0-9]+\.json$/)
     const raw = fs.readFileSync(files[0], 'utf8')
     const payload = JSON.parse(raw)
-    assert.deepStrictEqual(Object.keys(payload), ['version', 'metadata', 'events'])
-    assert.doesNotMatch(raw, /"(?:encoding|kind|payload)":/)
-    assert.match(raw, new RegExp(`"trace_id":${BigInt('0x1234abcd1234abcd')}`))
+    assert.deepStrictEqual(Object.keys(payload), ['version', 'events'])
+    assert.doesNotMatch(raw, /"(?:encoding|kind|payload|trace_id)":/)
 
     const output = readOfflineOutput(outputRoot)
     assert.strictEqual(output.events.length, 1)
@@ -75,7 +74,7 @@ describe('CI validation offline output', () => {
 
   it('fails closed when the output byte limit is exceeded', () => {
     const sink = new CiValidationSink(outputRoot)
-    sink.writeCoverage('x'.repeat(MAX_OUTPUT_BYTES))
+    sink.writeCoverage({ test_session_id: 'x'.repeat(MAX_OUTPUT_BYTES) })
     sink.writeSummary()
 
     assert.strictEqual(getPayloadFiles(outputRoot, 'coverage').length, 0)
@@ -137,10 +136,7 @@ describe('CI validation offline output', () => {
 
   it('fails closed when an output record cannot be serialized', () => {
     const sink = new CiValidationSink(outputRoot)
-    const circularPayload = {}
-    circularPayload.circular = circularPayload
-
-    sink.writeCoverage(circularPayload)
+    sink.writeCoverage('unsupported')
     sink.writeSummary()
 
     assert.strictEqual(getPayloadFiles(outputRoot, 'coverage').length, 0)
@@ -163,20 +159,8 @@ describe('CI validation offline output', () => {
 
   it('accepts the last output file and rejects the first file beyond the limit', () => {
     const sink = new CiValidationSink(outputRoot)
-    const openSync = sinon.stub(fs, 'openSync').returns(42)
-    const fstatSync = sinon.stub(fs, 'fstatSync').returns({ isFile: () => true, nlink: 1 })
-    const writeFileSync = sinon.stub(fs, 'writeFileSync')
-    const closeSync = sinon.stub(fs, 'closeSync')
-
-    try {
-      for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeCoverage({})
-      sink.writeSummary()
-    } finally {
-      openSync.restore()
-      fstatSync.restore()
-      writeFileSync.restore()
-      closeSync.restore()
-    }
+    for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeCoverage({})
+    sink.writeSummary()
 
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
@@ -198,6 +182,66 @@ describe('CI validation offline output', () => {
       writeEvents(rejected, type, limit + 1)
       assert.throws(() => readOfflineOutput(rejected), new RegExp(`exceeds ${limit} test`))
     }
+  })
+
+  it('retains bounded early and late lifecycle evidence for a large sampled CI replay', () => {
+    const sink = new CiValidationSink(outputRoot, { captureMode: 'sample' })
+    const writer = new CiValidationWriter({ sink, tags: {} })
+    const spans = []
+    for (let index = 0; index < MAX_OUTPUT_TESTS + 100; index++) {
+      spans.push({
+        ...createTestSpan(),
+        resource: `test-${index}`,
+        meta: {
+          'test.name': `test-${index}`,
+          'test.suite': 'offline.spec.js',
+          'test.status': 'pass',
+        },
+      })
+    }
+    for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+      spans.push({ ...createTestSpan(), type, meta: { 'test.status': 'pass' } })
+    }
+    writer.append(spans)
+    writer.flush()
+    sink.writeSummary()
+
+    const output = readOfflineOutput(outputRoot)
+    assert.strictEqual(output.captureMode, 'sample')
+    assert.strictEqual(output.observedEventCount, spans.length)
+    assert(output.retainedEventCount < spans.length)
+    assert.strictEqual(output.sampled, true)
+    for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+      assert(output.events.some(event => event.type === type))
+    }
+  })
+
+  it('does not persist arbitrary telemetry before report redaction', () => {
+    const marker = 'API_KEY=raw-secret-value'
+    const sink = new CiValidationSink(outputRoot)
+    const writer = new CiValidationWriter({ sink, tags: {} })
+    writer.append([{
+      ...createTestSpan(),
+      error: 1,
+      meta: {
+        ...createTestSpan().meta,
+        custom: marker,
+        'error.message': marker,
+        'error.stack': marker,
+        'test.parameters': marker,
+      },
+    }])
+    writer.flush()
+    sink.writeCoverage({
+      test_session_id: 1,
+      files: [{ filename: marker, bitmap: Buffer.from(marker) }],
+    })
+    sink.writeSummary()
+
+    const persisted = getAllFiles(outputRoot).map(filename => fs.readFileSync(filename, 'utf8')).join('\n')
+    assert.doesNotMatch(persisted, /raw-secret-value/)
+    assert.doesNotMatch(stderrWrite.args.flat().join('\n'), /raw-secret-value/)
+    assert.strictEqual(readOfflineOutput(outputRoot).events.length, 1)
   })
 
   it('rejects symbolic-link output roots', function () {
@@ -480,6 +524,16 @@ function writeEvents (outputRoot, type, count) {
 function getPayloadFiles (outputRoot, kind) {
   const directory = path.join(outputRoot, 'payloads', kind)
   return fs.readdirSync(directory).map(filename => path.join(directory, filename))
+}
+
+function getAllFiles (directory) {
+  const files = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name)
+    if (entry.isDirectory()) files.push(...getAllFiles(filename))
+    else files.push(filename)
+  }
+  return files
 }
 
 function writeValidationCache (root) {

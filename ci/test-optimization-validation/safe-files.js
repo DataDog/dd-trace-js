@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -62,7 +63,23 @@ function ensureSafeDirectory (root, directory, label, options = {}) {
  * @param {string} label customer-facing path label
  */
 function writeFileSafely (root, filename, data, label) {
-  openAndWrite(root, filename, data, label, fs.constants.O_TRUNC)
+  const resolvedFilename = path.resolve(filename)
+  const parent = path.dirname(resolvedFilename)
+  ensureSafeDirectory(root, parent, label)
+  const parentIdentity = getDirectoryIdentity(parent, label)
+  const temporaryFilename = path.join(
+    parent,
+    `.${path.basename(filename)}.${crypto.randomBytes(12).toString('hex')}.tmp`
+  )
+
+  try {
+    openAndWrite(root, temporaryFilename, data, label, fs.constants.O_EXCL)
+    assertDirectoryIdentity(parent, parentIdentity, label)
+    fs.renameSync(temporaryFilename, resolvedFilename)
+  } catch (error) {
+    removeTemporaryFile(temporaryFilename, parent, parentIdentity)
+    throw error
+  }
 }
 
 /**
@@ -97,10 +114,58 @@ function openAndWrite (root, filename, data, label, creationFlag) {
     (fs.constants.O_NOFOLLOW || 0)
   const file = fs.openSync(resolvedFilename, flags, 0o600)
   try {
+    const stat = fs.fstatSync(file)
+    if (!stat.isFile() || stat.nlink !== 1) {
+      throw new Error(`Refusing ${label} because its output is not a private regular file: ${resolvedFilename}`)
+    }
     fs.writeFileSync(file, data)
   } finally {
     fs.closeSync(file)
   }
+}
+
+/**
+ * Captures one directory identity without accepting a symbolic link.
+ *
+ * @param {string} directory directory path
+ * @param {string} label customer-facing path label
+ * @returns {{dev: number, ino: number}} directory identity
+ */
+function getDirectoryIdentity (directory, label) {
+  const stat = fs.lstatSync(directory)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(`Refusing ${label} because its parent is not a regular directory: ${directory}`)
+  }
+  return { dev: stat.dev, ino: stat.ino }
+}
+
+/**
+ * Refuses replacement of a parent directory between safe creation and publication.
+ *
+ * @param {string} directory directory path
+ * @param {{dev: number, ino: number}} expected expected identity
+ * @param {string} label customer-facing path label
+ */
+function assertDirectoryIdentity (directory, expected, label) {
+  const current = getDirectoryIdentity(directory, label)
+  if (current.dev !== expected.dev || current.ino !== expected.ino) {
+    throw new Error(`Refusing ${label} because its parent directory changed during the write: ${directory}`)
+  }
+}
+
+/**
+ * Removes only the validator-created temporary regular file or symbolic link.
+ *
+ * @param {string} filename temporary filename
+ * @param {string} parent expected parent directory
+ * @param {{dev: number, ino: number}} parentIdentity expected parent identity
+ */
+function removeTemporaryFile (filename, parent, parentIdentity) {
+  try {
+    assertDirectoryIdentity(parent, parentIdentity, 'temporary file cleanup')
+    const stat = fs.lstatSync(filename)
+    if (stat.isFile() || stat.isSymbolicLink()) fs.unlinkSync(filename)
+  } catch {}
 }
 
 /**

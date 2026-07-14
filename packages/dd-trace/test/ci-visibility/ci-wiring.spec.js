@@ -5,10 +5,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const { getArtifactId } = require('../../../../ci/test-optimization-validation/artifact-id')
 const { runCiWiring } = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
-const { AgentlessCiVisibilityEncoder } = require('../../src/encode/agentless-ci-visibility')
-const { msgpackToJson } = require('../../src/ci-visibility/exporters/ci-validation/msgpack-to-json')
-const id = require('../../src/id')
 
 function validationOptions (repositoryRoot) {
   return {
@@ -399,8 +397,8 @@ describe('test optimization CI wiring validation', () => {
         options: validationOptions(out),
       })
 
-      const events = fs.readFileSync(path.join(out, 'runs', 'vitest-root', 'ci-wiring', 'events.ndjson'), 'utf8')
-      assert.match(events, /<redacted>/)
+      const eventsArtifact = path.join(out, 'runs', getArtifactId('vitest:root'), 'ci-wiring', 'events.ndjson')
+      const events = fs.readFileSync(eventsArtifact, 'utf8')
       for (const secret of [
         'ci-wiring-event-api-key-secret',
         'ci-wiring-event-token-secret',
@@ -552,13 +550,56 @@ describe('test optimization CI wiring validation', () => {
         basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
       })
 
-      assert.strictEqual(result.status, 'pass')
+      assert.strictEqual(result.status, 'pass', JSON.stringify(result))
       assert.deepStrictEqual(result.evidence.ciCommandExecution, {
         mode: 'full-replay',
         fullReplayRan: true,
       })
       assert.strictEqual(result.evidence.commandExitCode, 0)
       assert.match(result.diagnosis, /CI test command emitted session, module, suite, and test events/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('completes a large CI replay and reaches a conclusive result from bounded sampled evidence', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-large-ci-wiring-'))
+
+    try {
+      const result = await runCiWiring({
+        manifest: { repository: { root: out } },
+        framework: {
+          id: 'vitest:large-ci-job',
+          framework: 'vitest',
+          project: { root: out },
+          ciWiring: { status: 'unknown', reason: 'The CI command is replayable.' },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', largeOfflineEventScript(2_100)],
+          },
+        },
+        out,
+        options: validationOptions(out),
+        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
+      })
+
+      assert.strictEqual(result.status, 'pass', JSON.stringify(result))
+      assert.strictEqual(result.evidence.commandExitCode, 0)
+      assert.deepStrictEqual(result.evidence.offlineExporterCapture, {
+        mode: 'sample',
+        completionCount: 1,
+        observedEventCount: 2_103,
+        retainedEventCount: 11,
+        sampled: true,
+      })
+      assert.deepStrictEqual(result.evidence.ciCommandExecution, {
+        mode: 'full-replay',
+        fullReplayRan: true,
+      })
+      assert.strictEqual(result.evidence.testSessionEvents, 1)
+      assert.strictEqual(result.evidence.testModuleEvents, 1)
+      assert.strictEqual(result.evidence.testSuiteEvents, 1)
+      assert.strictEqual(result.evidence.testEvents, 8)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -594,11 +635,18 @@ describe('test optimization CI wiring validation', () => {
         basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'fail', JSON.stringify(result))
       assert.strictEqual(fs.readFileSync(fullReplayMarker, 'utf8'), 'ran')
       assert.deepStrictEqual(result.evidence.ciCommandExecution, {
         mode: 'full-replay',
         fullReplayRan: true,
+      })
+      assert.deepStrictEqual(result.evidence.offlineExporterCapture, {
+        mode: undefined,
+        completionCount: 0,
+        observedEventCount: 0,
+        retainedEventCount: 0,
+        sampled: false,
       })
       assert.strictEqual(result.evidence.commandExitCode, 0)
       assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
@@ -886,46 +934,59 @@ function restoreEnv (name, value) {
 }
 
 function offlineEventScript (events, exitCode = 0) {
-  const encoder = new AgentlessCiVisibilityEncoder({ flush () {} }, {})
-  encoder.encode(events.map(({ type, meta }) => basicSpan(type, meta)))
-  const payload = msgpackToJson(encoder.makePayload()).toString()
-  const summary = `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
-    coverageFiles: 0,
-    events: events.length,
-    payloadFiles: 1,
-    input: 'filesystem-cache',
-    inputs: {},
-    errors: [],
-  })}\n`
+  const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
+  const writerPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/writer.js')
+  const idPath = path.resolve('packages/dd-trace/src/id.js')
   return [
-    "const fs = require('node:fs')",
-    "const path = require('node:path')",
+    `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
+    `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
+    `const id = require(${JSON.stringify(idPath)})`,
     'const outputRoot = process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR',
-    "const testsDirectory = path.join(outputRoot, 'payloads', 'tests')",
-    'fs.mkdirSync(testsDirectory, { recursive: true })',
-    `fs.writeFileSync(path.join(testsDirectory, 'tests-1-' + process.pid + '-1.json'), ${JSON.stringify(payload)})`,
-    `process.stderr.write(${JSON.stringify(summary)})`,
+    'const captureMode = process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE || "strict"',
+    'const sink = new CiValidationSink(outputRoot, { captureMode })',
+    'const writer = new CiValidationWriter({ sink, tags: {} })',
+    `const events = ${JSON.stringify(events)}`,
+    'writer.append(events.map(({ type, meta = {} }) => ({',
+    "  trace_id: id('1234abcd1234abcd'), span_id: id('1234abcd1234abcd'),",
+    "  parent_id: id('0000000000000000'), name: 'example test', resource: 'example test',",
+    "  service: 'validation', type, error: 0,",
+    "  meta: { 'test.name': 'example test', 'test.status': 'pass', ...meta }, metrics: {},",
+    '  start: 123, duration: 456,',
+    '})))',
+    'writer.flush()',
+    'sink.writeSummary()',
     `process.exit(${exitCode})`,
-  ].join(';')
+  ].join('\n')
 }
 
-function basicSpan (type, meta = {}) {
-  return {
-    type,
-    trace_id: id('1234abcd1234abcd'),
-    span_id: id('1234abcd1234abcd'),
-    parent_id: id('0000000000000000'),
-    name: 'example test',
-    resource: 'example test',
-    service: 'validation',
-    error: 0,
-    meta: {
-      'test.name': 'example test',
-      'test.status': 'pass',
-      ...meta,
-    },
-    metrics: {},
-    start: 123,
-    duration: 456,
-  }
+function largeOfflineEventScript (eventCount) {
+  const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
+  const writerPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/writer.js')
+  const idPath = path.resolve('packages/dd-trace/src/id.js')
+  return [
+    `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
+    `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
+    `const id = require(${JSON.stringify(idPath)})`,
+    'const outputRoot = process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR',
+    'const captureMode = process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE',
+    'const sink = new CiValidationSink(outputRoot, { captureMode })',
+    'const writer = new CiValidationWriter({ sink, tags: {} })',
+    'const spans = []',
+    `for (let index = 0; index < ${eventCount}; index++) spans.push({`,
+    "  trace_id: id('1234abcd1234abcd'), span_id: id('1234abcd1234abcd'),",
+    "  parent_id: id('0000000000000000'), name: 'test', resource: 'test-' + index,",
+    "  service: 'validation', type: 'test', error: 0,",
+    "  meta: { 'test.name': 'test-' + index, 'test.status': 'pass' }, metrics: {},",
+    '  start: 123, duration: 456,',
+    '})',
+    "for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) spans.push({",
+    "  trace_id: id('1234abcd1234abcd'), span_id: id('1234abcd1234abcd'),",
+    "  parent_id: id('0000000000000000'), name: type, resource: type,",
+    "  service: 'validation', type, error: 0, meta: { 'test.status': 'pass' }, metrics: {},",
+    '  start: 123, duration: 456,',
+    '})',
+    'writer.append(spans)',
+    'writer.flush()',
+    'sink.writeSummary()',
+  ].join('\n')
 }

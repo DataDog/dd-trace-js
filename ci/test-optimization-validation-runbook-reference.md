@@ -3,6 +3,37 @@
 This file supports `ci/runbook.md`. Do not read it front-to-back unless needed. Use it when CI
 discovery, manifest authoring, dependency setup, or generated-test strategy needs more detail.
 
+## Frameworks Not Scaffolded Automatically
+
+`--init-manifest` scaffolds Jest, Mocha, and Vitest. Cucumber, Cypress, and Playwright remain supported
+when discovery identifies a real project command. Add a framework entry using the same command rules:
+
+- Cucumber: select a bounded `cucumber-js` command and record its feature/config files.
+- Cypress: select a bounded `cypress run` command that uses the project's existing browser/setup requirements.
+- Playwright: select a bounded `playwright test` command and record its config and browser/setup requirements.
+
+For each, keep `existingTestCommand` Datadog-clean, preserve the exact replayable CI command in
+`ciWiringCommand`, and record a concrete setup blocker instead of inventing a runnable command.
+
+## Approval And Offline Evidence
+
+The approval plan shows the canonical executable path and SHA-256 for every selected command. The
+validator rechecks that identity immediately before spawning the command. This makes executable
+selection reproducible; it does not attest package scripts, modules, subprocesses, or other code the
+approved project command loads.
+
+Offline validation writes only allowlisted event fields and compact coverage linkage. It never writes
+raw test parameters, errors, stacks, arbitrary tags, environment values, source paths, or coverage
+bitmaps. Every exporter process writes a bounded completion record after flushing. Payloads without
+matching completion evidence are incomplete and cannot pass validation. CI replay uses a bounded
+sample while continuing to observe the approved command through process exit; strict Basic Reporting
+and advanced checks keep their existing event limits.
+
+Run the validator in the same sandbox and with the same permissions as an ordinary test run. The
+filesystem cache and output transport must never justify broader access. If an exact approved project
+command independently needs additional access in normal development, surface that separately under
+the agent platform's normal approval policy; if it is denied, report a blocker.
+
 ## CI Workflow Discovery
 
 Search CI definitions before broad package-script exploration. Read only files needed to identify

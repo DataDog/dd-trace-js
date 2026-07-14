@@ -2,6 +2,7 @@
 
 const path = require('path')
 
+const { getArtifactId } = require('./artifact-id')
 const {
   MAX_GENERATED_FILES,
   getGeneratedFileContentError,
@@ -50,6 +51,10 @@ const CI_INITIALIZATION_STATUSES = new Set(['configured', 'not_configured', 'unk
 const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const MAX_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
+const MAX_FRAMEWORKS = 100
+const MAX_MANIFEST_ARRAY_ENTRIES = 1000
+const MAX_SETUP_COMMANDS = 100
+const MAX_VALIDATION_ERRORS = 50
 const SECRET_PLACEHOLDER = 'dd-validation-placeholder'
 const SAFE_SECRET_FIELD_VALUES = new Set(['', '0', '1', 'false', 'true', 'none', 'disabled'])
 const COMMAND_FIELDS = new Set([
@@ -80,7 +85,7 @@ const GENERATED_SCENARIO_EXIT_CODES = {
 }
 
 function validateManifest (manifest) {
-  const errors = []
+  const errors = createErrorCollector()
 
   if (!manifest || typeof manifest !== 'object') {
     return ['Manifest must be a JSON object.']
@@ -93,6 +98,9 @@ function validateManifest (manifest) {
   if (Array.isArray(manifest.frameworks) && manifest.frameworks.length === 0) {
     errors.push('frameworks must include at least one framework entry.')
   }
+  validateArrayLimit(manifest, 'frameworks', MAX_FRAMEWORKS, errors)
+  validateArrayLimit(manifest, 'omitted', MAX_MANIFEST_ARRAY_ENTRIES, errors)
+  validateArrayLimit(manifest, 'omittedTestCommands', MAX_MANIFEST_ARRAY_ENTRIES, errors)
 
   if (manifest.repository) {
     requiredAbsolutePath(manifest.repository, 'root', errors)
@@ -103,22 +111,24 @@ function validateManifest (manifest) {
   }
 
   if (Array.isArray(manifest.frameworks)) {
-    validateUniqueFrameworkIds(manifest.frameworks, errors)
-    validateDuplicateRunnableCoverage(manifest.frameworks, errors)
-    for (const [index, framework] of manifest.frameworks.entries()) {
+    const frameworks = manifest.frameworks.slice(0, MAX_FRAMEWORKS)
+    validateUniqueFrameworkIds(frameworks, errors)
+    validateUniqueArtifactIds(frameworks, errors)
+    validateDuplicateRunnableCoverage(frameworks, errors)
+    for (const [index, framework] of frameworks.entries()) {
       validateFramework(framework, index, errors)
     }
   }
 
   validateRepositoryContainedPaths(manifest, errors)
 
-  return errors
+  return errors.finalize()
 }
 
 function validateDuplicateRunnableCoverage (frameworks, errors) {
   const seen = new Map()
   for (const [index, framework] of frameworks.entries()) {
-    if (framework.status !== 'runnable' || !framework.ciWiringCommand) continue
+    if (framework?.status !== 'runnable' || !framework.ciWiringCommand) continue
     const key = JSON.stringify({
       framework: framework.framework,
       projectRoot: framework.project?.root,
@@ -135,6 +145,22 @@ function validateDuplicateRunnableCoverage (frameworks, errors) {
       `frameworks[${index}] duplicates runnable framework and CI command coverage from frameworks[${previous}]. ` +
       'Keep one representative framework entry and record the other CI job as an omitted or duplicate candidate.'
     )
+  }
+}
+
+function validateUniqueArtifactIds (frameworks, errors) {
+  const seen = new Map()
+  for (const [index, framework] of frameworks.entries()) {
+    if (typeof framework?.id !== 'string') continue
+    const artifactId = getArtifactId(framework.id)
+    const previous = seen.get(artifactId)
+    if (previous !== undefined && previous !== framework.id) {
+      errors.push(
+        `frameworks[${index}].id collides with another framework artifact identifier after normalization.`
+      )
+    } else {
+      seen.set(artifactId, framework.id)
+    }
   }
 }
 
@@ -162,11 +188,14 @@ function validateRepositoryContainedPaths (manifest, errors) {
   const repositoryRoot = manifest.repository?.root
   if (typeof repositoryRoot !== 'string' || !path.isAbsolute(repositoryRoot)) return
 
-  for (const [index, framework] of (manifest.frameworks || []).entries()) {
+  const frameworks = Array.isArray(manifest.frameworks) ? manifest.frameworks.slice(0, MAX_FRAMEWORKS) : []
+  for (const [index, framework] of frameworks.entries()) {
+    if (!framework || typeof framework !== 'object' || Array.isArray(framework)) continue
     const prefix = `frameworks[${index}]`
     containedPath(repositoryRoot, framework.project?.root, `${prefix}.project.root`, errors)
     containedPath(repositoryRoot, framework.project?.packageJson, `${prefix}.project.packageJson`, errors)
-    for (const [configIndex, configFile] of (framework.project?.configFiles || []).entries()) {
+    for (const [configIndex, configFile] of
+      limitedArray(framework.project?.configFiles, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
       containedPath(repositoryRoot, configFile, `${prefix}.project.configFiles[${configIndex}]`, errors)
     }
 
@@ -179,10 +208,11 @@ function validateRepositoryContainedPaths (manifest, errors) {
 
     const strategy = framework.generatedTestStrategy
     containedPath(repositoryRoot, strategy?.testDirectory, `${prefix}.generatedTestStrategy.testDirectory`, errors)
-    for (const [fileIndex, file] of (strategy?.files || []).entries()) {
+    for (const [fileIndex, file] of limitedArray(strategy?.files, MAX_GENERATED_FILES).entries()) {
       containedPath(repositoryRoot, file?.path, `${prefix}.generatedTestStrategy.files[${fileIndex}].path`, errors)
     }
-    for (const [cleanupIndex, cleanupPath] of (strategy?.cleanupPaths || []).entries()) {
+    for (const [cleanupIndex, cleanupPath] of
+      limitedArray(strategy?.cleanupPaths, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
       containedPath(
         repositoryRoot,
         cleanupPath,
@@ -190,8 +220,10 @@ function validateRepositoryContainedPaths (manifest, errors) {
         errors
       )
     }
-    for (const [scenarioIndex, scenario] of (strategy?.scenarios || []).entries()) {
-      for (const [identityIndex, identity] of (scenario?.testIdentities || []).entries()) {
+    for (const [scenarioIndex, scenario] of
+      limitedArray(strategy?.scenarios, GENERATED_SCENARIO_IDS.size).entries()) {
+      for (const [identityIndex, identity] of
+        limitedArray(scenario?.testIdentities, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
         containedPath(
           repositoryRoot,
           identity?.file,
@@ -208,10 +240,11 @@ function getFrameworkCommands (framework) {
   for (const name of ['existingTestCommand', 'forcedLocalCommand', 'ciWiringCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
-  for (const [index, command] of (framework.setup?.commands || []).entries()) {
+  for (const [index, command] of limitedArray(framework.setup?.commands, MAX_SETUP_COMMANDS).entries()) {
     commands.push([`setup.commands[${index}]`, command])
   }
-  for (const [index, scenario] of (framework.generatedTestStrategy?.scenarios || []).entries()) {
+  for (const [index, scenario] of
+    limitedArray(framework.generatedTestStrategy?.scenarios, GENERATED_SCENARIO_IDS.size).entries()) {
     if (scenario?.runCommand) {
       commands.push([`generatedTestStrategy.scenarios[${index}].runCommand`, scenario.runCommand])
     }
@@ -249,6 +282,10 @@ function validateCiDiscovery (ciDiscovery, prefix, errors) {
 
 function validateFramework (framework, index, errors) {
   const prefix = `frameworks[${index}]`
+  if (!framework || typeof framework !== 'object' || Array.isArray(framework)) {
+    errors.push(`${prefix} must be an object.`)
+    return
+  }
   requiredString(framework, 'id', errors, prefix)
   enumString(framework, 'framework', FRAMEWORKS, errors, prefix)
   enumString(framework, 'status', STATUSES, errors, prefix)
@@ -258,6 +295,7 @@ function validateFramework (framework, index, errors) {
     requiredAbsolutePath(framework.project, 'root', errors, `${prefix}.project`)
     optionalAbsolutePath(framework.project, 'packageJson', errors, `${prefix}.project`)
     optionalAbsolutePathArray(framework.project, 'configFiles', errors, `${prefix}.project`)
+    validateArrayLimit(framework.project, 'configFiles', MAX_MANIFEST_ARRAY_ENTRIES, errors, `${prefix}.project`)
   }
 
   if (framework.status === 'runnable') {
@@ -284,7 +322,8 @@ function validateFramework (framework, index, errors) {
 
   if (framework.setup?.commands) {
     if (Array.isArray(framework.setup.commands)) {
-      for (const [commandIndex, command] of framework.setup.commands.entries()) {
+      validateArrayLimit(framework.setup, 'commands', MAX_SETUP_COMMANDS, errors, `${prefix}.setup`)
+      for (const [commandIndex, command] of framework.setup.commands.slice(0, MAX_SETUP_COMMANDS).entries()) {
         requiredCommand({ command }, 'command', errors, `${prefix}.setup.commands[${commandIndex}]`)
       }
     } else {
@@ -317,7 +356,7 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
     if (strategy.files.length > MAX_GENERATED_FILES) {
       errors.push(`${prefix}.files must contain at most ${MAX_GENERATED_FILES} generated files.`)
     }
-    for (const [index, file] of strategy.files.entries()) {
+    for (const [index, file] of strategy.files.slice(0, MAX_GENERATED_FILES).entries()) {
       requiredAbsolutePath(file, 'path', errors, `${prefix}.files[${index}]`)
       requiredArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
       validateStringArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
@@ -327,7 +366,8 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
   }
 
   if (Array.isArray(strategy.scenarios)) {
-    for (const [index, scenario] of strategy.scenarios.entries()) {
+    validateArrayLimit(strategy, 'scenarios', GENERATED_SCENARIO_IDS.size, errors, prefix)
+    for (const [index, scenario] of strategy.scenarios.slice(0, GENERATED_SCENARIO_IDS.size).entries()) {
       requiredString(scenario, 'id', errors, `${prefix}.scenarios[${index}]`)
       enumString(scenario, 'id', GENERATED_SCENARIO_IDS, errors, `${prefix}.scenarios[${index}]`)
       requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`, { datadogClean: true })
@@ -442,7 +482,7 @@ function validateCompleteGeneratedScenarioSet (strategy, prefix, errors) {
   if (!Array.isArray(strategy.scenarios)) return
 
   const seen = new Set()
-  for (const scenario of strategy.scenarios) {
+  for (const scenario of strategy.scenarios.slice(0, GENERATED_SCENARIO_IDS.size)) {
     if (typeof scenario?.id === 'string') seen.add(scenario.id)
   }
 
@@ -485,8 +525,15 @@ function validateScenarioIdentities (scenario, prefix, errors, required = false)
   if (required && scenario.testIdentities.length === 0) {
     errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is planned or verified.`)
   }
+  validateArrayLimit(
+    { testIdentities: scenario.testIdentities },
+    'testIdentities',
+    MAX_MANIFEST_ARRAY_ENTRIES,
+    errors,
+    prefix
+  )
 
-  for (const [index, identity] of scenario.testIdentities.entries()) {
+  for (const [index, identity] of scenario.testIdentities.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
     const identityPrefix = `${prefix}.testIdentities[${index}]`
     if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
       errors.push(`${identityPrefix} must be an object.`)
@@ -538,7 +585,7 @@ function requiredCommand (target, field, errors, prefix = '', options = {}) {
     errors.push(`${key}.argv must be a non-empty array unless usesShell is true.`)
   } else {
     validateStringArray(value, 'argv', errors, key)
-    for (const [index, arg] of value.argv.entries()) {
+    for (const [index, arg] of value.argv.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
       rejectUnresolvedPlaceholder(arg, `${key}.argv[${index}]`, errors)
     }
     if (value.argv.some(hasUnsafeExecutionCharacter)) {
@@ -551,7 +598,11 @@ function requiredCommand (target, field, errors, prefix = '', options = {}) {
     if (!value.env || typeof value.env !== 'object' || Array.isArray(value.env)) {
       errors.push(`${key}.env must be an object when present.`)
     } else {
-      for (const [name, envValue] of Object.entries(value.env)) {
+      const environmentEntries = Object.entries(value.env)
+      if (environmentEntries.length > MAX_MANIFEST_ARRAY_ENTRIES) {
+        errors.push(`${key}.env must contain at most ${MAX_MANIFEST_ARRAY_ENTRIES} entries.`)
+      }
+      for (const [name, envValue] of environmentEntries.slice(0, MAX_MANIFEST_ARRAY_ENTRIES)) {
         if (!ENV_NAME_PATTERN.test(name)) {
           errors.push(`${key}.env contains invalid variable name ${JSON.stringify(name)}.`)
         }
@@ -569,7 +620,8 @@ function requiredCommand (target, field, errors, prefix = '', options = {}) {
   }
   if (value.requiredEnvVars !== undefined) {
     if (Array.isArray(value.requiredEnvVars)) {
-      for (const [index] of value.requiredEnvVars.entries()) {
+      validateArrayLimit(value, 'requiredEnvVars', MAX_MANIFEST_ARRAY_ENTRIES, errors, key)
+      for (const [index] of value.requiredEnvVars.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
         requiredString(value.requiredEnvVars, index, errors, `${key}.requiredEnvVars`)
       }
     } else {
@@ -646,7 +698,8 @@ function optionalAbsolutePathArray (target, field, errors, prefix = '') {
     return
   }
 
-  for (const [index, item] of value.entries()) {
+  validateArrayLimit(target, field, MAX_MANIFEST_ARRAY_ENTRIES, errors, prefix)
+  for (const [index, item] of value.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
     if (typeof item !== 'string' || !path.isAbsolute(item)) {
       errors.push(`${join(prefix, field)}[${index}] must be an absolute path.`)
     } else if (hasUnsafeExecutionCharacter(item)) {
@@ -659,15 +712,59 @@ function validateStringArray (target, field, errors, prefix = '') {
   const value = target && target[field]
   if (!Array.isArray(value)) return
 
-  for (const [index, item] of value.entries()) {
+  validateArrayLimit(target, field, MAX_MANIFEST_ARRAY_ENTRIES, errors, prefix)
+  for (const [index, item] of value.slice(0, MAX_MANIFEST_ARRAY_ENTRIES).entries()) {
     if (typeof item !== 'string') {
       errors.push(`${join(prefix, field)}[${index}] must be a string.`)
     }
   }
 }
 
+function validateArrayLimit (target, field, limit, errors, prefix = '') {
+  const value = target && target[field]
+  if (Array.isArray(value) && value.length > limit) {
+    errors.push(`${join(prefix, field)} must contain at most ${limit} entries.`)
+  }
+}
+
+function limitedArray (value, limit) {
+  return Array.isArray(value) ? value.slice(0, limit) : []
+}
+
+function createErrorCollector () {
+  const errors = []
+  let omitted = 0
+  Object.defineProperties(errors, {
+    push: {
+      value (...messages) {
+        for (const message of messages) {
+          if (this.length < MAX_VALIDATION_ERRORS - 1) {
+            Array.prototype.push.call(this, message)
+          } else {
+            omitted++
+          }
+        }
+        return this.length
+      },
+    },
+    finalize: {
+      value () {
+        if (omitted > 0) {
+          Array.prototype.push.call(this, `${omitted} additional validation error(s) omitted.`)
+        }
+        return this
+      },
+    },
+  })
+  return errors
+}
+
 function join (prefix, field) {
   return prefix ? `${prefix}.${field}` : field
 }
 
-module.exports = { validateManifest }
+module.exports = {
+  MAX_FRAMEWORKS,
+  MAX_VALIDATION_ERRORS,
+  validateManifest,
+}

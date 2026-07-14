@@ -354,9 +354,9 @@ describe('test optimization validation command runner', () => {
       })
 
       assert.strictEqual(result.exitCode, null)
-      assert.match(result.stderr, /ENOENT/)
-      assert.ok(fs.existsSync(path.join(outDir, 'command.json')))
-      assert.ok(fs.existsSync(path.join(outDir, 'stderr.txt')))
+      assert.match(result.stderr, /Command executable is unavailable/)
+      assert.strictEqual(fs.existsSync(path.join(outDir, 'command.json')), false)
+      assert.strictEqual(fs.existsSync(path.join(outDir, 'stderr.txt')), false)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
@@ -608,7 +608,7 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('restores a pre-existing coverage directory after an approved coverage command', async () => {
+  it('refuses to move or overwrite a pre-existing coverage directory', async () => {
     const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
     const artifactRoot = path.join(repositoryRoot, 'results')
     const outDir = path.join(artifactRoot, 'run')
@@ -618,7 +618,7 @@ describe('test optimization validation command runner', () => {
     fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')
 
     try {
-      const result = await runCommand({
+      assert.throws(() => runCommand({
         cwd: repositoryRoot,
         argv: [
           process.execPath,
@@ -628,12 +628,32 @@ describe('test optimization validation command runner', () => {
           '--',
           '--coverage',
         ],
-      }, { artifactRoot, outDir, repositoryRoot })
-
-      assert.strictEqual(result.exitCode, 0)
+      }, { artifactRoot, outDir, repositoryRoot }), /already exists and will not be moved or overwritten/)
       assert.strictEqual(fs.readFileSync(path.join(coverage, 'original.txt'), 'utf8'), 'original')
       assert.strictEqual(fs.existsSync(path.join(coverage, 'new.txt')), false)
-      assert.deepStrictEqual(result.commandOutputPaths, [{ outputPath: coverage, action: 'restored' }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a dangling symbolic link at a declared command output', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const coverage = path.join(repositoryRoot, 'coverage')
+    const missingTarget = path.join(repositoryRoot, 'missing-target')
+    fs.mkdirSync(artifactRoot)
+    fs.symlinkSync(missingTarget, coverage)
+
+    try {
+      assert.throws(() => runCommand({
+        cwd: repositoryRoot,
+        argv: [process.execPath, '-e', 'throw new Error("must not run")'],
+        outputPaths: [coverage],
+      }, { artifactRoot, outDir, repositoryRoot }), /already exists and will not be moved or overwritten/)
+      assert.strictEqual(fs.lstatSync(coverage).isSymbolicLink(), true)
     } finally {
       fs.rmSync(repositoryRoot, { recursive: true, force: true })
     }
@@ -668,7 +688,45 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('restores earlier outputs when a later declared output is unsafe', () => {
+  it('fails closed when a command replaces an output parent before cleanup', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-outside-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const outputParent = path.join(repositoryRoot, 'generated')
+    const outputPath = path.join(outputParent, 'coverage')
+    const outsideMarker = path.join(outsideRoot, 'keep.txt')
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(outputParent)
+    fs.writeFileSync(outsideMarker, 'keep')
+
+    const script = [
+      'const fs = require("node:fs")',
+      `fs.renameSync(${JSON.stringify(outputParent)}, ${JSON.stringify(`${outputParent}-original`)})`,
+      `fs.symlinkSync(${JSON.stringify(outsideRoot)}, ${JSON.stringify(outputParent)}, "dir")`,
+      `fs.mkdirSync(${JSON.stringify(outputPath)})`,
+    ].join(';')
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [process.execPath, '-e', script],
+        outputPaths: [outputPath],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 1)
+      assert.match(result.outputCleanupError, /non-regular directory|parent directory changed/)
+      assert.strictEqual(fs.readFileSync(outsideMarker, 'utf8'), 'keep')
+      assert.strictEqual(fs.existsSync(path.join(outsideRoot, 'coverage')), true)
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+      fs.rmSync(outsideRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not modify pre-existing outputs when a later declared output is unsafe', () => {
     const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
     const artifactRoot = path.join(repositoryRoot, 'results')
     const outDir = path.join(artifactRoot, 'run')

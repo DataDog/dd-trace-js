@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 /**
- * Returns command-created paths that must be declared and restored after validation.
+ * Returns command-created paths that must be declared and removed after validation.
  *
  * @param {object} command structured command
  * @returns {string[]} absolute output paths
@@ -18,61 +18,126 @@ function getCommandOutputPaths (command) {
 }
 
 /**
- * Moves pre-existing command outputs aside so the validator can restore them exactly.
+ * Refuses pre-existing outputs and records parent identities for fail-closed cleanup.
  *
  * @param {object} input isolation inputs
  * @param {object} input.command structured command
  * @param {string} input.artifactRoot validation results root
- * @param {string} input.outDir command artifact directory
  * @param {string} [input.repositoryRoot] repository root
- * @returns {{outputPath: string, backupPath?: string, existed: boolean}[]} restoration state
+ * @returns {{outputPath: string, repositoryRoot: string, parentIdentities: object[]}[]} cleanup state
  */
-function prepareCommandOutputs ({ command, artifactRoot, outDir, repositoryRoot }) {
+function prepareCommandOutputs ({ command, artifactRoot, repositoryRoot }) {
   repositoryRoot = path.resolve(repositoryRoot || path.dirname(path.resolve(artifactRoot)))
-  const backupRoot = path.join(outDir, '.command-output-backup')
   const states = []
+  const outputPaths = getCommandOutputPaths(command)
 
-  try {
-    for (const [index, outputPath] of getCommandOutputPaths(command).entries()) {
-      assertSafeOutputPath({ outputPath, repositoryRoot, artifactRoot, command })
-      const existed = fs.existsSync(outputPath)
-      const state = { outputPath, existed }
-      if (existed) {
-        const backupPath = path.join(backupRoot, String(index))
-        fs.mkdirSync(path.dirname(backupPath), { recursive: true })
-        fs.renameSync(outputPath, backupPath)
-        state.backupPath = backupPath
-      }
-      states.push(state)
+  for (const outputPath of outputPaths) {
+    assertSafeOutputPath({ outputPath, repositoryRoot, artifactRoot, command })
+  }
+  for (const outputPath of outputPaths) {
+    if (pathExists(outputPath)) {
+      throw new Error(
+        `Command output path already exists and will not be moved or overwritten: ${outputPath}. ` +
+        'Remove it or choose a command that writes to a fresh output path, then render a new approval plan.'
+      )
     }
-  } catch (error) {
-    restoreCommandOutputs(states)
-    throw error
+    states.push({
+      outputPath,
+      repositoryRoot,
+      parentIdentities: captureExistingParentIdentities(outputPath, repositoryRoot),
+    })
   }
 
   return states
 }
 
 /**
- * Removes outputs created by a command and restores any pre-existing path.
+ * Removes outputs created by a command after revalidating every parent component.
  *
- * @param {{outputPath: string, backupPath?: string, existed: boolean}[]} states restoration state
+ * @param {{outputPath: string, repositoryRoot: string, parentIdentities: object[]}[]} states cleanup state
  * @returns {object[]} customer-safe cleanup summary
  */
-function restoreCommandOutputs (states) {
+function cleanupCommandOutputs (states) {
   const actions = []
   for (let index = states.length - 1; index >= 0; index--) {
     const state = states[index]
-    fs.rmSync(state.outputPath, { force: true, recursive: true })
-    if (state.existed) {
-      fs.mkdirSync(path.dirname(state.outputPath), { recursive: true })
-      fs.renameSync(state.backupPath, state.outputPath)
-      actions.push({ outputPath: state.outputPath, action: 'restored' })
-    } else {
-      actions.push({ outputPath: state.outputPath, action: 'removed' })
-    }
+    assertOutputParentsUnchanged(state)
+    const existed = fs.existsSync(state.outputPath)
+    if (existed) fs.rmSync(state.outputPath, { force: true, recursive: true })
+    actions.push({ outputPath: state.outputPath, action: existed ? 'removed' : 'absent' })
   }
   return actions.reverse()
+}
+
+/**
+ * Records every existing directory from repository.root through an output parent.
+ *
+ * @param {string} outputPath output path
+ * @param {string} repositoryRoot repository root
+ * @returns {{path: string, dev: number, ino: number}[]} parent identities
+ */
+function captureExistingParentIdentities (outputPath, repositoryRoot) {
+  const identities = []
+  const relative = path.relative(repositoryRoot, path.dirname(outputPath))
+  let current = repositoryRoot
+  for (const segment of relative ? relative.split(path.sep) : []) {
+    const stat = fs.lstatSync(current)
+    assertRegularDirectory(stat, current)
+    identities.push({ path: current, dev: stat.dev, ino: stat.ino })
+    current = path.join(current, segment)
+    if (!pathExists(current)) return identities
+  }
+
+  const stat = fs.lstatSync(current)
+  assertRegularDirectory(stat, current)
+  identities.push({ path: current, dev: stat.dev, ino: stat.ino })
+  return identities
+}
+
+/**
+ * Refuses cleanup if an existing parent changed or a new parent is a symbolic link.
+ *
+ * @param {object} state cleanup state
+ */
+function assertOutputParentsUnchanged (state) {
+  for (const identity of state.parentIdentities) {
+    const stat = fs.lstatSync(identity.path)
+    assertRegularDirectory(stat, identity.path)
+    if (stat.dev !== identity.dev || stat.ino !== identity.ino) {
+      throw new Error(`Refusing command output cleanup because a parent directory changed: ${identity.path}`)
+    }
+  }
+
+  const lastExisting = state.parentIdentities[state.parentIdentities.length - 1].path
+  const relative = path.relative(lastExisting, path.dirname(state.outputPath))
+  let current = lastExisting
+  for (const segment of relative ? relative.split(path.sep) : []) {
+    current = path.join(current, segment)
+    if (!pathExists(current)) break
+    assertRegularDirectory(fs.lstatSync(current), current)
+  }
+}
+
+/**
+ * Refuses symbolic links and non-directory parent components.
+ *
+ * @param {fs.Stats} stat path status
+ * @param {string} directory directory path
+ */
+function assertRegularDirectory (stat, directory) {
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(`Refusing command output cleanup through a non-regular directory: ${directory}`)
+  }
+}
+
+function pathExists (filename) {
+  try {
+    fs.lstatSync(filename)
+    return true
+  } catch (error) {
+    if (error.code === 'ENOENT') return false
+    throw error
+  }
 }
 
 function getCoverageDirectory (tokens) {
@@ -135,7 +200,7 @@ function isPathInside (directory, filename) {
 }
 
 module.exports = {
+  cleanupCommandOutputs,
   getCommandOutputPaths,
   prepareCommandOutputs,
-  restoreCommandOutputs,
 }

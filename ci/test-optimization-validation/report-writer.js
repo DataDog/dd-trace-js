@@ -8,7 +8,6 @@ const path = require('path')
 const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const { sanitizeConsoleText, sanitizeForReport, sanitizeString } = require('./redaction')
 const { writeFileSafely } = require('./safe-files')
-const { buildValidationPayloads } = require('./validation-payload')
 
 const CI_WIRING_SCENARIO = 'ci-wiring'
 const SHARING_WARNING =
@@ -28,12 +27,6 @@ function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {}
     reportPath,
     staticDiagnosis: staticDiagnosis && staticDiagnosis.reportPath,
   }
-  const validationPayloads = buildValidationPayloads({
-    manifest,
-    results,
-    artifacts: baseArtifacts,
-  })
-
   const frameworkLabels = getFrameworkLabels(manifest)
   const sanitizedResults = sanitizeForReport(results).map(result => ({
     ...result,
@@ -56,10 +49,11 @@ function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {}
     artifacts: {
       ...baseArtifacts,
     },
-    validation: validationPayloads.map(payload => ({
-      frameworkId: payload.frameworkId,
-      payload: payload.payload,
-    })),
+    validationSummaries: buildDiagnosticValidationSummaries({
+      manifest,
+      results: sanitizedResults,
+      reportDirectory: out,
+    }),
   }
 
   writeFileSafely(out, reportPath, renderMarkdown(report), 'Markdown report')
@@ -150,43 +144,201 @@ function renderMarkdown (report) {
 }
 
 function buildCompactDiagnosticSummary (report) {
-  const results = new Map()
-  for (const result of report.results) {
-    const frameworkResults = results.get(result.frameworkId) || []
-    frameworkResults.push(result)
-    results.set(result.frameworkId, frameworkResults)
-  }
   const reportDirectory = path.dirname(report.artifacts.report)
 
   return {
     version: 2,
     runSummary: report.runSummary,
-    validationSummaries: report.validation.map(validation => {
-      const payload = validation.payload
-      return {
-        frameworkId: validation.frameworkId,
-        status: payload.status,
-        framework: compactFramework(payload.framework),
-        ciCommandCandidate: compactCiCommandCandidate(payload.ciCommandCandidate, report.repositoryRoot),
-        checks: payload.checks.map(check => {
-          const result = getResultForCheck(check.id, results.get(validation.frameworkId) || [])
-          return compactCheck(check, result, reportDirectory)
-        }),
-      }
-    }),
+    validationSummaries: report.validationSummaries,
     artifacts: compactArtifacts(report.artifacts, reportDirectory),
   }
 }
 
-function compactFramework (framework) {
-  if (!framework) return
-
-  return {
-    id: framework.id,
-    name: framework.name,
-    version: framework.version,
-    packageName: framework.packageName,
+function buildDiagnosticValidationSummaries ({ manifest, results, reportDirectory }) {
+  const frameworks = new Map((manifest.frameworks || []).map(framework => [framework.id, framework]))
+  const grouped = new Map()
+  for (const result of results) {
+    const values = grouped.get(result.frameworkId) || []
+    values.push(result)
+    grouped.set(result.frameworkId, values)
   }
+
+  const summaries = []
+  for (const [frameworkId, frameworkResults] of grouped) {
+    const framework = frameworks.get(frameworkId)
+    const checks = frameworkResults.map(result => buildDiagnosticCheck(result, reportDirectory)).filter(Boolean)
+    summaries.push(sanitizeForReport({
+      frameworkId,
+      status: getDiagnosticStatus(checks),
+      framework: buildDiagnosticFramework(framework, frameworkId),
+      ciCommandCandidate: compactCiCommandCandidate(
+        buildCiCommandCandidate(framework || {}),
+        manifest.repository?.root
+      ),
+      checks,
+    }))
+  }
+  return summaries
+}
+
+function buildDiagnosticCheck (result, reportDirectory) {
+  const definition = getDiagnosticCheckDefinition(result.scenario)
+  if (!definition) return
+  const staticOnly = result.scenario === 'all'
+  const checkLevelFailure = result.scenario === 'basic-reporting' && isDiagnosticCheckLevelFailure(result)
+  const ciReplayUnavailable = result.scenario === 'ci-wiring' &&
+    (result.evidence?.manifestIncomplete === true || result.evidence?.ciCommandExecution?.fullReplayRan === false)
+  const command = readResultCommand(result)
+  const remediation = ['fail', 'error', 'blocked'].includes(result.status)
+    ? getResultRecommendations(result)
+    : []
+  return {
+    id: definition.id,
+    name: definition.name,
+    status: toDiagnosticStatus(result.status),
+    reason: staticOnly || ['fail', 'error', 'blocked'].includes(result.status) ? result.diagnosis : undefined,
+    command: staticOnly || checkLevelFailure || ciReplayUnavailable ? undefined : command?.command,
+    exitCode: staticOnly || checkLevelFailure || ciReplayUnavailable || result.evidence?.commandExitCode === undefined
+      ? undefined
+      : String(result.evidence.commandExitCode),
+    evidence: staticOnly || checkLevelFailure
+      ? undefined
+      : compactResultEvidence(definition.id, result.evidence || {}),
+    remediation: remediation.length > 0 ? remediation : undefined,
+    artifactDirectory: getRelativeArtifactDirectory(result.artifacts, reportDirectory),
+  }
+}
+
+function isDiagnosticCheckLevelFailure (result) {
+  if (!['fail', 'error'].includes(result.status)) return false
+  if (result.evidence?.commandExitCode !== undefined) return false
+  return !readResultCommand(result)
+}
+
+function getDiagnosticCheckDefinition (scenario) {
+  return {
+    all: { id: 'basic-reporting', name: 'Basic reporting' },
+    'basic-reporting': { id: 'basic-reporting', name: 'Basic reporting' },
+    'ci-wiring': { id: 'ci-wiring', name: 'CI wiring' },
+    'generated-test-verification': {
+      id: 'generated-test-verification',
+      name: 'Generated test verification',
+    },
+    efd: { id: 'efd-new-test-detection-and-retry', name: 'EFD new test detection and retry' },
+    atr: { id: 'auto-test-retries', name: 'Auto test retries' },
+    'test-management': { id: 'test-management', name: 'Test Management' },
+  }[scenario]
+}
+
+function buildDiagnosticFramework (framework, frameworkId) {
+  if (!framework) return { id: frameworkId, name: frameworkId, version: 'unknown', packageName: null }
+  return {
+    id: framework.framework,
+    name: getFrameworkDisplayName(framework.framework),
+    version: framework.frameworkVersion || 'unknown',
+    packageName: framework.project?.name || readPackageName(framework.project?.packageJson) || null,
+  }
+}
+
+function readPackageName (packageJson) {
+  if (!packageJson) return
+  try {
+    return JSON.parse(fs.readFileSync(packageJson, 'utf8')).name
+  } catch {}
+}
+
+function getFrameworkDisplayName (framework) {
+  return {
+    cucumber: 'Cucumber',
+    cypress: 'Cypress',
+    jest: 'Jest',
+    mocha: 'Mocha',
+    playwright: 'Playwright',
+    vitest: 'Vitest',
+  }[framework] || framework
+}
+
+function toDiagnosticStatus (status) {
+  if (status === 'pass') return 'ok'
+  if (status === 'fail' || status === 'error') return 'failed'
+  if (status === 'skip' || status === 'skipped') return 'skipped'
+  return 'unknown'
+}
+
+function getDiagnosticStatus (checks) {
+  if (checks.some(check => check.status === 'failed')) return 'failed'
+  if (checks.some(check => check.status === 'unknown')) return 'unknown'
+  if (checks.every(check => check.status === 'skipped')) return 'unknown'
+  return 'ok'
+}
+
+function compactResultEvidence (checkId, evidence) {
+  if (checkId === 'basic-reporting') {
+    const events = {
+      sessions: evidence.testSessionEvents || 0,
+      modules: evidence.testModuleEvents || 0,
+      suites: evidence.testSuiteEvents || 0,
+      tests: evidence.testEvents || 0,
+    }
+    return compactDefined({
+      events,
+      missingLevels: getMissingEventLevels(events),
+      failureKind: evidence.eventLevelFailure?.kind || evidence.commandFailure?.kind,
+    })
+  }
+  if (checkId === 'ci-wiring') {
+    return compactDefined({
+      events: getEventCounts(evidence),
+      failureKind: evidence.eventLevelFailure?.kind,
+      fullReplayRan: evidence.ciCommandExecution?.fullReplayRan,
+      initializationProbe: compactInitializationProbe(evidence.initializationProbe),
+      capture: compactDefined({
+        observedEvents: evidence.offlineExporterSummary?.eventsObserved,
+        retainedEvents: evidence.offlineExporterSummary?.eventsRetained,
+      }),
+    })
+  }
+  if (checkId === 'efd-new-test-detection-and-retry') {
+    return compactDefined({
+      matchingTestEvents: evidence.matchingTestEvents,
+      retryEvents: evidence.earlyFlakeRetryEvents,
+      taggedEvents: evidence.earlyFlakeTaggedEvents,
+    })
+  }
+  if (checkId === 'auto-test-retries') {
+    return compactDefined({
+      matchingTestEvents: evidence.matchingTestEvents,
+      retryEvents: evidence.autoTestRetryEvents,
+      failedAttempts: evidence.failedAttempts,
+      passedAttempts: evidence.passedAttempts,
+    })
+  }
+  if (checkId === 'test-management') {
+    return compactDefined({
+      matchingTestEvents: evidence.matchingTestEvents,
+      quarantinedEvents: evidence.quarantinedEvents,
+    })
+  }
+  if (checkId === 'generated-test-verification') {
+    return {
+      scenarios: (evidence.scenarios || []).map(scenario => compactDefined({
+        id: scenario.id,
+        exitCode: scenario.exitCode,
+        expectedExitCode: scenario.expectedExitCode,
+        observedTestCount: scenario.observedTestCount,
+        expectedTestCount: scenario.expectedTestCount,
+      })),
+    }
+  }
+}
+
+function getMissingEventLevels (events) {
+  const missing = []
+  if (events.sessions === 0) missing.push('test_session_end')
+  if (events.modules === 0) missing.push('test_module_end')
+  if (events.suites === 0) missing.push('test_suite_end')
+  if (events.tests === 0) missing.push('test')
+  return missing
 }
 
 function compactCiCommandCandidate (candidate, repositoryRoot) {
@@ -200,85 +352,6 @@ function compactCiCommandCandidate (candidate, repositoryRoot) {
     step: candidate.step,
     command: candidate.command,
     whySelected: candidate.whySelected,
-  }
-}
-
-function compactCheck (check, result, reportDirectory) {
-  const runStep = (check.steps || []).find(step => step.id === 'run-tests')
-  const evidenceStep = (check.steps || []).find(step => step.id !== 'run-tests')
-  const remediation = check.remediation || (
-    result && ['fail', 'error', 'blocked'].includes(result.status)
-      ? getResultRecommendations(result)
-      : undefined
-  )
-
-  return {
-    id: check.id,
-    name: check.name,
-    status: check.status,
-    reason: check.reason,
-    command: runStep?.command,
-    exitCode: runStep?.exitCode,
-    evidence: compactCheckEvidence(check.id, evidenceStep?.evidence || check.evidence),
-    remediation: remediation?.length > 0 ? remediation : undefined,
-    artifactDirectory: getRelativeArtifactDirectory(result?.artifacts, reportDirectory),
-  }
-}
-
-function compactCheckEvidence (checkId, evidence) {
-  if (!evidence) return
-
-  if (checkId === 'basic-reporting') {
-    return compactDefined({
-      events: evidence.events,
-      missingLevels: nonEmptyArray(evidence.missingLevels),
-      failureKind: evidence.eventLevelFailure?.kind || evidence.commandFailure?.kind,
-    })
-  }
-
-  if (checkId === 'ci-wiring') {
-    return compactDefined({
-      events: getEventCounts(evidence),
-      failureKind: evidence.eventLevelFailure?.kind,
-      fullReplayRan: evidence.ciCommandExecution?.fullReplayRan,
-      initializationProbe: compactInitializationProbe(evidence.initializationProbe),
-    })
-  }
-
-  if (checkId === 'efd-new-test-detection-and-retry') {
-    return compactDefined({
-      matchingTestEvents: evidence.matchingTestEvents,
-      retryEvents: evidence.earlyFlakeRetryEvents,
-      taggedEvents: evidence.earlyFlakeTaggedEvents,
-    })
-  }
-
-  if (checkId === 'auto-test-retries') {
-    return compactDefined({
-      matchingTestEvents: evidence.matchingTestEvents,
-      retryEvents: evidence.autoTestRetryEvents,
-      failedAttempts: evidence.failedAttempts,
-      passedAttempts: evidence.passedAttempts,
-    })
-  }
-
-  if (checkId === 'test-management') {
-    return compactDefined({
-      matchingTestEvents: evidence.matchingTestEvents,
-      quarantinedEvents: evidence.quarantinedEvents,
-    })
-  }
-
-  if (checkId === 'generated-test-verification') {
-    return {
-      scenarios: (evidence.scenarios || []).map(scenario => compactDefined({
-        id: scenario.id,
-        exitCode: scenario.exitCode,
-        expectedExitCode: scenario.expectedExitCode,
-        observedTestCount: scenario.observedTestCount,
-        expectedTestCount: scenario.expectedTestCount,
-      })),
-    }
   }
 }
 
@@ -330,30 +403,12 @@ function relativeRepositoryPath (value, repositoryRoot) {
     : value
 }
 
-function getResultForCheck (checkId, results) {
-  const scenario = {
-    'basic-reporting': 'basic-reporting',
-    'ci-wiring': 'ci-wiring',
-    'efd-new-test-detection-and-retry': 'efd',
-    'auto-test-retries': 'atr',
-    'test-management': 'test-management',
-    'generated-test-verification': 'generated-test-verification',
-  }[checkId]
-  return results.find(result => result.scenario === scenario) || (
-    checkId === 'basic-reporting' ? results.find(result => result.scenario === 'all') : undefined
-  )
-}
-
 function compactDefined (value) {
   const compact = {}
   for (const [key, entry] of Object.entries(value)) {
     if (entry !== undefined) compact[key] = entry
   }
   return compact
-}
-
-function nonEmptyArray (value) {
-  return Array.isArray(value) && value.length > 0 ? value : undefined
 }
 
 function toCamelCase (value) {

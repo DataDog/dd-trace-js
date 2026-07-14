@@ -1,10 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
 const jsonSchema = require('../../../../ci/test-optimization-validation-manifest.schema.json')
-const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
+const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
+const {
+  MAX_FRAMEWORKS,
+  MAX_VALIDATION_ERRORS,
+  validateManifest,
+} = require('../../../../ci/test-optimization-validation/manifest-schema')
 
 describe('test optimization validation manifest schema', () => {
   it('requires at least one framework entry', () => {
@@ -24,6 +31,80 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[1].id must be unique; duplicate "mocha:root".',
     ])
+  })
+
+  it('accepts the last framework entry and rejects the first excessive entry', () => {
+    const manifest = getManifest()
+    manifest.frameworks = Array.from({ length: MAX_FRAMEWORKS }, (_, index) => ({
+      ...manifest.frameworks[0],
+      id: `mocha:project-${index}`,
+      project: { ...manifest.frameworks[0].project },
+      existingTestCommand: { ...manifest.frameworks[0].existingTestCommand },
+      preflight: { ...manifest.frameworks[0].preflight },
+      ciWiring: { ...manifest.frameworks[0].ciWiring },
+    }))
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+
+    manifest.frameworks.push({ ...manifest.frameworks[0], id: 'mocha:excessive' })
+    assert.match(validateManifest(manifest)[0], new RegExp(`at most ${MAX_FRAMEWORKS} entries`))
+  })
+
+  it('bounds validation errors and rendered invalid-manifest output', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-manifest-bounds-'))
+    const manifestPath = path.join(repositoryRoot, 'dd-test-optimization-validation-manifest.json')
+    const manifest = {
+      schemaVersion: '1.0',
+      repository: { root: repositoryRoot },
+      environment: {},
+      frameworks: Array.from({ length: MAX_FRAMEWORKS }, () => null),
+    }
+
+    try {
+      const errors = validateManifest(manifest)
+      assert.strictEqual(errors.length, MAX_VALIDATION_ERRORS)
+      assert.match(errors.at(-1), /additional validation error\(s\) omitted/)
+
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest))
+      assert.throws(() => loadManifest(manifestPath), error => {
+        assert.match(error.message, /additional validation error\(s\) omitted/)
+        assert(Buffer.byteLength(error.message) < 20 * 1024)
+        return true
+      })
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('reports malformed repeated structures without throwing during path validation', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].project.configFiles = {}
+    manifest.frameworks[0].setup = { commands: {} }
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'planned',
+      files: {},
+      scenarios: {},
+      cleanupPaths: {},
+    }
+
+    const errors = validateManifest(manifest)
+
+    assert(errors.some(error => /project\.configFiles must be an array/.test(error)))
+    assert(errors.some(error => /setup\.commands must be an array/.test(error)))
+    assert(errors.some(error => /generatedTestStrategy\.files must be an array/.test(error)))
+    assert(errors.some(error => /generatedTestStrategy\.scenarios must be an array/.test(error)))
+  })
+
+  it('rejects excessive manifest nesting before JSON parsing', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-manifest-depth-'))
+    const manifestPath = path.join(repositoryRoot, 'dd-test-optimization-validation-manifest.json')
+
+    try {
+      fs.writeFileSync(manifestPath, '['.repeat(65))
+      assert.throws(() => loadManifest(manifestPath), /nesting exceeds 64/)
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
   })
 
   it('requires runnable entries to include preflight evidence', () => {

@@ -4,9 +4,14 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { parseBoundedJson } = require('./bounded-json')
 const { validateManifest } = require('./manifest-schema')
 
 const MAX_MANIFEST_BYTES = 5 * 1024 * 1024
+const MAX_MANIFEST_COLLECTION_ENTRIES = 50_000
+const MAX_MANIFEST_ERROR_BYTES = 16 * 1024
+const MAX_MANIFEST_NESTING_DEPTH = 64
+const MAX_MANIFEST_STRING_BYTES = 256 * 1024
 
 function loadManifest (manifestPath) {
   const resolvedPath = path.resolve(manifestPath)
@@ -17,8 +22,18 @@ function loadManifest (manifestPath) {
   if (stat.size > MAX_MANIFEST_BYTES) {
     throw new Error(`Validation manifest exceeds the ${MAX_MANIFEST_BYTES}-byte size limit: ${resolvedPath}`)
   }
-  const raw = fs.readFileSync(resolvedPath, 'utf8')
-  const manifest = JSON.parse(raw)
+  const raw = fs.readFileSync(resolvedPath)
+  const manifest = parseBoundedJson(raw, {
+    label: 'Validation manifest JSON',
+    maxCollectionEntries: MAX_MANIFEST_COLLECTION_ENTRIES,
+    maxNestingDepth: MAX_MANIFEST_NESTING_DEPTH,
+    maxStringBytes: MAX_MANIFEST_STRING_BYTES,
+  }).value
+
+  const errors = validateManifest(manifest)
+  if (errors.length > 0) {
+    throw new Error(`Invalid validation manifest:\n- ${renderErrors(errors)}`)
+  }
   manifest.__path = resolvedPath
   Object.defineProperty(manifest, '__sourceSha256', {
     configurable: false,
@@ -26,17 +41,18 @@ function loadManifest (manifestPath) {
     value: crypto.createHash('sha256').update(raw).digest('hex'),
     writable: false,
   })
-
-  const errors = validateManifest(manifest)
-  if (errors.length > 0) {
-    throw new Error(`Invalid validation manifest:\n- ${errors.join('\n- ')}`)
-  }
   if (path.dirname(resolvedPath) !== path.resolve(manifest.repository.root)) {
     throw new Error(`Validation manifest must be stored directly in repository.root: ${resolvedPath}`)
   }
   validatePhysicalManifestPaths(manifest)
 
   return manifest
+}
+
+function renderErrors (errors) {
+  const rendered = errors.join('\n- ')
+  if (Buffer.byteLength(rendered) <= MAX_MANIFEST_ERROR_BYTES) return rendered
+  return `${Buffer.from(rendered).subarray(0, MAX_MANIFEST_ERROR_BYTES).toString('utf8')}\n- Additional errors omitted.`
 }
 
 function validatePhysicalManifestPaths (manifest) {

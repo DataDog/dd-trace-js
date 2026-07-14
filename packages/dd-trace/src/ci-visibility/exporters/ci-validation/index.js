@@ -10,6 +10,7 @@ const CiValidationWriter = require('./writer')
 
 const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
 const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const VALIDATION_CAPTURE_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE'
 
 class CiValidationExporter extends CiVisibilityExporter {
   /**
@@ -31,7 +32,9 @@ class CiValidationExporter extends CiVisibilityExporter {
     })
     super(config, { cacheOnly: true, testOptimizationHttpCache: cache })
 
-    this._sink = new CiValidationSink(validationOutputRoot)
+    this._sink = new CiValidationSink(validationOutputRoot, {
+      captureMode: process.env[VALIDATION_CAPTURE_MODE_ENV] || 'strict',
+    })
     this._writer = new CiValidationWriter({ sink: this._sink, tags: config.tags })
     this._coverageWriter = new CiValidationCoverageWriter(this._sink)
     this._isInitialized = true

@@ -4,19 +4,22 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { getArtifactId } = require('./artifact-id')
 const { getApprovalDigest } = require('./approval')
 const { getCommandOutputPaths } = require('./command-output-policy')
 const { getCommandSuitabilityError } = require('./command-suitability')
 const { serializeApprovalCommand } = require('./command-runner')
-const { getUnavailableExecutable } = require('./executable')
-const { getLocalValidationCommand } = require('./local-command')
+const {
+  getApprovedExecutable,
+  getUnavailableExecutable,
+} = require('./executable')
+const { getCiWiringCommand, getLocalValidationCommand } = require('./local-command')
 const {
   getOfflineFixturePaths,
   getOfflineScenarioNames,
 } = require('./offline-fixtures')
 const { sanitizeEnv, sanitizeString } = require('./redaction')
 const { getBasicReportingCommand } = require('./scenarios/basic-reporting')
-const { getCiWiringCommand } = require('./scenarios/ci-wiring')
 
 const VALIDATOR_PATH = path.resolve(__dirname, '..', 'validate-test-optimization.js')
 const DEFAULT_MANIFEST_FILENAME = 'dd-test-optimization-validation-manifest.json'
@@ -94,6 +97,8 @@ function formatExecutionPlan ({
     '',
     'Command environment values are shown after secret-like values are replaced with `<redacted>`. ' +
       'Validator-controlled offline cache and noise-suppression settings are described collectively.',
+    'The approved executable path and SHA-256 bind executable selection for reproducibility. They do not attest ' +
+      'project scripts, packages, modules, subprocesses, or other code loaded by that executable.',
     ''
   )
   for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
@@ -159,11 +164,9 @@ function formatExecutionPlan ({
 function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
   for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
     const plannedCommands = getPlannedCommands(framework, requestedScenario)
-    const setupCommandCount = framework.setup?.commands?.length || 0
-    for (const [index, plannedCommand] of plannedCommands.entries()) {
+    for (const plannedCommand of plannedCommands) {
       const executable = getUnavailableExecutable(plannedCommand.command)
       if (!executable) continue
-      if (setupCommandCount > 0 && index > 0) continue
 
       throw new Error(
         `Cannot render an approvable plan because ${plannedCommand.label} for ${framework.id} uses ` +
@@ -486,7 +489,7 @@ function appendOfflineArtifacts (lines, {
     '',
     `Captured event artifacts: ${inlineCode(getRepositoryRelativePath(
       repositoryRoot,
-      path.join(out, 'runs', sanitizePathSegment(framework.id))
+      path.join(out, 'runs', getArtifactId(framework.id))
     ))}`,
     '',
     'Each execution writes bounded temporary JSON payload files under `.offline-payloads/payloads/tests/`, using ' +
@@ -495,10 +498,6 @@ function appendOfflineArtifacts (lines, {
       'approval digest even though this plan summarizes their shared layout.',
     ''
   )
-}
-
-function sanitizePathSegment (value) {
-  return String(value).replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
 }
 
 /**
@@ -537,6 +536,13 @@ function appendExecutionSection (lines, {
     `- Timeout: ${command.timeoutMs || 300_000} ms`
   )
   if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
+  const approvedExecutable = getApprovedExecutable(command)
+  if (approvedExecutable) {
+    lines.push(
+      `- Approved executable: ${inlineCode(approvedExecutable.path)}`,
+      `- Executable SHA-256: ${inlineCode(approvedExecutable.sha256)}`
+    )
+  }
   const commandEnvironment = sanitizeEnv(command.env)
   if (commandEnvironment) {
     lines.push(`- Command environment: ${Object.entries(commandEnvironment).map(([name, value]) => {
@@ -547,7 +553,7 @@ function appendExecutionSection (lines, {
   if (outputPaths.length > 0) {
     lines.push('- Command-created outputs: ' + outputPaths.map(outputPath => {
       return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
-    }).join(', ') + ' (pre-existing paths are restored; newly created paths are removed)')
+    }).join(', ') + ' (must not exist before validation; newly created paths are removed)')
   }
   for (const adjustment of command.localAdjustments || []) {
     lines.push(`- Local adjustment: ${plainText(adjustment)}`)

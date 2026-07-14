@@ -4,6 +4,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { bindManifestExecutables } = require('./executable')
 const { getFixtureRecipeDigests } = require('./offline-fixtures')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
@@ -46,6 +47,7 @@ function getApprovalDigest ({
       selectedFrameworkIds,
       requestedScenario,
     }),
+    executableIdentities: bindManifestExecutables(manifest),
     keepTempFiles,
     verbose,
     validatorSha256: getValidatorDigest(),

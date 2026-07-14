@@ -3,8 +3,6 @@
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 
 class CiValidationWriter {
-  #eventCount = 0
-
   /**
    * Creates an offline writer that preserves CI Visibility event encoding.
    *
@@ -24,7 +22,6 @@ class CiValidationWriter {
    * @param {object[]} trace formatted trace
    */
   append (trace) {
-    this.#eventCount += trace.length
     this._encoder.encode(trace)
   }
 
@@ -35,9 +32,7 @@ class CiValidationWriter {
    */
   flush (done = () => {}) {
     if (this._encoder.count() > 0) {
-      const eventCount = this.#eventCount
-      this.#eventCount = 0
-      this._sink.writeTestCycle(this._encoder.makePayload(), eventCount)
+      this._sink.writeTestCycle(this._encoder.makePayload())
     }
     done()
   }

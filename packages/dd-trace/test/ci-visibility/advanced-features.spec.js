@@ -76,13 +76,14 @@ describe('test optimization validation advanced features', () => {
         },
       },
       '../offline-output': {
-        parseOfflineSummary () {},
         readOfflineOutput () {
           return {
             coverageFileCount: 0,
             events: [test],
+            initialized: true,
             inputs: {},
             payloadFileCount: 0,
+            summary: { errors: [] },
           }
         },
       },
@@ -138,7 +139,6 @@ describe('test optimization validation advanced features', () => {
         suite: test.testSuite,
         name: test.testName,
         file: test.testSourceFile,
-        parameters: undefined,
       }])
     } finally {
       clock.restore()
