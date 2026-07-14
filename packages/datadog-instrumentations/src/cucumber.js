@@ -1212,6 +1212,11 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
+    let onDone
+    const flushPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
     sessionFinishCh.publish({
       status: success ? 'pass' : 'fail',
       isSuitesSkipped,
@@ -1224,10 +1229,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      onDone,
     })
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
+    await flushPromise
     return success
   }
 }
