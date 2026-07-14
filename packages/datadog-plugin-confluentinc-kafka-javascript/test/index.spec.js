@@ -331,7 +331,7 @@ describe('Plugin', () => {
                 // librdkafka may deliver messages across multiple batches,
                 // so each batch span will have links for the messages it received.
                 assert.ok(links.length >= 1, `expected at least 1 span link, got ${links.length}`)
-              })
+              }, { timeoutMs: 5000 }) // librdkafka consumer delivery lags the produce by seconds
 
               await consumer.run({ eachBatch: () => {} })
               await Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])

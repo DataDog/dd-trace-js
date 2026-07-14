@@ -3,7 +3,7 @@
 const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
 
-const { afterEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('./agent')
 
@@ -158,6 +158,110 @@ describe('test agent helper', () => {
       } finally {
         delete process.env.SOME_TEST_NOISE
       }
+    })
+  })
+
+  describe('assertSomeTraces timeout', () => {
+    afterEach(() => agent.close())
+
+    it('rejects at the timeout when no payload arrives', async () => {
+      await agent.load([])
+
+      const start = Date.now()
+      await assert.rejects(
+        agent.assertSomeTraces(() => {}, { timeoutMs: 200 }),
+        { message: /No matching trace received within 200ms/ }
+      )
+      assert.ok(Date.now() - start < 1000, 'rejected well before Mocha\'s 5s timeout')
+    })
+  })
+
+  describe('assertNoTraces', () => {
+    afterEach(() => agent.close())
+
+    it('resolves at the timeout when no forbidden trace arrives', async () => {
+      const tracer = await agent.load('dns')
+
+      const start = Date.now()
+      await agent.assertNoTraces(() => {
+        assert.fail('no trace should have been produced')
+      }, { timeoutMs: 200 })
+      const elapsed = Date.now() - start
+      assert.ok(elapsed >= 200, `resolved before the timeout window (${elapsed}ms)`)
+      assert.ok(elapsed < 1000, `resolved well after the timeout window (${elapsed}ms)`)
+
+      assert.strictEqual(tracer, global._ddtrace)
+    })
+
+    it('rejects when a forbidden trace arrives', async () => {
+      const tracer = await agent.load('dns')
+      const dns = require('node:dns')
+
+      const rejection = assert.rejects(
+        agent.assertNoTraces(traces => {
+          if (traces[0][0].name === 'dns.lookup') {
+            assert.fail('dns.lookup should not have been traced')
+          }
+        }, { timeoutMs: 5000 }),
+        { message: /dns\.lookup should not have been traced/ }
+      )
+
+      dns.lookup('localhost', () => {})
+      await rejection
+
+      assert.strictEqual(tracer, global._ddtrace)
+    })
+  })
+
+  describe('teardown of an unconsumed expectation', () => {
+    /** @type {(reason: unknown) => void} */
+    let onUnhandledRejection
+    /** @type {unknown[]} */
+    let unhandledRejections
+
+    beforeEach(() => {
+      unhandledRejections = []
+      onUnhandledRejection = reason => unhandledRejections.push(reason)
+      process.on('unhandledRejection', onUnhandledRejection)
+    })
+
+    afterEach(async () => {
+      await agent.close()
+      process.removeListener('unhandledRejection', onUnhandledRejection)
+    })
+
+    it('a cancelled expectation leaves no leak and nothing for reset() to report', async () => {
+      await agent.load([])
+
+      const promise = agent.assertSomeTraces(() => {}, { timeoutMs: 100 })
+      promise.cancel()
+
+      agent.reset()
+
+      await new Promise(resolve => setTimeout(resolve, 200))
+      assert.deepStrictEqual(unhandledRejections, [])
+    })
+
+    it('close() disarms an unconsumed expectation without leaking', async () => {
+      await agent.load([])
+
+      agent.assertSomeTraces(() => {}, { timeoutMs: 100 })
+
+      await agent.close()
+
+      await new Promise(resolve => setTimeout(resolve, 200))
+      assert.deepStrictEqual(unhandledRejections, [])
+    })
+
+    it('reset() throws on a leaked expectation and still disarms it', async () => {
+      await agent.load([])
+
+      agent.assertSomeTraces(() => {}, { timeoutMs: 100 })
+
+      assert.throws(() => agent.reset(), /1 trace expectation\(s\) were still armed/)
+
+      await new Promise(resolve => setTimeout(resolve, 200))
+      assert.deepStrictEqual(unhandledRejections, [])
     })
   })
 })
