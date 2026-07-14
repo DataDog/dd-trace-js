@@ -88,6 +88,45 @@ describe('resolvePluginVersions', () => {
     assert.equal(result.unversioned, '4')
   })
 
+  it('includes declarations at the Node.js range boundary', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=2 <5'],
+      nodeRange: '>=22',
+      nodeVersion: '22.0.0',
+      env: {},
+    })
+
+    assert.deepEqual(versionKeys(result), ['2.0.0', '2', '3', '4'])
+    assert.equal(result.unversioned, '4')
+  })
+
+  it('excludes declarations outside the Node.js range before applying package range overrides', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=2 <5'],
+      nodeRange: '>=22',
+      nodeVersion: '21.999.999',
+      env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
+    })
+
+    assert.deepEqual(result.versionList, [])
+    assert.equal(result.unversioned, undefined)
+  })
+
+  it('throws on an invalid Node.js range', () => {
+    assert.throws(
+      () => resolvePluginVersions({
+        name: 'mongodb',
+        declaredVersions: ['>=2 <5'],
+        nodeRange: 'not-a-version',
+        nodeVersion: '22.0.0',
+        env: {},
+      }),
+      /Invalid Node.js version range/
+    )
+  })
+
   it('filters the installed keys by RANGE and follows the filtered tail', () => {
     const result = resolvePluginVersions({
       name: 'mongodb',
