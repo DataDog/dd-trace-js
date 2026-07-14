@@ -1030,6 +1030,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'friends:[Human]',
               meta: {
+                'graphql.field.coordinates': 'RootQueryType.friends',
                 'graphql.field.path': 'friends',
                 'graphql.field.type': 'Human',
               },
@@ -1040,6 +1041,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'name:String',
               meta: {
+                'graphql.field.coordinates': 'Human.name',
                 'graphql.field.path': 'friends.*.name',
                 'graphql.field.type': 'String',
               },
@@ -1050,6 +1052,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'pets:[Pet!]',
               meta: {
+                'graphql.field.coordinates': 'Human.pets',
                 'graphql.field.path': 'friends.*.pets',
                 'graphql.field.type': 'Pet',
               },
@@ -1060,6 +1063,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'name:String',
               meta: {
+                'graphql.field.coordinates': 'Pet.name',
                 'graphql.field.path': 'friends.*.pets.*.name',
                 'graphql.field.type': 'String',
               },

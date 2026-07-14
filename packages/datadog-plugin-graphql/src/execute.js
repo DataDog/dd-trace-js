@@ -314,6 +314,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       type: 'graphql',
       startTime,
       meta: {
+        'graphql.field.coordinates': `${field.parentTypeName}.${fieldName}`,
         'graphql.field.name': fieldName,
         'graphql.field.path': collapsedKey,
         'graphql.field.type': baseTypeName,
@@ -438,6 +439,7 @@ function wrapResolve (resolve) {
       field = {
         fieldNode: info.fieldNodes?.[0],
         fieldName: info.fieldName,
+        parentTypeName: info.parentType.name,
         returnType: info.returnType,
         baseTypeName: getBaseTypeName(info.returnType),
         variableValues: info.variableValues,
