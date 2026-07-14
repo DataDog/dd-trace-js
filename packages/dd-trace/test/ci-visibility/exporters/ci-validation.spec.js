@@ -9,6 +9,7 @@ const net = require('node:net')
 const os = require('node:os')
 const path = require('node:path')
 
+const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -70,6 +71,26 @@ describe('CI validation offline output', () => {
     assert.strictEqual(output.events[0].type, 'test')
     assert.strictEqual(output.events[0].meta['test.name'], 'offline test')
     assert.match(stderrWrite.firstCall.args[0], new RegExp(`^${SUMMARY_PREFIX}`))
+  })
+
+  it('discards non-test spans without dropping test events from the same payload', () => {
+    const sink = new CiValidationSink(outputRoot)
+    const writer = new CiValidationWriter({ sink, tags: {} })
+    writer.append([{
+      ...createTestSpan(),
+      name: 'internal',
+      resource: 'non-test-telemetry-marker',
+      type: 'web',
+    }, createTestSpan()])
+    writer.flush()
+    sink.writeSummary()
+
+    const output = readOfflineOutput(outputRoot)
+    assert.strictEqual(output.events.length, 1)
+    assert.strictEqual(output.events[0].type, 'test')
+    assert.deepStrictEqual(output.summary.errors, [])
+    assert.doesNotMatch(getAllFiles(outputRoot).map(filename => fs.readFileSync(filename, 'utf8')).join('\n'),
+      /non-test-telemetry-marker/)
   })
 
   it('fails closed when the output byte limit is exceeded', () => {
@@ -154,7 +175,21 @@ describe('CI validation offline output', () => {
     assert.strictEqual(getPayloadFiles(outputRoot, 'tests').length, 0)
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
-    assert.deepStrictEqual(summary.errors, ['output_payload_conversion_failed'])
+    assert.deepStrictEqual(summary.errors, ['output_payload_decode_failed'])
+  })
+
+  it('distinguishes an unsupported decoded payload from a MessagePack decode failure', () => {
+    const sink = new CiValidationSink(outputRoot)
+    sink.writeTestCycle(Buffer.from(msgpack.encode({
+      version: 1,
+      events: [{ type: 'unsupported', content: {} }],
+    })))
+    sink.writeSummary()
+
+    assert.strictEqual(getPayloadFiles(outputRoot, 'tests').length, 0)
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['output_payload_projection_failed'])
   })
 
   it('accepts the last output file and rejects the first file beyond the limit', () => {

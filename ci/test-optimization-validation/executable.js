@@ -120,24 +120,25 @@ function getApprovedExecutable (command) {
 }
 
 /**
- * Verifies and returns the absolute executable that must be spawned.
+ * Verifies and returns the canonical executable and approved invocation name used to spawn it.
  *
  * @param {object} command command about to execute
- * @returns {string} approved absolute executable
+ * @returns {{argv0: string, path: string}} approved launch identity
  */
 function getExecutableForSpawn (command) {
   const approved = getApprovedExecutable(command)
   const current = getExecutableIdentity(command)
   if (!approved) {
     if (!current) throw new Error(`Command executable is unavailable: ${getExecutable(command)}`)
-    return current.path
+    return { argv0: current.invocationPath, path: current.path }
   }
-  if (!current || current.path !== approved.path || current.sha256 !== approved.sha256) {
+  if (!current || current.invocationPath !== approved.invocationPath || current.path !== approved.path ||
+    current.sha256 !== approved.sha256) {
     throw new Error(
       'The selected command executable changed after approval. Render and approve a fresh execution plan.'
     )
   }
-  return approved.path
+  return { argv0: approved.invocationPath, path: approved.path }
 }
 
 /**
@@ -145,22 +146,22 @@ function getExecutableForSpawn (command) {
  *
  * @param {object} command manifest command
  * @param {Map<string, object>} [identitiesByPath] identities already hashed during this approval pass
- * @returns {{path: string, sha256: string}|undefined} executable identity
+ * @returns {{invocationPath: string, path: string, sha256: string}|undefined} executable identity
  */
 function getExecutableIdentity (command, identitiesByPath) {
   const resolved = getResolvedExecutable(command)
   if (!resolved) return
   const canonicalPath = fs.realpathSync(resolved)
   const cached = identitiesByPath?.get(canonicalPath)
-  if (cached) return cached
+  if (cached) return { invocationPath: resolved, ...cached }
   const stat = fs.statSync(canonicalPath)
   if (!stat.isFile()) return
-  const identity = {
+  const canonicalIdentity = {
     path: canonicalPath,
     sha256: crypto.createHash('sha256').update(fs.readFileSync(canonicalPath)).digest('hex'),
   }
-  identitiesByPath?.set(canonicalPath, identity)
-  return identity
+  identitiesByPath?.set(canonicalPath, canonicalIdentity)
+  return { invocationPath: resolved, ...canonicalIdentity }
 }
 
 function bindExecutableIdentity (command, identity) {

@@ -33,7 +33,10 @@ function projectTestCyclePayload (payload) {
   }
 
   const events = []
-  for (const event of payload.events) events.push(projectEvent(event))
+  for (const event of payload.events) {
+    if (isNonTestSpan(event)) continue
+    events.push(projectEvent(event))
+  }
   return { version: 1, events }
 }
 
@@ -67,6 +70,14 @@ function projectEvent (event) {
       metrics: projectFields(event.content.metrics, METRIC_FIELDS),
     },
   }
+}
+
+function isNonTestSpan (event) {
+  if (!isObject(event) || event.type !== 'span') return false
+  if (!isObject(event.content)) {
+    throw new Error('Test Optimization validation payload contains an unsupported span shape.')
+  }
+  return true
 }
 
 function projectFields (source, allowed) {

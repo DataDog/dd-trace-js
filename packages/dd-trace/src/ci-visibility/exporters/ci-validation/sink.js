@@ -84,11 +84,19 @@ class CiValidationSink {
    * @param {Buffer} payload encoded Test Optimization payload
    */
   writeTestCycle (payload) {
+    let decoded
+    try {
+      decoded = JSON.parse(msgpackToJson(payload).toString('utf8'))
+    } catch {
+      this.#fail('output_payload_decode_failed')
+      return
+    }
+
     let projected
     try {
-      projected = projectTestCyclePayload(JSON.parse(msgpackToJson(payload).toString('utf8')))
+      projected = projectTestCyclePayload(decoded)
     } catch {
-      this.#fail('output_payload_conversion_failed')
+      this.#fail('output_payload_projection_failed')
       return
     }
 

@@ -12,6 +12,7 @@ const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 const {
   filterFrameworks,
+  main: runValidationCli,
   normalizeFrameworkTarget,
   parseArgs,
 } = require('../../../../ci/test-optimization-validation/cli')
@@ -146,6 +147,28 @@ describe('test optimization validation cli', () => {
     assert.strictEqual(options.offlineFixtureNonce, nonce)
   })
 
+  it('parses the read-only approval digest verification mode', () => {
+    const options = parseArgs(['--offline-fixture-nonce', 'b'.repeat(32), '--print-approval-sha256'])
+
+    assert.strictEqual(options.printApprovalSha256, true)
+  })
+
+  it('explains the approval hash trust boundary in help output', async () => {
+    const logs = []
+    const originalLog = console.log
+    console.log = message => logs.push(message)
+
+    try {
+      await runValidationCli(['--help'])
+
+      assert.match(logs.join('\n'), /--print-approval-sha256/)
+      assert.match(logs.join('\n'), /does not verify package origin/)
+      assert.match(logs.join('\n'), /lockfile\/integrity metadata or a trusted package tarball/)
+    } finally {
+      console.log = originalLog
+    }
+  })
+
   it('initializes a manifest scaffold without starting live validation', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-init-manifest-'))
     const originalCwd = process.cwd()
@@ -202,6 +225,104 @@ describe('test optimization validation cli', () => {
 
       assert.strictEqual(fs.existsSync(out), false)
       assert.deepStrictEqual(logs, [`Validation manifest is valid: ${manifestPath}`])
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('prints the approval digest without creating output or starting live validation', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-digest-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const digest = 'c'.repeat(64)
+    const nonce = 'd'.repeat(32)
+    const logs = []
+    const digestInputs = []
+    const originalLog = console.log
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './approval': {
+        assertApprovalDigest () {
+          throw new Error('live approval should not run')
+        },
+        getApprovalDigest (input) {
+          digestInputs.push(input)
+          return digest
+        },
+      },
+      './static-diagnosis': {
+        runStaticDiagnosis () {
+          throw new Error('static diagnosis should not run')
+        },
+      },
+    })
+
+    const manifest = getRunnableManifest(tmpDir)
+    manifest.frameworks.push({
+      ...manifest.frameworks[0],
+      id: 'vitest:other',
+    })
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    console.log = message => logs.push(message)
+
+    try {
+      await main([
+        '--manifest', manifestPath,
+        '--out', out,
+        '--framework', manifest.frameworks[0].id,
+        '--offline-fixture-nonce', nonce,
+        '--print-approval-sha256',
+      ])
+
+      assert.deepStrictEqual(logs, [digest])
+      assert.strictEqual(fs.existsSync(out), false)
+      assert.strictEqual(digestInputs.length, 1)
+      assert.strictEqual(digestInputs[0].offlineFixtureNonce, nonce)
+      assert.deepStrictEqual(digestInputs[0].selectedFrameworkIds, [manifest.frameworks[0].id])
+      assert.deepStrictEqual(digestInputs[0].manifest.frameworks.map(framework => framework.id), [
+        manifest.frameworks[0].id,
+      ])
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reproduces the hash from a framework-scoped execution plan', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-reproduce-digest-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const logs = []
+    const originalLog = console.log
+    const manifest = getRunnableManifest(tmpDir)
+    manifest.frameworks.push({
+      ...manifest.frameworks[0],
+      id: 'jest:other',
+    })
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    console.log = message => logs.push(message)
+
+    try {
+      await runValidationCli([
+        '--manifest', manifestPath,
+        '--out', out,
+        '--framework', manifest.frameworks[0].id,
+        '--print-plan',
+      ])
+      const plan = logs.pop()
+      const nonce = plan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
+      const expectedDigest = plan.match(/Expected output: `([a-f0-9]{64})`/)?.[1]
+
+      await runValidationCli([
+        '--manifest', manifestPath,
+        '--out', out,
+        '--framework', manifest.frameworks[0].id,
+        '--offline-fixture-nonce', nonce,
+        '--print-approval-sha256',
+      ])
+
+      assert.strictEqual(logs.pop(), expectedDigest)
+      assert.strictEqual(fs.existsSync(out), false)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })

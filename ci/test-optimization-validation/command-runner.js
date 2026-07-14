@@ -132,13 +132,15 @@ function runCommand (command, options = {}) {
       const executable = getExecutableForSpawn(command)
       child = command.usesShell
         ? spawn(command.shellCommand, {
+          argv0: executable.argv0,
           cwd: command.cwd,
           detached: useProcessGroup,
           env: childEnv,
-          shell: executable,
+          shell: executable.path,
           stdio: ['ignore', 'pipe', 'pipe'],
         })
-        : spawn(executable, command.argv.slice(1), {
+        : spawn(executable.path, command.argv.slice(1), {
+          argv0: executable.argv0,
           cwd: command.cwd,
           detached: useProcessGroup,
           env: childEnv,

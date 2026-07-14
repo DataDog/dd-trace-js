@@ -8,7 +8,7 @@ const path = require('path')
 const { getFrameworkDefinitions } = require('../diagnose')
 const { DD_MAJOR } = require('../../version')
 
-const { assertApprovalDigest } = require('./approval')
+const { assertApprovalDigest, getApprovalDigest } = require('./approval')
 
 const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
@@ -88,6 +88,9 @@ function parseArgs (argv) {
       case '--print-plan':
         options.printPlan = true
         break
+      case '--print-approval-sha256':
+        options.printApprovalSha256 = true
+        break
       case '--approved-plan-sha256':
         options.approvedPlanSha256 = requireValue(argv, ++i, arg)
         break
@@ -134,6 +137,10 @@ Options:
   --validate-manifest     Validate the manifest and exit without running project code.
   --init-manifest         Create a schema-valid manifest scaffold without running project code.
   --print-plan            Print the normalized execution plan without running project code.
+  --print-approval-sha256 Recalculate and print the approval hash without running project code.
+                          Requires the nonce and the same selection/output options shown in the plan.
+                          This checks consistency with installed dd-trace; it does not verify package origin.
+                          Verify origin through lockfile/integrity metadata or a trusted package tarball.
   --offline-fixture-nonce Random fixture-root nonce emitted by --print-plan for the approved live run.
   --approved-plan-sha256  Bind live execution to the exact manifest and options shown by --print-plan.
   --help                  Show this help.
@@ -166,14 +173,33 @@ async function main (argv) {
     const manifest = loadManifest(options.manifest)
     if (options.printPlan) {
       const out = validateOutputPath(manifest, options.out)
-      manifest.frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
+      const approvalManifest = getApprovalManifest(manifest, options.frameworks)
       console.log(formatExecutionPlan({
-        manifest,
+        manifest: approvalManifest,
         out,
         selectedFrameworkIds: options.frameworks.size > 0
-          ? manifest.frameworks.map(framework => framework.id)
+          ? approvalManifest.frameworks.map(framework => framework.id)
           : [],
         requestedScenario: options.requestedScenario,
+        keepTempFiles: options.keepTempFiles,
+        verbose: options.verbose,
+      }))
+      return
+    }
+    if (options.printApprovalSha256) {
+      if (!options.offlineFixtureNonce) {
+        throw new Error('--print-approval-sha256 requires the --offline-fixture-nonce value shown in the plan.')
+      }
+      const out = validateOutputPath(manifest, options.out)
+      const approvalManifest = getApprovalManifest(manifest, options.frameworks)
+      console.log(getApprovalDigest({
+        manifest: approvalManifest,
+        out,
+        selectedFrameworkIds: options.frameworks.size > 0
+          ? approvalManifest.frameworks.map(framework => framework.id)
+          : [],
+        requestedScenario: options.requestedScenario,
+        offlineFixtureNonce: options.offlineFixtureNonce,
         keepTempFiles: options.keepTempFiles,
         verbose: options.verbose,
       }))
@@ -193,8 +219,9 @@ async function main (argv) {
     const out = validateOutputPath(manifest, options.out)
     options.repositoryRoot = manifest.repository.root
     const selectedFrameworks = filterFrameworks(manifest.frameworks, options.frameworks)
+    const approvalManifest = getApprovalManifest(manifest, options.frameworks)
     assertApprovalDigest(options.approvedPlanSha256, {
-      manifest,
+      manifest: approvalManifest,
       out,
       selectedFrameworkIds: options.frameworks.size > 0
         ? selectedFrameworks.map(framework => framework.id)
@@ -379,6 +406,27 @@ function filterFrameworks (frameworks, targets) {
   }
 
   return selected
+}
+
+/**
+ * Creates the manifest view covered by a framework-scoped approval.
+ *
+ * @param {object} manifest loaded manifest
+ * @param {Set<string>} targets selected framework targets
+ * @returns {object} approval manifest
+ */
+function getApprovalManifest (manifest, targets) {
+  const frameworks = filterFrameworks(manifest.frameworks, targets)
+  if (frameworks === manifest.frameworks) return manifest
+
+  const approvalManifest = { ...manifest, frameworks }
+  Object.defineProperty(approvalManifest, '__sourceSha256', {
+    configurable: false,
+    enumerable: false,
+    value: manifest.__sourceSha256,
+    writable: false,
+  })
+  return approvalManifest
 }
 
 function normalizeFrameworkTarget (target) {

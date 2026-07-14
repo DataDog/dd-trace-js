@@ -114,8 +114,11 @@ It contains:
 - every setup/install command and why it is needed
 - every selected existing test command, CI wiring command, and generated-scenario command that will
   execute during the approved phase
-- each command's exact executable arguments or shell replay, working directory, shell executable,
-  and command-specific environment values after secret-like values are replaced with `<redacted>`;
+- each command's executable arguments or shell replay in readable form, working directory, shell executable,
+  and command-specific environment values inline after secret-like values are replaced with `<redacted>`;
+  repository-contained arguments may be shown relative to the stated working directory, while each selected
+  executable path appears once in the executables section; executable fingerprints remain internal to the
+  approval hash
   describe validator-controlled offline-fixture and noise-suppression variables collectively as
   diagnostic plumbing instead of reading validator source to enumerate them; do not enumerate the
   ambient process environment
@@ -129,12 +132,19 @@ service, network access, or write is either included in this approval request or
 discovery is needed to choose exact commands, continue read-only discovery before asking.
 
 Do not hand-compose a second execution plan. Make the draft manifest concrete enough that
-`--print-plan` can show the complete shell command or argv, shell executable, absolute working
-directory, sanitized command environment, exact generated test source, cleanup paths, and exact live
-validator command. Fix the manifest if the rendered plan contains placeholders or missing scope.
-The live command contains `--approved-plan-sha256`; do not remove or replace it. It binds execution
-to the exact manifest, selected options, output path, and installed validator implementation that
-produced the approved plan.
+`--print-plan` can show the complete shell command or argv, shell executable, working directory,
+sanitized command environment, exact generated test source, cleanup paths, and exact live validator
+command. The repository path at the top is absolute; command working directories and repository-contained
+arguments may be shown relative to it to keep the plan readable. Fix the manifest if the rendered plan
+contains placeholders or missing scope.
+The live command contains `--approved-plan-sha256`; do not remove or replace it. The plan must explain
+that the user does not calculate this value: the validator generates and later recalculates it from the
+manifest, selected options, output path, installed validator implementation, offline fixture recipes,
+and command executable identities. It refuses to run if those covered inputs changed after approval. The plan
+also prints a read-only `--print-approval-sha256` command with the same nonce and selection/output options so the
+user can reproduce the digest without running project code. This confirms consistency with the installed
+`dd-trace` package; it does not verify where that package came from. Package origin must be established separately
+through package-manager lockfile and integrity metadata, or an independently verified package tarball.
 
 List the manifest, results directory, generated files, explicit cleanup files, and command-created outputs
 identified by the plan, such as `coverage/`. The validator preserves and restores a pre-existing declared output
@@ -144,17 +154,22 @@ or validator internals merely to enumerate them.
 
 Use this checkpoint order:
 
-1. **Framework coverage**: list every detected framework/runner family and either its selected
-    service-free representative or a concrete omission reason. Do not say `starting with` one family
-    when other detected families remain unclassified.
+1. **What will be validated**: explain that tests run first without Datadog and then with Datadog,
+    followed by CI wiring and advanced-feature checks where eligible. List every detected
+    framework/runner family using its framework and project/package name, and either its selected
+    service-free representative or a concrete omission reason. Keep manifest IDs in artifacts rather
+    than using identifiers such as `vitest:root` as the main customer-facing label.
 2. **Selected test commands**: show the command used to confirm tests run normally, the same command
     with correct Datadog initialization, and the test command with the configuration supplied by CI.
-    State how many times each command can execute, including the conditional Basic Reporting debug
-    rerun and CI initialization-reachability probe.
+    Show Datadog `NODE_OPTIONS` and command-specific CI variables inline with each command, after
+    redaction. Datadog preload paths may use their installed package names in this readable command;
+    explain that the validator resolves them from the installed `dd-trace` package. State how many times
+    each command can execute, including the conditional Basic Reporting debug rerun and CI
+    initialization-reachability probe.
 3. **Temporary advanced-feature tests**: show every temporary test path and its exact source, the
     command that runs each advanced-feature check, each verification/baseline/feature execution and
     conditional debug rerun, and the files that will be removed afterward.
-4. **Command the agent runs after approval**: show the exact installed validator command and explain
+4. **Command the agent submits for approval**: show the exact installed validator command and explain
     that it writes bounded filesystem fixtures, runs the listed checks with the offline exporter,
     writes the report, and removes the temporary tests and fixtures.
 
@@ -177,15 +192,18 @@ and the final validator command.
 
 Use exactly one approval surface:
 
-- **Agent platform with a command-approval dialog**: first send the complete plan as a normal
-  user-visible message, then immediately request execution of the exact digest-bound live command.
-  The platform dialog is the single approval for the displayed plan. Do not ask `Approve executing
-  exactly the plan above?` in chat before opening it.
+- **Agent platform with a command-approval dialog**: present the complete plan and, in the same agent
+  turn, immediately submit the exact digest-bound live command to the platform's command tool. The
+  platform dialog is the single approval for the displayed plan. Do not end the turn after the plan,
+  and do not ask `Approve executing exactly the plan above?` in chat before opening the dialog. Use
+  this path only when opening the dialog does not change the sandbox or grant broader permissions.
 - **Agent platform without a command-approval dialog**: after showing the complete plan, ask one
   binary chat question: `Approve executing exactly the plan above?` Run the exact command only after
-  that answer.
+  that answer. Also use this fallback when opening a platform dialog would itself require broader
+  permissions; after approval, execute inside the existing sandbox.
 
 Never use both a chat approval question and a command-approval dialog for the same unchanged plan.
+These approval-surface rules are agent instructions. Do not copy them into the rendered customer-facing plan.
 Run `--print-plan` in the current restricted environment; because that mode runs no project code or
 network operations, do not request broader permissions merely to render the plan.
 
@@ -562,17 +580,21 @@ planned executable. It also rejects bare Yarn commands when the repository conta
 release, and rejects generated Vitest runtime tests that use `--typecheck` or a typecheck-enabled
 config. If it reports an unavailable or unsuitable command, do not ask for approval: use the
 repository-pinned package manager, choose a typecheck-disabled generated-test command, add the
-required approved setup, or mark the affected check with its concrete setup blocker. The plan records
-the canonical executable path and SHA-256 used for each command, and live execution refuses an
-executable that changed after approval. This binds executable selection for reproducibility only. It
-does not attest project scripts, packages, modules, subprocesses, or other code loaded by `node`,
-`npm`, `yarn`, or the selected test runner.
+required approved setup, or mark the affected check with its concrete setup blocker. The plan lists
+each selected executable path once, while its fingerprint remains internal to the approval hash. Live
+execution refuses an executable that changed after approval. Customer-facing commands may use `node`
+and repository-relative arguments for readability; the stated working directory and executables section
+make their resolved targets explicit. This binds executable selection for reproducibility only. It does
+not attest project scripts, packages, modules, subprocesses, or other code loaded by `node`, `npm`,
+`yarn`, or the selected test runner.
 
 Copy the complete rendered plan into the user-facing response. A collapsed command transcript or
-agent-written summary is not a displayed plan. Use the agent platform's command-approval dialog as
-the single approval when available; otherwise ask one binary chat question. After that approval,
-run the exact validator command from the plan, including its approval digest. Live validation fails
-closed when that digest is absent or no longer matches. Do not replace it with a manually
+agent-written summary is not a displayed plan. When the platform can show a command-approval dialog
+without changing the sandbox or permissions, submit the exact validator command in the same agent
+turn and use that dialog as the single approval. Do not stop after displaying the plan or ask for
+chat approval on that path. When no such dialog exists, ask one binary chat question, wait for the
+answer, and then run the command. Include the approval digest exactly as printed. Live validation
+fails closed when that digest is absent or no longer matches. Do not replace it with a manually
 reconstructed command.
 
 An existing manifest or report is evidence from an earlier attempt, not proof that the current

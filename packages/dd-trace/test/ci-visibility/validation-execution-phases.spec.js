@@ -138,6 +138,7 @@ describe('test optimization validator-owned execution phases', () => {
     const manifestPath = path.join(root, 'manifest.json')
     const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
     const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-test-optimization-validation'))
+    framework.project.name = '@example/app'
     framework.existingTestCommand = {
       cwd: root,
       argv: ['npm', 'test', '--', '--runInBand', '--token', 'plan-secret'],
@@ -161,10 +162,17 @@ describe('test optimization validator-owned execution phases', () => {
       },
     }
     framework.ciWiring.shell = 'bash --noprofile --norc {0}'
+    const unsupportedFramework = {
+      id: 'karma:browser-example',
+      framework: 'karma',
+      status: 'unsupported_by_validator',
+      project: { name: 'browser-example', root: path.join(root, 'examples', 'browser') },
+      notes: ['Karma requires browser execution and is not supported by this validator.'],
+    }
     const manifest = {
       __path: manifestPath,
       repository: { root },
-      frameworks: [framework],
+      frameworks: [framework, unsupportedFramework],
     }
 
     try {
@@ -186,8 +194,8 @@ describe('test optimization validator-owned execution phases', () => {
         requestedScenario: 'ci-wiring',
       })
 
-      assert.match(plan, /The exact command above requires one approval before execution\./)
-      assert.doesNotMatch(plan, /Approve executing exactly the plan above\?/)
+      assert.match(plan, /command above requires one approval before validation begins/)
+      assert.doesNotMatch(plan, /Agent next action|command-approval dialog|approval surfaces/)
       assert.match(plan, /--no-watchman/)
       const relativeGeneratedFile = path.relative(root, generatedFile).split(path.sep).join('/')
       assert.match(plan, new RegExp(escapeRegExp(relativeGeneratedFile)))
@@ -196,9 +204,8 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
       assert.match(plan, /Command-created outputs: `coverage` \(must not exist before validation; newly created /)
-      assert.match(fullPlan, /Use variables recorded from the CI job: CI, DD_API_KEY/)
-      assert.match(fullPlan, /DD_API_KEY=<redacted>/)
-      assert.match(fullPlan, /bash --noprofile --norc -c "pnpm test"/)
+      assert.match(fullPlan, /CI=true DD_API_KEY="<redacted>" bash --noprofile --norc -c "pnpm test"/)
+      assert.match(plan, /NODE_OPTIONS="-r dd-trace\/ci\/init" npm test/)
       assert.match(ciOnlyPlan, /#### CI Test Execution/)
       assert.doesNotMatch(ciOnlyPlan, /#### Temporary Tests Created for Advanced Checks/)
       assert.match(plan, /#### Test Execution Without Datadog/)
@@ -218,18 +225,23 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /<details>|<summary>/)
       assert.match(plan, /\/\/ generated validation test/)
       assert.match(plan, /- Working directory: `\.`/)
-      assert.match(plan, /- Approved executable: `/)
-      assert.match(plan, /- Executable SHA-256: `[a-f0-9]{64}`/)
+      assert.match(plan, /## What Will Be Validated/)
+      assert.match(plan, /\*\*Jest tests for @example\/app\*\*: will be validated/)
+      assert.match(plan, /\*\*Karma tests for browser-example\*\*: not supported by this validator/)
+      assert.match(plan, /## Executables Used/)
+      assert.match(plan, /- Node\.js: `/)
+      assert.match(fullPlan, /- Bash shell: `/)
+      assert.doesNotMatch(plan, /Technical Safeguard: Command Identity|\(SHA-256 `/)
+      assert.doesNotMatch(plan, /- Approved executable:|- Executable SHA-256:/)
       assert.strictEqual(countOccurrences(fullPlan, 'bash --noprofile --norc -c "pnpm test"'), 1)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /local validator included with the installed `dd-trace` package/)
       assert.match(plan, /bounded filesystem cache fixtures/)
       assert.match(plan, /does not open a listener or use a network endpoint/)
       assert.match(plan, /During normal operation, `dd-trace` downloads Test Optimization settings/)
-      assert.match(plan, /Temporary response root:/)
-      assert.match(plan, /\.testoptimization\/cache\/http\/settings\.json/)
-      assert.strictEqual(countOccurrences(plan, '.testoptimization/cache/http/settings.json'), 1)
-      assert.match(plan, /Test execution with Datadog, diagnostic rerun if needed/)
+      assert.match(plan, /Private response directory:/)
+      assert.match(plan, /Each check gets an isolated subdirectory containing bounded Test Optimization settings/)
+      assert.doesNotMatch(plan, /\.testoptimization\/cache\/http\/settings\.json|Execution folders:/)
       assert.match(plan, /adds `DD_TRACE_DEBUG=1`/)
       assert.match(plan, /Exact fixture recipes and paths are included in the approval digest/)
       assert.doesNotMatch(plan, /Fixture recipe SHA-256/)
@@ -246,6 +258,17 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, new RegExp(`dd-test-optimization-validation-${planNonce}`))
       assert.notStrictEqual(planNonce, fullPlanNonce)
       assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64} --framework jest:root --scenario atr/)
+      const approvalDigest = plan.match(/--approved-plan-sha256 ([a-f0-9]{64})/)?.[1]
+      assert.match(approvalDigest, /^[a-f0-9]{64}$/)
+      assert.match(plan, /--print-approval-sha256 --framework jest:root --scenario atr/)
+      assert.match(plan, new RegExp(`Expected output: \`${approvalDigest}\``))
+      assert.match(plan, /validator generated the nonce and approval hash/)
+      assert.match(plan, /regenerates the hash and stops if any covered input changed/)
+      assert.match(plan, /without running project code/)
+      assert.match(plan, /does not verify where that package came from/)
+      assert.match(plan, /package-manager lockfile and integrity metadata/)
+      assert.match(plan, /validate-test-optimization\.js --help/)
+      assert.match(plan, /Run the approved validation command/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -283,12 +306,13 @@ describe('test optimization validator-owned execution phases', () => {
         out: path.join(root, 'results'),
         requestedScenario: 'ci-wiring',
       })
-      const renderedCommand = `${process.execPath} -e "console.log(\\"Tests: 1 passed, 1 total\\")"`
+      const renderedCommand = 'node -e "console.log(\\"Tests: 1 passed, 1 total\\")"'
 
       assert.strictEqual(countOccurrences(plan, renderedCommand), 3)
       assert.match(plan, /SAFE_MODE=direct/)
       assert.match(plan, /SAFE_MODE=ci/)
       assert.match(plan, /Working directory: `package`/)
+      assert.match(plan, /selected CI job supplies no Datadog variables/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -430,6 +454,57 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('preserves approved named-shim semantics while executing the canonical target', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-named-shim-'))
+    const bin = path.join(root, 'bin')
+    const shim = path.join(bin, 'yarn')
+    const marker = path.join(root, 'named-shim-ran')
+    const out = path.join(root, 'results')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [
+        'yarn',
+        '-e',
+        'if (require(\'node:path\').basename(process.argv0) !== \'yarn\') process.exit(126); ' +
+          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'named-shim')`,
+      ],
+      env: { PATH: bin },
+    }
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+    fs.mkdirSync(bin)
+    fs.mkdirSync(out)
+    fs.symlinkSync(process.execPath, shim)
+
+    try {
+      const plan = formatExecutionPlan({ manifest, out, requestedScenario: 'basic-reporting' })
+      const result = await runCommand(
+        framework.existingTestCommand,
+        { artifactRoot: out, outDir: path.join(out, 'run'), repositoryRoot: root }
+      )
+
+      assert.strictEqual(result.exitCode, 0, result.stderr)
+      assert.strictEqual(fs.existsSync(marker), true)
+      assert.deepStrictEqual(getExecutableForSpawn(framework.existingTestCommand), {
+        argv0: shim,
+        path: fs.realpathSync(process.execPath),
+      })
+      assert.match(plan, new RegExp('Yarn: `' + escapeRegExp(shim) + '`.*verified target', 's'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('resolves Windows forward-slash relative executable paths consistently for planning and execution', () => {
     assert.strictEqual(isExplicitExecutablePath('./node_modules/.bin/jest.cmd', 'win32'), true)
     assert.strictEqual(isExplicitExecutablePath('.\\node_modules\\.bin\\jest.cmd', 'win32'), true)
@@ -465,7 +540,10 @@ describe('test optimization validator-owned execution phases', () => {
       })
 
       assert.strictEqual(getResolvedExecutable(framework.existingTestCommand), executable)
-      assert.strictEqual(getExecutableForSpawn(framework.existingTestCommand), fs.realpathSync(executable))
+      assert.deepStrictEqual(getExecutableForSpawn(framework.existingTestCommand), {
+        argv0: executable,
+        path: fs.realpathSync(executable),
+      })
     } finally {
       Object.defineProperty(process, 'platform', platformDescriptor)
       fs.rmSync(root, { recursive: true, force: true })
