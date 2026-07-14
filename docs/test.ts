@@ -331,6 +331,7 @@ tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
 tracer.use('google-genai');
+tracer.use('genkit');
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });

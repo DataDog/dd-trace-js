@@ -254,6 +254,17 @@ module.exports = {
       versions: ['>=3'],
     },
   ],
+  genkit: [
+    {
+      name: 'genkit',
+      versions: ['1.21.0'],
+    },
+    {
+      name: '@genkit-ai/core',
+      versions: ['1.21.0'],
+      dep: true,
+    },
+  ],
   'google-cloud-pubsub': [
     {
       name: 'google-gax',

@@ -12,6 +12,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @cucumber/cucumber,cucumber,7.0.0,13.0.0,True
 @elastic/elasticsearch,elasticsearch,5.6.16,9.4.0,True
 @elastic/transport,elasticsearch,8.0.0,9.3.5,True
+@genkit-ai/core,genkit,1.21.0,1.21.0,True
 @google-cloud/pubsub,google-cloud-pubsub,1.2.0,5.3.1,True
 @google-cloud/vertexai,google-cloud-vertexai,1.0.0,1.12.0,True
 @google/genai,google-genai,1.19.0,2.9.0,True
