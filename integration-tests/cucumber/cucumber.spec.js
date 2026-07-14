@@ -1944,6 +1944,56 @@ describe(`cucumber@${version} commonJS`, () => {
             await eventsPromise
           })
 
+          onlyLatestIt('preserves an all-zero EFD framework retry budget without a worker count', async () => {
+            const testSuitePath = 'ci-visibility/features/farewell.feature'
+            receiver.setSettings({
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '10s': 0,
+                },
+              },
+              known_tests_enabled: true,
+            })
+            receiver.setKnownTests({
+              cucumber: {},
+            })
+
+            childProcess = exec(
+              `./node_modules/.bin/cucumber-js ${testSuitePath} --parallel 2 ` +
+                `--require-module "${path.join(cwd, 'ci-visibility/cucumber-worker-message-delay.js')}"`,
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  DD_TEST_DROP_CUCUMBER_EFD_RETRY_COUNT_MESSAGES: '1',
+                },
+              }
+            )
+
+            await receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_SUITE] === testSuitePath)
+                const testSuites = events
+                  .filter(event => event.type === 'test_suite_end')
+                  .map(event => event.content)
+                  .filter(testSuite => testSuite.meta[TEST_SUITE] === testSuitePath)
+
+                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 0)
+                assert.strictEqual(testSuites.length, 1)
+              },
+              { hardTimeout: 60_000 }
+            )
+            assert.strictEqual(childProcess.exitCode, 0)
+          })
+
           onlyLatestIt('bails out of EFD if the percentage of new tests is too high', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({

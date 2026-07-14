@@ -180,7 +180,7 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
 
 function getConfiguredEfdRetryCount () {
   const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  return maxSlowTestRetryCount || earlyFlakeDetectionNumRetries
+  return maxSlowTestRetryCount ?? earlyFlakeDetectionNumRetries
 }
 
 function publishWorkerEfdRetryCount (pickle, retryCount) {

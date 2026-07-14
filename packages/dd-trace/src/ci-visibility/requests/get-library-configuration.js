@@ -49,7 +49,7 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     requireGit,
     isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
     earlyFlakeDetectionNumRetries:
-      earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
+      earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] ?? DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
     earlyFlakeDetectionSlowTestRetries:
       earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
     earlyFlakeDetectionFaultyThreshold:
