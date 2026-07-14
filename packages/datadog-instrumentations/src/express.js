@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { createWrapRouterMethod } = require('./router')
+const { createWrapRouterMethod, createLayerDispatchWrappers } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const { getCompileToRegexp } = require('./path-to-regexp')
 const {
@@ -164,12 +164,30 @@ addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express 
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
-  const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp())
+  // `wrapLegacyHandle` only fires for express <4.6.0 layers, which have no
+  // prototype dispatch; 4.6.0+ keeps `handle` pristine (wrapped below).
+  const { wrapLegacyHandle } = createLayerDispatchWrappers('express')
+  const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp(), wrapLegacyHandle)
 
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
   return express
+})
+
+// Express 4 bundles its own Layer; express 5 delegates to the `router` package
+// (wrapped in router.js). Both keep `layer.handle` the user's function and trace
+// via the prototype dispatch. express <4.6.0 has no such dispatch and is traced
+// by the legacy handle wrap instead.
+addHook({ name: 'express', file: 'lib/router/layer.js', versions: ['4'] }, Layer => {
+  if (typeof Layer.prototype.handle_request !== 'function') return Layer
+
+  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('express')
+
+  shimmer.wrap(Layer.prototype, 'handle_request', wrapLayerRequest)
+  shimmer.wrap(Layer.prototype, 'handle_error', wrapLayerError)
+
+  return Layer
 })
 
 const queryParserReadCh = channel('datadog:query:read:finish')
