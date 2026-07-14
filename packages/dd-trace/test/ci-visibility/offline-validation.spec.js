@@ -48,11 +48,11 @@ describe('test optimization offline validation artifacts', () => {
     assert.strictEqual(path.relative(repositoryRoot, fixture.root).startsWith('..'), true)
     assert.notStrictEqual(fixture.root, otherFixture.root)
     assert.deepStrictEqual(fixture.files.map(({ filename }) => path.relative(fixture.root, filename)), [
-      '.testoptimization/manifest.txt',
-      '.testoptimization/cache/http/settings.json',
-      '.testoptimization/cache/http/known_tests.json',
-      '.testoptimization/cache/http/skippable_tests.json',
-      '.testoptimization/cache/http/test_management.json',
+      path.join('.testoptimization', 'manifest.txt'),
+      path.join('.testoptimization', 'cache', 'http', 'settings.json'),
+      path.join('.testoptimization', 'cache', 'http', 'known_tests.json'),
+      path.join('.testoptimization', 'cache', 'http', 'skippable_tests.json'),
+      path.join('.testoptimization', 'cache', 'http', 'test_management.json'),
     ])
 
     cleanupOfflineFixture(fixture.root)
