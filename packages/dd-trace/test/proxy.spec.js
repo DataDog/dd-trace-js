@@ -1177,7 +1177,9 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:update')
-      sinon.assert.calledOnceWithExactly(channelMock.publish, config)
+      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:refresh')
+      sinon.assert.calledTwice(channelMock.publish)
+      sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
     })
 
     it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
