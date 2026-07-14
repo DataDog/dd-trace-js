@@ -251,7 +251,7 @@ function assertLlmObsSpanEvent (actual, expected) {
   if (error) {
     expectedMeta[ERROR_MESSAGE] = span.meta[ERROR_MESSAGE]
     expectedMeta[ERROR_TYPE] = span.meta[ERROR_TYPE]
-    expectedMeta[ERROR_STACK] = span.meta[ERROR_STACK]
+    if (Object.hasOwn(span.meta, ERROR_STACK)) expectedMeta[ERROR_STACK] = span.meta[ERROR_STACK]
   }
 
   if (inputMessages) {

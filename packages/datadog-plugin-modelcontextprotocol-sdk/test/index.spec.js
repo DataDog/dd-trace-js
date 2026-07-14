@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { channel } = require('dc-polyfill')
 
@@ -24,16 +25,16 @@ describe('plugin lifecycle', () => {
   })
 })
 
-function assertClientServerParenting (spans, clientResource) {
+function assertClientServerParenting (spans, clientResource, serverResource = 'server_tool_call') {
   const clientSpan = spans.find(s => {
     return s.name === 'mcp.request' && s.resource === clientResource
   })
   const serverSpan = spans.find(s => {
-    return s.name === 'mcp.request' && s.resource === 'server_tool_call'
+    return s.name === 'mcp.request' && s.resource === serverResource
   })
 
-  assert.ok(clientSpan, 'client tool call span should exist')
-  assert.ok(serverSpan, 'server tool call request span should exist')
+  assert.ok(clientSpan, `client ${clientResource} span should exist`)
+  assert.ok(serverSpan, `server ${serverResource} request span should exist`)
   assert.strictEqual(
     serverSpan.trace_id.toString(),
     clientSpan.trace_id.toString(),
@@ -150,6 +151,52 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
         return await traceAssertion
       } finally {
         emptyErrorTool.disable()
+      }
+    })
+  })
+
+  describe('Client.connect() - mcp.request', () => {
+    it('should generate client and server initialize spans', async () => {
+      const { Client } = meta.mod
+      const clientEntryPath = meta.versionMod.getPath('@modelcontextprotocol/sdk/client')
+      const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
+      const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
+      const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
+
+      const initializeServer = new McpServer({ name: 'initialize-server', version: '2.0.0' })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      let initializeClient
+
+      await initializeServer.connect(serverTransport)
+
+      const spans = []
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        spans.push(...traces.flatMap(trace => trace))
+        assertClientServerParenting(spans, 'ClientSession.initialize', 'initialize')
+
+        const clientSpan = spans.find(span => {
+          return span.name === 'mcp.request' && span.resource === 'ClientSession.initialize'
+        })
+        assert.strictEqual(clientSpan.meta.component, 'modelcontextprotocol_initialize')
+        assert.strictEqual(clientSpan.meta['_dd.integration'], 'modelcontextprotocol_initialize')
+        assert.strictEqual(clientSpan.meta['span.kind'], 'client')
+
+        const serverSpan = spans.find(span => {
+          return span.name === 'mcp.request' && span.resource === 'initialize'
+        })
+        assert.strictEqual(serverSpan.meta.component, 'modelcontextprotocol_server')
+        assert.strictEqual(serverSpan.meta['_dd.integration'], 'modelcontextprotocol_server')
+        assert.strictEqual(serverSpan.meta['span.kind'], 'server')
+      })
+
+      try {
+        initializeClient = new Client({ name: 'initialize-client', version: '1.2.3' })
+        await initializeClient.connect(clientTransport)
+
+        return await traceAssertion
+      } finally {
+        if (initializeClient) await initializeClient.close()
+        await initializeServer.close()
       }
     })
   })
