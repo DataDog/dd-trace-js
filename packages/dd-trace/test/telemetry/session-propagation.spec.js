@@ -228,6 +228,21 @@ describe('session-propagation', () => {
       ])
     })
 
+    it('reflects a runtime id updated on config after start (e.g. MicroVM identity refresh)', () => {
+      const config = createConfig()
+      sessionPropagation.start(config)
+
+      config.tags['runtime-id'] = 'refreshed-id'
+
+      const context = publishStart({ callArgs: ['node', ['test.js'], {}], shell: false })
+
+      assert.deepStrictEqual(context.callArgs, [
+        'node',
+        ['test.js'],
+        { env: createExpectedEnv({ DD_ROOT_JS_SESSION_ID: 'refreshed-id' }) },
+      ])
+    })
+
     it('ignores execution contexts without call arguments', () => {
       sessionPropagation.start(createConfig())
 

@@ -120,6 +120,30 @@ describe('AgentlessExporter', () => {
         languageName: 'nodejs',
       })
     })
+
+    it('should reflect a runtime id updated on config after construction', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = {
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      }
+
+      exporter = new Exporter(config)
+
+      config.tags['runtime-id'] = 'new-uuid'
+
+      assert.strictEqual(writerOptions.metadata.runtimeID, 'new-uuid')
+    })
   })
 
   describe('export', () => {

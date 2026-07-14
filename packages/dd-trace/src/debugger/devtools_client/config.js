@@ -24,4 +24,5 @@ function updateConfig (updates) {
   // reconstructed into a URL here rather than read directly off a Config instance.
   config.url = new URL(updates.url)
   config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
+  config.runtimeId = updates.runtimeId
 }

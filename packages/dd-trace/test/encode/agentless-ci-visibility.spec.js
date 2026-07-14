@@ -29,14 +29,15 @@ describe('agentless-ci-visibility-encode', () => {
   let writer
   let logger
   let trace
+  let AgentlessCiVisibilityEncoder
 
   beforeEach(() => {
     logger = {
       debug: sinon.stub(),
     }
-    const { AgentlessCiVisibilityEncoder } = proxyquire('../../src/encode/agentless-ci-visibility', {
+    AgentlessCiVisibilityEncoder = proxyquire('../../src/encode/agentless-ci-visibility', {
       '../log': logger,
-    })
+    }).AgentlessCiVisibilityEncoder
     writer = { flush: sinon.spy() }
     encoder = new AgentlessCiVisibilityEncoder(writer, {})
 
@@ -110,6 +111,21 @@ describe('agentless-ci-visibility-encode', () => {
 
     assert.strictEqual(spanEvent.content.metrics.positive, 123456712345)
     assert.strictEqual(spanEvent.content.metrics.negative, -123456712345)
+  })
+
+  it('should encode runtime-id from tags, reflecting a mutation made after construction', () => {
+    const tags = { 'runtime-id': 'initial-id' }
+    const localEncoder = new AgentlessCiVisibilityEncoder(writer, { tags })
+
+    localEncoder.encode(trace)
+    const firstDecoded = msgpack.decode(localEncoder.makePayload(), { useBigInt64: true })
+    assert.strictEqual(firstDecoded.metadata['*']['runtime-id'], 'initial-id')
+
+    tags['runtime-id'] = 'refreshed-id'
+
+    localEncoder.encode(trace)
+    const secondDecoded = msgpack.decode(localEncoder.makePayload(), { useBigInt64: true })
+    assert.strictEqual(secondDecoded.metadata['*']['runtime-id'], 'refreshed-id')
   })
 
   it('should report its count', () => {

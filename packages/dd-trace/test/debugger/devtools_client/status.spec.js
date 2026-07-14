@@ -16,7 +16,7 @@ const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let clock, statusproxy, request, jsonBuffer
+  let clock, statusproxy, request, jsonBuffer, configStub
 
   /** @type {Array<[string, string] | [string, string, Error]>} */
   const acks = [
@@ -42,16 +42,18 @@ describe('diagnostic message http requests', function () {
       }
     }
 
-    statusproxy = proxyquire('../../../src/debugger/devtools_client/status', {
-      './config': {
-        service,
-        runtimeId,
-        maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
-        dynamicInstrumentation: {
-          uploadIntervalSeconds: 1,
-        },
-        '@noCallThru': true,
+    configStub = {
+      service,
+      runtimeId,
+      maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+      dynamicInstrumentation: {
+        uploadIntervalSeconds: 1,
       },
+      '@noCallThru': true,
+    }
+
+    statusproxy = proxyquire('../../../src/debugger/devtools_client/status', {
+      './config': configStub,
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
     })
@@ -148,6 +150,22 @@ describe('diagnostic message http requests', function () {
       })
     })
   }
+
+  it('should read runtimeId live off config, reflecting a later update', function () {
+    // `config` is read at module scope, but its `runtimeId` can be updated after load by
+    // `updateConfig()` (e.g. a MicroVM clone resume regenerating the runtime-id).
+    configStub.runtimeId = 'refreshed-runtime-id'
+
+    statusproxy.ackReceived({ id: 'foo', version: 0 })
+
+    sinon.assert.calledOnceWithExactly(jsonBuffer.write, JSON.stringify({
+      ddsource,
+      service,
+      debugger: {
+        diagnostics: { probeId: 'foo', runtimeId: 'refreshed-runtime-id', probeVersion: 0, status: 'RECEIVED' },
+      },
+    }))
+  })
 })
 
 function formatAsDiagnosticsEvent ({ probeId, version, status, exception }) {

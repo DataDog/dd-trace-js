@@ -8,10 +8,13 @@ const os = require('node:os')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 const datadogCore = require('../../datadog-core')
 
 require('./setup/core')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('dogstatsd', () => {
   let client
@@ -347,6 +350,17 @@ describe('dogstatsd', () => {
     assert.strictEqual(udp6.send.firstCall.args[2], 30)
     assert.strictEqual(udp6.send.firstCall.args[3], 7777)
     assert.strictEqual(udp6.send.firstCall.args[4], '::1')
+  })
+
+  it('should recompute its cached tags via updateTags', () => {
+    client = createDogStatsDClient({ tags: ['foo:bar'] })
+
+    client.updateTags(['baz:qux'])
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g|#baz:qux\n')
   })
 
   const udsIt = os.platform() === 'win32' ? it.skip : it
@@ -724,24 +738,97 @@ describe('dogstatsd', () => {
       sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar|c:ci-1234\n')
     })
+
+    it('should refresh its tags when the identity-refresh channel fires', () => {
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      client = new CustomMetrics(config)
+
+      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      client.gauge('test.avg', 10)
+      client.flush()
+
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
+    })
+
+    it('skips a dead registry entry during identity-refresh without disrupting live entries', () => {
+      const created = []
+      const OriginalWeakRef = global.WeakRef
+      sinon.stub(global, 'WeakRef').callsFake(target => {
+        const ref = new OriginalWeakRef(target)
+        created.push(ref)
+        return ref
+      })
+
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      try {
+        // eslint-disable-next-line no-new
+        new CustomMetrics({ ...config, tags: { 'runtime-id': 'stale-id' } })
+        client = new CustomMetrics(config)
+      } finally {
+        global.WeakRef.restore()
+      }
+
+      // Simulates the CustomMetrics instance above becoming unreachable and collected.
+      sinon.stub(created[0], 'deref').returns(undefined)
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      client.gauge('test.avg', 10)
+      client.flush()
+
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#runtime-id:refreshed-id\n')
+    })
   })
 
   describe('MetricsAggregationClient', () => {
     let aggregator
     let gaugeCalls
     let incrementCalls
+    let inner
 
     beforeEach(() => {
       gaugeCalls = []
       incrementCalls = []
-      const inner = {
+      inner = {
         gauge: (name, value, tags) => gaugeCalls.push([name, value, tags?.slice()]),
         increment: (name, value, tags) => incrementCalls.push([name, value, tags?.slice()]),
         distribution: () => {},
         histogram: () => {},
         flush: () => {},
+        updateTags: sinon.spy(),
       }
       aggregator = new MetricsAggregationClient(inner)
+    })
+
+    it('forwards updateTags to the wrapped client', () => {
+      aggregator.updateTags(['foo:bar'])
+
+      sinon.assert.calledOnceWithExactly(inner.updateTags, ['foo:bar'])
     })
 
     it('emits a gauge once and then stays silent until it is set again', () => {

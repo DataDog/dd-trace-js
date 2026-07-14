@@ -6,8 +6,11 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/mocha')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 describe('debugger/index', () => {
   let DynamicInstrumentation
@@ -241,6 +244,54 @@ describe('debugger/index', () => {
         url: 'http://localhost:8126/',
         version: '1.2.3',
       })
+    })
+  })
+
+  describe('identity refresh', () => {
+    it('should reconfigure the worker with the refreshed runtime id when the identity-refresh channel fires', () => {
+      DynamicInstrumentation.start(config, rc)
+      const configPort = messageChannels[2].port2
+      configPort.postMessage.resetHistory()
+
+      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnce(configPort.postMessage)
+      const postedConfig = configPort.postMessage.firstCall.args[0]
+      assert.strictEqual(postedConfig.runtimeId, 'refreshed-runtime-id')
+    })
+
+    it('should not reconfigure the worker when the channel fires before start', () => {
+      identityRefreshChannel.publish(config)
+      // Should not throw, and there is no worker/configPort to have posted to.
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    it('should stop reacting to identity refresh after stop', () => {
+      DynamicInstrumentation.start(config, rc)
+      const configPort = messageChannels[2].port2
+
+      DynamicInstrumentation.stop()
+      configPort.postMessage.resetHistory()
+
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.notCalled(configPort.postMessage)
+    })
+
+    it('should not accumulate subscriptions across restarts', () => {
+      DynamicInstrumentation.start(config, rc)
+      DynamicInstrumentation.stop()
+      DynamicInstrumentation.start(config, rc)
+      const configPort = messageChannels[messageChannels.length - 1].port2
+      configPort.postMessage.resetHistory()
+
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnce(configPort.postMessage)
     })
   })
 

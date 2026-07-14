@@ -44,7 +44,9 @@ class AgentlessExporter {
       languageName: 'nodejs',
       languageVersion: process.version,
       tracerVersion,
-      runtimeID: config.tags?.['runtime-id'],
+      // Reads live off `config` (instead of copying the value) so a later runtime-id change
+      // (e.g. a MicroVM clone resume) is picked up by the next `JSON.stringify` in the encoder.
+      get runtimeID () { return config.tags?.['runtime-id'] },
       ...(entityId ? { containerID: entityId } : {}),
     }
 

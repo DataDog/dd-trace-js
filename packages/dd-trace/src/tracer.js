@@ -1,5 +1,6 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const {
@@ -23,6 +24,13 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one tracer is active at a time in practice; each new instance replaces the previous
+// subscription so restarts (e.g. across tests constructing multiple tracers) don't accumulate
+// listeners reacting on behalf of an instance that's no longer in use.
+let unsubscribeIdentityRefresh = null
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
@@ -50,6 +58,11 @@ class DatadogTracer extends Tracer {
       }
       this._inmem_cfg = metadata
     }
+
+    unsubscribeIdentityRefresh?.()
+    const onIdentityRefresh = (refreshedConfig) => this.refreshMetadata(refreshedConfig)
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeIdentityRefresh = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
   }
 
   configure (config) {
