@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "stage": "31-type-repair",
+  "status": "passed",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "changed_files": [
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+    "packages/dd-trace/src/opentelemetry/context_manager.js",
+    "packages/dd-trace/src/opentelemetry/tracer.js"
+  ],
+  "compiler_command": "./node_modules/.bin/tsc --noEmit -p tsconfig.dev.json --ignoreDeprecations 6.0",
+  "before": {
+    "exit_code": 2,
+    "diagnostic_count": 6553,
+    "diagnostic_file_count": 989,
+    "introduced_production_diagnostic_count": 7,
+    "introduced_production_diagnostics": [
+      "genkit/index.js TS2339 document.content (line 186)",
+      "genkit/index.js TS2339 document.content (line 189)",
+      "context_manager.js TS2538 preserveOtelContext symbol index",
+      "context_manager.js TS2345 OTel store as Context",
+      "tracer.js TS2538 suppressOtelInstrumentation symbol index",
+      "tracer.js TS18048 possibly undefined legacy store",
+      "tracer.js TS2339 untyped legacy-store span"
+    ],
+    "pre_existing_changed_production_diagnostic_count": 18
+  },
+  "after": {
+    "exit_code": 2,
+    "diagnostic_count": 6539,
+    "diagnostic_file_count": 988,
+    "introduced_production_diagnostic_count": 0,
+    "remaining_changed_production_diagnostic_count": 11,
+    "remaining_changed_production_diagnostics_classification": "unchanged original-base statements",
+    "incidental_pre_existing_diagnostics_resolved": 7
+  },
+  "validation": {
+    "genkit_tests": "23 passing",
+    "otel_context_manager_and_tracer_tests": "49 passing",
+    "syntax": "passed",
+    "targeted_eslint": "passed",
+    "diff_check": "passed"
+  },
+  "scope": {
+    "behavior_changed": false,
+    "tests_modified": false,
+    "tsconfig_modified": false,
+    "pipeline_progress_modified": false,
+    "unrelated_type_debt_modified": false
+  }
+}

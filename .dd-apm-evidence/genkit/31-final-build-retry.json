@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "stage": "31-final-build-retry",
+  "status": "failed",
+  "gate_passed": false,
+  "head": "c33d632cbd14dba1ee0522bf81bedfb90ad44107",
+  "source_base": "372e5eb61c4c6a13662ad2f8780a87275b50314d",
+  "source_diff_sha256_before": "ace2a9ff42cd91973d9fc0ad021d8e1d57d434771bdd446374d5f493cb6cecab",
+  "source_diff_sha256_after": "ace2a9ff42cd91973d9fc0ad021d8e1d57d434771bdd446374d5f493cb6cecab",
+  "source_state_unchanged": true,
+  "commands": [
+    {
+      "command": "npm run verify:config:types",
+      "exit_code": 0,
+      "status": "passed"
+    },
+    {
+      "command": "npm run verify:supported-integrations",
+      "exit_code": 0,
+      "status": "passed",
+      "genkit_row_count": 1
+    },
+    {
+      "command": "npm run type:check",
+      "exit_code": 2,
+      "status": "failed",
+      "classification": "repository_wide_typescript_6_configuration_blocker",
+      "diagnostic_count": 2,
+      "diagnostics": [
+        "TS5107: alwaysStrict=false is deprecated; ignoreDeprecations 6.0 is not configured",
+        "TS5101: baseUrl is deprecated; ignoreDeprecations 6.0 is not configured"
+      ],
+      "project_sources_checked": false
+    },
+    {
+      "command": "./node_modules/.bin/tsc --noEmit -p tsconfig.dev.json --ignoreDeprecations 6.0",
+      "exit_code": 2,
+      "status": "failed",
+      "classification": "project_source_type_errors",
+      "diagnostic_count": 6553,
+      "diagnostic_file_count": 989,
+      "changed_file_diagnostic_count": 117,
+      "changed_files_with_diagnostics": 6,
+      "changed_production_diagnostic_count": 25,
+      "changed_production_files_with_diagnostics": 3,
+      "changed_file_counts": {
+        "packages/datadog-plugin-genkit/test/llmobs.spec.js": 52,
+        "packages/dd-trace/src/llmobs/plugins/genkit/index.js": 2,
+        "packages/dd-trace/src/opentelemetry/context_manager.js": 14,
+        "packages/dd-trace/src/opentelemetry/tracer.js": 9,
+        "packages/dd-trace/test/opentelemetry/context_manager.spec.js": 32,
+        "packages/dd-trace/test/opentelemetry/tracer.spec.js": 8
+      },
+      "changed_diagnostic_code_counts": {
+        "TS18048": 23,
+        "TS2322": 49,
+        "TS2339": 21,
+        "TS2345": 15,
+        "TS2532": 2,
+        "TS2538": 2,
+        "TS2554": 3,
+        "TS2741": 2
+      },
+      "new_genkit_production_errors": [
+        {
+          "file": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+          "line": 186,
+          "column": 76,
+          "code": "TS2339",
+          "message": "Property 'content' does not exist on type 'object'."
+        },
+        {
+          "file": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+          "line": 189,
+          "column": 31,
+          "code": "TS2339",
+          "message": "Property 'content' does not exist on type 'object'."
+        }
+      ]
+    },
+    {
+      "command": "node --check for all changed/new JavaScript production and test files",
+      "exit_code": 0,
+      "status": "passed",
+      "file_count": 16,
+      "failure_count": 0
+    },
+    {
+      "command": "JSON.parse generated/config manifests and assert the Genkit supported row",
+      "exit_code": 0,
+      "status": "passed",
+      "json_file_count": 3,
+      "genkit_row_count": 1
+    },
+    {
+      "command": "git diff --check against original base excluding pipeline/evidence",
+      "exit_code": 0,
+      "status": "passed"
+    }
+  ],
+  "generated_artifact_repair_valid": true,
+  "canonical_type_script_blocker_preserved": true,
+  "actual_source_type_check_passed": false,
+  "working_tree_status_before": [
+    " M .dd-apm-pipeline/PROGRESS.md"
+  ],
+  "working_tree_status_after_commands": [
+    " M .dd-apm-pipeline/PROGRESS.md"
+  ],
+  "working_tree_changed_by_commands": false,
+  "production_files_modified": false,
+  "test_files_modified": false,
+  "generated_files_modified": false,
+  "progress_modified_by_stage_worker": false,
+  "next_stage_authorized": false,
+  "evidence": [
+    "31-final-build-retry.md"
+  ]
+}

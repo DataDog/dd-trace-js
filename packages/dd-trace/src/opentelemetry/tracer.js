@@ -16,7 +16,10 @@ const Sampler = require('./sampler')
 const { normalizeLinkContext } = require('./span-helpers')
 const { suppressOtelInstrumentation } = require('./suppression')
 
-const legacyStorage = storage('legacy')
+/** @typedef {Record<PropertyKey, unknown> & { span?: import('../opentracing/span') }} LegacyStore */
+/** @typedef {{ getStore: () => LegacyStore | undefined }} LegacyStorage */
+
+const legacyStorage = /** @type {LegacyStorage} */ (storage('legacy'))
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -99,7 +102,7 @@ class Tracer {
     const store = legacyStorage.getStore()
     const suppressedInstrumentation = store?.[suppressOtelInstrumentation]
     if (suppressedInstrumentation !== undefined && suppressedInstrumentation === this.instrumentationLibrary?.name) {
-      return api.trace.wrapSpanContext(new SpanContext(store.span?.context()))
+      return api.trace.wrapSpanContext(new SpanContext(store?.span?.context()))
     }
 
     // remove span from context in case a root span is requested via options

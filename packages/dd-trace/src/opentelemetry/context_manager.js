@@ -8,16 +8,28 @@ const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')
 const { preserveOtelContext } = require('./suppression')
 
+/** @typedef {import('@opentelemetry/api').Context} OtelContext */
+/**
+ * @typedef {object} OtelStorage
+ * @property {() => OtelContext | undefined} getStore
+ * @property {ReturnType<typeof storage>['run']} run
+ */
+/** @typedef {Record<PropertyKey, unknown> & { span?: import('../opentracing/span') }} LegacyStore */
+/** @typedef {{ getStore: () => LegacyStore | undefined }} LegacyStorage */
+
+const legacyStorage = /** @type {LegacyStorage} */ (storage('legacy'))
+const otelStorage = /** @type {OtelStorage} */ (storage('opentelemetry'))
+
 class ContextManager {
   constructor () {
-    this._store = storage('opentelemetry')
+    this._store = otelStorage
   }
 
   // converts dd to otel
   active () {
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
-    const activeDatadogStore = storage('legacy').getStore()
+    const activeDatadogStore = legacyStorage.getStore()
     const activeSpan = activeDatadogStore?.span
 
     const storedSpan = store ? trace.getSpan(store) : null
@@ -44,7 +56,7 @@ class ContextManager {
     // framework-native OTel span only for in-process context. Preserve that OTel context
     // for the marked operation store instead of replacing it with a Datadog span proxy.
     if (storedSpan && activeDatadogStore?.[preserveOtelContext]) {
-      if (otelBaggages) return propagation.setBaggage(store, otelBaggages)
+      if (otelBaggages) return propagation.setBaggage(baseContext, otelBaggages)
       return store
     }
 

@@ -183,7 +183,9 @@ function formatMessages (messages) {
  * @returns {string} Document text.
  */
 function getDocumentText (document) {
-  if (!document || typeof document !== 'object' || !Array.isArray(document.content)) return ''
+  if (!document || typeof document !== 'object' || !('content' in document) || !Array.isArray(document.content)) {
+    return ''
+  }
 
   let text = ''
   for (const part of document.content) {
