@@ -16,6 +16,7 @@ const latests = require('../packages/dd-trace/test/plugins/versions/package.json
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
+const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
 
@@ -352,18 +353,22 @@ async function assertWorkspaces () {
 }
 
 /**
- * @param {boolean} [retry]
+ * Install the generated versions/ workspaces.
+ *
+ * Some workspaces download large prebuilt binaries at postinstall time (e.g. Electron pulls one archive per major
+ * from GitHub's release CDN), which intermittently fail with 5xx gateway errors. Retry with backoff so a brief CDN
+ * outage doesn't fail the whole job.
  */
-function install (retry = true) {
+function install () {
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    retry(() => exec('yarn --ignore-engines', { cwd: folder() }), {
+      onRetry: (error, attempt, delayMs) => process.stderr.write(
+        `yarn install attempt ${attempt} failed, retrying in ${delayMs / 1000}s: ${error.message}\n`
+      ),
+    })
   } catch (error) {
-    if (retry) {
-      install(false) // retry in case of server error from registry
-      return
-    }
-    // A non-transient failure is most often an unresolvable version: a declared range spans a major version that was
-    // never published. Point at the fix instead of leaving a bare yarn error.
+    // A failure that outlasts the retries is most often an unresolvable version: a declared range spans a major
+    // version that was never published. Point at the fix instead of leaving a bare yarn error.
     throw new Error(
       'yarn failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
       'major version that was never published (non-consecutive majors), add that package to ' +
