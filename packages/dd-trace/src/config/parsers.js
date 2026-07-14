@@ -339,6 +339,14 @@ const programmaticTypeCoercions = {
   /**
    * @param {unknown} value
    */
+  FUNCTION (value) {
+    if (typeof value === 'function') {
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
   ARRAY (value) {
     if (Array.isArray(value)) {
       for (const item of value) {

@@ -144,12 +144,8 @@ function generateTelemetry (value = null, origin, optionName) {
 const optionsTable = {
   // Additional properties that are not supported by the supported-configurations.json file.
   lookup: {
-    transformer (value) {
-      if (typeof value === 'function') {
-        return value
-      }
-    },
     property: 'lookup',
+    type: 'FUNCTION',
   },
   logger: {
     transformer (object) {
@@ -174,12 +170,15 @@ const optionsTable = {
       }
     },
     property: 'logger',
+    type: 'MAP',
   },
   isCiVisibility: {
     property: 'isCiVisibility',
+    type: 'BOOLEAN',
   },
   plugins: {
     property: 'plugins',
+    type: 'BOOLEAN',
   },
 }
 

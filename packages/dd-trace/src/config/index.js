@@ -156,32 +156,9 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
 /**
  * @param {ConfigurationOption} entry
  * @param {unknown} value
- * @param {string} optionName
- * @param {TelemetrySource} source
  */
-function coerceType (entry, value, optionName, source) {
-  let coerced = value
-  if (entry.type) {
-    try {
-      coerced = programmaticTypeCoercions[entry.type](value, entry.canonicalName ?? optionName)
-    } catch (error) {
-      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`, error)
-      return
-    }
-    if (coerced === undefined) {
-      warnInvalidValue(value, optionName, source, `Invalid ${entry.type} input`)
-      return
-    }
-  }
-  if (entry.transformer) {
-    try {
-      coerced = entry.transformer(coerced, optionName, source)
-    } catch (error) {
-      warnInvalidValue(value, optionName, source, 'Invalid value', error)
-      return
-    }
-  }
-  return coerced
+function coerceType (entry, value) {
+  return programmaticTypeCoercions[entry.type](value)
 }
 
 module.exports = getConfig
@@ -321,9 +298,13 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const transformed = value === undefined
-        ? value
-        : coerceType(entry, value, fullName, source)
+      const coerced = value === undefined ? value : coerceType(entry, value)
+      if (coerced === undefined && value !== undefined) {
+        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+      }
+      const transformed = coerced !== undefined && entry.transformer
+        ? entry.transformer(coerced, fullName, source)
+        : coerced
       setAndTrack(this, entry.property ?? name, transformed, value, source)
     }
   }

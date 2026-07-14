@@ -73,7 +73,7 @@ export type ConfigDefaults = Partial<{ [TPath in ConfigPath]: ConfigPathValue<TP
 export type ConfigurationOption = {
   property?: string
   parser?: (value: unknown, optionName: string, source: string) => unknown
-  type?: string
+  type: string
   canonicalName?: string
   transformer?: (value: unknown, optionName: string, source: string) => unknown
   telemetryTransformer?: (value: unknown) => unknown

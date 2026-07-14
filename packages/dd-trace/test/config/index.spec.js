@@ -1737,26 +1737,6 @@ describe('Config', () => {
     assert.strictEqual(config.service, 'node')
   })
 
-  it('should ignore programmatic options when their transformations throw', () => {
-    const headerTags = new Proxy([], {
-      get () {
-        throw new Error('array transformation failed')
-      },
-    })
-    const samplingRules = new Proxy({}, {
-      ownKeys () {
-        throw new Error('option transformation failed')
-      },
-    })
-
-    const config = getConfig({ headerTags, samplingRules })
-
-    assert.deepStrictEqual(config.headerTags, defaults.headerTags)
-    assert.deepStrictEqual(config.samplingRules, defaults.samplingRules)
-    sinon.assert.calledWithMatch(log.error, /^Invalid ARRAY input:/)
-    sinon.assert.calledWithMatch(log.error, /^Invalid value:/)
-  })
-
   it('should initialize from environment variables with url taking precedence', () => {
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:7777'
     process.env.DD_SITE = 'datadoghq.eu'
