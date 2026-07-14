@@ -58,6 +58,13 @@ function applyMajorOverrides (supportedConfigurations, majorVersion) {
   delete supportedConfigurations.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
   // eslint-disable-next-line eslint-rules/eslint-env-aliases
   dropAlias(supportedConfigurations.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, 'DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED')
+
+  if (majorVersion >= 7) {
+    // The Electron plugin moved to the Electron SDK and is opt-in (disabled by default) from v7 on,
+    // while remaining enabled by default on earlier majors (see ElectronPlugin.experimental).
+    const electronEntry = supportedConfigurations.DD_TRACE_ELECTRON_ENABLED?.[0]
+    if (electronEntry) electronEntry.default = 'false'
+  }
 }
 
 /**
