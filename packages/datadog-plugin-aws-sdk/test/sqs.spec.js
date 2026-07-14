@@ -522,6 +522,55 @@ describe('Plugin', () => {
           assert.strictEqual(consumerSpans, 0)
         })
       })
+
+      // Regression: when the injection propagation style writes nothing (`...INJECT=none`),
+      // `tracer.inject` reports back that the carrier stayed empty, so the producer must not
+      // attach an empty `_datadog` message attribute.
+      describe('with trace context injection disabled', () => {
+        before(() => {
+          process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'none'
+          tracer = require('../../dd-trace')
+          return agent.load('aws-sdk', { sqs: { dsmEnabled: false } })
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
+          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+        })
+
+        beforeEach(done => {
+          sqs.createQueue(queueOptions, err => done(err))
+        })
+
+        afterEach(done => {
+          sqs.deleteQueue({ QueueUrl }, done)
+        })
+
+        after(() => {
+          delete process.env.DD_TRACE_PROPAGATION_STYLE_INJECT
+          return agent.close()
+        })
+
+        it('does not attach an empty `_datadog` attribute when nothing is injected', done => {
+          sqs.sendMessage({ MessageBody: 'no inject', QueueUrl }, error => {
+            if (error) return done(error)
+
+            sqs.receiveMessage({ QueueUrl, MessageAttributeNames: ['.*'] }, (error, data) => {
+              if (error) return done(error)
+              try {
+                const attributes = data.Messages?.[0]?.MessageAttributes ?? {}
+                assert.ok(
+                  !Object.hasOwn(attributes, '_datadog'),
+                  `expected no _datadog attribute, got ${inspect(Object.keys(attributes))}`
+                )
+                done()
+              } catch (assertionError) {
+                done(assertionError)
+              }
+            })
+          })
+        })
+      })
     })
   })
 })
