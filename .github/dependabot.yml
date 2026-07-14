@@ -39,6 +39,7 @@ updates:
   # pinned by digest. docker-compose.yml is handled separately (GHCR mirror).
   - package-ecosystem: "docker"
     directories:
+      - "/.github/editorconfig-checker"
       - "/.github/playwright"
       - "/.github/selenium"
       - "/benchmark/sirun"
