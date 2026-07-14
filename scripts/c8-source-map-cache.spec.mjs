@@ -22,6 +22,7 @@ const { markCoverageDirectory } = require('./c8-source-map-cache')
  * @param {object} [options]
  * @param {string} [options.childCoverageDir]
  * @param {boolean} [options.failLookup]
+ * @param {boolean} [options.loadAtExit]
  * @param {number} [options.moduleCount]
  */
 async function runFixture (coverageDir, fixtureDir, options = {}) {
@@ -30,6 +31,7 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
   const childCoverageLog = path.join(fixtureDir, 'child-coverage-dir.txt')
   const lookupLog = path.join(fixtureDir, 'source-map-lookups.txt')
   const modulesDir = path.join(fixtureDir, 'modules')
+  const lateFile = path.join(fixtureDir, 'late.js')
   const observerFile = path.join(fixtureDir, 'observe-source-map-lookups.js')
   const parentFile = path.join(fixtureDir, 'parent.js')
   const targetFile = path.join(fixtureDir, 'target.mjs')
@@ -47,8 +49,14 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
   await writeFile(observerFile, String.raw`
     'use strict'
     const fs = require('node:fs')
+    const inspector = require('node:inspector')
     const Module = require('node:module')
+    const originalDisconnect = inspector.Session.prototype.disconnect
     const originalFindSourceMap = Module.findSourceMap
+    inspector.Session.prototype.disconnect = function () {
+      originalDisconnect.call(this)
+      fs.appendFileSync(${JSON.stringify(lookupLog)}, 'disconnect\n')
+    }
     Module.findSourceMap = function (url) {
       fs.appendFileSync(${JSON.stringify(lookupLog)}, url + '\n')
       ${options.failLookup
@@ -59,6 +67,7 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
       return originalFindSourceMap(url)
     }
   `)
+  await writeFile(lateFile, 'module.exports = true\n//# sourceMappingURL=late.js.map\n')
   await writeFile(parentFile, `
     'use strict'
     const { spawnSync } = require('node:child_process')
@@ -81,7 +90,9 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
   `)
   await writeFile(targetFile, `
     import { writeFileSync } from 'node:fs'
+    import { createRequire } from 'node:module'
     ${importLines.join('\n')}
+    const require = createRequire(import.meta.url)
     writeFileSync(
       ${JSON.stringify(childCoverageLog)},
       process.env.NODE_V8_COVERAGE ?? ''
@@ -90,6 +101,11 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
       globalThis.coverageTail = true
     }
     process.once('beforeExit', coveredAtBeforeExit)
+    ${options.loadAtExit
+      ? `process.prependOnceListener('exit', function loadLateSourceMap () {
+      require(${JSON.stringify(lateFile)})
+    })`
+      : ''}
   `)
 
   const env = {
@@ -98,7 +114,12 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
   }
   await execFileAsync(process.execPath, [parentFile], { cwd: repoRoot, env })
 
-  return { childCoverageLog, lookupLog, targetFile: await realpath(targetFile) }
+  return {
+    childCoverageLog,
+    lateFile: await realpath(lateFile),
+    lookupLog,
+    targetFile: await realpath(targetFile),
+  }
 }
 
 /**
@@ -191,6 +212,23 @@ describe('c8 source map cache', () => {
 
     const lookups = await readFile(lookupLog, 'utf8')
     assert.ok(lookups.includes(pathToFileURL(targetFile).href), `No source map lookup found for ${targetFile}`)
+    await assertTailCovered(ownCoverageDir, targetFile)
+  })
+
+  it('warms exit-time source maps before disconnecting the inspector', async () => {
+    const ownCoverageDir = path.join(fixtureDir, 'own-coverage')
+    markCoverageDirectory(ownCoverageDir)
+    const { lateFile, lookupLog, targetFile } =
+      await runFixture(ownCoverageDir, fixtureDir, { loadAtExit: true })
+
+    const lookupLogContent = await readFile(lookupLog, 'utf8')
+    const entries = lookupLogContent.trimEnd().split('\n')
+    const lateUrl = pathToFileURL(lateFile).href
+    const lateIndex = entries.indexOf(lateUrl)
+    const disconnectIndex = entries.indexOf('disconnect')
+    assert.notStrictEqual(lateIndex, -1, `No source map lookup found for ${lateFile}`)
+    assert.strictEqual(disconnectIndex, entries.length - 1)
+    assert.strictEqual(entries.lastIndexOf('disconnect'), disconnectIndex)
     await assertTailCovered(ownCoverageDir, targetFile)
   })
 })

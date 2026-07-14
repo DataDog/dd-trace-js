@@ -58,9 +58,15 @@ function warmSourceMaps () {
     }
   }
 
+  function finishWarmingSourceMaps () {
+    warmPendingSourceMaps()
+    session.disconnect()
+  }
+
   session.connect()
   session.on('Debugger.scriptParsed', onScriptParsed)
   session.post('Debugger.enable')
+  process.once('exit', finishWarmingSourceMaps)
 }
 
 module.exports = { markCoverageDirectory }
