@@ -5,7 +5,7 @@ const process = require('node:process')
 const { performance, monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks')
 const { metrics } = require('@opentelemetry/api')
 const log = require('../log')
-const { createMetricsClient } = require('./client')
+const { createMetricsClient, generateMetricsClientTags } = require('./client')
 
 const METER_NAME = 'datadog.runtime_metrics'
 
@@ -222,6 +222,16 @@ module.exports = {
       flushInterval = null
     }
     client = null
+  },
+
+  /**
+   * Regenerates the DogStatsD client's tags (e.g. after a reseeded `runtime-id`). No-op if
+   * runtime metrics were never started.
+   *
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
+  updateTags (config) {
+    client?.updateTags(generateMetricsClientTags(config))
   },
 
   // Tied to @datadog/native-metrics which the OTLP path doesn't enable; noop with expected shape.

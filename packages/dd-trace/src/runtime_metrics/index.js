@@ -6,6 +6,7 @@ let runtimeMetrics
 
 const noop = runtimeMetrics = {
   stop () {},
+  updateTags () {},
   track () {},
   boolean () {},
   histogram () {},

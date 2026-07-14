@@ -331,6 +331,21 @@ describe('dogstatsd', () => {
     assert.strictEqual(noopDuringSend, true)
   })
 
+  it('reflects tags updated via updateTags() on the next _add() call', () => {
+    client = createDogStatsDClient({ tags: ['foo:bar'] })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g|#foo:bar\n')
+
+    client.updateTags(['baz:qux'])
+    client.gauge('test.avg', 2)
+    client.flush()
+
+    sinon.assert.calledTwice(udp4.send)
+    assert.strictEqual(udp4.send.secondCall.args[0].toString(), 'test.avg:2|g|#baz:qux\n')
+  })
+
   it('should support configuration', () => {
     client = createDogStatsDClient({
       host: '::1',
@@ -706,6 +721,24 @@ describe('dogstatsd', () => {
       } finally {
         clock.restore()
       }
+    })
+
+    it('reflects tags updated via updateTags() (e.g. a reseeded runtime-id) on the next metric', () => {
+      client = createCustomMetrics()
+
+      client.gauge('test.avg', 1, { foo: 'bar' })
+      client.flush()
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:1|g|#foo:bar\n')
+
+      client.updateTags(['runtime-id:reseeded-id'])
+      client.gauge('test.avg', 2, { foo: 'bar' })
+      client.flush()
+
+      sinon.assert.calledTwice(udp4.send)
+      assert.strictEqual(
+        udp4.send.secondCall.args[0].toString(),
+        'test.avg:2|g|#runtime-id:reseeded-id,foo:bar\n'
+      )
     })
 
     it('should send the Docker entity ID when available', () => {

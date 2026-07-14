@@ -44,7 +44,7 @@ class AgentlessExporter {
       languageName: 'nodejs',
       languageVersion: process.version,
       tracerVersion,
-      runtimeID: config.tags?.['runtime-id'],
+      get runtimeID () { return config.tags?.['runtime-id'] },
       ...(entityId ? { containerID: entityId } : {}),
     }
 

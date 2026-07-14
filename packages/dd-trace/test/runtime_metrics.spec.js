@@ -175,6 +175,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
             flush: client.flush.bind(client),
+            updateTags: client.updateTags.bind(client),
           }
         })
 
@@ -185,6 +186,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           increment: sinon.spy(),
           histogram: sinon.spy(),
           flush: sinon.spy(),
+          updateTags: sinon.spy(),
         }
 
         const proxiedObject = {
@@ -295,6 +297,33 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           const call = Client.lastCall
           const tags = call.args[0].tags
           assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
+        })
+
+        it('reflects a reseeded runtime-id and client-id via updateTags(), respecting the runtimeMetricsRuntimeId ' +
+          'gate', () => {
+          config.runtimeMetricsRuntimeId = true
+          config.tags['runtime-id'] = 'reseeded-id'
+          config.tags['_dd.rc.client_id'] = 'reseeded-client-id'
+
+          runtimeMetrics.updateTags(config)
+
+          sinon.assert.calledWith(client.updateTags, [
+            'str:bar',
+            'invalid:t_e_s_t5-:./',
+            'runtime-id:reseeded-id',
+            '_dd.rc.client_id:reseeded-client-id',
+          ])
+        })
+
+        it('omits runtime-id from updateTags() when the runtimeMetricsRuntimeId gate is off', () => {
+          config.tags['runtime-id'] = 'reseeded-id'
+
+          runtimeMetrics.updateTags(config)
+
+          sinon.assert.calledWith(client.updateTags, [
+            'str:bar',
+            'invalid:t_e_s_t5-:./',
+          ])
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -1117,6 +1146,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     count (name, count, tag, monotonic) { statsdCalls.push(['count', name, count, tag, monotonic]) },
     gauge (name, value, tag) { statsdCalls.push(['gauge', name, value, tag]) },
     flush () {},
+    updateTags: sinon.spy(),
   }
 
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
@@ -1134,6 +1164,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
     },
     './client': {
       createMetricsClient: () => fakeMetricsClient,
+      generateMetricsClientTags: require('../src/runtime_metrics/client').generateMetricsClientTags,
     },
   })
 
@@ -1271,6 +1302,23 @@ describe('otlp_runtime_metrics', () => {
       }
       assert.doesNotMatch(name, /^runtime\.node\./, `${name} should not use DD-proprietary naming`)
     }
+  })
+
+  it('reflects a reseeded runtime-id via updateTags() on the underlying DogStatsD client', () => {
+    const ctx = loadOtlpRuntimeMetricsTestModule()
+    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    const config = {
+      dogstatsd: { hostname: 'localhost', port: 8125 },
+      runtimeMetricsRuntimeId: true,
+      tags: { 'runtime-id': 'reseeded-id' },
+    }
+    ctx.otlpMetrics.updateTags(config)
+
+    sinon.assert.calledOnce(ctx.fakeMetricsClient.updateTags)
+    assert.deepStrictEqual(ctx.fakeMetricsClient.updateTags.firstCall.args[0], ['runtime-id:reseeded-id'])
+
+    ctx.otlpMetrics.stop()
   })
 
   it('observes positive values and emits required attributes', () => {

@@ -47,6 +47,18 @@ class DogStatsDClient {
     this._udp6 = this._socket('udp6')
   }
 
+  /**
+   * Regenerates the cached tags string used by every `_add()` call. Needed because `#tagsPrefix`
+   * is computed once in the constructor for hot-path performance, so a tag value change (e.g. a
+   * reseeded `runtime-id`) would otherwise never reach it.
+   *
+   * @param {string[]} tags - Freshly generated tags, in `key:value` form
+   */
+  updateTags (tags) {
+    this._tags = tags
+    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+  }
+
   increment (stat, value, tags) {
     this._add(stat, value, TYPE_COUNTER, tags)
   }
@@ -212,6 +224,13 @@ class MetricsAggregationClient {
     this.reset()
   }
 
+  /**
+   * @param {string[]} tags - Freshly generated tags, in `key:value` form
+   */
+  updateTags (tags) {
+    this._client.updateTags(tags)
+  }
+
   flush () {
     this._captureCounters()
     this._captureGauges()
@@ -370,6 +389,13 @@ class CustomMetrics {
     setInterval(flush, 10 * 1000).unref?.()
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
+  }
+
+  /**
+   * @param {string[]} tags - Freshly generated tags, in `key:value` form
+   */
+  updateTags (tags) {
+    this.#client.updateTags(tags)
   }
 
   increment (stat, value = 1, tags) {

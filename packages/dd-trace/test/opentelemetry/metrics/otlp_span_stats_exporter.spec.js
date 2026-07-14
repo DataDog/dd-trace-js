@@ -172,6 +172,20 @@ describe('OtlpStatsExporter', () => {
     assert.ok(httpStub.calledOnce)
   })
 
+  it('reflects resource attributes pushed via updateResourceAttributes on the next export', () => {
+    exporter.updateResourceAttributes({ 'service.name': 'reseeded-svc' })
+
+    const drained = makeDrained([makeSpan()])
+    exporter.export(drained, BUCKET_SIZE_NS)
+
+    const payload = JSON.parse(mockReq.write.firstCall.args[0].toString())
+    const { attributes } = payload.resourceMetrics[0].resource
+    assert.deepStrictEqual(
+      attributes.find(attr => attr.key === 'service.name'),
+      { key: 'service.name', value: { stringValue: 'reseeded-svc' } }
+    )
+  })
+
   it('handles request error without throwing', () => {
     mockReq.on = (event, handler) => { if (event === 'error') handler(new Error('connection refused')) }
 

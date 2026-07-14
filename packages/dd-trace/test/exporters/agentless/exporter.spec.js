@@ -120,6 +120,25 @@ describe('AgentlessExporter', () => {
         languageName: 'nodejs',
       })
     })
+
+    it('should reflect a runtime-id mutated on config after construction (e.g. MicroVM clone resume)', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = { site: 'datadoghq.com', tags: { 'runtime-id': 'test-uuid' } }
+      exporter = new Exporter(config)
+
+      config.tags['runtime-id'] = 'reseeded-uuid'
+
+      assert.strictEqual(writerOptions.metadata.runtimeID, 'reseeded-uuid')
+    })
   })
 
   describe('export', () => {

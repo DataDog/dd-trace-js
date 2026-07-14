@@ -312,6 +312,27 @@ class Tracer extends NoopProxy {
     getConfig.refreshRuntimeId(config)
     require('./remote_config').refreshClientId(config)
     this._tracer?.refreshMetadata(config)
+    this.#refreshDogStatsDTags(config)
+    require('./opentelemetry/metrics').refreshResourceAttributes(config)
+    if (DynamicInstrumentation.isStarted()) DynamicInstrumentation.configure(config)
+  }
+
+  /**
+   * Regenerates the cached DogStatsD tags for whichever clients are already constructed. Clients
+   * that haven't been constructed yet (e.g. the lazily-created Custom Metrics client outside
+   * serverless) naturally pick up the fresh config on their first access, so they're left alone.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  #refreshDogStatsDTags (config) {
+    const dogstatsdDescriptor = Object.getOwnPropertyDescriptor(this, 'dogstatsd')
+    if (!dogstatsdDescriptor || typeof dogstatsdDescriptor.get !== 'function') {
+      const { CustomMetrics, DogStatsDClient } = require('./dogstatsd')
+      if (this.dogstatsd instanceof CustomMetrics) {
+        this.dogstatsd.updateTags(DogStatsDClient.generateClientConfig(config).tags)
+      }
+    }
+    runtimeMetrics.updateTags(config)
   }
 
   /**

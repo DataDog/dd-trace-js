@@ -76,6 +76,17 @@ class OtlpTransformerBase {
   }
 
   /**
+   * Recomputes the cached OTLP resource attributes from a fresh attributes object (e.g. after a
+   * reseeded `runtime-id`). `#resourceAttributes` is otherwise only ever set once, in the
+   * constructor, for hot-path fitness on every export.
+   *
+   * @param {Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#resourceAttributes = this.transformAttributes(resourceAttributes)
+  }
+
+  /**
    * Transforms attributes to OTLP KeyValue format.
    * @param {Attributes} attributes - Attributes to transform
    * @returns {object[]} Array of OTLP KeyValue objects

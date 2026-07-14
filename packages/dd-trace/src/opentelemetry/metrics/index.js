@@ -14,6 +14,12 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
  * @typedef {import('../../config')} Config
  */
 
+// Tracks the currently-active exporters so `refreshResourceAttributes` can push updated
+// resource attributes (e.g. a reseeded `runtime-id`) into their caches. Undefined if OTel
+// metrics / span-stats were never initialized.
+let activeMetricsExporter
+let activeStatsExporter
+
 /**
  * @file OpenTelemetry Metrics Implementation for dd-trace-js
  *
@@ -37,10 +43,11 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
  */
 
 /**
- * Initializes OpenTelemetry Metrics support
+ * Builds the resource attributes for the OTel metrics (non-span-stats) exporter.
  * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {object} Resource attributes
  */
-function initializeOpenTelemetryMetrics (config) {
+function buildMetricsResourceAttributes (config) {
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
@@ -59,6 +66,16 @@ function initializeOpenTelemetryMetrics (config) {
     resourceAttributes['host.name'] = os.hostname()
   }
 
+  return resourceAttributes
+}
+
+/**
+ * Initializes OpenTelemetry Metrics support
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
+ */
+function initializeOpenTelemetryMetrics (config) {
+  const resourceAttributes = buildMetricsResourceAttributes(config)
+
   const exporter = new OtlpHttpMetricExporter(
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
@@ -66,6 +83,7 @@ function initializeOpenTelemetryMetrics (config) {
     config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
     resourceAttributes
   )
+  activeMetricsExporter = exporter
 
   const reader = new PeriodicMetricReader(
     exporter,
@@ -101,17 +119,26 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
   return attrs
 }
 
-function createOtlpSpanStatsExporter (config) {
-  const { OtlpStatsExporter } = require('./otlp_span_stats_exporter')
-  const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
-  const resourceAttributes = buildResourceAttributes(config.tags, {
+/**
+ * Builds the resource attributes for the OTLP span-stats exporter.
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {object} Resource attributes
+ */
+function buildStatsResourceAttributes (config) {
+  return buildResourceAttributes(config.tags, {
     reportHostname: config.reportHostname,
     otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     service: config.service,
     env: config.env,
     serviceVersion: config.version,
   })
-  return new OtlpStatsExporter(
+}
+
+function createOtlpSpanStatsExporter (config) {
+  const { OtlpStatsExporter } = require('./otlp_span_stats_exporter')
+  const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
+  const resourceAttributes = buildStatsResourceAttributes(config)
+  const exporter = new OtlpStatsExporter(
     config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     protocol,
     resourceAttributes,
@@ -120,6 +147,20 @@ function createOtlpSpanStatsExporter (config) {
     config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
   )
+  activeStatsExporter = exporter
+  return exporter
+}
+
+/**
+ * Recomputes and pushes fresh resource attributes (e.g. after a reseeded `runtime-id`) into
+ * whichever OTel metrics exporters are currently active. No-op for any exporter that was never
+ * initialized.
+ *
+ * @param {import('../../config/config-base')} config - Tracer configuration
+ */
+function refreshResourceAttributes (config) {
+  activeMetricsExporter?.updateResourceAttributes(buildMetricsResourceAttributes(config))
+  activeStatsExporter?.updateResourceAttributes(buildStatsResourceAttributes(config))
 }
 
 module.exports = {
@@ -127,4 +168,5 @@ module.exports = {
   initializeOpenTelemetryMetrics,
   buildResourceAttributes,
   createOtlpSpanStatsExporter,
+  refreshResourceAttributes,
 }

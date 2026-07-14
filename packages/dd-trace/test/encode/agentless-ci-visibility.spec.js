@@ -112,6 +112,20 @@ describe('agentless-ci-visibility-encode', () => {
     assert.strictEqual(spanEvent.content.metrics.negative, -123456712345)
   })
 
+  it('reflects a runtime-id mutated on the shared tags object after construction (e.g. MicroVM clone resume)', () => {
+    const tags = { 'runtime-id': 'current-id' }
+    const { AgentlessCiVisibilityEncoder } = require('../../src/encode/agentless-ci-visibility')
+    const liveEncoder = new AgentlessCiVisibilityEncoder(writer, { tags })
+
+    tags['runtime-id'] = 'reseeded-id'
+
+    liveEncoder.encode(trace)
+    const buffer = liveEncoder.makePayload()
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+    assert.strictEqual(decoded.metadata['*']['runtime-id'], 'reseeded-id')
+  })
+
   it('should report its count', () => {
     assert.strictEqual(encoder.count(), 0)
 

@@ -54,12 +54,12 @@ describe('OpenTelemetry Meter Provider', () => {
 
     metrics.disable()
     const config = getConfigFresh()
+    let otelMetricsModule
     if (config.DD_METRICS_OTEL_ENABLED) {
-      const { initializeOpenTelemetryMetrics } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
-      initializeOpenTelemetryMetrics(config)
+      otelMetricsModule = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+      otelMetricsModule.initializeOpenTelemetryMetrics(config)
     }
-    return { config, meterProvider: metrics.getMeterProvider() }
+    return { config, meterProvider: metrics.getMeterProvider(), otelMetricsModule }
   }
 
   function mockOtlpExport (validator) {
@@ -385,6 +385,26 @@ describe('OpenTelemetry Meter Provider', () => {
 
       setTimeout(() => { validator(); done() }, 150)
     })
+
+    it('reflects resource attributes refreshed via refreshResourceAttributes() (e.g. a reseeded runtime-id)',
+      (done) => {
+        const validator = mockOtlpExport((decoded) => {
+          const attrs = {}
+          decoded.resourceMetrics[0].resource.attributes.forEach(attr => {
+            attrs[attr.key] = attr.value.stringValue || attr.value.intValue
+          })
+          assert.strictEqual(attrs['service.name'], 'reseeded-service')
+        })
+
+        const { config, otelMetricsModule } = setupMetrics({ DD_SERVICE: 'original-service' })
+        config.service = 'reseeded-service'
+        otelMetricsModule.refreshResourceAttributes(config)
+
+        const meter = metrics.getMeter('app')
+        meter.createCounter('test').add(1)
+
+        setTimeout(() => { validator(); done() }, 150)
+      })
 
     it('supports multiple attributes and data points', (done) => {
       const validator = mockOtlpExport((decoded) => {

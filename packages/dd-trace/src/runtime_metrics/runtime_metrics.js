@@ -8,7 +8,7 @@ const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const log = require('../log')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
-const { createMetricsClient } = require('./client')
+const { createMetricsClient, generateMetricsClientTags } = require('./client')
 
 const eventLoopDelayResolution = 4
 const EVENT_LOOP_SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
@@ -119,6 +119,16 @@ module.exports = {
 
     eventLoopDelayObserver?.disable()
     eventLoopDelayObserver = null
+  },
+
+  /**
+   * Regenerates the DogStatsD client's tags (e.g. after a reseeded `runtime-id`). No-op if
+   * runtime metrics were never started.
+   *
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
+  updateTags (config) {
+    client?.updateTags(generateMetricsClientTags(config))
   },
 
   track (span) {

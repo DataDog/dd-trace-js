@@ -16,7 +16,7 @@ const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let clock, statusproxy, request, jsonBuffer
+  let clock, statusproxy, request, jsonBuffer, configMock
 
   /** @type {Array<[string, string] | [string, string, Error]>} */
   const acks = [
@@ -42,16 +42,18 @@ describe('diagnostic message http requests', function () {
       }
     }
 
-    statusproxy = proxyquire('../../../src/debugger/devtools_client/status', {
-      './config': {
-        service,
-        runtimeId,
-        maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
-        dynamicInstrumentation: {
-          uploadIntervalSeconds: 1,
-        },
-        '@noCallThru': true,
+    configMock = {
+      service,
+      runtimeId,
+      maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+      dynamicInstrumentation: {
+        uploadIntervalSeconds: 1,
       },
+      '@noCallThru': true,
+    }
+
+    statusproxy = proxyquire('../../../src/debugger/devtools_client/status', {
+      './config': configMock,
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
     })
@@ -148,10 +150,20 @@ describe('diagnostic message http requests', function () {
       })
     })
   }
+
+  it('reflects a runtimeId mutated on the config after load (e.g. a main-thread identity refresh)', function (done) {
+    configMock.runtimeId = 'reseeded-runtime-id'
+
+    statusproxy.ackReceived({ id: 'foo', version: 0 })
+
+    const event = formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status: 'RECEIVED' }, 'reseeded-runtime-id')
+    sinon.assert.calledOnceWithExactly(jsonBuffer.write, JSON.stringify(event))
+    done()
+  })
 })
 
-function formatAsDiagnosticsEvent ({ probeId, version, status, exception }) {
-  const diagnostics = { probeId, runtimeId, probeVersion: version, status }
+function formatAsDiagnosticsEvent ({ probeId, version, status, exception }, expectedRuntimeId = runtimeId) {
+  const diagnostics = { probeId, runtimeId: expectedRuntimeId, probeVersion: version, status }
 
   // Error requests will also contain an `exception` property
   if (exception) diagnostics.exception = exception

@@ -30,6 +30,15 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
   }
 
   /**
+   * Recomputes the transformer's cached resource attributes (e.g. after a reseeded `runtime-id`).
+   *
+   * @param {Resource} resource - Resource attributes
+   */
+  updateResourceAttributes (resource) {
+    this.transformer.updateResourceAttributes(resource)
+  }
+
+  /**
    * Exports metrics via OTLP over HTTP.
    *
    * @param {Map<string, AggregatedMetric>} metrics - Map of metric data to export

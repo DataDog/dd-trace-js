@@ -4,15 +4,18 @@ const dc = /** @type {typeof import('diagnostics_channel')} */ (require('dc-poly
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
 let subscribed = false
-let runtimeId
+let savedConfig
 
 function isOptionsObject (value) {
   return value != null && typeof value === 'object' && !Array.isArray(value) && value
 }
 
 function getEnvWithRuntimeId (env) {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  return { ...(env ?? process.env), DD_ROOT_JS_SESSION_ID: runtimeId }
+  return {
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    ...(env ?? process.env),
+    DD_ROOT_JS_SESSION_ID: savedConfig.DD_ROOT_JS_SESSION_ID || savedConfig.tags['runtime-id'],
+  }
 }
 
 function onChildProcessStart (context) {
@@ -43,7 +46,7 @@ function start (config) {
   if (!config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED || subscribed) return
   subscribed = true
 
-  runtimeId = config.DD_ROOT_JS_SESSION_ID || config.tags['runtime-id']
+  savedConfig = config
 
   childProcessChannel.subscribe(
     /** @type {import('diagnostics_channel').TracingChannelSubscribers<object>} */ ({ start: onChildProcessStart })

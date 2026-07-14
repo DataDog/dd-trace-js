@@ -23,6 +23,15 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
   }
 
   /**
+   * Recomputes the transformer's cached resource attributes (e.g. after a reseeded `runtime-id`).
+   *
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#transformer.updateResourceAttributes(resourceAttributes)
+  }
+
+  /**
    * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
    * @param {number} bucketSizeNs
    */

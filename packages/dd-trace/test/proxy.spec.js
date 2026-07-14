@@ -114,6 +114,7 @@ describe('TracerProxy', () => {
       class FauxDogStatsDClient {
         constructor (cfg) {
           dogstatsdConfig = cfg
+          this.updateTags = sinon.spy()
         }
 
         increment () {
@@ -127,6 +128,7 @@ describe('TracerProxy', () => {
 
       dogStatsD = {
         CustomMetrics: FauxDogStatsDClient,
+        DogStatsDClient: { generateClientConfig: sinon.stub().returns({ tags: [] }) },
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig,
         _flushes: () => dogstatsdFlushes,
@@ -176,6 +178,7 @@ describe('TracerProxy', () => {
 
     runtimeMetrics = {
       start: sinon.spy(),
+      updateTags: sinon.spy(),
     }
 
     profiler = {
@@ -1002,6 +1005,8 @@ describe('TracerProxy', () => {
     let idMock
     let channelMock
     let diagnosticsChannelMock
+    let dynamicInstrumentationMock
+    let otelMetricsMock
     let MicroVmProxy
     let microProxy
     let origEnv
@@ -1019,6 +1024,17 @@ describe('TracerProxy', () => {
 
       diagnosticsChannelMock = {
         channel: sinon.stub().returns(channelMock),
+      }
+
+      dynamicInstrumentationMock = {
+        isStarted: sinon.stub().returns(false),
+        configure: sinon.stub(),
+        start: sinon.stub(),
+        stop: sinon.stub(),
+      }
+
+      otelMetricsMock = {
+        refreshResourceAttributes: sinon.stub(),
       }
 
       Config.refreshRuntimeId = sinon.stub()
@@ -1044,6 +1060,8 @@ describe('TracerProxy', () => {
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
         './id': idMock,
+        './debugger': dynamicInstrumentationMock,
+        './opentelemetry/metrics': otelMetricsMock,
         'dc-polyfill': diagnosticsChannelMock,
       })
 
@@ -1121,6 +1139,53 @@ describe('TracerProxy', () => {
       assert.ok(idMock.reseed.calledBefore(Config.refreshRuntimeId))
       assert.ok(Config.refreshRuntimeId.calledBefore(RemoteConfig.refreshClientId))
       assert.ok(RemoteConfig.refreshClientId.calledBefore(tracer.refreshMetadata))
+    })
+
+    it('should refresh runtime-metrics DogStatsD tags and OTel resource attributes', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledWith(runtimeMetrics.updateTags, config)
+      sinon.assert.calledWith(otelMetricsMock.refreshResourceAttributes, config)
+    })
+
+    it('should refresh an already-constructed Custom Metrics DogStatsD client', () => {
+      config.dogstatsd = { hostname: 'localhost', port: 8125 }
+      dogStatsD.DogStatsDClient.generateClientConfig.returns({ tags: ['runtime-id:reseeded-id'] })
+
+      microProxy.init()
+      const customMetricsClient = microProxy.dogstatsd
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledOnceWithExactly(customMetricsClient.updateTags, ['runtime-id:reseeded-id'])
+    })
+
+    it('should NOT reconfigure the debugger when it is not started', () => {
+      dynamicInstrumentationMock.isStarted.returns(false)
+
+      microProxy.init()
+      dynamicInstrumentationMock.configure.resetHistory() // init() itself reconfigures the debugger once
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.notCalled(dynamicInstrumentationMock.configure)
+    })
+
+    it('should reconfigure the debugger when it is already started', () => {
+      dynamicInstrumentationMock.isStarted.returns(true)
+
+      microProxy.init()
+      dynamicInstrumentationMock.configure.resetHistory() // init() itself reconfigures the debugger once
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      sinon.assert.calledWith(dynamicInstrumentationMock.configure, config)
     })
 
     it('should call refreshIdentity from resetRuntimeId when initialized and env var set', () => {
