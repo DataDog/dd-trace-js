@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const { getApiLogsBinding, getApiLogsOwner, getApiOwner } = require('../api')
+const { getApiLogs, getApiOwner } = require('../api')
 const ContextManager = require('../context_manager')
 const Logger = require('./logger')
 
@@ -20,7 +20,6 @@ const Logger = require('./logger')
  * @implements {import('@opentelemetry/api-logs').LoggerProvider}
  */
 class LoggerProvider {
-  #apiBinding
   #loggers
   #contextManager
   #registered = false
@@ -35,7 +34,6 @@ class LoggerProvider {
   constructor (options = {}) {
     this.processor = options.processor
     this.#loggers = new Map()
-    this.#contextManager = undefined
     this.isShutdown = false
   }
 
@@ -66,12 +64,7 @@ class LoggerProvider {
     const key = `${name}@${loggerVersion}`
 
     if (!this.#loggers.has(key)) {
-      this.#loggers.set(key, new Logger(
-        this,
-        { name, version: loggerVersion, schemaUrl: loggerSchemaUrl },
-        undefined,
-        this.#getApiBinding()
-      ))
+      this.#loggers.set(key, new Logger(this, { name, version: loggerVersion, schemaUrl: loggerSchemaUrl }))
     }
     return this.#loggers.get(key)
   }
@@ -87,20 +80,9 @@ class LoggerProvider {
     if (this.#registered) return
 
     this.#registered = true
-    this.#getApiBinding()
+    this.#contextManager = new ContextManager()
     getApiOwner().context.setGlobalContextManager(this.#contextManager)
-    getApiLogsOwner().logs.setGlobalLoggerProvider(this)
-  }
-
-  /**
-   * @returns {import('../api').ApiBinding}
-   */
-  #getApiBinding () {
-    if (!this.#apiBinding) {
-      this.#apiBinding = getApiLogsBinding()
-      this.#contextManager = new ContextManager(this.#apiBinding)
-    }
-    return this.#apiBinding
+    getApiLogs().logs.setGlobalLoggerProvider(this)
   }
 
   /**

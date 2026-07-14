@@ -107,9 +107,17 @@ async function runOtelApiBundleScenario ({ applicationOwnsApi, build, extension 
  * @returns {string}
  */
 function applicationSource (applicationOwnsApi) {
+  const applicationApi = applicationOwnsApi
+    ? `const api = require('@opentelemetry/api')
+const apiLogs = require('@opentelemetry/api-logs')`
+    : `const api = holder.getApi()
+const apiLogs = holder.getApiLogs()`
   const runtimeCopyAssertion = applicationOwnsApi
-    ? `if (api !== globalThis.__ddRuntimeApi || apiLogs !== globalThis.__ddRuntimeApiLogs) {
-  throw new Error('Application-owned OpenTelemetry APIs were bundled instead of loaded at runtime')
+    ? `if (api.trace !== globalThis.__ddRuntimeApi.trace || apiLogs.logs !== globalThis.__ddRuntimeApiLogs.logs) {
+  throw new Error('Application OpenTelemetry APIs were bundled instead of loaded at runtime')
+}
+if (api.trace === holder.getApi().trace || apiLogs.logs === holder.getApiLogs().logs) {
+  throw new Error('Application and bridge APIs unexpectedly share a bundled module')
 }
 `
     : ''
@@ -119,11 +127,7 @@ const holder = require(${JSON.stringify(path.join(DD_TRACE_PATH, 'packages/dd-tr
 const tracer = require(${JSON.stringify(DD_TRACE_PATH)}).init({ startupLogs: false })
 const provider = new tracer.TracerProvider()
 provider.register()
-const api = require('@opentelemetry/api')
-const apiLogs = require('@opentelemetry/api-logs')
-if (api !== holder.getApi() || apiLogs !== holder.getApiLogs()) {
-  throw new Error('Application and bridge selected different OpenTelemetry API copies')
-}
+${applicationApi}
 ${runtimeCopyAssertion}if (!apiLogs.SeverityNumber) {
   throw new Error('OpenTelemetry Logs API did not load')
 }

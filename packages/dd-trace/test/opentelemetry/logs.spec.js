@@ -511,63 +511,6 @@ describe('OpenTelemetry Logs', () => {
       assert.strictEqual(logs.getLoggerProvider(), loggerProvider)
       logs.getLogger('test').emit({ body: 'test' })
     })
-
-    it('keeps the logger provider on compatibility-max owners after late captures', () => {
-      const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-      const applicationRequire = sinon.stub()
-      applicationRequire.resolve = sinon.stub().throws(notFound)
-      const ownerApi = {
-        context: {
-          disable: sinon.spy(),
-          setGlobalContextManager: sinon.spy(),
-        },
-      }
-      const ownerApiLogs = {
-        logs: {
-          disable: sinon.spy(),
-          setGlobalLoggerProvider: sinon.spy(),
-        },
-      }
-      const holder = proxyquire.noPreserveCache()('../../src/opentelemetry/api', {
-        'node:module': { createRequire: () => applicationRequire },
-        '@opentelemetry/api': ownerApi,
-        '@opentelemetry/api-logs': ownerApiLogs,
-      })
-      const applicationApi = {
-        context: {
-          disable: sinon.spy(),
-          setGlobalContextManager: sinon.spy(),
-        },
-      }
-      const applicationApiLogs = {
-        logs: {
-          disable: sinon.spy(),
-          setGlobalLoggerProvider: sinon.spy(),
-        },
-      }
-      const FreshLoggerProvider = proxyquire.noPreserveCache()(
-        '../../src/opentelemetry/logs/logger_provider',
-        {
-          '../api': holder,
-          '../context_manager': class {},
-          './logger': class {},
-        }
-      )
-      const loggerProvider = new FreshLoggerProvider()
-      loggerProvider.register()
-
-      holder.setApi(applicationApi, '1.9.0', false, { applicationOwned: true })
-      holder.setApiLogs(applicationApiLogs, '0.57.2', false, { applicationOwned: true })
-
-      assert.strictEqual(holder.getApi(), applicationApi)
-      assert.strictEqual(holder.getApiLogs(), applicationApiLogs)
-      sinon.assert.calledOnce(ownerApi.context.setGlobalContextManager)
-      sinon.assert.calledOnceWithExactly(ownerApiLogs.logs.setGlobalLoggerProvider, loggerProvider)
-      sinon.assert.notCalled(ownerApi.context.disable)
-      sinon.assert.notCalled(ownerApiLogs.logs.disable)
-      sinon.assert.notCalled(applicationApi.context.setGlobalContextManager)
-      sinon.assert.notCalled(applicationApiLogs.logs.setGlobalLoggerProvider)
-    })
   })
 
   describe('Configurations', () => {

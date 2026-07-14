@@ -3,9 +3,9 @@
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
-const { getApiOwner } = require('./api')
+const { getApi } = require('./api')
 
-const { createTraceState } = getApiOwner()
+const { createTraceState } = getApi()
 
 function newContext () {
   const spanId = id()

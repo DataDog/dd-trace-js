@@ -21,7 +21,7 @@ describe('OTel TracerProvider', () => {
     assert.strictEqual(trace.getTracerProvider().getDelegate(), provider)
   })
 
-  it('should register only once', () => {
+  it('registers through the compatibility-max owner only once', () => {
     const api = {
       trace: {
         getTracerProvider: () => ({ setDelegate () {} }),
@@ -32,24 +32,22 @@ describe('OTel TracerProvider', () => {
     }
     const getApiOwner = sinon.stub().returns(api)
     const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
-      './api': {
-        getApiBinding: () => ({ current: { api, apiLogs: {} } }),
-        getApiOwner,
-      },
+      './api': { getApiOwner },
       '../../': {},
       './context_manager': class {},
       './tracer': class {},
       './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
     })
     const provider = new FreshTracerProvider()
+    const propagator = {}
 
-    provider.register()
+    provider.register({ propagator })
     provider.register()
 
     sinon.assert.calledOnce(getApiOwner)
     sinon.assert.calledOnce(api.trace.setGlobalTracerProvider)
     sinon.assert.calledOnce(api.context.setGlobalContextManager)
-    sinon.assert.calledOnce(api.propagation.setGlobalPropagator)
+    sinon.assert.calledOnceWithExactly(api.propagation.setGlobalPropagator, propagator)
   })
 
   it('should get tracer', () => {
@@ -153,117 +151,5 @@ describe('OTel TracerProvider', () => {
 
     provider.forceFlush()
     sinon.assert.calledOnce(processor.forceFlush)
-  })
-
-  it('registers through the compatibility-max owner when an application copy is selected', () => {
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().throws(notFound)
-    const ownerCopy = {
-      trace: {
-        getTracerProvider: () => ({ setDelegate () {} }),
-        setGlobalTracerProvider: sinon.stub().returns(true),
-      },
-      context: { setGlobalContextManager: sinon.spy() },
-      propagation: { setGlobalPropagator: sinon.spy() },
-    }
-    const holder = proxyquire('../../src/opentelemetry/api', {
-      'node:module': { createRequire: () => applicationRequire },
-      '@opentelemetry/api': ownerCopy,
-    })
-    const applicationCopy = {
-      trace: {
-        getTracerProvider: () => ({ setDelegate () {} }),
-        setGlobalTracerProvider: sinon.stub().returns(true),
-      },
-      context: { setGlobalContextManager: sinon.spy() },
-      propagation: { setGlobalPropagator: sinon.spy() },
-    }
-
-    class ContextManager {}
-    const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
-      './api': holder,
-      '../../': {},
-      './context_manager': ContextManager,
-      './tracer': class {},
-      './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
-    })
-
-    holder.setApi(applicationCopy, '1.0.0', false, { applicationOwned: true })
-
-    const provider = new FreshTracerProvider()
-    const propagator = {}
-    provider.register({ propagator })
-
-    assert.strictEqual(holder.getApi(), applicationCopy)
-    sinon.assert.calledOnceWithExactly(ownerCopy.trace.setGlobalTracerProvider, provider)
-    sinon.assert.calledOnceWithExactly(
-      ownerCopy.context.setGlobalContextManager,
-      sinon.match.instanceOf(ContextManager)
-    )
-    sinon.assert.calledOnceWithExactly(ownerCopy.propagation.setGlobalPropagator, propagator)
-    sinon.assert.notCalled(applicationCopy.trace.setGlobalTracerProvider)
-    sinon.assert.notCalled(applicationCopy.context.setGlobalContextManager)
-    sinon.assert.notCalled(applicationCopy.propagation.setGlobalPropagator)
-  })
-
-  it('does not move an existing registration to a late application copy', () => {
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().throws(notFound)
-    const ownerCopy = {
-      trace: {
-        disable: sinon.spy(),
-        getTracerProvider: () => ({ setDelegate () {} }),
-        setGlobalTracerProvider: sinon.stub().returns(true),
-      },
-      context: {
-        disable: sinon.spy(),
-        setGlobalContextManager: sinon.spy(),
-      },
-      propagation: {
-        disable: sinon.spy(),
-        setGlobalPropagator: sinon.spy(),
-      },
-    }
-    const holder = proxyquire('../../src/opentelemetry/api', {
-      'node:module': { createRequire: () => applicationRequire },
-      '@opentelemetry/api': ownerCopy,
-    })
-    const applicationCopy = {
-      trace: {
-        disable: sinon.spy(),
-        getTracerProvider: () => ({ setDelegate () {} }),
-        setGlobalTracerProvider: sinon.stub().returns(true),
-      },
-      context: {
-        disable: sinon.spy(),
-        setGlobalContextManager: sinon.spy(),
-      },
-      propagation: {
-        disable: sinon.spy(),
-        setGlobalPropagator: sinon.spy(),
-      },
-    }
-
-    const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
-      './api': holder,
-      '../../': {},
-      './context_manager': class {},
-      './tracer': class {},
-      './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
-    })
-    const provider = new FreshTracerProvider()
-    provider.register()
-
-    holder.setApi(applicationCopy, '1.9.0', false, { applicationOwned: true })
-
-    assert.strictEqual(holder.getApi(), applicationCopy)
-    sinon.assert.notCalled(ownerCopy.trace.disable)
-    sinon.assert.notCalled(ownerCopy.context.disable)
-    sinon.assert.notCalled(ownerCopy.propagation.disable)
-    sinon.assert.notCalled(applicationCopy.trace.setGlobalTracerProvider)
-    sinon.assert.notCalled(applicationCopy.context.setGlobalContextManager)
-    sinon.assert.notCalled(applicationCopy.propagation.setGlobalPropagator)
   })
 })

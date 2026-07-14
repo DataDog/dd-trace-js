@@ -1,10 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const Module = require('node:module')
-const os = require('node:os')
-const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -14,609 +10,113 @@ const API_OWNER_VERSION = require('../../../../package.json').dependencies['@ope
 
 require('../setup/core')
 
-/**
- * Loads a fresh copy of the holder so each test starts with empty captures.
- *
- * @param {typeof import('node:module').createRequire} [createRequire]
- * @param {Record<string, object>} [stubs]
- * @returns {typeof import('../../src/opentelemetry/api')}
- */
-function freshHolder (createRequire, stubs = {}) {
-  if (createRequire) stubs['node:module'] = { createRequire }
-  proxyquire.noPreserveCache()
-  try {
-    return proxyquire('../../src/opentelemetry/api', stubs)
-  } finally {
-    proxyquire.preserveCache()
-  }
-}
-
-describe('opentelemetry/api holder', () => {
-  let holder
-  let mainFilename
-  let argvEntrypoint
-  let temporaryDirectories
+describe('opentelemetry/api', () => {
+  const globalKey = Symbol.for('opentelemetry.js.api.1')
+  let previousGlobal
 
   beforeEach(() => {
-    mainFilename = require.main?.filename
-    argvEntrypoint = process.argv[1]
-    temporaryDirectories = []
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(notFound)))
+    previousGlobal = Object.getOwnPropertyDescriptor(globalThis, globalKey)
   })
 
   afterEach(() => {
-    if (require.main) require.main.filename = mainFilename
-    process.argv[1] = argvEntrypoint
-    for (const directory of temporaryDirectories) {
-      fs.rmSync(directory, { recursive: true, force: true })
-    }
     sinon.restore()
+    if (previousGlobal) Object.defineProperty(globalThis, globalKey, previousGlobal)
+    else Reflect.deleteProperty(globalThis, globalKey)
+    previousGlobal = undefined
   })
 
   /**
-   * @param {string} packageName
-   * @param {string} version
-   * @param {string} [manifestName]
-   * @returns {string}
+   * @param {object} [stubs]
+   * @returns {typeof import('../../src/opentelemetry/api')}
    */
-  function createPackageEntry (packageName, version, manifestName = packageName) {
-    const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-api-'))
-    const packageDirectory = path.join(temporaryDirectory, 'node_modules', ...packageName.split('/'))
-    const entry = path.join(packageDirectory, 'build', 'index.js')
-    temporaryDirectories.push(temporaryDirectory)
-    fs.mkdirSync(path.dirname(entry), { recursive: true })
-    fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({
-      name: manifestName,
-      version,
-    }))
-    fs.writeFileSync(entry, '')
-    return entry
+  function loadApi (stubs = {}) {
+    proxyquire.noPreserveCache()
+    try {
+      return proxyquire('../../src/opentelemetry/api', stubs)
+    } finally {
+      proxyquire.preserveCache()
+    }
   }
 
   /**
-   * @param {Error} error
-   * @returns {NodeRequire}
+   * @param {object} globalApi
    */
-  function createFailingApplicationRequire (error) {
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().throws(error)
-    return /** @type {NodeRequire} */ (applicationRequire)
+  function setGlobalApi (globalApi) {
+    Reflect.set(globalThis, globalKey, globalApi)
   }
 
-  it('falls back to the bundled copy when nothing has been captured', () => {
+  it('uses pinned compatibility-max copies for every bridge operation', () => {
+    const holder = loadApi()
+
     assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
+    assert.strictEqual(holder.getApiOwner(), require('@opentelemetry/api'))
     assert.strictEqual(holder.getApiLogs(), require('@opentelemetry/api-logs'))
   })
 
-  it('retries the fallback and accepts an application capture after a load failure', () => {
-    const error = new Error('fallback failed')
-    sinon.stub(Module, '_load').callThrough().withArgs('@opentelemetry/api').onFirstCall().throws(error)
-
-    assert.throws(() => holder.getApi(), { message: 'fallback failed' })
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-
-    const application = { copy: 'application' }
-    holder.setApi(application)
-    assert.strictEqual(holder.getApi(), application)
-  })
-
-  it('returns the captured copy over the bundled fallback', () => {
-    const api = { trace: {}, context: {} }
-    holder.setApi(api)
-    assert.strictEqual(holder.getApi(), api)
-    assert.notStrictEqual(holder.getApi(), require('@opentelemetry/api'))
-  })
-
-  it('ignores a capture marked as dd-trace-owned', () => {
-    const internal = { copy: 'internal' }
-    holder.setApi(internal, '1.9.0', false, { applicationOwned: false })
-
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-  })
-
-  it('keeps the two packages independent', () => {
-    const apiLogs = { logs: {} }
-    holder.setApiLogs(apiLogs)
-    assert.strictEqual(holder.getApiLogs(), apiLogs)
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-  })
-
-  it('ignores a second capture so the first application copy wins', () => {
-    const first = { copy: 'first' }
-    const second = { copy: 'second' }
-    holder.setApi(first)
-    holder.setApi(second)
-    assert.strictEqual(holder.getApi(), first)
-  })
-
-  it('prefers a capture closest to the application root', () => {
-    const nested = { copy: 'nested' }
-    const application = { copy: 'application' }
-    holder.setApi(nested, '1.9.0', false, {
-      moduleBaseDir: path.join(process.cwd(), 'node_modules', 'helper', 'node_modules', '@opentelemetry', 'api'),
-    })
-    holder.setApi(application, '1.9.0', false, {
-      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
-    })
-
-    assert.strictEqual(holder.getApi(), application)
-  })
-
-  it('prefers a nested entrypoint capture over a shallower working directory capture', () => {
-    assert.ok(require.main)
-    const applicationDirectory = path.join(process.cwd(), 'packages', 'application')
-    require.main.filename = path.join(applicationDirectory, 'app.js')
-    const workingDirectoryCopy = { copy: 'working-directory' }
-    const applicationCopy = { copy: 'application' }
-    holder.setApi(workingDirectoryCopy, '1.9.0', false, {
-      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
-    })
-    holder.setApi(applicationCopy, '1.9.0', false, {
-      moduleBaseDir: path.join(applicationDirectory, 'custom', 'node_modules', '@opentelemetry', 'api'),
-    })
-
-    assert.strictEqual(holder.getApi(), applicationCopy)
-  })
-
-  it('ranks captures from the ESM entrypoint when require.main has no filename', () => {
-    assert.ok(require.main)
-    delete require.main.filename
-    const entrypointDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-api-entrypoint-'))
-    temporaryDirectories.push(entrypointDirectory)
-    process.argv[1] = path.join(entrypointDirectory, 'app.mjs')
-    const nested = { copy: 'nested' }
-    const application = { copy: 'application' }
-    holder.setApi(nested, '1.9.0', false, {
-      moduleBaseDir: path.join(os.tmpdir(), 'dependency', 'node_modules', '@opentelemetry', 'api'),
-    })
-    holder.setApi(application, '1.9.0', false, {
-      moduleBaseDir: path.join(entrypointDirectory, 'node_modules', '@opentelemetry', 'api'),
-    })
-
-    assert.strictEqual(holder.getApi(), application)
-  })
-
-  it('promotes core and logs copies with immutable snapshots', () => {
-    const initialApi = { copy: 'initial-api' }
-    const initialApiLogs = { copy: 'initial-api-logs' }
-    holder.setApi(initialApi)
-    holder.setApiLogs(initialApiLogs)
-    const binding = holder.getApiLogsBinding()
-    const initialSnapshot = binding.current
-
-    const applicationApi = { copy: 'application-api' }
-    holder.setApi(applicationApi, '1.9.0', false, { applicationOwned: true })
-
-    const coreSnapshot = binding.current
-    assert.notStrictEqual(coreSnapshot, initialSnapshot)
-    assert.strictEqual(coreSnapshot.api, applicationApi)
-    assert.strictEqual(coreSnapshot.apiLogs, initialApiLogs)
-
-    const applicationApiLogs = { copy: 'application-api-logs' }
-    holder.setApiLogs(applicationApiLogs, '0.212.0', false, { applicationOwned: true })
-
-    assert.notStrictEqual(binding.current, coreSnapshot)
-    assert.strictEqual(binding.current.api, applicationApi)
-    assert.strictEqual(binding.current.apiLogs, applicationApiLogs)
-  })
-
-  it('keeps compatibility-max owners stable across snapshot promotions', () => {
-    const ownerApi = holder.getApiOwner()
-    const ownerApiLogs = holder.getApiLogsOwner()
-    holder.getApiBinding()
-
-    holder.setApi({ copy: 'application' }, '1.0.0', false, { applicationOwned: true })
-    holder.setApiLogs({ copy: 'application-logs' }, '0.33.0', false, { applicationOwned: true })
-
-    assert.strictEqual(holder.getApiOwner(), ownerApi)
-    assert.strictEqual(holder.getApiLogsOwner(), ownerApiLogs)
-  })
-
   it('adopts a compatible diagnostic-only global before provider registration', () => {
-    const globalKey = Symbol.for('opentelemetry.js.api.1')
-    const previous = Reflect.get(globalThis, globalKey)
     const diag = {}
-    Reflect.set(globalThis, globalKey, { version: '1.0.0', diag })
+    setGlobalApi({ version: '1.4.1', diag })
 
-    try {
-      holder.getApiOwner()
+    loadApi().getApiOwner()
 
-      const globalApi = Reflect.get(globalThis, globalKey)
-      assert.strictEqual(globalApi.version, API_OWNER_VERSION)
-      assert.strictEqual(globalApi.diag, diag)
-    } finally {
-      if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
-      else Reflect.set(globalThis, globalKey, previous)
-    }
+    const globalApi = Reflect.get(globalThis, globalKey)
+    assert.strictEqual(globalApi.version, API_OWNER_VERSION)
+    assert.strictEqual(globalApi.diag, diag)
   })
 
-  it('adopts a diagnostic-only global created after the owner first loads', () => {
-    const globalKey = Symbol.for('opentelemetry.js.api.1')
-    const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
+  it('adopts diagnostic state created after the pinned copy loads', () => {
     Reflect.deleteProperty(globalThis, globalKey)
+    const holder = loadApi()
+    const owner = holder.getApiOwner()
+    Reflect.set(globalThis, globalKey, { version: '1.4.1', diag: {} })
 
-    try {
-      const owner = holder.getApiOwner()
-      Reflect.set(globalThis, globalKey, { version: '1.0.0', diag: {} })
-
-      assert.strictEqual(holder.getApiOwner(), owner)
-      assert.strictEqual(Reflect.get(globalThis, globalKey).version, API_OWNER_VERSION)
-    } finally {
-      if (previous) Object.defineProperty(globalThis, globalKey, previous)
-      else Reflect.deleteProperty(globalThis, globalKey)
-    }
+    assert.strictEqual(holder.getApiOwner(), owner)
+    assert.strictEqual(Reflect.get(globalThis, globalKey).version, API_OWNER_VERSION)
   })
+
+  for (const [description, globalApi] of [
+    ['a non-string version', { version: undefined, diag: {} }],
+    ['the version immediately below the supported range', { version: '1.4.0', diag: {} }],
+    ['the first unsupported future minor', { version: '1.10.0', diag: {} }],
+    ['a signal owner', { version: '1.4.1', diag: {}, trace: {} }],
+  ]) {
+    it(`does not adopt ${description}`, () => {
+      setGlobalApi(globalApi)
+
+      loadApi().getApiOwner()
+
+      assert.strictEqual(Reflect.get(globalThis, globalKey), globalApi)
+    })
+  }
 
   it('continues when a diagnostic-only global cannot be replaced', () => {
-    const globalKey = Symbol.for('opentelemetry.js.api.1')
-    const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
     const error = sinon.spy()
-    holder = freshHolder(undefined, { '../log': { error } })
     Object.defineProperty(globalThis, globalKey, {
       configurable: true,
-      value: { version: '1.0.0', diag: {} },
+      value: { version: '1.4.1', diag: {} },
       writable: false,
     })
 
-    try {
-      holder.getApiOwner()
-      sinon.assert.calledOnceWithExactly(error, 'Unable to prepare the OpenTelemetry API global owner.')
-    } finally {
-      if (previous) Object.defineProperty(globalThis, globalKey, previous)
-      else Reflect.deleteProperty(globalThis, globalKey)
-    }
+    loadApi({ '../log': { error } }).getApiOwner()
+
+    sinon.assert.calledOnceWithExactly(error, 'Unable to prepare the OpenTelemetry API global owner.')
   })
 
   it('continues when inspecting a diagnostic-only global throws', () => {
-    const globalKey = Symbol.for('opentelemetry.js.api.1')
-    const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
     const failure = new Error('global inspection failed')
     const error = sinon.spy()
-    holder = freshHolder(undefined, { '../log': { error } })
-    Reflect.set(globalThis, globalKey, new Proxy({ version: '1.0.0' }, {
+    setGlobalApi(new Proxy({ version: '1.4.1' }, {
       ownKeys () {
         throw failure
       },
     }))
 
-    try {
-      holder.getApiOwner()
-      sinon.assert.calledOnceWithExactly(
-        error,
-        'Unable to prepare the OpenTelemetry API global owner: %s',
-        failure
-      )
-    } finally {
-      if (previous) Object.defineProperty(globalThis, globalKey, previous)
-      else Reflect.deleteProperty(globalThis, globalKey)
-    }
-  })
-
-  for (const [description, version] of [
-    ['without a string version', undefined],
-    ['with an incompatible version', '0.9.0'],
-  ]) {
-    it(`does not adopt a diagnostic-only global ${description}`, () => {
-      const globalKey = Symbol.for('opentelemetry.js.api.1')
-      const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
-      const globalApi = { version, diag: {} }
-      Reflect.set(globalThis, globalKey, globalApi)
-
-      try {
-        holder.getApiOwner()
-        assert.strictEqual(Reflect.get(globalThis, globalKey), globalApi)
-      } finally {
-        if (previous) Object.defineProperty(globalThis, globalKey, previous)
-        else Reflect.deleteProperty(globalThis, globalKey)
-      }
-    })
-  }
-
-  it('does not adopt a global that already owns a signal', () => {
-    const globalKey = Symbol.for('opentelemetry.js.api.1')
-    const previous = Reflect.get(globalThis, globalKey)
-    const globalApi = { version: '1.0.0', diag: {}, trace: {} }
-    Reflect.set(globalThis, globalKey, globalApi)
-
-    try {
-      holder.getApiOwner()
-
-      assert.strictEqual(Reflect.get(globalThis, globalKey), globalApi)
-      assert.strictEqual(globalApi.version, '1.0.0')
-    } finally {
-      if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
-      else Reflect.set(globalThis, globalKey, previous)
-    }
-  })
-
-  it('updates priority without replacing a snapshot when the selected copy is unchanged', () => {
-    const api = { copy: 'shared' }
-    holder.setApi(api, '1.9.0')
-    const binding = holder.getApiBinding()
-    const snapshot = binding.current
-
-    holder.setApi(api, '1.9.0', false, { applicationOwned: true })
-    holder.setApi({ copy: 'internal' }, '1.9.0', false, { applicationOwned: false })
-
-    assert.strictEqual(holder.getApi(), api)
-    assert.strictEqual(binding.current, snapshot)
-  })
-
-  it('keeps an internal late capture from replacing the application snapshot', () => {
-    const application = { copy: 'application' }
-    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
-    const binding = holder.getApiBinding()
-
-    holder.setApi({ copy: 'internal' }, '1.9.0', false, {
-      applicationOwned: false,
-      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
-    })
-
-    assert.strictEqual(holder.getApi(), application)
-    assert.strictEqual(binding.current.api, application)
-  })
-
-  it('prefers the entrypoint API over an earlier internal capture', () => {
-    const internal = { copy: 'internal' }
-    const application = { copy: 'application' }
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
-    applicationRequire.withArgs('@opentelemetry/api').returns(application)
-    holder = freshHolder(sinon.stub().returns(applicationRequire))
-
-    holder.setApi(internal)
-
-    assert.strictEqual(holder.getApi(), application)
-  })
-
-  it('moves a preloaded copy to a late explicitly application-owned copy', () => {
-    const preloaded = { copy: 'preloaded' }
-    const application = { copy: 'application' }
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
-    applicationRequire.withArgs('@opentelemetry/api').returns(preloaded)
-    holder = freshHolder(sinon.stub().returns(applicationRequire))
-    const binding = holder.getApiBinding()
-
-    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
-
-    assert.strictEqual(holder.getApi(), application)
-    assert.strictEqual(binding.current.api, application)
-  })
-
-  it('prefers the working-directory API over a launcher dependency', () => {
-    assert.ok(require.main)
-    const launcherDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-launcher-'))
-    temporaryDirectories.push(launcherDirectory)
-    require.main.filename = path.join(launcherDirectory, 'cli.js')
-
-    const application = { copy: 'application' }
-    const launcher = { copy: 'launcher' }
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
-    applicationRequire.withArgs('@opentelemetry/api').returns(application)
-    const launcherRequire = sinon.stub()
-    launcherRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
-    launcherRequire.withArgs('@opentelemetry/api').returns(launcher)
-    const createRequire = sinon.stub()
-    createRequire.withArgs(path.join(process.cwd(), 'package.json')).returns(applicationRequire)
-    createRequire.withArgs(require.main.filename).returns(launcherRequire)
-    holder = freshHolder(createRequire)
-
-    assert.strictEqual(holder.getApi(), application)
-    sinon.assert.notCalled(launcherRequire)
-  })
-
-  it('prefers a nested application entrypoint over the working-directory API', () => {
-    assert.ok(require.main)
-    const entrypoint = path.join(process.cwd(), 'packages', 'app', 'index.js')
-    require.main.filename = entrypoint
-
-    const workspace = { copy: 'workspace' }
-    const application = { copy: 'application' }
-    const workspaceRequire = sinon.stub()
-    workspaceRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.0.0'))
-    workspaceRequire.withArgs('@opentelemetry/api').returns(workspace)
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
-    applicationRequire.withArgs('@opentelemetry/api').returns(application)
-    const createRequire = sinon.stub()
-    createRequire.withArgs(entrypoint).returns(applicationRequire)
-    createRequire.withArgs(path.join(process.cwd(), 'package.json')).returns(workspaceRequire)
-    holder = freshHolder(createRequire)
-
-    assert.strictEqual(holder.getApi(), application)
-    sinon.assert.notCalled(workspaceRequire)
-  })
-
-  for (const [packageName, getter, version, supported] of [
-    ['@opentelemetry/api', 'getApi', '1.0.0', true],
-    ['@opentelemetry/api', 'getApi', '1.9.999', true],
-    ['@opentelemetry/api', 'getApi', '1.10.0-alpha.1', false],
-    ['@opentelemetry/api', 'getApi', '1.10.0', false],
-    ['@opentelemetry/api-logs', 'getApiLogs', '0.32.999', false],
-    ['@opentelemetry/api-logs', 'getApiLogs', '0.33.0', true],
-    ['@opentelemetry/api-logs', 'getApiLogs', '0.999.999', true],
-    ['@opentelemetry/api-logs', 'getApiLogs', '1.0.0', false],
-  ]) {
-    it(`${supported ? 'loads' : 'rejects'} ${packageName}@${version} from the application`, () => {
-      const application = { copy: 'application' }
-      const applicationRequire = sinon.stub()
-      applicationRequire.resolve = sinon.stub().returns(createPackageEntry(packageName, version))
-      applicationRequire.withArgs(packageName).returns(application)
-      holder = freshHolder(sinon.stub().returns(applicationRequire))
-
-      const loaded = holder[getter]()
-
-      if (supported) {
-        assert.strictEqual(loaded, application)
-        sinon.assert.calledOnceWithExactly(applicationRequire, packageName)
-      } else {
-        assert.notStrictEqual(loaded, application)
-        sinon.assert.notCalled(applicationRequire)
-      }
-    })
-  }
-
-  it('warns when the application API version is unsupported', () => {
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.10.0'))
-    const warn = sinon.spy()
-    holder = freshHolder(sinon.stub().returns(applicationRequire), {
-      '../log': { warn },
-    })
-
-    holder.getApi()
+    loadApi({ '../log': { error } }).getApiOwner()
 
     sinon.assert.calledOnceWithExactly(
-      warn,
-      'Unsupported application-owned %s@%s; supported versions are %s. Using the bundled fallback.',
-      '@opentelemetry/api',
-      '1.10.0',
-      '>=1.0.0 <1.10.0'
+      error,
+      'Unable to prepare the OpenTelemetry API global owner: %s',
+      failure
     )
   })
-
-  it('roots application resolution inside a directory entrypoint', () => {
-    assert.ok(require.main)
-    const entrypoint = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-otel-entrypoint-'))
-    temporaryDirectories.push(entrypoint)
-    require.main.filename = entrypoint
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    const createRequire = sinon.stub().returns(createFailingApplicationRequire(notFound))
-    holder = freshHolder(createRequire)
-
-    holder.getApi()
-
-    assert.deepStrictEqual(createRequire.args, [
-      [path.join(process.cwd(), 'package.json')],
-      [path.join(entrypoint, 'package.json')],
-    ])
-  })
-
-  it('roots application resolution at process.argv for an ESM entrypoint', () => {
-    assert.ok(require.main)
-    delete require.main.filename
-    process.argv[1] = path.join(os.tmpdir(), 'app.mjs')
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    const createRequire = sinon.stub().returns(createFailingApplicationRequire(notFound))
-    holder = freshHolder(createRequire)
-
-    holder.getApi()
-
-    assert.deepStrictEqual(createRequire.args, [
-      [path.join(process.cwd(), 'package.json')],
-      [process.argv[1]],
-    ])
-  })
-
-  it('roots application resolution in the working directory without an entrypoint', () => {
-    assert.ok(require.main)
-    delete require.main.filename
-    delete process.argv[1]
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    const createRequire = sinon.stub().returns(createFailingApplicationRequire(notFound))
-    holder = freshHolder(createRequire)
-
-    holder.getApi()
-
-    sinon.assert.calledOnceWithExactly(createRequire, path.join(process.cwd(), 'package.json'))
-  })
-
-  it('falls back without logging when the application does not install the package', () => {
-    const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    const debug = sinon.spy()
-    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(notFound)), {
-      '../log': { debug },
-    })
-
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-    sinon.assert.notCalled(debug)
-  })
-
-  it('logs an unexpected application resolution failure and falls back', () => {
-    const error = Object.assign(new Error('permission denied'), { code: 'EACCES' })
-    const debug = sinon.spy()
-    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(error)), {
-      '../log': { debug },
-    })
-
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-    sinon.assert.calledOnceWithExactly(
-      debug,
-      'Unable to load the application-owned %s; using the bundled fallback.',
-      '@opentelemetry/api',
-      error
-    )
-  })
-
-  it('logs an application package load failure and falls back', () => {
-    const error = Object.assign(new Error('missing internal module'), { code: 'MODULE_NOT_FOUND' })
-    const applicationRequire = sinon.stub().throws(error)
-    applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
-    const debug = sinon.spy()
-    holder = freshHolder(sinon.stub().returns(applicationRequire), {
-      '../log': { debug },
-    })
-
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-    sinon.assert.calledOnceWithExactly(
-      debug,
-      'Unable to load the application-owned %s; using the bundled fallback.',
-      '@opentelemetry/api',
-      error
-    )
-  })
-
-  it('rejects a resolved entry whose manifest belongs to another package', () => {
-    const applicationRequire = sinon.stub()
-    applicationRequire.resolve = sinon.stub().returns(
-      createPackageEntry('@opentelemetry/api', '1.9.0', '@opentelemetry/not-api')
-    )
-    holder = freshHolder(sinon.stub().returns(applicationRequire))
-
-    assert.strictEqual(holder.getApi(), require('@opentelemetry/api'))
-    sinon.assert.notCalled(applicationRequire)
-  })
-
-  for (const [packageName, getter, setter] of [
-    ['@opentelemetry/api', 'getApi', 'setApi'],
-    ['@opentelemetry/api-logs', 'getApiLogs', 'setApiLogs'],
-  ]) {
-    it(`loads the application's ${packageName} copy before the fallback`, () => {
-      const application = { copy: 'application' }
-      const applicationRequire = sinon.stub()
-      applicationRequire.resolve = sinon.stub().withArgs(packageName).returns(require.resolve(packageName))
-      applicationRequire.withArgs(packageName).returns(application)
-      holder = freshHolder(sinon.stub().returns(applicationRequire))
-
-      assert.strictEqual(holder[getter](), application)
-    })
-
-    it(`does not treat dd-trace's ${packageName} fallback as an application capture`, () => {
-      const notFound = Object.assign(new Error(`Cannot find module '${packageName}'`), {
-        code: 'MODULE_NOT_FOUND',
-      })
-      const applicationRequire = sinon.stub()
-      applicationRequire.resolve = sinon.stub().throws(notFound)
-      holder = freshHolder(sinon.stub().returns(applicationRequire))
-
-      const fallback = { copy: 'fallback' }
-      sinon.stub(Module, '_load').callThrough().withArgs(packageName).callsFake(
-        /** @returns {object} */
-        () => {
-          holder[setter](fallback)
-          return fallback
-        }
-      )
-
-      assert.strictEqual(holder[getter](), fallback)
-
-      const application = { copy: 'application' }
-      holder[setter](application)
-      assert.strictEqual(holder[getter](), application)
-    })
-  }
 })

@@ -2,25 +2,18 @@
 
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
-const { getApiBinding } = require('./api')
 
 const ActiveSpanProxy = require('./active-span-proxy')
+const { trace, ROOT_CONTEXT, propagation } = require('./api').getApi()
 const SpanContext = require('./span_context')
 
 class ContextManager {
-  #apiBinding
-
-  /**
-   * @param {import('./api').ApiBinding} [apiBinding]
-   */
-  constructor (apiBinding = getApiBinding()) {
-    this.#apiBinding = apiBinding
+  constructor () {
     this._store = storage('opentelemetry')
   }
 
   // converts dd to otel
   active () {
-    const { trace, ROOT_CONTEXT, propagation } = this.#apiBinding.current.api
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
     const activeSpan = storage('legacy').getStore()?.span
@@ -74,7 +67,6 @@ class ContextManager {
 
   // converts otel to dd
   with (context, fn, thisArg, ...args) {
-    const { trace, propagation } = this.#apiBinding.current.api
     const span = trace.getSpan(context)
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)

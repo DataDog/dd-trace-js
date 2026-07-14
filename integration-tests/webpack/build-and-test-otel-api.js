@@ -18,8 +18,11 @@ const DatadogWebpackPlugin = require('../../webpack')
  */
 function build (paths, outputModule) {
   return new Promise((resolve, reject) => {
-    const externals = { '@opentelemetry/api': 'module @opentelemetry/api' }
     const externalType = outputModule ? 'node-commonjs' : 'commonjs'
+    const externals = {
+      '@opentelemetry/api': `${externalType} @opentelemetry/api`,
+      '@opentelemetry/api-logs': `${externalType} @opentelemetry/api-logs`,
+    }
     for (const name of EXTERNALS) {
       externals[name] = `${externalType} ${name}`
     }

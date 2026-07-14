@@ -8,16 +8,11 @@ const instrumentations = require('../datadog-instrumentations/src/helpers/instru
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { matchesOptionalPeerFile } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
-const {
-  createApplicationOtelApiPackageResolver,
-} = require('../datadog-instrumentations/src/helpers/otel-api-externals')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
-const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api').replaceAll('\\', '/')
-const OTEL_API_HOLDER_DIRECTORY = path.posix.dirname(OTEL_API_HOLDER_PATH)
-const OTEL_API_PACKAGES = new Set(['@opentelemetry/api', '@opentelemetry/api-logs'])
+const DD_TRACE_DIRECTORY = path.resolve(__dirname, '../..').replaceAll('\\', '/')
 const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
 for (const hook of Object.values(hooks)) {
@@ -82,66 +77,73 @@ function getOtelApiPackageName (request) {
 }
 
 /**
- * Prevent user externals from overriding the OpenTelemetry API decision made by this plugin.
+ * @param {string | undefined} context
+ * @param {unknown} request
+ * @returns {boolean}
+ */
+function isOtelApiFallback (context, request) {
+  if (!getOtelApiPackageName(request)) return false
+  return context?.replaceAll('\\', '/').startsWith(`${DD_TRACE_DIRECTORY}/`) === true
+}
+
+/**
+ * @param {object} external
+ * @param {string | undefined} layer
+ * @returns {object}
+ */
+function resolveExternalLayer (external, layer) {
+  // dd-trace cannot import internals from the application-owned Webpack installation.
+  if (!Object.hasOwn(external, 'byLayer')) return external
+
+  const { byLayer, ...base } = external
+  const selected = typeof byLayer === 'function'
+    ? byLayer(layer)
+    : byLayer?.[layer] ?? byLayer?.default
+  if (selected === null || typeof selected !== 'object' || Array.isArray(selected)) return base
+
+  return { ...base, ...resolveExternalLayer(selected, layer) }
+}
+
+/**
+ * Keeps configured application externals unchanged while preventing them from externalizing an API
+ * import inside dd-trace's fallback graph.
  *
  * @param {unknown} external
  * @returns {unknown}
  */
-function withoutOtelApiExternals (external) {
-  if (typeof external === 'string') {
-    return getOtelApiPackageName(external) ? undefined : external
-  }
-
-  if (Array.isArray(external)) {
-    const filtered = []
-    for (const value of external) {
-      const filteredValue = withoutOtelApiExternals(value)
-      if (filteredValue !== undefined) filtered.push(filteredValue)
-    }
-    return filtered
-  }
-
-  if (external instanceof RegExp) {
-    return ({ request }, callback) => {
-      if (getOtelApiPackageName(request)) return callback()
-      callback(null, external.test(request) ? request : undefined)
-    }
-  }
+function protectOtelApiFallback (external) {
+  if (Array.isArray(external)) return external.map(protectOtelApiFallback)
 
   if (typeof external === 'function') {
     if (external.length === 3) {
       return (context, request, callback) => {
-        if (getOtelApiPackageName(request)) return callback()
+        if (isOtelApiFallback(context, request)) return callback()
         return external(context, request, callback)
       }
     }
 
     return (data, callback) => {
-      if (getOtelApiPackageName(data.request)) return callback()
+      if (isOtelApiFallback(data.context, data.request)) return callback()
       return external(data, callback)
     }
   }
 
-  if (external !== null && typeof external === 'object') {
-    const filtered = {}
-    for (const [request, value] of Object.entries(external)) {
-      if (getOtelApiPackageName(request)) continue
-      if (request === 'byLayer' && value !== null && typeof value === 'object') {
-        const layers = {}
-        for (const [layer, layerExternal] of Object.entries(value)) {
-          layers[layer] = withoutOtelApiExternals(layerExternal)
-        }
-        filtered[request] = layers
-      } else {
-        filtered[request] = value
-      }
-    }
-    return filtered
-  }
+  return (data, callback) => {
+    const { context, contextInfo, request } = data
+    if (isOtelApiFallback(context, request)) return callback()
 
-  // Preserve external types added by future Webpack versions.
-  /* istanbul ignore next */
-  return external
+    if (typeof external === 'string') {
+      return callback(null, request === external ? external : undefined)
+    }
+    if (external instanceof RegExp) {
+      return callback(null, typeof request === 'string' && external.test(request) ? request : undefined)
+    }
+    if (external !== null && typeof external === 'object') {
+      const definition = resolveExternalLayer(external, contextInfo?.issuerLayer)
+      return callback(null, Object.hasOwn(definition, request) ? definition[request] : undefined)
+    }
+    callback()
+  }
 }
 
 class DatadogWebpackPlugin {
@@ -161,32 +163,10 @@ class DatadogWebpackPlugin {
       }
     })
 
-    const workingDirectory = compiler.options.context || process.cwd()
-    const resolveApplicationOtelApiPackages = createApplicationOtelApiPackageResolver(workingDirectory)
-    const outputModule = compiler.options.experiments?.outputModule || compiler.options.output?.module
-    const externalType = outputModule ? 'node-commonjs' : 'commonjs'
-    /**
-     * @param {{ context?: string, request?: string }} data
-     * @param {(error?: Error | null, result?: string | boolean) => void} callback
-     */
-    const otelApiExternal = ({ context, request }, callback) => {
-      const packageName = getOtelApiPackageName(request)
-      if (!packageName) return callback()
-      if (context?.replaceAll('\\', '/') === OTEL_API_HOLDER_DIRECTORY) return callback(null, false)
-      if (resolveApplicationOtelApiPackages(context).has(packageName)) {
-        return callback(null, `${externalType} ${request}`)
-      }
-      callback(null, false)
-    }
     const configuredExternals = Array.isArray(compiler.options.externals)
       ? compiler.options.externals
       : [compiler.options.externals].filter(Boolean)
-    const externals = [otelApiExternal]
-    for (const external of configuredExternals) {
-      const filtered = withoutOtelApiExternals(external)
-      if (filtered !== undefined) externals.push(filtered)
-    }
-    compiler.options.externals = externals
+    compiler.options.externals = configuredExternals.map(protectOtelApiFallback)
 
     const gitMetadata = getGitMetadata()
     if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
@@ -294,22 +274,11 @@ class DatadogWebpackPlugin {
 
         const version = packageJson.version
         const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
-        const moduleBaseDir = path.dirname(pkgJson).replaceAll('\\', '/')
-        const issuer = resolveData.contextInfo?.issuer?.replaceAll('\\', '/')
-        const applicationPackage = resolveApplicationOtelApiPackages(
-          issuer && path.posix.dirname(issuer)
-        ).get(pkg)
-        const applicationOwned = issuer !== OTEL_API_HOLDER_PATH &&
-          applicationPackage?.moduleBaseDir === moduleBaseDir
-
-        // The fallback API is consumed directly by the holder and does not need a hook publish.
-        // Skipping its loader also lets Webpack bundle the package's ESM entrypoint unchanged.
-        if (OTEL_API_PACKAGES.has(pkg) && !applicationOwned) return
 
         createData.loaders = createData.loaders || []
         createData.loaders.unshift({
           loader: require.resolve('./src/loader'),
-          options: { applicationOwned, moduleBaseDir, pkg, version, path: pkgPath },
+          options: { pkg, version, path: pkgPath },
         })
 
         log.debug('LOAD: %s@%s, pkg "%s"', pkg, version, pkgPath)

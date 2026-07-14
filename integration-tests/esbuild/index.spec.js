@@ -101,7 +101,7 @@ esbuildVersions.forEach((version) => {
       })
     })
 
-    it('shares application APIs and bundles fallbacks after relocation', () => {
+    it('preserves application externals and bundles API fallbacks after relocation', () => {
       execSync('node ./build-and-test-otel-api.js', {
         timeout,
       })

@@ -12,14 +12,14 @@ const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
-const { getApi } = require('./api')
+const api = require('./api').getApi()
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
 const spanEndingHook = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
 // SpanKind is a fixed spec enum available from every supported API copy.
-const { SpanKind } = getApi()
+const { SpanKind } = api
 
 const spanKindNames = {
   [SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -252,7 +252,7 @@ class Span extends BridgeSpanBase {
    */
   end (timeInput) {
     if (this.ended) {
-      getApi().diag.error('You can only call end() on a span once.')
+      api.diag.error('You can only call end() on a span once.')
       return
     }
 

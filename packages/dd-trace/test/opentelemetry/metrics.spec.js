@@ -1013,42 +1013,6 @@ describe('OpenTelemetry Meter Provider', () => {
       assert.strictEqual(meterProvider instanceof MeterProvider, false)
     })
 
-    it('keeps the meter provider on the compatibility-max owner after a late capture', () => {
-      const notFound = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-      const applicationRequire = sinon.stub()
-      applicationRequire.resolve = sinon.stub().throws(notFound)
-      const ownerCopy = {
-        metrics: {
-          disable: sinon.spy(),
-          setGlobalMeterProvider: sinon.spy(),
-        },
-      }
-      const holder = proxyquire.noPreserveCache()('../../src/opentelemetry/api', {
-        'node:module': { createRequire: () => applicationRequire },
-        '@opentelemetry/api': ownerCopy,
-      })
-      const applicationCopy = {
-        metrics: {
-          disable: sinon.spy(),
-          setGlobalMeterProvider: sinon.spy(),
-        },
-      }
-      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {
-        '../api': holder,
-        './meter_provider': class {},
-        './periodic_metric_reader': class {},
-        './otlp_http_metric_exporter': class {},
-      })
-
-      initializeOpenTelemetryMetrics({})
-      holder.setApi(applicationCopy, '1.9.0', false, { applicationOwned: true })
-
-      assert.strictEqual(holder.getApi(), applicationCopy)
-      sinon.assert.calledOnce(ownerCopy.metrics.setGlobalMeterProvider)
-      sinon.assert.notCalled(ownerCopy.metrics.disable)
-      sinon.assert.notCalled(applicationCopy.metrics.setGlobalMeterProvider)
-    })
-
     it('handles shutdown correctly', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')

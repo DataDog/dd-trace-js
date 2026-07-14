@@ -1,48 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const os = require('node:os')
-const path = require('node:path')
 
-const { describe, it, afterEach } = require('mocha')
+const { describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
-
-const temporaryDirectories = []
-
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    fs.rmSync(directory, { recursive: true, force: true })
-  }
-})
-
-/**
- * @param {Record<string, string | Record<string, string>>} manifest
- * @returns {string}
- */
-function createManifestDirectory (manifest) {
-  const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-esbuild-otel-'))
-  temporaryDirectories.push(workingDirectory)
-  fs.writeFileSync(path.join(workingDirectory, 'package.json'), JSON.stringify(manifest))
-  return workingDirectory
-}
-
-/**
- * @param {string} workingDirectory
- * @param {string} name
- * @param {string} version
- */
-function installPackage (workingDirectory, name, version) {
-  const packageDirectory = path.join(workingDirectory, 'node_modules', ...name.split('/'))
-  fs.mkdirSync(packageDirectory, { recursive: true })
-  fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({
-    name,
-    version,
-    main: 'index.js',
-  }))
-  fs.writeFileSync(path.join(packageDirectory, 'index.js'), 'module.exports = {}\n')
-}
 
 function captureOptionalPeerOnLoad () {
   let onLoad
@@ -61,87 +23,73 @@ function captureOptionalPeerOnLoad () {
  * @returns {{
  *   external: string[] | undefined,
  *   resolve: (args: import('esbuild').OnResolveArgs) => object | undefined,
- *   resolveAny: (args: import('esbuild').OnResolveArgs) => object | undefined,
- *   load: import('esbuild').OnLoadCallback
+ *   resolveAny: (args: import('esbuild').OnResolveArgs) => object | undefined
  * }}
  */
 function setupOtelApiResolution (initialOptions = {}) {
   const handlers = []
-  let load
   ddPlugin.setup({
     initialOptions,
     onResolve (options, callback) {
       handlers.push({ options, callback })
     },
-    onLoad (options, callback) {
-      if (options.filter.source === '.*') load = callback
-    },
+    onLoad () {},
   })
   const { callback: resolve } = handlers.find(({ options }) => {
     return options.filter.test('@opentelemetry/api') && !options.filter.test('express')
   })
   const { callback: resolveAny } = handlers.find(({ options }) => options.filter.test('express'))
-  return { external: initialOptions.external, resolve, resolveAny, load }
+  return { external: initialOptions.external, resolve, resolveAny }
 }
 
 describe('datadog-esbuild plugin', () => {
-  describe('OpenTelemetry API externalization', () => {
-    it('externalizes application imports of both installed API packages', () => {
-      const { resolve } = setupOtelApiResolution()
-
-      assert.deepStrictEqual(resolve({
-        path: '@opentelemetry/api',
-        importer: '/app/index.js',
-      }), {
-        path: '@opentelemetry/api',
-        external: true,
+  describe('OpenTelemetry API fallback bundling', () => {
+    it('keeps normal application external behavior', () => {
+      const { external, resolve, resolveAny } = setupOtelApiResolution({
+        external: ['pg', '@opentelemetry/api', '@opentelemetry/api-logs'],
       })
-      assert.deepStrictEqual(resolve({
-        path: '@opentelemetry/api-logs',
-        importer: '/app/index.js',
-      }), {
-        path: '@opentelemetry/api-logs',
-        external: true,
-      })
-    })
-
-    it('keeps the externals supplied by the build', () => {
-      const { external, resolve } = setupOtelApiResolution({ external: ['pg'] })
 
       assert.deepStrictEqual(external, ['pg'])
-      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer: '/app/index.js' }).external, true)
+      assert.deepStrictEqual(resolve({
+        path: '@opentelemetry/api',
+        importer: '/app/index.js',
+      }), {
+        path: '@opentelemetry/api',
+        external: true,
+      })
+      assert.deepStrictEqual(resolve({
+        path: '@opentelemetry/api-logs',
+        importer: '/app/index.js',
+      }), {
+        path: '@opentelemetry/api-logs',
+        external: true,
+      })
+      assert.strictEqual(resolveAny({
+        path: 'dc-polyfill',
+        importer: '/app/index.js',
+        kind: 'require-call',
+        namespace: 'file',
+        resolveDir: __dirname,
+      }), undefined)
     })
 
-    it('moves an exact user API external into the importer-aware resolver', () => {
-      const workingDirectory = createManifestDirectory({
-        name: 'app',
-        dependencies: { '@opentelemetry/api': '^1.9.0' },
-      })
-      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
-      const { external, resolve } = setupOtelApiResolution({
-        absWorkingDir: workingDirectory,
-        external: ['@opentelemetry/api'],
-      })
+    it('bundles the holder fallback despite exact user externals', () => {
+      const { resolve } = setupOtelApiResolution({ external: ['@opentelemetry/api'] })
+      const importer = require.resolve('../../dd-trace/src/opentelemetry/api')
+      const vendoredImporter = require.resolve('../../../vendor/dist/@opentelemetry/core')
 
-      assert.deepStrictEqual(external, [])
-      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer: '/app/index.js' }).external, true)
-      assert.strictEqual(
-        resolve({ path: '@opentelemetry/api/experimental', importer: '/app/index.js' }).external,
-        true
-      )
+      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer }), undefined)
+      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer: vendoredImporter }), undefined)
     })
 
-    it('moves wildcard API externals without changing their unrelated matches', () => {
-      const workingDirectory = createManifestDirectory({ name: 'app', dependencies: {} })
+    it('bundles the holder fallback despite wildcard user externals', () => {
       const { external, resolve, resolveAny } = setupOtelApiResolution({
-        absWorkingDir: workingDirectory,
         external: ['@opentelemetry/*'],
       })
-      const holderImporter = require.resolve('../../dd-trace/src/opentelemetry/api')
+      const importer = require.resolve('../../dd-trace/src/opentelemetry/api')
 
       assert.deepStrictEqual(external, [])
-      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer: holderImporter }), undefined)
-      assert.strictEqual(resolveAny({ path: '@opentelemetry/api', importer: holderImporter }), undefined)
+      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer }), undefined)
       assert.deepStrictEqual(resolveAny({
         path: '@opentelemetry/core',
         importer: '/app/index.js',
@@ -151,159 +99,17 @@ describe('datadog-esbuild plugin', () => {
       })
     })
 
-    it('bundles the holder fallback even when the application package is external', () => {
-      const { resolve, resolveAny } = setupOtelApiResolution()
-      const importer = require.resolve('../../dd-trace/src/opentelemetry/api')
-
-      assert.strictEqual(resolve({
-        path: '@opentelemetry/api',
-        importer,
-      }), undefined)
-      const result = resolveAny({
-        importer,
-        kind: 'require-call',
-        namespace: 'file',
-        path: '@opentelemetry/api',
-        resolveDir: path.dirname(importer),
-      })
-      assert.strictEqual(result.pluginData.applicationOwned, false)
-      assert.strictEqual(
-        result.pluginData.moduleBaseDir,
-        path.resolve(path.dirname(require.resolve('@opentelemetry/api')), '../..')
-      )
-    })
-
-    it('bundles the holder fallback when its importer uses Windows separators', () => {
-      const workingDirectory = createManifestDirectory({
-        name: 'app',
-        dependencies: { '@opentelemetry/api': '^1.9.0' },
-      })
-      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
-      const { resolve } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
+    it('normalizes Windows separators when identifying the holder', () => {
+      const { resolve } = setupOtelApiResolution({ external: ['@opentelemetry/api'] })
       const importer = require.resolve('../../dd-trace/src/opentelemetry/api').replaceAll('/', '\\')
 
       assert.strictEqual(resolve({ path: '@opentelemetry/api', importer }), undefined)
     })
 
-    it('marks resolved application API modules as application-owned', () => {
-      const workingDirectory = createManifestDirectory({
-        name: 'app',
-        dependencies: { '@opentelemetry/api': '^1.9.0' },
-      })
-      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
-      const { resolveAny } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
+    it('leaves application imports bundled without user externals', () => {
+      const { resolve } = setupOtelApiResolution()
 
-      const result = resolveAny({
-        importer: path.join(workingDirectory, 'app.js'),
-        kind: 'require-call',
-        namespace: 'file',
-        path: '@opentelemetry/api',
-        resolveDir: workingDirectory,
-      })
-
-      assert.strictEqual(result.pluginData.applicationOwned, true)
-      assert.strictEqual(
-        result.pluginData.moduleBaseDir,
-        fs.realpathSync(path.join(workingDirectory, 'node_modules', '@opentelemetry', 'api'))
-      )
-    })
-
-    it('externalizes an API declared by a workspace package below the build root', () => {
-      const workingDirectory = createManifestDirectory({ name: 'workspace', private: true })
-      const applicationDirectory = path.join(workingDirectory, 'packages', 'app')
-      fs.mkdirSync(applicationDirectory, { recursive: true })
-      fs.writeFileSync(path.join(applicationDirectory, 'package.json'), JSON.stringify({
-        name: 'app',
-        dependencies: { '@opentelemetry/api': '^1.9.0' },
-      }))
-      installPackage(applicationDirectory, '@opentelemetry/api', '1.9.0')
-      const { resolve } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
-
-      assert.deepStrictEqual(resolve({
-        path: '@opentelemetry/api',
-        importer: path.join(applicationDirectory, 'app.js'),
-        resolveDir: applicationDirectory,
-      }), {
-        path: '@opentelemetry/api',
-        external: true,
-      })
-    })
-
-    it('forwards ownership metadata from application and fallback modules', async () => {
-      const workingDirectory = createManifestDirectory({
-        name: 'app',
-        dependencies: { '@opentelemetry/api': '^1.9.0' },
-      })
-      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
-      const { resolveAny, load } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
-      const applicationResult = resolveAny({
-        importer: path.join(workingDirectory, 'app.js'),
-        kind: 'require-call',
-        namespace: 'file',
-        path: '@opentelemetry/api',
-        resolveDir: workingDirectory,
-      })
-      const applicationLoad = await load({
-        path: applicationResult.path,
-        pluginData: applicationResult.pluginData,
-      })
-
-      assert.ok(applicationLoad.contents.includes("path: '@opentelemetry/api',"))
-      assert.ok(applicationLoad.contents.includes('applicationOwned: true,'))
-      assert.ok(applicationLoad.contents.includes(
-        `moduleBaseDir: ${JSON.stringify(applicationResult.pluginData.moduleBaseDir)}`
-      ))
-
-      const holderImporter = require.resolve('../../dd-trace/src/opentelemetry/api')
-      const fallbackResult = resolveAny({
-        importer: holderImporter,
-        kind: 'require-call',
-        namespace: 'file',
-        path: '@opentelemetry/api',
-        resolveDir: path.dirname(holderImporter),
-      })
-      const fallbackLoad = await load({
-        path: fallbackResult.path,
-        pluginData: fallbackResult.pluginData,
-      })
-
-      assert.ok(fallbackLoad.contents.includes("path: '@opentelemetry/api',"))
-      assert.ok(fallbackLoad.contents.includes('applicationOwned: false,'))
-      assert.ok(fallbackLoad.contents.includes(
-        `moduleBaseDir: ${JSON.stringify(fallbackResult.pluginData.moduleBaseDir)}`
-      ))
-    })
-
-    it('bundles a package the application does not depend on so the bundle stays self-contained', () => {
-      const workingDirectory = createManifestDirectory({ name: 'app', dependencies: {} })
-      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
-
-      const { external, resolve } = setupOtelApiResolution({
-        absWorkingDir: workingDirectory,
-        external: ['@opentelemetry/api'],
-      })
-
-      assert.deepStrictEqual(external, [])
       assert.strictEqual(resolve({ path: '@opentelemetry/api', importer: '/app/index.js' }), undefined)
-      assert.strictEqual(
-        resolve({ path: '@opentelemetry/api/experimental', importer: '/app/index.js' }),
-        undefined
-      )
-      assert.strictEqual(resolve({ path: '@opentelemetry/api-logs', importer: '/app/index.js' }), undefined)
-    })
-
-    it('externalizes only the package the application declares', () => {
-      const workingDirectory = createManifestDirectory({
-        name: 'app',
-        dependencies: { '@opentelemetry/api': '^1.9.0' },
-      })
-      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
-      installPackage(workingDirectory, '@opentelemetry/api-logs', '0.203.0')
-
-      const { resolve } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
-
-      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer: '/app/index.js' }).external, true)
-      assert.strictEqual(resolve({ path: '@opentelemetry/api-logs', importer: '/app/index.js' }), undefined)
     })
   })
 

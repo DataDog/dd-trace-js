@@ -13,15 +13,12 @@ const {
   matchesOptionalPeerFile,
   rewriteOptionalPeerLoads,
 } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
-const {
-  createApplicationOtelApiPackageResolver,
-} = require('../datadog-instrumentations/src/helpers/otel-api-externals')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
-const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api').replaceAll('\\', '/')
+const DD_TRACE_DIRECTORY = path.resolve(__dirname, '../..').replaceAll('\\', '/')
 const OTEL_API_PACKAGES = ['@opentelemetry/api', '@opentelemetry/api-logs']
 const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
@@ -174,9 +171,6 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
-  const workingDirectory = build.initialOptions.absWorkingDir || process.cwd()
-  const resolveApplicationOtelApiPackages = createApplicationOtelApiPackageResolver(workingDirectory)
-
   const esmBuild = isESMBuild(build)
   if (
     esmBuild &&
@@ -232,14 +226,18 @@ ${build.initialOptions.banner.js}`
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
 
-  // Application imports stay external, but the holder's fallback must remain in a relocated bundle.
+  // User externals still apply to application imports, but dd-trace's fallback graph must remain
+  // in a relocated bundle.
   /** @param {import('esbuild').OnResolveArgs} args */
   function resolveOtelApi (args) {
-    const packageName = OTEL_API_PACKAGE_PATTERN.exec(args.path)?.[1]
-    if (args.importer.replaceAll('\\', '/') === OTEL_API_HOLDER_PATH) return
-    if (resolveApplicationOtelApiPackages(args.resolveDir).has(packageName)) {
-      log.debug('EXTERNAL: %s', args.path)
-      return { path: args.path, external: true }
+    const importer = args.importer.replaceAll('\\', '/')
+    if (importer.startsWith(`${DD_TRACE_DIRECTORY}/`)) return
+
+    for (const pattern of deferredExternalPatterns) {
+      if (pattern.test(args.path)) {
+        log.debug('EXTERNAL: %s', args.path)
+        return { path: args.path, external: true }
+      }
     }
   }
   build.onResolve({ filter: OTEL_API_PACKAGE_PATTERN }, resolveOtelApi)
@@ -289,10 +287,6 @@ ${build.initialOptions.banner.js}`
     }
 
     const extracted = extractPackageAndModulePath(fullPathToModule.replaceAll('\\', '/'))
-    const moduleBaseDir = extracted?.pkgJson && path.dirname(extracted.pkgJson).replaceAll('\\', '/')
-    const applicationPackage = resolveApplicationOtelApiPackages(args.resolveDir).get(extracted?.pkg)
-    const applicationOwned = args.importer.replaceAll('\\', '/') !== OTEL_API_HOLDER_PATH &&
-      applicationPackage?.moduleBaseDir === moduleBaseDir
 
     const internal = builtins.has(args.path)
 
@@ -359,8 +353,6 @@ ${build.initialOptions.banner.js}`
             kind: args.kind,
             internal,
             isESM,
-            applicationOwned,
-            moduleBaseDir,
           },
         }
       } catch (e) {
@@ -445,9 +437,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
             module: mod,
             version: '${data.version}',
             package: '${data.pkg}',
-            path: '${pkgPath}',
-            applicationOwned: ${data.applicationOwned === true},
-            moduleBaseDir: ${JSON.stringify(data.moduleBaseDir)}
+            path: '${pkgPath}'
           };
           ch.publish(payload);
           module.exports = payload.module;

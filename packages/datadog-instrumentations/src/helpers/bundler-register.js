@@ -77,15 +77,7 @@ function doHook (name) {
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
 
-/**
- * @typedef {object} Payload
- * @property {boolean} [applicationOwned]
- * @property {string} [moduleBaseDir]
- * @property {unknown} module
- * @property {string} package
- * @property {string} path
- * @property {string} version
- */
+/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
@@ -119,10 +111,7 @@ dc.subscribe(CHANNEL, (message) => {
 
     try {
       loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version, false, {
-        applicationOwned: payload.applicationOwned,
-        moduleBaseDir: payload.moduleBaseDir,
-      }) ?? payload.module
+      payload.module = hook(payload.module, payload.version) ?? payload.module
     } catch (e) {
       log.error('Error executing bundler hook', e)
     }
