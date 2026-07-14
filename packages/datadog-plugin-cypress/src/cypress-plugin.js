@@ -1835,13 +1835,13 @@ class CypressPlugin {
         }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
-        // Save the test status to know if it has passed all retries
-        if (this.testStatuses[testName]) {
-          this.testStatuses[testName].push(testStatus)
+        const testIdentifier = `${testSuite}\0${testName}`
+        let testStatuses = this.testStatuses[testIdentifier]
+        if (testStatuses) {
+          testStatuses.push(testStatus)
         } else {
-          this.testStatuses[testName] = [testStatus]
+          testStatuses = this.testStatuses[testIdentifier] = [testStatus]
         }
-        const testStatuses = this.testStatuses[testName]
         const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
