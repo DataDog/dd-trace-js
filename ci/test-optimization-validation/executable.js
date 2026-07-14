@@ -130,7 +130,7 @@ function getExecutableForSpawn (command) {
   const current = getExecutableIdentity(command)
   if (!approved) {
     if (!current) throw new Error(`Command executable is unavailable: ${getExecutable(command)}`)
-    return { argv0: current.invocationPath, path: current.path }
+    return getLaunchIdentity(current)
   }
   if (!current || current.invocationPath !== approved.invocationPath || current.path !== approved.path ||
     current.sha256 !== approved.sha256) {
@@ -138,7 +138,21 @@ function getExecutableForSpawn (command) {
       'The selected command executable changed after approval. Render and approve a fresh execution plan.'
     )
   }
-  return { argv0: approved.invocationPath, path: approved.path }
+  return getLaunchIdentity(approved)
+}
+
+/**
+ * Selects the verified path and invocation name used to launch an executable.
+ *
+ * @param {{invocationPath: string, path: string}} identity verified executable identity
+ * @returns {{argv0: string, path: string}} executable launch identity
+ */
+function getLaunchIdentity (identity) {
+  return {
+    argv0: identity.invocationPath,
+    // Windows package-manager shims rely on their invoked path. The canonical target is still verified above.
+    path: process.platform === 'win32' ? identity.invocationPath : identity.path,
+  }
 }
 
 /**

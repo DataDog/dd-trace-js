@@ -505,6 +505,30 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('preserves a Windows shim invocation path after verifying its canonical target', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-shim-'))
+    const shim = path.join(root, 'test-runner.cmd')
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+
+    try {
+      fs.symlinkSync(process.execPath, shim)
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+
+      assert.deepStrictEqual(getExecutableForSpawn({
+        cwd: root,
+        argv: [shim],
+      }), {
+        argv0: shim,
+        path: shim,
+      })
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('resolves Windows forward-slash relative executable paths consistently for planning and execution', () => {
     assert.strictEqual(isExplicitExecutablePath('./node_modules/.bin/jest.cmd', 'win32'), true)
     assert.strictEqual(isExplicitExecutablePath('.\\node_modules\\.bin\\jest.cmd', 'win32'), true)
@@ -542,7 +566,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.strictEqual(getResolvedExecutable(framework.existingTestCommand), executable)
       assert.deepStrictEqual(getExecutableForSpawn(framework.existingTestCommand), {
         argv0: executable,
-        path: fs.realpathSync(executable),
+        path: executable,
       })
     } finally {
       Object.defineProperty(process, 'platform', platformDescriptor)
