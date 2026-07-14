@@ -37,6 +37,8 @@ const MODE_DATADOG = 'datadog'
 const MODE_OFF = 'off'
 const DIRECT_SOURCE_MAP_CACHE_BYTES_LIMIT = 128 * 1024 * 1024
 const DIRECT_SOURCE_MAP_CACHE_LIMIT = 256
+const DIRECT_STACK_CACHE_BYTES_LIMIT = 8 * 1024 * 1024
+const DIRECT_STACK_CACHE_LIMIT = 1024
 const MAX_SOURCE_MAP_BYTES = 64 * 1024 * 1024
 const SOURCE_MAPPING_URL_BYTES = 16 * 1024 * 1024
 const SOURCE_MAPPING_URL = /^[ \t]*\/\/[#@][ \t]*sourceMappingURL=([^\r\n]+?)[ \t]*$/gm
@@ -65,6 +67,20 @@ const directSourceMapMetadata = new WeakMap()
 /** @type {Map<string, DirectStackFrameCacheEntry>} */
 const directStackFrameCache = new Map()
 /**
+ * @typedef {object} DirectStackCacheDependency
+ * @property {string | undefined} generatedFileName
+ * @property {NodeModule | undefined} module
+ * @property {string | undefined} workingDirectory
+ */
+/**
+ * @typedef {object} DirectStackCacheEntry
+ * @property {number} bytes
+ * @property {DirectStackCacheDependency[]} dependencies
+ * @property {string} remappedFrames
+ */
+/** @type {Map<string, DirectStackCacheEntry>} */
+const directStackCache = new Map()
+/**
  * @typedef {object} DirectSourceMapCacheEntry
  * @property {number} bytes
  * @property {NodeModule | undefined} module
@@ -81,6 +97,7 @@ const datadogPrepareStackTraces = new WeakSet()
 let directFileSystem
 let installed = false
 let directSourceMapBytes = 0
+let directStackBytes = 0
 /** @type {string | undefined} */
 let mostRecentDirectSourceMapFileName
 let generatedCodeEnabled = legacySourceMapsEnabled
@@ -340,18 +357,51 @@ function isNodeDefaultPrepareStackTrace (handler) {
  * @returns {unknown}
  */
 function remapErrorStack (stack) {
-  if (typeof stack !== 'string' || !stack.includes('\n')) return stack
+  if (typeof stack !== 'string') return stack
+  const firstNewline = stack.indexOf('\n')
+  if (firstNewline === -1) return stack
   if (shouldDeferDatadogRemapping()) return stack
 
+  const framesStart = firstNewline + 1
+  const frames = stack.slice(framesStart)
+  const cached = directStackCache.get(frames)
+  if (cached !== undefined && useCachedDirectStack(cached)) {
+    return cached.remappedFrames === frames
+      ? stack
+      : stack.slice(0, framesStart) + cached.remappedFrames
+  }
+
+  /** @type {DirectStackCacheDependency[]} */
+  const dependencies = []
   let output
   let lineStart = 0
-  while (lineStart < stack.length) {
-    const newline = stack.indexOf('\n', lineStart)
-    const lineEnd = newline === -1 ? stack.length : newline
-    const line = stack.slice(lineStart, lineEnd)
+  while (lineStart < frames.length) {
+    const newline = frames.indexOf('\n', lineStart)
+    const lineEnd = newline === -1 ? frames.length : newline
+    const line = frames.slice(lineStart, lineEnd)
     const remappedLine = remapStackFrame(line)
+    const frameEntry = directStackFrameCache.get(line)
+    if (frameEntry !== undefined &&
+        (frameEntry.generatedFileName !== undefined || frameEntry.workingDirectory !== undefined)) {
+      let hasDependency = false
+      for (let i = 0; i < dependencies.length; i++) {
+        const dependency = dependencies[i]
+        if (dependency.generatedFileName === frameEntry.generatedFileName &&
+            dependency.workingDirectory === frameEntry.workingDirectory) {
+          hasDependency = true
+          break
+        }
+      }
+      if (!hasDependency) {
+        dependencies.push({
+          generatedFileName: frameEntry.generatedFileName,
+          module: frameEntry.module,
+          workingDirectory: frameEntry.workingDirectory,
+        })
+      }
+    }
     if (remappedLine !== line) {
-      output ??= stack.slice(0, lineStart)
+      output ??= frames.slice(0, lineStart)
       output += remappedLine
     } else if (output !== undefined) {
       output += line
@@ -360,7 +410,47 @@ function remapErrorStack (stack) {
     if (output !== undefined) output += '\n'
     lineStart = newline + 1
   }
-  return output ?? stack
+  const remappedFrames = output ?? frames
+  const bytes = (frames.length + (remappedFrames === frames ? 0 : remappedFrames.length)) * 2
+  if (cached !== undefined) {
+    directStackCache.delete(frames)
+    directStackBytes -= cached.bytes
+  }
+  if (bytes <= DIRECT_STACK_CACHE_BYTES_LIMIT) {
+    while (directStackCache.size >= DIRECT_STACK_CACHE_LIMIT ||
+           directStackBytes + bytes > DIRECT_STACK_CACHE_BYTES_LIMIT) {
+      const [oldestFrames, oldest] = directStackCache.entries().next().value
+      directStackCache.delete(oldestFrames)
+      directStackBytes -= oldest.bytes
+    }
+    const entry = { bytes, dependencies, remappedFrames }
+    directStackCache.set(frames, entry)
+    directStackBytes += bytes
+  }
+  return output === undefined
+    ? stack
+    : stack.slice(0, framesStart) + remappedFrames
+}
+
+/**
+ * @param {DirectStackCacheEntry} entry
+ * @returns {boolean}
+ */
+function useCachedDirectStack (entry) {
+  for (let i = 0; i < entry.dependencies.length; i++) {
+    const dependency = entry.dependencies[i]
+    if (dependency.workingDirectory !== undefined && dependency.workingDirectory !== process.cwd()) return false
+
+    const { generatedFileName } = dependency
+    if (generatedFileName !== undefined) {
+      if (require.cache[generatedFileName] !== dependency.module) return false
+      if (mostRecentDirectSourceMapFileName !== generatedFileName) {
+        const sourceMapEntry = directSourceMapByFile.get(generatedFileName)
+        if (sourceMapEntry !== undefined) touchDirectSourceMap(generatedFileName, sourceMapEntry)
+      }
+    }
+  }
+  return true
 }
 
 /**
@@ -421,6 +511,8 @@ function disableDatadogRemapping () {
   mode = MODE_OFF
   remap.errorStack = identity
   remap.location = identity
+  directStackCache.clear()
+  directStackBytes = 0
   directStackFrameCache.clear()
   directSourceMapByFile.clear()
   directSourceMapBytes = 0
@@ -438,7 +530,7 @@ function remapStackFrame (frame) {
   if (cached !== undefined &&
       (cached.workingDirectory === undefined || cached.workingDirectory === process.cwd()) &&
       (cached.generatedFileName === undefined || require.cache[cached.generatedFileName] === cached.module)) {
-    if (cached.generatedFileName !== undefined) {
+    if (cached.generatedFileName !== undefined && mostRecentDirectSourceMapFileName !== cached.generatedFileName) {
       const sourceMapEntry = directSourceMapByFile.get(cached.generatedFileName)
       if (sourceMapEntry !== undefined) touchDirectSourceMap(cached.generatedFileName, sourceMapEntry)
     }
@@ -490,7 +582,10 @@ function remapStackFrame (frame) {
     generatedFileName,
     module: generatedFileName === undefined ? undefined : require.cache[generatedFileName],
     remappedFrame,
-    workingDirectory: path.isAbsolute(fileName) || fileName.startsWith('file:') ? undefined : process.cwd(),
+    workingDirectory: path.isAbsolute(fileName) ||
+      (URL_SCHEME.test(fileName) && !WINDOWS_DRIVE_PATH.test(fileName))
+      ? undefined
+      : process.cwd(),
   })
   return remappedFrame
 }
@@ -839,7 +934,11 @@ function evictDirectSourceMaps () {
     directSourceMapBytes -= oldest.bytes
     evicted = true
   }
-  if (evicted) directStackFrameCache.clear()
+  if (evicted) {
+    directStackCache.clear()
+    directStackBytes = 0
+    directStackFrameCache.clear()
+  }
 }
 
 /**

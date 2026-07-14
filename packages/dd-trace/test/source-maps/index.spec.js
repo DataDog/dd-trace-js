@@ -779,6 +779,16 @@ describe('source maps', function () {
       })
     }
 
+    it('preserves each error header when frame tails are reused', function () {
+      const modulePath = writeTranspiledCommonJS('datadog-repeated-frames', 'inline')
+      const frames = `    at run (${modulePath}:3:1)`
+      const remappedFrames = `    at run (${path.join(temporaryDirectory, 'datadog-repeated-frames.ts')}:1:1)`
+      sourceMaps.configure('datadog')
+
+      assert.strictEqual(sourceMaps.remapErrorStack(`Error: first\n${frames}`), `Error: first\n${remappedFrames}`)
+      assert.strictEqual(sourceMaps.remapErrorStack(`Error: second\n${frames}`), `Error: second\n${remappedFrames}`)
+    })
+
     it('remaps a percent-encoded inline source map', function () {
       const modulePath = writeTranspiledCommonJS('datadog-percent-inline', 'inline')
       const source = fs.readFileSync(modulePath, 'utf8')
