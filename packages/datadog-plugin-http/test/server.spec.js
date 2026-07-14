@@ -380,18 +380,11 @@ describe('Plugin', () => {
         })
 
         it('should drop traces for blocklist route', done => {
-          const spy = sinon.spy(() => {})
-
           agent
-            .assertSomeTraces((traces) => {
-              spy()
-            })
-            .catch(done)
-
-          setTimeout(() => {
-            sinon.assert.notCalled(spy)
-            done()
-          }, 100)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted routes should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           axios.get(`http://localhost:${port}/health`).catch(done)
         })

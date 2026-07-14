@@ -65,12 +65,12 @@ describe('Plugin', () => {
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
-            const timer = setTimeout(done, 100)
 
-            agent.assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Agent received an unexpected trace.'))
-            })
+            agent
+              .assertNoTraces(() => {
+                throw new Error('Agent received an unexpected trace.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             axios
               .get(`http://localhost:${port}/user`)
@@ -1677,20 +1677,12 @@ describe('Plugin', () => {
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
-            const spy = sinon.spy()
 
             agent
-              .assertSomeTraces(spy)
-              .catch(done)
-
-            setTimeout(() => {
-              try {
-                sinon.assert.notCalled(spy)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }, 100)
+              .assertNoTraces(() => {
+                throw new Error('Filtered URLs should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             axios
               .get(`http://localhost:${port}/health`)
