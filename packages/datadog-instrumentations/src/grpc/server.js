@@ -2,6 +2,7 @@
 
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { FOREIGN_HTTP2_SERVER } = require('../../../dd-trace/src/constants')
 const types = require('./types')
 
 const startChannel = channel('apm:grpc:server:request:start')
@@ -73,6 +74,22 @@ function wrapRegister (register) {
     }
 
     return register.apply(this, arguments)
+  }
+}
+
+function wrapSetupHandlers (setupHandlers) {
+  return function (http2Server) {
+    // gRPC builds its transport on a core Node `Http2Server` and drives every
+    // call through its own span lifecycle over the raw 'stream' event. Mark the
+    // server so the http2 server instrumentation leaves it untraced; otherwise
+    // its re-enabled 'stream' path would wrap every gRPC call in a second
+    // web.request span and become the top frame. `_setupHandlers` is the single
+    // server-creation funnel across all supported versions (the older
+    // `createHttp2Server` does not exist), and it runs at bind time, before any
+    // request reaches the wrapped `emit`.
+    if (http2Server) http2Server[FOREIGN_HTTP2_SERVER] = true
+
+    return setupHandlers.apply(this, arguments)
   }
 }
 
@@ -149,6 +166,7 @@ function isEmitter (obj) {
 
 addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3'], file: 'build/src/server.js' }, server => {
   shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
+  shimmer.wrap(server.Server.prototype, '_setupHandlers', wrapSetupHandlers)
 
   return server
 })
