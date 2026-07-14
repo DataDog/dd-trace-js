@@ -1,6 +1,7 @@
 'use strict'
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
+const ROUTE_RESOLUTION_FAILED = Symbol('routeResolutionFailed')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 const { getCompileToRegexp } = require('./path-to-regexp')
@@ -35,6 +36,7 @@ function isFastSlash (layer, matchers) {
  * @param {{ handle: Function, name?: string, path?: string,
  *   regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
  * @param {Array<{ path?: string, regex?: RegExp }> & { hasStarPath?: boolean, hasSlashPath?: boolean }} matchers
+ * @returns {void}
  */
 function annotateLayer (layer, matchers) {
   const handle = layer.handle
@@ -72,6 +74,25 @@ function resolveLayerRoute (meta, layer) {
 }
 
 /**
+ * Preserve the host Layer's error boundary while resolving a route outside its
+ * dispatch method. This path runs only for multi-pattern layers.
+ *
+ * @param {{ captureRoute?: string, needMultiMatch: boolean,
+ *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
+ * @param {{ path?: string }} layer
+ * @param {Function} next
+ * @returns {string | undefined | typeof ROUTE_RESOLUTION_FAILED}
+ */
+function resolveLayerRouteOrForwardError (meta, layer, next) {
+  try {
+    return resolveLayerRoute(meta, layer)
+  } catch (error) {
+    next(error)
+    return ROUTE_RESOLUTION_FAILED
+  }
+}
+
+/**
  * Build the request/error dispatch wrappers for one host (`express` / `router`).
  * They wrap the layer's prototype dispatch and read the side-table metadata, so
  * `layer.handle` is never replaced. The arity guard mirrors the host's own
@@ -79,6 +100,11 @@ function resolveLayerRoute (meta, layer) {
  * span is published only for the layer the host actually runs.
  *
  * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
+ * @returns {{
+ *   wrapLayerRequest: (originalRequest: Function) => Function,
+ *   wrapLayerError: (originalError: Function) => Function,
+ *   wrapLegacyHandle: (layer: object, original: Function, guardRepeatedNext?: boolean) => Function
+ * }}
  */
 function createLayerDispatchWrappers (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
@@ -128,6 +154,10 @@ function createLayerDispatchWrappers (name) {
   // `wrappedNext` through captures both without a tracer-side try/catch; only
   // `exit` needs the `finally`. express 4's native dispatch converts only the
   // synchronous throw — exactly what the pre-refactor handle wrap caught.
+  /**
+   * @param {Function} originalRequest
+   * @returns {Function}
+   */
   function wrapLayerRequest (originalRequest) {
     return function (req, res, next) {
       if (!enterChannel.hasSubscribers) return originalRequest.call(this, req, res, next)
@@ -135,8 +165,14 @@ function createLayerDispatchWrappers (name) {
       const meta = getLayerMeta(this)
       if (meta === undefined || this.handle.length > 3) return originalRequest.call(this, req, res, next)
 
+      let route = meta.captureRoute
+      if (meta.needMultiMatch) {
+        route = resolveLayerRouteOrForwardError(meta, this, next)
+        if (route === ROUTE_RESOLUTION_FAILED) return
+      }
+
       const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
-      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, this), layer: this })
+      enterChannel.publish({ name: meta.name, req, route, layer: this })
 
       try {
         return originalRequest.call(this, req, res, wrappedNext)
@@ -146,6 +182,10 @@ function createLayerDispatchWrappers (name) {
     }
   }
 
+  /**
+   * @param {Function} originalError
+   * @returns {Function}
+   */
   function wrapLayerError (originalError) {
     return function (error, req, res, next) {
       if (!enterChannel.hasSubscribers) return originalError.call(this, error, req, res, next)
@@ -153,8 +193,14 @@ function createLayerDispatchWrappers (name) {
       const meta = getLayerMeta(this)
       if (meta === undefined || this.handle.length !== 4) return originalError.call(this, error, req, res, next)
 
+      let route = meta.captureRoute
+      if (meta.needMultiMatch) {
+        route = resolveLayerRouteOrForwardError(meta, this, next)
+        if (route === ROUTE_RESOLUTION_FAILED) return
+      }
+
       const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
-      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, this), layer: this })
+      enterChannel.publish({ name: meta.name, req, route, layer: this })
 
       try {
         return originalError.call(this, error, req, res, wrappedNext)
@@ -164,36 +210,164 @@ function createLayerDispatchWrappers (name) {
     }
   }
 
-  // express <4.6.0 has no `Layer` prototype dispatch: the router invokes
-  // `layer.handle` directly and routes errors by its arity. There the handle is
-  // replaced in place, with the arity preserved so the host still routes
-  // correctly. Newer express, express 5, and the router package keep `handle`
-  // pristine and are traced through the prototype wraps above.
-  function wrapLegacyHandle (layer, original) {
+  // express <4.6.0 dispatches `layer.handle` directly, so its replacement must preserve arity.
+  // It cannot replay `next` for a rejected promise; only express-async-errors needs the repeated-next guard.
+  /**
+   * @param {object} layer
+   * @param {Function} original
+   * @returns {Function}
+   */
+  function wrapNativeLegacyRequestHandle (layer, original) {
+    const meta = getLayerMeta(layer)
+    const { name, captureRoute, needMultiMatch } = meta
+    return shimmer.wrapFunction(original, inner => function (req, res, next) {
+      if (!enterChannel.hasSubscribers) return inner.call(this, req, res, next)
+
+      let calls = 0
+      if (typeof next === 'function') {
+        next = shimmer.wrapCallback(next, originalNext => function next (error) {
+          calls++
+          if (calls === 1) {
+            if (error && error !== 'route' && error !== 'router') {
+              publishError({ req, error })
+            }
+
+            nextChannel.publish({ req })
+            finishChannel.publish({ req })
+          } else if (calls === 2) {
+            repeatChannel.publish({ req, name, error })
+          }
+
+          originalNext.apply(this, arguments)
+        })
+      }
+
+      const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
+      enterChannel.publish({ name, req, route, layer })
+
+      try {
+        return inner.call(this, req, res, next)
+      } catch (error) {
+        if (calls === 0) {
+          calls = 1
+          publishError({ req, error })
+          nextChannel.publish({ req })
+          finishChannel.publish({ req })
+        }
+
+        throw error
+      } finally {
+        exitChannel.publish({ req })
+      }
+    })
+  }
+
+  /**
+   * @param {object} layer
+   * @param {Function} original
+   * @returns {Function}
+   */
+  function wrapNativeLegacyErrorHandle (layer, original) {
+    const meta = getLayerMeta(layer)
+    const { name, captureRoute, needMultiMatch } = meta
+    return shimmer.wrapFunction(original, inner => function (error, req, res, next) {
+      if (!enterChannel.hasSubscribers) return inner.call(this, error, req, res, next)
+
+      let calls = 0
+      if (typeof next === 'function') {
+        next = shimmer.wrapCallback(next, originalNext => function next (nextError) {
+          calls++
+          if (calls === 1) {
+            if (nextError && nextError !== 'route' && nextError !== 'router') {
+              publishError({ req, error: nextError })
+            }
+
+            nextChannel.publish({ req })
+            finishChannel.publish({ req })
+          } else if (calls === 2) {
+            repeatChannel.publish({ req, name, error: nextError })
+          }
+
+          originalNext.apply(this, arguments)
+        })
+      }
+
+      const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
+      enterChannel.publish({ name, req, route, layer })
+
+      try {
+        return inner.call(this, error, req, res, next)
+      } catch (caught) {
+        if (calls === 0) {
+          calls = 1
+          publishError({ req, error: caught })
+          nextChannel.publish({ req })
+          finishChannel.publish({ req })
+        }
+
+        throw caught
+      } finally {
+        exitChannel.publish({ req })
+      }
+    })
+  }
+
+  /**
+   * @param {object} layer
+   * @param {Function} original
+   * @param {boolean} [guardRepeatedNext]
+   * @returns {Function}
+   */
+  function wrapLegacyHandle (layer, original, guardRepeatedNext = false) {
+    if (!guardRepeatedNext) {
+      return original.length === 4
+        ? wrapNativeLegacyErrorHandle(layer, original)
+        : wrapNativeLegacyRequestHandle(layer, original)
+    }
+
     // `annotateLayer` always runs first in `wrapStack`, so the captured meta is
     // never undefined here (unlike the prototype wraps, where `this` can be any
     // layer the host dispatches).
     const meta = getLayerMeta(layer)
+    const { name, captureRoute, needMultiMatch } = meta
     const wrapped = shimmer.wrapFunction(original, inner => function (...args) {
       if (!enterChannel.hasSubscribers) return inner.apply(this, args)
 
       const isErrorHandler = original.length === 4
       const req = args[isErrorHandler ? 1 : 0]
       const nextIndex = isErrorHandler ? 3 : 2
-      if (typeof args[nextIndex] === 'function') args[nextIndex] = wrapNext(req, meta.name, args[nextIndex])
+      let calls = 0
+      if (typeof args[nextIndex] === 'function') {
+        args[nextIndex] = shimmer.wrapCallback(args[nextIndex], originalNext => function next (error) {
+          calls++
+          if (calls === 1) {
+            if (error && error !== 'route' && error !== 'router') {
+              publishError({ req, error })
+            }
 
-      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, layer), layer })
+            nextChannel.publish({ req })
+            finishChannel.publish({ req })
+          } else if (calls === 2) {
+            repeatChannel.publish({ req, name, error })
+          }
+
+          originalNext.apply(this, arguments)
+        })
+      }
+
+      const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
+      enterChannel.publish({ name, req, route, layer })
 
       try {
         return inner.apply(this, args)
       } catch (error) {
-        // Unlike the prototype hosts, this router catches a synchronous throw
-        // outside the layer and calls its own `next(error)`, never `wrappedNext`.
-        // Mirror `wrapNext` here so the throwing layer still tags its error and
-        // finishes, rather than lingering on the stack until request finish.
-        publishError({ req, error })
-        nextChannel.publish({ req })
-        finishChannel.publish({ req })
+        // Legacy hosts catch outside the layer and never call its wrapped `next`, so finish before rethrowing.
+        if (calls === 0) {
+          calls = 1
+          publishError({ req, error })
+          nextChannel.publish({ req })
+          finishChannel.publish({ req })
+        }
 
         throw error
       } finally {
@@ -209,6 +383,7 @@ function createLayerDispatchWrappers (name) {
 
 /**
  * @param {{ handle_request?: unknown, handleRequest?: unknown }} layer
+ * @returns {boolean}
  */
 function hasLayerDispatch (layer) {
   return typeof layer.handle_request === 'function' || typeof layer.handleRequest === 'function'
@@ -221,9 +396,11 @@ function hasLayerDispatch (layer) {
  *   Host-resolved path-to-regexp compile adapter, or undefined when the host
  *   instance ships no path-to-regexp. Captured here so each express/router
  *   instance keeps the dialect it actually loaded.
- * @param {((layer: object, original: Function) => Function) | undefined} [wrapLegacyHandle]
+ * @param {((layer: object, original: Function, guardRepeatedNext?: boolean) => Function) | undefined}
+ *   [wrapLegacyHandle]
  *   Fallback that replaces `layer.handle` for hosts without a `Layer` prototype
  *   dispatch (express <4.6.0). Omitted for hosts that always ship one.
+ * @returns {(original: Function) => Function}
  */
 function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
   const routeAddedChannel = channel(`apm:${name}:route:added`)
@@ -234,7 +411,7 @@ function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
 
       if (wrapLegacyHandle !== undefined && !hasLayerDispatch(layer)) {
         if (layer.__handle) { // express-async-errors
-          layer.__handle = wrapLegacyHandle(layer, layer.__handle)
+          layer.__handle = wrapLegacyHandle(layer, layer.__handle, true)
         } else {
           layer.handle = wrapLegacyHandle(layer, layer.handle)
         }
