@@ -14,14 +14,14 @@ const {
   rewriteOptionalPeerLoads,
 } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const {
-  getApplicationOtelApiPackages,
+  createApplicationOtelApiPackageResolver,
 } = require('../datadog-instrumentations/src/helpers/otel-api-externals')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
-const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api')
+const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api').replaceAll('\\', '/')
 const OTEL_API_PACKAGES = ['@opentelemetry/api', '@opentelemetry/api-logs']
 const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
@@ -140,7 +140,6 @@ module.exports.setup = function (build) {
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set()
-  const externalOtelApiPackages = new Set()
   const deferredExternalPatterns = []
   if (build.initialOptions.external) {
     build.initialOptions.external = build.initialOptions.external.filter(name => {
@@ -176,10 +175,7 @@ ${build.initialOptions.banner.js}`
   }
 
   const workingDirectory = build.initialOptions.absWorkingDir || process.cwd()
-  const applicationOtelApiPackages = getApplicationOtelApiPackages(workingDirectory)
-  for (const otelApiPackage of applicationOtelApiPackages.keys()) {
-    externalOtelApiPackages.add(otelApiPackage)
-  }
+  const resolveApplicationOtelApiPackages = createApplicationOtelApiPackageResolver(workingDirectory)
 
   const esmBuild = isESMBuild(build)
   if (
@@ -240,8 +236,8 @@ ${build.initialOptions.banner.js}`
   /** @param {import('esbuild').OnResolveArgs} args */
   function resolveOtelApi (args) {
     const packageName = OTEL_API_PACKAGE_PATTERN.exec(args.path)?.[1]
-    if (args.importer === OTEL_API_HOLDER_PATH) return
-    if (externalOtelApiPackages.has(packageName)) {
+    if (args.importer.replaceAll('\\', '/') === OTEL_API_HOLDER_PATH) return
+    if (resolveApplicationOtelApiPackages(args.resolveDir).has(packageName)) {
       log.debug('EXTERNAL: %s', args.path)
       return { path: args.path, external: true }
     }
@@ -292,10 +288,10 @@ ${build.initialOptions.banner.js}`
       }
     }
 
-    const extracted = extractPackageAndModulePath(fullPathToModule)
-    const moduleBaseDir = extracted?.pkgJson && path.dirname(extracted.pkgJson)
-    const applicationPackage = applicationOtelApiPackages.get(extracted?.pkg)
-    const applicationOwned = args.importer !== OTEL_API_HOLDER_PATH &&
+    const extracted = extractPackageAndModulePath(fullPathToModule.replaceAll('\\', '/'))
+    const moduleBaseDir = extracted?.pkgJson && path.dirname(extracted.pkgJson).replaceAll('\\', '/')
+    const applicationPackage = resolveApplicationOtelApiPackages(args.resolveDir).get(extracted?.pkg)
+    const applicationOwned = args.importer.replaceAll('\\', '/') !== OTEL_API_HOLDER_PATH &&
       applicationPackage?.moduleBaseDir === moduleBaseDir
 
     const internal = builtins.has(args.path)

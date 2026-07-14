@@ -1,13 +1,11 @@
 'use strict'
 
-const { getApiBinding, getApiLogs } = require('../api')
+const { getApiBinding, getApiLogsOwner } = require('../api')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
-// SeverityNumber is an OTel spec enum of fixed numeric constants, identical across every copy of
-// the API, so reading it at load time is safe. `trace` is read at use time so global API access
-// uses the application copy's version compatibility checks (issue #6882).
-const { SeverityNumber } = getApiLogs()
+// SeverityNumber is a fixed spec enum available from every supported Logs API.
+const { SeverityNumber } = getApiLogsOwner()
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -189,7 +187,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   #extractSpanContext (logContext) {
     if (!logContext) return null
 
-    const activeSpan = this.#apiBinding.current.trace.getSpan(logContext)
+    const activeSpan = this.#apiBinding.current.api.trace.getSpan(logContext)
     if (activeSpan) {
       return activeSpan.spanContext()
     }

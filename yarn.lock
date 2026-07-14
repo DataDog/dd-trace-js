@@ -785,17 +785,36 @@
   resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.22.0.tgz#c3a13939682473d4d1b141bfd01c1baf11011fb7"
   integrity sha512-YBrf6SQkn0FNB/dRAtLEs41dvFMUE8CrQTwI+iLaMFUIqWlqGNJfGnulKSneEKS+2OgKTAC6DdmKcZ6tK7kBcg==
 
-"@opentelemetry/api-logs@<1.0.0":
+"@opentelemetry/api-logs-v033@npm:@opentelemetry/api-logs@0.33.0":
+  version "0.33.0"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/api-logs/-/api-logs-0.33.0.tgz#2f180853459227d91a17e3aee40e21d4431b1b5b"
+  integrity sha512-B3SocjwflrNEaTQrJXNbmOg4nggJmFpxiJnoat+Ap861I9n4ZIH/nuSn7JfPdIEeoZV+jbFu2QzEKNk2ROZMZQ==
+  dependencies:
+    "@opentelemetry/api" "^1.0.0"
+
+"@opentelemetry/api-logs-v034@npm:@opentelemetry/api-logs@0.34.0":
+  version "0.34.0"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/api-logs/-/api-logs-0.34.0.tgz#6c26cefa18137afe674e8a814a7ae99cfe61620d"
+  integrity sha512-6/s7Klnc3IDtLCXjvRlMKYOTp5LgWXwmFDSNF35zMFyk1rNv5LZajWhkk3zXIlEW9auqoesTyoWlP0bgCbr7bw==
+  dependencies:
+    "@opentelemetry/api" "^1.0.0"
+
+"@opentelemetry/api-logs@0.212.0":
   version "0.212.0"
   resolved "https://registry.yarnpkg.com/@opentelemetry/api-logs/-/api-logs-0.212.0.tgz#ec66a0951b84b1f082e13fd8a027b9f9d65a3f7a"
   integrity sha512-TEEVrLbNROUkYY51sBJGk7lO/OLjuepch8+hmpM6ffMJQ2z/KVCjdHuCFX6fJj8OkJP2zckPjrJzQtXU3IAsFg==
   dependencies:
     "@opentelemetry/api" "^1.3.0"
 
-"@opentelemetry/api@>=1.0.0 <1.10.0", "@opentelemetry/api@^1.3.0":
-  version "1.9.0"
-  resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.9.0.tgz#d03eba68273dc0f7509e2a3d5cba21eae10379fe"
-  integrity sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==
+"@opentelemetry/api-v1@npm:@opentelemetry/api@1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.0.0.tgz#cc7712009095697f8a9492ee375daa08588ba263"
+  integrity sha512-TcdhrGy+ehLIFs79/TcWiHiPujishrhSgQ7wxvWvk8WY2YT8Np/pYXmRP94voG3N8GJ/5nIVyzacfViwhN50AQ==
+
+"@opentelemetry/api@1.9.1", "@opentelemetry/api@^1.0.0", "@opentelemetry/api@^1.3.0":
+  version "1.9.1"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.9.1.tgz#c1b0346de336ba55af2d5a7970882037baedec05"
+  integrity sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==
 
 "@oven/bun-darwin-aarch64@1.3.14":
   version "1.3.14"

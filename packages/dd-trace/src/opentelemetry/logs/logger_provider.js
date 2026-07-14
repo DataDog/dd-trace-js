@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const { getApiBinding, registerApi, registerApiLogs } = require('../api')
+const { getApiLogsBinding, getApiLogsOwner, getApiOwner } = require('../api')
 const ContextManager = require('../context_manager')
 const Logger = require('./logger')
 
@@ -88,22 +88,16 @@ class LoggerProvider {
 
     this.#registered = true
     this.#getApiBinding()
-    registerApi({
-      activate: api => api.context.setGlobalContextManager(this.#contextManager),
-      deactivate: api => api.context.disable(),
-    })
-    registerApiLogs({
-      activate: api => api.logs.setGlobalLoggerProvider(this),
-      deactivate: api => api.logs.disable(),
-    })
+    getApiOwner().context.setGlobalContextManager(this.#contextManager)
+    getApiLogsOwner().logs.setGlobalLoggerProvider(this)
   }
 
   /**
-   * @returns {{ current: typeof import('@opentelemetry/api') }}
+   * @returns {import('../api').ApiBinding}
    */
   #getApiBinding () {
     if (!this.#apiBinding) {
-      this.#apiBinding = getApiBinding()
+      this.#apiBinding = getApiLogsBinding()
       this.#contextManager = new ContextManager(this.#apiBinding)
     }
     return this.#apiBinding

@@ -173,6 +173,18 @@ describe('datadog-esbuild plugin', () => {
       )
     })
 
+    it('bundles the holder fallback when its importer uses Windows separators', () => {
+      const workingDirectory = createManifestDirectory({
+        name: 'app',
+        dependencies: { '@opentelemetry/api': '^1.9.0' },
+      })
+      installPackage(workingDirectory, '@opentelemetry/api', '1.9.0')
+      const { resolve } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
+      const importer = require.resolve('../../dd-trace/src/opentelemetry/api').replaceAll('/', '\\')
+
+      assert.strictEqual(resolve({ path: '@opentelemetry/api', importer }), undefined)
+    })
+
     it('marks resolved application API modules as application-owned', () => {
       const workingDirectory = createManifestDirectory({
         name: 'app',
@@ -194,6 +206,27 @@ describe('datadog-esbuild plugin', () => {
         result.pluginData.moduleBaseDir,
         fs.realpathSync(path.join(workingDirectory, 'node_modules', '@opentelemetry', 'api'))
       )
+    })
+
+    it('externalizes an API declared by a workspace package below the build root', () => {
+      const workingDirectory = createManifestDirectory({ name: 'workspace', private: true })
+      const applicationDirectory = path.join(workingDirectory, 'packages', 'app')
+      fs.mkdirSync(applicationDirectory, { recursive: true })
+      fs.writeFileSync(path.join(applicationDirectory, 'package.json'), JSON.stringify({
+        name: 'app',
+        dependencies: { '@opentelemetry/api': '^1.9.0' },
+      }))
+      installPackage(applicationDirectory, '@opentelemetry/api', '1.9.0')
+      const { resolve } = setupOtelApiResolution({ absWorkingDir: workingDirectory })
+
+      assert.deepStrictEqual(resolve({
+        path: '@opentelemetry/api',
+        importer: path.join(applicationDirectory, 'app.js'),
+        resolveDir: applicationDirectory,
+      }), {
+        path: '@opentelemetry/api',
+        external: true,
+      })
     })
 
     it('forwards ownership metadata from application and fallback modules', async () => {

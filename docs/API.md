@@ -400,17 +400,17 @@ const tracerProvider = new tracer.TracerProvider()
 tracerProvider.register()
 ```
 
-dd-trace resolves the application's own `@opentelemetry/api` copy from its entrypoint when the
-bridge first uses it and falls back to the copy bundled with dd-trace otherwise. The
-`dd-trace/esbuild` and `dd-trace/webpack` plugins keep a supported, installed application dependency
-external so its single runtime copy is shared with the bridge; keep those dependencies resolvable at
-runtime. A package the application does not depend on is bundled from dd-trace's own copy, so no
-extra runtime dependency is needed.
+dd-trace registers providers through its bundled, compatibility-max OpenTelemetry API copy and uses
+the application's supported API copy for copy-local bridge operations. The `dd-trace/esbuild` and
+`dd-trace/webpack` plugins keep a supported, installed application dependency external so it remains
+detectable at runtime; keep those dependencies resolvable after deployment. A package the
+application does not depend on is bundled from dd-trace's own copy, so no extra runtime dependency
+is needed.
 
 Other bundlers do not get this configuration automatically. When the application imports
 `@opentelemetry/api` or `@opentelemetry/api-logs`, keep that package external and deploy it as a
-runtime dependency. Inlining a separate application copy can leave the bridge registered on
-dd-trace's copy and make application spans no-ops.
+runtime dependency. Inlining a separate application copy bypasses the bridge's ownership detection
+and is not supported.
 
 The following attributes are available to override Datadog-specific options:
 

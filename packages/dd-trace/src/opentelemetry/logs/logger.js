@@ -38,7 +38,7 @@ class Logger {
    *  `name` defaults to 'dd-trace-js';
    *  `version` defaults to tracer version;
    *  `schemaUrl` defaults to '';
-   * @param {{ current: typeof import('@opentelemetry/api') }} apiBinding
+   * @param {import('../api').ApiBinding} apiBinding
    */
   constructor (loggerProvider, instrumentationScope, instrumentationLibrary, apiBinding) {
     this.#apiBinding = apiBinding
@@ -75,7 +75,7 @@ class Logger {
 
     if (!logRecord.context) {
       // Store span context in the log record context for trace correlation.
-      logRecord.context = this.#apiBinding.current.context.active()
+      logRecord.context = this.#apiBinding.current.api.context.active()
     }
 
     this.loggerProvider.processor.onEmit(logRecord, this.#instrumentationScope)

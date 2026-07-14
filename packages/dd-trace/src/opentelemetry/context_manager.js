@@ -11,7 +11,7 @@ class ContextManager {
   #apiBinding
 
   /**
-   * @param {{ current: typeof import('@opentelemetry/api') }} [apiBinding]
+   * @param {import('./api').ApiBinding} [apiBinding]
    */
   constructor (apiBinding = getApiBinding()) {
     this.#apiBinding = apiBinding
@@ -20,7 +20,7 @@ class ContextManager {
 
   // converts dd to otel
   active () {
-    const { trace, ROOT_CONTEXT, propagation } = this.#apiBinding.current
+    const { trace, ROOT_CONTEXT, propagation } = this.#apiBinding.current.api
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
     const activeSpan = storage('legacy').getStore()?.span
@@ -74,7 +74,7 @@ class ContextManager {
 
   // converts otel to dd
   with (context, fn, thisArg, ...args) {
-    const { trace, propagation } = this.#apiBinding.current
+    const { trace, propagation } = this.#apiBinding.current.api
     const span = trace.getSpan(context)
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)

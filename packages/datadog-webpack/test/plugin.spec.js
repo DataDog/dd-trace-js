@@ -272,6 +272,14 @@ describe('DatadogWebpackPlugin', () => {
       assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api'), false)
     })
 
+    it('bundles the holder fallback when its context uses Windows separators', () => {
+      const externals = applyToExternals({ '@opentelemetry/api': 'module @opentelemetry/api' })
+      const holderDirectory = path.dirname(require.resolve('../../dd-trace/src/opentelemetry/api'))
+        .replaceAll('/', '\\')
+
+      assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api'), false)
+    })
+
     for (const [name, userExternals] of [
       ['string', '@opentelemetry/api'],
       ['object', { '@opentelemetry/api': 'module @opentelemetry/api' }],
@@ -334,6 +342,23 @@ describe('DatadogWebpackPlugin', () => {
       assert.strictEqual(
         resolveExternal(externals[0], '/app', '@opentelemetry/api/experimental'),
         'commonjs @opentelemetry/api/experimental'
+      )
+    })
+
+    it('externalizes an API declared by a workspace package below the compiler context', () => {
+      const context = createManifestDirectory({ name: 'workspace', private: true })
+      const applicationDirectory = path.join(context, 'packages', 'app')
+      fs.mkdirSync(applicationDirectory, { recursive: true })
+      fs.writeFileSync(path.join(applicationDirectory, 'package.json'), JSON.stringify({
+        name: 'app',
+        dependencies: { '@opentelemetry/api': '^1.9.0' },
+      }))
+      installPackage(applicationDirectory, '@opentelemetry/api', '1.9.0')
+      const externals = applyToExternals(undefined, context)
+
+      assert.strictEqual(
+        resolveExternal(externals[0], applicationDirectory, '@opentelemetry/api'),
+        'commonjs @opentelemetry/api'
       )
     })
   })

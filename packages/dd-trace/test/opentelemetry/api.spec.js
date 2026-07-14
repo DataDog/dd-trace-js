@@ -10,6 +10,8 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const API_OWNER_VERSION = require('../../../../package.json').dependencies['@opentelemetry/api']
+
 require('../setup/core')
 
 /**
@@ -176,173 +178,184 @@ describe('opentelemetry/api holder', () => {
     assert.strictEqual(holder.getApi(), application)
   })
 
-  it('binds a custom application copy captured after an internal copy before registration', () => {
-    const internal = { copy: 'internal' }
-    const application = { copy: 'application' }
-    const activate = sinon.spy()
-    const deactivate = sinon.spy()
-    holder.setApi(internal, '1.9.0', false, {
-      applicationOwned: false,
-      moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
-    })
-    holder.setApi(application, '1.9.0', false, {
-      moduleBaseDir: path.join(process.cwd(), 'custom', 'node_modules', '@opentelemetry', 'api'),
-    })
-    holder.registerApi({ activate, deactivate })
+  it('promotes core and logs copies with immutable snapshots', () => {
+    const initialApi = { copy: 'initial-api' }
+    const initialApiLogs = { copy: 'initial-api-logs' }
+    holder.setApi(initialApi)
+    holder.setApiLogs(initialApiLogs)
+    const binding = holder.getApiLogsBinding()
+    const initialSnapshot = binding.current
 
-    assert.strictEqual(holder.getApi(), application)
-    sinon.assert.calledOnceWithExactly(activate, application)
-    sinon.assert.notCalled(deactivate)
+    const applicationApi = { copy: 'application-api' }
+    holder.setApi(applicationApi, '1.9.0', false, { applicationOwned: true })
+
+    const coreSnapshot = binding.current
+    assert.notStrictEqual(coreSnapshot, initialSnapshot)
+    assert.strictEqual(coreSnapshot.api, applicationApi)
+    assert.strictEqual(coreSnapshot.apiLogs, initialApiLogs)
+
+    const applicationApiLogs = { copy: 'application-api-logs' }
+    holder.setApiLogs(applicationApiLogs, '0.212.0', false, { applicationOwned: true })
+
+    assert.notStrictEqual(binding.current, coreSnapshot)
+    assert.strictEqual(binding.current.api, applicationApi)
+    assert.strictEqual(binding.current.apiLogs, applicationApiLogs)
   })
 
-  it('deactivates every registration before activating a late application copy', () => {
-    const internal = { copy: 'internal' }
-    const application = { copy: 'application' }
-    const calls = []
-    holder.setApi(internal, '1.9.0')
-    for (const signal of ['trace', 'metrics', 'logs']) {
-      holder.registerApi({
-        activate: api => calls.push(`activate ${signal} ${api.copy}`),
-        deactivate: api => calls.push(`deactivate ${signal} ${api.copy}`),
-      })
-    }
+  it('keeps compatibility-max owners stable across snapshot promotions', () => {
+    const ownerApi = holder.getApiOwner()
+    const ownerApiLogs = holder.getApiLogsOwner()
+    holder.getApiBinding()
 
-    const binding = holder.getApiBinding()
-    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
+    holder.setApi({ copy: 'application' }, '1.0.0', false, { applicationOwned: true })
+    holder.setApiLogs({ copy: 'application-logs' }, '0.33.0', false, { applicationOwned: true })
 
-    assert.strictEqual(holder.getApi(), application)
-    assert.strictEqual(binding.current, application)
-    assert.deepStrictEqual(calls, [
-      'activate trace internal',
-      'activate metrics internal',
-      'activate logs internal',
-      'deactivate trace internal',
-      'deactivate metrics internal',
-      'deactivate logs internal',
-      'activate trace application',
-      'activate metrics application',
-      'activate logs application',
-    ])
+    assert.strictEqual(holder.getApiOwner(), ownerApi)
+    assert.strictEqual(holder.getApiLogsOwner(), ownerApiLogs)
   })
 
-  it('continues a late transition when registrations throw', () => {
-    const error = sinon.spy()
-    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(
-      Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    )), {
-      '../log': { error },
-    })
-    const internal = { copy: 'internal' }
-    const application = { copy: 'application' }
-    const activationError = new Error('activate failed')
-    const deactivationError = new Error('deactivate failed')
-    const activate = sinon.stub()
-    const deactivate = sinon.spy()
-    holder.setApi(internal, '1.9.0')
-    holder.registerApi({
-      activate,
-      deactivate: sinon.stub().throws(deactivationError),
-    })
-    holder.registerApi({
-      activate: sinon.stub().onSecondCall().throws(activationError),
-      deactivate,
-    })
-
-    holder.setApi(application, '1.9.0', false, { applicationOwned: true })
-
-    assert.strictEqual(holder.getApi(), application)
-    sinon.assert.calledOnceWithExactly(deactivate, internal)
-    sinon.assert.calledTwice(activate)
-    sinon.assert.calledWithExactly(activate.secondCall, application)
-    assert.deepStrictEqual(error.args, [
-      ['Error deactivating the previous %s registration.', '@opentelemetry/api', deactivationError],
-      ['Error activating the new %s registration.', '@opentelemetry/api', activationError],
-    ])
-  })
-
-  it('transfers the core API global version before activating a different copy', () => {
+  it('adopts a compatible diagnostic-only global before provider registration', () => {
     const globalKey = Symbol.for('opentelemetry.js.api.1')
     const previous = Reflect.get(globalThis, globalKey)
-    const globalApi = { version: '1.8.0' }
+    const diag = {}
+    Reflect.set(globalThis, globalKey, { version: '1.0.0', diag })
+
+    try {
+      holder.getApiOwner()
+
+      const globalApi = Reflect.get(globalThis, globalKey)
+      assert.strictEqual(globalApi.version, API_OWNER_VERSION)
+      assert.strictEqual(globalApi.diag, diag)
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
+      else Reflect.set(globalThis, globalKey, previous)
+    }
+  })
+
+  it('adopts a diagnostic-only global created after the owner first loads', () => {
+    const globalKey = Symbol.for('opentelemetry.js.api.1')
+    const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
+    Reflect.deleteProperty(globalThis, globalKey)
+
+    try {
+      const owner = holder.getApiOwner()
+      Reflect.set(globalThis, globalKey, { version: '1.0.0', diag: {} })
+
+      assert.strictEqual(holder.getApiOwner(), owner)
+      assert.strictEqual(Reflect.get(globalThis, globalKey).version, API_OWNER_VERSION)
+    } finally {
+      if (previous) Object.defineProperty(globalThis, globalKey, previous)
+      else Reflect.deleteProperty(globalThis, globalKey)
+    }
+  })
+
+  it('continues when a diagnostic-only global cannot be replaced', () => {
+    const globalKey = Symbol.for('opentelemetry.js.api.1')
+    const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
+    const error = sinon.spy()
+    holder = freshHolder(undefined, { '../log': { error } })
+    Object.defineProperty(globalThis, globalKey, {
+      configurable: true,
+      value: { version: '1.0.0', diag: {} },
+      writable: false,
+    })
+
+    try {
+      holder.getApiOwner()
+      sinon.assert.calledOnceWithExactly(error, 'Unable to prepare the OpenTelemetry API global owner.')
+    } finally {
+      if (previous) Object.defineProperty(globalThis, globalKey, previous)
+      else Reflect.deleteProperty(globalThis, globalKey)
+    }
+  })
+
+  it('continues when inspecting a diagnostic-only global throws', () => {
+    const globalKey = Symbol.for('opentelemetry.js.api.1')
+    const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
+    const failure = new Error('global inspection failed')
+    const error = sinon.spy()
+    holder = freshHolder(undefined, { '../log': { error } })
+    Reflect.set(globalThis, globalKey, new Proxy({ version: '1.0.0' }, {
+      ownKeys () {
+        throw failure
+      },
+    }))
+
+    try {
+      holder.getApiOwner()
+      sinon.assert.calledOnceWithExactly(
+        error,
+        'Unable to prepare the OpenTelemetry API global owner: %s',
+        failure
+      )
+    } finally {
+      if (previous) Object.defineProperty(globalThis, globalKey, previous)
+      else Reflect.deleteProperty(globalThis, globalKey)
+    }
+  })
+
+  for (const [description, version] of [
+    ['without a string version', undefined],
+    ['with an incompatible version', '0.9.0'],
+  ]) {
+    it(`does not adopt a diagnostic-only global ${description}`, () => {
+      const globalKey = Symbol.for('opentelemetry.js.api.1')
+      const previous = Object.getOwnPropertyDescriptor(globalThis, globalKey)
+      const globalApi = { version, diag: {} }
+      Reflect.set(globalThis, globalKey, globalApi)
+
+      try {
+        holder.getApiOwner()
+        assert.strictEqual(Reflect.get(globalThis, globalKey), globalApi)
+      } finally {
+        if (previous) Object.defineProperty(globalThis, globalKey, previous)
+        else Reflect.deleteProperty(globalThis, globalKey)
+      }
+    })
+  }
+
+  it('does not adopt a global that already owns a signal', () => {
+    const globalKey = Symbol.for('opentelemetry.js.api.1')
+    const previous = Reflect.get(globalThis, globalKey)
+    const globalApi = { version: '1.0.0', diag: {}, trace: {} }
     Reflect.set(globalThis, globalKey, globalApi)
 
     try {
-      holder.setApi({ copy: 'internal' }, '1.8.0')
-      holder.registerApi({ activate: sinon.spy(), deactivate: sinon.spy() })
+      holder.getApiOwner()
 
-      holder.setApi({ copy: 'application' }, '1.9.0', false, { applicationOwned: true })
-
-      assert.strictEqual(globalApi.version, '1.9.0')
+      assert.strictEqual(Reflect.get(globalThis, globalKey), globalApi)
+      assert.strictEqual(globalApi.version, '1.0.0')
     } finally {
       if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
       else Reflect.set(globalThis, globalKey, previous)
     }
   })
 
-  it('continues a transition when the core API global version cannot be transferred', () => {
-    const globalKey = Symbol.for('opentelemetry.js.api.1')
-    const previous = Reflect.get(globalThis, globalKey)
-    Reflect.set(globalThis, globalKey, Object.freeze({ version: '1.8.0' }))
-    const error = sinon.spy()
-    holder = freshHolder(sinon.stub().returns(createFailingApplicationRequire(
-      Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
-    )), {
-      '../log': { error },
-    })
-    const application = { copy: 'application' }
-    const activate = sinon.spy()
-
-    try {
-      holder.setApi({ copy: 'internal' }, '1.8.0')
-      holder.registerApi({ activate, deactivate: sinon.spy() })
-
-      holder.setApi(application, '1.9.0', false, { applicationOwned: true })
-
-      assert.strictEqual(holder.getApi(), application)
-      sinon.assert.calledWithExactly(activate.secondCall, application)
-      sinon.assert.calledOnceWithExactly(
-        error,
-        'Unable to transfer the OpenTelemetry API global to version %s.',
-        '1.9.0',
-        sinon.match.instanceOf(TypeError)
-      )
-    } finally {
-      if (previous === undefined) Reflect.deleteProperty(globalThis, globalKey)
-      else Reflect.set(globalThis, globalKey, previous)
-    }
-  })
-
-  it('updates the priority when the selected copy is later identified as application-owned', () => {
+  it('updates priority without replacing a snapshot when the selected copy is unchanged', () => {
     const api = { copy: 'shared' }
-    const activate = sinon.spy()
-    const deactivate = sinon.spy()
     holder.setApi(api, '1.9.0')
-    holder.registerApi({ activate, deactivate })
+    const binding = holder.getApiBinding()
+    const snapshot = binding.current
 
     holder.setApi(api, '1.9.0', false, { applicationOwned: true })
     holder.setApi({ copy: 'internal' }, '1.9.0', false, { applicationOwned: false })
 
     assert.strictEqual(holder.getApi(), api)
-    sinon.assert.calledOnceWithExactly(activate, api)
-    sinon.assert.notCalled(deactivate)
+    assert.strictEqual(binding.current, snapshot)
   })
 
-  it('keeps an internal late capture from replacing the registered application copy', () => {
+  it('keeps an internal late capture from replacing the application snapshot', () => {
     const application = { copy: 'application' }
-    const internal = { copy: 'internal' }
-    const activate = sinon.spy()
-    const deactivate = sinon.spy()
     holder.setApi(application, '1.9.0', false, { applicationOwned: true })
-    holder.registerApi({ activate, deactivate })
+    const binding = holder.getApiBinding()
 
-    holder.setApi(internal, '1.9.0', false, {
+    holder.setApi({ copy: 'internal' }, '1.9.0', false, {
       applicationOwned: false,
       moduleBaseDir: path.join(process.cwd(), 'node_modules', '@opentelemetry', 'api'),
     })
 
     assert.strictEqual(holder.getApi(), application)
-    sinon.assert.calledOnceWithExactly(activate, application)
-    sinon.assert.notCalled(deactivate)
+    assert.strictEqual(binding.current.api, application)
   })
 
   it('prefers the entrypoint API over an earlier internal capture', () => {
@@ -365,15 +378,12 @@ describe('opentelemetry/api holder', () => {
     applicationRequire.resolve = sinon.stub().returns(createPackageEntry('@opentelemetry/api', '1.9.0'))
     applicationRequire.withArgs('@opentelemetry/api').returns(preloaded)
     holder = freshHolder(sinon.stub().returns(applicationRequire))
-    const activate = sinon.spy()
-    const deactivate = sinon.spy()
-    holder.registerApi({ activate, deactivate })
+    const binding = holder.getApiBinding()
 
     holder.setApi(application, '1.9.0', false, { applicationOwned: true })
 
     assert.strictEqual(holder.getApi(), application)
-    sinon.assert.calledOnceWithExactly(deactivate, preloaded)
-    assert.deepStrictEqual(activate.args, [[preloaded], [application]])
+    assert.strictEqual(binding.current.api, application)
   })
 
   it('prefers the working-directory API over a launcher dependency', () => {

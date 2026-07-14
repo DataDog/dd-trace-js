@@ -3,7 +3,7 @@
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
-const { getApiBinding, registerApi } = require('./api')
+const { getApiBinding, getApiOwner } = require('./api')
 
 const ContextManager = require('./context_manager')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
@@ -75,10 +75,7 @@ class TracerProvider {
     this.#registered = true
     this.#registrationConfig = config
     this.#getApiBinding()
-    registerApi({
-      activate: api => this.#activate(api),
-      deactivate: api => this.#deactivate(api),
-    })
+    this.#activate(getApiOwner())
   }
 
   /**
@@ -88,7 +85,7 @@ class TracerProvider {
     const { trace, context, propagation } = api
     context.setGlobalContextManager(this.#contextManager)
     if (!trace.setGlobalTracerProvider(this)) {
-      trace.getTracerProvider().setDelegate(this)
+      trace.getTracerProvider().setDelegate?.(this)
     }
     // The default propagator used is the W3C Trace Context propagator, users should be able to pass in others
     // as needed
@@ -100,16 +97,7 @@ class TracerProvider {
   }
 
   /**
-   * @param {typeof import('@opentelemetry/api')} api
-   */
-  #deactivate (api) {
-    api.trace.disable()
-    api.context.disable()
-    api.propagation.disable()
-  }
-
-  /**
-   * @returns {{ current: typeof import('@opentelemetry/api') }}
+   * @returns {import('./api').ApiBinding}
    */
   #getApiBinding () {
     if (!this.#apiBinding) {

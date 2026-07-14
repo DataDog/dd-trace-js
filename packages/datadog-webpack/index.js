@@ -9,14 +9,14 @@ const extractPackageAndModulePath = require('../datadog-instrumentations/src/hel
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { matchesOptionalPeerFile } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const {
-  getApplicationOtelApiPackages,
+  createApplicationOtelApiPackageResolver,
 } = require('../datadog-instrumentations/src/helpers/otel-api-externals')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
-const OTEL_API_HOLDER_DIRECTORY = path.dirname(require.resolve('../dd-trace/src/opentelemetry/api'))
-const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api')
+const OTEL_API_HOLDER_PATH = require.resolve('../dd-trace/src/opentelemetry/api').replaceAll('\\', '/')
+const OTEL_API_HOLDER_DIRECTORY = path.posix.dirname(OTEL_API_HOLDER_PATH)
 const OTEL_API_PACKAGES = new Set(['@opentelemetry/api', '@opentelemetry/api-logs'])
 const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
@@ -162,7 +162,7 @@ class DatadogWebpackPlugin {
     })
 
     const workingDirectory = compiler.options.context || process.cwd()
-    const applicationOtelApiPackages = getApplicationOtelApiPackages(workingDirectory)
+    const resolveApplicationOtelApiPackages = createApplicationOtelApiPackageResolver(workingDirectory)
     const outputModule = compiler.options.experiments?.outputModule || compiler.options.output?.module
     const externalType = outputModule ? 'node-commonjs' : 'commonjs'
     /**
@@ -172,8 +172,8 @@ class DatadogWebpackPlugin {
     const otelApiExternal = ({ context, request }, callback) => {
       const packageName = getOtelApiPackageName(request)
       if (!packageName) return callback()
-      if (context === OTEL_API_HOLDER_DIRECTORY) return callback(null, false)
-      if (applicationOtelApiPackages.has(packageName)) {
+      if (context?.replaceAll('\\', '/') === OTEL_API_HOLDER_DIRECTORY) return callback(null, false)
+      if (resolveApplicationOtelApiPackages(context).has(packageName)) {
         return callback(null, `${externalType} ${request}`)
       }
       callback(null, false)
@@ -294,9 +294,13 @@ class DatadogWebpackPlugin {
 
         const version = packageJson.version
         const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
-        const moduleBaseDir = path.dirname(pkgJson)
-        const applicationOwned = resolveData.contextInfo?.issuer !== OTEL_API_HOLDER_PATH &&
-          applicationOtelApiPackages.get(pkg)?.moduleBaseDir === moduleBaseDir
+        const moduleBaseDir = path.dirname(pkgJson).replaceAll('\\', '/')
+        const issuer = resolveData.contextInfo?.issuer?.replaceAll('\\', '/')
+        const applicationPackage = resolveApplicationOtelApiPackages(
+          issuer && path.posix.dirname(issuer)
+        ).get(pkg)
+        const applicationOwned = issuer !== OTEL_API_HOLDER_PATH &&
+          applicationPackage?.moduleBaseDir === moduleBaseDir
 
         // The fallback API is consumed directly by the holder and does not need a hook publish.
         // Skipping its loader also lets Webpack bundle the package's ESM entrypoint unchanged.

@@ -21,7 +21,7 @@ class Tracer {
    * @param {import('@opentelemetry/core').InstrumentationLibrary} library
    * @param {object} config
    * @param {import('./tracer_provider')} tracerProvider
-   * @param {{ current: typeof import('@opentelemetry/api') }} [apiBinding]
+   * @param {import('./api').ApiBinding} [apiBinding]
    */
   constructor (library, config, tracerProvider, apiBinding = getApiBinding()) {
     this.#apiBinding = apiBinding
@@ -101,7 +101,7 @@ class Tracer {
   }
 
   startSpan (name, options = {}, context) {
-    const api = this.#apiBinding.current
+    const api = this.#apiBinding.current.api
     if (context === undefined) {
       context = api.context.active()
     }
@@ -170,7 +170,7 @@ class Tracer {
       return
     }
 
-    const api = this.#apiBinding.current
+    const api = this.#apiBinding.current.api
     const parentContext = context || api.context.active()
     const span = this.startSpan(name, options, parentContext)
     const contextWithSpanSet = api.trace.setSpan(parentContext, span)

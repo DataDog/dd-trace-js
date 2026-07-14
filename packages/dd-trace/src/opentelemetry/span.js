@@ -18,9 +18,7 @@ const SpanContext = require('./span_context')
 const spanEndingHook = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
-// SpanKind is an OTel spec enum of fixed numeric constants, identical across every copy of the API,
-// so reading it from whichever copy is resolved at load time is safe. Global API access stays
-// copy-sensitive because each copy applies its own version compatibility check (issue #6882).
+// SpanKind is a fixed spec enum available from every supported API copy.
 const { SpanKind } = getApi()
 
 const spanKindNames = {

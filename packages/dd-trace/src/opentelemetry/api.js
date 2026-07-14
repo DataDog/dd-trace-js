@@ -1,15 +1,13 @@
 'use strict'
 
-// Holder for the OpenTelemetry API packages the bridge registers its providers on.
+// Holder for the OpenTelemetry API packages used by the bridge.
 //
-// The bridge must register on the exact copy the application reads with: the OTel global API
-// rejects a provider registered by a copy older than the reader's and silently downgrades every
-// span to a no-op (issue #6882). The holder resolves from the application entrypoint first, while
-// the OpenTelemetry API instrumentations supply copies loaded through custom resolution.
+// Providers register once through dd-trace's compatibility-max fallback. Older application copies
+// can consume globals owned by that newer copy, while moving registrations between exact versions is
+// unsafe because the core API keeps its original version sentinel after disable() (issue #6882).
 //
-// When no supported application copy is available, the holder falls back to dd-trace's bundled
-// copy. This preserves the bridge and OTLP metrics/logs pipelines without forcing applications
-// that do not use OpenTelemetry directly to add its API packages.
+// Copy-local bridge operations use one immutable snapshot. A later application capture replaces
+// the whole snapshot with one pointer assignment without disturbing registered providers.
 
 /** @typedef {typeof import('@opentelemetry/api')} OtelApi */
 /** @typedef {typeof import('@opentelemetry/api-logs')} OtelApiLogs */
@@ -19,15 +17,13 @@
  * @property {boolean} [applicationOwned]
  */
 /**
- * @template T
- * @typedef {object} ApiBinding
- * @property {T} current
+ * @typedef {object} ApiSnapshot
+ * @property {OtelApi} api
+ * @property {OtelApiLogs} [apiLogs]
  */
 /**
- * @template T
- * @typedef {object} ApiRegistration
- * @property {(api: T) => void} activate
- * @property {(api: T) => void} deactivate
+ * @typedef {object} ApiBinding
+ * @property {ApiSnapshot} current
  */
 /**
  * @typedef {object} ApplicationLocation
@@ -42,11 +38,35 @@
 
 const API_VERSION_RANGE = '>=1.0.0 <1.10.0'
 const API_LOGS_VERSION_RANGE = '>=0.33.0 <1.0.0'
+const API_OWNER_VERSION = require('../../../../package.json').dependencies['@opentelemetry/api']
 
 /** @type {ApplicationLocation[] | undefined} */
 let applicationLocations
 /** @type {NodeRequire[] | undefined} */
 let applicationRequires
+
+function prepareApiOwner () {
+  const globalKey = Symbol.for('opentelemetry.js.api.1')
+  try {
+    const globalApi = Reflect.get(globalThis, globalKey)
+    if (!globalApi || typeof globalApi !== 'object' || globalApi.version === API_OWNER_VERSION) return
+    if (typeof globalApi.version !== 'string') return
+    if (!require('../../../../vendor/dist/semifies')(globalApi.version, API_VERSION_RANGE)) return
+
+    for (const key of Reflect.ownKeys(globalApi)) {
+      if (key !== 'version' && key !== 'diag') return
+    }
+
+    // A diagnostic logger creates the core global before any signal owns it. Move that diagnostic
+    // state to the newer compatible owner once so every supported API copy can consume later signals.
+    const ownerGlobal = { ...globalApi, version: API_OWNER_VERSION }
+    if (!Reflect.set(globalThis, globalKey, ownerGlobal)) {
+      require('../log').error('Unable to prepare the OpenTelemetry API global owner.')
+    }
+  } catch (error) {
+    require('../log').error('Unable to prepare the OpenTelemetry API global owner: %s', error)
+  }
+}
 
 /**
  * Returns resolution locations ordered by ownership. A nested entrypoint comes first so its
@@ -203,26 +223,6 @@ function hasHigherPriority (candidate, current) {
 }
 
 /**
- * @param {string} packageName
- * @param {string | undefined} version
- */
-function prepareGlobalRegistration (packageName, version) {
-  if (packageName !== '@opentelemetry/api' || !version) return
-
-  const major = version.slice(0, version.indexOf('.'))
-  const globalApi = Reflect.get(globalThis, Symbol.for(`opentelemetry.js.api.${major}`))
-  if (!globalApi || typeof globalApi !== 'object' || globalApi.version === version) return
-
-  // disable() removes providers but leaves the core API's global version behind. Transfer that
-  // container before the new copy registers or it rejects every provider with a version mismatch.
-  try {
-    globalApi.version = version
-  } catch (error) {
-    require('../log').error('Unable to transfer the OpenTelemetry API global to version %s.', version, error)
-  }
-}
-
-/**
  * Creates a holder for one OpenTelemetry API package. A fallback load is not considered an
  * application capture: requiring the fallback also runs the instrumentation synchronously, and
  * accepting that callback would prevent the application's later require from replacing it.
@@ -231,15 +231,16 @@ function prepareGlobalRegistration (packageName, version) {
  * @param {string} packageName
  * @param {string} versionRange
  * @param {() => T} loadFallback
+ * @param {(api: T) => void} promote
+ * @param {() => void} [prepareOwner]
  * @returns {{
- *   binding: () => ApiBinding<T>,
  *   finalize: () => T,
  *   get: () => T,
- *   register: (registration: ApiRegistration<T>) => void,
+ *   owner: () => T,
  *   set: (api: T, version?: string, isIitm?: boolean, hookMetadata?: HookMetadata) => T
  * }}
  */
-function createApiHolder (packageName, versionRange, loadFallback) {
+function createApiHolder (packageName, versionRange, loadFallback, promote, prepareOwner) {
   /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
   let applicationCapture
   /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
@@ -248,12 +249,26 @@ function createApiHolder (packageName, versionRange, loadFallback) {
   let fallback
   /** @type {{ api: T, priority: CapturePriority, version?: string } | undefined} */
   let finalized
-  /** @type {ApiBinding<T> | undefined} */
-  let binding
-  /** @type {Set<ApiRegistration<T>>} */
-  const registrations = new Set()
   let applicationChecked = false
   let loadingFallback = false
+
+  /**
+   * @returns {{ api: T, priority: CapturePriority, version?: string }}
+   */
+  function owner () {
+    if (fallback) return fallback
+
+    loadingFallback = true
+    try {
+      fallback = {
+        api: loadFallback(),
+        priority: { rootIndex: Number.MAX_SAFE_INTEGER, depth: Number.MAX_SAFE_INTEGER },
+      }
+    } finally {
+      loadingFallback = false
+    }
+    return fallback
+  }
 
   /**
    * @returns {{ api: T, priority: CapturePriority, version?: string }}
@@ -274,18 +289,7 @@ function createApiHolder (packageName, versionRange, loadFallback) {
     }
     if (applicationCapture) return applicationCapture
     if (captured) return captured
-    if (fallback) return fallback
-
-    loadingFallback = true
-    try {
-      fallback = {
-        api: loadFallback(),
-        priority: { rootIndex: Number.MAX_SAFE_INTEGER, depth: Number.MAX_SAFE_INTEGER },
-      }
-    } finally {
-      loadingFallback = false
-    }
-    return fallback
+    return owner()
   }
 
   /**
@@ -304,47 +308,12 @@ function createApiHolder (packageName, versionRange, loadFallback) {
   }
 
   /**
-   * @returns {ApiBinding<T>}
+   * @returns {T}
    */
-  function getBinding () {
-    if (!binding) binding = { current: finalize() }
-    return binding
-  }
-
-  /**
-   * @param {{ api: T, priority: CapturePriority, version?: string }} candidate
-   */
-  function transition (candidate) {
-    const previous = finalized
-    const currentRegistrations = [...registrations]
-
-    for (const registration of currentRegistrations) {
-      try {
-        registration.deactivate(previous.api)
-      } catch (error) {
-        require('../log').error('Error deactivating the previous %s registration.', packageName, error)
-      }
-    }
-
-    prepareGlobalRegistration(packageName, candidate.version)
-    finalized = candidate
-    if (binding) binding.current = candidate.api
-
-    for (const registration of currentRegistrations) {
-      try {
-        registration.activate(candidate.api)
-      } catch (error) {
-        require('../log').error('Error activating the new %s registration.', packageName, error)
-      }
-    }
-  }
-
-  /**
-   * @param {ApiRegistration<T>} registration
-   */
-  function register (registration) {
-    registrations.add(registration)
-    registration.activate(finalize())
+  function getOwner () {
+    const api = owner().api
+    prepareOwner?.()
+    return api
   }
 
   /**
@@ -361,11 +330,9 @@ function createApiHolder (packageName, versionRange, loadFallback) {
     if (finalized) {
       if (hasHigherPriority(candidate.priority, finalized.priority)) {
         captured = candidate
-        if (api === finalized.api) {
-          finalized = candidate
-        } else {
-          transition(candidate)
-        }
+        const changed = api !== finalized.api
+        finalized = candidate
+        if (changed) promote(api)
       }
       return api
     }
@@ -376,7 +343,7 @@ function createApiHolder (packageName, versionRange, loadFallback) {
     return api
   }
 
-  return { binding: getBinding, finalize, get, register, set }
+  return { finalize, get, owner: getOwner, set }
 }
 
 /**
@@ -393,18 +360,63 @@ function loadApiLogs () {
   return require('@opentelemetry/api-logs')
 }
 
-const apiHolder = createApiHolder('@opentelemetry/api', API_VERSION_RANGE, loadApi)
-const apiLogsHolder = createApiHolder('@opentelemetry/api-logs', API_LOGS_VERSION_RANGE, loadApiLogs)
+/** @type {ApiBinding | undefined} */
+let apiBinding
+
+/**
+ * @param {OtelApi} api
+ */
+function promoteApi (api) {
+  if (apiBinding) apiBinding.current = { api, apiLogs: apiBinding.current.apiLogs }
+}
+
+/**
+ * @param {OtelApiLogs} apiLogs
+ */
+function promoteApiLogs (apiLogs) {
+  if (apiBinding) apiBinding.current = { api: apiBinding.current.api, apiLogs }
+}
+
+const apiHolder = createApiHolder('@opentelemetry/api', API_VERSION_RANGE, loadApi, promoteApi, prepareApiOwner)
+const apiLogsHolder = createApiHolder('@opentelemetry/api-logs', API_LOGS_VERSION_RANGE, loadApiLogs, promoteApiLogs)
+
+/**
+ * @returns {ApiBinding}
+ */
+function getApiBinding () {
+  if (!apiBinding) {
+    apiBinding = {
+      current: {
+        api: apiHolder.finalize(),
+      },
+    }
+  }
+  return apiBinding
+}
+
+/**
+ * @returns {ApiBinding}
+ */
+function getApiLogsBinding () {
+  const binding = getApiBinding()
+  if (!binding.current.apiLogs) {
+    binding.current = {
+      api: binding.current.api,
+      apiLogs: apiLogsHolder.finalize(),
+    }
+  }
+  return binding
+}
 
 module.exports = {
   API_LOGS_VERSION_RANGE,
   API_VERSION_RANGE,
-  finalizeApi: apiHolder.finalize,
   getApi: apiHolder.get,
-  getApiBinding: apiHolder.binding,
+  getApiBinding,
   getApiLogs: apiLogsHolder.get,
-  registerApi: apiHolder.register,
-  registerApiLogs: apiLogsHolder.register,
+  getApiLogsBinding,
+  getApiLogsOwner: apiLogsHolder.owner,
+  getApiOwner: apiHolder.owner,
   setApi: apiHolder.set,
   setApiLogs: apiLogsHolder.set,
 }
