@@ -13,13 +13,22 @@ class DSMTextMapPropagator {
     this.config = config
   }
 
+  /**
+   * @param {object} ctx DSM pathway context.
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
+   */
   inject (ctx, carrier) {
     if (!this.config.dsmEnabled) return
 
-    DsmPathwayCodec.encode(ctx, carrier)
+    const injectedCarrier = DsmPathwayCodec.encode(ctx, carrier)
+    if (injectedCarrier === undefined) return
 
+    carrier = injectedCarrier
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier (DSM): ${JSON.stringify(pick(carrier, logKeys))}.`)
+
+    return carrier
   }
 
   extract (carrier) {
