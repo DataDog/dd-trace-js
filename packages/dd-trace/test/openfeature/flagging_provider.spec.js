@@ -211,20 +211,24 @@ describe('FlaggingProvider', () => {
     })
   })
 
-  // Pins the optional-peer gate against accidental regression to a direct
-  // `require('@datadog/openfeature-node-server')`, which would leak the optional peer chain
-  // into customer bundles (see #8635). The opaque-load mechanism is covered by
-  // `datadog-instrumentations/test/helpers/require-optional-peer.spec.js`.
+  // Pins the optional-peer gate against leaking the provider chain into customer bundles (#8635).
+  // `file-tracing.spec.js` covers the same wrapper's nft contract.
   describe('optional-peer gate', () => {
     const modulePath = require.resolve('../../src/openfeature/flagging_provider')
+    const providerModulePath = require.resolve('../../src/openfeature/require-provider')
+    const peer = '@datadog/openfeature-node-server'
 
     afterEach(() => {
       delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
+      delete globalThis.__webpack_require__
+      delete globalThis.__non_webpack_require__
     })
 
     it('uses `require` outside a bundler', () => {
       assert.strictEqual(typeof globalThis.__webpack_require__, 'undefined')
       delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
 
       const ReloadedFlaggingProvider = require(modulePath)
 
@@ -232,9 +236,40 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })
 
+    it('uses `__non_webpack_require__`, never `__webpack_require__`, under webpack', () => {
+      const loadCalls = []
+      globalThis.__webpack_require__ = () => {
+        throw new Error('webpack require must not run for an optional peer')
+      }
+      /** @param {string} request */
+      globalThis.__non_webpack_require__ = (request) => {
+        loadCalls.push(request)
+        return require(request)
+      }
+
+      delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.deepStrictEqual(loadCalls, [peer])
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+    })
+
+    it('falls back to `require` when `__non_webpack_require__` is absent', () => {
+      globalThis.__webpack_require__ = () => {
+        throw new Error('webpack require must not run for an optional peer')
+      }
+
+      delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+    })
+
     it('does not statically require `@datadog/openfeature-node-server`', () => {
       const fs = require('node:fs')
-      const source = fs.readFileSync(modulePath, 'utf8')
+      const source = fs.readFileSync(providerModulePath, 'utf8')
 
       assert.doesNotMatch(
         source,

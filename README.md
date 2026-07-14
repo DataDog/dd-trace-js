@@ -93,6 +93,15 @@ Regardless of where you open the issue, someone at Datadog will try to help.
 
 If you would like to trace your bundled application then please read this page on [bundling and dd-trace](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling). It includes information on how to use our ESBuild plugin and includes caveats for other bundlers.
 
+When using the experimental OpenFeature provider, file-traced deployments can force the optional provider and
+its dependencies into the output with a side-effect import before accessing `tracer.openfeature`:
+
+```js
+import 'dd-trace/openfeature'
+```
+
+This is a fallback for build tools that do not recognize the provider's optional-require wrapper.
+
 
 ## Security Vulnerabilities
 
