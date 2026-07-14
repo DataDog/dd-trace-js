@@ -6,6 +6,7 @@ const { addHook, getHooks } = require('./helpers/instrument')
 
 const requestChannel = tracingChannel('h3.request')
 const requestContexts = new WeakMap()
+const nitroVersions = ['>=3.0.0-0 <4']
 
 function wrapHandler (handler) {
   if (typeof handler !== 'function' || handler.__dd_traced__ || handler.__traced__) return handler
@@ -101,15 +102,21 @@ function ddTracingPlugin (app) {
   }
 }
 
-// Orchestrion publishes the freshly constructed H3 instance here.
-tracingChannel('orchestrion:h3:H3_constructor').subscribe({
-  end (ctx) {
-    ctx.self?.register(ddTracingPlugin)
-  },
-})
+function applyH3TracingPlugin (ctx) {
+  if (ctx.self) ddTracingPlugin(ctx.self)
+}
+
+function applyH3CoreTracingPlugin (ctx) {
+  if (ctx.self && typeof ctx.self.register !== 'function') ddTracingPlugin(ctx.self)
+}
+
+// Orchestrion publishes freshly constructed H3 and H3Core instances here.
+tracingChannel('orchestrion:h3:H3_constructor').subscribe({ end: applyH3TracingPlugin })
+tracingChannel('orchestrion:h3:H3Core_constructor').subscribe({ end: applyH3CoreTracingPlugin })
 
 for (const hook of getHooks('h3')) {
   addHook(hook, h3Module => h3Module)
 }
 
-addHook({ name: 'nitro', versions: ['>=3'] }, nitro => nitro)
+addHook({ name: 'nitro', versions: nitroVersions }, nitro => nitro)
+addHook({ name: 'nitro', versions: nitroVersions, file: 'dist/runtime/virtual/app.mjs' }, nitro => nitro)

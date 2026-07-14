@@ -6,6 +6,7 @@ tracer.init()
 tracer.use('nitro', {
   service: 'configured-nitro',
   validateStatus: status => status < 600,
+  headers: ['x-secret', 'x-response'],
   hooks: {
     request (span) {
       span.setTag('nitro.request_hook', 'true')
@@ -15,6 +16,11 @@ tracer.use('nitro', {
 
 const app = new H3()
 app.get('/response-error', () => new Response('bad', { status: 503 }))
+app.get('/headers', () => new Response('ok', {
+  headers: {
+    'x-response': 'response-secret',
+  },
+}))
 
 const server = http.createServer(toNodeHandler(app))
 // Bind on all interfaces (no host) so the test client can reach it whether

@@ -41,8 +41,8 @@ describe('nitro ESM', () => {
   let agent
   let proc
 
-  // Install h3 into a sandbox; the spawned servers import it as ESM from there.
-  useSandbox(["'h3@2.0.1-rc.22'"], false, [
+  // Install h3 and nitro into a sandbox; the spawned servers import them as ESM from there.
+  useSandbox(["'h3@2.0.1-rc.22'", "'nitro@3.0.260522-beta'", "'std-env@3.10.0'"], false, [
     path.join(__dirname, '*'),
   ])
 
@@ -114,6 +114,21 @@ describe('nitro ESM', () => {
       assert.strictEqual(span.resource, 'GET')
       assert.strictEqual(span.meta['http.method'], 'GET')
       assert.strictEqual(span.meta['http.route'], undefined)
+      assert.strictEqual(span.meta['http.status_code'], '404')
+      assert.strictEqual(span.error, 0)
+    })
+    const res = await httpGet(`${proc.url}/missing`)
+    assert.strictEqual(res.statusCode, 404)
+    return assertion
+  }).timeout(30000)
+
+  it('creates a nitro.server.request span for the Nitro runtime H3Core app', async () => {
+    await spawnServer('server-nitro.mjs')
+    const assertion = agent.assertMessageReceived(({ payload }) => {
+      const span = findNitroSpan(payload)
+      assert.ok(span, 'expected a nitro.server.request span')
+      assert.strictEqual(span.resource, 'GET')
+      assert.strictEqual(span.meta['http.method'], 'GET')
       assert.strictEqual(span.meta['http.status_code'], '404')
       assert.strictEqual(span.error, 0)
     })
@@ -197,6 +212,23 @@ describe('nitro ESM', () => {
     })
     const res = await httpGet(`${proc.url}/response-error`)
     assert.strictEqual(res.statusCode, 503)
+    return assertion
+  }).timeout(30000)
+
+  it('honors HttpServer query-string obfuscation and configured headers', async () => {
+    await spawnServer('server-config.mjs')
+    const assertion = agent.assertMessageReceived(({ payload }) => {
+      const span = findNitroSpan(payload)
+      assert.ok(span, 'expected a nitro.server.request span')
+      assert.strictEqual(span.resource, 'GET /headers')
+      assert.strictEqual(span.meta['http.url'], `${proc.url}/headers?<redacted>&foo=bar`)
+      assert.strictEqual(span.meta['http.request.headers.x-secret'], 'request-secret')
+      assert.strictEqual(span.meta['http.response.headers.x-response'], 'response-secret')
+    }, 10000)
+    const res = await httpGet(`${proc.url}/headers?password=secret&foo=bar`, {
+      'x-secret': 'request-secret',
+    })
+    assert.strictEqual(res.statusCode, 200)
     return assertion
   }).timeout(30000)
 
