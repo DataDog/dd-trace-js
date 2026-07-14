@@ -944,12 +944,21 @@ function preparePluginIntegrationTestSpawnOptions (
 
   const scriptPath = path.join(cwd, serverFile)
 
+  // When running under c8-ci.js (NODE_V8_COVERAGE set, integration coverage harness inactive),
+  // strip NODE_V8_COVERAGE from the fixture subprocess. These short-lived fixture processes can
+  // hang during V8 coverage flush on exit — especially oracledb 6.x ESM, which loads many more
+  // modules than 5.x and triggers a coverage serialisation that outlasts the 20s test timeout.
+  // The integration coverage harness (when active) handles V8 coverage propagation itself via its
+  // child_process patch; stripping here only applies to the c8-ci.js path where that harness is off.
+  const { NODE_V8_COVERAGE: _v8Coverage, ...parentEnv } = process.env
+  const baseEnv = (!isCoverageActive() && 'NODE_V8_COVERAGE' in process.env) ? parentEnv : process.env
+
   return {
     filename: scriptPath,
     options: {
       cwd,
       env: {
-        ...process.env,
+        ...baseEnv,
         NODE_OPTIONS,
         DD_TRACE_AGENT_PORT: String(agentPort),
         DD_TRACE_FLUSH_INTERVAL: '0',
