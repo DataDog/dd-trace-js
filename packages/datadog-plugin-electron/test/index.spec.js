@@ -64,8 +64,14 @@ describe('Plugin', () => {
 
         afterEach(() => agent.close({ ritmReset: false }))
         afterEach(done => {
-          child.send({ name: 'quit' })
-          child.on('close', () => done())
+          const proc = child
+          child = undefined
+          // The child may have already exited (e.g. an app crash mid-test). Sending on a closed IPC channel emits
+          // an unhandled ERR_IPC_CHANNEL_CLOSED 'error' that masks the real failure and aborts the rest of the
+          // suite, so only quit a still-connected child and let the send callback absorb a channel that races closed.
+          if (!proc?.connected) return done()
+          proc.once('close', () => done())
+          proc.send({ name: 'quit' }, () => {})
         })
 
         it('should do automatic instrumentation for fetch', done => {

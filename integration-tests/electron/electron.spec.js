@@ -115,8 +115,11 @@ describe('Electron integration', function () {
   afterEach(done => {
     const proc = child
     child = null
-    proc.send({ name: 'quit' })
+    // Sending on a closed IPC channel emits an unhandled ERR_IPC_CHANNEL_CLOSED 'error' that masks the real
+    // failure, so only quit a still-connected child and let the send callback absorb a channel that races closed.
+    if (!proc?.connected) return done()
     proc.once('close', done)
+    proc.send({ name: 'quit' }, () => {})
   })
 
   it('should create an http.request span for net.fetch calls', done => {
