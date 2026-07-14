@@ -1,0 +1,105 @@
+name: dd-trace-js-agent
+version: "0.1"
+
+# The cases below exercise repository guidance loaded through CLAUDE.md's AGENTS.md import. Every repository-specific
+# command and path in the criteria is verified against this checkout; the comparative judge has no repository access.
+cases:
+  - id: dd-trace-js-package-manager-001
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I changed one dd-trace-js unit spec and need to install dependencies and run just that test.
+      Which package manager and commands should I use? Should I run the root test script too?
+    expected_criteria:
+      - Uses yarn only to install dependencies or services, such as yarn install or yarn services.
+      - Runs a specific spec with ./node_modules/.bin/mocha path/to/test.spec.js, using npm rather than yarn for repository scripts.
+      - Warns that the root npm test command is intentionally disabled and recommends a specific spec or targeted npm run test:<area> script.
+    bad_signals:
+      - Uses yarn to run lint, build, or test scripts other than yarn services.
+      - Recommends the root npm test command as a useful validation step.
+      - Runs the entire test suite before the affected spec.
+
+  - id: dd-trace-js-plugin-tests-002
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I changed the amqplib plugin. Show me how to run only its tests when RabbitMQ is required,
+      and call out the environment issue that can make span assertions time out in instrumented shells.
+    expected_criteria:
+      - Selects the plugin with PLUGINS="amqplib" and uses npm run test:plugins after bringing up the required service and running yarn services.
+      - Starts the RabbitMQ dependency with docker compose and checks .github/workflows/apm-integrations.yml for the applicable SERVICES value.
+      - Unsets OTEL_TRACES_EXPORTER, OTEL_LOGS_EXPORTER, and OTEL_METRICS_EXPORTER before plugin tests so spans reach the local mock agent.
+    bad_signals:
+      - Uses yarn to run the plugin test script.
+      - Raises the timeout without diagnosing spans being routed through the OTLP exporter.
+      - Runs every plugin's tests instead of selecting amqplib.
+
+  - id: dd-trace-js-new-configuration-003
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I am adding a public DD_ environment variable for a new size limit in dd-trace-js.
+      What needs to change end to end, including naming, types, telemetry, documentation, and tests?
+    expected_criteria:
+      - Gives the option a unit-bearing name such as maxBytes and adds its default in packages/dd-trace/src/config/defaults.js.
+      - Maps the environment variable in the #applyEnvironment method in packages/dd-trace/src/config/index.js.
+      - Updates index.d.ts and index.d.v5.ts unless the API is explicitly v6-only.
+      - Updates packages/dd-trace/src/config/supported-configurations.json and the telemetry name mapping when applicable.
+      - Documents a non-internal, non-experimental option in docs/API.md and tests it in packages/dd-trace/test/config/index.spec.js.
+    bad_signals:
+      - Adds the environment variable mapping without a default or a supported-configurations entry.
+      - Omits index.d.v5.ts for an API that is not v6-only.
+      - Uses a size option name without a unit suffix.
+
+  - id: dd-trace-js-test-boundaries-004
+    files: [AGENTS.md, CLAUDE.md]
+    input: |
+      I fixed a 32-entry cap and need regression tests. What boundary cases and assertion style should I use,
+      and how should I handle two promises that must both settle?
+    expected_criteria:
+      - Tests both 32 as the last accepted value and 33 as the first rejected value.
+      - Uses node:assert/strict, favoring assert.deepStrictEqual for the data shape and assert.strictEqual for unrelated scalars.
+      - Uses assert.throws or assert.rejects with relevant error fields instead of manual try/catch plus assert.fail.
+      - Awaits both promises with Promise.all so one is not left temporarily unhandled.
+      - Checks existing specs and adds the failure plus uncovered sibling cases sharing the fixed path.
+    bad_signals:
+      - Tests only values comfortably below and above the boundary.
+      - Uses real time passing for a time-based unit test instead of sinon fake timers.
+      - Weakens an assertion or raises a timeout to hide the underlying failure.
+
+  - id: dd-trace-js-new-cache-integration-005
+    files: [AGENTS.md, CLAUDE.md]
+    only_warn: true
+    input: |
+      We want to add automatic tracing for a hypothetical Redis-like package named acme-cache, starting at v2.
+      Upstream inspection confirmed that Client.execute(command, ...args) is async and implemented separately in
+      dist/cjs/client.js and dist/esm/client.js. The client talks directly to a cache service and must produce spans
+      for successful and failed commands. Inspect this repository and give me a concrete, file-by-file implementation
+      and verification plan. Cover the instrumentation approach and event lifecycle, plugin architecture, registration,
+      public types, documentation, unit and ESM tests, CI, and the commands you would run. Do not modify files yet.
+    expected_criteria:
+      - Starts from the confirmed upstream contract, reads one or two cache integration references, and chooses Orchestrion by default rather than shimmer.
+      - Adds Orchestrion entries for both dist/cjs/client.js and dist/esm/client.js with the same channel, plus the instrumentation hook and packages/datadog-instrumentations/src/helpers/hooks.js registration.
+      - Keeps tracing out of the instrumentation layer and creates packages/datadog-plugin-acme-cache using CachePlugin, with a prefix matching the Orchestrion channel and bindStart extracting command and connection data from ctx.arguments or ctx.self.
+      - Registers the plugin in packages/dd-trace/src/plugins/index.js, index.d.ts, index.d.v5.ts, docs/test.ts, docs/API.md, and .github/workflows/apm-integrations.yml.
+      - Covers success, error, configuration, and supported-version behavior in plugin specs; adds native ESM coverage for relevant import forms; validates with the plugin-structure spec and PLUGINS="acme-cache" npm run test:plugins:ci.
+    bad_signals:
+      - Implements only a plugin or only instrumentation instead of both diagnostic-channel layers.
+      - Uses shimmer without identifying a concrete pattern Orchestrion cannot support.
+      - Creates spans directly in packages/datadog-instrumentations or instruments only one module format.
+      - Omits the frozen v5 type surface for a plugin that is not declared v6-only.
+      - Runs the disabled root npm test command or uses yarn to run test scripts.
+
+  - id: dd-trace-js-hot-path-review-006
+    files: [AGENTS.md, CLAUDE.md]
+    only_warn: true
+    input: |
+      Review a proposed tracer hot-path rewrite that replaces a readable array transformation with a hand-written loop,
+      probes object emptiness with Object.keys(value).length, and adds async/await to production package code.
+      What should change, and what evidence is required for the performance rewrite?
+    expected_criteria:
+      - Rejects Object.keys(value).length as an emptiness probe because it allocates and suggests tracking presence, probing a known key, or returning undefined when empty.
+      - Rejects async/await and promises in production package code except allowed worker-thread locations, while allowing them in tests.
+      - Requires a one-file microbenchmark with about one second of warmup, at least five trials, and a fresh-shell reproduction before keeping a speed-motivated rewrite.
+      - Keeps the more readable implementation when results are within roughly two percent and expects a commit-body justification around a reproducible five-percent marginal win.
+    bad_signals:
+      - Accepts the loop as faster without benchmark evidence.
+      - Recommends Object.keys(value).length in the tracer hot path.
+      - Treats async/await as acceptable in ordinary production package code.

@@ -1,0 +1,26 @@
+# LLM Validation Platform — dd-trace-js config
+model: claude-opus-4-8
+runs: 3
+
+# CLAUDE.md loads AGENTS.md, so changes to either file can alter the effective instruction set.
+instruction_files:
+  - AGENTS.md
+  - CLAUDE.md
+
+default_level: minimum
+presets:
+  minimum:
+    cases: ["dd-trace-js-package-manager-001", "dd-trace-js-plugin-tests-002"]
+    runs: 4
+  medium:
+    max_cases: 5
+    runs: 3
+  full:
+    runs: 3
+
+# Block only confident regressions; noisy results remain advisory.
+policy:
+  noise_threshold: 1.0
+  pairwise_win_floor: 0.45
+  blocking_fail_floor: 0.45
+  blocking_fail_ci_upper: 0.55
