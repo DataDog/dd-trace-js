@@ -20,6 +20,16 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
   }
 
   /**
+   * Recomputes the resource attributes baked into the transformer (e.g. after a MicroVM clone
+   * resume regenerates `runtime-id`).
+   *
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#transformer.updateResourceAttributes(resourceAttributes)
+  }
+
+  /**
    * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
    * @param {number} bucketSizeNs
    * @param {Function} [done] Called after the HTTP export completes

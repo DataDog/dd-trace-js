@@ -8,6 +8,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
@@ -15,6 +16,8 @@ const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -1282,6 +1285,57 @@ describe('OpenTelemetry Meter Provider', () => {
       } finally {
         clock.restore()
       }
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('recomputes resource attributes when the identity-refresh channel fires', () => {
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+      const config = {
+        service: 'svc',
+        version: '1.0.0',
+        env: 'prod',
+        tags: { 'runtime-id': 'initial-id' },
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 5000,
+        OTEL_METRIC_EXPORT_INTERVAL: 100_000,
+      }
+
+      initializeOpenTelemetryMetrics(config)
+      const provider = metrics.getMeterProvider()
+      const exporter = provider.reader.exporter
+      const updateSpy = sinon.spy(exporter, 'updateResourceAttributes')
+
+      // Simulates `proxy.js#refreshIdentity` mutating `config.tags['runtime-id']` in place and
+      // then publishing to the shared identity-refresh channel (MicroVM clone resume).
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnce(updateSpy)
+      assert.strictEqual(updateSpy.firstCall.args[0]['runtime-id'], 'refreshed-id')
+    })
+
+    it('replaces the previous identity-refresh subscription so listeners do not accumulate', () => {
+      const { initializeOpenTelemetryMetrics } = proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+      const config = {
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+        OTEL_METRIC_EXPORT_INTERVAL: 100_000,
+        tags: {},
+      }
+
+      initializeOpenTelemetryMetrics(config)
+      const firstExporter = metrics.getMeterProvider().reader.exporter
+      const firstSpy = sinon.spy(firstExporter, 'updateResourceAttributes')
+
+      metrics.disable()
+      initializeOpenTelemetryMetrics(config)
+      const secondExporter = metrics.getMeterProvider().reader.exporter
+      const secondSpy = sinon.spy(secondExporter, 'updateResourceAttributes')
+
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.notCalled(firstSpy)
+      sinon.assert.calledOnce(secondSpy)
     })
   })
 })
