@@ -215,16 +215,59 @@ explicitly compares compatibility with another version.
   Repair rationale, architecture score, commands, outputs, and structured result:
   `.dd-apm-evidence/genkit/28-test-fixer.md`, `.dd-apm-evidence/genkit/28-test-fixer-result.json`, and
   `.dd-apm-evidence/genkit/28-attempts/`.
-- [ ] 29 Review: human-quality gate. Evidence: automated engineering review completed and its sole blocker,
+- [x] 29 Review: human-quality gate. Evidence: automated engineering review completed and its sole blocker,
   `GENKIT-HUMAN-001`, was repaired test-first by moving `preserveOtelContext` from ambient span state to the
   operation-scoped Genkit store. Fresh validation passes: targeted regression 1/1, default Genkit 23/23,
   OTel-enabled Genkit 23/23, and shared OTel context-manager/tracer 49/49, plus targeted lint/syntax/diff checks.
-  Literal human approval remains unavailable and is not marked passed; Stage 30 must not begin without explicit
-  workflow-owner approval or waiver. Review, reproduction, remediation, commands, and structured status:
+  The authenticated workflow owner explicitly approved continuation on 2026-07-14 after reviewing the repaired
+  handoff; this approval does not waive final gates. Review, reproduction, remediation, commands, and approval:
   `.dd-apm-evidence/genkit/29-human-review.md`, `.dd-apm-evidence/genkit/29-human-review.json`,
-  `.dd-apm-evidence/genkit/29-human-review-fix.md`, and `.dd-apm-evidence/genkit/29-human-review-fix.json`.
-- [ ] 30 Review: finalize. Evidence: pending
-- [ ] 31 Final gate: build. Evidence: pending
-- [ ] 32 Final gate: tests. Evidence: pending
-- [ ] 33 Final gate: lint. Evidence: pending
-- [ ] 34 Final gate: live observability. Evidence: pending
+  `.dd-apm-evidence/genkit/29-human-review-fix.md`, `.dd-apm-evidence/genkit/29-human-review-fix.json`, and
+  `.dd-apm-evidence/genkit/29-human-approval.md`.
+- [x] 30 Review: finalize. Evidence: independent reconciliation approved the frozen 24-file source/test/config
+  diff (`7ae72584fa94013b2e3db0f5bc465064a81aa77560d4978261b6a54559bf3abd`). All Stage 25 todos,
+  Stage 27 coverage gaps, and `GENKIT-HUMAN-001` are resolved; authenticated human approval is recorded and no
+  review blocker remains. Fresh exact-version default and OTel-enabled Genkit suites pass 23/23 each, shared OTel
+  suites pass 49/49, plugin structure passes 171/171, and syntax/diff checks pass. ReviewResult, finding ledger,
+  commands, source hash, and downstream obligations: `.dd-apm-evidence/genkit/30-review-finalize.md` and
+  `.dd-apm-evidence/genkit/30-review-finalize.json`.
+- [x] 31 Final gate: build. Evidence: after regenerating canonical supported-integration artifacts and repairing
+  seven change-introduced production type diagnostics, the frozen source diff
+  `2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422` passes both generated verifiers,
+  all 16 changed JavaScript syntax checks, and original-base differential type analysis with zero diagnostics on
+  introduced production statements. The canonical type script remains blocked before source checking by unchanged
+  TS6 config deprecations; the TS6-bypassed repository check retains 6,539 existing diagnostics, including 11 on
+  byte-identical original-base statements, all documented rather than waived as change-owned errors. Failure,
+  generated repair, type repair, final commands, hashes, and behavior-equivalence audit:
+  `.dd-apm-evidence/genkit/31-final-build.md`, `.dd-apm-evidence/genkit/31-build-repair.md`,
+  `.dd-apm-evidence/genkit/31-final-build-retry.md`, `.dd-apm-evidence/genkit/31-type-repair.md`, and
+  `.dd-apm-evidence/genkit/31-final-build-final.md` with companion JSON artifacts.
+- [x] 32 Final gate: tests. Evidence: on frozen diff
+  `2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422`, authoritative
+  `PLUGINS=genkit npm run test:plugins:ci` passes 23/23 after unsetting OTel exporters and the sandbox's inherited
+  empty `DD_AGENT_HOST`; the required first run with only exporters unset is retained as an environment-only
+  2-pass/21-timeout failure. Direct default and OTel-enabled Genkit suites pass 23/23 each, shared OTel suites
+  49/49, and plugin structure 171/171, with zero failures/pending/skips. Coverage audit found 876 added and zero
+  deleted behavioral-spec lines, no deleted declarations, and no skip/only markers. Commands, counts, integrity
+  hashes, environment diagnosis, and logs: `.dd-apm-evidence/genkit/32-final-tests.md`,
+  `.dd-apm-evidence/genkit/32-final-tests.json`, and `.dd-apm-evidence/genkit/32-attempts/`.
+- [x] 33 Final gate: lint. Evidence: on frozen diff
+  `2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422`, all 16 changed/new
+  JavaScript files pass repository ESLint with zero warnings and syntax checks; diff/whitespace, generated config
+  and supported-integrations, JSON/YAML, CODEOWNERS (1,640 files, 0 unknown), and exercised-test validation (799
+  tests) pass. Differential typing reproduces zero introduced production diagnostics. Canonical type-check remains
+  blocked by unchanged TS6 config debt and repository-wide CI verification by the existing unrelated
+  `confluentinc-kafka-javascript` npm E404; both are fully logged and not misreported as Genkit-clean commands.
+  Exact commands, classifications, counts, frozen hashes, and logs: `.dd-apm-evidence/genkit/33-final-lint.md`,
+  `.dd-apm-evidence/genkit/33-final-lint.json`, and `.dd-apm-evidence/genkit/33-attempts/`.
+- [x] 34 Final gate: live observability. Evidence: the unchanged real Stage 9 sample ran against exact
+  `genkit@1.21.0`/`@genkit-ai/core@1.21.0` and the current built tracer with OTel enabled on frozen diff
+  `2f18329cc57421c538109e8fab5a216cd52a6f36a1ba2d1d3d547a3948bf1422`. All 14 application cases completed
+  (7 success, 7 expected error, 0 unexpected); the repository trace agent captured 21 authoritative APM spans
+  and 21 one-to-one LLMObs events: 7 `llm`, 4 `workflow`, 4 `tool`, 3 `retrieval`, and 3 `embedding`. Raw payload
+  inspection proves model/provider identity, five model events with numeric token metrics, final streaming output,
+  eight typed error events, exact workflow/step/action parenting, and absence of native Genkit duplicates, raw
+  Genkit input/output tags, embedding vectors, and excluded secrets. Reproduction harness, commands, provenance,
+  raw APM/LLMObs JSON, readable span index, validator, hashes, and final result:
+  `.dd-apm-evidence/genkit/34-final-observability.md`,
+  `.dd-apm-evidence/genkit/34-final-observability.json`, and `.dd-apm-evidence/genkit/34-*`.
