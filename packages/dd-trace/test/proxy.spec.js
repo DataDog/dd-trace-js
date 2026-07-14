@@ -200,11 +200,12 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
-    openfeatureProvider = {
-      _setConfiguration: sinon.spy(),
-    }
-
-    OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
+    OpenFeatureProvider = sinon.stub().callsFake(function () {
+      openfeatureProvider = {
+        _setConfiguration: sinon.spy(),
+      }
+      return openfeatureProvider
+    })
 
     flare = {
       enable: sinon.spy(),
@@ -258,9 +259,16 @@ describe('TracerProxy', () => {
     })
 
     const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
+    const noopOpenfeature = {}
+    function hasOpenfeatureProvider (proxy) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
+
+      return descriptor?.value !== undefined && descriptor.value !== noopOpenfeature
+    }
+
     featureRegistry.registerFeature({
       name: 'openfeature',
-      noop: {},
+      noop: noopOpenfeature,
       factory: () => openfeature,
       remoteConfig (rc, config, proxy) {
         openfeatureRcEnable(rc, config, () => proxy.openfeature)
@@ -268,7 +276,9 @@ describe('TracerProxy', () => {
       enable (config, tracer, proxy, lazyProxy) {
         if (config.experimental.flaggingProvider.enabled) {
           proxy._modules.openfeature.enable(config)
-          lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
+          if (!hasOpenfeatureProvider(proxy)) {
+            lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
+          }
         }
       },
     })
@@ -408,6 +418,24 @@ describe('TracerProxy', () => {
         handlers.get('FFE_FLAGS')('modify', flagConfig)
 
         sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
+      })
+
+      it('should keep OpenFeature bound to the provider that receives FFE_FLAGS after APM_TRACING updates', () => {
+        config.experimental.flaggingProvider.enabled = true
+
+        proxy.init()
+        const boundProvider = proxy.openfeature
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', {
+          tracing_enabled: true,
+        }))
+
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', flagConfig)
+
+        sinon.assert.calledOnce(OpenFeatureProvider)
+        assert.strictEqual(proxy.openfeature, boundProvider)
+        sinon.assert.calledOnceWithExactly(boundProvider._setConfiguration, flagConfig)
       })
 
       it('should support applying remote config', () => {
