@@ -4,11 +4,14 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const { channel } = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const getDebuggerConfig = require('./config')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -24,6 +27,7 @@ let ackId = 0
 let rcAckCallbacks = null
 let rc = null
 let inputPath = null
+let onIdentityRefresh = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -63,6 +67,11 @@ function start (config, rcInstance) {
   const probeChannel = new MessageChannel()
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
+
+  // Reuses the existing hot-reload path (`configure()` posts the current config over
+  // `configChannel`) instead of proxy.js reaching into the debugger directly.
+  onIdentityRefresh = () => configure(config)
+  identityRefreshChannel.subscribe(onIdentityRefresh)
 
   globalThis[Symbol.for('dd-trace')].utilTypes = types
 
@@ -183,6 +192,10 @@ function stop () {
  * @param {Error} [error] - Optional error to pass to pending ack callbacks (for unexpected exits)
  */
 function cleanup (error) {
+  if (onIdentityRefresh) {
+    identityRefreshChannel.unsubscribe(onIdentityRefresh)
+    onIdentityRefresh = null
+  }
   if (rc) {
     rc.removeProductHandler('LIVE_DEBUGGING')
     rc = null

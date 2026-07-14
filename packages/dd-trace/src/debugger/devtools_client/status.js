@@ -17,7 +17,6 @@ module.exports = {
 
 const ddsource = 'dd_debugger'
 const service = config.service
-const runtimeId = config.runtimeId
 
 const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 
@@ -110,7 +109,9 @@ function statusPayload (probeId, probeVersion, status) {
     ddsource,
     service,
     debugger: {
-      diagnostics: { probeId, runtimeId, probeVersion, status },
+      // Read live: `config` can be updated after module load via `updateConfig()`
+      // (e.g. a MicroVM clone resume regenerating the runtime-id).
+      diagnostics: { probeId, runtimeId: config.runtimeId, probeVersion, status },
     },
   }
 }

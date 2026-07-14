@@ -4,7 +4,7 @@ const OtlpHttpExporterBase = require('../otlp/otlp_http_exporter_base')
 const OtlpTransformer = require('./otlp_transformer')
 
 /**
- * @typedef {import('@opentelemetry/resources').Resource} Resource
+ * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('./periodic_metric_reader').AggregatedMetric} AggregatedMetric
  */
 
@@ -22,11 +22,21 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
    *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {Resource} resource - Resource attributes
+   * @param {Attributes} resourceAttributes - Resource attributes
    */
-  constructor (url, headers, timeout, protocol, resource) {
+  constructor (url, headers, timeout, protocol, resourceAttributes) {
     super(url, headers, timeout, protocol, 'metrics')
-    this.transformer = new OtlpTransformer(resource, protocol)
+    this.transformer = new OtlpTransformer(resourceAttributes, protocol)
+  }
+
+  /**
+   * Recomputes the resource attributes baked into the transformer (e.g. after a MicroVM clone
+   * resume regenerates `runtime-id`). Leaves the reader's export interval untouched.
+   *
+   * @param {Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.transformer.updateResourceAttributes(resourceAttributes)
   }
 
   /**

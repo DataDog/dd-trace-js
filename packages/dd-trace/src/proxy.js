@@ -305,6 +305,7 @@ class Tracer extends NoopProxy {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         ch.unsubscribe(onHttpRequest)
         channel('datadog:identity:update').publish(config)
+        channel('datadog:identity:refresh').publish(config)
       }
     }
 
