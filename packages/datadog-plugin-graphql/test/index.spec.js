@@ -2000,6 +2000,156 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with multiple argument-bearing fields in one operation', () => {
+        let variableFilterCalls
+
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', {
+            variables: variables => {
+              variableFilterCalls += 1
+              return variables
+            },
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          variableFilterCalls = 0
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        // graphql coerces variableValues once per execute and hands the same
+        // object to every resolver, so the plugin memoizes the user filter on
+        // the operation and reuses it across every argument-bearing field. The
+        // two sibling fields must each still be tagged only with their own
+        // arguments from that shared filtered object, and the filter must not
+        // re-run per field.
+        it('reuses the filtered variables across sibling resolve spans', () => {
+          const source = `
+            query TwoFields($name: String!, $title: String!) {
+              first: hello(name: $name)
+              second: hello(title: $title)
+            }
+          `
+          const variableValues = { name: 'world', title: 'planet' }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const resolveSpans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+
+            assert.strictEqual(resolveSpans.length, 2)
+
+            const nameSpan = resolveSpans.find(span => 'graphql.variables.name' in span.meta)
+            const titleSpan = resolveSpans.find(span => 'graphql.variables.title' in span.meta)
+
+            assert.ok(nameSpan, 'expected a resolve span tagged with the name variable')
+            assert.ok(titleSpan, 'expected a resolve span tagged with the title variable')
+            assert.strictEqual(nameSpan.meta['graphql.variables.name'], 'world')
+            assert.strictEqual(titleSpan.meta['graphql.variables.title'], 'planet')
+            assert.ok(!('graphql.variables.title' in nameSpan.meta))
+            assert.ok(!('graphql.variables.name' in titleSpan.meta))
+          }, { spanResourceMatch: /TwoFields/ })
+
+          return Promise.all([
+            assertion,
+            graphql.graphql({ schema, source, variableValues }).then(() => {
+              // One call tags the execute span; the second is the memoized
+              // resolve-path call shared by both fields. Without the cache the
+              // second field would trigger a third call.
+              assert.strictEqual(variableFilterCalls, 2)
+            }),
+          ])
+        })
+      })
+
+      describe('with nested executions sharing a contextValue', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', {
+            variables: variables => variables,
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        // A resolver that re-enters execute() with the same object contextValue
+        // (Apollo federation and stitching do this) is short-circuited by the
+        // plugin and its resolvers reuse the outer operation's context. The
+        // per-resolver variable tags must still come from each field's own
+        // variableValues, not the outer operation's.
+        it('tags each resolve span with its own operation variables', () => {
+          const outerDocument = graphql.parse('query Outer($x: String) { outer(x: $x) }')
+          const innerDocument = graphql.parse('query Inner($y: String) { inner(y: $y) }')
+
+          const nestedSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'NestedQuery',
+              fields: {
+                outer: {
+                  type: graphql.GraphQLString,
+                  args: { x: { type: graphql.GraphQLString } },
+                  resolve (source, args, contextValue) {
+                    return graphql.execute({
+                      schema: nestedSchema,
+                      document: innerDocument,
+                      contextValue,
+                      variableValues: { y: 'inner' },
+                    }).then(result => `outer:${result.data.inner}`)
+                  },
+                },
+                inner: {
+                  type: graphql.GraphQLString,
+                  args: { y: { type: graphql.GraphQLString } },
+                  resolve () {
+                    return 'inner-value'
+                  },
+                },
+              },
+            }),
+          })
+
+          const resolveSpans = new Map()
+          const assertion = agent.assertSomeTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'graphql.resolve') resolveSpans.set(span.resource, span)
+              }
+            }
+
+            const outerSpan = resolveSpans.get('outer:String')
+            const innerSpan = resolveSpans.get('inner:String')
+            assert.ok(outerSpan, 'expected an outer graphql.resolve span')
+            assert.ok(innerSpan,
+              `expected an inner graphql.resolve span, got: ${[...resolveSpans.keys()].join(', ')}`)
+
+            assert.strictEqual(outerSpan.meta['graphql.variables.x'], 'outer')
+            assert.strictEqual(innerSpan.meta['graphql.variables.y'], 'inner')
+          }, { timeoutMs: 3000 })
+
+          const contextValue = {}
+          const execution = graphql.execute({
+            schema: nestedSchema,
+            document: outerDocument,
+            contextValue,
+            variableValues: { x: 'outer' },
+          })
+
+          return Promise.all([assertion, execution])
+        })
+      })
+
       describe('with an array of variable names', () => {
         before(() => {
           tracer = require('../../dd-trace')
