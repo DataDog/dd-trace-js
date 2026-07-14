@@ -211,7 +211,6 @@ function createLayerDispatchWrappers (name) {
   }
 
   // express <4.6.0 dispatches `layer.handle` directly, so its replacement must preserve arity.
-  // It cannot replay `next` for a rejected promise; only express-async-errors needs the repeated-next guard.
   /**
    * @param {object} layer
    * @param {Function} original

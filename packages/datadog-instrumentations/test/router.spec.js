@@ -990,6 +990,65 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(events.at(-1).error, failure)
     })
 
+    it('publishes the lifecycle once and surfaces a repeated native request next call', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const lateError = new Error('late')
+      const wrappedUse = wrapMethod(legacyUse)
+      /**
+       * @param {object} req
+       * @param {object} res
+       * @param {Function} next
+       */
+      function doubleNext (req, res, next) {
+        next()
+        next(lateError)
+      }
+      wrappedUse.call(router, '/foo', doubleNext)
+
+      legacyDispatch(router.stack[0])
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'repeat', 'host-next', 'exit',
+      ])
+      assert.strictEqual(events[4].data.name, 'doubleNext')
+      assert.strictEqual(events[4].data.error, lateError)
+      assert.strictEqual(events.at(-2).error, lateError)
+    })
+
+    it('publishes the lifecycle once and surfaces a repeated native error next call', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const lateError = new Error('late')
+      const wrappedUse = wrapMethod(legacyUse)
+      /**
+       * @param {Error} error
+       * @param {object} req
+       * @param {object} res
+       * @param {Function} next
+       */
+      function doubleNext (error, req, res, next) {
+        next()
+        next(lateError)
+      }
+      wrappedUse.call(router, '/foo', doubleNext)
+
+      legacyDispatch(router.stack[0], { error: new Error('upstream') })
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'host-next', 'repeat', 'host-next', 'exit',
+      ])
+      assert.strictEqual(events[4].data.name, 'doubleNext')
+      assert.strictEqual(events[4].data.error, lateError)
+      assert.strictEqual(events.at(-2).error, lateError)
+    })
+
     it('leaves handle pristine when the layer has a prototype dispatch method', () => {
       const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
       const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
@@ -1123,6 +1182,7 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(events.find(event => event.label === 'enter').data.route, '/foo')
       assert.strictEqual(events.find(event => event.label === 'error').data.error, failure)
       assert.strictEqual(events.filter(event => event.label === 'finish').length, 1)
+      assert.strictEqual(events.find(event => event.label === 'repeat').data.name, 'errorHandler')
     })
 
     it('publishes a synchronous express-async-errors throw before rethrowing', () => {
@@ -1150,7 +1210,7 @@ describe('createWrapRouterMethod', () => {
       ])
     })
 
-    it('publishes once when an express-async-errors __handle calls next twice', () => {
+    it('publishes the lifecycle once and surfaces a repeated express-async-errors next call', () => {
       subscribeAll()
       const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
       const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
@@ -1173,8 +1233,9 @@ describe('createWrapRouterMethod', () => {
       router.stack[0].__handle({}, {}, error => events.push({ label: 'host-next', error }))
 
       assert.deepStrictEqual(events.map(e => e.label), [
-        'enter', 'next', 'finish', 'host-next', 'host-next', 'exit',
+        'enter', 'next', 'finish', 'host-next', 'repeat', 'host-next', 'exit',
       ])
+      assert.strictEqual(events[4].data.error, lateError)
       assert.strictEqual(events.at(-2).error, lateError)
     })
   })
