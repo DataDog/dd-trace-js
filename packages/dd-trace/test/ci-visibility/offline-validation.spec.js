@@ -334,17 +334,15 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('applies the decoded-entry budget across payload files', () => {
-    const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
-    const eventCount = Math.floor(MAX_DECODED_COLLECTION_ENTRIES / 8)
-    const payload = JSON.stringify(createTestCyclePayload(
-      Array.from({ length: eventCount }, () => createProjectedEvent())
-    ))
-    fs.writeFileSync(path.join(testsDirectory, `tests-${processId}-1-1-1.json`), payload)
-    fs.writeFileSync(path.join(testsDirectory, `tests-${processId}-1-1-2.json`), payload)
+    const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
+    const coverageDirectory = path.join(outputRoot, 'payloads', 'coverage')
+    const recordCount = Math.floor(MAX_DECODED_COLLECTION_ENTRIES * 0.6)
+    const payload = JSON.stringify(Array.from({ length: recordCount }, () => ({})))
+    fs.writeFileSync(path.join(coverageDirectory, `coverage-${processId}-1-1-1.json`), payload)
+    fs.writeFileSync(path.join(coverageDirectory, `coverage-${processId}-1-1-2.json`), payload)
     writeCompletion(outputRoot, processId, {
-      eventsObserved: eventCount * 2,
-      eventsRetained: eventCount * 2,
-      payloadFiles: 2,
+      coverageFilesObserved: 2,
+      coverageFilesRetained: 2,
     })
     assert.throws(() => readOfflineOutput(outputRoot), /aggregate decoded entries/)
   })
