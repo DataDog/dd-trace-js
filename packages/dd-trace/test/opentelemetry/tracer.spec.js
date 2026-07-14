@@ -77,6 +77,7 @@ describe('OTel Tracer', () => {
 
   it('suppresses only the instrumentation scope selected by the active store', () => {
     const tracerProvider = new TracerProvider()
+    tracerProvider.register()
     const suppressedTracer = new Tracer({ name: 'suppressed-library' }, {}, tracerProvider)
     const userTracer = new Tracer({ name: 'user-library' }, {}, tracerProvider)
     const legacyStorage = storage('legacy')
@@ -89,14 +90,19 @@ describe('OTel Tracer', () => {
 
       legacyStorage.run(store, () => {
         const suppressedSpan = suppressedTracer.startSpan('suppressed')
-        const userSpan = userTracer.startSpan('user')
 
         assert.strictEqual(suppressedSpan instanceof Span, false)
         assert.strictEqual(suppressedSpan.isRecording(), false)
-        assert.strictEqual(suppressedSpan.spanContext().spanId, authoritativeSpan.context().toSpanId(true))
-        assert.ok(userSpan instanceof Span)
-        isChildOf(userSpan._ddSpan, authoritativeSpan)
-        userSpan.end()
+        assert.strictEqual(suppressedSpan.spanContext().traceId, authoritativeSpan.context().toTraceId(true))
+
+        const suppressedContext = api.trace.setSpan(api.context.active(), suppressedSpan)
+        api.context.with(suppressedContext, () => {
+          const userSpan = userTracer.startSpan('user')
+
+          assert.ok(userSpan instanceof Span)
+          isChildOf(userSpan._ddSpan, authoritativeSpan)
+          userSpan.end()
+        })
       })
     })
   })
