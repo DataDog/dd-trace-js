@@ -153,14 +153,6 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   }
 }
 
-/**
- * @param {ConfigurationOption} entry
- * @param {unknown} value
- */
-function coerceType (entry, value) {
-  return programmaticTypeCoercions[entry.type](value)
-}
-
 module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
@@ -298,7 +290,7 @@ class Config extends ConfigBase {
           continue
         }
       }
-      const coerced = value === undefined ? value : coerceType(entry, value)
+      const coerced = programmaticTypeCoercions[entry.type](value)
       if (coerced === undefined && value !== undefined) {
         warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
       }
