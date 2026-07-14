@@ -1,6 +1,6 @@
 'use strict'
 
-const { clean, coerce, intersects, satisfies, subset } = require('semver')
+const { clean, coerce, intersects, satisfies, subset, validRange } = require('semver')
 
 const latests = require('./package.json').dependencies
 
@@ -219,6 +219,8 @@ function highestMajor (name, range, floorMajor) {
  * @param {object} options
  * @param {string} options.name The module name, e.g. `fastify`.
  * @param {string[]} options.declaredVersions The declared version entries to expand.
+ * @param {string} [options.nodeRange] The Node.js versions where these declarations apply.
+ * @param {string} [options.nodeVersion] The current Node.js version; injectable for testing.
  * @param {boolean} [options.honourEnvRange] Whether `PACKAGE_VERSION_RANGE` applies to this module. False for sibling
  *   externals that must stay on their declared versions while the matrix shards a different package.
  * @param {NodeJS.ProcessEnv} [options.env] Injectable for testing.
@@ -226,7 +228,19 @@ function highestMajor (name, range, floorMajor) {
  *   `RANGE`-filtered key set, and the key the default `versions/<name>` folder resolves to (the newest in-scope entry,
  *   or `undefined` when nothing is in scope).
  */
-function resolvePluginVersions ({ name, declaredVersions, honourEnvRange = true, env = process.env }) {
+function resolvePluginVersions ({
+  name,
+  declaredVersions,
+  nodeRange,
+  nodeVersion = process.versions.node,
+  honourEnvRange = true,
+  env = process.env,
+}) {
+  if (nodeRange !== undefined) {
+    if (!validRange(nodeRange)) throw new Error(`Invalid Node.js version range for '${name}': ${nodeRange}`)
+    if (!satisfies(nodeVersion, nodeRange)) return { versionList: [], unversioned: undefined }
+  }
+
   const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honourEnvRange
   const versions = useEnvRange ? [env.PACKAGE_VERSION_RANGE] : declaredVersions
 

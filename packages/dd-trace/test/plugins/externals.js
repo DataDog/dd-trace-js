@@ -164,6 +164,12 @@ module.exports = {
     {
       name: 'mongodb',
       versions: ['>=3.3 <5', '5', '6', '>=7'],
+      node: '>=20.19.0',
+    },
+    {
+      name: 'mongodb',
+      versions: ['>=3.3 <5', '5', '6'],
+      node: '<20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -195,7 +201,13 @@ module.exports = {
     },
     {
       name: 'mongodb',
-      versions: ['5', '>=6'],
+      versions: ['5', '6', '>=7'],
+      node: '>=20.19.0',
+    },
+    {
+      name: 'mongodb',
+      versions: ['5', '6'],
+      node: '<20.19.0',
     },
   ],
   mysql2: [
@@ -219,7 +231,13 @@ module.exports = {
     },
     {
       name: '@fastify/cookie',
+      versions: ['>=6 <11.1.0'],
+      node: '<22',
+    },
+    {
+      name: '@fastify/cookie',
       versions: ['>=6'],
+      node: '>=22',
     },
     {
       name: '@fastify/multipart',
