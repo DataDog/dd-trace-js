@@ -22,6 +22,7 @@ const RELOAD_EVICTION_IDS = [
   '../../../..', // root index.js → `module.exports = require('./packages/dd-trace')`
   '../..',
   '../../src',
+  '../../src/bootstrap',
   '../../src/proxy',
   '../../src/config',
   '../../src/config/defaults',
