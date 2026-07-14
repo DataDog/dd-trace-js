@@ -257,6 +257,52 @@ function resolvePluginVersions ({
 }
 
 /**
+ * Resolve every declaration for one package and combine their active unversioned ranges.
+ *
+ * @param {object} options
+ * @param {string} options.name
+ * @param {Array<{ versions?: string|string[], node?: string }>} options.declarations
+ * @param {string} [options.nodeVersion]
+ * @param {boolean} [options.honourEnvRange]
+ * @param {NodeJS.ProcessEnv} [options.env]
+ * @returns {{ versionList: Array<{ versionKey: string, range: string }>, unversioned: string|undefined }}
+ */
+function resolvePluginDeclarations ({
+  name,
+  declarations,
+  nodeVersion,
+  honourEnvRange,
+  env,
+}) {
+  const versions = new Map()
+  const unversionedRanges = new Set()
+
+  for (const declaration of declarations) {
+    const declaredVersions = declaration.versions === undefined
+      ? []
+      : Array.isArray(declaration.versions) ? declaration.versions : [declaration.versions]
+    const result = resolvePluginVersions({
+      name,
+      declaredVersions,
+      nodeRange: declaration.node,
+      nodeVersion,
+      honourEnvRange,
+      env,
+    })
+
+    for (const version of result.versionList) {
+      if (!versions.has(version.versionKey)) versions.set(version.versionKey, version)
+    }
+    if (result.unversioned !== undefined) unversionedRanges.add(result.unversioned)
+  }
+
+  return {
+    versionList: [...versions.values()],
+    unversioned: unversionedRanges.size > 0 ? [...unversionedRanges].join(' || ') : undefined,
+  }
+}
+
+/**
  * The reason `version` of `name` is marked broken (and must be skipped), or `undefined` when it is testable.
  *
  * @param {string} name
@@ -274,5 +320,6 @@ module.exports = {
   brokenVersionReason,
   getCappedRange,
   getVersionList,
+  resolvePluginDeclarations,
   resolvePluginVersions,
 }

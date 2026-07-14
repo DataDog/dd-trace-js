@@ -163,13 +163,12 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '6', '>=7'],
-      node: '>=20.19.0',
+      versions: ['>=3.3 <5', '5', '6'],
     },
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '6'],
-      node: '<20.19.0',
+      versions: ['>=7'],
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -201,13 +200,12 @@ module.exports = {
     },
     {
       name: 'mongodb',
-      versions: ['5', '6', '>=7'],
-      node: '>=20.19.0',
+      versions: ['5', '6'],
     },
     {
       name: 'mongodb',
-      versions: ['5', '6'],
-      node: '<20.19.0',
+      versions: ['>=7'],
+      node: '>=20.19.0',
     },
   ],
   mysql2: [

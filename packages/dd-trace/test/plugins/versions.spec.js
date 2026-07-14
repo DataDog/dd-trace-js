@@ -3,9 +3,14 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
-const { coerce, major } = require('semver')
+const { coerce, major, maxSatisfying } = require('semver')
 
-const { getVersionList, resolvePluginVersions, brokenVersionReason } = require('./versions')
+const {
+  brokenVersionReason,
+  getVersionList,
+  resolvePluginDeclarations,
+  resolvePluginVersions,
+} = require('./versions')
 
 const latests = require('./versions/package.json').dependencies
 
@@ -188,6 +193,90 @@ describe('resolvePluginVersions', () => {
 
     assert.deepEqual(result.versionList, [])
     assert.equal(result.unversioned, undefined)
+  })
+})
+
+describe('resolvePluginDeclarations', () => {
+  const declarations = [
+    {
+      versions: ['5', '6'],
+    },
+    {
+      versions: ['>=7'],
+      node: '>=20.19.0',
+    },
+  ]
+
+  it('points the unversioned folder at the latest active declaration', () => {
+    const result = resolvePluginDeclarations({
+      name: 'mongodb',
+      declarations,
+      nodeVersion: '20.19.0',
+      env: {},
+    })
+
+    assert.deepEqual(
+      result.versionList.map(({ versionKey }) => versionKey),
+      ['5.0.0', '5', '6.0.0', '6', '7.0.0', '7']
+    )
+    assert.equal(result.unversioned, '6 || 7')
+    assert.equal(maxSatisfying(['6.21.0', '7.2.0'], result.unversioned), '7.2.0')
+  })
+
+  it('excludes declarations unsupported by the current Node.js version', () => {
+    const result = resolvePluginDeclarations({
+      name: 'mongodb',
+      declarations,
+      nodeVersion: '20.18.0',
+      env: {},
+    })
+
+    assert.deepEqual(
+      result.versionList.map(({ versionKey }) => versionKey),
+      ['5.0.0', '5', '6.0.0', '6']
+    )
+    assert.equal(result.unversioned, '6')
+  })
+
+  it('applies a package version override once across active declarations', () => {
+    const result = resolvePluginDeclarations({
+      name: 'mongodb',
+      declarations,
+      nodeVersion: '20.19.0',
+      env: { PACKAGE_VERSION_RANGE: '>=6 <7' },
+    })
+
+    assert.deepEqual(
+      result.versionList.map(({ versionKey }) => versionKey),
+      ['6.0.0', '6']
+    )
+    assert.equal(result.unversioned, '>=6 <7')
+  })
+
+  it('normalizes scalar and dependency-only declarations', () => {
+    const result = resolvePluginDeclarations({
+      name: 'mongodb',
+      declarations: [
+        { versions: '6' },
+        {},
+      ],
+      env: {},
+    })
+
+    assert.deepEqual(
+      result.versionList.map(({ versionKey }) => versionKey),
+      ['6.0.0', '6']
+    )
+    assert.equal(result.unversioned, '6')
+
+    const emptyResult = resolvePluginDeclarations({
+      name: 'mongodb',
+      declarations: [{}],
+      env: {},
+    })
+
+    assert.deepEqual(emptyResult.versionList, [])
+    assert.equal(emptyResult.unversioned, undefined)
   })
 })
 
