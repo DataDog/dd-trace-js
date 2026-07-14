@@ -2,9 +2,11 @@
 
 const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
+const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { PassThrough } = require('node:stream')
 
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
@@ -113,6 +115,45 @@ describe('test optimization validation command runner', () => {
     assert.match(nodeOptions, /--import/)
     assert.match(nodeOptions, /[\\/]register\.js/)
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
+  })
+
+  it('does not override argv0 when launching a verified executable on Windows', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-spawn-'))
+    const out = path.join(root, 'results')
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    let spawnOptions
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+      const { runCommand } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+        child_process: {
+          spawn (executable, args, options) {
+            spawnOptions = options
+            const child = new EventEmitter()
+            child.kill = () => {}
+            child.pid = 1
+            child.stderr = new PassThrough()
+            child.stdout = new PassThrough()
+            process.nextTick(() => child.emit('close', 0, null))
+            return child
+          },
+        },
+      })
+
+      await runCommand({
+        cwd: root,
+        argv: [process.execPath, '-e', ''],
+      }, {
+        artifactRoot: root,
+        outDir: out,
+        repositoryRoot: root,
+      })
+
+      assert.strictEqual(Object.hasOwn(spawnOptions, 'argv0'), false)
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('disables unrelated Datadog side channels during forced local validation', () => {

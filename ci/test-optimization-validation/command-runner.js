@@ -130,9 +130,10 @@ function runCommand (command, options = {}) {
     let child
     try {
       const executable = getExecutableForSpawn(command)
+      const argv0 = process.platform === 'win32' ? {} : { argv0: executable.argv0 }
       child = command.usesShell
         ? spawn(command.shellCommand, {
-          argv0: executable.argv0,
+          ...argv0,
           cwd: command.cwd,
           detached: useProcessGroup,
           env: childEnv,
@@ -140,7 +141,7 @@ function runCommand (command, options = {}) {
           stdio: ['ignore', 'pipe', 'pipe'],
         })
         : spawn(executable.path, command.argv.slice(1), {
-          argv0: executable.argv0,
+          ...argv0,
           cwd: command.cwd,
           detached: useProcessGroup,
           env: childEnv,
