@@ -520,13 +520,52 @@ describe('TextMapPropagator', () => {
 
       config.tracePropagationStyle.inject = []
 
-      propagator.inject(spanContext, carrier)
+      const injectedCarrier = propagator.inject(spanContext, carrier)
 
+      assert.strictEqual(injectedCarrier, carrier)
       assert.ok(!('x-datadog-trace-id' in carrier))
       assert.ok(!('x-datadog-parent-id' in carrier))
       assert.ok(!('x-datadog-sampling-priority' in carrier))
       assert.ok(!('x-datadog-origin' in carrier))
       assert.ok(!('x-datadog-tags' in carrier))
+    })
+
+    describe('return value', () => {
+      it('returns a lazily created carrier when datadog headers are written', () => {
+        const carrier = propagator.inject(createContext())
+
+        assert.ok(carrier)
+        assert.ok('x-datadog-trace-id' in carrier)
+      })
+
+      it('returns the provided carrier when datadog headers are written', () => {
+        const carrier = {}
+
+        assert.strictEqual(propagator.inject(createContext(), carrier), carrier)
+      })
+
+      it('returns undefined when no style writes and there is no baggage', () => {
+        config.tracePropagationStyle.inject = []
+        config.legacyBaggageEnabled = false
+        baggageItems = {}
+
+        assert.strictEqual(propagator.inject(createContext()), undefined)
+      })
+
+      it('returns a lazily created carrier when only baggage is written', () => {
+        config.tracePropagationStyle.inject = ['baggage']
+        setBaggageItem('foo', 'bar')
+
+        // No spanContext: the datadog/b3/traceparent styles are skipped, baggage still runs.
+        const carrier = propagator.inject(null)
+
+        assert.ok(carrier)
+        assert.strictEqual(carrier.baggage, 'foo=bar')
+      })
+
+      it('returns undefined when the carrier is null', () => {
+        assert.strictEqual(propagator.inject(createContext(), null), undefined)
+      })
     })
 
     it('should publish spanContext and carrier', () => {
@@ -544,6 +583,21 @@ describe('TextMapPropagator', () => {
       try {
         sinon.assert.calledOnce(onSpanInject)
         assert.deepStrictEqual(onSpanInject.firstCall.args[0], { spanContext, carrier })
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
+    it('should not publish when nothing was injected', () => {
+      config.tracePropagationStyle.inject = []
+      config.legacyBaggageEnabled = false
+      baggageItems = {}
+      const onSpanInject = sinon.stub()
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        assert.strictEqual(propagator.inject(createContext()), undefined)
+        sinon.assert.notCalled(onSpanInject)
       } finally {
         injectCh.unsubscribe(onSpanInject)
       }
