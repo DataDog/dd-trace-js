@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -124,6 +127,36 @@ describe('CiPlugin', () => {
     assert.strictEqual(plugin.skippableSuitesCoverage, undefined)
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
+  })
+
+  it('uploads regular coverage reports and excludes symlinks', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const coverageDir = path.join(rootDir, 'coverage')
+    const regularReportPath = path.join(coverageDir, 'lcov.info')
+    const symlinkTargetPath = path.join(rootDir, 'symlink-target.info')
+    const symlinkReportPath = path.join(rootDir, 'lcov.info')
+
+    fs.mkdirSync(coverageDir)
+    fs.writeFileSync(regularReportPath, 'regular coverage')
+    fs.writeFileSync(symlinkTargetPath, 'symlinked coverage')
+    fs.symlinkSync(symlinkTargetPath, symlinkReportPath)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.calledOnce(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: regularReportPath,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
   })
 
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
