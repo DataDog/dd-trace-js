@@ -6,6 +6,10 @@ Your task is to discover how tests are run, initialize and complete a validation
 Datadog validator, and report the result. Do not debug Datadog internals and do not add Datadog
 instrumentation during discovery.
 
+This is an agent-assisted local diagnostic, not a self-correcting tool. It can produce copy-ready
+recommendations, but it does not apply them. Changing CI, project configuration, dependencies, source, or tests
+requires a separate workflow and separate explicit approval.
+
 Do not turn validation findings into repository changes. Never edit `AGENTS.md`, `CLAUDE.md`, other
 agent instruction files, project documentation, CI workflows, package manifests, lockfiles, source
 files, test configuration, or existing tests. Record discovered constraints in the validation
@@ -278,6 +282,10 @@ no-events failure is the evidence that CI does not initialize Test Optimization.
 when the CI-shaped command itself cannot be replayed safely or its required setup is unavailable.
 An `unknown` CI-wiring disposition without a replay command is incomplete and makes validation exit
 unsuccessfully; use `skip` only with the concrete technical reason replay is not eligible.
+
+The live `ciWiringCommand` replay is authoritative whenever it is available. Static CI inspection and the
+initialization-reachability probe may explain a result, but they cannot replace replay or produce a conclusive
+live CI-wiring pass/fail result. When replay is unavailable or unsafe, report CI wiring as incomplete or blocked.
 
 During live validation, the validator may overlay private offline-fixture/output variables,
 noise-suppression variables, and for CI wiring dd-trace debug logging. Those overlays are diagnostic
@@ -618,3 +626,5 @@ Use validator diagnoses as the source of truth. Do not claim that Datadog Test O
 broken unless the validator reports that diagnosis. Copy structured remediation from the validator;
 do not invent fixes or present an intentionally skipped check as a customer misconfiguration. If the
 manifest was incomplete, invalid, or based on unverified commands, report that as the primary issue.
+Recommendations are diagnostic guidance only. Do not apply them in this workflow; repository or CI changes
+require a separate plan and explicit approval.

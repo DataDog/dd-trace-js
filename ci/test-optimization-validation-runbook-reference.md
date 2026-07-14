@@ -180,18 +180,20 @@ direct-initialization manifest commands manually.
 Do not skip a replayable CI test command merely because CI configures no Datadog initialization.
 Represent the executable command and its non-secret CI environment exactly in `ciWiringCommand`.
 Set `ciWiring.initialization.status` to `not_configured` and record the workflow/job/step evidence when static
-inspection conclusively finds no Datadog initialization. After Basic Reporting passes, the validator can then run
-the exact-command initialization probe and, if it reaches the selected runner, conclude the CI wiring failure
-without replaying the full suite. If CI initialization is configured or static evidence is ambiguous, the
-validator still replays the authentic command shape. Use `skip` only when the CI-shaped command cannot be replayed safely or required
-setup is unavailable. `unknown` records incomplete discovery and causes an unsuccessful validation
-unless a replay command supplies the missing evidence.
+inspection conclusively finds no Datadog initialization. After Basic Reporting passes, the validator replays the
+approved CI-shaped command with exactly that recorded CI initialization state. Emitted events and command evidence
+from this replay determine the live CI-wiring verdict; static evidence only enriches the diagnosis. Use `skip` only
+when the CI-shaped command cannot be replayed safely or required setup is unavailable. `unknown` records incomplete
+discovery and causes an unsuccessful validation unless a replay command supplies the missing evidence. Without a
+safe replay, report CI wiring as incomplete or blocked rather than as a conclusive live failure.
 
 The initialization-reachability probe always reuses the exact `ciWiringCommand` so package-manager,
 workspace, monorepo, and wrapper behavior cannot be bypassed accidentally. The validator watches its local
 probe records and stops that diagnostic process tree immediately after the selected test runner is observed.
 Do not create a separate scoped probe command: package-manager argument forwarding is not reliable enough to
 prove that an apparently focused command preserves the same behavior or actually selects one test.
+The probe can explain where `NODE_OPTIONS` propagation stopped after a no-events replay; it never replaces the
+replay or determines the live CI-wiring verdict by itself.
 
 ## Framework Source Trees
 

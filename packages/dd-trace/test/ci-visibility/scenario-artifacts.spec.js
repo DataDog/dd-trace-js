@@ -253,6 +253,67 @@ describe('test optimization validation scenario artifacts', () => {
     }
   })
 
+  it('validates aggregate output from independent exporter processes', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-multi-process-'))
+    const eventExporter = path.join(out, 'event-exporter.js')
+    const runner = path.join(out, 'runner.js')
+    writeEventExporter(eventExporter)
+    writeExporterRunner(runner)
+
+    try {
+      const run = await runInstrumentedCommand({
+        framework: { id: 'node:multi-process', framework: 'node' },
+        out,
+        scenarioName: 'multi-process',
+        command: {
+          cwd: out,
+          argv: [process.execPath, runner, eventExporter, eventExporter],
+          timeoutMs: 10_000,
+        },
+        options: validationOptions(out),
+        ciWiring: true,
+      })
+
+      assert.strictEqual(run.events.length, 2)
+      assert.deepStrictEqual(run.offline.summary, {
+        errors: [],
+        events: 2,
+        input: 'filesystem-cache',
+        records: 2,
+      })
+      assert.strictEqual(run.offline.recordCount, 2)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('fails closed when one independent exporter process reports an error', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-multi-process-error-'))
+    const eventExporter = path.join(out, 'event-exporter.js')
+    const failingExporter = path.join(out, 'failing-exporter.js')
+    const runner = path.join(out, 'runner.js')
+    writeEventExporter(eventExporter)
+    writeFailingExporter(failingExporter)
+    writeExporterRunner(runner)
+
+    try {
+      await assert.rejects(runInstrumentedCommand({
+        framework: { id: 'node:multi-process-error', framework: 'node' },
+        out,
+        scenarioName: 'multi-process-error',
+        command: {
+          cwd: out,
+          argv: [process.execPath, runner, eventExporter, failingExporter],
+          timeoutMs: 10_000,
+        },
+        options: validationOptions(out),
+        ciWiring: true,
+      }), /Offline Test Optimization exporter failed: output_record_serialization_failed/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('redacts secret-like argv and execArgv values in initialization probe records', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-'))
     const recordsPath = path.join(tmpDir, 'records.ndjson')
@@ -367,4 +428,59 @@ function generatedScenario (id, file, runCommand) {
       parameters: null,
     }],
   }
+}
+
+function writeEventExporter (filename) {
+  const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
+  const writerPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/writer.js')
+  const idPath = path.resolve('packages/dd-trace/src/id.js')
+  fs.writeFileSync(filename, [
+    `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
+    `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
+    `const id = require(${JSON.stringify(idPath)})`,
+    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE)',
+    'const writer = new CiValidationWriter({ sink, tags: {} })',
+    'writer.append([{',
+    "  trace_id: id('1234abcd1234abcd'),",
+    "  span_id: id('1234abcd1234abcd'),",
+    "  parent_id: id('0000000000000000'),",
+    "  name: 'test', resource: 'multi-process test', service: 'validation', type: 'test', error: 0,",
+    "  meta: { 'test.name': 'multi-process test', 'test.status': 'pass' },",
+    '  metrics: {}, start: 123, duration: 456,',
+    '}])',
+    'writer.flush()',
+    'sink.writeSummary()',
+  ].join('\n'))
+}
+
+function writeFailingExporter (filename) {
+  const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
+  fs.writeFileSync(filename, [
+    `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
+    'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_FILE)',
+    'const circular = {}',
+    'circular.value = circular',
+    'sink.writeCoverage(circular)',
+    'sink.writeSummary()',
+  ].join('\n'))
+}
+
+function writeExporterRunner (filename) {
+  fs.writeFileSync(filename, [
+    "const { spawn } = require('node:child_process')",
+    'const scripts = process.argv.slice(2)',
+    'let remaining = scripts.length',
+    'let failed = false',
+    'for (const script of scripts) {',
+    '  const child = spawn(process.execPath, [script], {',
+    "    env: { ...process.env, NODE_OPTIONS: '' },",
+    "    stdio: 'inherit',",
+    '  })',
+    '  child.on(\'error\', () => { failed = true })',
+    '  child.on(\'exit\', code => {',
+    '    if (code !== 0) failed = true',
+    '    if (--remaining === 0) process.exitCode = failed ? 1 : 0',
+    '  })',
+    '}',
+  ].join('\n'))
 }

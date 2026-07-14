@@ -70,30 +70,63 @@ function readOfflineOutput (filename) {
 }
 
 /**
- * Extracts the last valid bounded exporter summary from command stderr.
+ * Extracts and aggregates every bounded process-local exporter summary from command stderr.
  *
  * @param {string} stderr command standard error
  * @returns {object|undefined} parsed summary
  */
 function parseOfflineSummary (stderr) {
   const lines = String(stderr || '').split(/\r?\n/)
-  for (let index = lines.length - 1; index >= 0; index--) {
-    if (!lines[index].startsWith(SUMMARY_PREFIX)) continue
-    const source = lines[index].slice(SUMMARY_PREFIX.length)
-    if (Buffer.byteLength(source) > 4096) return
-    try {
-      const summary = JSON.parse(source)
-      if (!Number.isSafeInteger(summary.events) || summary.events < 0 ||
-        !Number.isSafeInteger(summary.records) || summary.records < 0 ||
-        summary.input !== 'filesystem-cache' || !Array.isArray(summary.errors) || summary.errors.length > 20 ||
-        summary.errors.some(error => typeof error !== 'string' || error.length > 100)) {
-        return
-      }
-      return summary
-    } catch {
-      return
-    }
+  const aggregate = {
+    errors: [],
+    events: 0,
+    input: 'filesystem-cache',
+    records: 0,
   }
+  let summaries = 0
+
+  for (const line of lines) {
+    if (!line.startsWith(SUMMARY_PREFIX)) continue
+    const source = line.slice(SUMMARY_PREFIX.length)
+    if (Buffer.byteLength(source) > 4096) throw invalidSummaryError()
+
+    let summary
+    try {
+      summary = JSON.parse(source)
+    } catch {
+      throw invalidSummaryError()
+    }
+
+    if (!Number.isSafeInteger(summary.events) || summary.events < 0 ||
+      !Number.isSafeInteger(summary.records) || summary.records < 0 ||
+      summary.input !== 'filesystem-cache' || !Array.isArray(summary.errors) || summary.errors.length > 20 ||
+      summary.errors.some(error => typeof error !== 'string' || error.length > 100)) {
+      throw invalidSummaryError()
+    }
+
+    const events = aggregate.events + summary.events
+    const records = aggregate.records + summary.records
+    if (!Number.isSafeInteger(events) || !Number.isSafeInteger(records)) throw invalidSummaryError()
+
+    aggregate.events = events
+    aggregate.records = records
+    for (const error of summary.errors) {
+      aggregate.errors.push(error)
+      if (aggregate.errors.length > 20) throw invalidSummaryError()
+    }
+    summaries++
+  }
+
+  return summaries > 0 ? aggregate : undefined
+}
+
+/**
+ * Creates the stable error used for malformed or over-limit process summaries.
+ *
+ * @returns {Error} invalid summary error
+ */
+function invalidSummaryError () {
+  return new Error('Invalid offline Test Optimization exporter summary.')
 }
 
 function parseRecord (line) {

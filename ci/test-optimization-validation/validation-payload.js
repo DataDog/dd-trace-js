@@ -133,7 +133,9 @@ function buildCheck ({ result }) {
   const commandInfo = readResultCommandInfo(result)
 
   const steps = []
-  if (result.scenario !== 'ci-wiring' || result.evidence?.ciCommandExecution?.fullReplayRan !== false) {
+  const ciReplayUnavailable = result.scenario === 'ci-wiring' &&
+    (result.evidence?.manifestIncomplete === true || result.evidence?.ciCommandExecution?.fullReplayRan === false)
+  if (!ciReplayUnavailable) {
     steps.push({
       id: 'run-tests',
       name: 'Run tests',

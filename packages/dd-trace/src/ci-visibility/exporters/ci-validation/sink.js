@@ -90,7 +90,7 @@ class CiValidationSink {
   }
 
   /**
-   * Emits the single bounded stderr summary consumed by the validator.
+   * Emits this process's single bounded stderr summary for validator aggregation.
    */
   writeSummary () {
     if (this.#summaryWritten) return

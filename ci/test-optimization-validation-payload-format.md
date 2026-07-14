@@ -99,6 +99,10 @@ the command was selected, environment found at workflow/job/step scope, package-
 chain, and runner/tool chain. Sensitive environment values are redacted; `NODE_OPTIONS` and
 non-secret Datadog configuration are preserved because they are the wiring being diagnosed.
 
+When the candidate is replayable, the live replay is authoritative for the CI-wiring check. Static CI evidence
+and initialization-probe evidence may enrich the reason, but they do not replace replay or independently produce
+a conclusive live pass/fail result. An unavailable or unsafe replay produces an incomplete or blocked result.
+
 ## Validator Artifacts
 
 `dd-trace/ci/validate-test-optimization.js` writes one detailed Markdown report with one compact,
@@ -338,10 +342,10 @@ EFD, Auto Test Retries, and Test Management depend on Basic Reporting. When Basi
 for a framework, the validator skips those feature checks and includes the Basic Reporting diagnosis
 as the reason.
 
-CI wiring failures can include an independent initialization probe. In user-facing text, describe
+CI wiring failures after a no-events replay can include an independent initialization probe. In user-facing text, describe
 this as a `NODE_OPTIONS` probe: a temporary preload that records which Node.js processes received
 the preload and whether known test-runner modules were observed. It is used only as wiring evidence;
-it is not a Datadog payload.
+it is not a Datadog payload and never replaces the authoritative CI command replay.
 
 ```json
 {

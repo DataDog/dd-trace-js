@@ -191,8 +191,54 @@ describe('test optimization offline validation artifacts', () => {
       input: 'filesystem-cache',
       records: 2,
     })
-    assert.strictEqual(parseOfflineSummary(
+    assert.throws(() => parseOfflineSummary(
       'DD_TEST_OPTIMIZATION_VALIDATION_V1 {"events":-1,"records":2,"input":"filesystem-cache","errors":[]}'
-    ), undefined)
+    ), /Invalid offline Test Optimization exporter summary/)
+  })
+
+  it('aggregates every valid process-local exporter summary', () => {
+    const summary = parseOfflineSummary([
+      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
+        '{"events":4,"records":2,"input":"filesystem-cache","errors":[]}',
+      'runner output',
+      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
+        '{"events":3,"records":1,"input":"filesystem-cache","errors":["output_write_failed"]}',
+    ].join('\n'))
+
+    assert.deepStrictEqual(summary, {
+      errors: ['output_write_failed'],
+      events: 7,
+      input: 'filesystem-cache',
+      records: 3,
+    })
+  })
+
+  it('rejects all exporter summaries when any process summary is malformed', () => {
+    assert.throws(() => parseOfflineSummary([
+      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
+        '{"events":4,"records":2,"input":"filesystem-cache","errors":[]}',
+      'DD_TEST_OPTIMIZATION_VALIDATION_V1 ' +
+        '{"events":-1,"records":0,"input":"filesystem-cache","errors":[]}',
+    ].join('\n')), /Invalid offline Test Optimization exporter summary/)
+  })
+
+  it('accepts the last aggregate summary error and rejects the first error beyond the limit', () => {
+    const getSummary = errors => `DD_TEST_OPTIMIZATION_VALIDATION_V1 ${JSON.stringify({
+      events: 0,
+      records: 0,
+      input: 'filesystem-cache',
+      errors,
+    })}`
+    const firstErrors = Array.from({ length: 10 }, (_, index) => `first_${index}`)
+    const secondErrors = Array.from({ length: 10 }, (_, index) => `second_${index}`)
+
+    assert.strictEqual(parseOfflineSummary([
+      getSummary(firstErrors),
+      getSummary(secondErrors),
+    ].join('\n')).errors.length, 20)
+    assert.throws(() => parseOfflineSummary([
+      getSummary(firstErrors),
+      getSummary([...secondErrors, 'too_many']),
+    ].join('\n')), /Invalid offline Test Optimization exporter summary/)
   })
 })

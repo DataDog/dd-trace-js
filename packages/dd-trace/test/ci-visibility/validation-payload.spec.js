@@ -228,7 +228,7 @@ describe('test optimization validation payload', () => {
     assert.strictEqual(payload.checks[1].reason, 'The generated ATR scenario ran more than one test.')
   })
 
-  it('does not present an initialization probe as a CI test run', () => {
+  it('does not present an unavailable CI replay as a CI test run', () => {
     const [{ payload }] = buildValidationPayloads({
       manifest: {
         frameworks: [
@@ -243,16 +243,10 @@ describe('test optimization validation payload', () => {
         {
           frameworkId: 'vitest:root',
           scenario: 'ci-wiring',
-          status: 'fail',
-          diagnosis: 'The selected CI configuration does not initialize Datadog.',
+          status: 'error',
+          diagnosis: 'CI wiring was not replayed. No live CI-wiring conclusion was reached.',
           evidence: {
-            ciCommandExecution: {
-              mode: 'initialization-probe-only',
-              fullReplayRan: false,
-            },
-            initializationProbe: {
-              reachedTestRunnerProcess: true,
-            },
+            manifestIncomplete: true,
           },
           artifacts: [],
         },

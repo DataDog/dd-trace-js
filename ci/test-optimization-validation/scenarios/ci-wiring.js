@@ -9,8 +9,7 @@ const { serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
 const { findLateInitialization } = require('../late-initialization')
-const { sanitizeForReport } = require('../redaction')
-const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
+const { ensureSafeDirectory } = require('../safe-files')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
   basicEventEvidence,
@@ -22,7 +21,6 @@ const {
   incomplete,
   pass,
   runInstrumentedCommand,
-  skip,
   tailInterestingLines,
 } = require('./helpers')
 
@@ -31,22 +29,11 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
 
   try {
     const command = getCiWiringCommand(framework)
-    if (!command) return getMissingCiWiringCommandResult(framework, manifest, basicResult)
+    if (!command) return getMissingCiWiringCommandResult(framework, manifest)
 
     const outDir = frameworkOutDir(out, framework, scenarioName)
     ensureSafeDirectory(out, outDir, 'CI wiring artifact directory')
     const baseEvidence = getCiWiringBaseEvidence({ framework, manifest, basicResult, command })
-    const conclusiveStaticResult = await maybeConcludeMissingCiInitialization({
-      baseEvidence,
-      basicResult,
-      command,
-      framework,
-      options,
-      out,
-      outDir,
-    })
-    if (conclusiveStaticResult) return conclusiveStaticResult
-
     const run = await runInstrumentedCommand({
       framework,
       out,
@@ -64,6 +51,10 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
       commandTimedOut: result.timedOut,
       commandDescription: command.description,
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
+      ciCommandExecution: {
+        mode: 'full-replay',
+        fullReplayRan: true,
+      },
       preflight: summarizePreflight(ciWiringPreflight),
       settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
       offlineExporterSummary: run.offline.summary,
@@ -132,70 +123,6 @@ function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command })
     lateInitialization: findLateInitialization(manifest, framework),
     forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
   }
-}
-
-async function maybeConcludeMissingCiInitialization ({
-  baseEvidence,
-  basicResult,
-  command,
-  framework,
-  options,
-  out,
-  outDir,
-}) {
-  const initialization = framework.ciWiring?.initialization
-  if (initialization?.status !== 'not_configured' || basicResult?.status !== 'pass') return
-
-  let probe
-  try {
-    probe = await runInitializationProbe({ command, framework, options, outDir })
-  } catch (error) {
-    baseEvidence.shortcutProbe = {
-      ran: false,
-      error: error?.message || String(error),
-    }
-    return
-  }
-  if (probe.summary?.reachedTestRunnerProcess !== true) {
-    baseEvidence.shortcutProbe = probe.summary
-    return
-  }
-
-  const frameworkName = getDisplayFrameworkName(framework.framework)
-  const staticEvidence = initialization.evidence.join(' ')
-  const diagnosis = `The selected CI configuration does not initialize Datadog. ${staticEvidence} ` +
-    `A short NODE_OPTIONS probe reached the ${frameworkName} process, so the CI command can carry the required ` +
-    'initialization to the test runner. Basic Reporting already proved this test suite reports when Datadog is ' +
-    'initialized, so the validator did not replay the full CI test suite.'
-  const evidence = {
-    ...baseEvidence,
-    initializationProbe: probe.summary,
-    ciCommandExecution: {
-      mode: 'initialization-probe-only',
-      fullReplayRan: false,
-      reason: 'Static CI evidence showed no Datadog initialization and the exact-command probe reached the ' +
-        'selected test runner.',
-    },
-    monorepoFindings: getMonorepoFindings({ framework, command, probe: probe.summary }),
-    eventLevelFailure: {
-      kind: 'ci-wiring-static-missing-initialization',
-      missingLevels: ['session', 'module', 'suite', 'test'],
-      summary: diagnosis,
-      recommendation: baseEvidence.ciRemediation.summary,
-    },
-    ...basicEventEvidence([]),
-  }
-  const resultPath = path.join(outDir, 'result.json')
-  writeFileSafely(
-    out,
-    resultPath,
-    `${JSON.stringify(sanitizeForReport({ status: 'fail', diagnosis, evidence }), null, 2)}\n`,
-    'CI wiring static conclusion artifact'
-  )
-  return fail(framework, 'ci-wiring', diagnosis, evidence, null, {
-    ...probe.artifacts,
-    result: resultPath,
-  })
 }
 
 /**
@@ -312,15 +239,16 @@ async function maybeRunInitializationProbe ({ command, framework, options, outDi
   }
 }
 
-function getMissingCiWiringCommandResult (framework, manifest, basicResult) {
+function getMissingCiWiringCommandResult (framework, manifest) {
   const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
   if (contradiction) {
-    return fail(framework, 'ci-wiring', contradiction.reason, {
-      ciCommandCandidate: buildCiCommandCandidate(framework),
-      ciWiring: framework.ciWiring,
-      ciDiscovery: contradiction.ciDiscovery,
-      recommendation: contradiction.recommendation,
-    })
+    return incomplete(framework, 'ci-wiring',
+      `CI wiring was not replayed: ${contradiction.reason} No live CI-wiring conclusion was reached.`, {
+        ciCommandCandidate: buildCiCommandCandidate(framework),
+        ciWiring: framework.ciWiring,
+        ciDiscovery: contradiction.ciDiscovery,
+        recommendation: contradiction.recommendation,
+      })
   }
 
   const ciWiring = framework.ciWiring
@@ -335,32 +263,10 @@ function getMissingCiWiringCommandResult (framework, manifest, basicResult) {
     recommendation: 'Add ciWiringCommand to the manifest when a CI test step can be safely replayed locally.',
   }
 
-  if (ciWiring?.initialization?.status === 'not_configured' && basicResult?.status === 'pass') {
-    const staticEvidence = ciWiring.initialization.evidence.join(' ')
-    const summary = `The selected CI configuration does not initialize Datadog. ${staticEvidence} ` +
-      'Basic Reporting proved this test suite reports when Datadog is initialized. The exact CI command could not ' +
-      `be replayed locally: ${diagnosis} This does not change the current conclusion because CI provides no ` +
-      'initialization to propagate. Apply the generated CI configuration below; the next normal CI test run will ' +
-      'provide end-to-end verification.'
-    evidence.forcedLocalBasicReporting = summarizeBasicReportingResult(basicResult)
-    evidence.eventLevelFailure = {
-      kind: 'ci-wiring-static-missing-initialization',
-      missingLevels: ['session', 'module', 'suite', 'test'],
-      summary,
-      recommendation: ciRemediation.summary,
-    }
-    evidence.recommendation = ciRemediation.summary
-    return fail(framework, 'ci-wiring', summary, evidence)
-  }
-
-  if (ciWiring?.status === 'skip') return skip(framework, 'ci-wiring', diagnosis, evidence)
-  if (ciWiring?.status === 'pass' || ciWiring?.status === 'fail') {
-    return fail(framework, 'ci-wiring', diagnosis, evidence)
-  }
   return incomplete(
     framework,
     'ci-wiring',
-    `The validation manifest is incomplete: ${diagnosis}`,
+    `CI wiring was not replayed: ${diagnosis} No live CI-wiring conclusion was reached.`,
     evidence
   )
 }

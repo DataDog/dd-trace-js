@@ -19,7 +19,7 @@ function validationOptions (repositoryRoot) {
 }
 
 describe('test optimization CI wiring validation', () => {
-  it('does not turn a failed CI wiring classification into a skip when its command is missing', async () => {
+  it('reports a static CI wiring classification as incomplete when its command is missing', async () => {
     const result = await runCiWiring({
       manifest: {},
       framework: {
@@ -31,11 +31,13 @@ describe('test optimization CI wiring validation', () => {
       },
     })
 
-    assert.strictEqual(result.status, 'fail')
-    assert.strictEqual(result.diagnosis, 'CI does not configure Datadog initialization.')
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.manifestIncomplete, true)
+    assert.match(result.diagnosis, /CI wiring was not replayed/)
+    assert.match(result.diagnosis, /CI does not configure Datadog initialization/)
   })
 
-  it('fails from conclusive static CI evidence when the unavailable command cannot be replayed', async () => {
+  it('does not return a conclusive failure from static evidence when the CI command cannot be replayed', async () => {
     const result = await runCiWiring({
       manifest: {},
       framework: {
@@ -58,18 +60,12 @@ describe('test optimization CI wiring validation', () => {
       },
     })
 
-    assert.strictEqual(result.status, 'fail')
-    assert.match(result.diagnosis, /does not initialize Datadog/)
-    assert.match(result.diagnosis, /exact CI command could not be replayed locally/)
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.manifestIncomplete, true)
+    assert.match(result.diagnosis, /CI wiring was not replayed/)
     assert.match(result.diagnosis, /requires mise/)
-    assert.match(result.diagnosis, /does not change the current conclusion/)
-    assert.match(result.diagnosis, /next normal CI test run will provide end-to-end verification/)
-    assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-static-missing-initialization')
-    assert.deepStrictEqual(result.evidence.forcedLocalBasicReporting, {
-      ran: true,
-      status: 'pass',
-      diagnosis: 'Basic Reporting passed.',
-    })
+    assert.match(result.diagnosis, /No live CI-wiring conclusion was reached/)
+    assert.strictEqual(result.evidence.eventLevelFailure, undefined)
     assert.deepStrictEqual(result.evidence.ciRemediation.variants.map(variant => variant.id), ['agentless'])
   })
 
@@ -87,7 +83,7 @@ describe('test optimization CI wiring validation', () => {
 
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.manifestIncomplete, true)
-    assert.match(result.diagnosis, /manifest is incomplete/)
+    assert.match(result.diagnosis, /CI wiring was not replayed/)
   })
 
   it('does not inherit ambient Datadog initialization from the validator process', async () => {
@@ -515,18 +511,8 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
-  it('uses static missing-initialization evidence and the exact-command probe instead of a full CI ' +
-    'replay', async () => {
+  it('lets live replay override an incorrect static not-configured claim', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const vitestScript = path.join(out, 'vitest.mjs')
-    const fullReplayMarker = path.join(out, 'full-replay-ran')
-    fs.writeFileSync(vitestScript, `
-      import fs from 'node:fs'
-      setTimeout(() => {
-        fs.writeFileSync(${JSON.stringify(fullReplayMarker)}, 'ran')
-        console.log('Tests 1 passed')
-      }, 1000)
-    `)
 
     try {
       const result = await runCiWiring({
@@ -549,7 +535,57 @@ describe('test optimization CI wiring validation', () => {
           },
           ciWiringCommand: {
             cwd: out,
-            argv: [process.execPath, vitestScript],
+            argv: [process.execPath, '-e', offlineEventScript([
+              { type: 'test_session_end' },
+              { type: 'test_module_end' },
+              { type: 'test_suite_end' },
+              { type: 'test' },
+            ])],
+            env: {
+              NODE_OPTIONS: `-r ${path.resolve('ci/init.js')}`,
+            },
+          },
+        },
+        out,
+        options: validationOptions(out),
+        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
+      })
+
+      assert.strictEqual(result.status, 'pass')
+      assert.deepStrictEqual(result.evidence.ciCommandExecution, {
+        mode: 'full-replay',
+        fullReplayRan: true,
+      })
+      assert.strictEqual(result.evidence.commandExitCode, 0)
+      assert.match(result.diagnosis, /CI test command emitted session, module, suite, and test events/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('uses a no-events live replay as the evidence for genuinely missing CI initialization', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const fullReplayMarker = path.join(out, 'full-replay-ran')
+
+    try {
+      const result = await runCiWiring({
+        manifest: { repository: { root: out } },
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          project: { root: out },
+          ciWiring: {
+            initialization: {
+              status: 'not_configured',
+              evidence: ['The unit job defines no NODE_OPTIONS or Datadog environment variables.'],
+            },
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', [
+              `require('node:fs').writeFileSync(${JSON.stringify(fullReplayMarker)}, 'ran')`,
+              'console.log("Tests 1 passed")',
+            ].join(';')],
           },
         },
         out,
@@ -558,12 +594,15 @@ describe('test optimization CI wiring validation', () => {
       })
 
       assert.strictEqual(result.status, 'fail')
-      assert.ok(result.evidence.ciCommandExecution, JSON.stringify(result.evidence, null, 2))
-      assert.strictEqual(result.evidence.ciCommandExecution.fullReplayRan, false)
-      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, true)
-      assert.strictEqual(fs.existsSync(fullReplayMarker), false)
-      assert.match(result.diagnosis, /did not replay the full CI test suite/)
-      assert.match(result.evidence.ciRemediation.variants[0].snippet, /NODE_OPTIONS/)
+      assert.strictEqual(fs.readFileSync(fullReplayMarker, 'utf8'), 'ran')
+      assert.deepStrictEqual(result.evidence.ciCommandExecution, {
+        mode: 'full-replay',
+        fullReplayRan: true,
+      })
+      assert.strictEqual(result.evidence.commandExitCode, 0)
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
+      assert.match(result.diagnosis, /ran tests/)
+      assert.doesNotMatch(JSON.stringify(result.evidence), /initialization-probe-only/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }

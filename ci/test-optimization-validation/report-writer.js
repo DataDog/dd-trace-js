@@ -723,9 +723,6 @@ function getResultDetailLines (result, options = {}) {
   if (evidence.ciConfigurationDiagnosis) {
     lines.push(`Manifest CI configuration diagnosis: ${evidence.ciConfigurationDiagnosis}`)
   }
-  if (evidence.ciCommandExecution?.fullReplayRan === false) {
-    lines.push(`Full CI test replay: not needed; ${evidence.ciCommandExecution.reason}`)
-  }
   if (Array.isArray(evidence.existingDatadogInitScripts) && evidence.existingDatadogInitScripts.length > 0) {
     const scripts = evidence.existingDatadogInitScripts.map(script => {
       return `${script.name} (${script.packageJson})`
@@ -848,10 +845,7 @@ function appendEventFailureLines (lines, evidence, { format }) {
 
   if (failure.kind) lines.push(`Event failure kind: ${format(failure.kind)}`)
   if (Array.isArray(failure.missingLevels) && failure.missingLevels.length > 0) {
-    const label = failure.kind === 'ci-wiring-static-missing-initialization'
-      ? 'Event levels that require CI initialization (static inference)'
-      : 'Missing event levels'
-    lines.push(`${label}: ${formatList(failure.missingLevels, { format })}`)
+    lines.push(`Missing event levels: ${formatList(failure.missingLevels, { format })}`)
   }
 }
 
@@ -1297,12 +1291,6 @@ function getCompactResultMeaning (result) {
     return 'Tests emitted session, module, suite, and test data.'
   }
   if (result.scenario === CI_WIRING_SCENARIO && result.status === 'fail') {
-    if (result.evidence?.eventLevelFailure?.kind === 'ci-wiring-static-missing-initialization') {
-      return 'Static CI inspection found no Datadog initialization; the CI command was not replayed locally.'
-    }
-    if (result.evidence?.ciCommandExecution?.fullReplayRan === false) {
-      return 'CI has no Datadog initialization; a short probe proved NODE_OPTIONS reaches the test runner.'
-    }
     if (result.evidence?.nodeOptionsRemoval) {
       return 'CI ran tests, but a package script removed the dd-trace preload before the test runner started.'
     }

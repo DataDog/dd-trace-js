@@ -715,7 +715,7 @@ describe('test optimization validation report writer', () => {
     }
   })
 
-  it('does not claim a CI command ran for a static-only wiring failure', () => {
+  it('does not claim a CI command ran when CI replay is unavailable', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
     const packageJsonPath = path.join(tmpDir, 'package.json')
@@ -734,13 +734,10 @@ describe('test optimization validation report writer', () => {
     const results = [{
       frameworkId: 'vitest:date-fns',
       scenario: 'ci-wiring',
-      status: 'fail',
-      diagnosis: 'Static CI inspection found no Datadog initialization.',
+      status: 'error',
+      diagnosis: 'CI wiring was not replayed. No live CI-wiring conclusion was reached.',
       evidence: {
-        eventLevelFailure: {
-          kind: 'ci-wiring-static-missing-initialization',
-          missingLevels: ['test_session_end', 'test'],
-        },
+        manifestIncomplete: true,
       },
       artifacts: [],
     }]
@@ -760,11 +757,10 @@ describe('test optimization validation report writer', () => {
 
       const summary = logs.join('\n')
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-      assert.match(summary, /Static CI inspection found no Datadog initialization/)
-      assert.match(summary, /CI command was not replayed locally/)
+      assert.match(summary, /CI wiring was not replayed/)
+      assert.match(summary, /No live CI-wiring conclusion was reached/)
       assert.doesNotMatch(summary, /CI ran tests/)
       assert.doesNotMatch(markdown, /Missing event levels:/)
-      assert.ok(markdown.includes('Event levels that require CI initialization \\(static inference\\)'))
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
