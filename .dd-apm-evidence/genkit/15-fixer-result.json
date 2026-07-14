@@ -1,0 +1,24 @@
+{
+  "tests_passing": true,
+  "tests_deleted": false,
+  "changes_made": [
+    "Changed GenkitPlugin.static prefix from orchestrion:@genkit-ai/core:runInNewSpan to tracing:orchestrion:@genkit-ai/core:runInNewSpan."
+  ],
+  "explanation": "The prefix now matches the lifecycle channels published by dc-polyfill tracingChannel. The unchanged exact @genkit-ai/core@1.21.0 suite passes all five operation families.",
+  "validation": {
+    "focused_tests": {
+      "passing": 5,
+      "failing": 0,
+      "skipped": 0
+    },
+    "syntax": "passed",
+    "targeted_lint": "passed",
+    "diff_check": "passed"
+  },
+  "environment_removed_for_test": [
+    "OTEL_TRACES_EXPORTER",
+    "OTEL_LOGS_EXPORTER",
+    "OTEL_METRICS_EXPORTER",
+    "DD_AGENT_HOST"
+  ]
+}

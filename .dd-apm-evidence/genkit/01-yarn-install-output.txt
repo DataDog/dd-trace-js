@@ -1,0 +1,25 @@
+$ yarn add --exact genkit@1.21.0
+yarn add v1.22.22
+info No lockfile found.
+[1/4] Resolving packages...
+[2/4] Fetching packages...
+[3/4] Linking dependencies...
+[4/4] Building fresh packages...
+success Saved lockfile.
+success Saved 300 new dependencies.
+info Direct dependencies
+└─ genkit@1.21.0
+Done in 30.36s.
+
+Notable warnings from the complete console output:
+- @genkit-ai/firebase@1.39.0 has unmet peers @google-cloud/firestore@^7.11.0 and firebase-admin@>=12.2.
+- @genkit-ai/firebase@1.39.0 has incorrect peer dependency genkit@^1.39.0.
+- @genkit-ai/google-cloud@1.39.0 has incorrect peer dependency genkit@^1.39.0.
+- Several transitive packages emitted deprecation/support warnings (uuid <=10, Jaeger exporter, node-domexception,
+  an older OpenTelemetry propagation package, and glob@10.5.0).
+
+$ yarn install --frozen-lockfile
+yarn install v1.22.22
+[1/4] Resolving packages...
+success Already up-to-date.
+Done in 0.23s.

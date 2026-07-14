@@ -1,0 +1,6 @@
+v22.23.1
+1.22.22
+dd-apm-genkit-1.21.0-sample@1.0.0 /workspace/repo/.dd-apm-evidence/genkit/09-sample-app
+└─┬ genkit@1.21.0
+  ├── @genkit-ai/ai@1.21.0
+  └── @genkit-ai/core@1.21.0

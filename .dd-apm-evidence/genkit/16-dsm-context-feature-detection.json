@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "stage": "16-feature-detection",
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "decisions": [
+    {
+      "feature_id": "dsm",
+      "applicable": false,
+      "reasoning": "Data Streams Monitoring applies to messaging or queue integrations with producer and consumer boundaries. Genkit 1.21.0 is a provider-neutral generative-AI workflow orchestrator. Its selected runInNewSpan boundary executes model, flow, tool, retrieval, and embedding actions; it does not enqueue, publish, consume, acknowledge, or commit messages, and it exposes no topic, queue, partition, offset, consumer group, payload carrier, or pathway context at this hook. The Genkit APM plugin consequently has no producer/consumer plugins, DSM checkpoints, pathway encoding/decoding, or messaging destination tags."
+    },
+    {
+      "feature_id": "context_propagation",
+      "applicable": false,
+      "reasoning": "The feature guide limits distributed context propagation to messaging and HTTP/RPC client/server boundaries that can inject into or extract from a transport carrier. The selected Genkit boundary is an in-process orchestration/action lifecycle and receives only options plus a callback; runtime mapping shows labels, mutable metadata, result/error, and inherited async parentage but no request headers, message attributes, or other carrier. Genkit's AsyncLocalStorage/OpenTelemetry active-span handling already preserves in-process nesting, while provider SDK and transport integrations remain responsible for propagation across actual network boundaries. Adding carrier injection/extraction to Genkit would have no valid carrier and would duplicate lower-level integrations."
+    }
+  ],
+  "feature_guide_status": {
+    "dedicated_repository_guides_found": false,
+    "decision_guidance_source": ".dd-apm-pipeline/16-feature-feature-detection.md",
+    "note": "No dedicated DSM or context-propagation feature guide was present under .agents or .codex; repository implementations were used as concrete comparisons."
+  },
+  "sources": [
+    ".dd-apm-evidence/genkit/12-final-analysis.json",
+    "packages/datadog-plugin-genkit/src/index.js",
+    "packages/datadog-instrumentations/src/genkit.js",
+    "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js",
+    "/tmp/dd-apm-genkit-1.21.0/node_modules/@genkit-ai/core/src/tracing/instrumentation.ts",
+    "/tmp/dd-apm-genkit-1.21.0/node_modules/@genkit-ai/core/src/action.ts",
+    "packages/datadog-plugin-kafkajs/src/producer.js",
+    "packages/datadog-plugin-kafkajs/src/consumer.js",
+    "packages/datadog-plugin-grpc/src/client.js",
+    "packages/datadog-plugin-grpc/src/server.js"
+  ]
+}

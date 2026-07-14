@@ -1,0 +1,5 @@
+{
+  "feature_id": "dbm",
+  "applicable": false,
+  "reasoning": "Database Monitoring applies to database clients that execute SQL queries. Genkit 1.21.0 is a provider-neutral generative-AI and workflow orchestration framework. Its selected runInNewSpan boundary invokes registered model, flow, tool, retriever, and embedder runners; it neither accepts nor executes SQL statements and the exact genkit, @genkit-ai/core, and @genkit-ai/ai 1.21.0 manifests have no database-client dependencies. A user-supplied retriever may call a database, but that database client's own integration owns DBM query tagging and SQL trace-context injection. Adding DBM behavior to the Genkit action span would misclassify a generic retrieval abstraction and could not safely inject into an unknown downstream query."
+}

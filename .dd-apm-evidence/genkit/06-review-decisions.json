@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "stage": "06-review",
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "review_mode": {
+    "requested_capability": "interactive curses TUI",
+    "capability_status": "unavailable",
+    "reason": "The execution environment is headless and noninteractive. The Stage 06 guidance says the TUI is automatically skipped in headless or remote mode.",
+    "tui_executed": false,
+    "replacement": "independent source-based review with machine-readable decisions"
+  },
+  "overall_decision": "change",
+  "category_decision": {
+    "value": "ORCHESTRATION",
+    "decision": "accept",
+    "reason": "genkit coordinates provider-neutral actions, tools, retrieval, embeddings, and flows; genkit and @genkit-ai/ai do not implement provider HTTP clients"
+  },
+  "hook_decision": {
+    "target": "@genkit-ai/core runInNewSpan",
+    "decision": "accept_with_constraints",
+    "constraints": [
+      "Use Orchestrion Async with a strict label allowlist.",
+      "Register hooks for @genkit-ai/core rather than only genkit.",
+      "Support lib/tracing/instrumentation.js; retain the matching .mjs entry only for nonstandard resolver or bundler reachability.",
+      "Limit the initial supported version range to the source-proven 1.21.x endpoint, preferably exactly 1.21.0 until cross-version source evidence exists.",
+      "Do not claim input or output schema-validation failures are covered: input parsing precedes runInNewSpan and output parsing follows it."
+    ]
+  },
+  "target_decisions": [
+    {
+      "target": "runInNewSpan [genkit:metadata:subtype=model]",
+      "operation": "generation",
+      "decision": "change",
+      "accepted_kind": "llm",
+      "required_changes": [
+        "Convert Genkit Part arrays into valid LLMObs message content strings.",
+        "Map role model to assistant.",
+        "Convert toolRequest parts to toolCalls and toolResponse parts to toolResults using the LLMObs tagger field names.",
+        "Never pass raw media URLs, data parts, custom payloads, provider raw responses, or message metadata through by default.",
+        "Tag only numeric usage fields; the three standard token metrics are required when present.",
+        "Derive provider and model only from a proven action-name convention and preserve undefined rather than inventing values.",
+        "Demote the Genkit model span to workflow when an enabled native provider LLMObs integration emits the authoritative llm span for the same request."
+      ]
+    },
+    {
+      "target": "runInNewSpan [genkit:metadata:subtype=flow or genkit:type=flowStep]",
+      "operation": "workflow",
+      "decision": "accept_with_constraints",
+      "accepted_kind": "workflow",
+      "required_changes": [
+        "Use genkit:type=flowStep as the exact flow-step discriminator.",
+        "Keep structured I/O in LLMObs only and rely on configured LLMObs content capture/redaction; do not add raw workflow I/O as ordinary APM tags.",
+        "Test flow to model/tool/retrieval/embedding parent-child relationships."
+      ]
+    },
+    {
+      "target": "runInNewSpan [genkit:metadata:subtype=tool]",
+      "operation": "tool",
+      "decision": "accept_with_constraints",
+      "accepted_kind": "tool",
+      "required_changes": [
+        "Use bounded LLMObs text I/O and no raw ordinary APM payload tags.",
+        "Pin interrupt behavior with an exact 1.21.0 test before deciding whether an interrupt is an error or an interrupted successful result."
+      ]
+    },
+    {
+      "target": "runInNewSpan [genkit:metadata:subtype=retriever]",
+      "operation": "retrieval",
+      "decision": "change",
+      "accepted_kind": "retrieval",
+      "required_changes": [
+        "Flatten query.content text parts to the retrieval input value.",
+        "Convert each returned Genkit DocumentData from content parts to an LLMObs document object with a string text field.",
+        "Do not pass DocumentData objects directly to tagRetrievalIO because the tagger rejects objects without text.",
+        "Exclude arbitrary document metadata by default; copy only explicitly reviewed scalar name, id, or score fields."
+      ]
+    },
+    {
+      "target": "runInNewSpan [genkit:metadata:subtype=embedder]",
+      "operation": "embedding",
+      "decision": "change",
+      "accepted_kind": "embedding",
+      "required_changes": [
+        "Convert each input DocumentData content array into an LLMObs document object with a string text field.",
+        "Do not pass Genkit DocumentData directly to tagEmbeddingIO because the tagger rejects objects without text.",
+        "Never serialize returned numeric vectors. Emit only a summary such as [N embedding(s) returned with size D].",
+        "Exclude arbitrary document and embedding metadata by default."
+      ]
+    }
+  ],
+  "rejected_targets": [
+    {
+      "target": "agent",
+      "decision": "reject",
+      "reason": "Genkit 1.21.0 has no explicit agent lifecycle; tool-loop generation is not sufficient to label the operation as an agent."
+    },
+    {
+      "target": "generate/generateStream/prompt/chat convenience methods",
+      "decision": "reject",
+      "reason": "They converge on model actions and would duplicate spans; stream container-return timing is not provider completion timing."
+    },
+    {
+      "target": "defineFlow/defineTool/defineRetriever/defineEmbedder/defineModel",
+      "decision": "reject",
+      "reason": "These are registration boundaries, not operation execution."
+    },
+    {
+      "target": "runInNewSpan util/prompt/evaluator/indexer/reranker/resource labels",
+      "decision": "reject_for_initial_scope",
+      "reason": "The requested LLMObs kinds do not establish semantics for these labels; a strict allowlist prevents noisy internal spans."
+    }
+  ],
+  "findings": [
+    {
+      "id": "GENKIT-REVIEW-001",
+      "severity": "high",
+      "status": "override_required",
+      "summary": "Native Genkit message and document shapes are not valid direct inputs to the LLMObs tagger."
+    },
+    {
+      "id": "GENKIT-REVIEW-002",
+      "severity": "high",
+      "status": "override_required",
+      "summary": "Raw embedding vectors must be summarized rather than serialized as LLMObs output."
+    },
+    {
+      "id": "GENKIT-REVIEW-003",
+      "severity": "medium",
+      "status": "document_and_test",
+      "summary": "The selected hook does not cover schema validation before or after runInNewSpan."
+    },
+    {
+      "id": "GENKIT-REVIEW-004",
+      "severity": "high",
+      "status": "final_gate_blocker",
+      "summary": "Native OpenTelemetry and provider LLMObs duplicate-span behavior is unresolved until real-app trace inspection."
+    },
+    {
+      "id": "GENKIT-REVIEW-005",
+      "severity": "medium",
+      "status": "implementation_constraint",
+      "summary": "The hidden shared hook is source-proven only at 1.21.0 and must not receive an unsupported broad version range."
+    },
+    {
+      "id": "GENKIT-REVIEW-006",
+      "severity": "medium",
+      "status": "test_required",
+      "summary": "Tool-interrupt error semantics remain unresolved."
+    }
+  ],
+  "unresolved_blockers": [
+    "The curses TUI cannot run in this headless environment and is not marked passed.",
+    "Duplicate native OpenTelemetry/provider spans and token double counting require captured output from the real genkit@1.21.0 sample application.",
+    "Tool interrupt completion semantics require an executable 1.21.0 fixture.",
+    "The final supported semver range requires cross-version source and runtime evidence if it extends beyond 1.21.0."
+  ]
+}

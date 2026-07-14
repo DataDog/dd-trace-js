@@ -1,0 +1,20 @@
+
+> dd-apm-genkit-1.21.0-sample@1.0.0 sample
+> node sample-app.js
+
+setup: registered local Genkit 1.21.0 actions
+{"name":"generation","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.040Z","completedAt":"2026-07-14T00:11:01.213Z","value":{"message":{"role":"model","content":[{"text":"Offline generation complete."}]},"finishReason":"stop","usage":{"inputTokens":11,"outputTokens":7,"totalTokens":18},"custom":{},"request":{"messages":[{"role":"user","content":[{"text":"Generate a deterministic offline response."}]}],"config":{},"tools":[],"output":{}}}}
+{"name":"generationError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.213Z","completedAt":"2026-07-14T00:11:01.215Z","error":{"name":"Error","message":"intentional model runner failure"}}
+{"name":"generationStream","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.215Z","completedAt":"2026-07-14T00:11:01.227Z","value":{"chunkCount":2,"chunkOrder":["offline ","stream complete"],"streamCompleted":true,"finalResponseAwaited":true,"finalOutput":"Offline generation complete."}}
+{"name":"generationStreamError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.227Z","completedAt":"2026-07-14T00:11:01.229Z","error":{"name":"Error","message":"intentional model runner failure"}}
+{"name":"workflow","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.229Z","completedAt":"2026-07-14T00:11:01.254Z","value":{"answer":"The Paris forecast is sunny at 21C.","documentCount":1,"embeddingCount":2,"toolLoopEvents":["model-turn-1","tool-lookupWeather","model-turn-2"]}}
+{"name":"workflowError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.255Z","completedAt":"2026-07-14T00:11:01.255Z","error":{"name":"Error","message":"intentional flow runner failure"}}
+{"name":"flowStepError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.255Z","completedAt":"2026-07-14T00:11:01.256Z","error":{"name":"Error","message":"intentional flow step failure"}}
+{"name":"tool","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.256Z","completedAt":"2026-07-14T00:11:01.256Z","value":{"city":"Berlin","forecast":"sunny","temperatureCelsius":21}}
+{"name":"toolError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.256Z","completedAt":"2026-07-14T00:11:01.256Z","error":{"name":"Error","message":"intentional tool runner failure"}}
+{"name":"toolInterrupt","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.256Z","completedAt":"2026-07-14T00:11:01.258Z","value":{"finishReason":"interrupted","finishMessage":"One or more tool calls resulted in interrupts.","message":{"role":"model","content":[{"toolRequest":{"name":"approvalRequired","ref":"approval-1","input":{"task":"deploy"}},"metadata":{"interrupt":{"reason":"sample approval required","input":{"task":"deploy"}}}}]}}}
+{"name":"retrieval","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.258Z","completedAt":"2026-07-14T00:11:01.258Z","value":[{"text":"Retrieved context for: offline retrieval query","metadata":{"name":"offline-document","id":"doc-1","score":0.91,"excludedSecret":"do-not-capture"}}]}
+{"name":"retrievalError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.259Z","completedAt":"2026-07-14T00:11:01.259Z","error":{"name":"Error","message":"intentional retriever runner failure"}}
+{"name":"embedding","status":"success","expectedError":false,"startedAt":"2026-07-14T00:11:01.259Z","completedAt":"2026-07-14T00:11:01.260Z","value":{"count":2,"dimensions":[3,3]}}
+{"name":"embeddingError","status":"expected_error","expectedError":true,"startedAt":"2026-07-14T00:11:01.260Z","completedAt":"2026-07-14T00:11:01.260Z","error":{"name":"Error","message":"intentional embedder runner failure"}}
+teardown: wrote /workspace/repo/.dd-apm-evidence/genkit/09-sample-app/sample-results.json

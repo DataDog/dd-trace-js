@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "stage": "09-generate-app",
+  "status": "sample_passed_context_capture_blocked",
+  "sample_directory": ".dd-apm-evidence/genkit/09-sample-app",
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "services_required": [],
+  "module_formats_executed": ["commonjs", "esm"],
+  "operation_count": 14,
+  "unexpected_error_count": 0,
+  "successful_cases": [
+    "generation",
+    "fully consumed streaming generation with final response awaited",
+    "workflow with nested flowStep, retrieval, embedding, and tool-loop generation",
+    "direct tool",
+    "tool interrupt observed as finishReason=interrupted",
+    "retrieval",
+    "two-document, three-dimensional embedding"
+  ],
+  "expected_error_cases": [
+    "model runner rejection",
+    "streaming model runner rejection",
+    "flow runner rejection",
+    "flowStep runner rejection",
+    "tool runner rejection",
+    "retriever runner rejection",
+    "embedder runner rejection"
+  ],
+  "tool_loop_order": ["model-turn-1", "tool-lookupWeather", "model-turn-2"],
+  "context_capture": {
+    "status": "unavailable",
+    "captured_context_count": 0,
+    "evidence": "09-sample-app/context-capture-blocker.json"
+  },
+  "observability_gate": {
+    "status": "not_evaluated",
+    "reason": "Stage 09 does not have compiled repository instrumentation and emitted no Datadog APM or LLMObs trace capture."
+  },
+  "evidence": [
+    "09-sample-app/README.md",
+    "09-sample-app/package.json",
+    "09-sample-app/yarn.lock",
+    "09-sample-app/package-provenance.json",
+    "09-sample-app/services/required-services.json",
+    "09-sample-app/sample-app.js",
+    "09-sample-app/esm-smoke.mjs",
+    "09-sample-app/environment-output.txt",
+    "09-sample-app/sample-run-output.txt",
+    "09-sample-app/sample-results.json",
+    "09-sample-app/esm-smoke-output.txt",
+    "09-sample-app/yarn-install-output.txt",
+    "09-sample-app/yarn-lock-generation-output.txt",
+    "09-sample-app/yarn-frozen-lockfile-output.txt",
+    "09-sample-app/syntax-check-output.txt",
+    "09-sample-app/eslint-output.txt",
+    "09-sample-app/context-capture-blocker.json"
+  ]
+}

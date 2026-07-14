@@ -1,0 +1,21 @@
+{
+  "commands": [
+    "npm view genkit@1.21.0 name version description dist.tarball dist.shasum dist.integrity repository homepage license deprecated --json",
+    "npm view genkit@1.21.0 'time[1.21.0]' --json"
+  ],
+  "name": "genkit",
+  "version": "1.21.0",
+  "description": "Genkit AI framework",
+  "dist.tarball": "https://registry.npmjs.org/genkit/-/genkit-1.21.0.tgz",
+  "dist.shasum": "931ef9a3f66e09836393f60b142bb9215966756f",
+  "dist.integrity": "sha512-catTEjxhHZaicvxwak8jFL0K0H0ndN/qE9s+N7CIbsQeJczvRDleoyFa2mtaBOCaoZt7Xj8zJlYXOmt8tRyqJQ==",
+  "repository": {
+    "url": "git+https://github.com/firebase/genkit.git",
+    "type": "git",
+    "directory": "js/genkit"
+  },
+  "homepage": "https://genkit.dev",
+  "license": "Apache-2.0",
+  "publishedAt": "2025-10-06T22:58:10.442Z",
+  "deprecatedFieldPresent": false
+}

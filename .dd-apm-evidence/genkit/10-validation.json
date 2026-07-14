@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "stage": "10-validate-app",
+  "status": "passed",
+  "gate_passed": true,
+  "checks": {
+    "frozen_offline_yarn_install": "passed",
+    "exact_resolved_versions": "passed",
+    "required_source_headers": "passed",
+    "syntax": "passed",
+    "lint_from_repository_root": "passed",
+    "no_dd_trace_import": "passed",
+    "no_credentials": "passed_clean_environment",
+    "no_network": "passed_network_guard_zero_attempts",
+    "commonjs_full_run": "passed_exit_0",
+    "public_esm_smoke": "passed_exit_0",
+    "operation_count": 14,
+    "unexpected_error_count": 0,
+    "streaming_completion_and_order": "passed",
+    "tool_loop_order": "passed",
+    "interrupt": "passed",
+    "retrieval_embedding_and_expected_errors": "passed",
+    "clean_exit": "passed",
+    "docker_services": [],
+    "ci_services": []
+  },
+  "streaming": {
+    "chunk_count": 2,
+    "chunk_order": ["offline ", "stream complete"],
+    "stream_completed": true,
+    "final_response_awaited": true,
+    "final_output": "Offline generation complete."
+  },
+  "tool_loop_order": ["model-turn-1", "tool-lookupWeather", "model-turn-2"],
+  "interrupt_finish_reason": "interrupted",
+  "discrepancies": [],
+  "resolved_discrepancies": [
+    {
+      "severity": "documentation",
+      "resolution": "Stage 09 README now directs users to run the targeted ESLint command from /workspace/repo. The exact documented command was rerun there and exited 0 with no output.",
+      "historical_failure": "Running npm exec eslint from the sample directory exited 2 because the repository ESLint config reads ./vendor/package.json relative to cwd."
+    }
+  ],
+  "scope_exclusions": {
+    "context_capture": "not_evaluated_in_stage_10",
+    "apm_capture": "not_evaluated_in_stage_10",
+    "llmobs_capture": "not_evaluated_in_stage_10",
+    "observability_gate": "outside_stage_10"
+  },
+  "evidence": [
+    "10-command-output.md",
+    "10-fresh-sample-results.json",
+    "10-network-guard.cjs",
+    "10-validate-results.cjs",
+    "10-validated-sample-artifact.json",
+    "10-service-ci-requirements.json"
+  ]
+}

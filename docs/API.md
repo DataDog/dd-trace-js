@@ -55,6 +55,7 @@ tracer.use('pg', {
 <h5 id="fetch"></h5>
 <h5 id="find-my-way"></h5>
 <h5 id="fs"></h5>
+<h5 id="genkit"></h5>
 <h5 id="google-cloud-pubsub"></h5>
 <h5 id="google-cloud-vertexai"></h5>
 <h5 id="google-genai"></h5>
@@ -139,6 +140,7 @@ tracer.use('pg', {
 * [fetch](./interfaces/export_.plugins.fetch.html)
 * [find-my-way](./interfaces/export_.plugins.find_my_way.html)
 * [fs](./interfaces/export_.plugins.fs.html)
+* [genkit](./interfaces/export_.plugins.genkit.html)
 * [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
 * [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
 * [google-genai](./interfaces/export_.plugins.google_genai.html)

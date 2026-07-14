@@ -1,0 +1,267 @@
+{
+  "package_name": "genkit",
+  "package_version": "1.21.0",
+  "category": "generative-ai",
+  "subcategory": "workflow orchestration with a provider-neutral model registry",
+  "module_type": "dual-commonjs-esm",
+  "analysis": {
+    "summary": "Genkit 1.21.0 is an APM hybrid of generative AI and orchestration. For LLMObs it is classified as ORCHESTRATION because the package coordinates registered provider actions and workflows but does not itself call LLM provider endpoints. The selected hook is @genkit-ai/core runInNewSpan, filtered by Genkit's action subtype labels. This single lifecycle boundary receives mutable metadata that Genkit populates with action input and output, covers errors, and preserves parent-child relationships across model, flow, tool, retrieval, and embedding operations.",
+    "main_classes": [
+      "Genkit",
+      "Action (callable function created by @genkit-ai/core action())",
+      "Flow (Action subtype)",
+      "ModelAction (Action subtype)",
+      "ToolAction (Action subtype)",
+      "RetrieverAction (Action subtype)",
+      "EmbedderAction (Action subtype)"
+    ],
+    "instrumentation_targets": [
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=model]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>; runInNewSpan<T>(registry: Registry | HasRegistry, opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "module_name": "@genkit-ai/core",
+        "location": "runInNewSpan",
+        "file_path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "operation_type": "generation",
+        "operation": "model action invocation",
+        "span_kind": "client",
+        "span_name": "genkit.request",
+        "span_type": "genkit",
+        "reason": "Every provider-neutral model invocation, including each turn of tool-using generation and streaming generation, is executed inside this boundary. Genkit mutates opts.metadata.input and opts.metadata.output before the promise settles, so the plugin can extract messages, response, usage, model action name, errors, and configuration without coupling to a provider plugin.",
+        "priority": "critical",
+        "span_tags": {
+          "component": "genkit",
+          "genkit.operation.type": "model",
+          "genkit.action.name": "opts.metadata.name",
+          "llmobs.kind": "llm",
+          "llmobs.model_provider": "prefix of opts.metadata.name when present",
+          "llmobs.model_name": "opts.metadata.name",
+          "llmobs.input_messages": "opts.metadata.input.messages",
+          "llmobs.output_messages": "ctx.result.message or parsed opts.metadata.output.message",
+          "llmobs.metrics.input_tokens": "ctx.result.usage.inputTokens",
+          "llmobs.metrics.output_tokens": "ctx.result.usage.outputTokens",
+          "llmobs.metrics.total_tokens": "ctx.result.usage.totalTokens"
+        },
+        "async_pattern": "promise",
+        "error_handling": "Orchestrion Async error lifecycle records ctx.error; tag input plus an empty output and preserve the thrown error. Finish only after the returned promise settles.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "file_paths": [
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=flow or genkit:type=flowStep]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "module_name": "@genkit-ai/core",
+        "location": "runInNewSpan",
+        "file_path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "operation_type": "workflow",
+        "operation": "flow or named flow-step execution",
+        "span_kind": "internal",
+        "span_name": "genkit.workflow",
+        "span_type": "genkit",
+        "reason": "Flow invocation occurs here rather than at defineFlow registration. The promise encompasses the user flow function and all nested model, tool, retrieval, embedding, and run-step calls, giving the required workflow parent span and meaningful input/output/error data.",
+        "priority": "critical",
+        "span_tags": {
+          "component": "genkit",
+          "genkit.operation.type": "flow or flowStep",
+          "genkit.action.name": "opts.metadata.name",
+          "llmobs.kind": "workflow",
+          "llmobs.input": "opts.metadata.input",
+          "llmobs.output": "ctx.result or parsed opts.metadata.output"
+        },
+        "async_pattern": "promise",
+        "error_handling": "Record ctx.error and an empty workflow output; retain nested-child ordering through the Orchestrion start store.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "file_paths": [
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=tool]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "module_name": "@genkit-ai/core",
+        "location": "runInNewSpan",
+        "file_path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "operation_type": "tool",
+        "operation": "tool action invocation",
+        "span_kind": "internal",
+        "span_name": "genkit.tool",
+        "span_type": "genkit",
+        "reason": "This is the per-call execution boundary for both directly invoked tools and tools selected by an automatic generation loop. It avoids instrumenting defineTool registration and naturally nests between model turns.",
+        "priority": "critical",
+        "span_tags": {
+          "component": "genkit",
+          "genkit.operation.type": "tool",
+          "genkit.action.name": "opts.metadata.name",
+          "llmobs.kind": "tool",
+          "llmobs.input": "opts.metadata.input",
+          "llmobs.output": "ctx.result or parsed opts.metadata.output"
+        },
+        "async_pattern": "promise",
+        "error_handling": "Record thrown tool errors. Genkit tool interrupts are control-flow errors caught by resolveToolRequest; downstream implementation should verify whether they should be represented as successful interrupted tool results rather than LLMObs errors.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "file_paths": [
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=retriever]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "module_name": "@genkit-ai/core",
+        "location": "runInNewSpan",
+        "file_path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "operation_type": "retrieval",
+        "operation": "retriever action invocation",
+        "span_kind": "client",
+        "span_name": "genkit.request",
+        "span_type": "genkit",
+        "reason": "Retriever actions expose the actual query document, options, returned documents, action name, duration, and errors at this shared execution boundary. Genkit.retrieve is only a resolver veneer over the same action.",
+        "priority": "important",
+        "span_tags": {
+          "component": "genkit",
+          "genkit.operation.type": "retriever",
+          "genkit.action.name": "opts.metadata.name",
+          "llmobs.kind": "retrieval",
+          "llmobs.input_documents": "opts.metadata.input.query",
+          "llmobs.output_documents": "ctx.result.documents"
+        },
+        "async_pattern": "promise",
+        "error_handling": "Record ctx.error, the query document, and an empty output-document list.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "file_paths": [
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=embedder]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "module_name": "@genkit-ai/core",
+        "location": "runInNewSpan",
+        "file_path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "operation_type": "embedding",
+        "operation": "embedder action invocation",
+        "span_kind": "client",
+        "span_name": "genkit.request",
+        "span_type": "genkit",
+        "reason": "Both embed and embedMany resolve to one embedder action invocation. The shared boundary contains all input documents, embedding options, returned vectors, action name, duration, and errors without producing one span per document.",
+        "priority": "important",
+        "span_tags": {
+          "component": "genkit",
+          "genkit.operation.type": "embedder",
+          "genkit.action.name": "opts.metadata.name",
+          "llmobs.kind": "embedding",
+          "llmobs.input_documents": "opts.metadata.input.input",
+          "llmobs.output_embeddings": "ctx.result.embeddings"
+        },
+        "async_pattern": "promise",
+        "error_handling": "Record ctx.error, input documents, and an empty output-embedding list.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "file_paths": [
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "node_modules/@genkit-ai/core/lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ]
+      }
+    ],
+    "skipped_methods": [
+      {
+        "method": "Genkit.generate",
+        "reason": "Public convenience veneer that resolves options and delegates to generateHelper; selecting it would miss prompt/chat/internal call paths and duplicate the model action span. The model action subtype at runInNewSpan is the provider request boundary."
+      },
+      {
+        "method": "generateStream / Genkit.generateStream / Chat.sendStream / ExecutablePrompt.stream",
+        "reason": "These synchronously create a channel plus response promise and all funnel into generate and the model action. A span on the container-return method would end before generation. The selected model action promise completes after final provider output/error."
+      },
+      {
+        "method": "generateHelper [genkit:type=util]",
+        "reason": "This orchestration helper recurses once per tool turn. Recording it as an agent or workflow span would create nested duplicate generate spans and falsely label ordinary generation as an agent. Genkit 1.21.0 has no explicit agent API, so no agent-kind target is selected."
+      },
+      {
+        "method": "defineFlow / defineTool / defineRetriever / defineEmbedder / defineModel",
+        "reason": "Registration/factory methods do not execute user work and would measure setup rather than operation latency."
+      },
+      {
+        "method": "resolveToolRequest",
+        "reason": "The actual tool callable invokes an action subtype=tool and is already covered. Hooking resolution would duplicate tool execution and also include prompt-transfer bookkeeping."
+      },
+      {
+        "method": "embed / embedMany / retrieve",
+        "reason": "Public resolver veneers delegate to subtype-tagged actions. The action boundary is shared by direct action calls and high-level Genkit methods and has richer stable metadata."
+      },
+      {
+        "method": "runInNewSpan [unrecognized labels, util, prompt, evaluator, indexer, reranker, resource]",
+        "reason": "Conservative allowlist avoids tracing Genkit telemetry internals and operation classes not required by this integration. Reranking/indexing/resources may be future LLMObs targets only after product semantics are defined."
+      }
+    ],
+    "special_considerations": [
+      "LLMObs classification: LlmObsCategory.ORCHESTRATION, high confidence. The package has provider-neutral model registration and workflow/action state but no direct LLM-provider HTTP implementation. Incidental fetch calls download media, call a Genkit server, or export telemetry and do not make this an LLM_CLIENT.",
+      "The stage document references references/instrumentation/categories/generative-ai.md and orchestration.md, but no references/instrumentation/categories directory exists in the supplied workflow bundle. Repository apm-integrations and llmobs-integration guidance was used instead.",
+      "The overload has two argument layouts. Extract opts as ctx.arguments.length === 3 ? ctx.arguments[1] : ctx.arguments[0]. The same opts.metadata object is mutated with input, output, state, and path before async completion.",
+      "Map Genkit role model to standard LLMObs role assistant. Flatten text parts; preserve toolRequest/toolResponse structures as tool calls where supported; serialize non-text media/data/custom parts without recording raw binary payloads.",
+      "Model provider is not a dedicated field on model-action input. Derive a provider candidate from the registered action name prefix (for example googleai/model-name) and retain the full action name as modelName until real provider fixtures prove a stronger mapping.",
+      "Streaming generation uses callbacks/channels internally but the model action returns a Promise. The model span closes when the provider action's final response resolves or rejects, after chunk production completes. It intentionally does not measure how long application code takes to drain the returned stream.",
+      "Parent-child relationships come from runStores on Orchestrion start: flow -> model -> tool -> next model turn. The implementation must test direct calls and nested flow/tool calls to prove this ordering.",
+      "Genkit creates native OpenTelemetry spans inside runInNewSpan. A Datadog tracing span around the same boundary may coexist with those spans depending on OTel bridge configuration. The real-app gate must inspect for duplicate APM spans; do not suppress or claim success without captured evidence.",
+      "The top-level genkit package and the selected hook dependency are both exactly 1.21.0. Transitive @genkit-ai/firebase and @genkit-ai/google-cloud resolved to 1.39.0 but are not selected hook surfaces."
+    ],
+    "implementation_notes": {
+      "wrapping_strategy": "Use Orchestrion Async entries for @genkit-ai/core lib/tracing/instrumentation.js and lib/tracing/instrumentation.mjs, functionName runInNewSpan, with one shared channel. An APM TracingPlugin creates the current genkit span and an LLMObsPlugin filters the mutable Genkit opts labels into llm/workflow/tool/retrieval/embedding kinds. No AsyncIterator transform is needed because the actual selected operation returns a final-response Promise.",
+      "challenges": [
+        "A single hook serves many Genkit internal spans, so start must use a strict allowlist and return no span for unrelated labels.",
+        "The LLMObs plugin requires an APM currentStore span from the tracing plugin on the same channel.",
+        "Output is stored both as ctx.result and as a JSON string in opts.metadata.output; prefer ctx.result and parse the metadata string only as a fallback.",
+        "Tool interrupts and blocked generation have domain-specific completion states that require real-source tests before final error tagging is fixed.",
+        "Provider-specific integrations can wrap the underlying SDK too. If one is enabled, Genkit model spans may need workflow demotion to prevent two LLM spans and double-counted tokens, following the LangChain precedent."
+      ]
+    }
+  }
+}

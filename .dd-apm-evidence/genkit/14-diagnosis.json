@@ -1,0 +1,84 @@
+{
+  "success": false,
+  "integration_complete": false,
+  "failure_mode": "channels",
+  "suggestions": [
+    "Change GenkitPlugin.static prefix to tracing:orchestrion:@genkit-ai/core:runInNewSpan so it matches the event channels created by dc-polyfill tracingChannel('orchestrion:@genkit-ai/core:runInNewSpan').",
+    "Rerun the focused suite with OTEL_TRACES_EXPORTER, OTEL_LOGS_EXPORTER, and OTEL_METRICS_EXPORTER unset. In this sandbox also remove the exported empty DD_AGENT_HOST value, because it makes tracer initialization reject http: before PluginManager.configure runs.",
+    "Keep the exact @genkit-ai/core@1.21.0 Orchestrion paths and runInNewSpan Async query; probes prove the dependency hook loads, rewriting occurs, and start/end/asyncStart/asyncEnd events fire.",
+    "Add error, streaming, interrupt, ignored-label, and public ESM coverage after restoring the five success cases."
+  ],
+  "files_to_check": [
+    "packages/datadog-plugin-genkit/src/index.js",
+    "packages/datadog-plugin-genkit/test/index.spec.js",
+    "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js",
+    "packages/datadog-instrumentations/src/genkit.js",
+    "packages/datadog-instrumentations/src/helpers/hooks.js",
+    "packages/dd-trace/src/plugin_manager.js",
+    "packages/dd-trace/src/plugins/tracing.js"
+  ],
+  "skills_for_fixer": [
+    "apm-integrations"
+  ],
+  "test_output_summary": "Authoritative baseline with all three OTEL exporter variables explicitly unset: 0 passing, 5 failing, 0 pending; model, flow/flowStep, tool, retriever, and embedder each time out after their real operation returns while waiting for a trace. The sandbox exports DD_AGENT_HOST as an empty string, causing Config to construct invalid URL http: and tracer initialization to stop before PluginManager.configure; a probe observes configuredPlugins=[genkit], managerConfigured=false, and no instantiated plugins. After unsetting only that empty host variable, Genkit is instantiated but the suite remains 0/5: the plugin subscribes to orchestrion:@genkit-ai/core:runInNewSpan:* while Orchestrion emits tracing:orchestrion:@genkit-ai/core:runInNewSpan:*. The probe records one each of start/end/asyncStart/asyncEnd on the emitted prefix and zero on the configured prefix. A stage-local runtime-only prefix correction produces 5 passing in 1s, proving the selected hook, config, activation, tag extraction, parent linkage, and span finishing work once the channel prefix matches.",
+  "passing": 0,
+  "failing": 5,
+  "skipped": 0,
+  "exact_mechanism": {
+    "primary_integration_defect": "GenkitPlugin.static prefix omits the tracing: namespace automatically used by the tracingChannel event channels. TracingPlugin therefore binds no handler to the rewritten runInNewSpan lifecycle.",
+    "environmental_confounder": "The session exports DD_AGENT_HOST='' so agent.load tracer initialization catches ERR_INVALID_URL for input http: and never calls PluginManager.configure. This independently prevents plugin instantiation until the variable is removed for the focused test process.",
+    "not_the_cause": {
+      "orchestrion_config": "The exact @genkit-ai/core@1.21.0 CJS function is rewritten and emits the expected lifecycle.",
+      "instrumentation_hook_loading": "dd-trace:instrumentation:load publishes @genkit-ai/core and the registry exposes both @genkit-ai/core and genkit as Plugin id genkit.",
+      "span_finishing": "asyncEnd is emitted after the promise settles, and the runtime-only prefix proof passes all five completed-span assertions."
+    }
+  },
+  "missing_test_cases": [
+    {
+      "name": "runner_errors_all_families",
+      "description": "Verify error type/message/stack and completed spans for model, flow, flowStep, tool, retriever, and embedder runner rejections.",
+      "priority": "high"
+    },
+    {
+      "name": "streaming_completion",
+      "description": "Verify generation streaming spans remain open through final provider response, finish after all chunks, and capture streaming rejection.",
+      "priority": "high"
+    },
+    {
+      "name": "tool_interrupt",
+      "description": "Pin the observed Genkit 1.21.0 ToolInterruptError child and interrupted-success outer generation semantics.",
+      "priority": "high"
+    },
+    {
+      "name": "strict_label_allowlist",
+      "description": "Verify util, prompt, evaluator, indexer, reranker, resource, and unrecognized runInNewSpan labels do not create Genkit spans while preserving parent context.",
+      "priority": "high"
+    },
+    {
+      "name": "public_esm_usage",
+      "description": "Exercise a public ESM Genkit import and assert the normally reached instrumentation.js implementation creates spans.",
+      "priority": "medium"
+    },
+    {
+      "name": "three_argument_overload",
+      "description": "Exercise the source-supported registry/options/callback runInNewSpan overload and verify options extraction from arguments[1].",
+      "priority": "medium"
+    },
+    {
+      "name": "schema_validation_boundaries",
+      "description": "Document and pin that input validation before runInNewSpan produces no selected span and output validation after it is outside the selected lifecycle.",
+      "priority": "medium"
+    }
+  ],
+  "evidence": [
+    "14-test-diagnosis.md",
+    "14-channel-probe.cjs",
+    "14-prefix-proof.cjs",
+    "14-attempts/test-output-1.log",
+    "14-attempts/test-output-2-without-empty-agent-host.log",
+    "14-attempts/channel-probe-manager.log",
+    "14-attempts/debug-probe.log",
+    "14-attempts/prefix-proof.log",
+    "14-attempts/rewritten-channel-snippet.txt"
+  ]
+}

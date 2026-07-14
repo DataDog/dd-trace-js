@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "source": "09-sample-app/services/required-services.json",
+  "docker_compose_files": [],
+  "required_services": [],
+  "github_actions": {
+    "services": {}
+  },
+  "gitlab_ci": {
+    "services": []
+  },
+  "reason": "The validated sample uses only in-process Genkit model, tool, retriever, and embedder actions. A clean-environment run completed with the network guard reporting zero attempts."
+}

@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "stage": "18-llmobs-tracing-precheck",
+  "status": "passed",
+  "prerequisite_passed": true,
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "instrumentation": {
+    "loader": "packages/datadog-instrumentations/src/genkit.js",
+    "module_registration": "@genkit-ai/core",
+    "rewriter_config": "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js",
+    "function_name": "runInNewSpan",
+    "kind": "Async",
+    "channel_name": "runInNewSpan",
+    "version_range": "1.21.0",
+    "runtime_files": [
+      "lib/tracing/instrumentation.js",
+      "lib/tracing/instrumentation.mjs"
+    ]
+  },
+  "plugin": {
+    "path": "packages/datadog-plugin-genkit/src/index.js",
+    "id": "genkit",
+    "prefix": "tracing:orchestrion:@genkit-ai/core:runInNewSpan",
+    "runtime_registry_keys": [
+      "genkit",
+      "@genkit-ai/core"
+    ],
+    "covered_operations": [
+      "generation",
+      "flow",
+      "flowStep",
+      "tool",
+      "retrieval",
+      "embedding"
+    ]
+  },
+  "environment_scrub": [
+    "OTEL_TRACES_EXPORTER",
+    "OTEL_LOGS_EXPORTER",
+    "OTEL_METRICS_EXPORTER",
+    "DD_AGENT_HOST"
+  ],
+  "tests": [
+    {
+      "command": "env -u OTEL_TRACES_EXPORTER -u OTEL_LOGS_EXPORTER -u OTEL_METRICS_EXPORTER -u DD_AGENT_HOST ./node_modules/.bin/mocha packages/datadog-plugin-genkit/test/index.spec.js",
+      "exit_code": 0,
+      "result": "5 passing",
+      "duration": "1s"
+    },
+    {
+      "command": "env -u OTEL_TRACES_EXPORTER -u OTEL_LOGS_EXPORTER -u OTEL_METRICS_EXPORTER -u DD_AGENT_HOST ./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js",
+      "exit_code": 0,
+      "result": "171 passing",
+      "duration": "47ms"
+    }
+  ],
+  "source_sha256": {
+    "packages/datadog-instrumentations/src/genkit.js": "7ceeb9f0c2e2c0711d27bbd05b527aeeff9366cabdecb94b5278c95aedc391dc",
+    "packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/genkit.js": "dce72705932264556f52698f33324393d573247ac698449c95418dd4038aa7cc",
+    "packages/datadog-plugin-genkit/src/index.js": "1ad647c3bc431c528546e5b4221f350e53d5640536c19483506d5e70fe9bb321",
+    "packages/datadog-plugin-genkit/test/index.spec.js": "c7bdd7ee1473ca1a43a1291c9cfc2bf3fa24e5f246a9098f00cadc0c1c0642c1",
+    "@genkit-ai/core/lib/tracing/instrumentation.js": "94c7273234ec534218fa2f0cf62bbad1cf81bff90cb4cd11c91dc08b281b56d1",
+    "@genkit-ai/core/lib/tracing/instrumentation.mjs": "2440821b3ddd852d495f3104fef83c51355919ac2f69eb6e48a6a0e5aa56175f"
+  },
+  "blockers": [],
+  "scope": {
+    "production_files_modified": false,
+    "test_files_modified": false,
+    "progress_modified_by_stage_worker": false,
+    "llmobs_behavior_evaluated": false
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "status": "unavailable",
+  "captured_context_count": 0,
+  "reason": "Stage 08 did not provide a context_capture_tool or context_capture_command, and the plain Markdown pipeline explicitly forbids invoking dd-apm or a nested toolkit runner. No snapshot was fabricated.",
+  "reproduction_command": null,
+  "required_next_action": "A later instrumentation stage must supply a repository-native hook/capture command, then rerun this exact sample before claiming runtime hook context coverage."
+}

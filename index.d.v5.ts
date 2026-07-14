@@ -261,6 +261,7 @@ interface Plugins {
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
   "generic-pool": tracer.plugins.generic_pool;
+  "genkit": tracer.plugins.genkit;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -2601,6 +2602,12 @@ declare namespace tracer {
      * module to bind the callbacks the the caller context.
      */
     interface generic_pool extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * [Genkit](https://www.npmjs.com/package/genkit) module.
+     */
+    interface genkit extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

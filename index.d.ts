@@ -260,6 +260,7 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
+  "genkit": tracer.plugins.genkit;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -2467,6 +2468,12 @@ declare namespace tracer {
      * This plugin automatically instruments Node.js core fs operations.
      */
     interface fs extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [Genkit](https://www.npmjs.com/package/genkit) module.
+     */
+    interface genkit extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

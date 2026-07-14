@@ -1,0 +1,239 @@
+{
+  "success": true,
+  "error": null,
+  "total_targets": 5,
+  "found_targets": 5,
+  "missing_targets": [],
+  "enrichments": {
+    "targets": [
+      {
+        "target_name": "runInNewSpan [genkit:metadata:subtype=model]",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "module_name": "@genkit-ai/core",
+        "kind": "async",
+        "export_type": "named",
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "confirmed_in_library": true,
+        "language_specific": {
+          "javascript": {
+            "package_version": "1.21.0",
+            "source_path": "src/tracing/instrumentation.ts",
+            "source_implementation_line": 79,
+            "source_overload_lines": [60, 70],
+            "function_query": {
+              "functionName": "runInNewSpan",
+              "kind": "Async"
+            },
+            "public_subpath": "@genkit-ai/core/tracing",
+            "commonjs_publicly_reexported": true,
+            "esm_publicly_reexported": true,
+            "esm_entry_executes_commonjs_implementation": true,
+            "esm_counterpart_publicly_reachable": false
+          }
+        }
+      },
+      {
+        "target_name": "runInNewSpan [genkit:metadata:subtype=flow or genkit:type=flowStep]",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "module_name": "@genkit-ai/core",
+        "kind": "async",
+        "export_type": "named",
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "confirmed_in_library": true,
+        "language_specific": {
+          "javascript": {
+            "package_version": "1.21.0",
+            "source_path": "src/tracing/instrumentation.ts",
+            "source_implementation_line": 79,
+            "source_overload_lines": [60, 70],
+            "function_query": {
+              "functionName": "runInNewSpan",
+              "kind": "Async"
+            },
+            "public_subpath": "@genkit-ai/core/tracing",
+            "commonjs_publicly_reexported": true,
+            "esm_publicly_reexported": true,
+            "esm_entry_executes_commonjs_implementation": true,
+            "esm_counterpart_publicly_reachable": false
+          }
+        }
+      },
+      {
+        "target_name": "runInNewSpan [genkit:metadata:subtype=tool]",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "module_name": "@genkit-ai/core",
+        "kind": "async",
+        "export_type": "named",
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "confirmed_in_library": true,
+        "language_specific": {
+          "javascript": {
+            "package_version": "1.21.0",
+            "source_path": "src/tracing/instrumentation.ts",
+            "source_implementation_line": 79,
+            "source_overload_lines": [60, 70],
+            "function_query": {
+              "functionName": "runInNewSpan",
+              "kind": "Async"
+            },
+            "public_subpath": "@genkit-ai/core/tracing",
+            "commonjs_publicly_reexported": true,
+            "esm_publicly_reexported": true,
+            "esm_entry_executes_commonjs_implementation": true,
+            "esm_counterpart_publicly_reachable": false
+          }
+        }
+      },
+      {
+        "target_name": "runInNewSpan [genkit:metadata:subtype=retriever]",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "module_name": "@genkit-ai/core",
+        "kind": "async",
+        "export_type": "named",
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "confirmed_in_library": true,
+        "language_specific": {
+          "javascript": {
+            "package_version": "1.21.0",
+            "source_path": "src/tracing/instrumentation.ts",
+            "source_implementation_line": 79,
+            "source_overload_lines": [60, 70],
+            "function_query": {
+              "functionName": "runInNewSpan",
+              "kind": "Async"
+            },
+            "public_subpath": "@genkit-ai/core/tracing",
+            "commonjs_publicly_reexported": true,
+            "esm_publicly_reexported": true,
+            "esm_entry_executes_commonjs_implementation": true,
+            "esm_counterpart_publicly_reachable": false
+          }
+        }
+      },
+      {
+        "target_name": "runInNewSpan [genkit:metadata:subtype=embedder]",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "module_name": "@genkit-ai/core",
+        "kind": "async",
+        "export_type": "named",
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "confirmed_in_library": true,
+        "language_specific": {
+          "javascript": {
+            "package_version": "1.21.0",
+            "source_path": "src/tracing/instrumentation.ts",
+            "source_implementation_line": 79,
+            "source_overload_lines": [60, 70],
+            "function_query": {
+              "functionName": "runInNewSpan",
+              "kind": "Async"
+            },
+            "public_subpath": "@genkit-ai/core/tracing",
+            "commonjs_publicly_reexported": true,
+            "esm_publicly_reexported": true,
+            "esm_entry_executes_commonjs_implementation": true,
+            "esm_counterpart_publicly_reachable": false
+          }
+        }
+      }
+    ]
+  },
+  "package": {
+    "requested_name": "genkit",
+    "requested_version": "1.21.0",
+    "defining_module_name": "@genkit-ai/core",
+    "defining_module_version": "1.21.0",
+    "defining_module_type": "commonjs",
+    "package_export": {
+      "subpath": "./tracing",
+      "require": "./lib/tracing.js",
+      "import": "./lib/tracing.mjs",
+      "types": "./lib/tracing.d.ts",
+      "deep_instrumentation_subpath_exported": false
+    }
+  },
+  "hook_registration": {
+    "orchestrion_module_name": "@genkit-ai/core",
+    "orchestrion_version": "1.21.0",
+    "function_query": {
+      "functionName": "runInNewSpan",
+      "kind": "Async"
+    },
+    "required_file_paths": [
+      "lib/tracing/instrumentation.js",
+      "lib/tracing/instrumentation.mjs"
+    ],
+    "normal_node_require_runtime_path": "lib/tracing/instrumentation.js",
+    "normal_node_import_runtime_path": "lib/tracing/instrumentation.js",
+    "registration_requirement": "The integration hook must call getHooks('@genkit-ai/core') (or include that name in the getHooks name array) and add every returned hook before genkit is loaded. Registering only getHooks('genkit') will not install the dependency-file rewrite hooks.",
+    "reachability_note": "Both @genkit-ai/core/tracing require and import exports expose runInNewSpan as a named function. At 1.21.0, lib/tracing.mjs re-exports ./tracing/instrumentation.js, so ordinary ESM usage executes the CommonJS implementation. lib/tracing/instrumentation.mjs is a real matching ESM build artifact but is not directly exported; retain its Orchestrion entry for dual-build and nonstandard resolver coverage."
+  },
+  "source_hashes_sha256": {
+    "package.json": "de06d167e0bd9230d0071638c18a5483edcaca09258152dbe0836857d91d31f3",
+    "src/tracing/instrumentation.ts": "6d686f67c677c92e25c9e0da935028e172eb1fdc1c578d564c4c4332163d0986",
+    "lib/tracing/instrumentation.js": "94c7273234ec534218fa2f0cf62bbad1cf81bff90cb4cd11c91dc08b281b56d1",
+    "lib/tracing/instrumentation.mjs": "2440821b3ddd852d495f3104fef83c51355919ac2f69eb6e48a6a0e5aa56175f",
+    "lib/tracing.js": "9b799d733df183d01ac406445cc8c03eb23c997be35cbf6d8395f7d6702a3d41",
+    "lib/tracing.mjs": "fc0f92e41f48aa278713d4142193f6e85f1f812c70efc1764951df8618669719"
+  }
+}

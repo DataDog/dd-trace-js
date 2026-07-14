@@ -1,0 +1,5 @@
+
+> dd-apm-genkit-1.21.0-sample@1.0.0 esm-smoke
+> node esm-smoke.mjs
+
+{"moduleFormat":"esm","output":"ESM generation complete."}

@@ -1,0 +1,815 @@
+subpath	export_name	member_name	member_kind	static	optional	signatures	declaration
+.	ActionContext	auth	property	false	true		@genkit-ai/core/lib/context.d.ts:21:5
+.	ActionContext	IndexSignature	indexSignature	false	false	(additionalContext: string): any	@genkit-ai/core/lib/context.d.ts:22:5
+.	ActionMetadata	actionType	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:516:5
+.	ActionMetadata	name	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:517:5
+.	ActionMetadata	description	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:518:5
+.	ActionMetadata	inputSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:519:5
+.	ActionMetadata	inputJsonSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:520:5
+.	ActionMetadata	outputSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:521:5
+.	ActionMetadata	outputJsonSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:522:5
+.	ActionMetadata	streamSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:523:5
+.	ActionMetadata	metadata	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:524:5
+.	Chat	session	property	false	false		@genkit-ai/ai/lib/session.d.ts:202:5
+.	Chat	requestBase	property	false	true		@genkit-ai/ai/lib/session.d.ts:203:5
+.	Chat	sessionId	property	false	false		@genkit-ai/ai/lib/session.d.ts:204:5
+.	Chat	_messages	property	false	true		@genkit-ai/ai/lib/session.d.ts:205:5
+.	Chat	threadName	property	false	false		@genkit-ai/ai/lib/session.d.ts:206:5
+.	Chat	Constructor	constructor	false	false	(session: Session, requestBase: Promise<BaseGenerateOptions>, options: { id: string; thread: string; messages?: MessageData[]; }): Chat	@genkit-ai/ai/lib/session.d.ts:207:5
+.	Chat	send	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(options: string | Part[] | ChatGenerateOptions<O, CustomOptions>): Promise<GenerateResponse<z.infer<O>>>	@genkit-ai/ai/lib/session.d.ts:212:5
+.	Chat	sendStream	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(options: string | Part[] | GenerateStreamOptions<O, CustomOptions>): GenerateStreamResponse<z.infer<O>>	@genkit-ai/ai/lib/session.d.ts:213:5
+.	Chat	messages	getter	false	false	(): MessageData[]	@genkit-ai/ai/lib/session.d.ts:214:5
+.	Chat	updateMessages	property	false	false		@genkit-ai/ai/lib/session.d.ts:215:5
+.	Document	content	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1056:5
+.	Document	metadata	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1057:5
+.	Document	Constructor	constructor	false	false	(data: DocumentData): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1058:5
+.	Document	fromText	method	true	false	(text: string, metadata?: Record<string, any>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1059:5
+.	Document	fromMedia	method	true	false	(url: string, contentType?: string, metadata?: Record<string, unknown>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1060:5
+.	Document	fromData	method	true	false	(data: string, dataType?: string, metadata?: Record<string, unknown>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1061:5
+.	Document	text	getter	false	false	(): string	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1066:5
+.	Document	media	getter	false	false	(): { url: string; contentType?: string; }[]	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1071:5
+.	Document	data	getter	false	false	(): string	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1078:5
+.	Document	dataType	getter	false	false	(): string | undefined	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1082:5
+.	Document	toJSON	method	false	false	(): DocumentData	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1083:5
+.	Document	getEmbeddingDocuments	method	false	false	(embeddings: Embedding[]): Document[]	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1091:5
+.	EmbedderParams	embedder	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:282:5
+.	EmbedderParams	content	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:283:5
+.	EmbedderParams	metadata	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:284:5
+.	EmbedderParams	options	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:285:5
+.	EmbedderReference	name	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:361:5
+.	EmbedderReference	configSchema	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:362:5
+.	EmbedderReference	info	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:363:5
+.	EmbedderReference	config	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:364:5
+.	EmbedderReference	version	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:365:5
+.	EvaluatorParams	evaluator	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:379:5
+.	EvaluatorParams	dataset	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:380:5
+.	EvaluatorParams	evalRunId	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:381:5
+.	EvaluatorParams	options	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:382:5
+.	EvaluatorReference	name	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:418:5
+.	EvaluatorReference	configSchema	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:419:5
+.	EvaluatorReference	info	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:420:5
+.	ExecutablePrompt	ref	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:84:5
+.	ExecutablePrompt	CallSignature	callSignature	false	false	(input?: I, opts?: PromptGenerateOptions<O, CustomOptions>): Promise<GenerateResponse<z.infer<O>>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:95:5
+.	ExecutablePrompt	stream	method	false	false	(input?: I, opts?: PromptGenerateOptions<O, CustomOptions>): GenerateStreamResponse<z.infer<O>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:102:5
+.	ExecutablePrompt	render	method	false	false	(input?: I, opts?: PromptGenerateOptions<O, CustomOptions>): Promise<GenerateOptions<O, CustomOptions>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:109:5
+.	ExecutablePrompt	asTool	method	false	false	(): Promise<ToolAction>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:113:5
+.	FlowConfig	name	property	false	false		@genkit-ai/core/lib/flow.d.ts:35:5
+.	FlowConfig	inputSchema	property	false	true		@genkit-ai/core/lib/flow.d.ts:37:5
+.	FlowConfig	outputSchema	property	false	true		@genkit-ai/core/lib/flow.d.ts:39:5
+.	FlowConfig	streamSchema	property	false	true		@genkit-ai/core/lib/flow.d.ts:41:5
+.	FlowConfig	metadata	property	false	true		@genkit-ai/core/lib/flow.d.ts:43:5
+.	FlowSideChannel	CallSignature	callSignature	false	false	(chunk: S): void	@genkit-ai/core/lib/flow.d.ts:51:5
+.	GenerateOptions	model	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:368:5
+.	GenerateOptions	system	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:370:5
+.	GenerateOptions	prompt	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:372:5
+.	GenerateOptions	docs	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:374:5
+.	GenerateOptions	messages	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:376:5
+.	GenerateOptions	tools	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:380:5
+.	GenerateOptions	resources	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:382:5
+.	GenerateOptions	toolChoice	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:384:5
+.	GenerateOptions	config	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:386:5
+.	GenerateOptions	output	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:388:5
+.	GenerateOptions	resume	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:411:5
+.	GenerateOptions	returnToolRequests	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:413:5
+.	GenerateOptions	maxTurns	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:415:5
+.	GenerateOptions	onChunk	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:417:5
+.	GenerateOptions	streamingCallback	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:423:5
+.	GenerateOptions	use	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:425:5
+.	GenerateOptions	context	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:427:5
+.	GenerateOptions	abortSignal	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:429:5
+.	GenerateOptions	stepName	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:431:5
+.	GenerateOptions	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:437:5
+.	GenerateRequest	config	property	false	true		@genkit-ai/ai/lib/model-types.d.ts:3003:5
+.	GenerateResponse	message	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:29:5
+.	GenerateResponse	finishReason	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:31:5
+.	GenerateResponse	finishMessage	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:33:5
+.	GenerateResponse	usage	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:35:5
+.	GenerateResponse	custom	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:37:5
+.	GenerateResponse	raw	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:39:5
+.	GenerateResponse	request	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:41:5
+.	GenerateResponse	operation	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:43:5
+.	GenerateResponse	model	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:45:5
+.	GenerateResponse	parser	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:47:5
+.	GenerateResponse	Constructor	constructor	false	false	<O = unknown>(response: GenerateResponseData, options?: { request?: GenerateRequest; parser?: MessageParser<O>; }): GenerateResponse<O>	@genkit-ai/ai/lib/generate/response.d.ts:48:5
+.	GenerateResponse	assertValid	method	false	false	(): void	@genkit-ai/ai/lib/generate/response.d.ts:55:5
+.	GenerateResponse	assertValidSchema	method	false	false	(request?: GenerateRequest): void	@genkit-ai/ai/lib/generate/response.d.ts:59:5
+.	GenerateResponse	isValid	method	false	false	(request?: GenerateRequest): boolean	@genkit-ai/ai/lib/generate/response.d.ts:60:5
+.	GenerateResponse	output	getter	false	false	(): O | null	@genkit-ai/ai/lib/generate/response.d.ts:68:5
+.	GenerateResponse	text	getter	false	false	(): string	@genkit-ai/ai/lib/generate/response.d.ts:73:5
+.	GenerateResponse	reasoning	getter	false	false	(): string	@genkit-ai/ai/lib/generate/response.d.ts:78:5
+.	GenerateResponse	media	getter	false	false	(): { url: string; contentType?: string; } | null	@genkit-ai/ai/lib/generate/response.d.ts:84:5
+.	GenerateResponse	data	getter	false	false	(): O | null	@genkit-ai/ai/lib/generate/response.d.ts:92:5
+.	GenerateResponse	toolRequests	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/generate/response.d.ts:97:5
+.	GenerateResponse	interrupts	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/generate/response.d.ts:102:5
+.	GenerateResponse	messages	getter	false	false	(): MessageData[]	@genkit-ai/ai/lib/generate/response.d.ts:109:5
+.	GenerateResponse	toJSON	method	false	false	(): ModelResponseData	@genkit-ai/ai/lib/generate/response.d.ts:110:5
+.	GenerateResponseChunk	index	property	false	false		@genkit-ai/ai/lib/generate/chunk.d.ts:25:5
+.	GenerateResponseChunk	role	property	false	false		@genkit-ai/ai/lib/generate/chunk.d.ts:27:5
+.	GenerateResponseChunk	content	property	false	false		@genkit-ai/ai/lib/generate/chunk.d.ts:29:5
+.	GenerateResponseChunk	custom	property	false	true		@genkit-ai/ai/lib/generate/chunk.d.ts:31:5
+.	GenerateResponseChunk	previousChunks	property	false	true		@genkit-ai/ai/lib/generate/chunk.d.ts:33:5
+.	GenerateResponseChunk	parser	property	false	true		@genkit-ai/ai/lib/generate/chunk.d.ts:35:5
+.	GenerateResponseChunk	Constructor	constructor	false	false	<T = unknown>(data: GenerateResponseChunkData, options: { previousChunks?: GenerateResponseChunkData[]; role: Role; index: number; parser?: ChunkParser<T>; }): GenerateResponseChunk<T>	@genkit-ai/ai/lib/generate/chunk.d.ts:36:5
+.	GenerateResponseChunk	text	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:46:5
+.	GenerateResponseChunk	reasoning	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:51:5
+.	GenerateResponseChunk	accumulatedText	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:56:5
+.	GenerateResponseChunk	previousText	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:60:5
+.	GenerateResponseChunk	media	getter	false	false	(): { url: string; contentType?: string; } | null	@genkit-ai/ai/lib/generate/chunk.d.ts:66:5
+.	GenerateResponseChunk	data	getter	false	false	(): T | null	@genkit-ai/ai/lib/generate/chunk.d.ts:74:5
+.	GenerateResponseChunk	toolRequests	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/generate/chunk.d.ts:79:5
+.	GenerateResponseChunk	output	getter	false	false	(): T | null	@genkit-ai/ai/lib/generate/chunk.d.ts:84:5
+.	GenerateResponseChunk	toJSON	method	false	false	(): GenerateResponseChunkData	@genkit-ai/ai/lib/generate/chunk.d.ts:85:5
+.	GenerateStreamResponse	stream	getter	false	false	(): AsyncIterable<GenerateResponseChunk>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:466:5
+.	GenerateStreamResponse	response	getter	false	false	(): Promise<GenerateResponse<O>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:467:5
+.	GenerationResponseError	detail	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:441:5
+.	GenerationResponseError	Constructor	constructor	false	false	(response: GenerateResponse<any>, message: string, status?: GenkitError["status"], detail?: Record<string, any>): GenerationResponseError	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:445:5
+.	Genkit	options	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:86:5
+.	Genkit	registry	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:88:5
+.	Genkit	reflectionServer	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:90:5
+.	Genkit	flows	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:92:5
+.	Genkit	apiStability	getter	false	false	(): "stable" | "beta"	genkit/lib/index-Cd4YWqZH.d.ts:93:5
+.	Genkit	Constructor	constructor	false	false	(options?: GenkitOptions): Genkit	genkit/lib/index-Cd4YWqZH.d.ts:94:5
+.	Genkit	defineFlow	method	false	false	<I extends z.ZodTypeAny = z.ZodTypeAny, O extends z.ZodTypeAny = z.ZodTypeAny, S extends z.ZodTypeAny = z.ZodTypeAny>(config: FlowConfig<I, O, S> | string, fn: FlowFn<I, O, S>): Action<I, O, S>	genkit/lib/index-Cd4YWqZH.d.ts:98:5
+.	Genkit	defineTool	method	false	false	<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(config: ToolConfig<I, O>, fn: ToolFn<I, O>): ToolAction<I, O>	genkit/lib/index-Cd4YWqZH.d.ts:104:5
+.	Genkit	dynamicTool	method	false	false	<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(config: ToolConfig<I, O>, fn?: ToolFn<I, O>): ToolAction<I, O>	genkit/lib/index-Cd4YWqZH.d.ts:109:5
+.	Genkit	defineDynamicActionProvider	method	false	false	(config: DapConfig | string, fn: DapFn): DynamicActionProviderAction	genkit/lib/index-Cd4YWqZH.d.ts:113:5
+.	Genkit	defineSchema	method	false	false	<T extends z.ZodTypeAny>(name: string, schema: T): T	genkit/lib/index-Cd4YWqZH.d.ts:119:5
+.	Genkit	defineJsonSchema	method	false	false	(name: string, jsonSchema: JSONSchema): any	genkit/lib/index-Cd4YWqZH.d.ts:125:5
+.	Genkit	defineModel	method	false	false	<CustomOptionsSchema extends z.ZodTypeAny = z.ZodTypeAny>(options: { apiVersion: "v2"; } & DefineModelOptions<CustomOptionsSchema>, runner: (request: GenerateRequest<CustomOptionsSchema>, options: ActionFnArg<GenerateResponseChunkData>) => Promise<GenerateResponseData>): ModelAction<CustomOptionsSchema>	genkit/lib/index-Cd4YWqZH.d.ts:129:5
+.	Genkit	defineModel	method	false	false	<CustomOptionsSchema extends z.ZodTypeAny = z.ZodTypeAny>(options: DefineModelOptions<CustomOptionsSchema>, runner: (request: GenerateRequest<CustomOptionsSchema>, streamingCallback?: StreamingCallback<GenerateResponseChunkData>) => Promise<GenerateResponseData>): ModelAction<CustomOptionsSchema>	genkit/lib/index-Cd4YWqZH.d.ts:135:5
+.	Genkit	defineBackgroundModel	method	false	false	<CustomOptionsSchema extends z.ZodTypeAny = z.ZodTypeAny>(options: DefineBackgroundModelOptions<CustomOptionsSchema>): BackgroundModelAction<CustomOptionsSchema>	genkit/lib/index-Cd4YWqZH.d.ts:139:5
+.	Genkit	prompt	method	false	false	<I extends z.ZodTypeAny = z.ZodTypeAny, O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodTypeAny>(name: string, options?: { variant?: string; }): ExecutablePrompt<z.infer<I>, O, CustomOptions>	genkit/lib/index-Cd4YWqZH.d.ts:144:5
+.	Genkit	wrapExecutablePromptPromise	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:147:5
+.	Genkit	definePrompt	method	false	false	<I extends z.ZodTypeAny = z.ZodTypeAny, O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodTypeAny>(options: PromptConfig<I, O, CustomOptions>, templateOrFn?: string | PromptFn<I>): ExecutablePrompt<z.infer<I>, O, CustomOptions>	genkit/lib/index-Cd4YWqZH.d.ts:182:5
+.	Genkit	defineRetriever	method	false	false	<OptionsType extends z.ZodTypeAny = z.ZodTypeAny>(options: { name: string; configSchema?: OptionsType; info?: RetrieverInfo; }, runner: RetrieverFn<OptionsType>): RetrieverAction<OptionsType>	genkit/lib/index-Cd4YWqZH.d.ts:188:5
+.	Genkit	defineSimpleRetriever	method	false	false	<C extends z.ZodTypeAny = z.ZodTypeAny, R = any>(options: SimpleRetrieverOptions<C, R>, handler: (query: Document, config: z.infer<C>) => Promise<R[]>): RetrieverAction<C>	genkit/lib/index-Cd4YWqZH.d.ts:201:5
+.	Genkit	defineIndexer	method	false	false	<IndexerOptions extends z.ZodTypeAny>(options: { name: string; embedderInfo?: EmbedderInfo; configSchema?: IndexerOptions; }, runner: IndexerFn<IndexerOptions>): IndexerAction<IndexerOptions>	genkit/lib/index-Cd4YWqZH.d.ts:205:5
+.	Genkit	defineEvaluator	method	false	false	<DataPoint extends typeof BaseDataPointSchema = z.ZodObject<{ input: z.ZodUnknown; output: z.ZodOptional<z.ZodUnknown>; context: z.ZodOptional<z.ZodArray<z.ZodUnknown, "many">>; reference: z.ZodOptional<z.ZodUnknown>; testCaseId: z.ZodOptional<z.ZodString>; traceIds: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "strip", z.ZodTypeAny, { output?: unknown; context?: unknown[] | undefined; input?: unknown; reference?: unknown; testCaseId?: string | undefined; traceIds?: string[] | undefined; }, { output?: unknown; context?: unknown[] | undefined; input?: unknown; reference?: unknown; testCaseId?: string | undefined; traceIds?: string[] | undefined; }>, EvalDataPoint extends typeof BaseEvalDataPointSchema = z.ZodObject<{ input: z.ZodUnknown; output: z.ZodOptional<z.ZodUnknown>; context: z.ZodOptional<z.ZodArray<z.ZodUnknown, "many">>; reference: z.ZodOptional<z.ZodUnknown>; traceIds: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; } & { testCaseId: z.ZodString; }, "strip", z.ZodTypeAny, { testCaseId: string; output?: unknown; context?: unknown[] | undefined; input?: unknown; reference?: unknown; traceIds?: string[] | undefined; }, { testCaseId: string; output?: unknown; context?: unknown[] | undefined; input?: unknown; reference?: unknown; traceIds?: string[] | undefined; }>, EvaluatorOptions extends z.ZodTypeAny = z.ZodTypeAny>(options: { name: string; displayName: string; definition: string; dataPointType?: DataPoint; configSchema?: EvaluatorOptions; isBilled?: boolean; }, runner: EvaluatorFn<EvalDataPoint, EvaluatorOptions>): EvaluatorAction	genkit/lib/index-Cd4YWqZH.d.ts:213:5
+.	Genkit	defineEmbedder	method	false	false	<ConfigSchema extends z.ZodTypeAny = z.ZodTypeAny>(options: { name: string; configSchema?: ConfigSchema; info?: EmbedderInfo; }, runner: EmbedderFn<ConfigSchema>): EmbedderAction<ConfigSchema>	genkit/lib/index-Cd4YWqZH.d.ts:224:5
+.	Genkit	defineHelper	method	false	false	(name: string, fn: Handlebars.HelperDelegate): void	genkit/lib/index-Cd4YWqZH.d.ts:232:5
+.	Genkit	definePartial	method	false	false	(name: string, source: string): void	genkit/lib/index-Cd4YWqZH.d.ts:236:5
+.	Genkit	defineReranker	method	false	false	<OptionsType extends z.ZodTypeAny = z.ZodTypeAny>(options: { name: string; configSchema?: OptionsType; info?: RerankerInfo; }, runner: RerankerFn<OptionsType>): _genkit_ai_ai_reranker.RerankerAction<OptionsType>	genkit/lib/index-Cd4YWqZH.d.ts:240:5
+.	Genkit	embed	method	false	false	<CustomOptions extends z.ZodTypeAny>(params: EmbedderParams<CustomOptions>): Promise<Embedding[]>	genkit/lib/index-Cd4YWqZH.d.ts:248:5
+.	Genkit	embedMany	method	false	false	<ConfigSchema extends z.ZodTypeAny = z.ZodTypeAny>(params: { embedder: EmbedderArgument<ConfigSchema>; content: string[] | DocumentData[]; metadata?: Record<string, unknown>; options?: z.infer<ConfigSchema>; }): Promise<EmbeddingBatch>	genkit/lib/index-Cd4YWqZH.d.ts:252:5
+.	Genkit	evaluate	method	false	false	<DataPoint extends typeof BaseDataPointSchema = z.ZodObject<{ input: z.ZodUnknown; output: z.ZodOptional<z.ZodUnknown>; context: z.ZodOptional<z.ZodArray<z.ZodUnknown, "many">>; reference: z.ZodOptional<z.ZodUnknown>; testCaseId: z.ZodOptional<z.ZodString>; traceIds: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "strip", z.ZodTypeAny, { output?: unknown; context?: unknown[] | undefined; input?: unknown; reference?: unknown; testCaseId?: string | undefined; traceIds?: string[] | undefined; }, { output?: unknown; context?: unknown[] | undefined; input?: unknown; reference?: unknown; testCaseId?: string | undefined; traceIds?: string[] | undefined; }>, CustomOptions extends z.ZodTypeAny = z.ZodTypeAny>(params: EvaluatorParams<DataPoint, CustomOptions>): Promise<EvalResponses>	genkit/lib/index-Cd4YWqZH.d.ts:261:5
+.	Genkit	rerank	method	false	false	<CustomOptions extends z.ZodTypeAny>(params: RerankerParams<CustomOptions>): Promise<Array<RankedDocument>>	genkit/lib/index-Cd4YWqZH.d.ts:265:5
+.	Genkit	index	method	false	false	<CustomOptions extends z.ZodTypeAny>(params: IndexerParams<CustomOptions>): Promise<void>	genkit/lib/index-Cd4YWqZH.d.ts:269:5
+.	Genkit	retrieve	method	false	false	<CustomOptions extends z.ZodTypeAny>(params: RetrieverParams<CustomOptions>): Promise<Array<Document>>	genkit/lib/index-Cd4YWqZH.d.ts:273:5
+.	Genkit	generate	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny>(strPrompt: string): Promise<GenerateResponse<z.infer<O>>>	genkit/lib/index-Cd4YWqZH.d.ts:286:5
+.	Genkit	generate	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny>(parts: Part[]): Promise<GenerateResponse<z.infer<O>>>	genkit/lib/index-Cd4YWqZH.d.ts:302:5
+.	Genkit	generate	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(opts: GenerateOptions<O, CustomOptions> | PromiseLike<GenerateOptions<O, CustomOptions>>): Promise<GenerateResponse<z.infer<O>>>	genkit/lib/index-Cd4YWqZH.d.ts:328:5
+.	Genkit	generateStream	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny>(strPrompt: string): GenerateStreamResponse<z.infer<O>>	genkit/lib/index-Cd4YWqZH.d.ts:345:5
+.	Genkit	generateStream	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny>(parts: Part[]): GenerateStreamResponse<z.infer<O>>	genkit/lib/index-Cd4YWqZH.d.ts:365:5
+.	Genkit	generateStream	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(parts: GenerateOptions<O, CustomOptions> | PromiseLike<GenerateOptions<O, CustomOptions>>): GenerateStreamResponse<z.infer<O>>	genkit/lib/index-Cd4YWqZH.d.ts:395:5
+.	Genkit	checkOperation	method	false	false	<T>(operation: Operation<T>): Promise<Operation<T>>	genkit/lib/index-Cd4YWqZH.d.ts:414:5
+.	Genkit	run	method	false	false	<T>(name: string, func: () => Promise<T>): Promise<T>	genkit/lib/index-Cd4YWqZH.d.ts:430:5
+.	Genkit	run	method	false	false	<T>(name: string, input: any, func: (input?: any) => Promise<T>): Promise<T>	genkit/lib/index-Cd4YWqZH.d.ts:445:5
+.	Genkit	currentContext	method	false	false	(): ActionContext | undefined	genkit/lib/index-Cd4YWqZH.d.ts:451:5
+.	Genkit	configure	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:455:5
+.	Genkit	stopServers	method	false	false	(): Promise<void>	genkit/lib/index-Cd4YWqZH.d.ts:459:5
+.	GenkitError	source	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:215:5
+.	GenkitError	status	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:216:5
+.	GenkitError	detail	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:217:5
+.	GenkitError	code	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:218:5
+.	GenkitError	originalMessage	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:219:5
+.	GenkitError	Constructor	constructor	false	false	({ status, message, detail, source, }: { status: StatusName; message: string; detail?: any; source?: string; }): GenkitError	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:220:5
+.	GenkitError	toJSON	method	false	false	(): HttpErrorWireFormat	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:229:5
+.	GenkitOptions	plugins	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:63:5
+.	GenkitOptions	promptDir	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:65:5
+.	GenkitOptions	model	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:67:5
+.	GenkitOptions	context	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:69:5
+.	GenkitOptions	name	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:71:5
+.	GenkitOptions	clientHeader	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:73:5
+.	IndexerParams	indexer	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:701:5
+.	IndexerParams	documents	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:702:5
+.	IndexerParams	options	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:703:5
+.	IndexerReference	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:758:5
+.	IndexerReference	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:759:5
+.	IndexerReference	info	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:760:5
+.	JSONSchema7	$id	property	false	true		@types/json-schema/index.d.ts:609:5
+.	JSONSchema7	$ref	property	false	true		@types/json-schema/index.d.ts:610:5
+.	JSONSchema7	$schema	property	false	true		@types/json-schema/index.d.ts:611:5
+.	JSONSchema7	$comment	property	false	true		@types/json-schema/index.d.ts:612:5
+.	JSONSchema7	$defs	property	false	true		@types/json-schema/index.d.ts:618:5
+.	JSONSchema7	type	property	false	true		@types/json-schema/index.d.ts:625:5
+.	JSONSchema7	enum	property	false	true		@types/json-schema/index.d.ts:626:5
+.	JSONSchema7	const	property	false	true		@types/json-schema/index.d.ts:627:5
+.	JSONSchema7	multipleOf	property	false	true		@types/json-schema/index.d.ts:632:5
+.	JSONSchema7	maximum	property	false	true		@types/json-schema/index.d.ts:633:5
+.	JSONSchema7	exclusiveMaximum	property	false	true		@types/json-schema/index.d.ts:634:5
+.	JSONSchema7	minimum	property	false	true		@types/json-schema/index.d.ts:635:5
+.	JSONSchema7	exclusiveMinimum	property	false	true		@types/json-schema/index.d.ts:636:5
+.	JSONSchema7	maxLength	property	false	true		@types/json-schema/index.d.ts:641:5
+.	JSONSchema7	minLength	property	false	true		@types/json-schema/index.d.ts:642:5
+.	JSONSchema7	pattern	property	false	true		@types/json-schema/index.d.ts:643:5
+.	JSONSchema7	items	property	false	true		@types/json-schema/index.d.ts:648:5
+.	JSONSchema7	additionalItems	property	false	true		@types/json-schema/index.d.ts:649:5
+.	JSONSchema7	maxItems	property	false	true		@types/json-schema/index.d.ts:650:5
+.	JSONSchema7	minItems	property	false	true		@types/json-schema/index.d.ts:651:5
+.	JSONSchema7	uniqueItems	property	false	true		@types/json-schema/index.d.ts:652:5
+.	JSONSchema7	contains	property	false	true		@types/json-schema/index.d.ts:653:5
+.	JSONSchema7	maxProperties	property	false	true		@types/json-schema/index.d.ts:658:5
+.	JSONSchema7	minProperties	property	false	true		@types/json-schema/index.d.ts:659:5
+.	JSONSchema7	required	property	false	true		@types/json-schema/index.d.ts:660:5
+.	JSONSchema7	properties	property	false	true		@types/json-schema/index.d.ts:661:5
+.	JSONSchema7	patternProperties	property	false	true		@types/json-schema/index.d.ts:664:5
+.	JSONSchema7	additionalProperties	property	false	true		@types/json-schema/index.d.ts:667:5
+.	JSONSchema7	dependencies	property	false	true		@types/json-schema/index.d.ts:668:5
+.	JSONSchema7	propertyNames	property	false	true		@types/json-schema/index.d.ts:671:5
+.	JSONSchema7	if	property	false	true		@types/json-schema/index.d.ts:676:5
+.	JSONSchema7	then	property	false	true		@types/json-schema/index.d.ts:677:5
+.	JSONSchema7	else	property	false	true		@types/json-schema/index.d.ts:678:5
+.	JSONSchema7	allOf	property	false	true		@types/json-schema/index.d.ts:683:5
+.	JSONSchema7	anyOf	property	false	true		@types/json-schema/index.d.ts:684:5
+.	JSONSchema7	oneOf	property	false	true		@types/json-schema/index.d.ts:685:5
+.	JSONSchema7	not	property	false	true		@types/json-schema/index.d.ts:686:5
+.	JSONSchema7	format	property	false	true		@types/json-schema/index.d.ts:691:5
+.	JSONSchema7	contentMediaType	property	false	true		@types/json-schema/index.d.ts:696:5
+.	JSONSchema7	contentEncoding	property	false	true		@types/json-schema/index.d.ts:697:5
+.	JSONSchema7	definitions	property	false	true		@types/json-schema/index.d.ts:702:5
+.	JSONSchema7	title	property	false	true		@types/json-schema/index.d.ts:709:5
+.	JSONSchema7	description	property	false	true		@types/json-schema/index.d.ts:710:5
+.	JSONSchema7	default	property	false	true		@types/json-schema/index.d.ts:711:5
+.	JSONSchema7	readOnly	property	false	true		@types/json-schema/index.d.ts:712:5
+.	JSONSchema7	writeOnly	property	false	true		@types/json-schema/index.d.ts:713:5
+.	JSONSchema7	examples	property	false	true		@types/json-schema/index.d.ts:714:5
+.	Message	role	property	false	false		@genkit-ai/ai/lib/message.d.ts:29:5
+.	Message	content	property	false	false		@genkit-ai/ai/lib/message.d.ts:30:5
+.	Message	metadata	property	false	true		@genkit-ai/ai/lib/message.d.ts:31:5
+.	Message	parser	property	false	true		@genkit-ai/ai/lib/message.d.ts:32:5
+.	Message	parseData	method	true	false	(lenientMessage: string | (MessageData & { content: string | Part | Part[]; role: string; }) | MessageData, defaultRole?: MessageData["role"]): MessageData	@genkit-ai/ai/lib/message.d.ts:33:5
+.	Message	parse	method	true	false	(lenientMessage: string | (MessageData & { content: string; }) | MessageData): Message	@genkit-ai/ai/lib/message.d.ts:37:5
+.	Message	parseContent	method	true	false	(lenientPart: string | Part | (string | Part)[]): Part[]	@genkit-ai/ai/lib/message.d.ts:40:5
+.	Message	Constructor	constructor	false	false	<T = unknown>(message: MessageData, options?: { parser?: MessageParser<T>; }): Message<T>	@genkit-ai/ai/lib/message.d.ts:41:5
+.	Message	output	getter	false	false	(): T	@genkit-ai/ai/lib/message.d.ts:51:5
+.	Message	toolResponseParts	method	false	false	(): ToolResponsePart[]	@genkit-ai/ai/lib/message.d.ts:52:5
+.	Message	text	getter	false	false	(): string	@genkit-ai/ai/lib/message.d.ts:57:5
+.	Message	reasoning	getter	false	false	(): string	@genkit-ai/ai/lib/message.d.ts:62:5
+.	Message	media	getter	false	false	(): { url: string; contentType?: string; } | null	@genkit-ai/ai/lib/message.d.ts:68:5
+.	Message	data	getter	false	false	(): T | null	@genkit-ai/ai/lib/message.d.ts:76:5
+.	Message	toolRequests	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/message.d.ts:81:5
+.	Message	interrupts	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/message.d.ts:86:5
+.	Message	toJSON	method	false	false	(): MessageData	@genkit-ai/ai/lib/message.d.ts:91:5
+.	ModelReference	name	property	false	false		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:159:5
+.	ModelReference	configSchema	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:160:5
+.	ModelReference	info	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:161:5
+.	ModelReference	version	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:162:5
+.	ModelReference	config	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:163:5
+.	ModelReference	withConfig	method	false	false	(cfg: z.infer<CustomOptions>): ModelReference<CustomOptions>	@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:164:5
+.	ModelReference	withVersion	method	false	false	(version: string): ModelReference<CustomOptions>	@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:165:5
+.	ModelRequest	config	property	false	true		@genkit-ai/ai/lib/model-types.d.ts:2019:5
+.	Operation	action	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:105:5
+.	Operation	id	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:106:5
+.	Operation	done	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:107:5
+.	Operation	output	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:108:5
+.	Operation	error	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:109:5
+.	Operation	metadata	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:113:5
+.	OutputOptions	format	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:334:5
+.	OutputOptions	contentType	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:335:5
+.	OutputOptions	instructions	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:336:5
+.	OutputOptions	schema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:337:5
+.	OutputOptions	jsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:338:5
+.	OutputOptions	constrained	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:339:5
+.	PromptConfig	name	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:53:5
+.	PromptConfig	variant	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:54:5
+.	PromptConfig	model	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:55:5
+.	PromptConfig	config	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:56:5
+.	PromptConfig	description	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:57:5
+.	PromptConfig	input	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:58:5
+.	PromptConfig	system	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:62:5
+.	PromptConfig	prompt	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:63:5
+.	PromptConfig	messages	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:64:5
+.	PromptConfig	docs	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:65:5
+.	PromptConfig	output	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:66:5
+.	PromptConfig	maxTurns	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:67:5
+.	PromptConfig	returnToolRequests	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:68:5
+.	PromptConfig	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:69:5
+.	PromptConfig	tools	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:70:5
+.	PromptConfig	toolChoice	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:71:5
+.	PromptConfig	use	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:72:5
+.	PromptConfig	context	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:73:5
+.	RankedDocument	content	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:181:5
+.	RankedDocument	metadata	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:182:5
+.	RankedDocument	Constructor	constructor	false	false	(data: RankedDocumentData): RankedDocument	@genkit-ai/ai/lib/reranker.d.ts:185:5
+.	RankedDocument	score	method	false	false	(): number	@genkit-ai/ai/lib/reranker.d.ts:190:5
+.	ReflectionServer	RUNNING_SERVERS	property	true	false		@genkit-ai/core/lib/reflection.d.ts:68:5
+.	ReflectionServer	registry	property	false	false		@genkit-ai/core/lib/reflection.d.ts:70:5
+.	ReflectionServer	options	property	false	false		@genkit-ai/core/lib/reflection.d.ts:72:5
+.	ReflectionServer	port	property	false	false		@genkit-ai/core/lib/reflection.d.ts:74:5
+.	ReflectionServer	server	property	false	false		@genkit-ai/core/lib/reflection.d.ts:76:5
+.	ReflectionServer	runtimeFilePath	property	false	false		@genkit-ai/core/lib/reflection.d.ts:78:5
+.	ReflectionServer	Constructor	constructor	false	false	(registry: Registry, options?: ReflectionServerOptions): ReflectionServer	@genkit-ai/core/lib/reflection.d.ts:79:5
+.	ReflectionServer	findPort	method	false	false	(): Promise<number>	@genkit-ai/core/lib/reflection.d.ts:83:5
+.	ReflectionServer	start	method	false	false	(): Promise<void>	@genkit-ai/core/lib/reflection.d.ts:89:5
+.	ReflectionServer	stop	method	false	false	(): Promise<void>	@genkit-ai/core/lib/reflection.d.ts:93:5
+.	ReflectionServer	writeRuntimeFile	property	false	false		@genkit-ai/core/lib/reflection.d.ts:97:5
+.	ReflectionServer	cleanupRuntimeFile	property	false	false		@genkit-ai/core/lib/reflection.d.ts:101:5
+.	ReflectionServer	stopAll	method	true	false	(): Promise<void[]>	@genkit-ai/core/lib/reflection.d.ts:105:5
+.	ReflectionServerOptions	port	property	false	true		@genkit-ai/core/lib/reflection.d.ts:51:5
+.	ReflectionServerOptions	bodyLimit	property	false	true		@genkit-ai/core/lib/reflection.d.ts:53:5
+.	ReflectionServerOptions	configuredEnvs	property	false	true		@genkit-ai/core/lib/reflection.d.ts:55:5
+.	ReflectionServerOptions	name	property	false	true		@genkit-ai/core/lib/reflection.d.ts:57:5
+.	RerankerParams	reranker	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:830:5
+.	RerankerParams	query	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:831:5
+.	RerankerParams	documents	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:832:5
+.	RerankerParams	options	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:833:5
+.	RerankerReference	name	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:848:5
+.	RerankerReference	configSchema	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:849:5
+.	RerankerReference	info	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:850:5
+.	ResourceAction	matches	method	false	false	(input: ResourceInput): boolean	@genkit-ai/ai/lib/resource.d.ts:568:5
+.	ResumeOptions	respond	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:352:5
+.	ResumeOptions	restart	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:362:5
+.	ResumeOptions	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:364:5
+.	RetrieverParams	retriever	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:681:5
+.	RetrieverParams	query	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:682:5
+.	RetrieverParams	options	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:683:5
+.	RetrieverReference	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:723:5
+.	RetrieverReference	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:724:5
+.	RetrieverReference	info	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:725:5
+.	Session	registry	property	false	false		@genkit-ai/ai/lib/session.d.ts:51:5
+.	Session	id	property	false	false		@genkit-ai/ai/lib/session.d.ts:52:5
+.	Session	sessionData	property	false	true		@genkit-ai/ai/lib/session.d.ts:53:5
+.	Session	store	property	false	false		@genkit-ai/ai/lib/session.d.ts:54:5
+.	Session	Constructor	constructor	false	false	<S = any>(registry: Registry, options?: { id?: string; stateSchema?: S; sessionData?: SessionData<S>; store?: SessionStore<S>; }): Session<S>	@genkit-ai/ai/lib/session.d.ts:55:5
+.	Session	state	getter	false	false	(): S | undefined	@genkit-ai/ai/lib/session.d.ts:61:5
+.	Session	updateState	method	false	false	(data: S): Promise<void>	@genkit-ai/ai/lib/session.d.ts:65:5
+.	Session	updateMessages	method	false	false	(thread: string, messages: MessageData[]): Promise<void>	@genkit-ai/ai/lib/session.d.ts:69:5
+.	Session	chat	method	false	false	<I>(options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:82:5
+.	Session	chat	method	false	false	<I>(preamble: ExecutablePrompt<I>, options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:95:5
+.	Session	chat	method	false	false	<I>(threadName: string, preamble: ExecutablePrompt<I>, options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:111:5
+.	Session	chat	method	false	false	<I>(threadName: string, options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:127:5
+.	Session	run	method	false	false	<O>(fn: () => O): O	@genkit-ai/ai/lib/session.d.ts:132:5
+.	Session	toJSON	method	false	false	(): SessionData<S> | undefined	@genkit-ai/ai/lib/session.d.ts:133:5
+.	SessionData	id	property	false	false		@genkit-ai/ai/lib/session.d.ts:136:5
+.	SessionData	state	property	false	true		@genkit-ai/ai/lib/session.d.ts:137:5
+.	SessionData	threads	property	false	true		@genkit-ai/ai/lib/session.d.ts:138:5
+.	SessionStore	get	method	false	false	(sessionId: string): Promise<SessionData<S> | undefined>	@genkit-ai/ai/lib/session.d.ts:152:5
+.	SessionStore	save	method	false	false	(sessionId: string, data: Omit<SessionData<S>, "id">): Promise<void>	@genkit-ai/ai/lib/session.d.ts:153:5
+.	StreamingResponse	stream	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:591:5
+.	StreamingResponse	output	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:593:5
+.	ToolConfig	name	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:239:5
+.	ToolConfig	description	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:241:5
+.	ToolConfig	inputSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:243:5
+.	ToolConfig	inputJsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:245:5
+.	ToolConfig	outputSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:247:5
+.	ToolConfig	outputJsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:249:5
+.	ToolConfig	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:251:5
+.	ToolInterruptError	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:299:5
+.	ToolInterruptError	Constructor	constructor	false	false	(metadata?: Record<string, any> | undefined): ToolInterruptError	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:300:5
+.	UserFacingError	Constructor	constructor	false	false	(status: StatusName, message: string, details?: any): UserFacingError	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:251:5
+./registry	Registry	actionsById	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:383:5
+./registry	Registry	pluginsByName	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:384:5
+./registry	Registry	schemasByName	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:385:5
+./registry	Registry	valueByTypeAndName	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:386:5
+./registry	Registry	allPluginsInitialized	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:387:5
+./registry	Registry	apiStability	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:388:5
+./registry	Registry	dotprompt	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:389:5
+./registry	Registry	parent	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:390:5
+./registry	Registry	context	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:392:5
+./registry	Registry	Constructor	constructor	false	false	(parent?: Registry): Registry	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:393:5
+./registry	Registry	withParent	method	true	false	(parent: Registry): Registry	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:399:5
+./registry	Registry	resolveActionNames	method	false	false	(key: string): Promise<string[]>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:400:5
+./registry	Registry	lookupAction	method	false	false	<I extends z.ZodTypeAny, O extends z.ZodTypeAny, R extends Action<I, O>>(key: string): Promise<R>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:406:5
+./registry	Registry	lookupBackgroundAction	method	false	false	(key: string): Promise<BackgroundAction | undefined>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:412:5
+./registry	Registry	registerAction	method	false	false	<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(type: ActionType, action: Action<I, O>, opts?: { namespace?: string; }): void	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:418:5
+./registry	Registry	registerActionAsync	method	false	false	<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(type: ActionType, name: string, action: PromiseLike<Action<I, O>>, opts?: { namespace?: string; }): void	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:424:5
+./registry	Registry	listActions	method	false	false	(): Promise<ActionsRecord>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:431:5
+./registry	Registry	listResolvableActions	method	false	false	(): Promise<ActionMetadataRecord>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:441:5
+./registry	Registry	initializeAllPlugins	method	false	false	(): Promise<void>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:445:5
+./registry	Registry	registerPluginProvider	method	false	false	(name: string, provider: PluginProvider): void	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:451:5
+./registry	Registry	lookupPlugin	method	false	false	(name: string): PluginProvider | undefined	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:457:5
+./registry	Registry	resolvePluginAction	method	false	false	(pluginName: string, actionType: ActionType, actionName: string): Promise<void>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:465:5
+./registry	Registry	getDynamicAction	method	false	false	(key: ParsedRegistryKey): Promise<Action<z.ZodTypeAny, z.ZodTypeAny> | undefined>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:466:5
+./registry	Registry	initializePlugin	method	false	false	(name: string): Promise<void | InitializedPlugin>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:472:5
+./registry	Registry	registerSchema	method	false	false	(name: string, data: Schema): void	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:478:5
+./registry	Registry	registerValue	method	false	false	(type: string, name: string, value: any): void	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:479:5
+./registry	Registry	lookupValue	method	false	false	<T = unknown>(type: string, key: string): Promise<T | undefined>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:480:5
+./registry	Registry	listValues	method	false	false	<T>(type: string): Promise<Record<string, T>>	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:481:5
+./registry	Registry	lookupSchema	method	false	false	(name: string): Schema | undefined	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:487:5
+./registry	Schema	schema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:360:5
+./registry	Schema	jsonSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:361:5
+./beta	ActionContext	auth	property	false	true		@genkit-ai/core/lib/context.d.ts:21:5
+./beta	ActionContext	IndexSignature	indexSignature	false	false	(additionalContext: string): any	@genkit-ai/core/lib/context.d.ts:22:5
+./beta	ActionMetadata	actionType	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:516:5
+./beta	ActionMetadata	name	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:517:5
+./beta	ActionMetadata	description	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:518:5
+./beta	ActionMetadata	inputSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:519:5
+./beta	ActionMetadata	inputJsonSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:520:5
+./beta	ActionMetadata	outputSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:521:5
+./beta	ActionMetadata	outputJsonSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:522:5
+./beta	ActionMetadata	streamSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:523:5
+./beta	ActionMetadata	metadata	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:524:5
+./beta	Chat	session	property	false	false		@genkit-ai/ai/lib/session.d.ts:202:5
+./beta	Chat	requestBase	property	false	true		@genkit-ai/ai/lib/session.d.ts:203:5
+./beta	Chat	sessionId	property	false	false		@genkit-ai/ai/lib/session.d.ts:204:5
+./beta	Chat	_messages	property	false	true		@genkit-ai/ai/lib/session.d.ts:205:5
+./beta	Chat	threadName	property	false	false		@genkit-ai/ai/lib/session.d.ts:206:5
+./beta	Chat	Constructor	constructor	false	false	(session: Session, requestBase: Promise<BaseGenerateOptions>, options: { id: string; thread: string; messages?: MessageData[]; }): Chat	@genkit-ai/ai/lib/session.d.ts:207:5
+./beta	Chat	send	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(options: string | Part[] | ChatGenerateOptions<O, CustomOptions>): Promise<GenerateResponse<z.infer<O>>>	@genkit-ai/ai/lib/session.d.ts:212:5
+./beta	Chat	sendStream	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(options: string | Part[] | GenerateStreamOptions<O, CustomOptions>): GenerateStreamResponse<z.infer<O>>	@genkit-ai/ai/lib/session.d.ts:213:5
+./beta	Chat	messages	getter	false	false	(): MessageData[]	@genkit-ai/ai/lib/session.d.ts:214:5
+./beta	Chat	updateMessages	property	false	false		@genkit-ai/ai/lib/session.d.ts:215:5
+./beta	Document	content	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1056:5
+./beta	Document	metadata	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1057:5
+./beta	Document	Constructor	constructor	false	false	(data: DocumentData): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1058:5
+./beta	Document	fromText	method	true	false	(text: string, metadata?: Record<string, any>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1059:5
+./beta	Document	fromMedia	method	true	false	(url: string, contentType?: string, metadata?: Record<string, unknown>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1060:5
+./beta	Document	fromData	method	true	false	(data: string, dataType?: string, metadata?: Record<string, unknown>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1061:5
+./beta	Document	text	getter	false	false	(): string	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1066:5
+./beta	Document	media	getter	false	false	(): { url: string; contentType?: string; }[]	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1071:5
+./beta	Document	data	getter	false	false	(): string	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1078:5
+./beta	Document	dataType	getter	false	false	(): string | undefined	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1082:5
+./beta	Document	toJSON	method	false	false	(): DocumentData	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1083:5
+./beta	Document	getEmbeddingDocuments	method	false	false	(embeddings: Embedding[]): Document[]	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1091:5
+./beta	EmbedderParams	embedder	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:282:5
+./beta	EmbedderParams	content	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:283:5
+./beta	EmbedderParams	metadata	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:284:5
+./beta	EmbedderParams	options	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:285:5
+./beta	EmbedderReference	name	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:361:5
+./beta	EmbedderReference	configSchema	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:362:5
+./beta	EmbedderReference	info	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:363:5
+./beta	EmbedderReference	config	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:364:5
+./beta	EmbedderReference	version	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:365:5
+./beta	EvaluatorParams	evaluator	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:379:5
+./beta	EvaluatorParams	dataset	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:380:5
+./beta	EvaluatorParams	evalRunId	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:381:5
+./beta	EvaluatorParams	options	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:382:5
+./beta	EvaluatorReference	name	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:418:5
+./beta	EvaluatorReference	configSchema	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:419:5
+./beta	EvaluatorReference	info	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:420:5
+./beta	ExecutablePrompt	ref	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:84:5
+./beta	ExecutablePrompt	CallSignature	callSignature	false	false	(input?: I, opts?: PromptGenerateOptions<O, CustomOptions>): Promise<GenerateResponse<z.infer<O>>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:95:5
+./beta	ExecutablePrompt	stream	method	false	false	(input?: I, opts?: PromptGenerateOptions<O, CustomOptions>): GenerateStreamResponse<z.infer<O>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:102:5
+./beta	ExecutablePrompt	render	method	false	false	(input?: I, opts?: PromptGenerateOptions<O, CustomOptions>): Promise<GenerateOptions<O, CustomOptions>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:109:5
+./beta	ExecutablePrompt	asTool	method	false	false	(): Promise<ToolAction>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:113:5
+./beta	FlowConfig	name	property	false	false		@genkit-ai/core/lib/flow.d.ts:35:5
+./beta	FlowConfig	inputSchema	property	false	true		@genkit-ai/core/lib/flow.d.ts:37:5
+./beta	FlowConfig	outputSchema	property	false	true		@genkit-ai/core/lib/flow.d.ts:39:5
+./beta	FlowConfig	streamSchema	property	false	true		@genkit-ai/core/lib/flow.d.ts:41:5
+./beta	FlowConfig	metadata	property	false	true		@genkit-ai/core/lib/flow.d.ts:43:5
+./beta	FlowSideChannel	CallSignature	callSignature	false	false	(chunk: S): void	@genkit-ai/core/lib/flow.d.ts:51:5
+./beta	GenerateOptions	model	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:368:5
+./beta	GenerateOptions	system	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:370:5
+./beta	GenerateOptions	prompt	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:372:5
+./beta	GenerateOptions	docs	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:374:5
+./beta	GenerateOptions	messages	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:376:5
+./beta	GenerateOptions	tools	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:380:5
+./beta	GenerateOptions	resources	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:382:5
+./beta	GenerateOptions	toolChoice	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:384:5
+./beta	GenerateOptions	config	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:386:5
+./beta	GenerateOptions	output	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:388:5
+./beta	GenerateOptions	resume	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:411:5
+./beta	GenerateOptions	returnToolRequests	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:413:5
+./beta	GenerateOptions	maxTurns	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:415:5
+./beta	GenerateOptions	onChunk	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:417:5
+./beta	GenerateOptions	streamingCallback	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:423:5
+./beta	GenerateOptions	use	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:425:5
+./beta	GenerateOptions	context	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:427:5
+./beta	GenerateOptions	abortSignal	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:429:5
+./beta	GenerateOptions	stepName	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:431:5
+./beta	GenerateOptions	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:437:5
+./beta	GenerateRequest	config	property	false	true		@genkit-ai/ai/lib/model-types.d.ts:3003:5
+./beta	GenerateResponse	message	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:29:5
+./beta	GenerateResponse	finishReason	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:31:5
+./beta	GenerateResponse	finishMessage	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:33:5
+./beta	GenerateResponse	usage	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:35:5
+./beta	GenerateResponse	custom	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:37:5
+./beta	GenerateResponse	raw	property	false	false		@genkit-ai/ai/lib/generate/response.d.ts:39:5
+./beta	GenerateResponse	request	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:41:5
+./beta	GenerateResponse	operation	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:43:5
+./beta	GenerateResponse	model	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:45:5
+./beta	GenerateResponse	parser	property	false	true		@genkit-ai/ai/lib/generate/response.d.ts:47:5
+./beta	GenerateResponse	Constructor	constructor	false	false	<O = unknown>(response: GenerateResponseData, options?: { request?: GenerateRequest; parser?: MessageParser<O>; }): GenerateResponse<O>	@genkit-ai/ai/lib/generate/response.d.ts:48:5
+./beta	GenerateResponse	assertValid	method	false	false	(): void	@genkit-ai/ai/lib/generate/response.d.ts:55:5
+./beta	GenerateResponse	assertValidSchema	method	false	false	(request?: GenerateRequest): void	@genkit-ai/ai/lib/generate/response.d.ts:59:5
+./beta	GenerateResponse	isValid	method	false	false	(request?: GenerateRequest): boolean	@genkit-ai/ai/lib/generate/response.d.ts:60:5
+./beta	GenerateResponse	output	getter	false	false	(): O | null	@genkit-ai/ai/lib/generate/response.d.ts:68:5
+./beta	GenerateResponse	text	getter	false	false	(): string	@genkit-ai/ai/lib/generate/response.d.ts:73:5
+./beta	GenerateResponse	reasoning	getter	false	false	(): string	@genkit-ai/ai/lib/generate/response.d.ts:78:5
+./beta	GenerateResponse	media	getter	false	false	(): { url: string; contentType?: string; } | null	@genkit-ai/ai/lib/generate/response.d.ts:84:5
+./beta	GenerateResponse	data	getter	false	false	(): O | null	@genkit-ai/ai/lib/generate/response.d.ts:92:5
+./beta	GenerateResponse	toolRequests	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/generate/response.d.ts:97:5
+./beta	GenerateResponse	interrupts	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/generate/response.d.ts:102:5
+./beta	GenerateResponse	messages	getter	false	false	(): MessageData[]	@genkit-ai/ai/lib/generate/response.d.ts:109:5
+./beta	GenerateResponse	toJSON	method	false	false	(): ModelResponseData	@genkit-ai/ai/lib/generate/response.d.ts:110:5
+./beta	GenerateResponseChunk	index	property	false	false		@genkit-ai/ai/lib/generate/chunk.d.ts:25:5
+./beta	GenerateResponseChunk	role	property	false	false		@genkit-ai/ai/lib/generate/chunk.d.ts:27:5
+./beta	GenerateResponseChunk	content	property	false	false		@genkit-ai/ai/lib/generate/chunk.d.ts:29:5
+./beta	GenerateResponseChunk	custom	property	false	true		@genkit-ai/ai/lib/generate/chunk.d.ts:31:5
+./beta	GenerateResponseChunk	previousChunks	property	false	true		@genkit-ai/ai/lib/generate/chunk.d.ts:33:5
+./beta	GenerateResponseChunk	parser	property	false	true		@genkit-ai/ai/lib/generate/chunk.d.ts:35:5
+./beta	GenerateResponseChunk	Constructor	constructor	false	false	<T = unknown>(data: GenerateResponseChunkData, options: { previousChunks?: GenerateResponseChunkData[]; role: Role; index: number; parser?: ChunkParser<T>; }): GenerateResponseChunk<T>	@genkit-ai/ai/lib/generate/chunk.d.ts:36:5
+./beta	GenerateResponseChunk	text	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:46:5
+./beta	GenerateResponseChunk	reasoning	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:51:5
+./beta	GenerateResponseChunk	accumulatedText	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:56:5
+./beta	GenerateResponseChunk	previousText	getter	false	false	(): string	@genkit-ai/ai/lib/generate/chunk.d.ts:60:5
+./beta	GenerateResponseChunk	media	getter	false	false	(): { url: string; contentType?: string; } | null	@genkit-ai/ai/lib/generate/chunk.d.ts:66:5
+./beta	GenerateResponseChunk	data	getter	false	false	(): T | null	@genkit-ai/ai/lib/generate/chunk.d.ts:74:5
+./beta	GenerateResponseChunk	toolRequests	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/generate/chunk.d.ts:79:5
+./beta	GenerateResponseChunk	output	getter	false	false	(): T | null	@genkit-ai/ai/lib/generate/chunk.d.ts:84:5
+./beta	GenerateResponseChunk	toJSON	method	false	false	(): GenerateResponseChunkData	@genkit-ai/ai/lib/generate/chunk.d.ts:85:5
+./beta	GenerateStreamResponse	stream	getter	false	false	(): AsyncIterable<GenerateResponseChunk>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:466:5
+./beta	GenerateStreamResponse	response	getter	false	false	(): Promise<GenerateResponse<O>>	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:467:5
+./beta	GenerationResponseError	detail	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:441:5
+./beta	GenerationResponseError	Constructor	constructor	false	false	(response: GenerateResponse<any>, message: string, status?: GenkitError["status"], detail?: Record<string, any>): GenerationResponseError	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:445:5
+./beta	GenkitBeta	Constructor	constructor	false	false	(options?: GenkitOptions): GenkitBeta	genkit/lib/genkit-beta.d.ts:48:5
+./beta	GenkitBeta	chat	method	false	false	<I>(options?: ChatOptions<I>): Chat	genkit/lib/genkit-beta.d.ts:62:5
+./beta	GenkitBeta	chat	method	false	false	<I>(preamble: ExecutablePrompt<I>, options?: ChatOptions<I>): Chat	genkit/lib/genkit-beta.d.ts:76:5
+./beta	GenkitBeta	createSession	method	false	false	<S = any>(options?: SessionOptions<S>): Session<S>	genkit/lib/genkit-beta.d.ts:80:5
+./beta	GenkitBeta	loadSession	method	false	false	(sessionId: string, options: SessionOptions): Promise<Session>	genkit/lib/genkit-beta.d.ts:86:5
+./beta	GenkitBeta	currentSession	method	false	false	<S = any>(): Session<S>	genkit/lib/genkit-beta.d.ts:92:5
+./beta	GenkitBeta	defineFormat	method	false	false	(options: { name: string; } & Formatter["config"], handler: Formatter["handler"]): { config: Formatter["config"]; handler: Formatter["handler"]; }	genkit/lib/genkit-beta.d.ts:128:5
+./beta	GenkitBeta	defineInterrupt	method	false	false	<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(config: InterruptConfig<I, O>): ToolAction<I, O>	genkit/lib/genkit-beta.d.ts:142:5
+./beta	GenkitBeta	generateOperation	method	false	false	<O extends z.ZodTypeAny = z.ZodTypeAny, CustomOptions extends z.ZodTypeAny = z.ZodObject<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, "passthrough", z.ZodTypeAny, z.objectOutputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">, z.objectInputType<{ version: z.ZodOptional<z.ZodString>; temperature: z.ZodOptional<z.ZodNumber>; maxOutputTokens: z.ZodOptional<z.ZodNumber>; topK: z.ZodOptional<z.ZodNumber>; topP: z.ZodOptional<z.ZodNumber>; stopSequences: z.ZodOptional<z.ZodArray<z.ZodString, "many">>; }, z.ZodTypeAny, "passthrough">>>(opts: GenerateOptions<O, CustomOptions> | PromiseLike<GenerateOptions<O, CustomOptions>>): Promise<Operation<GenerateResponseData>>	genkit/lib/genkit-beta.d.ts:158:5
+./beta	GenkitBeta	defineResource	method	false	false	(opts: ResourceOptions, fn: ResourceFn): ResourceAction	genkit/lib/genkit-beta.d.ts:174:5
+./beta	GenkitBetaOptions	plugins	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:63:5
+./beta	GenkitBetaOptions	promptDir	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:65:5
+./beta	GenkitBetaOptions	model	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:67:5
+./beta	GenkitBetaOptions	context	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:69:5
+./beta	GenkitBetaOptions	name	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:71:5
+./beta	GenkitBetaOptions	clientHeader	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:73:5
+./beta	GenkitError	source	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:215:5
+./beta	GenkitError	status	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:216:5
+./beta	GenkitError	detail	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:217:5
+./beta	GenkitError	code	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:218:5
+./beta	GenkitError	originalMessage	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:219:5
+./beta	GenkitError	Constructor	constructor	false	false	({ status, message, detail, source, }: { status: StatusName; message: string; detail?: any; source?: string; }): GenkitError	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:220:5
+./beta	GenkitError	toJSON	method	false	false	(): HttpErrorWireFormat	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:229:5
+./beta	IndexerParams	indexer	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:701:5
+./beta	IndexerParams	documents	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:702:5
+./beta	IndexerParams	options	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:703:5
+./beta	IndexerReference	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:758:5
+./beta	IndexerReference	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:759:5
+./beta	IndexerReference	info	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:760:5
+./beta	JSONSchema7	$id	property	false	true		@types/json-schema/index.d.ts:609:5
+./beta	JSONSchema7	$ref	property	false	true		@types/json-schema/index.d.ts:610:5
+./beta	JSONSchema7	$schema	property	false	true		@types/json-schema/index.d.ts:611:5
+./beta	JSONSchema7	$comment	property	false	true		@types/json-schema/index.d.ts:612:5
+./beta	JSONSchema7	$defs	property	false	true		@types/json-schema/index.d.ts:618:5
+./beta	JSONSchema7	type	property	false	true		@types/json-schema/index.d.ts:625:5
+./beta	JSONSchema7	enum	property	false	true		@types/json-schema/index.d.ts:626:5
+./beta	JSONSchema7	const	property	false	true		@types/json-schema/index.d.ts:627:5
+./beta	JSONSchema7	multipleOf	property	false	true		@types/json-schema/index.d.ts:632:5
+./beta	JSONSchema7	maximum	property	false	true		@types/json-schema/index.d.ts:633:5
+./beta	JSONSchema7	exclusiveMaximum	property	false	true		@types/json-schema/index.d.ts:634:5
+./beta	JSONSchema7	minimum	property	false	true		@types/json-schema/index.d.ts:635:5
+./beta	JSONSchema7	exclusiveMinimum	property	false	true		@types/json-schema/index.d.ts:636:5
+./beta	JSONSchema7	maxLength	property	false	true		@types/json-schema/index.d.ts:641:5
+./beta	JSONSchema7	minLength	property	false	true		@types/json-schema/index.d.ts:642:5
+./beta	JSONSchema7	pattern	property	false	true		@types/json-schema/index.d.ts:643:5
+./beta	JSONSchema7	items	property	false	true		@types/json-schema/index.d.ts:648:5
+./beta	JSONSchema7	additionalItems	property	false	true		@types/json-schema/index.d.ts:649:5
+./beta	JSONSchema7	maxItems	property	false	true		@types/json-schema/index.d.ts:650:5
+./beta	JSONSchema7	minItems	property	false	true		@types/json-schema/index.d.ts:651:5
+./beta	JSONSchema7	uniqueItems	property	false	true		@types/json-schema/index.d.ts:652:5
+./beta	JSONSchema7	contains	property	false	true		@types/json-schema/index.d.ts:653:5
+./beta	JSONSchema7	maxProperties	property	false	true		@types/json-schema/index.d.ts:658:5
+./beta	JSONSchema7	minProperties	property	false	true		@types/json-schema/index.d.ts:659:5
+./beta	JSONSchema7	required	property	false	true		@types/json-schema/index.d.ts:660:5
+./beta	JSONSchema7	properties	property	false	true		@types/json-schema/index.d.ts:661:5
+./beta	JSONSchema7	patternProperties	property	false	true		@types/json-schema/index.d.ts:664:5
+./beta	JSONSchema7	additionalProperties	property	false	true		@types/json-schema/index.d.ts:667:5
+./beta	JSONSchema7	dependencies	property	false	true		@types/json-schema/index.d.ts:668:5
+./beta	JSONSchema7	propertyNames	property	false	true		@types/json-schema/index.d.ts:671:5
+./beta	JSONSchema7	if	property	false	true		@types/json-schema/index.d.ts:676:5
+./beta	JSONSchema7	then	property	false	true		@types/json-schema/index.d.ts:677:5
+./beta	JSONSchema7	else	property	false	true		@types/json-schema/index.d.ts:678:5
+./beta	JSONSchema7	allOf	property	false	true		@types/json-schema/index.d.ts:683:5
+./beta	JSONSchema7	anyOf	property	false	true		@types/json-schema/index.d.ts:684:5
+./beta	JSONSchema7	oneOf	property	false	true		@types/json-schema/index.d.ts:685:5
+./beta	JSONSchema7	not	property	false	true		@types/json-schema/index.d.ts:686:5
+./beta	JSONSchema7	format	property	false	true		@types/json-schema/index.d.ts:691:5
+./beta	JSONSchema7	contentMediaType	property	false	true		@types/json-schema/index.d.ts:696:5
+./beta	JSONSchema7	contentEncoding	property	false	true		@types/json-schema/index.d.ts:697:5
+./beta	JSONSchema7	definitions	property	false	true		@types/json-schema/index.d.ts:702:5
+./beta	JSONSchema7	title	property	false	true		@types/json-schema/index.d.ts:709:5
+./beta	JSONSchema7	description	property	false	true		@types/json-schema/index.d.ts:710:5
+./beta	JSONSchema7	default	property	false	true		@types/json-schema/index.d.ts:711:5
+./beta	JSONSchema7	readOnly	property	false	true		@types/json-schema/index.d.ts:712:5
+./beta	JSONSchema7	writeOnly	property	false	true		@types/json-schema/index.d.ts:713:5
+./beta	JSONSchema7	examples	property	false	true		@types/json-schema/index.d.ts:714:5
+./beta	Message	role	property	false	false		@genkit-ai/ai/lib/message.d.ts:29:5
+./beta	Message	content	property	false	false		@genkit-ai/ai/lib/message.d.ts:30:5
+./beta	Message	metadata	property	false	true		@genkit-ai/ai/lib/message.d.ts:31:5
+./beta	Message	parser	property	false	true		@genkit-ai/ai/lib/message.d.ts:32:5
+./beta	Message	parseData	method	true	false	(lenientMessage: string | (MessageData & { content: string | Part | Part[]; role: string; }) | MessageData, defaultRole?: MessageData["role"]): MessageData	@genkit-ai/ai/lib/message.d.ts:33:5
+./beta	Message	parse	method	true	false	(lenientMessage: string | (MessageData & { content: string; }) | MessageData): Message	@genkit-ai/ai/lib/message.d.ts:37:5
+./beta	Message	parseContent	method	true	false	(lenientPart: string | Part | (string | Part)[]): Part[]	@genkit-ai/ai/lib/message.d.ts:40:5
+./beta	Message	Constructor	constructor	false	false	<T = unknown>(message: MessageData, options?: { parser?: MessageParser<T>; }): Message<T>	@genkit-ai/ai/lib/message.d.ts:41:5
+./beta	Message	output	getter	false	false	(): T	@genkit-ai/ai/lib/message.d.ts:51:5
+./beta	Message	toolResponseParts	method	false	false	(): ToolResponsePart[]	@genkit-ai/ai/lib/message.d.ts:52:5
+./beta	Message	text	getter	false	false	(): string	@genkit-ai/ai/lib/message.d.ts:57:5
+./beta	Message	reasoning	getter	false	false	(): string	@genkit-ai/ai/lib/message.d.ts:62:5
+./beta	Message	media	getter	false	false	(): { url: string; contentType?: string; } | null	@genkit-ai/ai/lib/message.d.ts:68:5
+./beta	Message	data	getter	false	false	(): T | null	@genkit-ai/ai/lib/message.d.ts:76:5
+./beta	Message	toolRequests	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/message.d.ts:81:5
+./beta	Message	interrupts	getter	false	false	(): ToolRequestPart[]	@genkit-ai/ai/lib/message.d.ts:86:5
+./beta	Message	toJSON	method	false	false	(): MessageData	@genkit-ai/ai/lib/message.d.ts:91:5
+./beta	ModelReference	name	property	false	false		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:159:5
+./beta	ModelReference	configSchema	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:160:5
+./beta	ModelReference	info	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:161:5
+./beta	ModelReference	version	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:162:5
+./beta	ModelReference	config	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:163:5
+./beta	ModelReference	withConfig	method	false	false	(cfg: z.infer<CustomOptions>): ModelReference<CustomOptions>	@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:164:5
+./beta	ModelReference	withVersion	method	false	false	(version: string): ModelReference<CustomOptions>	@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:165:5
+./beta	ModelRequest	config	property	false	true		@genkit-ai/ai/lib/model-types.d.ts:2019:5
+./beta	Operation	action	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:105:5
+./beta	Operation	id	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:106:5
+./beta	Operation	done	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:107:5
+./beta	Operation	output	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:108:5
+./beta	Operation	error	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:109:5
+./beta	Operation	metadata	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:113:5
+./beta	OutputOptions	format	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:334:5
+./beta	OutputOptions	contentType	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:335:5
+./beta	OutputOptions	instructions	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:336:5
+./beta	OutputOptions	schema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:337:5
+./beta	OutputOptions	jsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:338:5
+./beta	OutputOptions	constrained	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:339:5
+./beta	PromptConfig	name	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:53:5
+./beta	PromptConfig	variant	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:54:5
+./beta	PromptConfig	model	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:55:5
+./beta	PromptConfig	config	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:56:5
+./beta	PromptConfig	description	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:57:5
+./beta	PromptConfig	input	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:58:5
+./beta	PromptConfig	system	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:62:5
+./beta	PromptConfig	prompt	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:63:5
+./beta	PromptConfig	messages	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:64:5
+./beta	PromptConfig	docs	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:65:5
+./beta	PromptConfig	output	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:66:5
+./beta	PromptConfig	maxTurns	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:67:5
+./beta	PromptConfig	returnToolRequests	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:68:5
+./beta	PromptConfig	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:69:5
+./beta	PromptConfig	tools	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:70:5
+./beta	PromptConfig	toolChoice	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:71:5
+./beta	PromptConfig	use	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:72:5
+./beta	PromptConfig	context	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:73:5
+./beta	RankedDocument	content	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:181:5
+./beta	RankedDocument	metadata	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:182:5
+./beta	RankedDocument	Constructor	constructor	false	false	(data: RankedDocumentData): RankedDocument	@genkit-ai/ai/lib/reranker.d.ts:185:5
+./beta	RankedDocument	score	method	false	false	(): number	@genkit-ai/ai/lib/reranker.d.ts:190:5
+./beta	ReflectionServer	RUNNING_SERVERS	property	true	false		@genkit-ai/core/lib/reflection.d.ts:68:5
+./beta	ReflectionServer	registry	property	false	false		@genkit-ai/core/lib/reflection.d.ts:70:5
+./beta	ReflectionServer	options	property	false	false		@genkit-ai/core/lib/reflection.d.ts:72:5
+./beta	ReflectionServer	port	property	false	false		@genkit-ai/core/lib/reflection.d.ts:74:5
+./beta	ReflectionServer	server	property	false	false		@genkit-ai/core/lib/reflection.d.ts:76:5
+./beta	ReflectionServer	runtimeFilePath	property	false	false		@genkit-ai/core/lib/reflection.d.ts:78:5
+./beta	ReflectionServer	Constructor	constructor	false	false	(registry: Registry, options?: ReflectionServerOptions): ReflectionServer	@genkit-ai/core/lib/reflection.d.ts:79:5
+./beta	ReflectionServer	findPort	method	false	false	(): Promise<number>	@genkit-ai/core/lib/reflection.d.ts:83:5
+./beta	ReflectionServer	start	method	false	false	(): Promise<void>	@genkit-ai/core/lib/reflection.d.ts:89:5
+./beta	ReflectionServer	stop	method	false	false	(): Promise<void>	@genkit-ai/core/lib/reflection.d.ts:93:5
+./beta	ReflectionServer	writeRuntimeFile	property	false	false		@genkit-ai/core/lib/reflection.d.ts:97:5
+./beta	ReflectionServer	cleanupRuntimeFile	property	false	false		@genkit-ai/core/lib/reflection.d.ts:101:5
+./beta	ReflectionServer	stopAll	method	true	false	(): Promise<void[]>	@genkit-ai/core/lib/reflection.d.ts:105:5
+./beta	ReflectionServerOptions	port	property	false	true		@genkit-ai/core/lib/reflection.d.ts:51:5
+./beta	ReflectionServerOptions	bodyLimit	property	false	true		@genkit-ai/core/lib/reflection.d.ts:53:5
+./beta	ReflectionServerOptions	configuredEnvs	property	false	true		@genkit-ai/core/lib/reflection.d.ts:55:5
+./beta	ReflectionServerOptions	name	property	false	true		@genkit-ai/core/lib/reflection.d.ts:57:5
+./beta	RerankerParams	reranker	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:830:5
+./beta	RerankerParams	query	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:831:5
+./beta	RerankerParams	documents	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:832:5
+./beta	RerankerParams	options	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:833:5
+./beta	RerankerReference	name	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:848:5
+./beta	RerankerReference	configSchema	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:849:5
+./beta	RerankerReference	info	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:850:5
+./beta	ResourceAction	matches	method	false	false	(input: ResourceInput): boolean	@genkit-ai/ai/lib/resource.d.ts:568:5
+./beta	ResumeOptions	respond	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:352:5
+./beta	ResumeOptions	restart	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:362:5
+./beta	ResumeOptions	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:364:5
+./beta	RetrieverParams	retriever	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:681:5
+./beta	RetrieverParams	query	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:682:5
+./beta	RetrieverParams	options	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:683:5
+./beta	RetrieverReference	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:723:5
+./beta	RetrieverReference	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:724:5
+./beta	RetrieverReference	info	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:725:5
+./beta	Session	registry	property	false	false		@genkit-ai/ai/lib/session.d.ts:51:5
+./beta	Session	id	property	false	false		@genkit-ai/ai/lib/session.d.ts:52:5
+./beta	Session	sessionData	property	false	true		@genkit-ai/ai/lib/session.d.ts:53:5
+./beta	Session	store	property	false	false		@genkit-ai/ai/lib/session.d.ts:54:5
+./beta	Session	Constructor	constructor	false	false	<S = any>(registry: Registry, options?: { id?: string; stateSchema?: S; sessionData?: SessionData<S>; store?: SessionStore<S>; }): Session<S>	@genkit-ai/ai/lib/session.d.ts:55:5
+./beta	Session	state	getter	false	false	(): S | undefined	@genkit-ai/ai/lib/session.d.ts:61:5
+./beta	Session	updateState	method	false	false	(data: S): Promise<void>	@genkit-ai/ai/lib/session.d.ts:65:5
+./beta	Session	updateMessages	method	false	false	(thread: string, messages: MessageData[]): Promise<void>	@genkit-ai/ai/lib/session.d.ts:69:5
+./beta	Session	chat	method	false	false	<I>(options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:82:5
+./beta	Session	chat	method	false	false	<I>(preamble: ExecutablePrompt<I>, options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:95:5
+./beta	Session	chat	method	false	false	<I>(threadName: string, preamble: ExecutablePrompt<I>, options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:111:5
+./beta	Session	chat	method	false	false	<I>(threadName: string, options?: ChatOptions<I, S>): Chat	@genkit-ai/ai/lib/session.d.ts:127:5
+./beta	Session	run	method	false	false	<O>(fn: () => O): O	@genkit-ai/ai/lib/session.d.ts:132:5
+./beta	Session	toJSON	method	false	false	(): SessionData<S> | undefined	@genkit-ai/ai/lib/session.d.ts:133:5
+./beta	SessionData	id	property	false	false		@genkit-ai/ai/lib/session.d.ts:136:5
+./beta	SessionData	state	property	false	true		@genkit-ai/ai/lib/session.d.ts:137:5
+./beta	SessionData	threads	property	false	true		@genkit-ai/ai/lib/session.d.ts:138:5
+./beta	SessionStore	get	method	false	false	(sessionId: string): Promise<SessionData<S> | undefined>	@genkit-ai/ai/lib/session.d.ts:152:5
+./beta	SessionStore	save	method	false	false	(sessionId: string, data: Omit<SessionData<S>, "id">): Promise<void>	@genkit-ai/ai/lib/session.d.ts:153:5
+./beta	StreamingResponse	stream	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:591:5
+./beta	StreamingResponse	output	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:593:5
+./beta	ToolConfig	name	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:239:5
+./beta	ToolConfig	description	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:241:5
+./beta	ToolConfig	inputSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:243:5
+./beta	ToolConfig	inputJsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:245:5
+./beta	ToolConfig	outputSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:247:5
+./beta	ToolConfig	outputJsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:249:5
+./beta	ToolConfig	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:251:5
+./beta	ToolInterruptError	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:299:5
+./beta	ToolInterruptError	Constructor	constructor	false	false	(metadata?: Record<string, any> | undefined): ToolInterruptError	@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:300:5
+./beta	UserFacingError	Constructor	constructor	false	false	(status: StatusName, message: string, details?: any): UserFacingError	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:251:5
+./tracing	TraceServerExporter	export	method	false	false	(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void	@genkit-ai/core/lib/tracing/exporter.d.ts:34:5
+./tracing	TraceServerExporter	shutdown	method	false	false	(): Promise<void>	@genkit-ai/core/lib/tracing/exporter.d.ts:38:5
+./tracing	TraceServerExporter	_exportInfo	property	false	false		@genkit-ai/core/lib/tracing/exporter.d.ts:43:5
+./tracing	TraceServerExporter	forceFlush	method	false	false	(): Promise<void>	@genkit-ai/core/lib/tracing/exporter.d.ts:47:5
+./tracing	TraceServerExporter	_sendSpans	property	false	false		@genkit-ai/core/lib/tracing/exporter.d.ts:48:5
+./tracing	TraceServerExporter	save	property	false	false		@genkit-ai/core/lib/tracing/exporter.d.ts:49:5
+./schema	ProvidedSchema	jsonSchema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:288:5
+./schema	ProvidedSchema	schema	property	false	true		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:289:5
+./schema	ValidationError	Constructor	constructor	false	false	({ data, errors, schema, }: { data: any; errors: ValidationErrorDetail[]; schema: JSONSchema; }): ValidationError	@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:295:5
+./schema	ValidationErrorDetail	path	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:311:5
+./schema	ValidationErrorDetail	message	property	false	false		@genkit-ai/core/lib/action-B8ZNjCZm.d.ts:312:5
+./formats	Formatter	name	property	false	false		@genkit-ai/ai/lib/formats/types.d.ts:26:5
+./formats	Formatter	config	property	false	false		@genkit-ai/ai/lib/formats/types.d.ts:27:5
+./formats	Formatter	handler	property	false	false	(schema?: JSONSchema): { parseMessage(message: Message): O; parseChunk?: (chunk: GenerateResponseChunk) => CO; instructions?: string; }	@genkit-ai/ai/lib/formats/types.d.ts:30:5
+./retriever	Document	content	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1056:5
+./retriever	Document	metadata	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1057:5
+./retriever	Document	Constructor	constructor	false	false	(data: DocumentData): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1058:5
+./retriever	Document	fromText	method	true	false	(text: string, metadata?: Record<string, any>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1059:5
+./retriever	Document	fromMedia	method	true	false	(url: string, contentType?: string, metadata?: Record<string, unknown>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1060:5
+./retriever	Document	fromData	method	true	false	(data: string, dataType?: string, metadata?: Record<string, unknown>): Document	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1061:5
+./retriever	Document	text	getter	false	false	(): string	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1066:5
+./retriever	Document	media	getter	false	false	(): { url: string; contentType?: string; }[]	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1071:5
+./retriever	Document	data	getter	false	false	(): string	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1078:5
+./retriever	Document	dataType	getter	false	false	(): string | undefined	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1082:5
+./retriever	Document	toJSON	method	false	false	(): DocumentData	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1083:5
+./retriever	Document	getEmbeddingDocuments	method	false	false	(embeddings: Embedding[]): Document[]	@genkit-ai/ai/lib/document-SEV6zxye.d.ts:1091:5
+./retriever	IndexerParams	indexer	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:701:5
+./retriever	IndexerParams	documents	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:702:5
+./retriever	IndexerParams	options	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:703:5
+./retriever	IndexerReference	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:758:5
+./retriever	IndexerReference	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:759:5
+./retriever	IndexerReference	info	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:760:5
+./retriever	RetrieverParams	retriever	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:681:5
+./retriever	RetrieverParams	query	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:682:5
+./retriever	RetrieverParams	options	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:683:5
+./retriever	RetrieverReference	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:723:5
+./retriever	RetrieverReference	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:724:5
+./retriever	RetrieverReference	info	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:725:5
+./retriever	SimpleRetrieverOptions	name	property	false	false		@genkit-ai/ai/lib/retriever.d.ts:771:5
+./retriever	SimpleRetrieverOptions	configSchema	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:773:5
+./retriever	SimpleRetrieverOptions	content	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:780:5
+./retriever	SimpleRetrieverOptions	metadata	property	false	true		@genkit-ai/ai/lib/retriever.d.ts:787:5
+./reranker	RankedDocument	content	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:181:5
+./reranker	RankedDocument	metadata	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:182:5
+./reranker	RankedDocument	Constructor	constructor	false	false	(data: RankedDocumentData): RankedDocument	@genkit-ai/ai/lib/reranker.d.ts:185:5
+./reranker	RankedDocument	score	method	false	false	(): number	@genkit-ai/ai/lib/reranker.d.ts:190:5
+./reranker	RerankerParams	reranker	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:830:5
+./reranker	RerankerParams	query	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:831:5
+./reranker	RerankerParams	documents	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:832:5
+./reranker	RerankerParams	options	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:833:5
+./reranker	RerankerReference	name	property	false	false		@genkit-ai/ai/lib/reranker.d.ts:848:5
+./reranker	RerankerReference	configSchema	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:849:5
+./reranker	RerankerReference	info	property	false	true		@genkit-ai/ai/lib/reranker.d.ts:850:5
+./embedder	EmbedderParams	embedder	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:282:5
+./embedder	EmbedderParams	content	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:283:5
+./embedder	EmbedderParams	metadata	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:284:5
+./embedder	EmbedderParams	options	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:285:5
+./embedder	EmbedderReference	name	property	false	false		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:361:5
+./embedder	EmbedderReference	configSchema	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:362:5
+./embedder	EmbedderReference	info	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:363:5
+./embedder	EmbedderReference	config	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:364:5
+./embedder	EmbedderReference	version	property	false	true		@genkit-ai/ai/lib/document-SEV6zxye.d.ts:365:5
+./evaluator	EvaluatorParams	evaluator	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:379:5
+./evaluator	EvaluatorParams	dataset	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:380:5
+./evaluator	EvaluatorParams	evalRunId	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:381:5
+./evaluator	EvaluatorParams	options	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:382:5
+./evaluator	EvaluatorReference	name	property	false	false		@genkit-ai/ai/lib/evaluator.d.ts:418:5
+./evaluator	EvaluatorReference	configSchema	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:419:5
+./evaluator	EvaluatorReference	info	property	false	true		@genkit-ai/ai/lib/evaluator.d.ts:420:5
+./model	GenerateRequest	config	property	false	true		@genkit-ai/ai/lib/model-types.d.ts:3003:5
+./model	ModelReference	name	property	false	false		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:159:5
+./model	ModelReference	configSchema	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:160:5
+./model	ModelReference	info	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:161:5
+./model	ModelReference	version	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:162:5
+./model	ModelReference	config	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:163:5
+./model	ModelReference	withConfig	method	false	false	(cfg: z.infer<CustomOptions>): ModelReference<CustomOptions>	@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:164:5
+./model	ModelReference	withVersion	method	false	false	(version: string): ModelReference<CustomOptions>	@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:165:5
+./model	ModelRequest	config	property	false	true		@genkit-ai/ai/lib/model-types.d.ts:2019:5
+./model/middleware	AugmentWithContextOptions	preface	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:48:5
+./model/middleware	AugmentWithContextOptions	itemTemplate	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:50:5
+./model/middleware	AugmentWithContextOptions	citationKey	property	false	true		@genkit-ai/ai/lib/model-BBzPDrC1.d.ts:52:5
+./tool	ToolConfig	name	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:239:5
+./tool	ToolConfig	description	property	false	false		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:241:5
+./tool	ToolConfig	inputSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:243:5
+./tool	ToolConfig	inputJsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:245:5
+./tool	ToolConfig	outputSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:247:5
+./tool	ToolConfig	outputJsonSchema	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:249:5
+./tool	ToolConfig	metadata	property	false	true		@genkit-ai/ai/lib/generate-3xWOiUzB.d.ts:251:5
+./plugin	GenkitPluginV2	version	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:38:5
+./plugin	GenkitPluginV2	name	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:39:5
+./plugin	GenkitPluginV2	init	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:40:5
+./plugin	GenkitPluginV2	resolve	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:41:5
+./plugin	GenkitPluginV2	list	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:42:5
+./plugin	PluginProvider	name	property	false	false		genkit/lib/index-Cd4YWqZH.d.ts:31:5
+./plugin	PluginProvider	initializer	property	false	false	(): void | Promise<void>	genkit/lib/index-Cd4YWqZH.d.ts:32:5
+./plugin	PluginProvider	resolver	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:33:5
+./plugin	PluginProvider	listActions	property	false	true		genkit/lib/index-Cd4YWqZH.d.ts:34:5
+./context	ApiKeyContext	auth	property	false	false		@genkit-ai/core/lib/context.d.ts:57:5
+./context	RequestData	method	property	false	false		@genkit-ai/core/lib/context.d.ts:40:5
+./context	RequestData	headers	property	false	false		@genkit-ai/core/lib/context.d.ts:41:5
+./context	RequestData	input	property	false	false		@genkit-ai/core/lib/context.d.ts:42:5

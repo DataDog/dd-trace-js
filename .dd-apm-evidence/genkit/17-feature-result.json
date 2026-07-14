@@ -1,0 +1,46 @@
+{
+  "stage": "17-feature-implement",
+  "package": "genkit@1.21.0",
+  "implementation": "no-op",
+  "production_changes": [],
+  "test_changes": [],
+  "features": [
+    {
+      "feature_id": "dsm",
+      "applicable": false,
+      "implemented": false,
+      "tests_added": false,
+      "explanation": "No messaging producer/consumer boundary, carrier, destination, or DSM pathway exists."
+    },
+    {
+      "feature_id": "context_propagation",
+      "applicable": false,
+      "implemented": false,
+      "tests_added": false,
+      "explanation": "The hook is an in-process action boundary with no distributed transport carrier."
+    },
+    {
+      "feature_id": "dbm",
+      "applicable": false,
+      "implemented": false,
+      "tests_added": false,
+      "explanation": "Genkit executes no SQL and exposes no database query context at the selected hook."
+    },
+    {
+      "feature_id": "peer_service",
+      "applicable": false,
+      "implemented": false,
+      "tests_added": false,
+      "explanation": "Provider-neutral actions expose no guaranteed remote peer identity."
+    }
+  ],
+  "validation": {
+    "focused_tests": {
+      "passing": 5,
+      "failing": 0,
+      "skipped": 0
+    },
+    "diff_check": "passed"
+  },
+  "tests_passing": true
+}

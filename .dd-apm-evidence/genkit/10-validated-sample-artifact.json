@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "artifact_name": "genkit-1.21.0-offline-sample",
+  "artifact_directory": "09-sample-app",
+  "entrypoints": {
+    "commonjs": "09-sample-app/sample-app.js",
+    "esm": "09-sample-app/esm-smoke.mjs"
+  },
+  "sha256": {
+    "package.json": "f52f41201ea6e08135039bfed57afa07b77307810ea728be38fd46b060ca0011",
+    "yarn.lock": "6df30ed3593dd5afad3c24b766f823ed8ce6dd0480079b8a361c89563b25d22a",
+    "sample-app.js": "f8d67bb23ad652d69b88fcfdf9045ac06af65e98498775abb33531ac42821e14",
+    "esm-smoke.mjs": "264a06f56e9324e5d98234d9dca4dbc42172eb10b2b411a1dd25f2875d633d12"
+  },
+  "resolved_versions": {
+    "genkit": "1.21.0",
+    "@genkit-ai/core": "1.21.0",
+    "@genkit-ai/ai": "1.21.0"
+  },
+  "fresh_result": "10-fresh-sample-results.json",
+  "fresh_result_sha256": "5e9dc0370ccf6e0b9fa152651335225d908de705f845f9a56c962239910c89dd"
+}

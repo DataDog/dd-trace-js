@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "stage": "11-context-mapping",
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "runtime_contract": {
+    "observed_argument_count": 2,
+    "options_path": "ctx.arguments[0]",
+    "callback_path": "ctx.arguments[1]",
+    "three_argument_overload_observed": false,
+    "three_argument_options_path_from_source_only": "ctx.arguments[1]",
+    "completion_result_path": "ctx.result",
+    "completion_error_path": "ctx.error",
+    "mutable_metadata_path": "ctx.arguments[0].metadata"
+  },
+  "mappings": [
+    {
+      "instrumentation_index": 0,
+      "method": "runInNewSpan [genkit:metadata:subtype=model]",
+      "operation": "generation",
+      "discriminator": "ctx.arguments[0].labels['genkit:metadata:subtype'] === 'model'",
+      "mappings": {
+        "component": "'genkit'",
+        "resource.name": "ctx.arguments[0].metadata.name",
+        "genkit.operation.type": "'generation'",
+        "genkit.action.name": "ctx.arguments[0].metadata.name",
+        "llmobs.kind": "'llm'",
+        "llmobs.name": "ctx.arguments[0].metadata.name",
+        "llmobs.model_provider": null,
+        "llmobs.model_name": null,
+        "llmobs.input_messages": "ctx.arguments[0].metadata.input.messages",
+        "llmobs.output_message": "ctx.result.message",
+        "llmobs.output_message_fallback": "ctx.arguments[0].metadata.output.message",
+        "llmobs.metrics.input_tokens": "ctx.result.usage.inputTokens",
+        "llmobs.metrics.output_tokens": "ctx.result.usage.outputTokens",
+        "llmobs.metrics.total_tokens": "ctx.result.usage.totalTokens",
+        "error": "ctx.error"
+      },
+      "transforms": [
+        "Map message role model to assistant.",
+        "Join only string content[].text values.",
+        "Normalize content[].toolRequest to toolCalls and content[].toolResponse to toolResults.",
+        "Do not copy message metadata, media, data, custom, or raw fields.",
+        "Tag token metrics only when numeric."
+      ],
+      "observed": {
+        "action_name": "local/offline-model",
+        "provider_model_decision": "The local namespace is not proof of a provider convention, so provider and model remain unmapped rather than guessed.",
+        "success_and_error": true,
+        "streaming_uses_same_hook": true,
+        "tool_loop_model_turn_count": 2
+      }
+    },
+    {
+      "instrumentation_index": 1,
+      "method": "runInNewSpan [genkit:metadata:subtype=flow or genkit:type=flowStep]",
+      "operation": "workflow",
+      "discriminator": "ctx.arguments[0].labels['genkit:metadata:subtype'] === 'flow' || ctx.arguments[0].labels['genkit:type'] === 'flowStep'",
+      "mappings": {
+        "component": "'genkit'",
+        "resource.name": "ctx.arguments[0].metadata.name",
+        "genkit.operation.type": "ctx.arguments[0].labels['genkit:type'] === 'flowStep' ? 'flowStep' : 'flow'",
+        "genkit.action.name": "ctx.arguments[0].metadata.name",
+        "llmobs.kind": "'workflow'",
+        "llmobs.name": "ctx.arguments[0].metadata.name",
+        "llmobs.input": "ctx.arguments[0].metadata.input",
+        "llmobs.output": "ctx.result",
+        "llmobs.output_fallback": "ctx.arguments[0].metadata.output",
+        "error": "ctx.error"
+      },
+      "transforms": [
+        "Use bounded LLMObs text serialization subject to content capture and redaction.",
+        "Do not add workflow input/output to ordinary APM tags."
+      ],
+      "observed": {
+        "flow_label": "genkit:metadata:subtype=flow",
+        "flow_step_label": "genkit:type=flowStep",
+        "success_and_error": true,
+        "flow_capture_id": 9,
+        "flow_step_capture_id": 10
+      }
+    },
+    {
+      "instrumentation_index": 2,
+      "method": "runInNewSpan [genkit:metadata:subtype=tool]",
+      "operation": "tool",
+      "discriminator": "ctx.arguments[0].labels['genkit:metadata:subtype'] === 'tool'",
+      "mappings": {
+        "component": "'genkit'",
+        "resource.name": "ctx.arguments[0].metadata.name",
+        "genkit.operation.type": "'tool'",
+        "genkit.action.name": "ctx.arguments[0].metadata.name",
+        "llmobs.kind": "'tool'",
+        "llmobs.name": "ctx.arguments[0].metadata.name",
+        "llmobs.input": "ctx.arguments[0].metadata.input",
+        "llmobs.output": "ctx.result",
+        "llmobs.output_fallback": "ctx.arguments[0].metadata.output",
+        "error": "ctx.error"
+      },
+      "transforms": [
+        "Use bounded LLMObs text serialization subject to content capture and redaction.",
+        "Do not add tool input/output to ordinary APM tags."
+      ],
+      "observed": {
+        "success_and_runner_error": true,
+        "interrupt_hook_completion": "error",
+        "interrupt_error_name": "ToolInterruptError",
+        "interrupt_outer_generation_completion": "success with finishReason=interrupted",
+        "model_selected_tool_capture_id": 15
+      }
+    },
+    {
+      "instrumentation_index": 3,
+      "method": "runInNewSpan [genkit:metadata:subtype=retriever]",
+      "operation": "retrieval",
+      "discriminator": "ctx.arguments[0].labels['genkit:metadata:subtype'] === 'retriever'",
+      "mappings": {
+        "component": "'genkit'",
+        "resource.name": "ctx.arguments[0].metadata.name",
+        "genkit.operation.type": "'retrieval'",
+        "genkit.action.name": "ctx.arguments[0].metadata.name",
+        "llmobs.kind": "'retrieval'",
+        "llmobs.name": "ctx.arguments[0].metadata.name",
+        "llmobs.input_document": "ctx.arguments[0].metadata.input.query",
+        "llmobs.output_documents": "ctx.result.documents",
+        "llmobs.output_documents_fallback": "ctx.arguments[0].metadata.output.documents",
+        "error": "ctx.error"
+      },
+      "transforms": [
+        "Join only query.content[].text for the input document text.",
+        "Convert each result document content[].text to a text string.",
+        "Copy only reviewed scalar metadata name, id, and score; exclude other metadata."
+      ],
+      "observed": {
+        "success_and_error": true,
+        "reviewed_metadata_fields": ["name", "id", "score"],
+        "excluded_secret_was_redacted_in_evidence": true
+      }
+    },
+    {
+      "instrumentation_index": 4,
+      "method": "runInNewSpan [genkit:metadata:subtype=embedder]",
+      "operation": "embedding",
+      "discriminator": "ctx.arguments[0].labels['genkit:metadata:subtype'] === 'embedder'",
+      "mappings": {
+        "component": "'genkit'",
+        "resource.name": "ctx.arguments[0].metadata.name",
+        "genkit.operation.type": "'embedding'",
+        "genkit.action.name": "ctx.arguments[0].metadata.name",
+        "llmobs.kind": "'embedding'",
+        "llmobs.name": "ctx.arguments[0].metadata.name",
+        "llmobs.input_documents": "ctx.arguments[0].metadata.input.input",
+        "llmobs.output_embeddings": "ctx.result.embeddings",
+        "llmobs.output_embeddings_fallback": "ctx.arguments[0].metadata.output.embeddings",
+        "error": "ctx.error"
+      },
+      "transforms": [
+        "Convert every input document content[].text to a text string.",
+        "Summarize output as count and common dimension; never serialize numeric vectors.",
+        "Exclude arbitrary input and embedding metadata."
+      ],
+      "observed": {
+        "success_and_error": true,
+        "success_input_document_count": 2,
+        "success_embedding_count": 2,
+        "success_embedding_dimensions": [3, 3],
+        "numeric_vectors_omitted_from_evidence": true
+      }
+    }
+  ],
+  "nesting_observations": {
+    "main_trace_id_source": "records[].nativeSpan.traceId",
+    "capture_parent_source": "records[].parentCaptureId",
+    "selected_parent_source": "records[].selectedParentCaptureId",
+    "main_trace": {
+      "flow": 9,
+      "flow_step": 10,
+      "retrieval": 11,
+      "embedding": 12,
+      "first_model_turn": 14,
+      "tool": 15,
+      "second_model_turn": 17
+    },
+    "actual_selected_relationships": [
+      "flow 9 -> flowStep 10",
+      "flowStep 10 -> retrieval 11",
+      "flowStep 10 -> embedding 12",
+      "flowStep 10 -> first model 14 through an unselected generate util span",
+      "flowStep 10 -> tool 15 through the same unselected generate util span",
+      "flowStep 10 -> second model 17 through a recursive unselected generate util span"
+    ],
+    "important_correction": "The model, tool, and follow-up model are ordered operations but are not a direct parent-child chain. At the selected-span level they share the flowStep ancestor; Genkit util spans provide the immediate native parents."
+  },
+  "limitations": [
+    "The exact sample exercised only the two-argument runInNewSpan overload. The three-argument options index is source-derived, not runtime-captured.",
+    "This stage-local proxy observes the same function lifecycle and values intended for Orchestrion, but it is not production instrumentation and emits no Datadog spans.",
+    "Native OpenTelemetry/provider duplication and provider-plugin demotion remain unresolved until the final instrumented real-app gate.",
+    "Input schema failures before runInNewSpan and output schema failures after it remain outside this hook."
+  ]
+}

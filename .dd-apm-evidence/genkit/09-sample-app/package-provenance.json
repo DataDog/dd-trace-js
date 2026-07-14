@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "requested": "genkit@1.21.0",
+  "resolved": {
+    "genkit": "1.21.0",
+    "@genkit-ai/core": "1.21.0",
+    "@genkit-ai/ai": "1.21.0"
+  },
+  "package_manager": "yarn@1.22.22",
+  "lockfile_sha256": "6df30ed3593dd5afad3c24b766f823ed8ce6dd0480079b8a361c89563b25d22a",
+  "manifest_sha256": {
+    "package.json": "f52f41201ea6e08135039bfed57afa07b77307810ea728be38fd46b060ca0011",
+    "node_modules/genkit/package.json": "d87afcdbd764e5bee2c73e77b016a907d240ec270ba3ad95cf7baa7aef83af3a",
+    "node_modules/@genkit-ai/core/package.json": "de06d167e0bd9230d0071638c18a5483edcaca09258152dbe0836857d91d31f3",
+    "node_modules/@genkit-ai/ai/package.json": "f61bf4a2aa2f9d1cd95abc49090fa635c3c6df827c411e0c9dd36901830d8a60"
+  },
+  "source_sha256": {
+    "sample-app.js": "f8d67bb23ad652d69b88fcfdf9045ac06af65e98498775abb33531ac42821e14",
+    "esm-smoke.mjs": "264a06f56e9324e5d98234d9dca4dbc42172eb10b2b411a1dd25f2875d633d12"
+  },
+  "evidence": "environment-output.txt"
+}

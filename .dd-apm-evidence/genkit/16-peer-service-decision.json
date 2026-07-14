@@ -1,0 +1,5 @@
+{
+  "feature_id": "peer_service",
+  "applicable": false,
+  "reasoning": "The selected Genkit spans wrap provider-neutral registered action callbacks, not a guaranteed outbound transport. In @genkit-ai/core@1.21.0, runInNewSpan receives only action metadata, labels, and the callback; model, retriever, and embedder actions may run entirely in-process and expose no hostname, port, URL, connection, or other peer identity at this boundary. The exact-version sample executes all three client-like operation families with zero network attempts. A real remote peer, when present, belongs to the underlying provider or transport integration, which has the endpoint needed to compute peer.service. Using the Genkit action name as a peer would mislabel local actions and provider-neutral logical names."
+}

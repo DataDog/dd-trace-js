@@ -1,0 +1,4 @@
+{
+  "services": [],
+  "reasoning": "The sample registers local Genkit model, tool, retriever, and embedder actions. It requires no provider API, network call, Docker service, or credentials."
+}

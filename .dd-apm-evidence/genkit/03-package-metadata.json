@@ -1,0 +1,21 @@
+{
+  "provenance": "installed /tmp/dd-apm-genkit-1.21.0/node_modules/genkit/package.json",
+  "name": "genkit",
+  "version": "1.21.0",
+  "description": "Genkit AI framework",
+  "keywords": [
+    "genkit",
+    "ai",
+    "genai",
+    "generative-ai"
+  ],
+  "homepage": "https://genkit.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/firebase/genkit.git",
+    "directory": "js/genkit"
+  },
+  "license": "Apache-2.0",
+  "author": "genkit",
+  "manifestSha256": "d87afcdbd764e5bee2c73e77b016a907d240ec270ba3ad95cf7baa7aef83af3a"
+}

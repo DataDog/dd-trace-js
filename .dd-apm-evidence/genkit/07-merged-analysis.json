@@ -1,0 +1,672 @@
+{
+  "schema_version": 1,
+  "stage": "07-merge-layers",
+  "success": true,
+  "package": {
+    "name": "genkit",
+    "version": "1.21.0",
+    "category": "generative-ai",
+    "subcategory": "workflow orchestration with a provider-neutral model registry",
+    "llmobs_category": "ORCHESTRATION",
+    "hook_package": "@genkit-ai/core",
+    "hook_package_version": "1.21.0"
+  },
+  "source_layers": {
+    "analysis": "04-target-selection.json",
+    "enrichment": "05-enrichments.json",
+    "review": "06-review-decisions.json",
+    "context_mapping": null
+  },
+  "context_mapping": {
+    "status": "not_available_yet",
+    "mappings": [],
+    "note": "This is the pre-sample-app merge. No runtime context mapping artifact exists yet."
+  },
+  "hook": {
+    "decision": "accept_with_constraints",
+    "target": "@genkit-ai/core runInNewSpan",
+    "constraints": [
+      "Use Orchestrion Async with a strict label allowlist.",
+      "Register hooks for @genkit-ai/core rather than only genkit.",
+      "Support lib/tracing/instrumentation.js; retain the matching .mjs entry only for nonstandard resolver or bundler reachability.",
+      "Limit the initial supported version range to the source-proven 1.21.x endpoint, preferably exactly 1.21.0 until cross-version source evidence exists.",
+      "Do not claim input or output schema-validation failures are covered: input parsing precedes runInNewSpan and output parsing follows it."
+    ],
+    "registration": {
+      "orchestrion_module_name": "@genkit-ai/core",
+      "orchestrion_version": "1.21.0",
+      "function_query": {
+        "functionName": "runInNewSpan",
+        "kind": "Async"
+      },
+      "required_file_paths": [
+        "lib/tracing/instrumentation.js",
+        "lib/tracing/instrumentation.mjs"
+      ],
+      "normal_node_require_runtime_path": "lib/tracing/instrumentation.js",
+      "normal_node_import_runtime_path": "lib/tracing/instrumentation.js",
+      "registration_requirement": "The integration hook must call getHooks('@genkit-ai/core') (or include that name in the getHooks name array) and add every returned hook before genkit is loaded. Registering only getHooks('genkit') will not install the dependency-file rewrite hooks.",
+      "reachability_note": "Both @genkit-ai/core/tracing require and import exports expose runInNewSpan as a named function. At 1.21.0, lib/tracing.mjs re-exports ./tracing/instrumentation.js, so ordinary ESM usage executes the CommonJS implementation. lib/tracing/instrumentation.mjs is a real matching ESM build artifact but is not directly exported; retain its Orchestrion entry for dual-build and nonstandard resolver coverage."
+    },
+    "coverage_limit": "Runner/provider errors and asynchronous work only; schema-validation failures outside runInNewSpan are not covered."
+  },
+  "analysis": {
+    "summary": "Genkit 1.21.0 is an APM hybrid of generative AI and orchestration. For LLMObs it is classified as ORCHESTRATION because the package coordinates registered provider actions and workflows but does not itself call LLM provider endpoints. The selected hook is @genkit-ai/core runInNewSpan, filtered by Genkit's action subtype labels. This single lifecycle boundary receives mutable metadata that Genkit populates with action input and output, covers errors, and preserves parent-child relationships across model, flow, tool, retrieval, and embedding operations.",
+    "instrumentation_targets": [
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=model]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>; runInNewSpan<T>(registry: Registry | HasRegistry, opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "location": "runInNewSpan",
+        "operation_type": "generation",
+        "operation": "model action invocation",
+        "span_kind": "client",
+        "span_name": "genkit.request",
+        "span_type": "genkit",
+        "reason": "Every provider-neutral model invocation, including each turn of tool-using generation and streaming generation, is executed inside this boundary. Genkit mutates opts.metadata.input and opts.metadata.output before the promise settles, so the plugin can extract messages, response, usage, model action name, errors, and configuration without coupling to a provider plugin.",
+        "priority": "critical",
+        "async_pattern": "promise",
+        "error_handling": "Orchestrion Async error lifecycle records ctx.error; tag input plus an empty output and preserve the thrown error. Finish only after the returned promise settles.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "target_name": "runInNewSpan [genkit:metadata:subtype=model]",
+        "module_name": "@genkit-ai/core",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "function_kind": "async",
+        "export_type": "named",
+        "confirmed_in_library": true,
+        "source": {
+          "package_version": "1.21.0",
+          "source_path": "src/tracing/instrumentation.ts",
+          "source_implementation_line": 79,
+          "source_overload_lines": [
+            60,
+            70
+          ],
+          "function_query": {
+            "functionName": "runInNewSpan",
+            "kind": "Async"
+          },
+          "public_subpath": "@genkit-ai/core/tracing",
+          "commonjs_publicly_reexported": true,
+          "esm_publicly_reexported": true,
+          "esm_entry_executes_commonjs_implementation": true,
+          "esm_counterpart_publicly_reachable": false
+        },
+        "review": {
+          "decision": "change",
+          "accepted_kind": "llm",
+          "required_changes": [
+            "Convert Genkit Part arrays into valid LLMObs message content strings.",
+            "Map role model to assistant.",
+            "Convert toolRequest parts to toolCalls and toolResponse parts to toolResults using the LLMObs tagger field names.",
+            "Never pass raw media URLs, data parts, custom payloads, provider raw responses, or message metadata through by default.",
+            "Tag only numeric usage fields; the three standard token metrics are required when present.",
+            "Derive provider and model only from a proven action-name convention and preserve undefined rather than inventing values.",
+            "Demote the Genkit model span to workflow when an enabled native provider LLMObs integration emits the authoritative llm span for the same request."
+          ]
+        },
+        "apm": {
+          "span_name": "genkit.request",
+          "span_kind": "client",
+          "span_type": "genkit",
+          "safe_tags": {
+            "component": "genkit",
+            "genkit.operation.type": "generation",
+            "genkit.action.name": "opts.metadata.name"
+          },
+          "payload_tags_allowed": false
+        },
+        "llmobs": {
+          "registration": {
+            "default_kind": "llm",
+            "provider_integration_kind": "workflow",
+            "name": "opts.metadata.name",
+            "model_provider": "Only a proven registered-action-name prefix; otherwise undefined.",
+            "model_name": "Only a proven registered-action-name model component; otherwise undefined."
+          },
+          "input": {
+            "source": "opts.metadata.input.messages",
+            "tagger": "tagLLMIO",
+            "transform": [
+              "Map Genkit role model to assistant.",
+              "Join only string part.text values into bounded message content.",
+              "Map toolRequest to toolCalls entries with name, arguments, toolId, and optional type.",
+              "Map toolResponse to toolResults entries with bounded string result, toolId, name, and optional type.",
+              "Drop media URLs, data parts, custom parts, raw provider values, and message metadata."
+            ]
+          },
+          "output": {
+            "source": "ctx.result.message, with parsed opts.metadata.output.message only as fallback",
+            "tagger": "tagLLMIO",
+            "transform": "Apply the same message normalization; use an empty normalized output message on error."
+          },
+          "metrics": {
+            "source": "ctx.result.usage",
+            "mapping": {
+              "inputTokens": "input_tokens",
+              "outputTokens": "output_tokens",
+              "totalTokens": "total_tokens"
+            },
+            "constraint": "Tag only values that are numeric; do not invent or relabel other usage fields."
+          },
+          "metadata": "Explicit reviewed scalar generation-config allowlist only; exclude raw, custom, context, payloads, and secrets."
+        },
+        "limitations": [
+          "Input schema parsing happens before the selected hook and output schema parsing happens after it.",
+          "Native OpenTelemetry and provider integration duplicate-span behavior remains a runtime blocker."
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=flow or genkit:type=flowStep]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "location": "runInNewSpan",
+        "operation_type": "workflow",
+        "operation": "flow or named flow-step execution",
+        "span_kind": "internal",
+        "span_name": "genkit.workflow",
+        "span_type": "genkit",
+        "reason": "Flow invocation occurs here rather than at defineFlow registration. The promise encompasses the user flow function and all nested model, tool, retrieval, embedding, and run-step calls, giving the required workflow parent span and meaningful input/output/error data.",
+        "priority": "critical",
+        "async_pattern": "promise",
+        "error_handling": "Record ctx.error and an empty workflow output; retain nested-child ordering through the Orchestrion start store.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "target_name": "runInNewSpan [genkit:metadata:subtype=flow or genkit:type=flowStep]",
+        "module_name": "@genkit-ai/core",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "function_kind": "async",
+        "export_type": "named",
+        "confirmed_in_library": true,
+        "source": {
+          "package_version": "1.21.0",
+          "source_path": "src/tracing/instrumentation.ts",
+          "source_implementation_line": 79,
+          "source_overload_lines": [
+            60,
+            70
+          ],
+          "function_query": {
+            "functionName": "runInNewSpan",
+            "kind": "Async"
+          },
+          "public_subpath": "@genkit-ai/core/tracing",
+          "commonjs_publicly_reexported": true,
+          "esm_publicly_reexported": true,
+          "esm_entry_executes_commonjs_implementation": true,
+          "esm_counterpart_publicly_reachable": false
+        },
+        "review": {
+          "decision": "accept_with_constraints",
+          "accepted_kind": "workflow",
+          "required_changes": [
+            "Use genkit:type=flowStep as the exact flow-step discriminator.",
+            "Keep structured I/O in LLMObs only and rely on configured LLMObs content capture/redaction; do not add raw workflow I/O as ordinary APM tags.",
+            "Test flow to model/tool/retrieval/embedding parent-child relationships."
+          ]
+        },
+        "apm": {
+          "span_name": "genkit.workflow",
+          "span_kind": "internal",
+          "span_type": "genkit",
+          "safe_tags": {
+            "component": "genkit",
+            "genkit.operation.type": "workflow",
+            "genkit.action.name": "opts.metadata.name"
+          },
+          "payload_tags_allowed": false
+        },
+        "llmobs": {
+          "registration": {
+            "kind": "workflow",
+            "name": "opts.metadata.name"
+          },
+          "input": {
+            "source": "opts.metadata.input",
+            "tagger": "tagTextIO",
+            "transform": "Bounded LLMObs serialization subject to configured content capture and redaction."
+          },
+          "output": {
+            "source": "ctx.result, with parsed opts.metadata.output only as fallback",
+            "tagger": "tagTextIO",
+            "transform": "Bounded LLMObs serialization; empty output on error."
+          },
+          "apm_payload_capture": false
+        },
+        "limitations": [
+          "Input schema parsing happens before the selected hook and output schema parsing happens after it."
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=tool]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "location": "runInNewSpan",
+        "operation_type": "tool",
+        "operation": "tool action invocation",
+        "span_kind": "internal",
+        "span_name": "genkit.tool",
+        "span_type": "genkit",
+        "reason": "This is the per-call execution boundary for both directly invoked tools and tools selected by an automatic generation loop. It avoids instrumenting defineTool registration and naturally nests between model turns.",
+        "priority": "critical",
+        "async_pattern": "promise",
+        "error_handling": "Record thrown tool errors. Genkit tool interrupts are control-flow errors caught by resolveToolRequest; downstream implementation should verify whether they should be represented as successful interrupted tool results rather than LLMObs errors.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "target_name": "runInNewSpan [genkit:metadata:subtype=tool]",
+        "module_name": "@genkit-ai/core",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "function_kind": "async",
+        "export_type": "named",
+        "confirmed_in_library": true,
+        "source": {
+          "package_version": "1.21.0",
+          "source_path": "src/tracing/instrumentation.ts",
+          "source_implementation_line": 79,
+          "source_overload_lines": [
+            60,
+            70
+          ],
+          "function_query": {
+            "functionName": "runInNewSpan",
+            "kind": "Async"
+          },
+          "public_subpath": "@genkit-ai/core/tracing",
+          "commonjs_publicly_reexported": true,
+          "esm_publicly_reexported": true,
+          "esm_entry_executes_commonjs_implementation": true,
+          "esm_counterpart_publicly_reachable": false
+        },
+        "review": {
+          "decision": "accept_with_constraints",
+          "accepted_kind": "tool",
+          "required_changes": [
+            "Use bounded LLMObs text I/O and no raw ordinary APM payload tags.",
+            "Pin interrupt behavior with an exact 1.21.0 test before deciding whether an interrupt is an error or an interrupted successful result."
+          ]
+        },
+        "apm": {
+          "span_name": "genkit.tool",
+          "span_kind": "internal",
+          "span_type": "genkit",
+          "safe_tags": {
+            "component": "genkit",
+            "genkit.operation.type": "tool",
+            "genkit.action.name": "opts.metadata.name"
+          },
+          "payload_tags_allowed": false
+        },
+        "llmobs": {
+          "registration": {
+            "kind": "tool",
+            "name": "opts.metadata.name"
+          },
+          "input": {
+            "source": "opts.metadata.input",
+            "tagger": "tagTextIO",
+            "transform": "Bounded LLMObs serialization subject to configured content capture and redaction."
+          },
+          "output": {
+            "source": "ctx.result, with parsed opts.metadata.output only as fallback",
+            "tagger": "tagTextIO",
+            "transform": "Bounded string output; interrupt error/success semantics remain blocked on an exact-version fixture."
+          },
+          "apm_payload_capture": false
+        },
+        "limitations": [
+          "Input schema parsing happens before the selected hook and output schema parsing happens after it."
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=retriever]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "location": "runInNewSpan",
+        "operation_type": "retrieval",
+        "operation": "retriever action invocation",
+        "span_kind": "client",
+        "span_name": "genkit.request",
+        "span_type": "genkit",
+        "reason": "Retriever actions expose the actual query document, options, returned documents, action name, duration, and errors at this shared execution boundary. Genkit.retrieve is only a resolver veneer over the same action.",
+        "priority": "important",
+        "async_pattern": "promise",
+        "error_handling": "Record ctx.error, the query document, and an empty output-document list.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "target_name": "runInNewSpan [genkit:metadata:subtype=retriever]",
+        "module_name": "@genkit-ai/core",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "function_kind": "async",
+        "export_type": "named",
+        "confirmed_in_library": true,
+        "source": {
+          "package_version": "1.21.0",
+          "source_path": "src/tracing/instrumentation.ts",
+          "source_implementation_line": 79,
+          "source_overload_lines": [
+            60,
+            70
+          ],
+          "function_query": {
+            "functionName": "runInNewSpan",
+            "kind": "Async"
+          },
+          "public_subpath": "@genkit-ai/core/tracing",
+          "commonjs_publicly_reexported": true,
+          "esm_publicly_reexported": true,
+          "esm_entry_executes_commonjs_implementation": true,
+          "esm_counterpart_publicly_reachable": false
+        },
+        "review": {
+          "decision": "change",
+          "accepted_kind": "retrieval",
+          "required_changes": [
+            "Flatten query.content text parts to the retrieval input value.",
+            "Convert each returned Genkit DocumentData from content parts to an LLMObs document object with a string text field.",
+            "Do not pass DocumentData objects directly to tagRetrievalIO because the tagger rejects objects without text.",
+            "Exclude arbitrary document metadata by default; copy only explicitly reviewed scalar name, id, or score fields."
+          ]
+        },
+        "apm": {
+          "span_name": "genkit.request",
+          "span_kind": "client",
+          "span_type": "genkit",
+          "safe_tags": {
+            "component": "genkit",
+            "genkit.operation.type": "retrieval",
+            "genkit.action.name": "opts.metadata.name"
+          },
+          "payload_tags_allowed": false
+        },
+        "llmobs": {
+          "registration": {
+            "kind": "retrieval",
+            "name": "opts.metadata.name"
+          },
+          "input": {
+            "source": "opts.metadata.input.query",
+            "tagger": "tagRetrievalIO",
+            "output_shape": [
+              {
+                "text": "string"
+              }
+            ],
+            "transform": "Join only query.content part.text strings; never pass DocumentData directly."
+          },
+          "output": {
+            "source": "ctx.result.documents",
+            "tagger": "tagRetrievalIO",
+            "output_shape": [
+              {
+                "text": "string",
+                "name": "optional string",
+                "id": "optional string",
+                "score": "optional number"
+              }
+            ],
+            "transform": "Convert each DocumentData content array to text and copy only explicitly reviewed scalar name/id/score.",
+            "error_value": []
+          },
+          "excluded": [
+            "arbitrary document metadata",
+            "non-text parts",
+            "raw DocumentData objects"
+          ]
+        },
+        "limitations": [
+          "Input schema parsing happens before the selected hook and output schema parsing happens after it."
+        ]
+      },
+      {
+        "method": "runInNewSpan [genkit:metadata:subtype=embedder]",
+        "full_signature": "runInNewSpan<T>(opts: RunInNewSpanOpts, fn: RunInNewSpanFn<T>): Promise<T>",
+        "location": "runInNewSpan",
+        "operation_type": "embedding",
+        "operation": "embedder action invocation",
+        "span_kind": "client",
+        "span_name": "genkit.request",
+        "span_type": "genkit",
+        "reason": "Both embed and embedMany resolve to one embedder action invocation. The shared boundary contains all input documents, embedding options, returned vectors, action name, duration, and errors without producing one span per document.",
+        "priority": "important",
+        "async_pattern": "promise",
+        "error_handling": "Record ctx.error, input documents, and an empty output-embedding list.",
+        "code_example_reference": ".dd-apm-evidence/genkit/03-guide-usage.md",
+        "target_name": "runInNewSpan [genkit:metadata:subtype=embedder]",
+        "module_name": "@genkit-ai/core",
+        "file_path": "lib/tracing/instrumentation.js",
+        "line_number": 41,
+        "file_paths": [
+          {
+            "path": "lib/tracing/instrumentation.js",
+            "line": 41,
+            "module_type": "commonjs"
+          },
+          {
+            "path": "lib/tracing/instrumentation.mjs",
+            "line": 14,
+            "module_type": "esm"
+          }
+        ],
+        "function_kind": "async",
+        "export_type": "named",
+        "confirmed_in_library": true,
+        "source": {
+          "package_version": "1.21.0",
+          "source_path": "src/tracing/instrumentation.ts",
+          "source_implementation_line": 79,
+          "source_overload_lines": [
+            60,
+            70
+          ],
+          "function_query": {
+            "functionName": "runInNewSpan",
+            "kind": "Async"
+          },
+          "public_subpath": "@genkit-ai/core/tracing",
+          "commonjs_publicly_reexported": true,
+          "esm_publicly_reexported": true,
+          "esm_entry_executes_commonjs_implementation": true,
+          "esm_counterpart_publicly_reachable": false
+        },
+        "review": {
+          "decision": "change",
+          "accepted_kind": "embedding",
+          "required_changes": [
+            "Convert each input DocumentData content array into an LLMObs document object with a string text field.",
+            "Do not pass Genkit DocumentData directly to tagEmbeddingIO because the tagger rejects objects without text.",
+            "Never serialize returned numeric vectors. Emit only a summary such as [N embedding(s) returned with size D].",
+            "Exclude arbitrary document and embedding metadata by default."
+          ]
+        },
+        "apm": {
+          "span_name": "genkit.request",
+          "span_kind": "client",
+          "span_type": "genkit",
+          "safe_tags": {
+            "component": "genkit",
+            "genkit.operation.type": "embedding",
+            "genkit.action.name": "opts.metadata.name"
+          },
+          "payload_tags_allowed": false
+        },
+        "llmobs": {
+          "registration": {
+            "kind": "embedding",
+            "name": "opts.metadata.name"
+          },
+          "input": {
+            "source": "opts.metadata.input.input",
+            "tagger": "tagEmbeddingIO",
+            "output_shape": [
+              {
+                "text": "string",
+                "name": "optional string",
+                "id": "optional string"
+              }
+            ],
+            "transform": "Convert each DocumentData content array to text; never pass DocumentData directly."
+          },
+          "output": {
+            "source": "ctx.result.embeddings",
+            "tagger": "tagEmbeddingIO",
+            "output_shape": "bounded summary string",
+            "transform": "Emit [N embedding(s) returned with size D]; never serialize numeric vectors or embedding metadata.",
+            "error_value": ""
+          },
+          "excluded": [
+            "numeric embedding vectors",
+            "arbitrary document metadata",
+            "embedding metadata"
+          ]
+        },
+        "limitations": [
+          "Input schema parsing happens before the selected hook and output schema parsing happens after it."
+        ]
+      }
+    ],
+    "rejected_targets": [
+      {
+        "target": "agent",
+        "decision": "reject",
+        "reason": "Genkit 1.21.0 has no explicit agent lifecycle; tool-loop generation is not sufficient to label the operation as an agent."
+      },
+      {
+        "target": "generate/generateStream/prompt/chat convenience methods",
+        "decision": "reject",
+        "reason": "They converge on model actions and would duplicate spans; stream container-return timing is not provider completion timing."
+      },
+      {
+        "target": "defineFlow/defineTool/defineRetriever/defineEmbedder/defineModel",
+        "decision": "reject",
+        "reason": "These are registration boundaries, not operation execution."
+      },
+      {
+        "target": "runInNewSpan util/prompt/evaluator/indexer/reranker/resource labels",
+        "decision": "reject_for_initial_scope",
+        "reason": "The requested LLMObs kinds do not establish semantics for these labels; a strict allowlist prevents noisy internal spans."
+      }
+    ],
+    "review_findings": [
+      {
+        "id": "GENKIT-REVIEW-001",
+        "severity": "high",
+        "status": "override_required",
+        "summary": "Native Genkit message and document shapes are not valid direct inputs to the LLMObs tagger."
+      },
+      {
+        "id": "GENKIT-REVIEW-002",
+        "severity": "high",
+        "status": "override_required",
+        "summary": "Raw embedding vectors must be summarized rather than serialized as LLMObs output."
+      },
+      {
+        "id": "GENKIT-REVIEW-003",
+        "severity": "medium",
+        "status": "document_and_test",
+        "summary": "The selected hook does not cover schema validation before or after runInNewSpan."
+      },
+      {
+        "id": "GENKIT-REVIEW-004",
+        "severity": "high",
+        "status": "final_gate_blocker",
+        "summary": "Native OpenTelemetry and provider LLMObs duplicate-span behavior is unresolved until real-app trace inspection."
+      },
+      {
+        "id": "GENKIT-REVIEW-005",
+        "severity": "medium",
+        "status": "implementation_constraint",
+        "summary": "The hidden shared hook is source-proven only at 1.21.0 and must not receive an unsupported broad version range."
+      },
+      {
+        "id": "GENKIT-REVIEW-006",
+        "severity": "medium",
+        "status": "test_required",
+        "summary": "Tool-interrupt error semantics remain unresolved."
+      }
+    ]
+  },
+  "review": {
+    "overall_decision": "change",
+    "category_decision": {
+      "value": "ORCHESTRATION",
+      "decision": "accept",
+      "reason": "genkit coordinates provider-neutral actions, tools, retrieval, embeddings, and flows; genkit and @genkit-ai/ai do not implement provider HTTP clients"
+    },
+    "review_mode": {
+      "requested_capability": "interactive curses TUI",
+      "capability_status": "unavailable",
+      "reason": "The execution environment is headless and noninteractive. The Stage 06 guidance says the TUI is automatically skipped in headless or remote mode.",
+      "tui_executed": false,
+      "replacement": "independent source-based review with machine-readable decisions"
+    }
+  },
+  "unresolved_blockers": [
+    "The curses TUI cannot run in this headless environment and is not marked passed.",
+    "Duplicate native OpenTelemetry/provider spans and token double counting require captured output from the real genkit@1.21.0 sample application.",
+    "Tool interrupt completion semantics require an executable 1.21.0 fixture.",
+    "The final supported semver range requires cross-version source and runtime evidence if it extends beyond 1.21.0."
+  ],
+  "provenance": {
+    "source_sha256": {
+      "04-target-selection.json": "3c283a25793fe08f735222654f30a5d4de94fda947eebeb1c050b7e4be3ce0ae",
+      "05-enrichments.json": "6f284d20fd1e42f5778f76798ca167b0676e65ee9c8b982fee0046df5b642562",
+      "06-review-decisions.json": "f080a4c78bcd3cbdfea7b21b0f0477ab8501c0475bc348f302dff541564b3b58"
+    },
+    "override_policy": "Stage 05 replaces Stage 04 hook metadata. Stage 06 replaces superseded Stage 04 tagger mappings and supplies final constraints, rejections, findings, and blockers."
+  },
+  "validation": {
+    "base_target_count": 5,
+    "enriched_target_count": 5,
+    "review_target_count": 5,
+    "merged_target_count": 5,
+    "missing_targets": [],
+    "context_mapping_count": 0,
+    "all_review_overrides_applied": true,
+    "superseded_span_tags_removed": true
+  }
+}

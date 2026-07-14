@@ -1,0 +1,983 @@
+{
+  "package": "genkit@1.21.0",
+  "packageRoot": "/tmp/dd-apm-genkit-1.21.0/node_modules/genkit",
+  "extraction": "TypeScript AST node.jsDoc collection from every bundled src/**/*.ts file",
+  "sourceFileCount": 23,
+  "sourceFilesWithDocumentation": 23,
+  "documentationBlockCount": 101,
+  "files": [
+    {
+      "file": "src/beta.ts",
+      "sha256": "baa418ce70431d28c0d5bc95ae8db113878f28a0c7f63f7cb17f79327c587a2f",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2025 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/client/client.ts",
+      "sha256": "4832f7b19573e2c8619c5a8ee44354dd17af57c7d38bcb7195ef3604f7bdc4e2",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ImportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        },
+        {
+          "name": "streamFlow",
+          "syntaxKind": "FunctionDeclaration",
+          "line": 39,
+          "comment": "Invoke and stream response from a deployed flow.\n\nFor example:\n\n```js\nimport { streamFlow } from 'genkit/beta/client';\n\nconst response = streamFlow({\n  url: 'https://my-flow-deployed-url',\n  input: 'foo',\n});\nfor await (const chunk of response.stream) {\n  console.log(chunk);\n}\nconsole.log(await response.output);\n```",
+          "tags": []
+        },
+        {
+          "name": "url",
+          "syntaxKind": "PropertySignature",
+          "line": 46,
+          "comment": "URL of the deployed flow.",
+          "tags": []
+        },
+        {
+          "name": "input",
+          "syntaxKind": "PropertySignature",
+          "line": 48,
+          "comment": "Flow input.",
+          "tags": []
+        },
+        {
+          "name": "headers",
+          "syntaxKind": "PropertySignature",
+          "line": 50,
+          "comment": "A map of HTTP headers to be added to the HTTP call.",
+          "tags": []
+        },
+        {
+          "name": "abortSignal",
+          "syntaxKind": "PropertySignature",
+          "line": 52,
+          "comment": "Abort signal to abort the request.",
+          "tags": []
+        },
+        {
+          "name": "runFlow",
+          "syntaxKind": "FunctionDeclaration",
+          "line": 161,
+          "comment": "Invoke a deployed flow over HTTP(s).\n\nFor example:\n\n```js\nimport { runFlow } from 'genkit/beta/client';\n\nconst response = await runFlow({\n  url: 'https://my-flow-deployed-url',\n  input: 'foo',\n});\nconsole.log(await response);\n```",
+          "tags": []
+        },
+        {
+          "name": "url",
+          "syntaxKind": "PropertySignature",
+          "line": 168,
+          "comment": "URL of the deployed flow.",
+          "tags": []
+        },
+        {
+          "name": "input",
+          "syntaxKind": "PropertySignature",
+          "line": 170,
+          "comment": "Flow input.",
+          "tags": []
+        },
+        {
+          "name": "headers",
+          "syntaxKind": "PropertySignature",
+          "line": 172,
+          "comment": "A map of HTTP headers to be added to the HTTP call.",
+          "tags": []
+        },
+        {
+          "name": "abortSignal",
+          "syntaxKind": "PropertySignature",
+          "line": 174,
+          "comment": "Abort signal to abort the request.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/client/index.ts",
+      "sha256": "bc2896bf36ef8345abf41cb635b469cfeac05dbd9f7c6499d1dd09cf364b4c37",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 42,
+          "comment": "",
+          "tags": [
+            {
+              "name": "license",
+              "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+              "text": "@license\n *\n * Copyright 2024 Google LLC\n *\n * Licensed under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS,\n * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n * See the License for the specific language governing permissions and\n * limitations under the License.\n "
+            }
+          ]
+        },
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 42,
+          "comment": "A simple, browser-safe client library for remotely running/streaming deployed Genkit flows.\n\n```ts\nimport { runFlow, streamFlow } from 'genkit/beta/client';\n\nconst response = await runFlow({\n  url: 'https://my-flow-deployed-url',\n  input: 'foo',\n});\n\nconst response = streamFlow({\n  url: 'https://my-flow-deployed-url',\n  input: 'foo',\n});\nfor await (const chunk of response.stream) {\n  console.log(chunk);\n}\nconsole.log(await response.output);\n```",
+          "tags": [
+            {
+              "name": "module",
+              "comment": "beta/client",
+              "text": "@module beta/client\n "
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/common.ts",
+      "sha256": "66d8278c69698df4ada72b999fd9d4d7242b0d5703f979c20a5fafe34efac001",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 18,
+          "comment": "\nCopyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/context.ts",
+      "sha256": "7068682281f89052b3b1f26e27682d9279450d2c7d7c99ea7b4554af913ee595",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/embedder.ts",
+      "sha256": "ec12273e942e5d087fca49cbeb209b9d922dce4d25e3961a677f6b40a732790c",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/evaluator.ts",
+      "sha256": "40895053ecf6c39be72d787b84a575eb29dcf913aaaaa531119ce53fe43277e9",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/extract.ts",
+      "sha256": "f6b0d56dc381972ca7a742de56d2bc4d1bb34b70a8a2a2f4644594e57ee07dad",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/formats.ts",
+      "sha256": "2b65cceb3404a68f55930bee797b3de95f815c9a0d83964b388a0ccb8d4baf45",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/genkit-beta.ts",
+      "sha256": "cdffd0aa896e3307ca0f4858fbcab7721284dece6b933977a1925c750b461a81",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ImportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2025 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        },
+        {
+          "name": "genkit",
+          "syntaxKind": "FunctionDeclaration",
+          "line": 58,
+          "comment": "WARNING: these APIs are considered unstable and subject to frequent breaking changes that may not honor semver.\n\nInitializes Genkit BETA APIs with a set of options.\n\nThis will create a new Genkit registry, register the provided plugins, stores, and other configuration. This\nshould be called before any flows are registered.",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n "
+            }
+          ]
+        },
+        {
+          "name": "GenkitBeta",
+          "syntaxKind": "ClassDeclaration",
+          "line": 67,
+          "comment": "Genkit BETA APIs.",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n "
+            }
+          ]
+        },
+        {
+          "name": "chat",
+          "syntaxKind": "MethodDeclaration",
+          "line": 86,
+          "comment": "Create a chat session with the provided options.\n\n```ts\nconst chat = ai.chat({\n  system: 'talk like a pirate',\n})\nlet response = await chat.send('tell me a joke')\nresponse = await chat.send('another one')\n```",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "chat",
+          "syntaxKind": "MethodDeclaration",
+          "line": 101,
+          "comment": "Create a chat session with the provided preamble.\n\n```ts\nconst triageAgent = ai.definePrompt({\n  system: 'help the user triage a problem',\n})\nconst chat = ai.chat(triageAgent)\nconst { text } = await chat.send('my phone feels hot');\n```",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "chat",
+          "syntaxKind": "MethodDeclaration",
+          "line": 116,
+          "comment": "Create a chat session with the provided options.\n\n```ts\nconst chat = ai.chat({\n  system: 'talk like a pirate',\n})\nlet response = await chat.send('tell me a joke')\nresponse = await chat.send('another one')\n```",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "createSession",
+          "syntaxKind": "MethodDeclaration",
+          "line": 143,
+          "comment": "Create a session for this environment.",
+          "tags": []
+        },
+        {
+          "name": "loadSession",
+          "syntaxKind": "MethodDeclaration",
+          "line": 161,
+          "comment": "Loads a session from the store.",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "currentSession",
+          "syntaxKind": "MethodDeclaration",
+          "line": 182,
+          "comment": "Gets the current session from async local storage.",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "defineFormat",
+          "syntaxKind": "MethodDeclaration",
+          "line": 225,
+          "comment": "Defines and registers a custom model output formatter.\n\nHere's an example of a custom JSON output formatter:\n\n```ts\nimport { extractJson } from 'genkit/extract';\n\nai.defineFormat(\n  { name: 'customJson' },\n  (schema) => {\n    let instructions: string | undefined;\n    if (schema) {\n      instructions = `Output should be in JSON format and conform to the following schema:\n\\`\\`\\`\n${JSON.stringify(schema)}\n\\`\\`\\`\n`;\n    }\n    return {\n      parseChunk: (chunk) => extractJson(chunk.accumulatedText),\n      parseMessage: (message) => extractJson(message.text),\n      instructions,\n    };\n  }\n);\n\nconst { output } = await ai.generate({\n  prompt: 'Invent a menu item for a pirate themed restaurant.',\n  output: { format: 'customJson', schema: MenuItemSchema },\n});\n```",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "defineInterrupt",
+          "syntaxKind": "MethodDeclaration",
+          "line": 242,
+          "comment": "Defines and registers an interrupt.\n\nInterrupts are special tools that halt model processing and return control back to the caller. Interrupts make it simpler to implement\n\"human-in-the-loop\" and out-of-band processing patterns that require waiting on external actions to complete.",
+          "tags": [
+            {
+              "name": "beta",
+              "comment": "",
+              "text": "@beta\n   "
+            }
+          ]
+        },
+        {
+          "name": "generateOperation",
+          "syntaxKind": "MethodDeclaration",
+          "line": 263,
+          "comment": "Starts a generate operation for long running generation models, typically for\nvideo and complex audio generation.\n\nSee {@link GenerateOptions} for detailed information about available options.\n\n```ts\nconst operation = await ai.generateOperation({\n  model: googleAI.model('veo-2.0-generate-001'),\n  prompt: 'A banana riding a bicycle.',\n});\n```\n\nThe status of the operation and final result can be obtained using {@link Genkit.checkOperation}.",
+          "tags": []
+        },
+        {
+          "name": "defineResource",
+          "syntaxKind": "MethodDeclaration",
+          "line": 289,
+          "comment": "Defines a resource. Resources can then be accessed from a generate call.\n\n```ts\nai.defineResource({\n  uri: 'my://resource/{param}',\n  description: 'provides my resource',\n}, async ({param}) => {\n  return [{ text: `resource ${param}` }]\n});\n\nawait ai.generate({\n  prompt: [{ resource: 'my://resource/value' }]\n})",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/genkit.ts",
+      "sha256": "c11553518237283b97c62e5fb0e9c7a3033d29e91ced39764ef168719d7404a4",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ImportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        },
+        {
+          "name": "PromptFn",
+          "syntaxKind": "TypeAliasDeclaration",
+          "line": 144,
+          "comment": "",
+          "tags": [
+            {
+              "name": "deprecated",
+              "comment": "use `ai.definePrompt({messages: fn})`",
+              "text": "@deprecated use `ai.definePrompt({messages: fn})`\n "
+            }
+          ]
+        },
+        {
+          "name": "GenkitOptions",
+          "syntaxKind": "InterfaceDeclaration",
+          "line": 152,
+          "comment": "Options for initializing Genkit.",
+          "tags": []
+        },
+        {
+          "name": "plugins",
+          "syntaxKind": "PropertySignature",
+          "line": 154,
+          "comment": "List of plugins to load.",
+          "tags": []
+        },
+        {
+          "name": "promptDir",
+          "syntaxKind": "PropertySignature",
+          "line": 156,
+          "comment": "Directory where dotprompts are stored.",
+          "tags": []
+        },
+        {
+          "name": "model",
+          "syntaxKind": "PropertySignature",
+          "line": 158,
+          "comment": "Default model to use if no model is specified.",
+          "tags": []
+        },
+        {
+          "name": "context",
+          "syntaxKind": "PropertySignature",
+          "line": 160,
+          "comment": "Additional runtime context data for flows and tools.",
+          "tags": []
+        },
+        {
+          "name": "name",
+          "syntaxKind": "PropertySignature",
+          "line": 162,
+          "comment": "Display name that will be shown in developer tooling.",
+          "tags": []
+        },
+        {
+          "name": "clientHeader",
+          "syntaxKind": "PropertySignature",
+          "line": 164,
+          "comment": "Additional attribution information to include in the x-goog-api-client header.",
+          "tags": []
+        },
+        {
+          "name": "Genkit",
+          "syntaxKind": "ClassDeclaration",
+          "line": 176,
+          "comment": "`Genkit` encapsulates a single Genkit instance including the {@link Registry}, {@link ReflectionServer}, {@link FlowServer}, and configuration.\n\nDo not instantiate this class directly. Use {@link genkit}.\n\nRegistry keeps track of actions, flows, tools, and many other components. Reflection server exposes an API to inspect the registry and trigger executions of actions in the registry. Flow server exposes flows as HTTP endpoints for production use.\n\nThere may be multiple Genkit instances in a single codebase.",
+          "tags": []
+        },
+        {
+          "name": "options",
+          "syntaxKind": "PropertyDeclaration",
+          "line": 178,
+          "comment": "Developer-configured options.",
+          "tags": []
+        },
+        {
+          "name": "registry",
+          "syntaxKind": "PropertyDeclaration",
+          "line": 180,
+          "comment": "Registry instance that is exclusively modified by this Genkit instance.",
+          "tags": []
+        },
+        {
+          "name": "reflectionServer",
+          "syntaxKind": "PropertyDeclaration",
+          "line": 182,
+          "comment": "Reflection server for this registry. May be null if not started.",
+          "tags": []
+        },
+        {
+          "name": "flows",
+          "syntaxKind": "PropertyDeclaration",
+          "line": 184,
+          "comment": "List of flows that have been registered in this instance.",
+          "tags": []
+        },
+        {
+          "name": "defineFlow",
+          "syntaxKind": "MethodDeclaration",
+          "line": 212,
+          "comment": "Defines and registers a flow function.",
+          "tags": []
+        },
+        {
+          "name": "defineTool",
+          "syntaxKind": "MethodDeclaration",
+          "line": 230,
+          "comment": "Defines and registers a tool.\n\nTools can be passed to models by name or value during `generate` calls to be called automatically based on the prompt and situation.",
+          "tags": []
+        },
+        {
+          "name": "dynamicTool",
+          "syntaxKind": "MethodDeclaration",
+          "line": 241,
+          "comment": "Defines a dynamic tool. Dynamic tools are just like regular tools ({@link Genkit.defineTool}) but will not be registered in the\nGenkit registry and can be defined dynamically at runtime.",
+          "tags": []
+        },
+        {
+          "name": "defineDynamicActionProvider",
+          "syntaxKind": "MethodDeclaration",
+          "line": 251,
+          "comment": "Defines and registers a dynamic action provider (e.g. mcp host)",
+          "tags": []
+        },
+        {
+          "name": "defineSchema",
+          "syntaxKind": "MethodDeclaration",
+          "line": 263,
+          "comment": "Defines and registers a schema from a Zod schema.\n\nDefined schemas can be referenced by `name` in prompts in place of inline schemas.",
+          "tags": []
+        },
+        {
+          "name": "defineJsonSchema",
+          "syntaxKind": "MethodDeclaration",
+          "line": 272,
+          "comment": "Defines and registers a schema from a JSON schema.\n\nDefined schemas can be referenced by `name` in prompts in place of inline schemas.",
+          "tags": []
+        },
+        {
+          "name": "defineModel",
+          "syntaxKind": "MethodDeclaration",
+          "line": 279,
+          "comment": "Defines a new model and adds it to the registry.",
+          "tags": []
+        },
+        {
+          "name": "defineModel",
+          "syntaxKind": "MethodDeclaration",
+          "line": 292,
+          "comment": "Defines a new model and adds it to the registry.",
+          "tags": []
+        },
+        {
+          "name": "defineModel",
+          "syntaxKind": "MethodDeclaration",
+          "line": 303,
+          "comment": "Defines a new model and adds it to the registry.",
+          "tags": []
+        },
+        {
+          "name": "defineBackgroundModel",
+          "syntaxKind": "MethodDeclaration",
+          "line": 316,
+          "comment": "Defines a new background model and adds it to the registry.",
+          "tags": []
+        },
+        {
+          "name": "prompt",
+          "syntaxKind": "MethodDeclaration",
+          "line": 328,
+          "comment": "Looks up a prompt by `name` (and optionally `variant`). Can be used to lookup\n.prompt files or prompts previously defined with {@link Genkit.definePrompt}",
+          "tags": []
+        },
+        {
+          "name": "definePrompt",
+          "syntaxKind": "MethodDeclaration",
+          "line": 451,
+          "comment": "Defines and registers a prompt based on a function.\n\nThis is an alternative to defining and importing a .prompt file, providing\nthe most advanced control over how the final request to the model is made.",
+          "tags": [
+            {
+              "name": "param",
+              "comment": "- Prompt metadata including model, model params,\ninput/output schemas, etc",
+              "text": "@param options - Prompt metadata including model, model params,\n   * input/output schemas, etc\n   * "
+            },
+            {
+              "name": "param",
+              "comment": "- A function that returns a {@link GenerateRequest}. Any config\nparameters specified by the {@link GenerateRequest} will take precedence\nover any parameters specified by `options`.\n\n```ts\nconst hi = ai.definePrompt(\n{\nname: 'hi',\ninput: {\nschema: z.object({\nname: z.string(),\n}),\n},\nconfig: {\ntemperature: 1,\n},\n},\nasync (input) => {\nreturn {\nmessages: [ { role: 'user', content: [{ text: `hi ${input.name}` }] } ],\n};\n}\n);\nconst { text } = await hi({ name: 'Genkit' });\n```",
+              "text": "@param fn - A function that returns a {@link GenerateRequest}. Any config\n   * parameters specified by the {@link GenerateRequest} will take precedence\n   * over any parameters specified by `options`.\n   *\n   * ```ts\n   * const hi = ai.definePrompt(\n   *   {\n   *     name: 'hi',\n   *     input: {\n   *       schema: z.object({\n   *         name: z.string(),\n   *       }),\n   *     },\n   *     config: {\n   *       temperature: 1,\n   *     },\n   *   },\n   *   async (input) => {\n   *     return {\n   *       messages: [ { role: 'user', content: [{ text: `hi ${input.name}` }] } ],\n   *     };\n   *   }\n   * );\n   * const { text } = await hi({ name: 'Genkit' });\n   * ```\n   "
+            }
+          ]
+        },
+        {
+          "name": "templateOrFn",
+          "syntaxKind": "Parameter",
+          "line": 458,
+          "comment": "",
+          "tags": [
+            {
+              "name": "deprecated",
+              "comment": "use `options.messages` with a template string instead.",
+              "text": "@deprecated use `options.messages` with a template string instead. "
+            }
+          ]
+        },
+        {
+          "name": "defineRetriever",
+          "syntaxKind": "MethodDeclaration",
+          "line": 493,
+          "comment": "Creates a retriever action for the provided {@link RetrieverFn} implementation.",
+          "tags": []
+        },
+        {
+          "name": "defineSimpleRetriever",
+          "syntaxKind": "MethodDeclaration",
+          "line": 512,
+          "comment": "defineSimpleRetriever makes it easy to map existing data into documents that\ncan be used for prompt augmentation.",
+          "tags": [
+            {
+              "name": "param",
+              "comment": "Configuration options for the retriever.",
+              "text": "@param options Configuration options for the retriever.\n   * "
+            },
+            {
+              "name": "param",
+              "comment": "A function that queries a datastore and returns items from which to extract documents.",
+              "text": "@param handler A function that queries a datastore and returns items from which to extract documents.\n   * "
+            },
+            {
+              "name": "returns",
+              "comment": "A Genkit retriever.",
+              "text": "@returns A Genkit retriever.\n   "
+            }
+          ]
+        },
+        {
+          "name": "defineIndexer",
+          "syntaxKind": "MethodDeclaration",
+          "line": 522,
+          "comment": "Creates an indexer action for the provided {@link IndexerFn} implementation.",
+          "tags": []
+        },
+        {
+          "name": "defineEvaluator",
+          "syntaxKind": "MethodDeclaration",
+          "line": 536,
+          "comment": "Creates evaluator action for the provided {@link EvaluatorFn} implementation.",
+          "tags": []
+        },
+        {
+          "name": "defineEmbedder",
+          "syntaxKind": "MethodDeclaration",
+          "line": 558,
+          "comment": "Creates embedder model for the provided {@link EmbedderFn} model implementation.",
+          "tags": []
+        },
+        {
+          "name": "defineHelper",
+          "syntaxKind": "MethodDeclaration",
+          "line": 572,
+          "comment": "create a handlebars helper (https://handlebarsjs.com/guide/block-helpers.html) to be used in dotprompt templates.",
+          "tags": []
+        },
+        {
+          "name": "definePartial",
+          "syntaxKind": "MethodDeclaration",
+          "line": 579,
+          "comment": "Creates a handlebars partial (https://handlebarsjs.com/guide/partials.html) to be used in dotprompt templates.",
+          "tags": []
+        },
+        {
+          "name": "defineReranker",
+          "syntaxKind": "MethodDeclaration",
+          "line": 586,
+          "comment": "Creates a reranker action for the provided {@link RerankerFn} implementation.",
+          "tags": []
+        },
+        {
+          "name": "embed",
+          "syntaxKind": "MethodDeclaration",
+          "line": 600,
+          "comment": "Embeds the given `content` using the specified `embedder`.",
+          "tags": []
+        },
+        {
+          "name": "embedMany",
+          "syntaxKind": "MethodDeclaration",
+          "line": 609,
+          "comment": "A veneer for interacting with embedder models in bulk.",
+          "tags": []
+        },
+        {
+          "name": "evaluate",
+          "syntaxKind": "MethodDeclaration",
+          "line": 621,
+          "comment": "Evaluates the given `dataset` using the specified `evaluator`.",
+          "tags": []
+        },
+        {
+          "name": "rerank",
+          "syntaxKind": "MethodDeclaration",
+          "line": 631,
+          "comment": "Reranks documents from a {@link RerankerArgument} based on the provided query.",
+          "tags": []
+        },
+        {
+          "name": "index",
+          "syntaxKind": "MethodDeclaration",
+          "line": 640,
+          "comment": "Indexes `documents` using the provided `indexer`.",
+          "tags": []
+        },
+        {
+          "name": "retrieve",
+          "syntaxKind": "MethodDeclaration",
+          "line": 649,
+          "comment": "Retrieves documents from the `retriever` based on the provided `query`.",
+          "tags": []
+        },
+        {
+          "name": "generate",
+          "syntaxKind": "MethodDeclaration",
+          "line": 667,
+          "comment": "Make a generate call to the default model with a simple text prompt.\n\n```ts\nconst ai = genkit({\n  plugins: [googleAI()],\n  model: gemini15Flash, // default model\n})\n\nconst { text } = await ai.generate('hi');\n```",
+          "tags": []
+        },
+        {
+          "name": "generate",
+          "syntaxKind": "MethodDeclaration",
+          "line": 686,
+          "comment": "Make a generate call to the default model with a multipart request.\n\n```ts\nconst ai = genkit({\n  plugins: [googleAI()],\n  model: gemini15Flash, // default model\n})\n\nconst { text } = await ai.generate([\n  { media: {url: 'http://....'} },\n  { text: 'describe this image' }\n]);\n```",
+          "tags": []
+        },
+        {
+          "name": "generate",
+          "syntaxKind": "MethodDeclaration",
+          "line": 715,
+          "comment": "Generate calls a generative model based on the provided prompt and configuration. If\n`messages` is provided, the generation will include a conversation history in its\nrequest. If `tools` are provided, the generate method will automatically resolve\ntool calls returned from the model unless `returnToolRequests` is set to `true`.\n\nSee {@link GenerateOptions} for detailed information about available options.\n\n```ts\nconst ai = genkit({\n  plugins: [googleAI()],\n})\n\nconst { text } = await ai.generate({\n  system: 'talk like a pirate',\n  prompt: [\n    { media: { url: 'http://....' } },\n    { text: 'describe this image' }\n  ],\n  messages: conversationHistory,\n  tools: [ userInfoLookup ],\n  model: gemini15Flash,\n});\n```",
+          "tags": []
+        },
+        {
+          "name": "generateStream",
+          "syntaxKind": "MethodDeclaration",
+          "line": 763,
+          "comment": "Make a streaming generate call to the default model with a simple text prompt.\n\n```ts\nconst ai = genkit({\n  plugins: [googleAI()],\n  model: gemini15Flash, // default model\n})\n\nconst { response, stream } = ai.generateStream('hi');\nfor await (const chunk of stream) {\n  console.log(chunk.text);\n}\nconsole.log((await response).text);\n```",
+          "tags": []
+        },
+        {
+          "name": "generateStream",
+          "syntaxKind": "MethodDeclaration",
+          "line": 786,
+          "comment": "Make a streaming generate call to the default model with a multipart request.\n\n```ts\nconst ai = genkit({\n  plugins: [googleAI()],\n  model: gemini15Flash, // default model\n})\n\nconst { response, stream } = ai.generateStream([\n  { media: {url: 'http://....'} },\n  { text: 'describe this image' }\n]);\nfor await (const chunk of stream) {\n  console.log(chunk.text);\n}\nconsole.log((await response).text);\n```",
+          "tags": []
+        },
+        {
+          "name": "generateStream",
+          "syntaxKind": "MethodDeclaration",
+          "line": 819,
+          "comment": "Streaming generate calls a generative model based on the provided prompt and configuration. If\n`messages` is provided, the generation will include a conversation history in its\nrequest. If `tools` are provided, the generate method will automatically resolve\ntool calls returned from the model unless `returnToolRequests` is set to `true`.\n\nSee {@link GenerateOptions} for detailed information about available options.\n\n```ts\nconst ai = genkit({\n  plugins: [googleAI()],\n})\n\nconst { response, stream } = ai.generateStream({\n  system: 'talk like a pirate',\n  prompt: [\n    { media: { url: 'http://....' } },\n    { text: 'describe this image' }\n  ],\n  messages: conversationHistory,\n  tools: [ userInfoLookup ],\n  model: gemini15Flash,\n});\nfor await (const chunk of stream) {\n  console.log(chunk.text);\n}\nconsole.log((await response).text);\n```",
+          "tags": []
+        },
+        {
+          "name": "checkOperation",
+          "syntaxKind": "MethodDeclaration",
+          "line": 862,
+          "comment": "Checks the status of of a given operation. Returns a new operation which will contain the updated status.\n\n```ts\nlet operation = await ai.generateOperation({\n  model: googleAI.model('veo-2.0-generate-001'),\n  prompt: 'A banana riding a bicycle.',\n});\n\nwhile (!operation.done) {\n  operation = await ai.checkOperation(operation!);\n  await new Promise((resolve) => setTimeout(resolve, 5000));\n}\n```",
+          "tags": [
+            {
+              "name": "param",
+              "comment": "",
+              "text": "@param operation\n   * "
+            },
+            {
+              "name": "returns",
+              "comment": "",
+              "text": "@returns\n   "
+            }
+          ]
+        },
+        {
+          "name": "run",
+          "syntaxKind": "MethodDeclaration",
+          "line": 881,
+          "comment": "A flow step that executes the provided function. Each run step is recorded separately in the trace.\n\n```ts\nai.defineFlow('hello', async() => {\n  await ai.run('step1', async () => {\n    // ... step 1\n  });\n  await ai.run('step2', async () => {\n    // ... step 2\n  });\n  return result;\n})\n```",
+          "tags": []
+        },
+        {
+          "name": "run",
+          "syntaxKind": "MethodDeclaration",
+          "line": 897,
+          "comment": "A flow step that executes the provided function. Each run step is recorded separately in the trace.\n\n```ts\nai.defineFlow('hello', async() => {\n  await ai.run('step1', async () => {\n    // ... step 1\n  });\n  await ai.run('step2', async () => {\n    // ... step 2\n  });\n  return result;\n})",
+          "tags": []
+        },
+        {
+          "name": "currentContext",
+          "syntaxKind": "MethodDeclaration",
+          "line": 919,
+          "comment": "Returns current action (or flow) invocation context. Can be used to access things like auth\ndata set by HTTP server frameworks. If invoked outside of an action (e.g. flow or tool) will\nreturn `undefined`.",
+          "tags": []
+        },
+        {
+          "name": "configure",
+          "syntaxKind": "MethodDeclaration",
+          "line": 926,
+          "comment": "Configures the Genkit instance.",
+          "tags": []
+        },
+        {
+          "name": "stopServers",
+          "syntaxKind": "MethodDeclaration",
+          "line": 1010,
+          "comment": "Stops all servers.",
+          "tags": []
+        },
+        {
+          "name": "genkit",
+          "syntaxKind": "FunctionDeclaration",
+          "line": 1051,
+          "comment": "Initializes Genkit with a set of options.\n\nThis will create a new Genkit registry, register the provided plugins, stores, and other configuration. This\nshould be called before any flows are registered.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/index.ts",
+      "sha256": "706f068deb14642fdab3ec53ba2c1779793f69456141e0cd888297aa821fb8be",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 28,
+          "comment": "",
+          "tags": [
+            {
+              "name": "license",
+              "comment": "Copyright 2025 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+              "text": "@license\n *\n * Copyright 2025 Google LLC\n *\n * Licensed under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS,\n * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n * See the License for the specific language governing permissions and\n * limitations under the License.\n "
+            }
+          ]
+        },
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 28,
+          "comment": "Main genkit import.\n\n```ts\nimport { genkit } from 'genkit';\n```",
+          "tags": [
+            {
+              "name": "module",
+              "comment": "/",
+              "text": "@module /\n "
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/logging.ts",
+      "sha256": "9b48a7ac7653eb4b3c3be3176fcdd4d4894f89dee51a349c774134d93598b9b9",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/middleware.ts",
+      "sha256": "ab5d2d7019e7d0f3a9bd7f03ac8a390538ae50117b0d658e371d7679e0fecc55",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/model.ts",
+      "sha256": "b68b40a2de1d86206799ed65012110380f966011ce7913d410afc02ad9e95dda",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/plugin.ts",
+      "sha256": "9ff2e92d0c4c8bc4315dc3616ee4f9349ad6c935f0b02de4c859f11d59076d4c",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ImportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        },
+        {
+          "name": "genkitPlugin",
+          "syntaxKind": "FunctionDeclaration",
+          "line": 63,
+          "comment": "Defines a Genkit plugin.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/registry.ts",
+      "sha256": "8382c35c47671bb050c5ca5cd2ed9d353d430cc066b054f018bf4dfaa20a058f",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/reranker.ts",
+      "sha256": "bbd8e54645630d59abc3e517668ea494f52a9c1ee67072c76af7f1c2c6762196",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/retriever.ts",
+      "sha256": "c4ea442f022e46f82e4de96bc90c2e35116ba3cd4c3117588f7e088a3bf0d000",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/schema.ts",
+      "sha256": "632e3313357269a43ca2d1d69a8e9acc76643712a917ee6132f55e448e7899b5",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/testing.ts",
+      "sha256": "f60c27d952e5bcd7530743977f7690c1102fdd0456680d782298fd7e0702147a",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/tool.ts",
+      "sha256": "6b1bfdb59a2180d2b561c90ee05c558bd55c674f6f05de79fe461391a567cf80",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "file": "src/tracing.ts",
+      "sha256": "3b9208cfce21f83c7b43a95ef791b399478dbacac2d934143b86090947b6eeb4",
+      "documentation": [
+        {
+          "name": "<anonymous>",
+          "syntaxKind": "ExportDeclaration",
+          "line": 17,
+          "comment": "Copyright 2024 Google LLC\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+          "tags": []
+        }
+      ]
+    }
+  ]
+}

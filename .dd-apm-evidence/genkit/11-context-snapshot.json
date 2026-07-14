@@ -1,0 +1,1820 @@
+{
+  "schemaVersion": 1,
+  "target": "@genkit-ai/core@1.21.0 runInNewSpan",
+  "captureMethod": "CommonJS preload Module._load proxy around the real exported runInNewSpan function",
+  "captureCount": 28,
+  "selectedCaptureCount": 21,
+  "operationCounts": {
+    "generation": 7,
+    "workflow": 4,
+    "retrieval": 3,
+    "embedding": 3,
+    "tool": 4
+  },
+  "nestingIndex": [
+    {
+      "captureId": 1,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "3cdeb4f5c681df2fa22bf0b02305428f",
+        "spanId": "2bf2f80f6dd93cc1"
+      }
+    },
+    {
+      "captureId": 2,
+      "parentCaptureId": 1,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "3cdeb4f5c681df2fa22bf0b02305428f",
+        "spanId": "74bf4beb2049c4ef"
+      }
+    },
+    {
+      "captureId": 3,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "c75b444a42d90d6dd3748ead426205a7",
+        "spanId": "d1001f0b333ca184"
+      }
+    },
+    {
+      "captureId": 4,
+      "parentCaptureId": 3,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "c75b444a42d90d6dd3748ead426205a7",
+        "spanId": "ddbcec993d352345"
+      }
+    },
+    {
+      "captureId": 5,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "0d80470d1cf61865dd32bf9800e1c982",
+        "spanId": "a89954902382f36c"
+      }
+    },
+    {
+      "captureId": 6,
+      "parentCaptureId": 5,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "0d80470d1cf61865dd32bf9800e1c982",
+        "spanId": "2196bbf8083baa52"
+      }
+    },
+    {
+      "captureId": 7,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "9dc5f5f68ece6ebbc6b215abcb07b506",
+        "spanId": "2823c4034e8edadd"
+      }
+    },
+    {
+      "captureId": 8,
+      "parentCaptureId": 7,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "9dc5f5f68ece6ebbc6b215abcb07b506",
+        "spanId": "613cacd909f80f47"
+      }
+    },
+    {
+      "captureId": 9,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "workflow",
+      "name": "offlineWorkflow",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "flow"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "3746a0bf4f3e7ae3"
+      }
+    },
+    {
+      "captureId": 10,
+      "parentCaptureId": 9,
+      "selectedParentCaptureId": 9,
+      "operation": "workflow",
+      "name": "offlineFlowStep",
+      "labels": {
+        "genkit:type": "flowStep"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "9fed84f16f463be9"
+      }
+    },
+    {
+      "captureId": 11,
+      "parentCaptureId": 10,
+      "selectedParentCaptureId": 10,
+      "operation": "retrieval",
+      "name": "localRetriever",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "retriever"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "92d570c4c8ad166a"
+      }
+    },
+    {
+      "captureId": 12,
+      "parentCaptureId": 10,
+      "selectedParentCaptureId": 10,
+      "operation": "embedding",
+      "name": "localEmbedder",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "embedder"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "e16e95769a198967"
+      }
+    },
+    {
+      "captureId": 13,
+      "parentCaptureId": 10,
+      "selectedParentCaptureId": 10,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "80c4b3f769621ae7"
+      }
+    },
+    {
+      "captureId": 14,
+      "parentCaptureId": 13,
+      "selectedParentCaptureId": 10,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "2fd3d78c86a13d80"
+      }
+    },
+    {
+      "captureId": 15,
+      "parentCaptureId": 13,
+      "selectedParentCaptureId": 10,
+      "operation": "tool",
+      "name": "lookupWeather",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "4a41a5c662b9cb5c"
+      }
+    },
+    {
+      "captureId": 16,
+      "parentCaptureId": 13,
+      "selectedParentCaptureId": 10,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "3fdad22ede8b0307"
+      }
+    },
+    {
+      "captureId": 17,
+      "parentCaptureId": 16,
+      "selectedParentCaptureId": 10,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "db1f7074b7c69964"
+      }
+    },
+    {
+      "captureId": 18,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "workflow",
+      "name": "failingWorkflow",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "flow"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "23d1b086595e15f0c413877d2f335f64",
+        "spanId": "e279e11d82e9dfae"
+      }
+    },
+    {
+      "captureId": 19,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "workflow",
+      "name": "failingFlowStep",
+      "labels": {
+        "genkit:type": "flowStep"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "934c8ec07660b9278127ac83f3c95974",
+        "spanId": "85a2badd768487b8"
+      }
+    },
+    {
+      "captureId": 20,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "tool",
+      "name": "lookupWeather",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "ee9f1b0121d3137dcaba500b0eaf33cb",
+        "spanId": "1fe382da71fb8b3b"
+      }
+    },
+    {
+      "captureId": 21,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "tool",
+      "name": "failingTool",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "e6c50c3059ca100b1d39854423fdb8ce",
+        "spanId": "4419af00ba9b47e0"
+      }
+    },
+    {
+      "captureId": 22,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": null,
+      "name": "generate",
+      "labels": {
+        "genkit:type": "util"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "4625c0854b5ae0a180a7131b4049e517",
+        "spanId": "597164cf5d87d04e"
+      }
+    },
+    {
+      "captureId": 23,
+      "parentCaptureId": 22,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "name": "local/offline-model",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "4625c0854b5ae0a180a7131b4049e517",
+        "spanId": "a4d476c8a775d287"
+      }
+    },
+    {
+      "captureId": 24,
+      "parentCaptureId": 22,
+      "selectedParentCaptureId": null,
+      "operation": "tool",
+      "name": "approvalRequired",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "4625c0854b5ae0a180a7131b4049e517",
+        "spanId": "ebb6e1d0e8713d49"
+      }
+    },
+    {
+      "captureId": 25,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "retrieval",
+      "name": "localRetriever",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "retriever"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "630e03d5c8733aa606b3015bcc33aa05",
+        "spanId": "71b7c6e4f844a8c3"
+      }
+    },
+    {
+      "captureId": 26,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "retrieval",
+      "name": "failingRetriever",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "retriever"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "e9d5e17566e63b39117b2d3ced434935",
+        "spanId": "40d56b1413e1653e"
+      }
+    },
+    {
+      "captureId": 27,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "embedding",
+      "name": "localEmbedder",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "embedder"
+      },
+      "completion": "success",
+      "nativeSpan": {
+        "traceId": "d62a1068a95f545c5942f24ce6f4f62d",
+        "spanId": "b3366c9e516afa1e"
+      }
+    },
+    {
+      "captureId": 28,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "embedding",
+      "name": "failingEmbedder",
+      "labels": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "embedder"
+      },
+      "completion": "error",
+      "nativeSpan": {
+        "traceId": "70f10553835ef16a983922d70deb522d",
+        "spanId": "9fff444046e4a27f"
+      }
+    }
+  ],
+  "records": [
+    {
+      "captureId": 2,
+      "parentCaptureId": 1,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "3cdeb4f5c681df2fa22bf0b02305428f",
+        "spanId": "74bf4beb2049c4ef"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "Generate a deterministic offline response."
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [],
+          "output": {}
+        },
+        "output": {
+          "message": {
+            "role": "model",
+            "content": [
+              {
+                "text": "Offline generation complete."
+              }
+            ]
+          },
+          "finishReason": "stop",
+          "usage": {
+            "inputTokens": 11,
+            "outputTokens": 7,
+            "totalTokens": 18
+          },
+          "latencyMs": 0.18301500000006854
+        },
+        "state": "success"
+      },
+      "result": {
+        "message": {
+          "role": "model",
+          "content": [
+            {
+              "text": "Offline generation complete."
+            }
+          ]
+        },
+        "finishReason": "stop",
+        "usage": {
+          "inputTokens": 11,
+          "outputTokens": 7,
+          "totalTokens": 18
+        },
+        "latencyMs": 0.18301500000006854
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 4,
+      "parentCaptureId": 3,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "c75b444a42d90d6dd3748ead426205a7",
+        "spanId": "ddbcec993d352345"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "MODEL_RUNNER_ERROR"
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [],
+          "output": {}
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional model runner failure"
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 6,
+      "parentCaptureId": 5,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "0d80470d1cf61865dd32bf9800e1c982",
+        "spanId": "2196bbf8083baa52"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "Stream offline."
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [],
+          "output": {}
+        },
+        "output": {
+          "message": {
+            "role": "model",
+            "content": [
+              {
+                "text": "Offline generation complete."
+              }
+            ]
+          },
+          "finishReason": "stop",
+          "usage": {
+            "inputTokens": 11,
+            "outputTokens": 7,
+            "totalTokens": 18
+          },
+          "latencyMs": 10.894619000000034
+        },
+        "state": "success"
+      },
+      "result": {
+        "message": {
+          "role": "model",
+          "content": [
+            {
+              "text": "Offline generation complete."
+            }
+          ]
+        },
+        "finishReason": "stop",
+        "usage": {
+          "inputTokens": 11,
+          "outputTokens": 7,
+          "totalTokens": 18
+        },
+        "latencyMs": 10.894619000000034
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 8,
+      "parentCaptureId": 7,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "9dc5f5f68ece6ebbc6b215abcb07b506",
+        "spanId": "613cacd909f80f47"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "MODEL_RUNNER_ERROR"
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [],
+          "output": {}
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional model runner failure"
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 9,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "workflow",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "flow"
+      },
+      "metadataBefore": {
+        "name": "offlineWorkflow"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "3746a0bf4f3e7ae3"
+      },
+      "metadataAfter": {
+        "name": "offlineWorkflow",
+        "isRoot": true,
+        "path": "/{offlineWorkflow,t:flow}",
+        "metadata": {
+          "subtype": "flow"
+        },
+        "input": {
+          "query": "Genkit tracing",
+          "city": "Paris"
+        },
+        "output": {
+          "answer": "The Paris forecast is sunny at 21C.",
+          "documentCount": 1,
+          "embeddingCount": 2,
+          "toolLoopEvents": [
+            "model-turn-1",
+            "tool-lookupWeather",
+            "model-turn-2"
+          ]
+        },
+        "state": "success"
+      },
+      "result": {
+        "answer": "The Paris forecast is sunny at 21C.",
+        "documentCount": 1,
+        "embeddingCount": 2,
+        "toolLoopEvents": [
+          "model-turn-1",
+          "tool-lookupWeather",
+          "model-turn-2"
+        ]
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 10,
+      "parentCaptureId": 9,
+      "selectedParentCaptureId": 9,
+      "operation": "workflow",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "flowStep"
+      },
+      "metadataBefore": {
+        "name": "offlineFlowStep"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "9fed84f16f463be9"
+      },
+      "metadataAfter": {
+        "name": "offlineFlowStep",
+        "path": "/{offlineWorkflow,t:flow}/{offlineFlowStep,t:flowStep}",
+        "input": {
+          "query": "Genkit tracing",
+          "city": "Paris"
+        },
+        "output": {
+          "answer": "The Paris forecast is sunny at 21C.",
+          "documentCount": 1,
+          "embeddingCount": 2,
+          "toolLoopEvents": [
+            "model-turn-1",
+            "tool-lookupWeather",
+            "model-turn-2"
+          ]
+        },
+        "state": "success"
+      },
+      "result": {
+        "answer": "The Paris forecast is sunny at 21C.",
+        "documentCount": 1,
+        "embeddingCount": 2,
+        "toolLoopEvents": [
+          "model-turn-1",
+          "tool-lookupWeather",
+          "model-turn-2"
+        ]
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 11,
+      "parentCaptureId": 10,
+      "selectedParentCaptureId": 10,
+      "operation": "retrieval",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "retriever"
+      },
+      "metadataBefore": {
+        "name": "localRetriever"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "92d570c4c8ad166a"
+      },
+      "metadataAfter": {
+        "name": "localRetriever",
+        "path": "/{offlineWorkflow,t:flow}/{offlineFlowStep,t:flowStep}/{localRetriever,t:action,s:retriever}",
+        "metadata": {
+          "subtype": "retriever"
+        },
+        "input": {
+          "query": {
+            "content": [
+              {
+                "text": "Genkit tracing"
+              }
+            ],
+            "metadata": "[undefined]"
+          },
+          "options": "[undefined]"
+        },
+        "output": {
+          "documents": [
+            {
+              "content": [
+                {
+                  "text": "Retrieved context for: Genkit tracing"
+                }
+              ],
+              "metadata": {
+                "name": "offline-document",
+                "id": "doc-1",
+                "score": 0.91,
+                "excludedSecret": "[redacted]"
+              }
+            }
+          ]
+        },
+        "state": "success"
+      },
+      "result": {
+        "documents": [
+          {
+            "content": [
+              {
+                "text": "Retrieved context for: Genkit tracing"
+              }
+            ],
+            "metadata": {
+              "name": "offline-document",
+              "id": "doc-1",
+              "score": 0.91,
+              "excludedSecret": "[redacted]"
+            }
+          }
+        ]
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 12,
+      "parentCaptureId": 10,
+      "selectedParentCaptureId": 10,
+      "operation": "embedding",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "embedder"
+      },
+      "metadataBefore": {
+        "name": "localEmbedder"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "e16e95769a198967"
+      },
+      "metadataAfter": {
+        "name": "localEmbedder",
+        "path": "/{offlineWorkflow,t:flow}/{offlineFlowStep,t:flowStep}/{localEmbedder,t:action,s:embedder}",
+        "metadata": {
+          "subtype": "embedder"
+        },
+        "input": {
+          "input": [
+            {
+              "content": [
+                {
+                  "text": "first embedding input"
+                }
+              ],
+              "metadata": "[undefined]"
+            },
+            {
+              "content": [
+                {
+                  "text": "second embedding input"
+                }
+              ],
+              "metadata": "[undefined]"
+            }
+          ],
+          "options": "[undefined]"
+        },
+        "output": {
+          "embeddings": [
+            {
+              "embedding": {
+                "omittedNumericVector": true,
+                "dimensions": 3
+              },
+              "metadata": {
+                "excludedSecret": "[redacted]"
+              }
+            },
+            {
+              "embedding": {
+                "omittedNumericVector": true,
+                "dimensions": 3
+              },
+              "metadata": {
+                "excludedSecret": "[redacted]"
+              }
+            }
+          ]
+        },
+        "state": "success"
+      },
+      "result": {
+        "embeddings": [
+          {
+            "embedding": {
+              "omittedNumericVector": true,
+              "dimensions": 3
+            },
+            "metadata": {
+              "excludedSecret": "[redacted]"
+            }
+          },
+          {
+            "embedding": {
+              "omittedNumericVector": true,
+              "dimensions": 3
+            },
+            "metadata": {
+              "excludedSecret": "[redacted]"
+            }
+          }
+        ]
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 14,
+      "parentCaptureId": 13,
+      "selectedParentCaptureId": 10,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "2fd3d78c86a13d80"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{offlineWorkflow,t:flow}/{offlineFlowStep,t:flowStep}/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "Use a tool for Paris"
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [
+            {
+              "name": "lookupWeather",
+              "description": "Looks up deterministic local weather data.",
+              "outputSchema": {
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "inputSchema": {
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "output": {}
+        },
+        "output": {
+          "message": {
+            "role": "model",
+            "content": [
+              {
+                "toolRequest": {
+                  "name": "lookupWeather",
+                  "ref": "weather-1",
+                  "input": {
+                    "city": "Paris"
+                  }
+                }
+              }
+            ]
+          },
+          "finishReason": "stop",
+          "usage": {
+            "inputTokens": 8,
+            "outputTokens": 4,
+            "totalTokens": 12
+          },
+          "latencyMs": 0.07068000000003849
+        },
+        "state": "success"
+      },
+      "result": {
+        "message": {
+          "role": "model",
+          "content": [
+            {
+              "toolRequest": {
+                "name": "lookupWeather",
+                "ref": "weather-1",
+                "input": {
+                  "city": "Paris"
+                }
+              }
+            }
+          ]
+        },
+        "finishReason": "stop",
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 4,
+          "totalTokens": 12
+        },
+        "latencyMs": 0.07068000000003849
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 15,
+      "parentCaptureId": 13,
+      "selectedParentCaptureId": 10,
+      "operation": "tool",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "metadataBefore": {
+        "name": "lookupWeather"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "4a41a5c662b9cb5c"
+      },
+      "metadataAfter": {
+        "name": "lookupWeather",
+        "path": "/{offlineWorkflow,t:flow}/{offlineFlowStep,t:flowStep}/{generate,t:util}/{lookupWeather,t:action,s:tool}",
+        "metadata": {
+          "subtype": "tool"
+        },
+        "input": {
+          "city": "Paris"
+        },
+        "output": {
+          "city": "Paris",
+          "forecast": "sunny",
+          "temperatureCelsius": 21
+        },
+        "state": "success"
+      },
+      "result": {
+        "city": "Paris",
+        "forecast": "sunny",
+        "temperatureCelsius": 21
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 17,
+      "parentCaptureId": 16,
+      "selectedParentCaptureId": 10,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "1ce808c983638fa1e31e60f9044238c8",
+        "spanId": "db1f7074b7c69964"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{offlineWorkflow,t:flow}/{offlineFlowStep,t:flowStep}/{generate,t:util}/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "Use a tool for Paris"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "content": [
+                {
+                  "toolRequest": {
+                    "name": "lookupWeather",
+                    "ref": "weather-1",
+                    "input": {
+                      "city": "Paris"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "content": [
+                {
+                  "toolResponse": {
+                    "name": "lookupWeather",
+                    "ref": "weather-1",
+                    "output": {
+                      "city": "Paris",
+                      "forecast": "sunny",
+                      "temperatureCelsius": 21
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [
+            {
+              "name": "lookupWeather",
+              "description": "Looks up deterministic local weather data.",
+              "outputSchema": {
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "inputSchema": {
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "output": {}
+        },
+        "output": {
+          "message": {
+            "role": "model",
+            "content": [
+              {
+                "text": "The Paris forecast is sunny at 21C."
+              }
+            ]
+          },
+          "finishReason": "stop",
+          "usage": {
+            "inputTokens": 11,
+            "outputTokens": 7,
+            "totalTokens": 18
+          },
+          "latencyMs": 0.024740000000065265
+        },
+        "state": "success"
+      },
+      "result": {
+        "message": {
+          "role": "model",
+          "content": [
+            {
+              "text": "The Paris forecast is sunny at 21C."
+            }
+          ]
+        },
+        "finishReason": "stop",
+        "usage": {
+          "inputTokens": 11,
+          "outputTokens": 7,
+          "totalTokens": 18
+        },
+        "latencyMs": 0.024740000000065265
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 18,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "workflow",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "flow"
+      },
+      "metadataBefore": {
+        "name": "failingWorkflow"
+      },
+      "nativeSpan": {
+        "traceId": "23d1b086595e15f0c413877d2f335f64",
+        "spanId": "e279e11d82e9dfae"
+      },
+      "metadataAfter": {
+        "name": "failingWorkflow",
+        "isRoot": true,
+        "path": "/{failingWorkflow,t:flow}",
+        "metadata": {
+          "subtype": "flow"
+        },
+        "input": {
+          "reason": "exercise error path"
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional flow runner failure"
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 19,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "workflow",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "flowStep"
+      },
+      "metadataBefore": {
+        "name": "failingFlowStep"
+      },
+      "nativeSpan": {
+        "traceId": "934c8ec07660b9278127ac83f3c95974",
+        "spanId": "85a2badd768487b8"
+      },
+      "metadataAfter": {
+        "name": "failingFlowStep",
+        "isRoot": true,
+        "path": "/{failingFlowStep,t:flowStep}",
+        "input": {
+          "requested": true
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional flow step failure"
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 20,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "tool",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "metadataBefore": {
+        "name": "lookupWeather"
+      },
+      "nativeSpan": {
+        "traceId": "ee9f1b0121d3137dcaba500b0eaf33cb",
+        "spanId": "1fe382da71fb8b3b"
+      },
+      "metadataAfter": {
+        "name": "lookupWeather",
+        "isRoot": true,
+        "path": "/{lookupWeather,t:action}",
+        "metadata": {
+          "subtype": "tool"
+        },
+        "input": {
+          "city": "Berlin"
+        },
+        "output": {
+          "city": "Berlin",
+          "forecast": "sunny",
+          "temperatureCelsius": 21
+        },
+        "state": "success"
+      },
+      "result": {
+        "city": "Berlin",
+        "forecast": "sunny",
+        "temperatureCelsius": 21
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 21,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "tool",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "metadataBefore": {
+        "name": "failingTool"
+      },
+      "nativeSpan": {
+        "traceId": "e6c50c3059ca100b1d39854423fdb8ce",
+        "spanId": "4419af00ba9b47e0"
+      },
+      "metadataAfter": {
+        "name": "failingTool",
+        "isRoot": true,
+        "path": "/{failingTool,t:action}",
+        "metadata": {
+          "subtype": "tool"
+        },
+        "input": {
+          "requested": true
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional tool runner failure"
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 23,
+      "parentCaptureId": 22,
+      "selectedParentCaptureId": null,
+      "operation": "generation",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "model"
+      },
+      "metadataBefore": {
+        "name": "local/offline-model"
+      },
+      "nativeSpan": {
+        "traceId": "4625c0854b5ae0a180a7131b4049e517",
+        "spanId": "a4d476c8a775d287"
+      },
+      "metadataAfter": {
+        "name": "local/offline-model",
+        "path": "/{generate,t:util}/{local/offline-model,t:action,s:model}",
+        "metadata": {
+          "subtype": "model"
+        },
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "text": "Request approval."
+                }
+              ]
+            }
+          ],
+          "config": {
+            "version": "[undefined]"
+          },
+          "docs": "[undefined]",
+          "tools": [
+            {
+              "name": "approvalRequired",
+              "description": "Interrupts to request deterministic local approval.",
+              "outputSchema": {
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "inputSchema": {
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "output": {}
+        },
+        "output": {
+          "message": {
+            "role": "model",
+            "content": [
+              {
+                "toolRequest": {
+                  "name": "approvalRequired",
+                  "ref": "approval-1",
+                  "input": {
+                    "task": "deploy"
+                  }
+                }
+              }
+            ]
+          },
+          "finishReason": "stop",
+          "usage": {
+            "inputTokens": 6,
+            "outputTokens": 3,
+            "totalTokens": 9
+          },
+          "latencyMs": 0.026920000000018263
+        },
+        "state": "success"
+      },
+      "result": {
+        "message": {
+          "role": "model",
+          "content": [
+            {
+              "toolRequest": {
+                "name": "approvalRequired",
+                "ref": "approval-1",
+                "input": {
+                  "task": "deploy"
+                }
+              }
+            }
+          ]
+        },
+        "finishReason": "stop",
+        "usage": {
+          "inputTokens": 6,
+          "outputTokens": 3,
+          "totalTokens": 9
+        },
+        "latencyMs": 0.026920000000018263
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 24,
+      "parentCaptureId": 22,
+      "selectedParentCaptureId": null,
+      "operation": "tool",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "tool"
+      },
+      "metadataBefore": {
+        "name": "approvalRequired"
+      },
+      "nativeSpan": {
+        "traceId": "4625c0854b5ae0a180a7131b4049e517",
+        "spanId": "ebb6e1d0e8713d49"
+      },
+      "metadataAfter": {
+        "name": "approvalRequired",
+        "path": "/{generate,t:util}/{approvalRequired,t:action,s:tool}",
+        "metadata": {
+          "subtype": "tool"
+        },
+        "input": {
+          "task": "deploy"
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "ToolInterruptError",
+        "message": ""
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 25,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "retrieval",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "retriever"
+      },
+      "metadataBefore": {
+        "name": "localRetriever"
+      },
+      "nativeSpan": {
+        "traceId": "630e03d5c8733aa606b3015bcc33aa05",
+        "spanId": "71b7c6e4f844a8c3"
+      },
+      "metadataAfter": {
+        "name": "localRetriever",
+        "isRoot": true,
+        "path": "/{localRetriever,t:action}",
+        "metadata": {
+          "subtype": "retriever"
+        },
+        "input": {
+          "query": {
+            "content": [
+              {
+                "text": "offline retrieval query"
+              }
+            ],
+            "metadata": "[undefined]"
+          },
+          "options": "[undefined]"
+        },
+        "output": {
+          "documents": [
+            {
+              "content": [
+                {
+                  "text": "Retrieved context for: offline retrieval query"
+                }
+              ],
+              "metadata": {
+                "name": "offline-document",
+                "id": "doc-1",
+                "score": 0.91,
+                "excludedSecret": "[redacted]"
+              }
+            }
+          ]
+        },
+        "state": "success"
+      },
+      "result": {
+        "documents": [
+          {
+            "content": [
+              {
+                "text": "Retrieved context for: offline retrieval query"
+              }
+            ],
+            "metadata": {
+              "name": "offline-document",
+              "id": "doc-1",
+              "score": 0.91,
+              "excludedSecret": "[redacted]"
+            }
+          }
+        ]
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 26,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "retrieval",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "retriever"
+      },
+      "metadataBefore": {
+        "name": "failingRetriever"
+      },
+      "nativeSpan": {
+        "traceId": "e9d5e17566e63b39117b2d3ced434935",
+        "spanId": "40d56b1413e1653e"
+      },
+      "metadataAfter": {
+        "name": "failingRetriever",
+        "isRoot": true,
+        "path": "/{failingRetriever,t:action}",
+        "metadata": {
+          "subtype": "retriever"
+        },
+        "input": {
+          "query": {
+            "content": [
+              {
+                "text": "trigger failure"
+              }
+            ],
+            "metadata": "[undefined]"
+          },
+          "options": "[undefined]"
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional retriever runner failure"
+      },
+      "completion": "error"
+    },
+    {
+      "captureId": 27,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "embedding",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "embedder"
+      },
+      "metadataBefore": {
+        "name": "localEmbedder"
+      },
+      "nativeSpan": {
+        "traceId": "d62a1068a95f545c5942f24ce6f4f62d",
+        "spanId": "b3366c9e516afa1e"
+      },
+      "metadataAfter": {
+        "name": "localEmbedder",
+        "isRoot": true,
+        "path": "/{localEmbedder,t:action}",
+        "metadata": {
+          "subtype": "embedder"
+        },
+        "input": {
+          "input": [
+            {
+              "content": [
+                {
+                  "text": "first input document"
+                }
+              ],
+              "metadata": "[undefined]"
+            },
+            {
+              "content": [
+                {
+                  "text": "second input document"
+                }
+              ],
+              "metadata": "[undefined]"
+            }
+          ],
+          "options": "[undefined]"
+        },
+        "output": {
+          "embeddings": [
+            {
+              "embedding": {
+                "omittedNumericVector": true,
+                "dimensions": 3
+              },
+              "metadata": {
+                "excludedSecret": "[redacted]"
+              }
+            },
+            {
+              "embedding": {
+                "omittedNumericVector": true,
+                "dimensions": 3
+              },
+              "metadata": {
+                "excludedSecret": "[redacted]"
+              }
+            }
+          ]
+        },
+        "state": "success"
+      },
+      "result": {
+        "embeddings": [
+          {
+            "embedding": {
+              "omittedNumericVector": true,
+              "dimensions": 3
+            },
+            "metadata": {
+              "excludedSecret": "[redacted]"
+            }
+          },
+          {
+            "embedding": {
+              "omittedNumericVector": true,
+              "dimensions": 3
+            },
+            "metadata": {
+              "excludedSecret": "[redacted]"
+            }
+          }
+        ]
+      },
+      "error": null,
+      "completion": "success"
+    },
+    {
+      "captureId": 28,
+      "parentCaptureId": null,
+      "selectedParentCaptureId": null,
+      "operation": "embedding",
+      "argumentCount": 2,
+      "optionsArgumentIndex": 0,
+      "labelsBefore": {
+        "genkit:type": "action",
+        "genkit:metadata:subtype": "embedder"
+      },
+      "metadataBefore": {
+        "name": "failingEmbedder"
+      },
+      "nativeSpan": {
+        "traceId": "70f10553835ef16a983922d70deb522d",
+        "spanId": "9fff444046e4a27f"
+      },
+      "metadataAfter": {
+        "name": "failingEmbedder",
+        "isRoot": true,
+        "path": "/{failingEmbedder,t:action}",
+        "metadata": {
+          "subtype": "embedder"
+        },
+        "input": {
+          "input": [
+            {
+              "content": [
+                {
+                  "text": "trigger failure"
+                }
+              ],
+              "metadata": "[undefined]"
+            }
+          ],
+          "options": "[undefined]"
+        },
+        "state": "error",
+        "isFailureSource": true
+      },
+      "result": null,
+      "error": {
+        "name": "Error",
+        "message": "intentional embedder runner failure"
+      },
+      "completion": "error"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+const tr_ch_apm$runInNewSpan = tr_ch_apm_tracingChannel("orchestrion:@genkit-ai/core:runInNewSpan");
+function runInNewSpan(__apm$arg0, __apm$arg1, __apm$arg2, ...__apm$args) {
+  const __apm$arguments = [__apm$arg0, __apm$arg1, __apm$arg2, ...__apm$args].slice(0, arguments.length);
+  const __apm$ctx = {
+    arguments: __apm$arguments,
+  const __apm$traced = () => {
+    const __apm$wrapped = async function (registryOrOprs, optsOrFn, fnMaybe) {
+    return __apm$wrapped.apply(this, __apm$arguments);
+  if (!tr_ch_apm_hasSubscribers(tr_ch_apm$runInNewSpan)) return __apm$traced();
+  return tr_ch_apm$runInNewSpan.start.runStores(__apm$ctx, () => {
+      let promise = __apm$traced();
+        __apm$ctx.result = promise;
+        return __apm$ctx.result;
+          __apm$ctx.result = result;
+          tr_ch_apm$runInNewSpan.asyncStart.publish(__apm$ctx);
+          tr_ch_apm$runInNewSpan.asyncEnd.publish(__apm$ctx);
+          return __apm$ctx.result;
+          __apm$ctx.error = err;
+          tr_ch_apm$runInNewSpan.error.publish(__apm$ctx);
+          tr_ch_apm$runInNewSpan.asyncStart.publish(__apm$ctx);
+          tr_ch_apm$runInNewSpan.asyncEnd.publish(__apm$ctx);
+        __apm$ctx.result = result;
+        tr_ch_apm$runInNewSpan.asyncStart.publish(__apm$ctx);
+        tr_ch_apm$runInNewSpan.asyncEnd.publish(__apm$ctx);
+        __apm$ctx.error = err;
+        tr_ch_apm$runInNewSpan.error.publish(__apm$ctx);
+        tr_ch_apm$runInNewSpan.asyncStart.publish(__apm$ctx);
+        tr_ch_apm$runInNewSpan.asyncEnd.publish(__apm$ctx);
+      __apm$ctx.error = err;
+      tr_ch_apm$runInNewSpan.error.publish(__apm$ctx);
+      __apm$ctx.self ??= this;
+      tr_ch_apm$runInNewSpan.end.publish(__apm$ctx);

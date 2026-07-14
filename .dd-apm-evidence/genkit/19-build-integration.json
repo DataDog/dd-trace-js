@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "stage": "19-llmobs-build-integration",
+  "success": true,
+  "package_category": "orchestration",
+  "category_confidence": "high",
+  "category_reasoning": "genkit@1.21.0 coordinates registered model, flow, tool, retriever, and embedder actions through @genkit-ai/core runInNewSpan; its source does not implement direct provider HTTP requests",
+  "llmobs_plugin_path": "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+  "composite_plugin_path": "packages/datadog-plugin-genkit/src/index.js",
+  "tracing_plugin_path": "packages/datadog-plugin-genkit/src/tracing.js",
+  "files_created": [
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js",
+    "packages/datadog-plugin-genkit/src/tracing.js"
+  ],
+  "files_modified": [
+    "packages/datadog-plugin-genkit/src/index.js"
+  ],
+  "shared_channel": "tracing:orchestrion:@genkit-ai/core:runInNewSpan",
+  "methods_instrumented": [
+    "runInNewSpan [genkit:metadata:subtype=model]",
+    "runInNewSpan [genkit:metadata:subtype=flow]",
+    "runInNewSpan [genkit:type=flowStep]",
+    "runInNewSpan [genkit:metadata:subtype=tool]",
+    "runInNewSpan [genkit:metadata:subtype=retriever]",
+    "runInNewSpan [genkit:metadata:subtype=embedder]"
+  ],
+  "llmobs_kinds": [
+    "llm",
+    "workflow",
+    "tool",
+    "retrieval",
+    "embedding"
+  ],
+  "excluded_kinds": [
+    "agent"
+  ],
+  "implemented_contracts": {
+    "overloads": "two-argument runtime mapping plus source-proven three-argument options index",
+    "strict_label_allowlist": true,
+    "metadata_output_fallback": "JSON parse with silent undefined fallback",
+    "message_roles": "model maps to assistant",
+    "message_parts": "text, toolRequest, and toolResponse only",
+    "excluded_message_parts": [
+      "media",
+      "data",
+      "custom",
+      "reasoning",
+      "resource",
+      "message metadata"
+    ],
+    "standard_token_metrics_only": true,
+    "scalar_metadata_allowlist": [
+      "version",
+      "temperature",
+      "max_output_tokens",
+      "top_k",
+      "top_p",
+      "tool_choice",
+      "finish_reason",
+      "latency_ms"
+    ],
+    "retrieval_metadata_allowlist": [
+      "name",
+      "id",
+      "score"
+    ],
+    "embedding_vectors_recorded": false,
+    "embedding_output": "count and common dimension summary",
+    "error_outputs": "empty kind-appropriate output",
+    "tool_interrupt": "tool span receives the observed ToolInterruptError while the enclosing generation can complete successfully"
+  },
+  "provider_demotion": {
+    "implemented": false,
+    "reason": "The LangChain precedent requires a trusted provider tag and enabled provider integration. Genkit runtime context exposes neither, and action-name namespaces are not reliable provider evidence."
+  },
+  "architecture_score": {
+    "baseline_to_proposal": {
+      "drift_prevention": "5 -> 9",
+      "module_coupling": "6 -> 9",
+      "explicit_contracts": "6 -> 9",
+      "testability_at_boundaries": "7 -> 9",
+      "extensibility": "4 -> 9",
+      "hot_path_fitness": "9 -> 9"
+    },
+    "result": "proposal scores at least 8/10 in all six dimensions"
+  },
+  "validation": {
+    "node_check": "passed for all three production files",
+    "targeted_eslint": "passed with zero output",
+    "static_composite_assertion": "passed",
+    "git_diff_check": "passed",
+    "tests_run": false,
+    "tests_deferred_to_stage": 20
+  },
+  "source_sha256": {
+    "packages/datadog-plugin-genkit/src/index.js": "b33a3cd4af7f491aef3178445fc00f5e47cf8690c7071e8dbb596fc2db0ba9b2",
+    "packages/datadog-plugin-genkit/src/tracing.js": "0569b94d50de63415bebb02dc7d23143c816aa7a10c312806fd098b10d2eb681",
+    "packages/dd-trace/src/llmobs/plugins/genkit/index.js": "df2ddd373a215859081287b3da6e39f8fb5c7f4460683dfa9935c6cfecc31d75"
+  },
+  "unresolved_runtime_questions": [
+    "Whether a supported provider LLMObs plugin can run beneath Genkit without duplicate llm spans or token metrics cannot be determined without a trusted provider identity and live trace capture.",
+    "Whether native Genkit OpenTelemetry spans coexist as near-duplicate APM spans remains a live observability gate question.",
+    "Comprehensive success, error, streaming, nesting, redaction, and event-shape assertions belong to Stage 20 and later runtime gates."
+  ],
+  "progress_modified_by_stage_worker": false,
+  "commit_created": false
+}

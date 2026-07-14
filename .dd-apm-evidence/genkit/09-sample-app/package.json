@@ -1,0 +1,13 @@
+{
+  "name": "dd-apm-genkit-1.21.0-sample",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline Genkit 1.21.0 operation exerciser for Datadog instrumentation evidence",
+  "scripts": {
+    "sample": "node sample-app.js",
+    "esm-smoke": "node esm-smoke.mjs"
+  },
+  "dependencies": {
+    "genkit": "1.21.0"
+  }
+}
