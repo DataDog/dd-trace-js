@@ -31,6 +31,13 @@ module.exports = {
   ERROR_MESSAGE: 'error.message',
   ERROR_STACK: 'error.stack',
   IGNORE_OTEL_ERROR: Symbol('ignore.otel.error'),
+  // Marks an `Http2Server` that another instrumentation (currently @grpc/grpc-js)
+  // owns and traces through its own span lifecycle over the raw HTTP/2 stream
+  // API. The http2 server instrumentation reads this to leave such servers
+  // untraced, so a gRPC call keeps a single span with gRPC as the top frame
+  // instead of gaining an extra web.request span. A module-local Symbol keeps
+  // the mark private to dd-trace and unforgeable from user code.
+  FOREIGN_HTTP2_SERVER: Symbol('foreign.http2.server'),
   COMPONENT: 'component',
   CLIENT_PORT_KEY: 'network.destination.port',
   PEER_SERVICE_KEY: 'peer.service',
