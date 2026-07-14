@@ -104,6 +104,40 @@ describe('tagger', () => {
         })
       })
 
+      it('establishes the trace-level default session when a session is set', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm', sessionId: 'my-session' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'my-session')
+        assert.strictEqual(spanContext._trace.tags['_dd.p.llmobs_sid'], 'my-session')
+      })
+
+      it('inherits the trace-level default session when the span sets none', () => {
+        spanContext._trace.tags['_dd.p.llmobs_sid'] = 'trace-session'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'trace-session')
+      })
+
+      it('lets an explicit session override without changing the established trace default', () => {
+        spanContext._trace.tags['_dd.p.llmobs_sid'] = 'trace-session'
+
+        tagger.registerLLMObsSpan(span, { kind: 'llm', sessionId: 'other-session' })
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'other-session')
+        assert.strictEqual(spanContext._trace.tags['_dd.p.llmobs_sid'], 'trace-session')
+      })
+
+      it('establishes the trace-level default when a session is post-populated via _setTag', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' }) // no session at registration
+        assert.strictEqual(spanContext._trace.tags['_dd.p.llmobs_sid'], undefined)
+
+        tagger._setTag(span, '_ml_obs.session_id', 'late-session') // integration sets it after start
+
+        assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.session_id'], 'late-session')
+        assert.strictEqual(spanContext._trace.tags['_dd.p.llmobs_sid'], 'late-session')
+      })
+
       it('uses the name if provided', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm', name: 'my-span-name' })
 
