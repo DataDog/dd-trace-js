@@ -19,8 +19,8 @@ class CiValidationSink {
   /**
    * Creates a bounded append-only sink for offline validation records.
    *
-  * @param {string} outputFile absolute validator-owned output file
-  */
+   * @param {string} outputFile absolute validator-owned output file
+   */
   constructor (outputFile) {
     if (typeof outputFile !== 'string' || !path.isAbsolute(outputFile)) {
       throw new Error('Offline Test Optimization validation output path must be absolute.')

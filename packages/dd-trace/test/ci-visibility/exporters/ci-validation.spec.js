@@ -21,7 +21,8 @@ const {
   readOfflineOutput,
 } = require('../../../../../ci/test-optimization-validation/offline-output')
 const id = require('../../../src/id')
-const { CiValidationSink, MAX_OUTPUT_BYTES, SUMMARY_PREFIX } =
+const CiValidationCoverageWriter = require('../../../src/ci-visibility/exporters/ci-validation/coverage-writer')
+const { CiValidationSink, MAX_OUTPUT_BYTES, MAX_OUTPUT_RECORDS, SUMMARY_PREFIX } =
   require('../../../src/ci-visibility/exporters/ci-validation/sink')
 const CiValidationWriter = require('../../../src/ci-visibility/exporters/ci-validation/writer')
 const CiValidationExporter = require('../../../src/ci-visibility/exporters/ci-validation')
@@ -72,6 +73,90 @@ describe('CI validation offline output', () => {
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
     assert.deepStrictEqual(summary.errors, ['output_byte_limit_exceeded'])
+  })
+
+  it('rejects relative and already oversized output files', () => {
+    assert.throws(() => new CiValidationSink('events.ndjson'), /path must be absolute/)
+
+    fs.truncateSync(outputFile, MAX_OUTPUT_BYTES + 1)
+    assert.throws(() => new CiValidationSink(outputFile), /already exceeds its size limit/)
+  })
+
+  it('rejects an output file that changes while it is opened', () => {
+    const stat = fs.statSync(outputFile)
+    const fstatSync = sinon.stub(fs, 'fstatSync').returns({
+      dev: stat.dev + 1,
+      ino: stat.ino,
+      isFile: () => true,
+    })
+
+    try {
+      assert.throws(() => new CiValidationSink(outputFile), /changed while it was opened/)
+    } finally {
+      fstatSync.restore()
+    }
+  })
+
+  it('writes coverage and bounded cache input results before one summary', () => {
+    const sink = new CiValidationSink(outputFile)
+    const coverageWriter = new CiValidationCoverageWriter(sink)
+    let flushed = false
+
+    coverageWriter.append([{ test_session_id: 1 }])
+    coverageWriter.flush(() => { flushed = true })
+    coverageWriter.addMetadataTags()
+    sink.writeInputResult('settings')
+    sink.writeInputResult('known_tests', new Error(`invalid\n${'x'.repeat(1100)}`))
+    sink.writeSummary()
+    sink.writeSummary()
+
+    assert.strictEqual(flushed, true)
+    const records = fs.readFileSync(outputFile, 'utf8').trim().split('\n').map(JSON.parse)
+    assert.deepStrictEqual(records[0], {
+      version: 1,
+      kind: 'coverage',
+      payload: [{ test_session_id: 1 }],
+    })
+    assert.deepStrictEqual(records[1], {
+      version: 1,
+      kind: 'input',
+      payload: { name: 'settings', status: 'loaded' },
+    })
+    assert.strictEqual(records[2].payload.name, 'known_tests')
+    assert.strictEqual(records[2].payload.status, 'error')
+    assert.strictEqual(records[2].payload.error.length, 1024)
+    assert.doesNotMatch(records[2].payload.error, /[\r\n]/)
+    assert.strictEqual(stderrWrite.callCount, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['invalid_known_tests'])
+  })
+
+  it('fails closed when an output record cannot be serialized', () => {
+    const sink = new CiValidationSink(outputFile)
+    const circularPayload = {}
+    circularPayload.circular = circularPayload
+
+    sink.writeCoverage(circularPayload)
+    sink.writeSummary()
+
+    assert.strictEqual(fs.statSync(outputFile).size, 0)
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['output_record_serialization_failed'])
+  })
+
+  it('accepts the last output record and rejects the first record beyond the limit', () => {
+    const sink = new CiValidationSink(outputFile)
+
+    for (let index = 0; index <= MAX_OUTPUT_RECORDS; index++) {
+      sink.writeInputResult('settings')
+    }
+    sink.writeSummary()
+
+    assert.strictEqual(fs.readFileSync(outputFile, 'utf8').trim().split('\n').length, MAX_OUTPUT_RECORDS)
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['output_record_limit_exceeded'])
   })
 
   it('accepts the last allowed and rejects the first excessive module, suite, and test event', () => {

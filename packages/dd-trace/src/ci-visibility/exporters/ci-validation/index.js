@@ -15,8 +15,8 @@ class CiValidationExporter extends CiVisibilityExporter {
   /**
    * Creates an immediately available cache-only Test Optimization exporter.
    *
-  * @param {object} config tracer configuration
-  */
+   * @param {object} config tracer configuration
+   */
   constructor (config) {
     const validationManifestPath = process.env[VALIDATION_MANIFEST_ENV]
     const validationOutputPath = process.env[VALIDATION_OUTPUT_ENV]

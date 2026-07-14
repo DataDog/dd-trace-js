@@ -8,6 +8,7 @@ const path = require('node:path')
 const {
   cleanupOfflineFixture,
   createOfflineFixture,
+  getOfflineFixturePaths,
   getOfflineScenarioNames,
 } = require('../../../../ci/test-optimization-validation/offline-fixtures')
 const {
@@ -57,6 +58,40 @@ describe('test optimization offline validation artifacts', () => {
     cleanupOfflineFixture(fixture.root)
     cleanupOfflineFixture(otherFixture.root)
     assert.strictEqual(fs.existsSync(fixture.root), false)
+  })
+
+  it('does not enforce POSIX mode bits when ownership APIs are unavailable', () => {
+    const offlineFixtureNonce = 'c'.repeat(32)
+    const framework = { id: 'vitest:windows' }
+    const { base } = getOfflineFixturePaths({
+      offlineFixtureNonce,
+      framework,
+      scenarioName: 'basic-reporting',
+    })
+    const getuidDescriptor = Object.getOwnPropertyDescriptor(process, 'getuid')
+    let fixture
+
+    fs.mkdirSync(base, { mode: 0o755 })
+    fs.chmodSync(base, 0o755)
+    Object.defineProperty(process, 'getuid', { configurable: true, value: undefined })
+    try {
+      fixture = createOfflineFixture({
+        approvedPlanSha256: 'c'.repeat(64),
+        offlineFixtureNonce,
+        framework,
+        repositoryRoot,
+        scenarioName: 'basic-reporting',
+      })
+      assert.strictEqual(fs.existsSync(fixture.manifestPath), true)
+    } finally {
+      if (fixture) cleanupOfflineFixture(fixture.root)
+      fs.rmSync(base, { recursive: true, force: true })
+      if (getuidDescriptor) {
+        Object.defineProperty(process, 'getuid', getuidDescriptor)
+      } else {
+        delete process.getuid
+      }
+    }
   })
 
   it('selects only the offline fixture executions required by the requested validation scope', () => {

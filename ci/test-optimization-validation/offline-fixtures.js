@@ -272,8 +272,10 @@ function ensurePrivateDirectory (directory) {
     if (error.code !== 'EEXIST') throw error
   }
   const stat = fs.lstatSync(directory)
-  const ownerMismatch = process.getuid && stat.uid !== process.getuid()
-  if (!stat.isDirectory() || stat.isSymbolicLink() || ownerMismatch || (stat.mode & 0o077) !== 0) {
+  const supportsPosixPermissions = typeof process.getuid === 'function'
+  const ownerMismatch = supportsPosixPermissions && stat.uid !== process.getuid()
+  const permissionsMismatch = supportsPosixPermissions && (stat.mode & 0o077) !== 0
+  if (!stat.isDirectory() || stat.isSymbolicLink() || ownerMismatch || permissionsMismatch) {
     throw new Error(`Offline validation fixture base is not a regular directory: ${directory}`)
   }
 }
