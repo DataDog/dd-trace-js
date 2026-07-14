@@ -14,7 +14,39 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
-module.exports = { waitForAsyncEnd }
+module.exports = { configureGraphqlJitExecute, waitForAsyncEnd }
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ */
+function configureGraphqlJitExecute (_state, node) {
+  const [context] = query(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const [tracedBody] = query(
+    node,
+    'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement'
+  )
+
+  assert(context && tracedBody, 'configureGraphqlJitExecute: incomplete orchestrion wrapper')
+
+  const properties = parse(`({
+    ddGraphqlJit: true,
+    ddDocument: document,
+    ddOperationName: operationName,
+    ddResolvers: resolvers,
+    ddSchema: compilationContext.schema
+  })`).body[0].expression.properties
+
+  context.properties.push(...properties)
+
+  tracedBody.body.unshift(...parse(`
+    if (__apm$ctx.ddAborted) {
+      const error = new Error('Aborted')
+      error.name = 'AbortError'
+      throw error
+    }
+  `).body)
+}
 
 /**
  * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`

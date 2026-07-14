@@ -82,6 +82,7 @@ module.exports = {
   'find-my-way': () => require('../find-my-way'),
   'generic-pool': () => require('../generic-pool'),
   graphql: () => require('../graphql'),
+  'graphql-jit': () => require('../graphql'),
   grpc: () => require('../grpc'),
   handlebars: () => require('../handlebars'),
   hapi: () => require('../hapi'),

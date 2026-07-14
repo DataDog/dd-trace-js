@@ -14,12 +14,22 @@ const { addHook, getHooks } = require('./helpers/instrument')
 // `ctx.arguments[0]` with an object whose getters throw AbortError. The
 // orchestrion-emitted wrapper's `catch { ...; throw err }` block propagates
 // that throw to the caller of graphql.execute. No outer wrap needed.
+// graphql-jit's generated method instead checks `ctx.ddAborted` before entering
+// the compiled body (see configureGraphqlJitExecute).
 
 for (const hook of getHooks('graphql')) {
   addHook(hook, exports => exports)
 }
 
 for (const hook of getHooks('@graphql-tools/executor')) {
+  addHook(hook, exports => exports)
+}
+
+// Multiple graphql-jit rewrites share each build file; register one hook per file.
+const graphqlJitFiles = new Set()
+for (const hook of getHooks('graphql-jit')) {
+  if (graphqlJitFiles.has(hook.file)) continue
+  graphqlJitFiles.add(hook.file)
   addHook(hook, exports => exports)
 }
 
