@@ -1277,6 +1277,14 @@ describe('getEfdRetryCount', () => {
     assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
     assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
   })
+
+  it('returns the all-duration override regardless of test duration', () => {
+    const retryCountOverride = { all: 2 }
+
+    assert.strictEqual(getEfdRetryCount(0, retryCountOverride), 2)
+    assert.strictEqual(getEfdRetryCount(300_000, retryCountOverride), 2)
+    assert.strictEqual(getEfdRetryCount(Number.MAX_SAFE_INTEGER, retryCountOverride), 2)
+  })
 })
 
 describe('getMaxEfdRetryCount', () => {

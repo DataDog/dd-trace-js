@@ -510,6 +510,12 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
+<h3 id="test-optimization-settings">Test Optimization settings</h3>
+
+Set `DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
+Early Flake Detection retries for every new test, regardless of test duration. A value of `0` disables EFD retries.
+When the variable is unset, the backend-provided duration-based retry policy applies.
+
 <h3 id="custom-logging">Custom Logging</h3>
 
 By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.

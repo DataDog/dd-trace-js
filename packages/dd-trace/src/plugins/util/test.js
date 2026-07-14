@@ -1448,16 +1448,20 @@ function parseAnnotations (annotations) {
 }
 
 /**
- * Given a test's first-execution duration (ms) and the slow_test_retries map
- * from the backend, return how many EFD retries to run.
+ * Given a test's first-execution duration (ms) and the slow_test_retries map,
+ * return how many EFD retries to run. The `all` entry is a local override that
+ * takes precedence over the backend's duration buckets.
  *
- * Returns 0 when the test is too slow to retry (≥ 5 min).
+ * Without an `all` override, returns 0 when the test is too slow to retry (≥ 5 min).
  *
  * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
  * @returns {number}
  */
 function getEfdRetryCount (durationMs, slowTestRetries) {
+  if (slowTestRetries.all !== undefined) {
+    return slowTestRetries.all
+  }
   for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
     if (durationMs < limitMs) {
       return slowTestRetries[key] ?? 0

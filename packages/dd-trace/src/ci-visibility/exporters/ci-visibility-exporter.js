@@ -293,6 +293,9 @@ class CiVisibilityExporter extends BufferingExporter {
       isCoverageReportUploadEnabled,
     } = remoteConfiguration
     const { testOptimization } = this._config
+    const earlyFlakeDetectionRetryCount =
+      testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT
+    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
     return {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
@@ -300,8 +303,10 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled:
         isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
-      earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionNumRetries:
+        hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries:
+        hasEarlyFlakeDetectionRetryCount ? { all: earlyFlakeDetectionRetryCount } : earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
