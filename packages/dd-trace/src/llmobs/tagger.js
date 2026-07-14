@@ -35,6 +35,7 @@ const {
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
+  PROPAGATED_SESSION_ID_KEY,
   DEFAULT_PROMPT_NAME,
   INTERNAL_CONTEXT_VARIABLE_KEYS,
   INTERNAL_QUERY_VARIABLE_KEYS,
@@ -139,7 +140,8 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
+    const traceTags = span.context()._trace.tags
+    sessionId = sessionId || registry.get(parent)?.[SESSION_ID] || traceTags[PROPAGATED_SESSION_ID_KEY]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
@@ -752,6 +754,18 @@ class LLMObsTagger {
 
     const tagsCarrier = registry.get(span)
     tagsCarrier[key] = value
+
+    // The first session set in a trace becomes the trace-level default, stored on the trace-shared
+    // propagating tags so later spans (incl. those under a session-less parent) inherit it and it
+    // rides `x-datadog-tags` across service boundaries. Established here, the single choke point for
+    // session writes, so sessions post-populated by integrations after span start also seed it.
+    // First-writer wins, so an explicit session still overrides locally.
+    if (key === SESSION_ID && value) {
+      const traceTags = span.context()._trace.tags
+      if (traceTags[PROPAGATED_SESSION_ID_KEY] === undefined) {
+        traceTags[PROPAGATED_SESSION_ID_KEY] = value
+      }
+    }
   }
 }
 
