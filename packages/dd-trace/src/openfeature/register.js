@@ -25,8 +25,14 @@ registerFeature({
    */
   enable (config, tracer, proxy, lazyProxy) {
     if (config.experimental.flaggingProvider.enabled) {
-      proxy._modules.openfeature.enable(config)
-      lazyProxy(proxy, 'openfeature', () => require('./flagging_provider'), tracer, config)
+      const openfeature = proxy._modules.openfeature
+      const shouldCreateProvider = openfeature.module === undefined
+
+      openfeature.enable(config)
+
+      if (shouldCreateProvider) {
+        lazyProxy(proxy, 'openfeature', () => require('./flagging_provider'), tracer, config)
+      }
     }
   },
 })

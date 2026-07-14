@@ -32,6 +32,7 @@ describe('TracerProxy', () => {
   let log
   let profiler
   let appsec
+  let aiguard
   let telemetry
   let iast
   let openfeature
@@ -186,6 +187,11 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
+    aiguard = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+    }
+
     telemetry = {
       start: sinon.spy(),
     }
@@ -248,6 +254,7 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './aiguard': aiguard,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
       './aiguard/sdk': AIGuardSdk,
@@ -267,8 +274,14 @@ describe('TracerProxy', () => {
       },
       enable (config, tracer, proxy, lazyProxy) {
         if (config.experimental.flaggingProvider.enabled) {
-          proxy._modules.openfeature.enable(config)
-          lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
+          const openfeatureModule = proxy._modules.openfeature
+          const shouldCreateProvider = openfeatureModule.module === undefined
+
+          openfeatureModule.enable(config)
+
+          if (shouldCreateProvider) {
+            lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
+          }
         }
       },
     })
@@ -418,6 +431,41 @@ describe('TracerProxy', () => {
         handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
 
         sinon.assert.calledOnce(OpenFeatureProvider)
+      })
+
+      it('should re-enable OpenFeature without replacing its provider when remote config re-enables tracing', () => {
+        config.experimental.flaggingProvider.enabled = true
+        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        config.setRemoteConfig = remoteConfig => {
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+        }
+
+        proxy.init()
+
+        const provider = proxy.openfeature
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+
+        assert.strictEqual(proxy.openfeature, provider)
+        sinon.assert.calledOnce(OpenFeatureProvider)
+        sinon.assert.calledTwice(openfeature.enable)
+        sinon.assert.calledOnce(openfeature.disable)
+      })
+
+      it('should re-enable AI Guard when remote config re-enables tracing', () => {
+        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        config.setRemoteConfig = remoteConfig => {
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+        }
+
+        proxy.init()
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
+        handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+
+        sinon.assert.calledOnce(AIGuardSdk)
+        sinon.assert.calledTwice(aiguard.enable)
+        sinon.assert.calledOnce(aiguard.disable)
       })
 
       it('should support applying remote config', () => {
