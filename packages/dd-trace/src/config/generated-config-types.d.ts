@@ -248,7 +248,6 @@ export interface GeneratedConfig {
   DD_TRACE_FS_ENABLED: boolean;
   DD_TRACE_GCP_PUBSUB_PUSH_ENABLED: boolean;
   DD_TRACE_GENERIC_POOL_ENABLED: boolean;
-  DD_TRACE_GENKIT_ENABLED: boolean;
   DD_TRACE_GIT_METADATA_ENABLED: boolean;
   DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED: boolean;
   DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED: boolean;
@@ -919,7 +918,6 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_FS_ENABLED: boolean;
   DD_TRACE_GCP_PUBSUB_PUSH_ENABLED: boolean;
   DD_TRACE_GENERIC_POOL_ENABLED: boolean;
-  DD_TRACE_GENKIT_ENABLED: boolean;
   DD_TRACE_GIT_METADATA_ENABLED: boolean;
   DD_TRACE_GLOBAL_TAGS: Record<string, string> | undefined;
   DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED: boolean;
