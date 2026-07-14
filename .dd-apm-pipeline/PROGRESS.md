@@ -139,17 +139,90 @@ explicitly compares compatibility with another version.
   prerequisite and reports no blocker; LLMObs remains unevaluated. Commands, assertions, hashes, and result:
   `.dd-apm-evidence/genkit/18-tracing-precheck.md` and
   `.dd-apm-evidence/genkit/18-tracing-precheck.json`.
-- [ ] 19 LLMObs: build integration. Evidence: pending
-- [ ] 20 LLMObs: write tests. Evidence: pending
-- [ ] 21 LLMObs: diagnose behavior. Evidence: pending
-- [ ] 22 LLMObs: fix behavior. Evidence: pending
-- [ ] 23 Lint: collect failures. Evidence: pending
-- [ ] 24 Lint: fix failures. Evidence: pending
-- [ ] 25 Review: batch review. Evidence: pending
-- [ ] 26 Review: batch fix. Evidence: pending
-- [ ] 27 Review: diagnose repaired tests. Evidence: pending
-- [ ] 28 Review: repair tests. Evidence: pending
-- [ ] 29 Review: human-quality gate. Evidence: pending
+- [x] 19 LLMObs: build integration. Evidence: implemented and independently audited the exact-version Genkit
+  LLMObs layer as `ORCHESTRATION`, composing LLMObs before tracing on the shared `runInNewSpan` channel. The plugin
+  conditionally registers `llm`, `workflow`, `tool`, `retrieval`, and `embedding` spans; normalizes messages,
+  tools, and documents; emits standard numeric token metrics and bounded scalar metadata; summarizes rather than
+  serializes embedding vectors; and uses kind-appropriate empty error outputs. No unsupported `agent` span or
+  guessed provider identity was added. Syntax, targeted lint, composition/contract assertions, evidence hashes,
+  and diff checks pass; tests remain reserved for Stage 20. Implementation decisions, architecture score,
+  limitations, commands, hashes, and structured result: `.dd-apm-evidence/genkit/19-build-integration.md` and
+  `.dd-apm-evidence/genkit/19-build-integration.json`.
+- [x] 20 LLMObs: write tests. Evidence: added 13 exact-version, pure in-process Genkit LLMObs tests with no VCR,
+  network, provider APIs, clients, credentials, or cassettes. The suite covers all five emitted kinds; model and
+  streaming success/error; flow/flowStep nesting and errors; tool success/error/interrupt; retrieval normalization
+  and metadata allowlisting; embedding summaries with vector omission; ignored-label parenting; serialized-output
+  fallback; the three-argument overload; and explicit secret/unsafe-part omission. The env-scrubbed suite passes
+  13/13 with no failures or pending tests; syntax, targeted lint, and diff checks pass. Strategy declaration,
+  coverage, commands, transcripts, hashes, and structured result: `.dd-apm-evidence/genkit/20-test-strategy.md`,
+  `.dd-apm-evidence/genkit/20-write-tests.md`, `.dd-apm-evidence/genkit/20-write-tests.json`, and
+  `.dd-apm-evidence/genkit/20-attempts/`.
+- [x] 21 LLMObs: diagnose behavior. Evidence: an independent, single exact env-scrubbed run passed 13/13 with no
+  failures or pending tests, so `failure_mode` is null and no source/test files require repair. The reviewer found
+  complete coverage for the exact Stage 12/19 unit contract across all five kinds, errors, streaming, nesting,
+  overloads, fallback parsing, and privacy/vector assertions. Native OTel/provider duplication, token ownership,
+  and broader compatibility remain correctly reserved for final live/compatibility gates. Command, full output,
+  structured diagnosis, and coverage assessment: `.dd-apm-evidence/genkit/21-test-output.log`,
+  `.dd-apm-evidence/genkit/21-diagnosis.md`, and `.dd-apm-evidence/genkit/21-diagnosis.json`.
+- [x] 22 LLMObs: fix behavior. Evidence: evidence-backed no-op because Stage 21 reported 13 passing, no failures or
+  pending tests, null failure mode, no event/tag issues, and no files to fix. Per the stage contract, the fixer ran
+  no tests and changed/deleted/weakened no production or test files; it verified all Stage 19/20 source hashes were
+  unchanged and diff validation passes. Result and integrity evidence:
+  `.dd-apm-evidence/genkit/22-test-fixer.md` and `.dd-apm-evidence/genkit/22-fixer-result.json`.
+- [x] 23 Lint: collect failures. Evidence: all 11 changed production/test JavaScript files relative to the original
+  base pass targeted ESLint with zero warnings and syntax checks; generated config types, JSON/YAML parsing,
+  CODEOWNERS, exercised-test coverage, and whitespace checks also pass. No fixable failure was found. The
+  repository-wide CI verifier stops before Genkit on an unrelated existing npm E404 for
+  `confluentinc-kafka-javascript`; this is preserved as an external verifier blocker, not hidden as a Genkit lint
+  failure. Inventory, commands, outputs, classification, and Stage 24 handoff:
+  `.dd-apm-evidence/genkit/23-lint-diagnosis.md` and `.dd-apm-evidence/genkit/23-lint-result.json`.
+- [x] 24 Lint: fix failures. Evidence: no-op with initial/final/fixed error counts `0/0/0`, zero iterations, and
+  an empty files-to-fix list because Stage 23 found no Genkit lint defects. No source/test files changed; the
+  diagnosed 11-file hash manifest and original-base-scoped diff check pass. The unrelated registry-dependent CI
+  verifier blocker remains unchanged. Fixer narrative and structured result:
+  `.dd-apm-evidence/genkit/24-lint-fixer.md` and `.dd-apm-evidence/genkit/24-lint-fixer-result.json`.
+- [x] 25 Review: batch review. Evidence: independent senior review requires changes despite 18/18 default focused
+  tests. Three high/fixable blockers were proven: model/embedder events fall back to generic identity; supported
+  provider ownership/demotion is missing and can double-count authoritative LLM spans/tokens; and exact runtime
+  with `DD_TRACE_OTEL_ENABLED=true` produces duplicate native Genkit spans whose raw input/output tags leak payloads
+  and embedding vectors. Hook/lifecycle, ignored parenting, five-kind transforms, registrations, exact scope, and
+  default tests otherwise passed. Canonical findings and runtime logs:
+  `.dd-apm-evidence/genkit/25-review.md`, `.dd-apm-evidence/genkit/25-review.json`, and
+  `.dd-apm-evidence/genkit/25-attempts/`.
+- [x] 26 Review: batch fix. Evidence: fixed all three Stage 25 blockers with none failed/skipped. Model/embedder
+  events now retain registered identity; source-proven `googleai/` models are demoted to workflow with no token
+  metrics only when the enabled `google-genai` LLMObs plugin owns the request; and OTel-enabled execution suppresses
+  only the distinct native Genkit bridge trace while preserving authoritative Datadog nesting and unrelated OTel.
+  This removes duplicate native spans and raw input/output/vector export. Default and `DD_TRACE_OTEL_ENABLED=true`
+  APM+LLMObs suites both pass 20/20, context-manager tests pass 26/26, and targeted lint/syntax/diff checks pass.
+  Fix design, architecture score, commands, outputs, and result:
+  `.dd-apm-evidence/genkit/26-batch-fix.md`, `.dd-apm-evidence/genkit/26-batch-fix.json`, and
+  `.dd-apm-evidence/genkit/26-attempts/`.
+- [x] 27 Review: diagnose repaired tests. Evidence: fresh default Genkit, OTel-enabled Genkit, and OTel
+  context-manager runs pass 20/20, 20/20, and 26/26 respectively (66 total, no failures/pending), but coverage is
+  not complete. Three missing boundary cases were identified: unrelated user OTel spans inside Genkit must remain
+  exportable despite native-trace suppression; the shared preserve-context marker branch needs direct precondition
+  unit tests; and source-proven `googleai/` with provider ownership disabled must remain `llm` with provider/model
+  identity and metrics. Commands, logs, structured diagnosis, and Stage 28 handoff:
+  `.dd-apm-evidence/genkit/27-diagnosis.md`, `.dd-apm-evidence/genkit/27-diagnosis.json`, and
+  `.dd-apm-evidence/genkit/27-attempts/`.
+- [x] 28 Review: repair tests. Evidence: added all three missing boundary cases and replaced trace-wide native
+  Genkit suppression with instrumentation-scope suppression. Only the exact `genkit-tracer` OTel scope is
+  non-recording; unrelated user OTel children remain exported under the authoritative Genkit span. Direct
+  context-manager/tracer tests pin marker prerequisites and scope matching, while the provider-unowned
+  `googleai/` path retains `llm` kind, provider/model identity, and token metrics. Default and OTel-enabled Genkit
+  suites pass 22/22 each; shared OTel context-manager/tracer suites pass 49/49; lint, syntax, and diff checks pass.
+  Repair rationale, architecture score, commands, outputs, and structured result:
+  `.dd-apm-evidence/genkit/28-test-fixer.md`, `.dd-apm-evidence/genkit/28-test-fixer-result.json`, and
+  `.dd-apm-evidence/genkit/28-attempts/`.
+- [ ] 29 Review: human-quality gate. Evidence: automated engineering review completed and its sole blocker,
+  `GENKIT-HUMAN-001`, was repaired test-first by moving `preserveOtelContext` from ambient span state to the
+  operation-scoped Genkit store. Fresh validation passes: targeted regression 1/1, default Genkit 23/23,
+  OTel-enabled Genkit 23/23, and shared OTel context-manager/tracer 49/49, plus targeted lint/syntax/diff checks.
+  Literal human approval remains unavailable and is not marked passed; Stage 30 must not begin without explicit
+  workflow-owner approval or waiver. Review, reproduction, remediation, commands, and structured status:
+  `.dd-apm-evidence/genkit/29-human-review.md`, `.dd-apm-evidence/genkit/29-human-review.json`,
+  `.dd-apm-evidence/genkit/29-human-review-fix.md`, and `.dd-apm-evidence/genkit/29-human-review-fix.json`.
 - [ ] 30 Review: finalize. Evidence: pending
 - [ ] 31 Final gate: build. Evidence: pending
 - [ ] 32 Final gate: tests. Evidence: pending
