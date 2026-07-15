@@ -55,7 +55,7 @@ function capSubrange (name, subrange) {
     )
   }
 
-  if (!subrange || subrange === 'latest') return latests[name]
+  if (!subrange || subrange === 'latest') return `<=${latests[name]}`
   if (subset(subrange, `<=${latests[name]}`)) return subrange
   if (subrange.includes(' - ')) {
     const minRange = subrange.split(' - ')[0].trim()
