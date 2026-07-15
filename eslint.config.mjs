@@ -99,6 +99,7 @@ export default [
       '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/ci-visibility/test-management/test-suite-failed-to-run-parse.js', // Intentional syntax error
       'integration-tests/code-origin/typescript.js', // Generated
+      'integration-tests/source-maps/throws.js', // Generated from throws.ts
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/minify.min.js', // Generated

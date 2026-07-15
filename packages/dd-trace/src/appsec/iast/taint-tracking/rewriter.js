@@ -11,6 +11,7 @@ const shimmer = require('../../../../../datadog-shimmer')
 const { getName } = require('../telemetry/verbosity')
 const telemetry = require('../telemetry')
 const log = require('../../../log')
+const sourceMaps = require('../../../source-maps')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
@@ -37,13 +38,24 @@ let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) 
   return { path, line, column }
 }
 
-function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOriginalPathAndLineFromSourceMap }) {
+/**
+ * @param {boolean} nativeSourceMapsEnabled
+ * @param {{
+ *   getOriginalPathAndLineFromSourceMap?: (path: string, line: number, column: number) =>
+ *     { path: string, line: number, column: number }
+ * }} iastRewriter
+ */
+function setGetOriginalPathAndLineFromSourceMapFunction (
+  nativeSourceMapsEnabled,
+  iastRewriter
+) {
+  const { getOriginalPathAndLineFromSourceMap } = iastRewriter
   if (!getOriginalPathAndLineFromSourceMap) return
 
-  getRewriterOriginalPathAndLineFromSourceMap = chainSourceMap
+  // Native stack frames already contain chained source-map locations. Programmatically enabled
+  // support still exposes generated structured call sites, so the rewriter must translate them.
+  getRewriterOriginalPathAndLineFromSourceMap = nativeSourceMapsEnabled
     ? (path, line, column) => {
-      // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
-      // column because the sourcemap chaining is done during the rewriting process so we can skip it
         return !globalThis.__DD_ESBUILD_IAST_WITH_SM && isPrivateModule(path) && !isDdTrace(path)
           ? { path, line, column }
           : getOriginalPathAndLineFromSourceMap(path, line, column)
@@ -60,8 +72,11 @@ function getRewriter (telemetryVerbosity) {
       kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
       cacheRewrittenSourceMap = iastRewriter.cacheRewrittenSourceMap
 
-      const chainSourceMap = isFlagPresent('--enable-source-maps')
-      setGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter)
+      const chainSourceMap = sourceMaps.syncSourceMapSupport()
+      setGetOriginalPathAndLineFromSourceMapFunction(
+        sourceMaps.isNativeSourceMapSupportEnabled(),
+        iastRewriter
+      )
 
       rewriter = new Rewriter({
         csiMethods,
@@ -83,6 +98,7 @@ function getPrepareStackTraceAccessor () {
   }
   originalPrepareStackTrace = Error.prepareStackTrace
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
+  sourceMaps.registerPrepareStackTrace(actual, originalPrepareStackTrace)
   return {
     configurable: true,
     get () {
@@ -90,6 +106,7 @@ function getPrepareStackTraceAccessor () {
     },
     set (value) {
       actual = getPrepareStackTrace(value)
+      sourceMaps.registerPrepareStackTrace(actual, value)
       originalPrepareStackTrace = value
     },
   }
@@ -219,7 +236,7 @@ let enableEsmRewriter = function (telemetryVerbosity) {
           port: port2,
           csiMethods,
           telemetryVerbosity,
-          chainSourceMap: isFlagPresent('--enable-source-maps'),
+          chainSourceMap: sourceMaps.syncSourceMapSupport(),
           orchestrionConfig,
           iastEnabled: config?.iast?.enabled,
         },

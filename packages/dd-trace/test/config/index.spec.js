@@ -276,6 +276,23 @@ describe('Config', () => {
     })
   })
 
+  describe('source map configuration', () => {
+    it('does not expose a programmatic option', () => {
+      const config = getConfig({ sourceMaps: 'off' })
+
+      assert.strictEqual(config.DD_TRACE_SOURCE_MAPS_MODE, 'datadog')
+      assert.strictEqual(Object.hasOwn(config, 'sourceMaps'), false)
+    })
+
+    it('reads the environment variable', () => {
+      process.env.DD_TRACE_SOURCE_MAPS_MODE = 'all'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_SOURCE_MAPS_MODE, 'all')
+    })
+  })
+
   describe('property surface', () => {
     // Mirror of the runtime-only fields in `ConfigProperties` (config-types.d.ts).
     const INTERNAL_RUNTIME_PROPERTIES = [

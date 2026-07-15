@@ -2,6 +2,7 @@
 
 const { getEnvironmentVariable } = require('../dd-trace/src/config/helper')
 const { parseUserLandFrames } = require('../dd-trace/src/plugins/util/stacktrace')
+const sourceMapRemapping = require('../dd-trace/src/source-maps/remap')
 
 const ENTRY_SPAN_STACK_FRAMES_LIMIT = 1
 const EXIT_SPAN_STACK_FRAMES_LIMIT =
@@ -38,13 +39,11 @@ function exitTags (topOfStackFunc) {
  * @returns {Record<string, string>}
  */
 function tag (type, limit, topOfStackFunc) {
-  // The `Error.prepareStackTrace` API doesn't support resolving source maps.
-  // Fall back to manually parsing the stack trace.
   const originalLimit = Error.stackTraceLimit
   Error.stackTraceLimit = Infinity
   const dummy = {}
   Error.captureStackTrace(dummy, topOfStackFunc)
-  const frames = parseUserLandFrames(dummy.stack, limit)
+  const frames = parseUserLandFrames(sourceMapRemapping.errorStack(dummy.stack), limit)
   Error.stackTraceLimit = originalLimit
 
   const tags = {

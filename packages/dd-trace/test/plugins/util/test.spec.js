@@ -35,6 +35,8 @@ const {
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
+  getFileAndLineNumberFromError,
+  getTestLineStart,
   isModifiedTest,
   recordAttemptToFixExecution,
   collectAttemptToFixExecutionsFromTraces,
@@ -44,6 +46,7 @@ const {
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
+const sourceMapRemapping = require('../../../src/source-maps/remap')
 
 const {
   CI_JOB_NAME,
@@ -56,6 +59,43 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('source mapped test locations', () => {
+  afterEach(() => {
+    sourceMapRemapping.configure('off')
+  })
+
+  it('uses an original source location as the test start line', () => {
+    const error = new Error('boom')
+    error.stack = 'Error: boom\n    at test (/repository/generated.js:10:2)'
+    sourceMapRemapping.errorStack = () => 'Error: boom\n    at test (/repository/original.ts:4:2)'
+
+    assert.strictEqual(getTestLineStart(error, '/repository/original.ts'), 4)
+  })
+
+  it('uses an original source location for a debugging probe', () => {
+    const error = new Error('boom')
+    error.stack = 'Error: boom\n    at test (/repository/generated.js:10:2)'
+    sourceMapRemapping.errorStack = () => 'Error: boom\n    at test (/repository/original.ts:4:2)'
+
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repository'), [
+      '/repository/original.ts',
+      4,
+      0,
+    ])
+  })
+
+  it('handles missing and non-string stack representations', () => {
+    const error = new Error('boom')
+    error.stack = ''
+    assert.strictEqual(getTestLineStart(error, '/repository/original.ts'), null)
+
+    sourceMapRemapping.errorStack = () => []
+    error.stack = 'Error: boom'
+    assert.strictEqual(getTestLineStart(error, '/repository/original.ts'), null)
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repository'), [])
+  })
+})
 
 describe('getTestOptimizationRequestResults', () => {
   it('starts known tests, test management, and skippable requests together when enabled', async () => {

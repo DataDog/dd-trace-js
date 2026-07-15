@@ -46,6 +46,8 @@ describe('TracerProxy', () => {
   let NoopDogStatsDClient
   let OpenFeatureProvider
   let openfeatureProvider
+  let rewriter
+  let sourceMaps
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -147,6 +149,7 @@ describe('TracerProxy', () => {
 
     config = {
       DD_TRACE_ENABLED: true,
+      DD_TRACE_SOURCE_MAPS_MODE: 'datadog',
       testOptimization: {},
       experimental: {
         flaggingProvider: {},
@@ -205,6 +208,13 @@ describe('TracerProxy', () => {
     }
 
     OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
+    sourceMaps = {
+      configure: sinon.spy(),
+    }
+    rewriter = {
+      disable: sinon.spy(),
+      enable: sinon.spy(),
+    }
 
     flare = {
       enable: sinon.spy(),
@@ -255,6 +265,8 @@ describe('TracerProxy', () => {
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
+      './appsec/iast/taint-tracking/rewriter': rewriter,
+      './source-maps/remap': sourceMaps,
     })
 
     const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
@@ -298,6 +310,21 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(RemoteConfig)
+      })
+
+      it('should configure source maps with the selected mode', () => {
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(sourceMaps.configure, 'datadog')
+        sinon.assert.callOrder(sourceMaps.configure, rewriter.enable)
+      })
+
+      it('should not enable source maps when disabled', () => {
+        config.DD_TRACE_SOURCE_MAPS_MODE = 'off'
+
+        proxy.init()
+
+        sinon.assert.notCalled(sourceMaps.configure)
       })
 
       it('should not enable remote config when disabled', () => {
@@ -417,6 +444,7 @@ describe('TracerProxy', () => {
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk,
+          './source-maps': sourceMaps,
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -448,6 +476,7 @@ describe('TracerProxy', () => {
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk,
+          './source-maps': sourceMaps,
         })
 
         config.telemetry = {}
@@ -588,6 +617,7 @@ describe('TracerProxy', () => {
           './appsec': appsec,
           './telemetry': telemetry,
           './remote_config': RemoteConfig,
+          './source-maps': sourceMaps,
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -619,6 +649,7 @@ describe('TracerProxy', () => {
           './appsec/sdk': AppsecSdk,
           './standalone': standalone,
           './telemetry': telemetry,
+          './source-maps': sourceMaps,
         })
 
         const proxy = new DatadogProxy()

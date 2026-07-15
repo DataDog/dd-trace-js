@@ -1,9 +1,13 @@
 'use strict'
 
 const assert = require('node:assert')
+const Module = require('node:module')
 const path = require('node:path')
 const Axios = require('axios')
 const { assertObjectContains, FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('./helpers')
+
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
+const supportsProgrammaticSourceMaps = typeof Module.setSourceMapsSupport === 'function'
 
 describe('Code Origin for Spans', function () {
   let cwd, appFile, agent, proc, axios
@@ -12,7 +16,7 @@ describe('Code Origin for Spans', function () {
 
   before(() => {
     cwd = sandboxCwd()
-    appFile = path.join(cwd, 'code-origin', 'typescript.js')
+    appFile = path.join(cwd, 'code-origin', 'index.js')
   })
 
   beforeEach(async () => {
@@ -20,10 +24,12 @@ describe('Code Origin for Spans', function () {
     proc = await spawnProc(appFile, {
       cwd,
       env: {
-        // Opt out: NYC's transform breaks --enable-source-maps resolution to the .ts source.
+        // Opt out: NYC's transform breaks source-map resolution to the .ts source.
         _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
-        NODE_OPTIONS: '--enable-source-maps',
+        // Older runtimes cannot enable parsing before the compiled module is loaded.
+        ...(supportsProgrammaticSourceMaps ? {} : { NODE_OPTIONS: '--enable-source-maps' }),
         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
+        DD_TRACE_FLUSH_INTERVAL: '0',
       },
       stdio: 'pipe',
     })
@@ -54,8 +60,8 @@ describe('Code Origin for Spans', function () {
               '_dd.code_origin.frames.0.type': 'Object',
             },
           })
-        }, 2_500),
-        await axios.get('/'),
+        }),
+        axios.get('/'),
       ])
     })
   })

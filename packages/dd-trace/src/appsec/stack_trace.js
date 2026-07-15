@@ -1,6 +1,7 @@
 'use strict'
 
 const { ddBasePath } = require('../util')
+const sourceMapRemapping = require('../source-maps/remap')
 const { getOriginalPathAndLineFromSourceMap } = require('./iast/taint-tracking/rewriter')
 
 const LIBRARY_FRAMES_BUFFER = 20
@@ -66,11 +67,16 @@ function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, c
   for (let i = 0; i < Math.min(filteredFrames.length, maxDepth); i++) {
     const index = i < half ? i : i + filteredFrames.length - maxDepth
     const callSite = filteredFrames[index]
-    indexedFrames.push({
-      id: index,
+    const location = sourceMapRemapping.location({
       file: callSite.getTranslatedFileName?.() ?? callSite.getFileName(),
       line: callSite.getTranslatedLineNumber?.() ?? callSite.getLineNumber(),
       column: callSite.getTranslatedColumnNumber?.() ?? callSite.getColumnNumber(),
+    })
+    indexedFrames.push({
+      id: index,
+      file: location.file,
+      line: location.line,
+      column: location.column,
       function: callSite.getFunctionName(),
       class_name: callSite.getTypeName(),
       isNative: callSite.isNative(),

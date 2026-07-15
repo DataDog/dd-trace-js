@@ -5,8 +5,13 @@ const path = require('path')
 const { inspect } = require('node:util')
 
 const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
+const sourceMapRemapping = require('../../src/source-maps/remap')
 
 describe('Stack trace reporter', () => {
+  afterEach(() => {
+    sourceMapRemapping.configure('off')
+  })
+
   describe('frame filtering', () => {
     it('should filter out frames from library', () => {
       const callSiteList =
@@ -72,6 +77,34 @@ describe('Stack trace reporter', () => {
       reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+    })
+
+    it('remaps application frame locations', () => {
+      const callSite = {
+        getFileName: () => 'generated.js',
+        getLineNumber: () => 3,
+        getColumnNumber: () => 4,
+        getFunctionName: () => 'run',
+        getTypeName: () => undefined,
+        isNative: () => false,
+      }
+      sourceMapRemapping.location = () => ({
+        file: 'original.ts',
+        line: 1,
+        column: 2,
+      })
+
+      const frames = getCallsiteFrames(1, getCallsiteFrames, () => [callSite])
+
+      assert.deepStrictEqual(frames, [{
+        id: 0,
+        file: 'original.ts',
+        line: 1,
+        column: 2,
+        function: 'run',
+        class_name: undefined,
+        isNative: false,
+      }])
     })
   })
 

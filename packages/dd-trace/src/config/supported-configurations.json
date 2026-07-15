@@ -3805,6 +3805,16 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_SOURCE_MAPS_MODE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "datadog",
+        "allowed": "off|datadog|all",
+        "transform": "toLowerCase",
+        "description": "Controls source-map remapping for error stack traces. \"off\" disables tracer source-map processing, \"datadog\" remaps only stacks exported by the tracer, and \"all\" remaps every stack read by the application. This setting does not disable source maps enabled by Node.js or another library."
+      }
+    ],
     "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [
       {
         "implementation": "B",

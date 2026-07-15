@@ -129,6 +129,10 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
+      if (config.DD_TRACE_SOURCE_MAPS_MODE !== 'off') {
+        require('./source-maps/remap').configure(config.DD_TRACE_SOURCE_MAPS_MODE)
+      }
+
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {

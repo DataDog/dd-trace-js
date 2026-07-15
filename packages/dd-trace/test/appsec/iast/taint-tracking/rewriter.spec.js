@@ -21,10 +21,19 @@ describe('IAST Rewriter', () => {
   })
 
   describe('Enabling rewriter', () => {
-    let rewriter, iastTelemetry, shimmer, Module, cacheRewrittenSourceMap, log, rewriterTelemetry
+    let rewriter, iastTelemetry, shimmer, Module, cacheRewrittenSourceMap, log, rewriterTelemetry, sourceMaps
     let workerThreads, MessageChannel, port1On, port1Unref
+    /** @type {{ chainSourceMap: boolean } | undefined} */
+    let rewriterOptions
 
     class Rewriter {
+      /**
+       * @param {{ chainSourceMap: boolean }} options
+       */
+      constructor (options) {
+        rewriterOptions = options
+      }
+
       rewrite (content, filename) {
         return {
           content: content + 'rewritten',
@@ -47,6 +56,11 @@ describe('IAST Rewriter', () => {
 
       Module = {
         register: sinon.stub(),
+      }
+      sourceMaps = {
+        isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
+        registerPrepareStackTrace: sinon.stub(),
+        syncSourceMapSupport: sinon.stub().returns(false),
       }
 
       cacheRewrittenSourceMap = sinon.stub()
@@ -98,6 +112,7 @@ describe('IAST Rewriter', () => {
         '../../telemetry': iastTelemetry,
         module: Module,
         '../../../log': log,
+        '../../../source-maps': sourceMaps,
         './rewriter-telemetry': rewriterTelemetry,
         worker_threads: workerThreads,
       })
@@ -112,7 +127,18 @@ describe('IAST Rewriter', () => {
       rewriter.enable(iastEnabledConfig)
       sinon.assert.calledOnce(shimmer.wrap)
       assert.strictEqual(shimmer.wrap.getCall(0).args[1], '_compile')
+      sinon.assert.calledOnce(sourceMaps.registerPrepareStackTrace)
+      assert.strictEqual(typeof sourceMaps.registerPrepareStackTrace.firstCall.firstArg, 'function')
 
+      rewriter.disable()
+    })
+
+    it('Should chain source maps when they are enabled programmatically', () => {
+      sourceMaps.syncSourceMapSupport.returns(true)
+
+      rewriter.enable(iastEnabledConfig)
+
+      assert.strictEqual(rewriterOptions.chainSourceMap, true)
       rewriter.disable()
     })
 
@@ -201,6 +227,15 @@ describe('IAST Rewriter', () => {
         rewriter.enable(iastEnabledConfig)
 
         sinon.assert.notCalled(Module.register)
+      })
+
+      it('Should pass programmatic source map support to the ESM rewriter', () => {
+        process.execArgv = ['--loader', 'dd-trace/initialize.mjs']
+        sourceMaps.syncSourceMapSupport.returns(true)
+
+        rewriter.enable(iastEnabledConfig)
+
+        assert.strictEqual(Module.register.firstCall.args[1].data.chainSourceMap, true)
       })
 
       it('Should enable esm rewriter when ESM is configured with --loader exec arg', () => {
@@ -348,16 +383,21 @@ describe('IAST Rewriter', () => {
   })
 
   describe('getOriginalPathAndLineFromSourceMap', () => {
-    let rewriter, getOriginalPathAndLineFromSourceMap, argvs
+    let rewriter, getOriginalPathAndLineFromSourceMap, sourceMaps
 
     beforeEach(() => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
+      sourceMaps = {
+        isNativeSourceMapSupportEnabled: sinon.stub().returns(false),
+        registerPrepareStackTrace: sinon.stub(),
+        syncSourceMapSupport: sinon.stub().returns(false),
+      }
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/wasm-js-rewriter': {
           getOriginalPathAndLineFromSourceMap,
         },
+        '../../../source-maps': sourceMaps,
       })
-      argvs = [...process.execArgv].filter(arg => arg !== '--enable-source-maps')
     })
 
     afterEach(() => {
@@ -365,8 +405,17 @@ describe('IAST Rewriter', () => {
       rewriter.disable()
     })
 
-    it('should call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is not present', () => {
-      sinon.stub(process, 'execArgv').value(argvs)
+    it('should call native getOriginalPathAndLineFromSourceMap if source maps are disabled', () => {
+      rewriter.enable(iastEnabledConfig)
+
+      const location = { path: 'test', line: 42, column: 4 }
+      rewriter.getOriginalPathAndLineFromSourceMap(location)
+
+      sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
+    })
+
+    it('should call native getOriginalPathAndLineFromSourceMap if source maps are enabled programmatically', () => {
+      sourceMaps.syncSourceMapSupport.returns(true)
 
       rewriter.enable(iastEnabledConfig)
 
@@ -376,8 +425,9 @@ describe('IAST Rewriter', () => {
       sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
     })
 
-    it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is present', () => {
-      sinon.stub(process, 'execArgv').value([...argvs, '--enable-source-maps'])
+    it('should not call native getOriginalPathAndLineFromSourceMap if source maps are enabled natively', () => {
+      sourceMaps.isNativeSourceMapSupportEnabled.returns(true)
+      sourceMaps.syncSourceMapSupport.returns(true)
 
       rewriter.enable(iastEnabledConfig)
 
@@ -385,25 +435,6 @@ describe('IAST Rewriter', () => {
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
       sinon.assert.notCalled(getOriginalPathAndLineFromSourceMap)
-    })
-
-    it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps as NODE_OPTION', () => {
-      sinon.stub(process, 'execArgv').value(argvs)
-
-      const origNodeOptions = process.env.NODE_OPTIONS
-
-      process.env.NODE_OPTIONS = process.env.NODE_OPTIONS
-        ? process.env.NODE_OPTIONS + ' --enable-source-maps'
-        : '--enable-source-maps'
-
-      rewriter.enable(iastEnabledConfig)
-
-      const location = { path: 'test', line: 42, column: 4 }
-      rewriter.getOriginalPathAndLineFromSourceMap(location)
-
-      sinon.assert.notCalled(getOriginalPathAndLineFromSourceMap)
-
-      process.env.NODE_OPTIONS = origNodeOptions
     })
   })
 })

@@ -6,6 +6,7 @@ const { URL } = require('url')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
+const sourceMapRemapping = require('../../source-maps/remap')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
@@ -1398,13 +1399,20 @@ function fromCoverageMapToCoverage (coverageMap) {
   }, {})
 }
 
-// Get the start line of a test by inspecting a given error's stack trace
-function getTestLineStart (err, testSuitePath) {
-  if (!err.stack) {
+/**
+ * @param {Error} error
+ * @param {string} testSuitePath
+ * @returns {number | null}
+ */
+function getTestLineStart (error, testSuitePath) {
+  const stack = error.stack
+  if (!stack) {
     return null
   }
+  const remappedStack = sourceMapRemapping.errorStack(stack)
+  if (typeof remappedStack !== 'string') return null
   // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
-  const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
+  const testFileLine = remappedStack.split('\n').find(line => line.includes(testSuitePath))
   try {
     const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
     return Number.parseInt(testFileLineMatch[3], 10) || null
@@ -1545,9 +1553,15 @@ const DEPENDENCY_FOLDERS = [
   '.pnp',
 ]
 
+/**
+ * @param {Error} error
+ * @param {string} repositoryRoot
+ * @returns {Array<string | number>}
+ */
 function getFileAndLineNumberFromError (error, repositoryRoot) {
-  // Split the stack trace into individual lines
-  const stackLines = error.stack.split('\n')
+  const stack = sourceMapRemapping.errorStack(error.stack)
+  if (typeof stack !== 'string') return []
+  const stackLines = stack.split('\n')
 
   // Remove potential messages on top of the stack that are not frames
   const frames = stackLines.filter(line => line.includes('at ') && line.includes(repositoryRoot))

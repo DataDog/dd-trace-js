@@ -517,6 +517,16 @@ Early Flake Detection retries in every supported test-duration bucket. A value o
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
 
+<h3 id="source-mapped-stack-traces">Source-mapped stack traces</h3>
+
+The `DD_TRACE_SOURCE_MAPS_MODE` environment variable controls source-map processing. It is not available as an `init()` option.
+
+- `datadog` (default) maps stack traces and structured stack locations only when the tracer exports them. When the tracer owns source-map processing, application reads of `error.stack` remain unchanged. This mode supports local inline and external source maps on every supported Node.js version and does not process dependency files under `node_modules`.
+- `all` maps every stack trace read by the application. Without source maps already enabled by Node.js or another library, it requires Node.js 22.14.0, 23.7.0, or a later release with programmatic source-map support. Source maps must be enabled before a module loads, so preload `dd-trace/init` to map frames from the application's entry module. On older releases, start Node with `--enable-source-maps`.
+- `off` disables source-map processing by the tracer.
+
+The tracer defers to source maps already enabled by Node.js and to an existing custom `Error.prepareStackTrace` formatter. `off` does not disable source maps owned by Node.js or another library.
+
 <h3 id="custom-logging">Custom Logging</h3>
 
 By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.

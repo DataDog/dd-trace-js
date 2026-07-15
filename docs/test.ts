@@ -28,6 +28,13 @@ import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
+import type { TracerOptions as TracerOptionsV5 } from '../index.d.v5'
+
+// @ts-expect-error Source-map support is controlled only by DD_TRACE_SOURCE_MAPS_MODE.
+export type UnsupportedSourceMapsOption = TracerOptions['sourceMaps']
+// @ts-expect-error The v5 declaration must reject the removed programmatic option too.
+export type UnsupportedV5SourceMapsOption = TracerOptionsV5['sourceMaps']
+
 opentracing.initGlobalTracer(tracer);
 
 let span: Span;
