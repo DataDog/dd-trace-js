@@ -1945,6 +1945,9 @@ function shouldFinishBailTestSession (globalConfig, results) {
   return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
 }
 
+/**
+ * @param {Record<string, unknown> & { onDone?: () => void }} payload
+ */
 async function waitForTestSessionFinish (payload) {
   if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
 
@@ -1967,6 +1970,7 @@ async function waitForTestSessionFinish (payload) {
   })
 
   testSessionFinishCh.publish(payload)
+  if (!testSessionFinishCh.hasSubscribers) payload.onDone()
 
   const waitingResult = await Promise.race([flushPromise, timeoutPromise])
 
@@ -2131,9 +2135,14 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
+/**
+ * @param {import('node:diagnostics_channel').Channel} channelToPublishTo
+ * @param {Record<string, unknown>} [payload]
+ */
 function getChannelPromise (channelToPublishTo, payload = {}) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ ...payload, onDone: resolve })
+    if (!channelToPublishTo.hasSubscribers) resolve()
   })
 }
 
@@ -2485,9 +2494,7 @@ function getCliWrapper (isNewJestVersion) {
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
-        await new Promise((resolve) => {
-          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
-        })
+        await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
@@ -2505,6 +2512,10 @@ function shouldWaitForTestSuiteFinish (environment) {
   return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
 }
 
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {boolean} waitForFinish
+ */
 function publishTestSuiteFinish (payload, waitForFinish) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
@@ -2519,6 +2530,7 @@ function publishTestSuiteFinish (payload, waitForFinish) {
       waitForFinish,
       onDone: resolve,
     })
+    if (!testSuiteFinishCh.hasSubscribers) resolve()
   })
 }
 
