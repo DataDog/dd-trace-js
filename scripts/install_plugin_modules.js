@@ -11,7 +11,7 @@ const semver = require('semver')
 
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
-const { getCappedRange, resolvePluginDeclarations } = require('../packages/dd-trace/test/plugins/versions')
+const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
 const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
@@ -92,7 +92,7 @@ function collectPackages (moduleNames) {
   }
 
   /**
-   * @param {Array<{ name: string, versions?: string|string[], node?: string }>} instrumentations
+   * @param {Array<{ name: string, versions?: string[], node?: string }>} instrumentations
    * @param {boolean} external
    * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
    *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
@@ -111,7 +111,7 @@ function collectPackages (moduleNames) {
     }
 
     for (const [name, declarations] of declarationsByName) {
-      const { versionList, unversioned } = resolvePluginDeclarations({
+      const { versionList, unversioned } = resolvePluginVersions({
         name,
         declarations,
         honourEnvRange: !external || name === pluginName,
