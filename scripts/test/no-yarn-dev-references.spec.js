@@ -12,51 +12,44 @@ const path = require('node:path')
 const yaml = require('yaml')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
-
-const ALLOWLIST_EXACT = new Set([
-  // Product code: dd-trace detects yarn at runtime as a user package manager.
-  'ci/init.js',
-  'packages/dd-trace/src/plugins/util/test.js',
-  'packages/dd-trace/src/ci-visibility/dynamic-instrumentation/index.js',
-  'packages/dd-trace/src/appsec/recommended.json',
-  'requirements.json',
-  '.gitlab/requirements_block.json',
-
-  // User-PM test fixtures: yarn runs as the user's package manager inside the sandbox under test.
-  'packages/dd-trace/test/appsec/next.utils.js',
-  'integration-tests/esbuild/openfeature.spec.js',
-  'integration-tests/ci-visibility/test-optimization-startup.spec.js',
-  'integration-tests/helpers/index.js',
-  'packages/dd-trace/test/plugins/versions/package.json',
-  '.github/workflows/platform.yml',
-
-  // Benchmark comparisons execute the baseline's pre-migration installer against the baseline source.
-  'benchmark/sirun/runall.sh',
-
-  // .gitignore tracks the per-fixture yarn.lock paths so they don't accidentally land in git.
-  '.gitignore',
-
-  // User-facing docs: yarn is still a popular user package manager and appears beside npm/pnpm.
-  'README.md',
-  'MIGRATING.md',
-
-  // Regression tests that pin the dev-tooling migration.
-  'scripts/test/install-plugin-modules.spec.js',
-  'scripts/test/no-yarn-dev-references.spec.js',
+const guardFile = 'scripts/test/no-yarn-dev-references.spec.js'
+const allowedLinePatterns = new Map([
+  ['ci/init.js', /PACKAGE_MANAGERS = \['npm', 'yarn', 'pnpm'\]/],
+  ['packages/dd-trace/src/plugins/util/test.js', /npm-8\.15\.0 or yarn-1\.22\.19|'\.yarn'/],
+  ['packages/dd-trace/src/ci-visibility/dynamic-instrumentation/index.js', /issues with yarn/],
+  ['packages/dd-trace/src/appsec/recommended.json', /"(?:\/yarn\.lock|bin\/yarn)",/],
+  ['requirements.json', /"yarn"|"Ignore the yarn CLI(?: \(symlink\))?"|"\*\/yarn(?:\.js)?"/],
+  ['.gitlab/requirements_block.json', /"name": "yarn(?:-symlink)?".*"\/pathto\/yarn(?:\.js)?"/],
+  ['packages/dd-trace/test/appsec/next.utils.js', /yarn install|yarn exec next build|'yarn\.lock'/],
+  [
+    'integration-tests/esbuild/openfeature.spec.js',
+    /npm install -g yarn|installing with yarn|install with yarn|yarn would error|yarn --ignore-engines/,
+  ],
+  ['integration-tests/ci-visibility/test-optimization-startup.spec.js', /packageManagers = \['yarn', 'npm', 'pnpm'\]/],
+  ['integration-tests/helpers/index.js', /yarn-linked|yarn link(?: dd-trace)?/],
+  ['packages/dd-trace/test/plugins/versions/package.json', /"yarn": "1\.22\.22"/],
+  ['.github/workflows/platform.yml', /name: yarn(?:-berry)?$|install: yarn add$|&& yarn (?:set|config|add)/],
+  ['benchmark/sirun/runall.sh', /\$HOME\/\.yarn|dependencies\.yarn|yarn install --ignore-engines|yarn services/],
+  ['.gitignore', /yarn\.lock$/],
+  ['README.md', /^\$ yarn add dd-trace(?:@\d+)?(?: # .*)?$/],
+  ['MIGRATING.md', /NODE_OPTIONS='-r dd-trace\/ci\/init' yarn test/],
+  ['scripts/test/install-plugin-modules.spec.js', /removes yarn|bun \(not yarn\)/],
 ])
-
-const ALLOWLIST_PREFIXES = [
-  // The next plugin tests spawn yarn-as-user-PM for the build step.
-  'packages/datadog-plugin-next/test/',
-]
+const allowedPrefixLinePatterns = new Map([
+  ['packages/datadog-plugin-next/test/', /yarn install|yarn exec next build|'yarn\.lock'/],
+])
 
 /**
  * @param {string} file
+ * @param {string} line
  */
-function isAllowed (file) {
-  if (ALLOWLIST_EXACT.has(file)) return true
-  for (const prefix of ALLOWLIST_PREFIXES) {
-    if (file.startsWith(prefix)) return true
+function isAllowedLine (file, line) {
+  if (file === guardFile) return true
+
+  const pattern = allowedLinePatterns.get(file)
+  if (pattern?.test(line.trim())) return true
+  for (const [prefix, prefixPattern] of allowedPrefixLinePatterns) {
+    if (file.startsWith(prefix) && prefixPattern.test(line.trim())) return true
   }
   return false
 }
@@ -92,8 +85,6 @@ describe('no yarn dev references', function () {
     const offendingMatches = []
 
     for (const file of files) {
-      if (isAllowed(file)) continue
-
       const full = path.join(repoRoot, file)
 
       let stat
@@ -118,13 +109,14 @@ describe('no yarn dev references', function () {
       const text = buf.toString('utf8')
       const lines = text.split('\n')
       for (let i = 0; i < lines.length; i++) {
-        if (yarnPattern.test(lines[i])) {
+        if (yarnPattern.test(lines[i]) && !isAllowedLine(file, lines[i])) {
           offendingMatches.push(`${file}:${i + 1}: ${lines[i].trim()}`)
         }
       }
     }
 
     assert.deepStrictEqual(offendingMatches, [])
+    assert.strictEqual(isAllowedLine('.github/workflows/platform.yml', '- run: yarn install'), false)
   })
 
   it('enforces frozen installs, release-age cooldowns, and aligned dependency locks', () => {
