@@ -3,6 +3,7 @@
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../../version')
+const { publishWithCompletion } = require('../helpers/channel')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
@@ -240,6 +241,41 @@ function resetSuiteSkippingRunState () {
   writeCoverageBackfillToCache({})
 }
 
+/**
+ * @param {((failures: number) => void) | undefined} callback
+ * @returns {{ onRunDone: (failures: number) => void, onFlushDone: () => void }}
+ */
+function getRunCompletionCallbacks (callback) {
+  let failures
+  let hasRunFinished = false
+  let hasFlushFinished = false
+  let hasCompleted = false
+  const onDone = callback || (() => {})
+
+  const completeIfReady = () => {
+    if (hasCompleted || !hasRunFinished || !hasFlushFinished) return
+
+    hasCompleted = true
+    onDone(failures)
+  }
+
+  return {
+    onRunDone: (runFailures) => {
+      if (hasRunFinished) return
+
+      failures = runFailures
+      hasRunFinished = true
+      completeIfReady()
+    },
+    onFlushDone: () => {
+      if (hasFlushFinished) return
+
+      hasFlushFinished = true
+      completeIfReady()
+    },
+  }
+}
+
 function getOnStartHandler (frameworkVersion) {
   return function () {
     const processArgv = process.argv.slice(2).join(' ')
@@ -251,7 +287,7 @@ function getOnStartHandler (frameworkVersion) {
   }
 }
 
-function getOnEndHandler (isParallel) {
+function getOnEndHandler (isParallel, onDone) {
   return function () {
     let status = 'pass'
     let error
@@ -337,7 +373,7 @@ function getOnEndHandler (isParallel) {
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    testSessionFinishCh.publish({
+    publishWithCompletion(testSessionFinishCh, {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
@@ -350,7 +386,7 @@ function getOnEndHandler (isParallel) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
-    })
+    }, onDone)
 
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
@@ -642,6 +678,9 @@ addHook({
       return run.apply(this, args)
     }
 
+    const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
+    args[0] = onRunDone
+
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
     // Populated during the root 'suite' event so the normal finish path can include them
@@ -753,7 +792,7 @@ addHook({
       finishRootSuiteForFile(test.file)
     }
 
-    const onEnd = getOnEndHandler(false)
+    const onEnd = getOnEndHandler(false, onFlushDone)
 
     this.once('start', getOnStartHandler(frameworkVersion))
 
@@ -1043,8 +1082,11 @@ addHook({
       return run.apply(this, arguments)
     }
 
+    const { onRunDone, onFlushDone } = getRunCompletionCallbacks(cb)
+    arguments[0] = onRunDone
+
     this.once('start', getOnStartHandler(frameworkVersion))
-    this.once('end', getOnEndHandler(true))
+    this.once('end', getOnEndHandler(true, onFlushDone))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
     for (const filePath of files) {
@@ -1084,7 +1126,7 @@ addHook({
         skippedSuites = skippedFiles
         skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
         writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
-        run.apply(this, [cb, { files: filteredFiles }])
+        run.apply(this, [onRunDone, { files: filteredFiles }])
       } else {
         run.apply(this, arguments)
       }
