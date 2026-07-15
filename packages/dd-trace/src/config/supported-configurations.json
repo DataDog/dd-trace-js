@@ -470,6 +470,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
       {
         "implementation": "A",

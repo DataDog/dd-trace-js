@@ -1861,10 +1861,16 @@ function resetSuiteSkippingRunState () {
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   if (!isItrEnabled || !isSuitesSkippingEnabled) return originalTests
 
-  const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
-  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
+  const repositoryRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
+  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, repositoryRoot, rootDir)
   hasFilteredSkippableSuites = true
-  log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
+  log.debug(
+    'Jest discovered %d suites; skipped %d using %d skippable candidates; %d suites will run.',
+    originalTests.length,
+    jestSuitesToRun.skippedSuites.length,
+    skippableSuites.length,
+    jestSuitesToRun.suitesToRun.length
+  )
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
@@ -1877,7 +1883,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
     ? getTestContexts(originalTests)
     : undefined
   coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
-    ? getCoverageBackfillFiles(skippableSuitesCoverage, suitePathRoot, getTestSuitePath)
+    ? getCoverageBackfillFiles(skippableSuitesCoverage, repositoryRoot, getTestSuitePath)
     : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })

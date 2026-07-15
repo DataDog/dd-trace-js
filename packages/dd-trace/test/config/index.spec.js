@@ -3519,6 +3519,7 @@ describe('Config', () => {
   context('ci visibility config', () => {
     let options = {}
     beforeEach(() => {
+      delete process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
@@ -3545,6 +3546,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, false)
+      })
+      it('should enable code coverage report upload by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, true)
+      })
+      it('should disable code coverage report upload from the environment', () => {
+        process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, false)
       })
       it('should activate ITR by default', () => {
         const config = getConfig(options)
