@@ -289,6 +289,51 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       )
     })
 
+    it('does not wait for git readiness when git upload is disabled', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+        require_git: true,
+      })
+
+      const settingsPath = '/api/v2/libraries/tests/services/setting'
+      const skippablePath = '/api/v2/ci/tests/skippable'
+
+      /**
+       * @param {{ url: string }} message
+       */
+      const isReadinessRequest = ({ url }) => url === settingsPath || url === skippablePath
+
+      /**
+       * @param {{ url: string }[]} payloads
+       */
+      const assertReadinessRequests = (payloads) => {
+        assert.strictEqual(payloads.filter(({ url }) => url === settingsPath).length, 2)
+        assert.strictEqual(payloads.filter(({ url }) => url === skippablePath).length, 1)
+      }
+
+      const requestsPromise = receiver.gatherPayloadsMaxTimeout(
+        isReadinessRequest,
+        assertReadinessRequests
+      )
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        requestsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
       receiver.setSuitesToSkip([{
         type: 'suite',
