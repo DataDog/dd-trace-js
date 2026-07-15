@@ -2,6 +2,8 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const NEXT_REQUEST_CONTEXT = Symbol.for('@next/request-context')
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -42,9 +44,55 @@ function isInServerlessEnvironment () {
   return inAWSLambda || isGCPFunction || isAzureFunction
 }
 
+/**
+ * Register an agentless export with Vercel's active Next.js request lifetime.
+ *
+ * @param {import('./opentracing/tracer') | {_tracer: import('./opentracing/tracer')}} tracer Datadog tracer instance.
+ * @returns {boolean} Whether the export was registered with the request context.
+ */
+function scheduleVercelFlush (tracer) {
+  if (getEnvironmentVariable('VERCEL') !== '1') return false
+
+  tracer = tracer?._tracer || tracer
+  if (tracer?._config?.experimental?.exporter !== 'agentless') return false
+  if (typeof tracer._exporter?.flush !== 'function') return false
+
+  let waitUntil
+  try {
+    waitUntil = globalThis[NEXT_REQUEST_CONTEXT]?.get?.()?.waitUntil
+  } catch {
+    return false
+  }
+  if (typeof waitUntil !== 'function') return false
+
+  let resolveFlush
+  const promise = new Promise(resolve => {
+    resolveFlush = resolve
+  })
+
+  try {
+    waitUntil(promise)
+  } catch {
+    resolveFlush()
+    return false
+  }
+
+  setImmediate(flushExporter, tracer._exporter, resolveFlush)
+  return true
+}
+
+function flushExporter (exporter, done) {
+  try {
+    exporter.flush(done)
+  } catch {
+    done()
+  }
+}
+
 module.exports = {
   getIsGCPFunction,
   getIsAzureFunction,
+  scheduleVercelFlush,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
   IS_SERVERLESS: isInServerlessEnvironment(),
