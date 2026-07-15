@@ -12,7 +12,7 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks
-> the vendored version (currently 0.15.0); confirm anything below against the
+> the vendored version (currently 0.16.0); confirm anything below against the
 > package source: `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
 > `#visit`) and `lib/transforms.js`.
 
@@ -23,7 +23,7 @@ declaration, class/object method, named expression, or assignment to a named
 receiver. Do **not** use shimmer just because users reach it through a decorated
 runtime handle; match the source function behind the handle instead.
 
-Inactive-path cost is **not zero** in the vendored 0.15.0 templates. The wrapper
+Inactive-path cost is **not zero** in the vendored 0.16.0 templates. The wrapper
 builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
 operator checks `hasSubscribers`. The check skips channel work and the wrapped
 call's tracing body, not the wrapper's array/object/closure setup. For very hot
@@ -31,11 +31,11 @@ idle methods, inspect the generated transform or microbench the path before
 claiming a perf win.
 
 Reach for shimmer only when no source node can be matched (for example, a method
-constructed entirely at runtime) or when arguments must be changed before
-Orchestrion's `bindStart` / subscribers can run. Mutating `ctx.arguments` from
-`bindStart` is applied before the wrapped function runs; the GraphQL abort
-pattern below depends on that. When shimmer is still necessary, leave a code
-comment naming the reason.
+constructed entirely at runtime), arguments must be changed before Orchestrion's
+`bindStart` / subscribers can run, or the required result replacement is not
+supported below. Mutating `ctx.arguments` from `bindStart` is applied before the
+wrapped function runs; the GraphQL abort pattern below depends on that. When
+shimmer is still necessary, leave a code comment naming the reason.
 
 ## Required Files
 
@@ -139,6 +139,21 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 | `Callback` | `traceCallback` | wraps the arg at `callbackIndex`; publishes `asyncStart`/`asyncEnd`/`error` from the callback |
 | `Auto` | `traceAuto` | runtime branch: if the `callbackIndex` arg is a function → callback path, else promise path |
 
+## Result Mutation
+
+Code-transformer 0.16 lets a subscriber replace the value returned to the
+caller:
+
+- For `kind: 'Sync'`, reassign `ctx.result` in `end`.
+- For a native `Promise` handled by `kind: 'Async'`, reassign `ctx.result` in
+  `asyncEnd` to replace its resolved value.
+
+This covers factories that return a function or object without shimmer. Promise
+subclasses and userland thenables are side-chained and returned unchanged to
+preserve their additional methods, so changing `ctx.result` does not replace
+their resolved value. Use shimmer when those results must be wrapped, or when
+the caller requires the original result object's identity.
+
 `returnKind` is orthogonal to `kind`: it injects iterator-patching into the
 chosen wrapper, patching `next`/`throw`/`return` on the returned iterator and
 publishing to a second `…:next` channel (`Iterator` → sync, `AsyncIterator` →
@@ -203,11 +218,20 @@ span. See the `addTraceSubs()` loop in
 
 ## Custom Transforms
 
-Register a transform the built-ins don't cover via
-`InstrumentationMatcher.addTransform(name, fn)` in
-`packages/datadog-instrumentations/src/helpers/rewriter/transforms.js`, then
-select it from a config with `transform: '<name>'` (it overrides `kind`).
-Signature: `(state, node, parent, ancestry) => void`, mutating the AST in place.
+Define and export a transform the built-ins do not cover from
+`packages/datadog-instrumentations/src/helpers/rewriter/transforms.js`. Import
+it in `rewriter/index.js`, then register it on both matcher instances:
+
+```javascript
+for (const matcher of [matcherCjs, matcherEsm]) {
+  matcher.addTransform('<name>', transform)
+}
+```
+
+The package exports `create()`, not `InstrumentationMatcher`; registration goes
+through the matcher instances returned by `create()`. Select the registered
+name from a config with `transform: '<name>'` (it overrides `kind`). Signature:
+`(state, node, parent, ancestry) => void`, mutating the AST in place.
 
 Configs run in order and share the AST. Established pattern (see
 `waitForAsyncEnd`): built-in wraps first; a later custom transform matches inside
