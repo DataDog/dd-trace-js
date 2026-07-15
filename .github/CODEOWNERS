@@ -4,6 +4,7 @@
 /.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.github/all-green/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -356,6 +357,7 @@
 /.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/dd-trace-js @DataDog/debugger-nodejs
+/docs/bun.lock @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/install-smoke.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/dd-trace-js @DataDog/apm-idm-js
