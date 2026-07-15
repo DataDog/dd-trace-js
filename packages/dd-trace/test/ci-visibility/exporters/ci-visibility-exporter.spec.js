@@ -42,6 +42,29 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('sendGitMetadata', () => {
+    it('should resolve git upload readiness immediately when git upload is disabled', async () => {
+      const clock = sinon.useFakeTimers()
+      const scope = nock(url)
+        .post('/api/v2/git/repository/search_commits')
+        .reply(200)
+        .post('/api/v2/git/repository/packfile')
+        .reply(202)
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: false },
+      })
+      const onGitUploadReady = sinon.spy()
+
+      ciVisibilityExporter._gitUploadPromise.then(onGitUploadReady)
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
+      await Promise.resolve()
+
+      sinon.assert.calledOnceWithExactly(onGitUploadReady, undefined)
+      assert.strictEqual(clock.now, 0)
+      assert.strictEqual(scope.isDone(), false)
+    })
+
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
@@ -286,8 +309,13 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          url, testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
         })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assert.strictEqual(scope.isDone(), true)
