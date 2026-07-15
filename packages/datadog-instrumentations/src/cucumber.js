@@ -2,6 +2,10 @@
 
 const { performance } = require('node:perf_hooks')
 
+// Capture timers before Cucumber test code can install fake timers.
+const realClearTimeout = clearTimeout
+const realSetTimeout = setTimeout
+
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -61,6 +65,7 @@ const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
+const FLUSH_TIMEOUT = 10_000
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -1213,9 +1218,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
+    let flushTimeoutId
     let onDone
     const flushPromise = new Promise(resolve => {
-      onDone = resolve
+      onDone = () => {
+        realClearTimeout(flushTimeoutId)
+        resolve()
+      }
+    })
+    const flushTimeoutPromise = new Promise(resolve => {
+      flushTimeoutId = realSetTimeout(() => resolve('timeout'), FLUSH_TIMEOUT)
+      flushTimeoutId.unref?.()
     })
 
     sessionFinishCh.publish({
@@ -1237,7 +1250,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
-    await flushPromise
+    const flushResult = await Promise.race([flushPromise, flushTimeoutPromise])
+    if (flushResult === 'timeout') {
+      log.error('Timeout waiting for the tracer to flush')
+    }
     return result
   }
 }
