@@ -4668,6 +4668,68 @@ rules:
     })
   })
 
+  describe('setRemoteConfigFromSdkConfig', () => {
+    it('should resolve env-var-keyed configs via configurationsTable', () => {
+      const config = getConfig()
+      assert.strictEqual(config.sampleRate, undefined)
+      config.setRemoteConfigFromSdkConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should resolve a boolean env-var-keyed config', () => {
+      const config = getConfig({ tracing: true })
+      assert.strictEqual(config.DD_TRACE_ENABLED, true)
+      config.setRemoteConfigFromSdkConfig({ DD_TRACE_ENABLED: 'false' })
+      assert.strictEqual(config.DD_TRACE_ENABLED, false)
+    })
+
+    it('should resolve a structured (JSON) env-var-keyed config', () => {
+      const config = getConfig()
+      assert.deepStrictEqual(config.sampler.rules, [])
+      config.setRemoteConfigFromSdkConfig({ DD_TRACE_SAMPLING_RULES: '[{"sample_rate":0.5}]' })
+      assert.deepStrictEqual(config.samplingRules, [{ sampleRate: 0.5 }])
+      assert.deepStrictEqual(config.sampler.rules, [{ sampleRate: 0.5 }])
+    })
+
+    it('should silently ignore keys this tracer version does not recognize', () => {
+      const config = getConfig()
+      assert.strictEqual(config.sampleRate, undefined)
+      assert.doesNotThrow(() => {
+        config.setRemoteConfigFromSdkConfig({
+          DD_TRACE_SAMPLE_RATE: '0.5',
+          DD_SOME_FUTURE_UNRECOGNIZED_SETTING: 'value',
+        })
+      })
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('should clear RC fields when called with null', () => {
+      const config = getConfig({ logInjection: true, sampleRate: 0.5 })
+
+      assertObjectContains(config, {
+        DD_TRACE_ENABLED: true,
+        logInjection: true,
+        sampleRate: 0.5,
+      })
+
+      config.setRemoteConfigFromSdkConfig({ DD_TRACE_ENABLED: 'false' })
+
+      assertObjectContains(config, {
+        DD_TRACE_ENABLED: false,
+        logInjection: true,
+        sampleRate: 0.5,
+      })
+
+      config.setRemoteConfigFromSdkConfig(null)
+
+      assertObjectContains(config, {
+        DD_TRACE_ENABLED: true,
+        logInjection: true,
+        sampleRate: 0.5,
+      })
+    })
+  })
+
   describe('remote config application', () => {
     it('should clear RC fields when setRemoteConfigFromLibConfig is called with null', () => {
       const config = getConfig({ logInjection: true, sampleRate: 0.5 })
