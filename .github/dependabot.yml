@@ -66,11 +66,12 @@ updates:
   # Dependabot bumps deps in package.json; the electron variant is always regenerated
   # fresh on the next npm install / npm pack.
 
-  # Root and docs packages installed by Bun
+  # Root, docs, and All Green packages installed by Bun
   - package-ecosystem: "bun"
     directories:
       - "/"
       - "/docs"
+      - "/.github/all-green"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
