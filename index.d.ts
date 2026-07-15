@@ -3779,9 +3779,17 @@ declare namespace tracer {
       url: string
     }
 
+    interface DatasetPushResult {
+      /** Number of records from this push that were confirmed with a record id. */
+      pushedCount: number
+      /** Number of records attempted in this push. */
+      totalCount: number
+    }
+
     interface Dataset {
       addRecord (input: any, expectedOutput?: any, metadata?: Record<string, any>): Dataset
-      push (): Promise<void>
+      /** Creates the dataset remotely if needed and pushes any unpushed records. */
+      push (): Promise<DatasetPushResult>
       name (): string
       id (): string | null
       projectId (): string | null

@@ -83,11 +83,12 @@ class Dataset {
   // Eagerly create the dataset (if needed) and push any unpushed records.
   async push () {
     const projectId = await this.#client.ensureProjectId()
-    await this.ensureCreatedAndPushed(projectId)
+    return this.ensureCreatedAndPushed(projectId)
   }
 
   // Create the remote dataset if needed, then push records added since the last
-  // push. Idempotent and incremental.
+  // push. Idempotent and incremental. Resolves to { pushedCount, totalCount } for
+  // the records attempted in this call, so callers can confirm the push landed.
   async ensureCreatedAndPushed (projectId) {
     if (this.#id === null) {
       let response
@@ -102,7 +103,7 @@ class Dataset {
       this.#projectId = projectId
     }
 
-    if (this.#pushedCount >= this.#records.length) return
+    if (this.#pushedCount >= this.#records.length) return { pushedCount: 0, totalCount: 0 }
 
     const pending = this.#records.slice(this.#pushedCount)
     const records = pending.map((rec) => {
@@ -128,16 +129,26 @@ class Dataset {
       throw new Error(`Failed to push records to dataset '${this.#name}': ${err.message}`)
     }
 
-    const data = response?.data
-    if (Array.isArray(data)) {
-      for (const node of data) {
-        this.#recordIds.push(String(node?.id ?? ''))
+    // The append-records response returns created records under a top-level
+    // `records` field, not the usual `data` envelope.
+    const created = response?.records
+    let pushedCount = 0
+    if (Array.isArray(created)) {
+      for (const node of created) {
+        const recordId = String(node?.id ?? '')
+        if (recordId !== '') pushedCount++
+        this.#recordIds.push(recordId)
       }
+      for (let i = created.length; i < pending.length; i++) this.#recordIds.push('')
     } else {
       for (let i = 0; i < pending.length; i++) this.#recordIds.push('')
     }
 
-    this.#pushedCount = this.#records.length
+    // Advance by the snapshotted pending count, not the live records length,
+    // so records added while this push was in flight aren't skipped by the next push.
+    this.#pushedCount += pending.length
+
+    return { pushedCount, totalCount: pending.length }
   }
 }
 

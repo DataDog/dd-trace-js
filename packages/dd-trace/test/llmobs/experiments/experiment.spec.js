@@ -13,7 +13,7 @@ function installFetch (calls, overrides = {}) {
   const route = (method, path, body) => {
     if (method === 'POST' && path === '/api/v2/llm-obs/v1/projects') return { data: { id: 'proj' } }
     if (method === 'POST' && path.endsWith('/proj/datasets/ds/records')) {
-      return { data: body.data.attributes.records.map((_, i) => ({ id: `rec-${i}` })) }
+      return { records: body.data.attributes.records.map((_, i) => ({ id: `rec-${i}` })) }
     }
     if (method === 'POST' && path.endsWith('/proj/datasets')) return { data: { id: 'ds' } }
     if (method === 'POST' && path.endsWith('/experiments/exp/events')) return {}
@@ -102,6 +102,45 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(recordPosts.length, 2)
     assert.equal(recordPosts[0].body.data.type, 'datasets')
     assert.deepEqual(recordPosts[1].body.data.attributes.records.map(r => r.input), ['b'])
+  })
+
+  it('does not drop records added while a push is in flight', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('a')
+
+    let resolveRecordsFetch
+    const routingFetch = global.fetch
+    global.fetch = sinon.stub().callsFake((url, opts) => {
+      const u = new URL(url)
+      if (opts.method === 'POST' && u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds/records') {
+        return new Promise((resolve) => {
+          resolveRecordsFetch = () => resolve({
+            ok: true,
+            status: 200,
+            text: sinon.stub().resolves(JSON.stringify({ records: [{ id: 'rec-0' }] })),
+          })
+        })
+      }
+      return routingFetch(url, opts)
+    })
+
+    const pushPromise = dataset.push()
+    // Let push() get past dataset creation and snapshot pending records, up to the
+    // in-flight records POST, before adding a second record.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    dataset.addRecord('b')
+    resolveRecordsFetch()
+    await pushPromise
+
+    global.fetch = routingFetch
+    await dataset.push()
+
+    // Only the second push's records POST goes through the instrumented `calls` route
+    // (the first push's records POST was intercepted above to control its timing).
+    const recordPosts = calls.filter(c => c.method === 'POST' && c.path.endsWith('/proj/datasets/ds/records'))
+    assert.equal(recordPosts.length, 1, 'expected a second push to send the record dropped by the race')
+    assert.deepEqual(recordPosts[0].body.data.attributes.records.map((r) => r.input), ['b'])
+    assert.deepEqual(dataset.records().map((r) => r.input), ['a', 'b'])
+    assert.equal(dataset.recordIds().length, 2)
   })
 
   it('posts events with type "experiments" (W2), one span per row, auto tags and raw metadata', async () => {
@@ -238,8 +277,32 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   it('pads record ids when the push response is not an array', async () => {
     installFetch(calls, { 'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': { data: { ok: true } } })
     const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
-    await dataset.push()
+    const result = await dataset.push()
     assert.deepEqual(dataset.recordIds(), ['', ''])
+    assert.deepEqual(result, { pushedCount: 0, totalCount: 2 })
+  })
+
+  it('resolves with the pushed/total record counts on a successful push', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
+    const result = await dataset.push()
+    assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
+  })
+
+  it('resolves with a lower pushedCount when the backend confirms fewer records than sent', async () => {
+    installFetch(calls, {
+      'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': { records: [{ id: 'rec-0' }] },
+    })
+    const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
+    const result = await dataset.push()
+    assert.deepEqual(result, { pushedCount: 1, totalCount: 2 })
+    assert.deepEqual(dataset.recordIds(), ['rec-0', ''])
+  })
+
+  it('resolves with zero counts when there is nothing new to push', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('a')
+    await dataset.push()
+    const result = await dataset.push()
+    assert.deepEqual(result, { pushedCount: 0, totalCount: 0 })
   })
 
   it('throws a clear error when dataset creation fails', async () => {
