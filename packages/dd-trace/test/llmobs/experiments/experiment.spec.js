@@ -148,7 +148,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(byLabel('c').categorical_value, 'label')
   })
 
-  it('captures a task error per row without aborting the run, and still completes', async () => {
+  it('captures a task error per row without aborting the run, but marks the experiment failed', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('good').addRecord('bad').addRecord('good2')
     const result = await new Experiment(client, {
       name: 'exp-demo',
@@ -161,10 +161,12 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(result.rows[1].isError, true)
     assert.equal(result.rows[1].errorMessage, 'boom')
     assert.equal(eventsBody().data.attributes.spans[1].status, 'error')
-    assert.ok(calls.some(c => c.method === 'PATCH' && c.body.data.attributes.status === 'completed'))
+    const patch = calls.find(c => c.method === 'PATCH')
+    assert.equal(patch.body.data.attributes.status, 'failed')
+    assert.equal(patch.body.data.attributes.error, 'one or more rows failed')
   })
 
-  it('captures an evaluator error per evaluation without aborting', async () => {
+  it('captures an evaluator error per evaluation without aborting, and marks the experiment failed', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('x')
     const result = await new Experiment(client, {
       name: 'exp-demo',
@@ -180,6 +182,22 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(result.rows[0].evaluations.fine, true)
     const errored = eventsBody().data.attributes.metrics.find(m => m.label === 'explodes')
     assert.equal(errored.error.message, 'eval-fail')
+    const patch = calls.find(c => c.method === 'PATCH')
+    assert.equal(patch.body.data.attributes.status, 'failed')
+  })
+
+  it('marks the experiment completed when every row succeeds', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: (i) => i,
+      evaluators: { fine: () => true },
+    }).run()
+
+    const patch = calls.find(c => c.method === 'PATCH')
+    assert.equal(patch.body.data.attributes.status, 'completed')
+    assert.equal(patch.body.data.attributes.error, undefined)
   })
 
   it('experiment create body carries project_id, dataset_id, config and ensure_unique', async () => {

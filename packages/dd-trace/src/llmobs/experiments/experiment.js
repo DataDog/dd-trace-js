@@ -164,6 +164,7 @@ class Experiment {
       const rows = []
       const spans = []
       const metrics = []
+      let hasRowError = false
 
       for (let i = 0; i < records.length; i++) {
         const record = records[i]
@@ -230,6 +231,7 @@ class Experiment {
           evaluationErrors,
         })
         rows.push(row)
+        if (row.isError || Object.keys(evaluationErrors).length > 0) hasRowError = true
         spans.push(toSpan(row, record.metadata, {
           experimentId,
           projectId,
@@ -239,7 +241,13 @@ class Experiment {
       }
 
       await this.#postEvents(experimentId, spans, metrics)
-      await this.#updateStatus(experimentId, 'completed', null)
+      // A row's task/evaluator error is isolated (doesn't abort the run), but it
+      // still means the experiment overall did not succeed cleanly.
+      await this.#updateStatus(
+        experimentId,
+        hasRowError ? 'failed' : 'completed',
+        hasRowError ? 'one or more rows failed' : null
+      )
 
       return new ExperimentResult(experimentId, rows, this.url())
     } catch (err) {
