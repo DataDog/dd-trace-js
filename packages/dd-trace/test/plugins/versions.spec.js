@@ -10,6 +10,7 @@ const { getInstrumentation } = require('../setup/helpers/load-inst')
 const externals = require('./externals')
 const {
   brokenVersionReason,
+  getCappedRange,
   getVersionList,
   resolvePluginVersions,
 } = require('./versions')
@@ -20,6 +21,17 @@ const keys = (name, versions, nonConsecutive) =>
   getVersionList(name, versions, nonConsecutive).map(({ versionKey }) => versionKey)
 
 const latestMajorKey = name => String(major(coerce(latests[name])))
+
+describe('getCappedRange', () => {
+  it('keeps latest requests flexible below the pinned ceiling', () => {
+    assert.equal(getCappedRange('mongodb', 'latest'), `<=${latests.mongodb}`)
+    assert.equal(getCappedRange('mongodb', ''), `<=${latests.mongodb}`)
+  })
+
+  it('keeps exact requests pinned so the release-age gate can reject them', () => {
+    assert.equal(getCappedRange('mongodb', '1.2.3'), '1.2.3')
+  })
+})
 
 describe('getVersionList', () => {
   it('collapses the wildcard to the latest major', () => {
