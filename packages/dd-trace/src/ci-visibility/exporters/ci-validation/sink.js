@@ -148,6 +148,15 @@ class CiValidationSink {
   }
 
   /**
+   * Records an exporter failure in the bounded validation summary.
+   *
+   * @param {string} code stable failure code
+   */
+  recordError (code) {
+    this.#fail(code)
+  }
+
+  /**
    * Emits this process's single bounded stderr summary for validator aggregation.
    */
   writeSummary () {

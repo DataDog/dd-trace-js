@@ -245,7 +245,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(approvalSummary, /Files removed after validation/)
       assert.match(approvalSummary, /--approved-plan-sha256 [a-f0-9]{64}/)
       if (process.platform === 'win32') {
-        assert.match(approvalSummary, /certutil -hashfile .*approval\.json SHA256/)
+        assert.match(approvalSummary, /certutil -hashfile .*approval\.json"? SHA256/)
         assert.doesNotMatch(approvalSummary, /shasum -a 256 -c/)
       } else {
         assert.match(approvalSummary, /shasum -a 256 .*approval\.json/)
@@ -490,6 +490,17 @@ describe('test optimization validator-owned execution phases', () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('does not fall back to the host PATH when the command PATH is empty', () => {
+    const command = {
+      cwd: process.cwd(),
+      argv: [path.basename(process.execPath)],
+      env: { PATH: '' },
+    }
+
+    assert.strictEqual(getUnavailableExecutable(command), path.basename(process.execPath))
+    assert.strictEqual(getResolvedExecutable(command), undefined)
   })
 
   it('detects an executable replaced after approval before it can be spawned', async function () {
@@ -892,6 +903,37 @@ describe('test optimization validator-owned execution phases', () => {
       }
     })
   }
+
+  it('prints the Vitest preload supported by the command Node.js version', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-node-version-plan-'))
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'dd-test-optimization-validation.test.ts'),
+      path.join(root, '.dd-validation-state')
+    )
+    const nodeVersionDescriptor = Object.getOwnPropertyDescriptor(process.versions, 'node')
+    framework.framework = 'vitest'
+
+    try {
+      Object.defineProperty(process.versions, 'node', { value: '18.17.0', configurable: true })
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+      const summary = fs.readFileSync(path.join(root, 'results', 'approval-summary.md'), 'utf8')
+
+      assert.match(summary, /NODE_OPTIONS="-r dd-trace\/ci\/init"/)
+      assert.doesNotMatch(summary, /--import dd-trace\/register\.js/)
+    } finally {
+      Object.defineProperty(process.versions, 'node', nodeVersionDescriptor)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 
   it('rejects an unknown absolute Node shim for direct Vitest validation', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-node-shim-'))

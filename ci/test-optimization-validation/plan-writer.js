@@ -8,7 +8,7 @@ const { getArtifactId } = require('./artifact-id')
 const { writeApprovalArtifacts } = require('./approval-artifacts')
 const { getCommandOutputPaths } = require('./command-output-policy')
 const { getCommandSuitabilityError } = require('./command-suitability')
-const { serializeApprovalCommand } = require('./command-runner')
+const { serializeApprovalCommand, supportsImportPreload } = require('./command-runner')
 const {
   getApprovedExecutable,
   getUnavailableExecutable,
@@ -340,7 +340,7 @@ function formatApprovalSummary ({
  */
 function appendApprovalSummaryFramework (lines, framework, requestedScenario, repositoryRoot) {
   const basicCommand = getBasicReportingCommand(framework)
-  const directInitialization = getDirectInitialization(framework)
+  const directInitialization = getDirectInitialization(framework, basicCommand)
   lines.push(`### ${plainText(formatFrameworkLabel(framework, repositoryRoot))}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
@@ -646,7 +646,7 @@ function appendFrameworkExecutions (
 ) {
   const basicCommand = getBasicReportingCommand(framework)
   const frameworkLabel = formatFrameworkLabel(framework, repositoryRoot)
-  const directInitialization = getDirectInitialization(framework)
+  const directInitialization = getDirectInitialization(framework, basicCommand)
   lines.push(`### ${plainText(frameworkLabel)}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
@@ -991,10 +991,11 @@ function isPathInside (parent, child) {
  * Returns the customer-facing Datadog preload required by one framework.
  *
  * @param {object} framework manifest framework entry
+ * @param {object} command test command
  * @returns {string} NODE_OPTIONS value
  */
-function getDirectInitialization (framework) {
-  return framework.framework === 'vitest'
+function getDirectInitialization (framework, command) {
+  return framework.framework === 'vitest' && supportsImportPreload(command)
     ? '--import dd-trace/register.js -r dd-trace/ci/init'
     : '-r dd-trace/ci/init'
 }

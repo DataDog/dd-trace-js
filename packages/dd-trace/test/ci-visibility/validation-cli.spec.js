@@ -591,6 +591,44 @@ describe('test optimization validation cli', () => {
     ])
   })
 
+  it('does not run implicit CI wiring when no replayable command was selected', async () => {
+    const validation = await runCliFixture({
+      './scenarios/ci-wiring': {
+        async runCiWiring () {
+          throw new Error('CI wiring should not run without a replayable command')
+        },
+      },
+      './scenarios/early-flake-detection': {
+        async runEarlyFlakeDetection ({ framework }) {
+          return getPassingScenarioResult(framework, 'efd')
+        },
+      },
+      './scenarios/auto-test-retries': {
+        async runAutoTestRetries ({ framework }) {
+          return getPassingScenarioResult(framework, 'atr')
+        },
+      },
+      './scenarios/test-management': {
+        async runTestManagement ({ framework }) {
+          return getPassingScenarioResult(framework, 'test-management')
+        },
+      },
+    }, manifest => {
+      manifest.frameworks[0].ciWiring = {
+        status: 'unknown',
+        reason: 'No replayable CI command was identified.',
+      }
+    })
+
+    assert.strictEqual(validation.exitCode, 0)
+    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
+      'basic-reporting:pass',
+      'efd:pass',
+      'atr:pass',
+      'test-management:pass',
+    ])
+  })
+
   it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
     const validation = await runCliFixture({}, manifest => {
       manifest.frameworks[0].ciWiring = {
@@ -831,6 +869,17 @@ function setReplayableCiWiring (framework, root) {
   framework.ciWiringCommand = {
     cwd: root,
     argv: [process.execPath, '-e', 'console.log("1 passing")'],
+  }
+}
+
+function getPassingScenarioResult (framework, scenario) {
+  return {
+    frameworkId: framework.id,
+    scenario,
+    status: 'pass',
+    diagnosis: `${scenario} passed.`,
+    evidence: {},
+    artifacts: [],
   }
 }
 

@@ -32,7 +32,17 @@ class CiValidationWriter {
    */
   flush (done = () => {}) {
     if (this._encoder.count() > 0) {
-      this._sink.writeTestCycle(this._encoder.makePayload())
+      let payload
+      try {
+        payload = this._encoder.makePayload()
+      } catch (error) {
+        if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+        this._encoder.reset()
+        this._sink.recordError('output_payload_too_large')
+        done()
+        return
+      }
+      this._sink.writeTestCycle(payload)
     }
     done()
   }

@@ -255,8 +255,8 @@ function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, proj
 }
 
 function getGeneratedModuleSystem (framework, fileExtension, packageType) {
-  if (framework === 'vitest' || /\.(?:mjs|mts)$/.test(fileExtension)) return 'module'
   if (/\.(?:cjs|cts)$/.test(fileExtension)) return 'commonjs'
+  if (framework === 'vitest' || /\.(?:mjs|mts)$/.test(fileExtension)) return 'module'
   return packageType === 'module' ? 'module' : 'commonjs'
 }
 

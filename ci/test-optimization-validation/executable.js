@@ -47,7 +47,7 @@ function resolveExecutable (executable, command) {
     return isExecutable(path.resolve(command.cwd, executable))
   }
 
-  const environmentPath = command.env?.PATH || process.env.PATH || ''
+  const environmentPath = getEnvironmentPath(command)
   const extensions = getExecutableExtensions()
 
   for (const directory of environmentPath.split(path.delimiter)) {
@@ -76,7 +76,7 @@ function getResolvedExecutable (command) {
     return isExecutable(filename) ? filename : undefined
   }
 
-  const environmentPath = command.env?.PATH || process.env.PATH || ''
+  const environmentPath = getEnvironmentPath(command)
   const extensions = getExecutableExtensions()
 
   for (const directory of environmentPath.split(path.delimiter)) {
@@ -87,6 +87,17 @@ function getResolvedExecutable (command) {
       if (isExecutable(filename)) return filename
     }
   }
+}
+
+/**
+ * Returns the PATH used by a command, preserving an explicitly empty value.
+ *
+ * @param {object} command manifest command
+ * @returns {string} command PATH
+ */
+function getEnvironmentPath (command) {
+  if (Object.hasOwn(command.env || {}, 'PATH')) return command.env.PATH || ''
+  return process.env.PATH || ''
 }
 
 /**

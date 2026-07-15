@@ -391,12 +391,11 @@ function validateOutputPath (manifest, outputPath) {
 }
 
 function shouldRunCiWiringValidation (framework, manifest, options) {
-  return hasCiWiringValidation(framework, manifest) || options.requestedScenario === CI_WIRING_SCENARIO
+  return options.requestedScenario === CI_WIRING_SCENARIO || hasCiWiringValidation(framework, manifest)
 }
 
 function hasCiWiringValidation (framework, manifest) {
-  return framework.ciWiringCommand || framework.ciWiring ||
-    Boolean(getFrameworkCiDiscoveryContradiction(framework, manifest))
+  return Boolean(framework.ciWiringCommand || getFrameworkCiDiscoveryContradiction(framework, manifest))
 }
 
 function filterFrameworks (frameworks, targets) {

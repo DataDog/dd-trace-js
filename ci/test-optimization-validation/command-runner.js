@@ -858,6 +858,7 @@ module.exports = {
   serializeApprovalCommand,
   serializeCommand,
   serializeDisplayCommand,
+  supportsImportPreload,
   withCiPreloads,
   mergeNodeOptions,
 }

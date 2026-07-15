@@ -232,6 +232,22 @@ describe('test optimization validation manifest scaffold', () => {
       testFilename: 'unit.test.cjs',
       expectedModuleSystem: 'commonjs',
     },
+    {
+      framework: 'vitest',
+      version: '2.1.9',
+      command: 'vitest run',
+      packageType: 'module',
+      testFilename: 'unit.test.cjs',
+      expectedModuleSystem: 'commonjs',
+    },
+    {
+      framework: 'vitest',
+      version: '2.1.9',
+      command: 'vitest run',
+      packageType: 'module',
+      testFilename: 'unit.test.cts',
+      expectedModuleSystem: 'commonjs',
+    },
   ]) {
     it(`creates ${definition.expectedModuleSystem} scenarios for ${definition.framework} ` +
       `from ${definition.testFilename}`, () => {

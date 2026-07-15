@@ -178,6 +178,27 @@ describe('CI validation offline output', () => {
     assert.deepStrictEqual(summary.errors, ['output_payload_decode_failed'])
   })
 
+  it('fails closed without throwing when an encoded test payload exceeds the MessagePack limit', () => {
+    const sink = new CiValidationSink(outputRoot)
+    const writer = new CiValidationWriter({ sink, tags: {} })
+    const error = new RangeError('MessagePack chunk overflow')
+    error.code = 'ERR_MSGPACK_CHUNK_OVERFLOW'
+    sinon.stub(writer._encoder, 'count').returns(1)
+    sinon.stub(writer._encoder, 'makePayload').throws(error)
+    const reset = sinon.spy(writer._encoder, 'reset')
+    let flushed = false
+
+    writer.flush(() => { flushed = true })
+    sink.writeSummary()
+
+    assert.strictEqual(flushed, true)
+    assert.strictEqual(reset.calledOnce, true)
+    assert.strictEqual(getPayloadFiles(outputRoot, 'tests').length, 0)
+    assert.strictEqual(process.exitCode, 1)
+    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
+    assert.deepStrictEqual(summary.errors, ['output_payload_too_large'])
+  })
+
   it('distinguishes an unsupported decoded payload from a MessagePack decode failure', () => {
     const sink = new CiValidationSink(outputRoot)
     sink.writeTestCycle(Buffer.from(msgpack.encode({
