@@ -8,12 +8,23 @@ const WRAP_QUERY = `${CREATE_BOUND_QUERY} ` +
   'VariableDeclarator[id.name="ret"] > ObjectExpression > Property > FunctionExpression'
 
 /**
+ * @typedef {{
+ *   module: { name: string, versionRange: string, filePath: string },
+ *   astQuery: string,
+ *   functionQuery?: { kind: 'Sync' },
+ *   transform?: string,
+ *   channelName: string
+ * }} GraphqlJitInstrumentation
+ */
+
+/**
+ * @param {GraphqlJitInstrumentation[]} instrumentations
  * @param {string} versionRange
  * @param {string} filePath
  */
-function getInstrumentations (versionRange, filePath) {
+function addInstrumentations (instrumentations, versionRange, filePath) {
   const moduleDefinition = { name: 'graphql-jit', versionRange, filePath }
-  return [
+  instrumentations.push(
     {
       module: moduleDefinition,
       astQuery: WRAP_QUERY,
@@ -31,13 +42,15 @@ function getInstrumentations (versionRange, filePath) {
       astQuery: CREATE_BOUND_QUERY,
       functionQuery: { kind: 'Sync' },
       channelName: 'apm:graphql:compile',
-    },
-  ]
+    }
+  )
 }
 
-module.exports = [
-  ...getInstrumentations('>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/execution.js'),
-  ...getInstrumentations('>=0.8.5 <0.8.7', 'dist/cjs/execution.js'),
-  ...getInstrumentations('>=0.8.5 <0.8.7', 'dist/esm/execution.js'),
-  ...getInstrumentations('>=0.8.7 <0.9.0', 'dist/execution.mjs'),
-]
+/** @type {GraphqlJitInstrumentation[]} */
+const instrumentations = []
+addInstrumentations(instrumentations, '>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/execution.js')
+addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/cjs/execution.js')
+addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/esm/execution.js')
+addInstrumentations(instrumentations, '>=0.8.7 <0.9.0', 'dist/execution.mjs')
+
+module.exports = instrumentations
