@@ -14,7 +14,10 @@ const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
  * Sends traces directly to the Datadog intake endpoint without an agent.
  */
 class AgentlessWriter extends BaseWriter {
+  #activeRequests = new Set()
   #apiKeyMissing = false
+  #flushWaiters = new Set()
+  #lastRequestId = 0
   #urlMissing = false
 
   /**
@@ -64,14 +67,14 @@ class AgentlessWriter extends BaseWriter {
         log.error('Maximum number of active requests reached. Dropping %d trace(s).', count)
       }
       this._encoder.reset()
-      done()
+      this.#callWhenRequestsComplete(done)
       return
     }
 
     const count = this._encoder.count()
 
     if (count === 0) {
-      done()
+      this.#callWhenRequestsComplete(done)
       return
     }
 
@@ -79,23 +82,22 @@ class AgentlessWriter extends BaseWriter {
 
     if (payload.length === 0) {
       log.debug('Skipping send of empty payload')
-      done()
+      this.#callWhenRequestsComplete(done)
       return
     }
 
-    this._sendPayload(payload, count, done)
+    this._sendPayload(payload, count)
+    this.#callWhenRequestsComplete(done)
   }
 
   /**
    * Sends the encoded payload to the intake endpoint.
    * @param {Buffer} data - The encoded JSON payload
    * @param {number} count - Number of traces in the payload
-   * @param {Function} done - Callback when complete
    */
-  _sendPayload (data, count, done) {
+  _sendPayload (data, count) {
     if (!data || data.length === 0) {
       log.debug('Skipping send of empty payload')
-      done()
       return
     }
 
@@ -105,7 +107,6 @@ class AgentlessWriter extends BaseWriter {
         log.error('No valid URL configured for agentless trace intake. Traces will not be sent.')
       }
       log.debug('Dropping %d trace(s) due to missing URL', count)
-      done()
       return
     }
 
@@ -116,7 +117,6 @@ class AgentlessWriter extends BaseWriter {
         log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
       }
       log.debug('Dropping %d trace(s) due to missing DD_API_KEY', count)
-      done()
       return
     }
     this.#apiKeyMissing = false
@@ -139,16 +139,66 @@ class AgentlessWriter extends BaseWriter {
 
     log.debug('Request to the agentless intake: %j', options)
 
-    request(data, options, (err, res, statusCode) => {
-      if (err) {
-        this.#logRequestError(err, statusCode, count)
-        done()
-        return
-      }
+    const activeRequest = ++this.#lastRequestId
+    this.#activeRequests.add(activeRequest)
 
-      log.debug('Response from the agentless intake: %s', res)
+    try {
+      request(data, options, (err, res, statusCode) => {
+        if (err) {
+          this.#logRequestError(err, statusCode, count)
+        } else {
+          log.debug('Response from the agentless intake: %s', res)
+        }
+
+        this.#finishRequest(activeRequest)
+      })
+    } catch (err) {
+      this.#finishRequest(activeRequest)
+      throw err
+    }
+  }
+
+  /**
+   * Waits for the intake requests that were active when this method was called.
+   * Requests started by later flushes do not delay this callback.
+   * @param {Function} done - Callback when the current requests have completed
+   */
+  #callWhenRequestsComplete (done) {
+    if (this.#activeRequests.size === 0) {
       done()
-    })
+      return
+    }
+
+    this.#flushWaiters.add({ done, lastRequestId: this.#lastRequestId })
+  }
+
+  /**
+   * Completes waiters whose request snapshot no longer contains an active request.
+   * @param {number} activeRequest - Identifier of the completed request
+   */
+  #finishRequest (activeRequest) {
+    if (!this.#activeRequests.delete(activeRequest)) return
+
+    // Request IDs increase with Set insertion order, so the first value is the oldest active request.
+    const oldestActiveRequest = this.#activeRequests.values().next().value
+    const callbacks = []
+    for (const waiter of this.#flushWaiters) {
+      if (oldestActiveRequest === undefined || oldestActiveRequest > waiter.lastRequestId) {
+        this.#flushWaiters.delete(waiter)
+        callbacks.push(waiter.done)
+      }
+    }
+
+    let callbackError
+    for (const callback of callbacks) {
+      try {
+        callback()
+      } catch (err) {
+        callbackError ??= err
+      }
+    }
+
+    if (callbackError) throw callbackError
   }
 
   /**
