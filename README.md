@@ -97,7 +97,7 @@ When using the experimental OpenFeature provider, file-traced deployments can fo
 its dependencies into the output with a side-effect import before accessing `tracer.openfeature`:
 
 ```js
-import 'dd-trace/openfeature'
+import 'dd-trace/openfeature.js'
 ```
 
 This is a fallback for build tools that do not recognize the provider's optional-require wrapper.
