@@ -60,18 +60,9 @@ const {
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
 
-/**
- * @template Value
- * @param {Value} value
- * @returns {Value}
- */
-function identity (value) {
-  return value
-}
-
 describe('source mapped test locations', () => {
   afterEach(() => {
-    sourceMapRemapping.errorStack = identity
+    sourceMapRemapping.configure('off')
   })
 
   it('uses an original source location as the test start line', () => {

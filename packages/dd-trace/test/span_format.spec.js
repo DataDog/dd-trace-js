@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
-const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -37,15 +36,6 @@ const spanId2 = id('0254567812345678')
 const spanId3 = id('0264567812345678')
 
 /**
- * @template Value
- * @param {Value} value
- * @returns {Value}
- */
-function identity (value) {
-  return value
-}
-
-/**
  * @param {unknown} stack
  * @returns {string}
  */
@@ -63,8 +53,7 @@ describe('spanFormat', () => {
   let TraceState
 
   beforeEach(() => {
-    sourceMapRemapping.errorStack = identity
-    sourceMapRemapping.location = identity
+    sourceMapRemapping.configure('off')
     TraceState = require('../src/opentracing/propagation/tracestate')
     spanContext = {
       _traceId: spanId,
@@ -116,9 +105,7 @@ describe('spanFormat', () => {
       toSpanId: sinon.stub().returns(spanId3.toString(16)),
     }
 
-    spanFormat = proxyquire.noPreserveCache()('../src/span_format', {
-      './source-maps/remap': sourceMapRemapping,
-    })
+    spanFormat = require('../src/span_format')
   })
 
   describe('spanFormat', () => {

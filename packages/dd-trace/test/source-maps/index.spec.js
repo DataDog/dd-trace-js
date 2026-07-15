@@ -19,6 +19,7 @@ const sourceMapsPath = require.resolve('../../src/source-maps')
 /** @typedef {(error: Error, callSites: NodeJS.CallSite[]) => unknown} PrepareStackTrace */
 /**
  * @typedef {{
+ *   findSourceMap?: (fileName: string) => object | undefined,
  *   getSourceMapsSupport?: () => { enabled: boolean, generatedCode: boolean, nodeModules: boolean },
  *   setSourceMapsSupport?: (
  *     enabled: boolean,
@@ -40,7 +41,7 @@ let temporaryDirectory
 
 /**
  * @param {string} name
- * @param {'inline' | 'external'} mapKind
+ * @param {'inline' | 'external' | 'throwing'} mapKind
  * @param {string} [sourceName]
  * @param {boolean} [mapNames]
  * @param {string} [sourceURL]
@@ -56,31 +57,26 @@ function writeTranspiledCommonJS (
   sourceRoot
 ) {
   const generator = new SourceMapGenerator({ file: `${name}.js`, sourceRoot })
-  const lines = [
-    '"use strict";',
-    'Object.defineProperty(exports, "__esModule", { value: true });',
-    `function ${name}Inner () { throw new Error("boom"); }`,
-    `function ${name}Outer () { return ${name}Inner(); }`,
-    `exports.run = function run () { return ${name}Outer(); };`,
-  ]
-  generator.addMapping({
-    generated: { line: 3, column: 0 },
-    name: mapNames ? `${name}OriginalInner` : undefined,
-    original: { line: 1, column: 0 },
-    source: sourceName,
-  })
-  generator.addMapping({
-    generated: { line: 4, column: 0 },
-    name: mapNames ? `${name}OriginalOuter` : undefined,
-    original: { line: 2, column: 0 },
-    source: sourceName,
-  })
-  generator.addMapping({
-    generated: { line: 5, column: 0 },
-    name: mapNames ? 'run' : undefined,
-    original: { line: 3, column: 0 },
-    source: sourceName,
-  })
+  const throwsOnLoad = mapKind === 'throwing'
+  const lines = throwsOnLoad
+    ? ['throw new Error("boom")']
+    : [
+        '"use strict";',
+        'Object.defineProperty(exports, "__esModule", { value: true });',
+        `function ${name}Inner () { throw new Error("boom"); }`,
+        `function ${name}Outer () { return ${name}Inner(); }`,
+        `exports.run = function run () { return ${name}Outer(); };`,
+      ]
+  const originalNames = [`${name}OriginalInner`, `${name}OriginalOuter`, 'run']
+  const mappingCount = throwsOnLoad ? 1 : 3
+  for (let i = 0; i < mappingCount; i++) {
+    generator.addMapping({
+      generated: { line: throwsOnLoad ? 1 : i + 3, column: 0 },
+      name: mapNames ? originalNames[i] : undefined,
+      original: { line: i + 1, column: 0 },
+      source: sourceName,
+    })
+  }
 
   const modulePath = path.join(temporaryDirectory, `${name}.js`)
   if (sourceURL !== undefined) lines.push(`//# sourceURL=${sourceURL}`)
@@ -106,45 +102,18 @@ function writeTranspiledESM (name) {
     `function ${name}Outer () { return ${name}Inner(); }`,
     `export function run () { return ${name}Outer(); }`,
   ]
-  generator.addMapping({
-    generated: { line: 1, column: 0 },
-    original: { line: 1, column: 0 },
-    source: `${name}.ts`,
-  })
-  generator.addMapping({
-    generated: { line: 2, column: 0 },
-    original: { line: 2, column: 0 },
-    source: `${name}.ts`,
-  })
-  generator.addMapping({
-    generated: { line: 3, column: 0 },
-    original: { line: 3, column: 0 },
-    source: `${name}.ts`,
-  })
+  for (let line = 1; line <= 3; line++) {
+    generator.addMapping({
+      generated: { line, column: 0 },
+      original: { line, column: 0 },
+      source: `${name}.ts`,
+    })
+  }
 
   const modulePath = path.join(temporaryDirectory, `${name}.mjs`)
   fs.writeFileSync(`${modulePath}.map`, generator.toString())
   lines.push(`//# sourceMappingURL=${name}.mjs.map`)
   fs.writeFileSync(modulePath, lines.join('\n'))
-  return modulePath
-}
-
-/**
- * @param {string} name
- * @param {string} sourceName
- * @returns {string}
- */
-function writeThrowingCommonJS (name, sourceName) {
-  const generator = new SourceMapGenerator({ file: `${name}.js` })
-  generator.addMapping({
-    generated: { line: 1, column: 0 },
-    original: { line: 1, column: 0 },
-    source: sourceName,
-  })
-
-  const modulePath = path.join(temporaryDirectory, `${name}.js`)
-  fs.writeFileSync(`${modulePath}.map`, generator.toString())
-  fs.writeFileSync(modulePath, `throw new Error("boom")\n//# sourceMappingURL=${name}.js.map\n`)
   return modulePath
 }
 
@@ -190,29 +159,30 @@ function runFunctionCode (code) {
 
 /**
  * @param {() => unknown} run
- * @returns {string}
+ * @returns {unknown}
  */
-function getThrownStack (run) {
-  let stack = ''
+function getThrownError (run) {
+  let thrown
   /**
    * @param {unknown} error
    * @returns {boolean}
    */
-  function captureStack (error) {
-    assert.ok(error instanceof Error)
-    stack = error.stack ?? ''
+  function captureError (error) {
+    thrown = error
     return true
   }
-  assert.throws(run, captureStack)
-  return stack
+  assert.throws(run, captureError)
+  return thrown
 }
 
 /**
- * @param {unknown} value
- * @returns {value is { stack: NodeJS.CallSite[] }}
+ * @param {() => unknown} run
+ * @returns {string}
  */
-function hasCallSiteStack (value) {
-  return value instanceof Error && Array.isArray(value.stack)
+function getThrownStack (run) {
+  const error = getThrownError(run)
+  assert.ok(error instanceof Error)
+  return error.stack ?? ''
 }
 
 /**
@@ -297,6 +267,17 @@ function createCallSite (fileName, lineNumber = 1, columnNumber = 1) {
 }
 
 /**
+ * @param {string} originalSource
+ * @param {number} [originalLine]
+ * @param {number} [originalColumn]
+ */
+function createSourceMap (originalSource, originalLine = 0, originalColumn = 0) {
+  return {
+    findEntry: sinon.stub().returns({ originalColumn, originalLine, originalSource }),
+  }
+}
+
+/**
  * @param {(fileName: string) => object | undefined} findSourceMap
  * @param {{ debug?: (...args: unknown[]) => unknown, warn: (...args: unknown[]) => unknown }} [log]
  * @param {() => { enabled: boolean, generatedCode: boolean, nodeModules: boolean }} [getSourceMapsSupport]
@@ -331,6 +312,30 @@ function loadStubbedSourceMaps (
   return sourceMaps
 }
 
+/** @returns {ReturnType<typeof loadStubbedSourceMaps>} */
+function loadLegacySourceMaps () {
+  return loadSourceMapsWithModule({
+    findSourceMap: sinon.stub(),
+    getSourceMapsSupport: undefined,
+    setSourceMapsSupport: undefined,
+  })
+}
+
+/**
+ * @param {SourceMapsModule} moduleOverrides
+ * @param {{ warn: (...args: unknown[]) => unknown }} [stubbedLog]
+ * @returns {ReturnType<typeof loadStubbedSourceMaps>}
+ */
+function loadSourceMapsWithModule (moduleOverrides, stubbedLog) {
+  return proxyquire.noPreserveCache()('../../src/source-maps', {
+    'node:module': {
+      findSourceMap: sinon.stub(),
+      ...moduleOverrides,
+    },
+    ...(stubbedLog === undefined ? {} : { '../log': stubbedLog }),
+  })
+}
+
 describe('source maps', function () {
   /** @type {PropertyDescriptor | undefined} */
   let originalPrepareStackTraceDescriptor
@@ -351,6 +356,19 @@ describe('source maps', function () {
    */
   let sourceMaps
   const cachedModulePaths = new Set()
+
+  /**
+   * @param {string} fileName
+   * @param {object} sourceMap
+   * @param {{ debug?: (...args: unknown[]) => unknown, warn: (...args: unknown[]) => unknown }} [stubbedLog]
+   * @returns {void}
+   */
+  function configureAllSourceMap (fileName, sourceMap, stubbedLog) {
+    require.cache[fileName] = /** @type {NodeModule} */ ({})
+    cachedModulePaths.add(fileName)
+    sourceMaps = loadStubbedSourceMaps(() => sourceMap, stubbedLog)
+    sourceMaps.configure('all')
+  }
 
   before(function () {
     temporaryDirectory = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'dd-source-maps-'))
@@ -424,13 +442,7 @@ describe('source maps', function () {
       process.execArgv = []
       process.env.NODE_OPTIONS = ''
       const previousPrepareStackTrace = Error.prepareStackTrace
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: undefined,
-          setSourceMapsSupport: undefined,
-        },
-      })
+      sourceMaps = loadLegacySourceMaps()
 
       assert.strictEqual(sourceMaps.syncSourceMapSupport(), false)
       assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), false)
@@ -441,12 +453,9 @@ describe('source maps', function () {
 
     it('enables Node source maps without dependencies or generated code', function () {
       const setSourceMapsSupport = sinon.stub()
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: () => ({ enabled: false }),
-          setSourceMapsSupport,
-        },
+      sourceMaps = loadSourceMapsWithModule({
+        getSourceMapsSupport: () => ({ enabled: false }),
+        setSourceMapsSupport,
       })
       if (typeof Error.prepareStackTrace === 'function') {
         sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
@@ -462,16 +471,13 @@ describe('source maps', function () {
 
     it('preserves existing Node source map support options', function () {
       const setSourceMapsSupport = sinon.stub()
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: () => ({
-            enabled: true,
-            generatedCode: true,
-            nodeModules: true,
-          }),
-          setSourceMapsSupport,
-        },
+      sourceMaps = loadSourceMapsWithModule({
+        getSourceMapsSupport: () => ({
+          enabled: true,
+          generatedCode: true,
+          nodeModules: true,
+        }),
+        setSourceMapsSupport,
       })
 
       sourceMaps.configure('all')
@@ -483,13 +489,7 @@ describe('source maps', function () {
       process.execArgv = ['--enable-source-maps']
       const previousPrepareStackTrace = formatCallSites
       Error.prepareStackTrace = previousPrepareStackTrace
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: undefined,
-          setSourceMapsSupport: undefined,
-        },
-      })
+      sourceMaps = loadLegacySourceMaps()
 
       assert.strictEqual(sourceMaps.syncSourceMapSupport(), true)
       assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), true)
@@ -504,13 +504,7 @@ describe('source maps', function () {
       process.env.NODE_OPTIONS = '--enable-source-maps'
       const previousPrepareStackTrace = formatCallSites
       Error.prepareStackTrace = previousPrepareStackTrace
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: undefined,
-          setSourceMapsSupport: undefined,
-        },
-      })
+      sourceMaps = loadLegacySourceMaps()
 
       sourceMaps.configure('all')
 
@@ -518,81 +512,28 @@ describe('source maps', function () {
     })
 
     it('follows Node option token and override semantics on older runtimes', function () {
+      /** @type {Array<[string[], string, boolean]>} */
       const cases = [
-        {
-          execArgv: ['--enable-source-maps=true'],
-          nodeOptions: '',
-          expected: true,
-        },
-        {
-          execArgv: ['--enable-source-maps', '--no-enable-source-maps'],
-          nodeOptions: '',
-          expected: false,
-        },
-        {
-          execArgv: ['--no-enable-source-maps'],
-          nodeOptions: '--enable-source-maps',
-          expected: false,
-        },
-        {
-          execArgv: ['--enable-source-maps'],
-          nodeOptions: '--no-enable-source-maps',
-          expected: true,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '--require "module --enable-source-maps"',
-          expected: false,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '"--enable-source-maps"',
-          expected: true,
-        },
-        {
-          execArgv: [],
-          nodeOptions: "'--enable-source-maps'",
-          expected: false,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '\\--enable-source-maps',
-          expected: false,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '"\\--enable-source-maps"',
-          expected: true,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '"--enable-source-maps',
-          expected: false,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '"--enable-source-maps\\',
-          expected: false,
-        },
-        {
-          execArgv: [],
-          nodeOptions: '--enable-source-maps=false',
-          expected: true,
-        },
+        [['--enable-source-maps=true'], '', true],
+        [['--enable-source-maps', '--no-enable-source-maps'], '', false],
+        [['--no-enable-source-maps'], '--enable-source-maps', false],
+        [['--enable-source-maps'], '--no-enable-source-maps', true],
+        [[], '--require "module --enable-source-maps"', false],
+        [[], '"--enable-source-maps"', true],
+        [[], "'--enable-source-maps'", false],
+        [[], '\\--enable-source-maps', false],
+        [[], '"\\--enable-source-maps"', true],
+        [[], '"--enable-source-maps', false],
+        [[], '"--enable-source-maps\\', false],
+        [[], '--enable-source-maps=false', true],
       ]
 
-      for (const { execArgv, nodeOptions, expected } of cases) {
+      for (const [execArgv, nodeOptions, expected] of cases) {
         process.execArgv = execArgv
         process.env.NODE_OPTIONS = nodeOptions
         const customPrepareStackTrace = () => 'custom stack'
         Error.prepareStackTrace = customPrepareStackTrace
-        sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-          'node:module': {
-            findSourceMap: sinon.stub(),
-            getSourceMapsSupport: undefined,
-            setSourceMapsSupport: undefined,
-          },
-        })
+        sourceMaps = loadLegacySourceMaps()
 
         assert.strictEqual(sourceMaps.syncSourceMapSupport(), expected)
         assert.strictEqual(sourceMaps.isNativeSourceMapSupportEnabled(), expected)
@@ -605,16 +546,12 @@ describe('source maps', function () {
     it('does not interrupt initialization when Node rejects enabling source maps', function () {
       const log = { warn: sinon.stub() }
       const previousPrepareStackTrace = Error.prepareStackTrace
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: () => ({ enabled: false }),
-          setSourceMapsSupport: () => {
-            throw new Error('source maps unavailable')
-          },
+      sourceMaps = loadSourceMapsWithModule({
+        getSourceMapsSupport: () => ({ enabled: false }),
+        setSourceMapsSupport: () => {
+          throw new Error('source maps unavailable')
         },
-        '../log': log,
-      })
+      }, log)
       if (typeof Error.prepareStackTrace === 'function') {
         sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
       }
@@ -627,16 +564,12 @@ describe('source maps', function () {
 
     it('does not interrupt initialization when source map support cannot be read', function () {
       const log = { warn: sinon.stub() }
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap: sinon.stub(),
-          getSourceMapsSupport: () => {
-            throw new Error('source maps unavailable')
-          },
-          setSourceMapsSupport: sinon.stub(),
+      sourceMaps = loadSourceMapsWithModule({
+        getSourceMapsSupport: () => {
+          throw new Error('source maps unavailable')
         },
-        '../log': log,
-      })
+        setSourceMapsSupport: sinon.stub(),
+      }, log)
 
       sourceMaps.configure('all')
 
@@ -672,6 +605,7 @@ describe('source maps', function () {
         return 'custom stack'
       }
       sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {})
+      sourceMaps.registerPrepareStackTrace(Error.prepareStackTrace)
       sourceMaps.configure('all')
 
       assert.strictEqual(new Error().stack, 'custom stack')
@@ -787,6 +721,12 @@ describe('source maps', function () {
 
       assert.strictEqual(sourceMaps.remapErrorStack(`Error: first\n${frames}`), `Error: first\n${remappedFrames}`)
       assert.strictEqual(sourceMaps.remapErrorStack(`Error: second\n${frames}`), `Error: second\n${remappedFrames}`)
+      sourceMaps.remapErrorStack('Error: other\n    at run (other.js:1:1)')
+      const extendedFrames = `${frames}\n    at next (next.js:1:1)`
+      assert.strictEqual(
+        sourceMaps.remapErrorStack(`Error: third\n${extendedFrames}`),
+        `Error: third\n${remappedFrames}\n    at next (next.js:1:1)`
+      )
     })
 
     it('remaps a percent-encoded inline source map', function () {
@@ -946,12 +886,15 @@ describe('source maps', function () {
       const structuredStack = [createCallSite(modulePath, 3, 1)]
       const invalidLine = `Error: boom\n    at run (${modulePath}:0:0)`
       const missingFile = 'Error: boom\n    at run (:1:1)'
+      const unprefixedFrame = `Error: boom\nrun (${modulePath}:3:1)`
       sourceMaps.configure('datadog')
 
+      assert.strictEqual(sourceMaps.remapErrorStack('Error: boom'), 'Error: boom')
       assert.strictEqual(sourceMaps.remapErrorStack(stack), stack)
       assert.strictEqual(sourceMaps.remapErrorStack(structuredStack), structuredStack)
       assert.strictEqual(sourceMaps.remapErrorStack(invalidLine), invalidLine)
       assert.strictEqual(sourceMaps.remapErrorStack(missingFile), missingFile)
+      assert.strictEqual(sourceMaps.remapErrorStack(unprefixedFrame), unprefixedFrame)
     })
 
     it('remaps a frame without a generated column number', function () {
@@ -1305,24 +1248,14 @@ describe('source maps', function () {
         // eslint-disable-next-line no-extend-native
         Error.prototype.toString = () => 'replaced header'
         Reflect.deleteProperty(Error, 'prepareStackTrace')
-        let nativeError
-        try {
-          fs.readFileSync(/** @type {unknown} */ ({}))
-        } catch (error) {
-          nativeError = error
-        }
+        const nativeError = getThrownError(() => fs.readFileSync(/** @type {unknown} */ ({})))
         assert.ok(nativeError instanceof Error)
         const expectedHeader = nativeError.stack?.split('\n')[0]
         sourceMaps = loadStubbedSourceMaps(sinon.stub())
         sourceMaps.configure('all')
 
         assert.strictEqual(Error.prepareStackTrace, undefined)
-        let actualError
-        try {
-          fs.readFileSync(/** @type {unknown} */ ({}))
-        } catch (error) {
-          actualError = error
-        }
+        const actualError = getThrownError(() => fs.readFileSync(/** @type {unknown} */ ({})))
         assert.ok(actualError instanceof Error)
         assert.match(actualError.stack ?? '', /\[ERR_INVALID_ARG_TYPE\]/)
         assert.strictEqual(actualError.stack?.split('\n')[0], expectedHeader)
@@ -1349,17 +1282,10 @@ describe('source maps', function () {
       const sourceMap = {
         payload: { names: ['originalFoo'] },
         findEntry: sinon.stub()
-          .onFirstCall().returns({
-            originalColumn: 0,
-            originalLine: 0,
-            originalSource: 'aliased-name.ts',
-          })
+          .onFirstCall().returns({ originalColumn: 0, originalLine: 0, originalSource: 'aliased-name.ts' })
           .onSecondCall().returns({ name: 'originalFoo' }),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
       const callSite = createCallSite(fileName)
       callSite.getFunctionName = () => 'foo'
       callSite.toString = () => `foo.foo [as foobar] (${fileName}:1:1)`
@@ -1373,20 +1299,13 @@ describe('source maps', function () {
       const fileName = path.join(temporaryDirectory, 'unnamed-map.js')
       let payloadReads = 0
       const sourceMap = {
+        ...createSourceMap('unnamed-map.ts'),
         get payload () {
           payloadReads++
           return { names: [] }
         },
-        findEntry: sinon.stub().returns({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'unnamed-map.ts',
-        }),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
       const callSite = createCallSite(fileName)
 
       Error.prepareStackTrace(new Error('first'), [callSite])
@@ -1400,19 +1319,12 @@ describe('source maps', function () {
       const failure = new Error('invalid names')
       const log = { debug: sinon.stub(), warn: sinon.stub() }
       const sourceMap = {
+        ...createSourceMap('throwing-names-map.ts'),
         get payload () {
           throw failure
         },
-        findEntry: sinon.stub().returns({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'throwing-names-map.ts',
-        }),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap, log)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap, log)
 
       const stack = Error.prepareStackTrace(new Error('boom'), [createCallSite(fileName)])
 
@@ -1429,24 +1341,13 @@ describe('source maps', function () {
       const sourceMap = {
         payload: { names: ['originalRun'] },
         findEntry: sinon.stub()
-          .onCall(0).returns({
-            originalColumn: 0,
-            originalLine: 0,
-            originalSource: 'current.ts',
-          })
+          .onCall(0).returns({ originalColumn: 0, originalLine: 0, originalSource: 'current.ts' })
           .onCall(1).returns({})
           .onCall(2).returns({ name: 'originalRun' })
-          .onCall(3).returns({
-            originalColumn: 0,
-            originalLine: 1,
-            originalSource: 'caller.ts',
-          })
+          .onCall(3).returns({ originalColumn: 0, originalLine: 1, originalSource: 'caller.ts' })
           .onCall(4).returns({}),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
 
       const stack = Error.prepareStackTrace(new Error('boom'), [
         createCallSite(fileName, 1, 1),
@@ -1461,24 +1362,13 @@ describe('source maps', function () {
       const sourceMap = {
         payload: { names: ['originalRun'] },
         findEntry: sinon.stub()
-          .onCall(0).returns({
-            originalColumn: 0,
-            originalLine: 0,
-            originalSource: 'custom-current.ts',
-          })
-          .onCall(1).returns({
-            originalColumn: 0,
-            originalLine: 1,
-            originalSource: 'custom-caller.ts',
-          })
+          .onCall(0).returns({ originalColumn: 0, originalLine: 0, originalSource: 'custom-current.ts' })
+          .onCall(1).returns({ originalColumn: 0, originalLine: 1, originalSource: 'custom-caller.ts' })
           .onCall(2).returns({})
           .onCall(3).returns({ name: 'originalRun' }),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstCallSite
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
 
       const stack = Error.prepareStackTrace(new Error('boom'), [
         createCallSite(fileName, 1, 1),
@@ -1493,17 +1383,10 @@ describe('source maps', function () {
       const sourceMap = {
         payload: { names: ['originalRun'] },
         findEntry: sinon.stub()
-          .onFirstCall().returns({
-            originalColumn: 0,
-            originalLine: 0,
-            originalSource: 'mapped.ts',
-          })
+          .onFirstCall().returns({ originalColumn: 0, originalLine: 0, originalSource: 'mapped.ts' })
           .onSecondCall().throws(new Error('invalid name mapping')),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
 
       const stack = Error.prepareStackTrace(new Error('boom'), [createCallSite(fileName)])
 
@@ -1513,24 +1396,18 @@ describe('source maps', function () {
     it('defers generated code to source maps enabled by another component', function () {
       const setSourceMapsSupport = sinon.stub()
       const sourceMap = {
+        ...createSourceMap('generated.ts', 3, 4),
         payload: { names: [] },
-        findEntry: sinon.stub().returns({
-          originalColumn: 4,
-          originalLine: 3,
-          originalSource: 'generated.ts',
-        }),
       }
       const findSourceMap = sinon.stub().withArgs('generated.js').returns(sourceMap)
-      sourceMaps = proxyquire.noPreserveCache()('../../src/source-maps', {
-        'node:module': {
-          findSourceMap,
-          getSourceMapsSupport: () => ({
-            enabled: true,
-            generatedCode: true,
-            nodeModules: false,
-          }),
-          setSourceMapsSupport,
-        },
+      sourceMaps = loadSourceMapsWithModule({
+        findSourceMap,
+        getSourceMapsSupport: () => ({
+          enabled: true,
+          generatedCode: true,
+          nodeModules: false,
+        }),
+        setSourceMapsSupport,
       })
       sourceMaps.configure('all')
       const callSite = createCallSite(null, 1, 2)
@@ -1545,13 +1422,7 @@ describe('source maps', function () {
     })
 
     it('delegates remapped generated code to a custom formatter', function () {
-      const sourceMap = {
-        findEntry: sinon.stub().returns({
-          originalColumn: 4,
-          originalLine: 3,
-          originalSource: 'generated.ts',
-        }),
-      }
+      const sourceMap = createSourceMap('generated.ts', 3, 4)
       const findSourceMap = sinon.stub().withArgs('generated.js').returns(sourceMap)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(
@@ -1567,13 +1438,7 @@ describe('source maps', function () {
     })
 
     it('exposes every remapped location field to a custom formatter', function () {
-      const sourceMap = {
-        findEntry: sinon.stub().returns({
-          originalColumn: 4,
-          originalLine: 3,
-          originalSource: 'original.ts',
-        }),
-      }
+      const sourceMap = createSourceMap('original.ts', 3, 4)
       const findSourceMap = sinon.stub().withArgs('generated.js').returns(sourceMap)
       Error.prepareStackTrace = (_error, callSites) => {
         const callSite = callSites[0]
@@ -1657,7 +1522,7 @@ describe('source maps', function () {
        * @returns {boolean}
        */
       function hasGeneratedCallSiteLocation (error) {
-        assert.ok(hasCallSiteStack(error))
+        assert.ok(error instanceof Error && Array.isArray(error.stack))
         const callSite = error.stack[0]
         const fileName = callSite.getFileName()
         const scriptName = callSite.getScriptNameOrSourceURL()
@@ -1700,7 +1565,7 @@ describe('source maps', function () {
        * @returns {boolean}
        */
       function hasAccessorCallSiteLocation (error) {
-        assert.ok(hasCallSiteStack(error))
+        assert.ok(error instanceof Error && Array.isArray(error.stack))
         const fileName = error.stack[0].getFileName()
         assert.ok(fileName)
         assert.match(fileName, /accessorhandler\.js$/)
@@ -1758,13 +1623,7 @@ describe('source maps', function () {
     })
 
     it('remaps a frame without a generated column number', function () {
-      sourceMaps = loadStubbedSourceMaps(() => ({
-        findEntry: sinon.stub().returns({
-          originalSource: 'line-only.ts',
-          originalLine: 3,
-          originalColumn: 4,
-        }),
-      }))
+      sourceMaps = loadStubbedSourceMaps(() => createSourceMap('line-only.ts', 3, 4))
       sourceMaps.configure('all')
 
       const stack = Error.prepareStackTrace(new Error('boom'), [
@@ -1789,13 +1648,13 @@ describe('source maps', function () {
     })
 
     it('does not retain a stale map after a module throws while loading', function () {
-      const modulePath = writeThrowingCommonJS('throwing-load', 'before.ts')
+      const modulePath = writeTranspiledCommonJS('throwing-load', 'throwing', 'before.ts')
       cachedModulePaths.add(modulePath)
       sourceMaps.configure('all')
       assert.match(getThrownStack(() => require(modulePath)), /before\.ts:1:1/)
       assert.strictEqual(require.cache[modulePath], undefined)
 
-      writeThrowingCommonJS('throwing-load', 'after.ts')
+      writeTranspiledCommonJS('throwing-load', 'throwing', 'after.ts')
 
       assert.match(getThrownStack(() => require(modulePath)), /after\.ts:1:1/)
     })
@@ -1804,13 +1663,7 @@ describe('source maps', function () {
   describe('cache and failure handling', function () {
     it('caches source maps and locations by CommonJS module', function () {
       const fileName = path.join(temporaryDirectory, 'cached.js')
-      const sourceMap = {
-        findEntry: sinon.stub().returns({
-          originalColumn: 2,
-          originalLine: 1,
-          originalSource: 'cached.ts',
-        }),
-      }
+      const sourceMap = createSourceMap('cached.ts', 1, 2)
       const findSourceMap = sinon.stub().returns(sourceMap)
       require.cache[fileName] = /** @type {NodeModule} */ ({})
       cachedModulePaths.add(fileName)
@@ -1842,10 +1695,7 @@ describe('source maps', function () {
       const sourceMap = {
         findEntry: sinon.stub().callsFake(findEntry),
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
 
       for (let line = 1; line <= 4096; line++) {
         sourceMapRemapping.location({ file: fileName, line, column: 1 })
@@ -1860,20 +1710,8 @@ describe('source maps', function () {
 
     it('invalidates cached maps when the source map support options change', function () {
       const fileName = path.join(temporaryDirectory, 'support-state.js')
-      const beforeSourceMap = {
-        findEntry: () => ({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'before.ts',
-        }),
-      }
-      const afterSourceMap = {
-        findEntry: () => ({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'after.ts',
-        }),
-      }
+      const beforeSourceMap = createSourceMap('before.ts')
+      const afterSourceMap = createSourceMap('after.ts')
       const findSourceMap = sinon.stub()
         .onFirstCall().returns(beforeSourceMap)
         .onSecondCall().returns(afterSourceMap)
@@ -1920,87 +1758,53 @@ describe('source maps', function () {
       sinon.assert.notCalled(findSourceMap)
     })
 
-    it('caches source map entries without original positions', function () {
-      const fileName = path.join(temporaryDirectory, 'unmapped.js')
-      const sourceMap = {
-        findEntry: sinon.stub().returns({
-          originalColumn: 0,
-          originalLine: 0,
-        }),
-      }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      Error.prepareStackTrace = formatFirstFileName
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
-      const callSite = createCallSite(fileName)
+    /** @type {Array<[string, string, Record<string, string | number>]>} */
+    const incompleteEntryCases = [
+      ['caches source map entries without original positions', 'unmapped.js', { originalColumn: 0, originalLine: 0 }],
+      ['keeps a source map entry with incomplete original positions',
+        'incomplete-position.js',
+        { originalSource: 'incomplete-position.ts' }],
+    ]
+    for (const [name, fixtureName, entry] of incompleteEntryCases) {
+      it(name, function () {
+        const fileName = path.join(temporaryDirectory, fixtureName)
+        const sourceMap = { findEntry: sinon.stub().returns(entry) }
+        Error.prepareStackTrace = formatFirstFileName
+        configureAllSourceMap(fileName, sourceMap)
+        const callSite = createCallSite(fileName)
 
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
-      sinon.assert.calledOnce(sourceMap.findEntry)
-    })
+        assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
+        assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
+        sinon.assert.calledOnce(sourceMap.findEntry)
+      })
+    }
 
-    it('keeps a source map entry with incomplete original positions', function () {
-      const fileName = path.join(temporaryDirectory, 'incomplete-position.js')
-      const sourceMap = {
-        findEntry: sinon.stub().returns({
-          originalSource: 'incomplete-position.ts',
-        }),
-      }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      Error.prepareStackTrace = formatFirstFileName
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
-      const callSite = createCallSite(fileName)
+    /** @type {Array<[string, string, boolean]>} */
+    const moduleCacheCases = [
+      ['keys source maps by the current CommonJS module object', 'reloaded.js', true],
+      ['does not cache a filename when no CommonJS module is cached', 'failed-load.js', false],
+    ]
+    for (const [name, fixtureName, cacheModule] of moduleCacheCases) {
+      it(name, function () {
+        const fileName = path.join(temporaryDirectory, fixtureName)
+        const findSourceMap = sinon.stub()
+          .onFirstCall().returns(createSourceMap('before.ts'))
+          .onSecondCall().returns(createSourceMap('after.ts'))
+        if (cacheModule) {
+          require.cache[fileName] = /** @type {NodeModule} */ ({})
+          cachedModulePaths.add(fileName)
+        }
+        Error.prepareStackTrace = formatFirstFileName
+        sourceMaps = loadStubbedSourceMaps(findSourceMap)
+        sourceMaps.configure('all')
+        const callSite = createCallSite(fileName)
 
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), fileName)
-      sinon.assert.calledOnce(sourceMap.findEntry)
-    })
-
-    it('keys source maps by the current CommonJS module object', function () {
-      const fileName = path.join(temporaryDirectory, 'reloaded.js')
-      const beforeSourceMap = {
-        findEntry: () => ({ originalColumn: 0, originalLine: 0, originalSource: 'before.ts' }),
-      }
-      const afterSourceMap = {
-        findEntry: () => ({ originalColumn: 0, originalLine: 0, originalSource: 'after.ts' }),
-      }
-      const findSourceMap = sinon.stub()
-        .onFirstCall().returns(beforeSourceMap)
-        .onSecondCall().returns(afterSourceMap)
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
-      Error.prepareStackTrace = formatFirstFileName
-      sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.configure('all')
-      const callSite = createCallSite(fileName)
-
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'before.ts')
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'after.ts')
-      sinon.assert.calledTwice(findSourceMap)
-    })
-
-    it('does not cache a filename when no CommonJS module is cached', function () {
-      const fileName = path.join(temporaryDirectory, 'failed-load.js')
-      const findSourceMap = sinon.stub()
-        .onFirstCall().returns({
-          findEntry: () => ({ originalColumn: 0, originalLine: 0, originalSource: 'before.ts' }),
-        })
-        .onSecondCall().returns({
-          findEntry: () => ({ originalColumn: 0, originalLine: 0, originalSource: 'after.ts' }),
-        })
-      Error.prepareStackTrace = formatFirstFileName
-      sourceMaps = loadStubbedSourceMaps(findSourceMap)
-      sourceMaps.configure('all')
-      const callSite = createCallSite(fileName)
-
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'before.ts')
-      assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'after.ts')
-      sinon.assert.calledTwice(findSourceMap)
-    })
+        assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'before.ts')
+        if (cacheModule) require.cache[fileName] = /** @type {NodeModule} */ ({})
+        assert.strictEqual(Error.prepareStackTrace(new Error(), [callSite]), 'after.ts')
+        sinon.assert.calledTwice(findSourceMap)
+      })
+    }
 
     it('falls back to generated locations when loading a source map throws', function () {
       const fileName = path.join(temporaryDirectory, 'load-error.js')
@@ -2029,11 +1833,8 @@ describe('source maps', function () {
           throw new Error('resolve failed')
         },
       }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
       Error.prepareStackTrace = formatFirstFileName
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap, log)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap, log)
 
       assert.strictEqual(Error.prepareStackTrace(new Error(), [createCallSite(fileName)]), fileName)
       sinon.assert.calledOnce(log.warn)
@@ -2066,18 +1867,9 @@ describe('source maps', function () {
 
     it('uses the generated file name when a call site has no script name', function () {
       const fileName = path.join(temporaryDirectory, 'without-script-name.js')
-      const sourceMap = {
-        findEntry: () => ({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'without-script-name.ts',
-        }),
-      }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
+      const sourceMap = createSourceMap('without-script-name.ts')
       Error.prepareStackTrace = formatCallSites
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
       const callSite = createCallSite(fileName)
       callSite.getScriptNameOrSourceURL = () => null
 
@@ -2089,18 +1881,9 @@ describe('source maps', function () {
 
     it('keeps a frame whose formatted location cannot be identified', function () {
       const fileName = path.join(temporaryDirectory, 'unexpected-frame.js')
-      const sourceMap = {
-        findEntry: () => ({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'original.ts',
-        }),
-      }
-      require.cache[fileName] = /** @type {NodeModule} */ ({})
-      cachedModulePaths.add(fileName)
+      const sourceMap = createSourceMap('original.ts')
       Error.prepareStackTrace = formatCallSites
-      sourceMaps = loadStubbedSourceMaps(() => sourceMap)
-      sourceMaps.configure('all')
+      configureAllSourceMap(fileName, sourceMap)
       const callSite = createCallSite(fileName)
       callSite.toString = () => 'unexpected frame'
 
@@ -2110,13 +1893,7 @@ describe('source maps', function () {
     it('keeps an original file URL when it cannot be converted to a path', function () {
       const generatedFileName = path.join(temporaryDirectory, 'invalid-url.js')
       const originalFileName = 'file:///%E0%A4%A'
-      const sourceMap = {
-        findEntry: () => ({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: originalFileName,
-        }),
-      }
+      const sourceMap = createSourceMap(originalFileName)
       require.cache[generatedFileName] = /** @type {NodeModule} */ ({})
       cachedModulePaths.add(generatedFileName)
       Error.prepareStackTrace = formatFirstFileName
@@ -2130,13 +1907,7 @@ describe('source maps', function () {
     })
 
     it('bounds the ESM source map cache', function () {
-      const sourceMap = {
-        findEntry: () => ({
-          originalColumn: 0,
-          originalLine: 0,
-          originalSource: 'original.ts',
-        }),
-      }
+      const sourceMap = createSourceMap('original.ts')
       const findSourceMap = sinon.stub().returns(sourceMap)
       Error.prepareStackTrace = formatFirstFileName
       sourceMaps = loadStubbedSourceMaps(findSourceMap)

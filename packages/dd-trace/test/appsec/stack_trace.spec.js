@@ -7,18 +7,9 @@ const { inspect } = require('node:util')
 const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
 const sourceMapRemapping = require('../../src/source-maps/remap')
 
-/**
- * @template Value
- * @param {Value} value
- * @returns {Value}
- */
-function identity (value) {
-  return value
-}
-
 describe('Stack trace reporter', () => {
   afterEach(() => {
-    sourceMapRemapping.location = identity
+    sourceMapRemapping.configure('off')
   })
 
   describe('frame filtering', () => {

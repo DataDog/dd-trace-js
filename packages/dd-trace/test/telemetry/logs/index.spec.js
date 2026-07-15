@@ -13,22 +13,13 @@ require('../../setup/core')
 const { Log } = require('../../../src/log/log')
 const sourceMapRemapping = require('../../../src/source-maps/remap')
 
-/**
- * @template Value
- * @param {Value} value
- * @returns {Value}
- */
-function identity (value) {
-  return value
-}
-
 describe('telemetry logs', () => {
   let defaultConfig
   let telemetryLog
   let dc
 
   beforeEach(() => {
-    sourceMapRemapping.errorStack = identity
+    sourceMapRemapping.configure('off')
     defaultConfig = {
       telemetry: {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,

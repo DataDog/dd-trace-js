@@ -13,19 +13,10 @@ const sourceMapRemapping = require('../../dd-trace/src/source-maps/remap')
 const testedFile = resolve(__dirname, '..', 'index.js')
 const originalLimit = Error.stackTraceLimit
 
-/**
- * @template Value
- * @param {Value} value
- * @returns {Value}
- */
-function identity (value) {
-  return value
-}
-
 describe('code origin', () => {
   afterEach(() => {
     Error.stackTraceLimit = originalLimit
-    sourceMapRemapping.errorStack = identity
+    sourceMapRemapping.configure('off')
   })
 
   describe('entryTags', () => {

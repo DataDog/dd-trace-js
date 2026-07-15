@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -18,14 +19,7 @@ describe('source map remapping facade', () => {
 
   beforeEach(() => {
     cachedRemapModule = require.cache[remapPath]
-    directFileSystem = {
-      closeSync: () => {},
-      fstatSync: () => {},
-      openSync: () => {},
-      readFileSync: () => {},
-      readSync: () => {},
-      statSync: () => {},
-    }
+    directFileSystem = { ...fs }
     sourceMaps = {
       configure: sinon.stub(),
     }

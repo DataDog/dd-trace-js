@@ -23,10 +23,10 @@ describe('source map support', function () {
   })
 
   afterEach(async function () {
-    const cleanup = []
-    if (childProcess !== undefined) cleanup.push(stopProc(childProcess))
-    if (agent !== undefined) cleanup.push(agent.stop())
-    await Promise.all(cleanup)
+    await Promise.all([
+      childProcess === undefined ? undefined : stopProc(childProcess),
+      agent?.stop(),
+    ])
     agent = undefined
     childProcess = undefined
   })
@@ -62,16 +62,7 @@ describe('source map support', function () {
      * }} message
      */
     function assertErrorSpan ({ payload }) {
-      let requestSpan
-      for (const trace of payload) {
-        for (const span of trace) {
-          if (span.name === 'source-map.request') {
-            requestSpan = span
-            break
-          }
-        }
-        if (requestSpan !== undefined) break
-      }
+      const requestSpan = payload.flat().find(span => span.name === 'source-map.request')
       assert.ok(requestSpan, 'source-map.request span should be present')
       assert.strictEqual(requestSpan.error, 1)
       stack = requestSpan.meta['error.stack']
@@ -95,61 +86,40 @@ describe('source map support', function () {
     return response.data.stack
   }
 
-  it('maps only the exported error span stack by default', async function () {
-    await startApp()
+  /**
+   * @param {string} stack
+   * @param {string} source
+   */
+  function assertStackSource (stack, source) {
+    const generated = source.startsWith('throws.js')
+    assert.match(stack, new RegExp(`${source.replace('.', '\\.')}:`))
+    assert.doesNotMatch(stack, generated ? /throws\.ts:/ : /throws\.js:/)
+  }
 
-    const [errorStack, applicationStack] = await Promise.all([
-      requestErrorStack(),
-      requestApplicationStack(),
-    ])
+  /** @type {Array<[string, Record<string, string>, string, string, boolean]>} */
+  const cases = [
+    ['maps only the exported error span stack by default', {}, 'throws.ts:7', 'throws.js:6', false],
+    ['leaves both stack representations generated in off mode',
+      { DD_TRACE_SOURCE_MAPS_MODE: 'off' }, 'throws.js:6', 'throws.js:6', false],
+    ['maps both stack representations in all mode',
+      { DD_TRACE_SOURCE_MAPS_MODE: 'all' }, 'throws.ts:7', 'throws.ts:7', true],
+    ['defers to source maps enabled by Node',
+      { NODE_OPTIONS: '--enable-source-maps' }, 'throws.ts:7', 'throws.ts:7', false],
+  ]
 
-    assert.match(errorStack, /throws\.ts:7:/)
-    assert.doesNotMatch(errorStack, /throws\.js:/)
-    assert.match(applicationStack, /throws\.js:6:/)
-    assert.doesNotMatch(applicationStack, /throws\.ts:/)
-  })
+  for (const [name, environment, errorSource, applicationSource, requiresProgrammaticSupport] of cases) {
+    it(name, async function () {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
+      if (requiresProgrammaticSupport && typeof Module.setSourceMapsSupport !== 'function') this.skip()
+      await startApp(environment)
 
-  it('leaves both stack representations generated in off mode', async function () {
-    await startApp({ DD_TRACE_SOURCE_MAPS_MODE: 'off' })
+      const [errorStack, applicationStack] = await Promise.all([
+        requestErrorStack(),
+        requestApplicationStack(),
+      ])
 
-    const [errorStack, applicationStack] = await Promise.all([
-      requestErrorStack(),
-      requestApplicationStack(),
-    ])
-
-    assert.match(errorStack, /throws\.js:6:/)
-    assert.doesNotMatch(errorStack, /throws\.ts:/)
-    assert.match(applicationStack, /throws\.js:6:/)
-    assert.doesNotMatch(applicationStack, /throws\.ts:/)
-  })
-
-  it('maps both stack representations in all mode', async function () {
-    // eslint-disable-next-line n/no-unsupported-features/node-builtins
-    if (typeof Module.setSourceMapsSupport !== 'function') this.skip()
-    await startApp({ DD_TRACE_SOURCE_MAPS_MODE: 'all' })
-
-    const [errorStack, applicationStack] = await Promise.all([
-      requestErrorStack(),
-      requestApplicationStack(),
-    ])
-
-    assert.match(errorStack, /throws\.ts:7:/)
-    assert.doesNotMatch(errorStack, /throws\.js:/)
-    assert.match(applicationStack, /throws\.ts:7:/)
-    assert.doesNotMatch(applicationStack, /throws\.js:/)
-  })
-
-  it('defers to source maps enabled by Node', async function () {
-    await startApp({ NODE_OPTIONS: '--enable-source-maps' })
-
-    const [errorStack, applicationStack] = await Promise.all([
-      requestErrorStack(),
-      requestApplicationStack(),
-    ])
-
-    assert.match(errorStack, /throws\.ts:7:/)
-    assert.doesNotMatch(errorStack, /throws\.js:/)
-    assert.match(applicationStack, /throws\.ts:7:/)
-    assert.doesNotMatch(applicationStack, /throws\.js:/)
-  })
+      assertStackSource(errorStack, errorSource)
+      assertStackSource(applicationStack, applicationSource)
+    })
+  }
 })

@@ -30,8 +30,7 @@ const { getSourceMapsSupport, setSourceMapsSupport } =
   /** @type {ProgrammaticSourceMaps} */ (/** @type {unknown} */ (Module))
 
 const supportsProgrammaticSourceMaps = typeof setSourceMapsSupport === 'function'
-const nativeSourceMapsEnabled = isNativeSourceMapSupportEnabled()
-const legacySourceMapsEnabled = !supportsProgrammaticSourceMaps && nativeSourceMapsEnabled
+const legacySourceMapsEnabled = !supportsProgrammaticSourceMaps && isNativeSourceMapSupportEnabled()
 const MODE_ALL = 'all'
 const MODE_DATADOG = 'datadog'
 const MODE_OFF = 'off'
@@ -143,7 +142,7 @@ function identity (value) {
 }
 
 function enableAll () {
-  if (!canResolveSourceMaps()) {
+  if (!supportsProgrammaticSourceMaps && !legacySourceMapsEnabled) {
     mode = MODE_OFF
     return
   }
@@ -205,10 +204,6 @@ function registerPrepareStackTrace (prepareStackTrace, delegate) {
   }
 }
 
-function canResolveSourceMaps () {
-  return supportsProgrammaticSourceMaps || legacySourceMapsEnabled
-}
-
 /**
  * @returns {boolean | undefined}
  */
@@ -216,15 +211,9 @@ function getExternalSourceMapSupport () {
   if (isNativeSourceMapSupportEnabled()) return true
 
   if (supportsProgrammaticSourceMaps) {
-    try {
-      if (getSourceMapsSupport().enabled) return true
-    } catch (error) {
-      log.warn(
-        'Unable to read source map support: %s',
-        getErrorMessage(error)
-      )
-      return
-    }
+    const support = readSourceMapsSupport()
+    if (support === undefined) return
+    if (support.enabled) return true
   }
 
   try {
@@ -235,6 +224,20 @@ function getExternalSourceMapSupport () {
   } catch (error) {
     log.warn(
       'Unable to read the source map stack trace formatter: %s',
+      getErrorMessage(error)
+    )
+  }
+}
+
+/**
+ * @returns {SourceMapsSupport | undefined}
+ */
+function readSourceMapsSupport () {
+  try {
+    return getSourceMapsSupport()
+  } catch (error) {
+    log.warn(
+      'Unable to read source map support: %s',
       getErrorMessage(error)
     )
   }
@@ -316,16 +319,8 @@ function syncSourceMapSupport () {
     return legacySourceMapsEnabled
   }
 
-  let support
-  try {
-    support = getSourceMapsSupport()
-  } catch (error) {
-    log.warn(
-      'Unable to read source map support: %s',
-      getErrorMessage(error)
-    )
-    return false
-  }
+  const support = readSourceMapsSupport()
+  if (support === undefined) return false
 
   const { enabled, generatedCode, nodeModules } = support
   const state = (enabled ? 1 : 0) | (nodeModules ? 2 : 0) | (generatedCode ? 4 : 0)
@@ -490,16 +485,8 @@ function shouldDeferDatadogRemapping () {
   }
 
   if (supportsProgrammaticSourceMaps) {
-    try {
-      if (getSourceMapsSupport().enabled) {
-        disableDatadogRemapping()
-        return true
-      }
-    } catch (error) {
-      log.warn(
-        'Unable to read source map support: %s',
-        getErrorMessage(error)
-      )
+    const support = readSourceMapsSupport()
+    if (support === undefined || support.enabled) {
       disableDatadogRemapping()
       return true
     }

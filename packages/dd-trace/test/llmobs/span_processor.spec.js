@@ -10,15 +10,6 @@ const LLMObsTagger = require('../../src/llmobs/tagger')
 const sourceMapRemapping = require('../../src/source-maps/remap')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-/**
- * @template Value
- * @param {Value} value
- * @returns {Value}
- */
-function identity (value) {
-  return value
-}
-
 describe('span processor', () => {
   let LLMObsSpanProcessor
   let processor
@@ -26,7 +17,7 @@ describe('span processor', () => {
   let log
 
   beforeEach(() => {
-    sourceMapRemapping.errorStack = identity
+    sourceMapRemapping.configure('off')
     writer = {
       append: sinon.stub(),
     }
