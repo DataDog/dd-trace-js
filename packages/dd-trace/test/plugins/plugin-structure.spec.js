@@ -99,6 +99,11 @@ describe('Plugin Structure Validation', () => {
       .filter(file => file.endsWith('.js'))
       .map(file => file.replace('.js', ''))
   )
+  const orchestrionInstrumentationNames = new Set(
+    fs.readdirSync(path.join(instrumentationsDir, 'helpers', 'rewriter', 'instrumentations'))
+      .filter(file => file !== 'index.js' && file.endsWith('.js'))
+      .map(file => file.replace('.js', ''))
+  )
 
   const allPluginIds = new Set(pluginDirs.map(dir => dir.replace('datadog-plugin-', '')))
 
@@ -117,12 +122,13 @@ describe('Plugin Structure Validation', () => {
         assert.strictEqual(pluginId, expectedId)
       })
 
-      it('should have a corresponding instrumentation file', () => {
+      it('should have a corresponding instrumentation', () => {
         if (abstractPlugins.includes(pluginId)) {
           return
         }
 
-        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
+        const hasInstrumentation = instrumentationFiles.has(pluginId) || orchestrionInstrumentationNames.has(pluginId)
+        assert.strictEqual(hasInstrumentation, true, `Missing instrumentation: ${pluginId}`)
       })
     })
   })
@@ -143,7 +149,9 @@ describe('Plugin Structure Validation', () => {
     const missingInstrumentations = []
 
     allPluginIds.forEach(pluginId => {
-      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId)) {
+      if (!instrumentationFiles.has(pluginId) &&
+          !orchestrionInstrumentationNames.has(pluginId) &&
+          !abstractPlugins.includes(pluginId)) {
         missingInstrumentations.push(pluginId)
       }
     })
@@ -152,7 +160,7 @@ describe('Plugin Structure Validation', () => {
   })
 
   it('should have all plugins accounted for with a hook', () => {
-    const instrumentationsRequired = new Set()
+    const instrumentationsRequired = new Set(orchestrionInstrumentationNames)
 
     for (const hook of Object.values(hooks)) {
       let hookFn = hook
@@ -186,6 +194,18 @@ describe('Plugin Structure Validation', () => {
     }
 
     assert.deepStrictEqual(missingPlugins, [])
+  })
+
+  it('should only load runtime modules for Orchestrion integrations that require activation', () => {
+    for (const [packageName, hook] of Object.entries(hooks)) {
+      if (!hook || typeof hook !== 'object' || !hook.orchestrion) continue
+
+      assert.strictEqual(
+        typeof hook.fn === 'function',
+        hook.activate === true,
+        `Unexpected runtime module loader for ${packageName}`
+      )
+    }
   })
 
   it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {

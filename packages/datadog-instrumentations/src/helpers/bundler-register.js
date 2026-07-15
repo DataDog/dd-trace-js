@@ -83,6 +83,10 @@ dc.subscribe(CHANNEL, (message) => {
   const name = payload.package
 
   const isPrefixedWithNode = name.startsWith('node:')
+  const packageHook = hooks[name] ?? hooks[`node:${name}`]
+
+  // Orchestrion rewrites source before execution and does not register an export hook.
+  if (packageHook && typeof packageHook === 'object' && packageHook.orchestrion) return
 
   const isNodeModule = isPrefixedWithNode || !hooks[name]
 

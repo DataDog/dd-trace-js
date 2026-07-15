@@ -3,12 +3,39 @@
 const fs = require('fs')
 const path = require('path')
 
+const INSTRUMENTATIONS_PATH = path.join(__dirname, '../../../../datadog-instrumentations/src')
 const INSTRUMENT_HELPER_PATH = path.join(
-  __dirname, '../../../../datadog-instrumentations/src/helpers/instrument'
+  INSTRUMENTATIONS_PATH, 'helpers/instrument'
+)
+const ORCHESTRION_INSTRUMENTATIONS_PATH = path.join(
+  INSTRUMENTATIONS_PATH, 'helpers/rewriter/instrumentations'
 )
 
+/**
+ * Adds the package metadata declared by an integration's Orchestrion configuration.
+ *
+ * @param {string} name - Integration name.
+ * @param {Array<{name: string, versions: string[], file?: string}>} instrumentations - Discovered instrumentations.
+ * @returns {void}
+ */
+function loadOrchestrionInstrumentations (name, instrumentations) {
+  const configPath = path.join(ORCHESTRION_INSTRUMENTATIONS_PATH, `${name}.js`)
+  if (!fs.existsSync(configPath)) return
+
+  const seen = new Set(instrumentations.map(({ name, versions, file }) => `${name}\0${versions?.join()}\0${file}`))
+
+  for (const { module } of require(configPath)) {
+    const { name, versionRange, filePath } = module
+    const key = `${name}\0${versionRange}\0${filePath}`
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    instrumentations.push({ name, versions: [versionRange], file: filePath })
+  }
+}
+
 function loadInstFile (file, instrumentations) {
-  const instPath = path.join(__dirname, `../../../../datadog-instrumentations/src/${file}`)
+  const instPath = path.join(INSTRUMENTATIONS_PATH, file)
 
   // Patch `addHook` for the duration of this load and filter to the SUT's own
   // call sites; addHook calls from transitively-loaded siblings (e.g.
@@ -43,27 +70,57 @@ function loadInstFile (file, instrumentations) {
 
 function loadOneInst (name) {
   const instrumentations = []
+  const instrumentationPath = path.join(INSTRUMENTATIONS_PATH, name)
 
-  try {
-    loadInstFile(`${name}/server.js`, instrumentations)
-    loadInstFile(`${name}/client.js`, instrumentations)
-  } catch (e) {
+  if (fs.existsSync(instrumentationPath) || fs.existsSync(`${instrumentationPath}.js`)) {
     try {
-      loadInstFile(`${name}/main.js`, instrumentations)
+      loadInstFile(`${name}/server.js`, instrumentations)
+      loadInstFile(`${name}/client.js`, instrumentations)
     } catch (e) {
-      loadInstFile(`${name}.js`, instrumentations)
+      try {
+        loadInstFile(`${name}/main.js`, instrumentations)
+      } catch (e) {
+        loadInstFile(`${name}.js`, instrumentations)
+      }
     }
   }
 
-  return instrumentations
+  loadOrchestrionInstrumentations(name, instrumentations)
+
+  const uniqueInstrumentations = []
+  const seen = new Set()
+
+  for (const instrumentation of instrumentations) {
+    const { name, versions, file, filePattern } = instrumentation
+    const key = `${name}\0${versions?.join()}\0${file}\0${filePattern}`
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    uniqueInstrumentations.push(instrumentation)
+  }
+
+  return uniqueInstrumentations
+}
+
+/**
+ * Returns every integration name declared by a runtime module or Orchestrion configuration.
+ *
+ * @returns {string[]}
+ */
+function getInstrumentationNames () {
+  const names = new Set(fs.readdirSync(INSTRUMENTATIONS_PATH)
+    .filter(file => file.endsWith('.js'))
+    .map(file => file.slice(0, -3)))
+
+  for (const file of fs.readdirSync(ORCHESTRION_INSTRUMENTATIONS_PATH)) {
+    if (file !== 'index.js' && file.endsWith('.js')) names.add(file.slice(0, -3))
+  }
+
+  return [...names]
 }
 
 function getAllInstrumentations () {
-  const names = fs.readdirSync(path.join(__dirname, '../../../../', 'datadog-instrumentations', 'src'))
-    .filter(file => file.endsWith('.js'))
-    .map(file => file.slice(0, -3))
-
-  return names.reduce((acc, key) => {
+  return getInstrumentationNames().reduce((acc, key) => {
     const name = key
     let instrumentations = loadOneInst(name)
 
@@ -79,4 +136,5 @@ function getAllInstrumentations () {
 module.exports = {
   getInstrumentation: loadOneInst,
   getAllInstrumentations,
+  getInstrumentationNames,
 }

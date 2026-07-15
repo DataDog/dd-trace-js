@@ -19,10 +19,6 @@ for (const hook of getHooks('graphql')) {
   addHook(hook, exports => exports)
 }
 
-for (const hook of getHooks('@graphql-tools/executor')) {
-  addHook(hook, exports => exports)
-}
-
 // Module-load hooks: capture references on ddGlobal for cross-plugin access
 // (read lazily inside each callback so agent.load() between mocha suites can
 // rebind globalThis[dd-trace] without us stashing a stale reference).

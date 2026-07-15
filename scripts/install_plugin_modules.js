@@ -10,7 +10,7 @@ const { join } = require('path')
 const semver = require('semver')
 
 const externals = require('../packages/dd-trace/test/plugins/externals')
-const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const { getInstrumentation, getInstrumentationNames } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
 const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
@@ -56,9 +56,7 @@ async function run () {
 async function assertPrerequisites () {
   const filter = process.env.PLUGINS?.split('|')
 
-  const instrumentationFiles = await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
-  const moduleNames = instrumentationFiles.filter(file => file.endsWith('.js'))
-    .map(file => file.slice(0, -3))
+  const moduleNames = getInstrumentationNames()
     .filter(file => !filter || filter.includes(file))
 
   const packages = collectPackages(moduleNames)

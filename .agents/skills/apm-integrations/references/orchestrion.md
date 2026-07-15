@@ -4,13 +4,12 @@ Orchestrion is the **required default** for new instrumentations. It automatical
 
 ## Required Files
 
-Orchestrion integrations need three files:
+Orchestrion integrations need a rewriter configuration and a package registry entry:
 
 ```
 packages/datadog-instrumentations/src/
-├── <name>.js                           # Hooks file (registers module hooks)
 └── helpers/
-    ├── hooks.js                        # Entry pointing to <name>.js
+    ├── hooks.js                        # Marks the package as Orchestrion-managed
     └── rewriter/
         ├── index.js                    # Main rewriter logic
         └── instrumentations/
@@ -18,24 +17,23 @@ packages/datadog-instrumentations/src/
             └── <name>.js              # JSON config
 ```
 
-**Hooks file** (`packages/datadog-instrumentations/src/<name>.js`):
-
-```javascript
-'use strict'
-
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('<npm-package>')) {
-  addHook(hook, exports => exports)
-}
-```
-
-`getHooks` reads the orchestrion JSON config and generates `addHook` entries so the module hooks are registered for the rewriter to process. Without this file, the rewriter will not be triggered.
-
 **hooks.js entry** (`packages/datadog-instrumentations/src/helpers/hooks.js`):
 
 ```javascript
-'<name>': () => require('../<name>'),
+'<npm-package>': { orchestrion: true },
+```
+
+The rewriter consumes the configuration directly. Do not add a no-op `addHook` bridge for Orchestrion metadata.
+
+An integration-side module is only needed when subscribers outside the tracing plugin must be loaded after a successful
+rewrite. Mark that entry with `activate: true` and provide the loader:
+
+```javascript
+'<npm-package>': {
+  orchestrion: true,
+  activate: true,
+  fn: () => require('../<name>'),
+},
 ```
 
 ## Config Schema

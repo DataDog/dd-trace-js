@@ -29,7 +29,6 @@ describe('register', () => {
       },
       bullmq: {
         orchestrion: true,
-        fn: sinon.stub().returns('hooked'),
       },
       hybrid: {
         orchestrion: true,
@@ -90,7 +89,7 @@ describe('register', () => {
       ['@confluentinc/kafka-javascript'],
       ['mongodb-core'],
     ])
-    sinon.assert.notCalled(hooksMock.bullmq.fn)
+    assert.strictEqual(hooksMock.bullmq.fn, undefined)
 
     channel('dd-trace:instrumentation:load').publish({ name: 'hybrid' })
     sinon.assert.calledOnce(hooksMock.hybrid.fn)
