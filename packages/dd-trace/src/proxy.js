@@ -298,9 +298,6 @@ class Tracer extends NoopProxy {
         if (config.experimental?.aiguard?.enabled) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
-        if (config.experimental.flaggingProvider.enabled) {
-          lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
-        }
         this._tracingInitialized = true
       }
       for (const feature of Object.values(features)) {

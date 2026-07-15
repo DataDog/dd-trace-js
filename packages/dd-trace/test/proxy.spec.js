@@ -206,11 +206,12 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
-    openfeatureProvider = {
-      _setConfiguration: sinon.spy(),
-    }
-
-    OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
+    OpenFeatureProvider = sinon.stub().callsFake(function () {
+      openfeatureProvider = {
+        _setConfiguration: sinon.spy(),
+      }
+      return openfeatureProvider
+    })
 
     flare = {
       enable: sinon.spy(),
@@ -265,21 +266,29 @@ describe('TracerProxy', () => {
     })
 
     const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
+    const noopOpenfeature = {}
+
+    /**
+     * @param {object} proxy
+     * @returns {boolean}
+     */
+    function hasOpenfeatureProvider (proxy) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
+
+      return descriptor?.value !== undefined && descriptor.value !== noopOpenfeature
+    }
+
     featureRegistry.registerFeature({
       name: 'openfeature',
-      noop: {},
+      noop: noopOpenfeature,
       factory: () => openfeature,
       remoteConfig (rc, config, proxy) {
         openfeatureRcEnable(rc, config, () => proxy.openfeature)
       },
       enable (config, tracer, proxy, lazyProxy) {
         if (config.experimental.flaggingProvider.enabled) {
-          const openfeatureModule = proxy._modules.openfeature
-          const shouldCreateProvider = openfeatureModule.module === undefined
-
-          openfeatureModule.enable(config)
-
-          if (shouldCreateProvider) {
+          proxy._modules.openfeature.enable(config)
+          if (!hasOpenfeatureProvider(proxy)) {
             lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
           }
         }
@@ -423,14 +432,20 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
       })
 
-      it('should not recreate the openfeature provider when remote config reconfigures the tracer', () => {
+      it('keeps OpenFeature bound to the provider receiving FFE_FLAGS after tracing reconfigures', () => {
         config.experimental.flaggingProvider.enabled = true
 
         proxy.init()
+        const boundProvider = proxy.openfeature
 
         handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
 
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', flagConfig)
+
         sinon.assert.calledOnce(OpenFeatureProvider)
+        assert.strictEqual(proxy.openfeature, boundProvider)
+        sinon.assert.calledOnceWithExactly(boundProvider._setConfiguration, flagConfig)
       })
 
       it('should re-enable OpenFeature without replacing its provider when remote config re-enables tracing', () => {
@@ -459,10 +474,12 @@ describe('TracerProxy', () => {
         }
 
         proxy.init()
+        const sdk = proxy.aiguard
 
         handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
         handlers.get('APM_TRACING')(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
 
+        assert.strictEqual(proxy.aiguard, sdk)
         sinon.assert.calledOnce(AIGuardSdk)
         sinon.assert.calledTwice(aiguard.enable)
         sinon.assert.calledOnce(aiguard.disable)
