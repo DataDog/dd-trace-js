@@ -596,7 +596,6 @@ function install () {
 function pruneAmbiguousBunCentralSymlinks () {
   const dotBun = join(__dirname, '..', 'versions', 'node_modules', '.bun')
   const central = join(dotBun, 'node_modules')
-  if (!existsSync(central)) return
 
   const installedMajors = collectInstalledMajors(dotBun)
   for (const [pkg, majors] of installedMajors) {
