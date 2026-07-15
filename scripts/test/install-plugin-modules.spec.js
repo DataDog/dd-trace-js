@@ -1,9 +1,7 @@
 'use strict'
 
-// `scripts/install_plugin_modules.js:301` is the install line under test (`exec('bun install --trust', ...)`).
-// `--linker=isolated` lives in `versions/bunfig.toml` so the isolation contract is structural, not a flag.
-// The constrained PATH below removes yarn from the spawned child's lookup; a regression that re-introduces
-// a yarn invocation would fail to launch instead of silently succeeding via `$PATH` lookup.
+// `versions/bunfig.toml` pins the isolated linker. The constrained PATH removes yarn from the
+// spawned child's lookup, so a regression that re-introduces it fails to launch.
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
@@ -60,10 +58,7 @@ describe('scripts/install_plugin_modules.js', function () {
     const resolvedVersions = {}
     const expectedVersions = {}
     for (const folder of sandboxFolders) {
-      // Walk Node's resolution from inside the sandbox: bun's hoisted linker shares a single
-      // hoisted copy at `versions/node_modules/pino` and only nests siblings whose declared
-      // version differs, so a fixed `versions/<sandbox>/node_modules/pino` lookup misses the
-      // hoisted entry.
+      // Resolve from inside the sandbox so the assertion follows the same lookup path as the plugin tests.
       const sandboxIndex = path.join(versionsDir, folder, 'index.js')
       const sandboxRequire = createRequire(sandboxIndex)
       const resolved = JSON.parse(fs.readFileSync(sandboxRequire.resolve('pino/package.json'), 'utf8')).version
@@ -93,6 +88,16 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.match(result.stderr, /bun pm view failed for express:/)
   })
 
+  it('skips a published package version inside the release-age window', () => {
+    const traceFile = path.join(bunTraceDirectory, 'recent-metadata-trace.ndjson')
+    runInstall('pino', bunTraceDirectory, traceFile, undefined, 'pino')
+
+    for (const folder of ['pino', 'pino@4']) {
+      const manifest = require(path.join(versionsDir, folder, 'package.json'))
+      assert.strictEqual(manifest.dependencies.pino, '4.17.5')
+    }
+  })
+
   it('ignores unpublished versions left in registry time metadata', () => {
     runInstall('mariadb')
 
@@ -120,9 +125,10 @@ describe('scripts/install_plugin_modules.js', function () {
  * @param {string} [binDirectory]
  * @param {string} [traceFile]
  * @param {string} [metadataFailurePackage]
+ * @param {string} [recentMetadataPackage]
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  */
-function runInstall (plugin, binDirectory, traceFile, metadataFailurePackage) {
+function runInstall (plugin, binDirectory, traceFile, metadataFailurePackage, recentMetadataPackage) {
   const result = spawnSync(process.execPath, [installScript], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -132,6 +138,7 @@ function runInstall (plugin, binDirectory, traceFile, metadataFailurePackage) {
       PATH: `${binDirectory ?? bunBinDir}:/usr/bin:/bin`,
       ...(traceFile && { DD_BUN_TRACE_FILE: traceFile }),
       ...(metadataFailurePackage && { DD_BUN_FAIL_METADATA_PACKAGE: metadataFailurePackage }),
+      ...(recentMetadataPackage && { DD_BUN_RECENT_METADATA_PACKAGE: recentMetadataPackage }),
     },
   })
 
@@ -159,6 +166,13 @@ const { appendFileSync } = require('node:fs')
 const args = process.argv.slice(2)
 appendFileSync(process.env.DD_BUN_TRACE_FILE, JSON.stringify(args) + '\n')
 if (args[0] === 'pm' && args[1] === 'view' && args[2] === process.env.DD_BUN_FAIL_METADATA_PACKAGE) process.exit(1)
+if (args[0] === 'pm' && args[1] === 'view' && args[2] === process.env.DD_BUN_RECENT_METADATA_PACKAGE) {
+  const output = args[3] === 'versions'
+    ? ['4.17.5', '4.17.6']
+    : { '4.17.5': '2000-01-01T00:00:00.000Z', '4.17.6': '2999-01-01T00:00:00.000Z' }
+  process.stdout.write(JSON.stringify(output))
+  process.exit(0)
+}
 const result = spawnSync(${JSON.stringify(bunBinary)}, args, { stdio: 'inherit' })
 if (result.error) throw result.error
 process.exit(result.status ?? 1)
