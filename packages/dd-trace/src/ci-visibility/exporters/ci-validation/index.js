@@ -128,6 +128,16 @@ class CiValidationExporter extends CiVisibilityExporter {
   }
 
   /**
+   * Rejects coverage report upload in offline validation mode.
+   *
+   * @param {object} options ignored upload options
+   * @param {Function} callback completion callback
+   */
+  uploadCoverageReport (options, callback) {
+    callback(new Error('Coverage report upload is disabled during offline Test Optimization validation.'))
+  }
+
+  /**
    * Reports that screenshot upload is unavailable.
    *
    * @returns {boolean} always false

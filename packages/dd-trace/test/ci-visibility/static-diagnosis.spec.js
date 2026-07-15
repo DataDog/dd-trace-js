@@ -12,6 +12,43 @@ const {
 } = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
+  it('ignores a root package.json symbolic link that escapes the repository', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-outside-'))
+    const outsidePackageJson = path.join(outside, 'package.json')
+    fs.writeFileSync(outsidePackageJson, JSON.stringify({
+      name: 'external-secret-package-name',
+      devDependencies: {
+        'dd-trace': '7.0.0',
+        jest: '29.7.0',
+      },
+      scripts: { test: 'jest' },
+    }))
+    fs.symlinkSync(outsidePackageJson, path.join(root, 'package.json'))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const serializedReport = JSON.stringify(report)
+      const titles = report.results.map(result => result.title)
+
+      assert.strictEqual(report.scannedFileCount, 0)
+      assert.deepStrictEqual(report.supportedFrameworks, [])
+      assert.ok(titles.includes('No root package.json found'))
+      assert.ok(!titles.includes('dd-trace dependency found'))
+      assert.doesNotMatch(serializedReport, /external-secret-package-name/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
   it('does not execute git from a repository-controlled PATH directory', function () {
     if (process.platform === 'win32') this.skip()
 

@@ -8,6 +8,10 @@ const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
+const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
+const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+
 describe('Test Optimization validation initialization', () => {
   it('resolves the private exporter instead of agent-proxy or agentless exporters', () => {
     const offlineExporter = {}
@@ -35,12 +39,15 @@ describe('Test Optimization validation initialization', () => {
       DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
       DD_CIVISIBILITY_ENABLED: false,
       DD_API_KEY: 'must-not-select-agentless',
+      [VALIDATION_MANIFEST_ENV]: '/private/validation/manifest.txt',
+      [VALIDATION_MODE_ENV]: '1',
+      [VALIDATION_OUTPUT_ENV]: '/private/validation/output',
     }
 
     proxyquire('../../../../ci/init', {
       '../packages/dd-trace': tracer,
       '../packages/dd-trace/src/config/helper': {
-        getEnvironmentVariable: name => name === '_DD_TEST_OPTIMIZATION_VALIDATION_MODE' ? '1' : undefined,
+        getEnvironmentVariable: name => values[name],
         getValueFromEnvSources: (name, skipDefault) => values[name] ?? skipDefault,
       },
       '../packages/dd-trace/src/log': { debug: sinon.stub() },
@@ -60,6 +67,44 @@ describe('Test Optimization validation initialization', () => {
     })
   })
 
+  for (const missingEnvironmentVariable of [VALIDATION_MANIFEST_ENV, VALIDATION_OUTPUT_ENV]) {
+    it(`does not initialize validation mode without ${missingEnvironmentVariable}`, () => {
+      const tracer = {
+        init: sinon.stub(),
+        use: sinon.stub(),
+      }
+      const values = {
+        [VALIDATION_MANIFEST_ENV]: '/private/validation/manifest.txt',
+        [VALIDATION_MODE_ENV]: '1',
+        [VALIDATION_OUTPUT_ENV]: '/private/validation/output',
+      }
+      delete values[missingEnvironmentVariable]
+      const consoleError = sinon.stub(console, 'error')
+
+      try {
+        proxyquire('../../../../ci/init', {
+          '../packages/dd-trace': tracer,
+          '../packages/dd-trace/src/config/helper': {
+            getEnvironmentVariable: name => values[name],
+            getValueFromEnvSources: () => undefined,
+          },
+          '../packages/dd-trace/src/log': { debug: sinon.stub() },
+          '../packages/dd-trace/src/util': {
+            isFalse: value => value === 'false' || value === '0',
+            isTrue: value => value === '1',
+          },
+        })
+
+        assert.strictEqual(tracer.init.callCount, 0)
+        assert.strictEqual(consoleError.callCount, 1)
+        assert.match(consoleError.firstCall.args[0], new RegExp(missingEnvironmentVariable))
+        assert.match(consoleError.firstCall.args[0], /dd-trace will not be initialized/)
+      } finally {
+        consoleError.restore()
+      }
+    })
+  }
+
   it('preserves an explicit CI instruction to disable Test Optimization', () => {
     const tracer = {
       init: sinon.stub(),
@@ -71,7 +116,9 @@ describe('Test Optimization validation initialization', () => {
       '../packages/dd-trace/src/config/helper': {
         getEnvironmentVariable: name => ({
           DD_CIVISIBILITY_ENABLED: 'false',
-          _DD_TEST_OPTIMIZATION_VALIDATION_MODE: '1',
+          [VALIDATION_MANIFEST_ENV]: '/private/validation/manifest.txt',
+          [VALIDATION_MODE_ENV]: '1',
+          [VALIDATION_OUTPUT_ENV]: '/private/validation/output',
         })[name],
         getValueFromEnvSources: () => undefined,
       },
@@ -109,7 +156,9 @@ describe('Test Optimization validation initialization', () => {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
         MOCHA_WORKER_ID: '1',
         NODE_OPTIONS: '',
-        _DD_TEST_OPTIMIZATION_VALIDATION_MODE: '1',
+        [VALIDATION_MANIFEST_ENV]: path.join(process.cwd(), 'validation-manifest.txt'),
+        [VALIDATION_MODE_ENV]: '1',
+        [VALIDATION_OUTPUT_ENV]: path.join(process.cwd(), 'validation-output'),
       },
     })
 

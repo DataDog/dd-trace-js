@@ -229,17 +229,18 @@ const UNSUPPORTED_FRAMEWORKS = [
  */
 function runDiagnosis (options = {}) {
   const root = path.resolve(options.root || process.cwd())
+  const physicalRoot = getPhysicalRoot(root)
   const env = options.env || process.env
   const execFile = options.execFile || execFileSync
   const maxFiles = options.maxFiles || MAX_SCANNED_FILES
   const maxTotalBytes = options.maxTotalBytes || MAX_SCANNED_TEXT_BYTES
   const results = []
-  const files = collectTextFiles(root, maxFiles, options.excludePaths)
-  const textFiles = readTextFiles(root, files, maxTotalBytes)
+  const files = collectTextFiles(root, physicalRoot, maxFiles, options.excludePaths)
+  const textFiles = readTextFiles(root, physicalRoot, files, maxTotalBytes)
   const truncatedFileScan = files.truncated || textFiles.truncated
   const manifests = readPackageManifests(root, textFiles)
   const rootManifest = manifests.find(manifest => manifest.relativePath === 'package.json')
-  const rootPackageJsonState = getRootPackageJsonState(root)
+  const rootPackageJsonState = getRootPackageJsonState(root, physicalRoot)
   const scripts = collectScripts(manifests)
   const workflowFiles = textFiles.filter(file => isWorkflowFile(file.relativePath))
   const definitions = getFrameworkDefinitions(DD_MAJOR)
@@ -320,17 +321,12 @@ function readPackageManifests (root, textFiles) {
  * Checks whether the repository root has a package.json independently from the text-file scan.
  *
  * @param {string} root repository root
+ * @param {string|undefined} physicalRoot physical repository root
  * @returns {{ exists: boolean }} root package.json state
  */
-function getRootPackageJsonState (root) {
-  try {
-    return {
-      exists: fs.statSync(path.join(root, 'package.json')).isFile(),
-    }
-  } catch {
-    return {
-      exists: false,
-    }
+function getRootPackageJsonState (root, physicalRoot) {
+  return {
+    exists: Boolean(getSafeScannedFile(root, physicalRoot, 'package.json')),
   }
 }
 
@@ -1473,11 +1469,12 @@ function findLocations (textFiles, pattern) {
  * Collects text-like repository files.
  *
  * @param {string} root repository root
+ * @param {string|undefined} physicalRoot physical repository root
  * @param {number} maxFiles maximum number of files
  * @param {string[]} [excludePaths] repository paths excluded from the scan
  * @returns {Array<string> & {truncated?: boolean}} relative paths
  */
-function collectTextFiles (root, maxFiles, excludePaths = []) {
+function collectTextFiles (root, physicalRoot, maxFiles, excludePaths = []) {
   const files = []
   const seen = new Set()
   const exclusions = getScanExclusions(root, excludePaths)
@@ -1524,12 +1521,7 @@ function collectTextFiles (root, maxFiles, excludePaths = []) {
   }
 
   function addTextFileIfPresent (relativePath) {
-    try {
-      if (!fs.statSync(path.join(root, relativePath)).isFile()) return
-    } catch {
-      return
-    }
-
+    if (!getSafeScannedFile(root, physicalRoot, relativePath)) return
     addTextFile(relativePath)
   }
 
@@ -1587,42 +1579,97 @@ function isScanPathExcluded (relativePath, exclusions) {
  * Reads scanned text files within the size limit.
  *
  * @param {string} root repository root
+ * @param {string|undefined} physicalRoot physical repository root
  * @param {string[]} files relative file paths
  * @param {number} maxTotalBytes maximum aggregate bytes to retain
  * @returns {Array<object>} text file records
  */
-function readTextFiles (root, files, maxTotalBytes) {
+function readTextFiles (root, physicalRoot, files, maxTotalBytes) {
   const textFiles = []
   let totalBytes = 0
   textFiles.truncated = false
 
   for (const relativePath of files) {
-    const absolutePath = path.join(root, relativePath)
-    let stat
-    try {
-      stat = fs.statSync(absolutePath)
-    } catch {
-      continue
-    }
+    const file = getSafeScannedFile(root, physicalRoot, relativePath)
+    if (!file) continue
 
-    if (stat.size > MAX_TEXT_FILE_SIZE) continue
-    if (totalBytes + stat.size > maxTotalBytes) {
+    if (file.stat.size > MAX_TEXT_FILE_SIZE) continue
+    if (totalBytes + file.stat.size > maxTotalBytes) {
       textFiles.truncated = true
       break
     }
 
     try {
+      const content = fs.readFileSync(file.filename, 'utf8')
+      const contentBytes = Buffer.byteLength(content)
+      if (contentBytes > MAX_TEXT_FILE_SIZE) continue
+      if (totalBytes + contentBytes > maxTotalBytes) {
+        textFiles.truncated = true
+        break
+      }
       textFiles.push({
         relativePath: normalizeRelativePath(relativePath),
-        content: fs.readFileSync(absolutePath, 'utf8'),
+        content,
       })
-      totalBytes += stat.size
+      totalBytes += contentBytes
     } catch {
       // Ignore files that cannot be read as UTF-8.
     }
   }
 
   return textFiles
+}
+
+/**
+ * Resolves the physical repository root used to constrain scanned file reads.
+ *
+ * @param {string} root repository root
+ * @returns {string|undefined} physical directory path
+ */
+function getPhysicalRoot (root) {
+  try {
+    const physicalRoot = fs.realpathSync(root)
+    return fs.statSync(physicalRoot).isDirectory() ? physicalRoot : undefined
+  } catch {}
+}
+
+/**
+ * Resolves one regular non-symlink file without escaping the physical repository root.
+ *
+ * @param {string} root lexical repository root
+ * @param {string|undefined} physicalRoot physical repository root
+ * @param {string} relativePath repository-relative candidate
+ * @returns {{filename: string, stat: fs.Stats}|undefined} safe file information
+ */
+function getSafeScannedFile (root, physicalRoot, relativePath) {
+  if (!physicalRoot) return
+
+  const lexicalRoot = path.resolve(root)
+  const absolutePath = path.resolve(lexicalRoot, relativePath)
+  if (!isPathInside(lexicalRoot, absolutePath)) return
+
+  try {
+    const entry = fs.lstatSync(absolutePath)
+    if (!entry.isFile() || entry.isSymbolicLink()) return
+
+    const filename = fs.realpathSync(absolutePath)
+    if (!isPathInside(physicalRoot, filename)) return
+
+    const stat = fs.statSync(filename)
+    return stat.isFile() ? { filename, stat } : undefined
+  } catch {}
+}
+
+/**
+ * Checks lexical or physical path containment.
+ *
+ * @param {string} root allowed root
+ * @param {string} filename candidate path
+ * @returns {boolean} whether the candidate is inside the root
+ */
+function isPathInside (root, filename) {
+  const relative = path.relative(root, filename)
+  return relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 /**

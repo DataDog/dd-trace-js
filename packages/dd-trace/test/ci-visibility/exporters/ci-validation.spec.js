@@ -479,11 +479,14 @@ describe('CI validation exporter', () => {
     assert.strictEqual(exporter.canUploadTestScreenshots(), false)
     exporter.sendGitMetadata()
     exporter.exportDiLogs()
-    exporter.uploadTestScreenshot({}, screenshotError => {
-      assert.match(screenshotError.message, /disabled during offline Test Optimization validation/)
-      assert(networkStubs.every(stub => stub.notCalled))
-      exporter._sink.writeSummary()
-      done()
+    exporter.uploadCoverageReport({}, coverageError => {
+      assert.match(coverageError.message, /disabled during offline Test Optimization validation/)
+      exporter.uploadTestScreenshot({}, screenshotError => {
+        assert.match(screenshotError.message, /disabled during offline Test Optimization validation/)
+        assert(networkStubs.every(stub => stub.notCalled))
+        exporter._sink.writeSummary()
+        done()
+      })
     })
   })
 

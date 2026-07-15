@@ -304,12 +304,6 @@ function removeEmptyParents (directory, stop) {
 }
 
 /**
- * Converts a manifest identifier into a bounded path segment.
- *
- * @param {string} value identifier
- * @returns {string} safe path segment
- */
-/**
  * Checks lexical path containment.
  *
  * @param {string} root candidate parent
