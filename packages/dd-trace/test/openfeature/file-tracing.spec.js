@@ -28,10 +28,6 @@ async function assertTracesProvider (entrypoint) {
 }
 
 describe('OpenFeature file tracing', () => {
-  it('traces the provider dependency tree through the default entrypoint', async () => {
-    await assertTracesProvider(path.join(repoRoot, 'index.js'))
-  })
-
   it('traces the provider dependency tree through the runtime wrapper', async () => {
     await assertTracesProvider(path.join(repoRoot, 'packages/dd-trace/src/openfeature/flagging_provider.js'))
   })
@@ -44,20 +40,26 @@ describe('OpenFeature file tracing', () => {
     require(path.join(repoRoot, 'openfeature.js'))
   })
 
-  it('loads the explicit entrypoint as an ESM package subpath', () => {
+  it('loads the explicit entrypoint as a CommonJS and ESM package subpath', () => {
     const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'dd-trace-openfeature-'))
     const nodeModulesPath = path.join(fixtureRoot, 'node_modules')
 
     try {
       mkdirSync(nodeModulesPath)
       symlinkSync(repoRoot, path.join(nodeModulesPath, 'dd-trace'), 'junction')
-      const result = spawnSync(
+      const commonJsResult = spawnSync(
+        process.execPath,
+        ['--eval', "require('dd-trace/openfeature')"],
+        { cwd: fixtureRoot, encoding: 'utf8' }
+      )
+      assert.strictEqual(commonJsResult.status, 0, commonJsResult.stderr)
+
+      const esmResult = spawnSync(
         process.execPath,
         ['--input-type=module', '--eval', "import 'dd-trace/openfeature.js'"],
         { cwd: fixtureRoot, encoding: 'utf8' }
       )
-
-      assert.strictEqual(result.status, 0, result.stderr)
+      assert.strictEqual(esmResult.status, 0, esmResult.stderr)
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true })
     }

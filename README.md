@@ -96,6 +96,14 @@ If you would like to trace your bundled application then please read this page o
 When using the experimental OpenFeature provider, file-traced deployments can force the optional provider and
 its dependencies into the output with a side-effect import before accessing `tracer.openfeature`:
 
+CommonJS:
+
+```js
+require('dd-trace/openfeature')
+```
+
+ES modules:
+
 ```js
 import 'dd-trace/openfeature.js'
 ```
