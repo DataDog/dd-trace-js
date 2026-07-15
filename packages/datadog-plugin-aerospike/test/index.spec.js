@@ -85,7 +85,7 @@ describe('Plugin', () => {
                   'aerospike.userkey': userKey,
                   component: 'aerospike',
                 },
-              })
+              }, { spanResourceMatch: /^Put$/ })
               .then(done)
               .catch(done)
 
@@ -130,7 +130,7 @@ describe('Plugin', () => {
                   'aerospike.userkey': userKey,
                   component: 'aerospike',
                 },
-              })
+              }, { spanResourceMatch: /^Get$/ })
               .then(done)
               .catch(done)
 
@@ -155,7 +155,7 @@ describe('Plugin', () => {
                   'aerospike.userkey': userKey,
                   component: 'aerospike',
                 },
-              })
+              }, { spanResourceMatch: /^Operate$/ })
               .then(done)
               .catch(done)
 
@@ -187,7 +187,7 @@ describe('Plugin', () => {
                   'aerospike.index': 'tags_idx',
                   component: 'aerospike',
                 },
-              })
+              }, { spanResourceMatch: /^IndexCreate$/ })
               .then(done)
               .catch(done)
 
@@ -218,7 +218,7 @@ describe('Plugin', () => {
                   'aerospike.setname': set,
                   component: 'aerospike',
                 },
-              })
+              }, { spanResourceMatch: /^Query$/ })
               .then(done)
               .catch(done)
 
@@ -271,7 +271,7 @@ describe('Plugin', () => {
                     component: 'aerospike',
                   },
                 })
-              })
+              }, { spanResourceMatch: /^Operate$/ })
               .then(done)
               .catch(done)
 
