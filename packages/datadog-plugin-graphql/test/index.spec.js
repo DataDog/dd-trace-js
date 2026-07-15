@@ -1125,7 +1125,7 @@ describe('Plugin', () => {
             })
           }
 
-          const names = ['Human', 'Pet', 'Robot']
+          const names = ['Human', 'Pet', 'Robot', 'Alien']
           const namedTypes = names.map(makeNamedType)
           const profileTypes = names.map(makeProfileType)
           const abstractSchema = new graphql.GraphQLSchema({
@@ -1146,9 +1146,19 @@ describe('Plugin', () => {
                       profile: { __typename: 'PetProfile', value: 'animal' },
                     },
                     {
+                      __typename: 'Pet',
+                      name: 'fido',
+                      profile: { __typename: 'PetProfile', value: 'animal' },
+                    },
+                    {
                       __typename: 'Robot',
                       name: 'r2d2',
                       profile: { __typename: 'RobotProfile', value: 'machine' },
+                    },
+                    {
+                      __typename: 'Alien',
+                      name: 'et',
+                      profile: { __typename: 'AlienProfile', value: 'visitor' },
                     },
                     {
                       __typename: 'Human',
@@ -1179,20 +1189,35 @@ describe('Plugin', () => {
             }
 
             assert.deepStrictEqual(coordinatesByPath['results.*.name'].sort(), [
+              'Alien.name',
               'Human.name',
               'Pet.name',
               'Robot.name',
             ])
             assert.deepStrictEqual(coordinatesByPath['results.*.profile'].sort(), [
+              'Alien.profile',
               'Human.profile',
               'Pet.profile',
               'Robot.profile',
             ])
             assert.deepStrictEqual(coordinatesByPath['results.*.profile.value'].sort(), [
+              'AlienProfile.value',
               'HumanProfile.value',
               'PetProfile.value',
               'RobotProfile.value',
             ])
+
+            if (semver.satisfies(graphqlVersion, '>=15.0.0')) {
+              const spans = sort(traces[0])
+              for (const name of names) {
+                const profile = spans.find(span => span.meta['graphql.field.coordinates'] === `${name}.profile`)
+                const value = spans.find(span =>
+                  span.meta['graphql.field.coordinates'] === `${name}Profile.value`)
+                assert.ok(profile, `expected ${name}.profile span`)
+                assert.ok(value, `expected ${name}Profile.value span`)
+                assert.strictEqual(value.parent_id.toString(), profile.span_id.toString())
+              }
+            }
           }
 
           const assertion = agent.assertSomeTraces(assertCoordinates, { spanResourceMatch: /results:\[Named\]/ })

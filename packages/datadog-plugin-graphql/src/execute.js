@@ -436,7 +436,14 @@ function wrapResolve (resolve) {
     let field = rootCtx.fields.get(fieldKey)
     const collapsedField = field
     if (config.collapse && field?.parentTypeName !== parentTypeName) {
-      field = field?.fieldsByParentType?.get(parentTypeName)
+      const parentTypeFields = field?.parentTypeFields
+      if (parentTypeFields?.parentTypeName === undefined) {
+        field = parentTypeFields?.get(parentTypeName)
+      } else if (parentTypeFields.parentTypeName === parentTypeName) {
+        field = parentTypeFields
+      } else {
+        field = undefined
+      }
     }
     const isFirst = !field
 
@@ -459,13 +466,17 @@ function wrapResolve (resolve) {
         currentStore: null,
       }
       if (config.collapse && collapsedField) {
-        if (collapsedField.fieldsByParentType) {
-          collapsedField.fieldsByParentType.set(parentTypeName, field)
+        const parentTypeFields = collapsedField.parentTypeFields
+        if (parentTypeFields === undefined) {
+          collapsedField.parentTypeFields = field
+        } else if (parentTypeFields.parentTypeName === undefined) {
+          parentTypeFields.set(parentTypeName, field)
         } else {
-          collapsedField.fieldsByParentType = new Map([
-            [collapsedField.parentTypeName, collapsedField],
-            [parentTypeName, field],
-          ])
+          const fieldsByParentType = new Map()
+            .set(collapsedField.parentTypeName, collapsedField)
+            .set(parentTypeFields.parentTypeName, parentTypeFields)
+            .set(parentTypeName, field)
+          collapsedField.parentTypeFields = fieldsByParentType
         }
       } else {
         rootCtx.fields.set(fieldKey, field)
@@ -640,7 +651,13 @@ function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
     const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
     const innerField = rootCtx.fields.get(fieldKey)
-    if (innerField) return innerField.fieldsByParentType?.get(curr.typename) ?? innerField
+    if (innerField) {
+      if (curr.typename === undefined || innerField.parentTypeName === curr.typename) return innerField
+
+      const parentTypeFields = innerField.parentTypeFields
+      if (parentTypeFields.parentTypeName === undefined) return parentTypeFields.get(curr.typename)
+      return parentTypeFields
+    }
   }
 
   return null
