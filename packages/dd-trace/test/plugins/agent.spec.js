@@ -4,6 +4,7 @@ const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('./agent')
 
@@ -181,14 +182,22 @@ describe('test agent helper', () => {
 
     it('resolves at the timeout when no forbidden trace arrives', async () => {
       const tracer = await agent.load('dns')
+      const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-      const start = Date.now()
-      await agent.assertNoTraces(() => {
-        assert.fail('no trace should have been produced')
-      }, { timeoutMs: 200 })
-      const elapsed = Date.now() - start
-      assert.ok(elapsed >= 200, `resolved before the timeout window (${elapsed}ms)`)
-      assert.ok(elapsed < 1000, `resolved well after the timeout window (${elapsed}ms)`)
+      try {
+        const expectation = agent.assertNoTraces(() => {
+          assert.fail('no trace should have been produced')
+        }, { timeoutMs: 200 })
+
+        clock.tick(199)
+        assert.strictEqual(clock.countTimers(), 1)
+
+        clock.tick(1)
+        await expectation
+        assert.strictEqual(clock.countTimers(), 0)
+      } finally {
+        clock.restore()
+      }
 
       assert.strictEqual(tracer, global._ddtrace)
     })
