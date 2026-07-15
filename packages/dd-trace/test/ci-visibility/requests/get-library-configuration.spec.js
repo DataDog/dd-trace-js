@@ -37,11 +37,13 @@ const COMPLETE_SETTINGS_ATTRIBUTES = {
 
 describe('get-library-configuration', () => {
   beforeEach(() => {
+    getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = true
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
   })
 
   afterEach(() => {
+    getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = true
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
   })
@@ -170,6 +172,31 @@ describe('get-library-configuration', () => {
 
       assert.strictEqual(settings.isCodeCoverageEnabled, true)
       assert.strictEqual(settings.isSuitesSkippingEnabled, true)
+    })
+
+    it('disables code coverage report upload when the environment override is false', () => {
+      getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = false
+
+      const settings = parseLibraryConfigurationResponse(JSON.stringify({
+        data: {
+          attributes: COMPLETE_SETTINGS_ATTRIBUTES,
+        },
+      }))
+
+      assert.strictEqual(settings.isCoverageReportUploadEnabled, false)
+    })
+
+    it('does not enable code coverage report upload when the environment override is true', () => {
+      const settings = parseLibraryConfigurationResponse(JSON.stringify({
+        data: {
+          attributes: {
+            ...COMPLETE_SETTINGS_ATTRIBUTES,
+            coverage_report_upload_enabled: false,
+          },
+        },
+      }))
+
+      assert.strictEqual(settings.isCoverageReportUploadEnabled, false)
     })
   })
 })
