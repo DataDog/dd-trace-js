@@ -98,7 +98,15 @@ describe('Plugin', () => {
           }
           const TracerProvider = require('../../dd-trace/src/opentelemetry/tracer_provider')
           const otelTracer = new TracerProvider().getTracer('ai')
-          const checkTraces = agent.assertSomeTraces(() => {})
+          const checkTraces = agent.assertSomeTraces(traces => {
+            assertObjectContains(traces[0][0], {
+              name: 'ai.generateText.doGenerate',
+              error: 1,
+              meta: {
+                'error.message': originalError.message,
+              },
+            })
+          })
 
           await assert.rejects(
             ai.generateText({
