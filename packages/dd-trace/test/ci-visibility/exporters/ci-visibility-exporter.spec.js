@@ -364,7 +364,7 @@ describe('CI Visibility Exporter', () => {
     it('replaces the backend EFD duration policy when the local retry count is set', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({
         url,
-        testOptimization: { DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT: 2 },
+        testOptimization: { DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 2 },
       })
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
@@ -376,7 +376,7 @@ describe('CI Visibility Exporter', () => {
     it('replaces the backend EFD duration policy with zero retries', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({
         url,
-        testOptimization: { DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT: 0 },
+        testOptimization: { DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 0 },
       })
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)

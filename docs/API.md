@@ -512,7 +512,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
-Set `DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
+Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
 Early Flake Detection retries for every new test, regardless of test duration. A value of `0` disables EFD retries.
 When the variable is unset, the backend-provided duration-based retry policy applies.
 

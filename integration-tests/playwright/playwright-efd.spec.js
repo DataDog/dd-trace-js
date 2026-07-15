@@ -279,7 +279,7 @@ versions.forEach((version) => {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT: '1',
+              DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: '1',
               TEST_DIR: './ci-visibility/playwright-efd-duration',
               PLAYWRIGHT_WORKERS: '2',
             },

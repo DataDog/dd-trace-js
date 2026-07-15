@@ -1036,7 +1036,7 @@ describe('Config', () => {
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED', value: true, origin: 'default' },
-      { name: 'DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT', value: null, origin: 'default' },
+      { name: 'DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', value: null, origin: 'default' },
       { name: 'DD_CIVISIBILITY_FLAKY_RETRY_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_ITR_ENABLED', value: true, origin: 'default' },
@@ -3523,7 +3523,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
-      delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT
+      delete process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
@@ -3586,29 +3586,29 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, false)
       })
-      it('should leave DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT unset by default', () => {
+      it('should leave DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT unset by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
-      it('should read DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT if present', () => {
-        process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2'
+      it('should read DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT if present', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2'
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
       })
-      it('should allow zero DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT retries', () => {
-        process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT = '0'
+      it('should allow zero DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT retries', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '0'
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT, 0)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 0)
       })
-      it('should round DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT down to an integer', () => {
-        process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2.9'
+      it('should round DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT down to an integer', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2.9'
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
       })
-      it('should reject a negative DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT', () => {
-        process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT = '-1'
+      it('should reject a negative DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '-1'
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)

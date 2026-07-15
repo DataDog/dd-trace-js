@@ -494,7 +494,7 @@
         "namespace": "testOptimization"
       }
     ],
-    "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT": [
+    "DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT": [
       {
         "implementation": "A",
         "type": "int",

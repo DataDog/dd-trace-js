@@ -294,7 +294,7 @@ class CiVisibilityExporter extends BufferingExporter {
     } = remoteConfiguration
     const { testOptimization } = this._config
     const earlyFlakeDetectionRetryCount =
-      testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_RETRY_COUNT
+      testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
     const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
     return {
       isCodeCoverageEnabled,
