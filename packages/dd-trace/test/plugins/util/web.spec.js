@@ -176,6 +176,54 @@ describe('plugins/util/web', () => {
       })
   })
 
+  describe('extractIncomingServerContext', () => {
+    it('passes propagation headers to the configured tracer extractor', () => {
+      const headers = {
+        traceparent: '00-00000000000000000000000000000001-0000000000000002-01',
+      }
+      const context = {}
+      const tracer = {
+        extract: sinon.stub().returns(context),
+      }
+
+      assert.strictEqual(web.extractIncomingServerContext(tracer, headers), context)
+      sinon.assert.calledOnceWithExactly(tracer.extract, 'http_headers', headers)
+    })
+
+    it('returns the configured extractor result', () => {
+      const headers = {
+        traceparent: '00-00000000000000000000000000000001-0000000000000002-01',
+      }
+      const tracer = {
+        extract: sinon.stub(),
+      }
+
+      assert.strictEqual(web.extractIncomingServerContext(tracer, headers), undefined)
+      sinon.assert.calledOnceWithExactly(tracer.extract, 'http_headers', headers)
+    })
+
+    it('normalizes Web Headers before extraction', () => {
+      const entries = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        traceparent: '00-00000000000000000000000000000001-0000000000000002-01',
+      }
+      const headers = {
+        get: name => entries[name.toLowerCase()],
+        [Symbol.iterator]: function * () {
+          yield * Object.entries(entries)
+        },
+      }
+      const context = {}
+      const tracer = {
+        extract: sinon.stub().returns(context),
+      }
+
+      assert.strictEqual(web.extractIncomingServerContext(tracer, headers), context)
+      sinon.assert.calledOnceWithExactly(tracer.extract, 'http_headers', entries)
+    })
+  })
+
   describe('OTel semantics network.peer.address', () => {
     // The HTTP tag renames happen centrally in span_format; only network.peer.address
     // is set here (the socket isn't available at serialization).
