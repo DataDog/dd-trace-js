@@ -1,14 +1,9 @@
 'use strict'
 
-const { randomUUID } = require('node:crypto')
+const id = require('../../id')
 
 const { API_BASE_PATH } = require('./client')
 const { Row, ExperimentResult } = require('./result')
-
-// 32-char hex id (a UUIDv4 with the dashes stripped) for span/trace ids.
-function hexId () {
-  return randomUUID().replaceAll('-', '')
-}
 
 function inferMetricType (value) {
   if (typeof value === 'boolean') return 'boolean'
@@ -173,10 +168,16 @@ class Experiment {
       for (let i = 0; i < records.length; i++) {
         const record = records[i]
         const datasetRecordId = i < recordIds.length ? recordIds[i] : ''
-        const spanId = hexId()
-        const traceId = hexId()
         const startNs = Date.now() * 1e6
         const startHr = process.hrtime.bigint()
+
+        // Root-span id generation, same convention as opentracing/span.js: a single
+        // random 64-bit id for the span, reused as the trace id's low 64 bits with a
+        // start-time-derived high 64 bits (like the `_dd.p.tid` 128-bit trace id tag).
+        const spanIdentifier = id()
+        const traceIdHigh = Math.floor(startNs / 1e9).toString(16).padStart(8, '0').padEnd(16, '0')
+        const spanId = spanIdentifier.toString(16).padStart(16, '0')
+        const traceId = spanIdentifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
 
         let output = null
         let errorType = null

@@ -117,8 +117,10 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const body = eventsBody()
     assert.equal(body.data.type, 'experiments')
     const span = body.data.attributes.spans[0]
-    assert.match(span.span_id, /^[0-9a-f]{32}$/)
+    assert.match(span.span_id, /^[0-9a-f]{16}$/)
     assert.match(span.trace_id, /^[0-9a-f]{32}$/)
+    // Root-span convention: the trace id's low 64 bits are the span id itself.
+    assert.equal(span.trace_id.slice(16), span.span_id)
     assert.equal(span.status, 'ok')
     assert.ok(span.tags.includes('experiment_id:exp'))
     assert.ok(span.tags.includes('dataset_id:ds'))
