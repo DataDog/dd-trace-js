@@ -61,4 +61,11 @@ module.exports = {
     UPSTREAM: 'span-pointer-up',
     DOWNSTREAM: 'span-pointer-down',
   }),
+  // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+  GRPC_STATUS_NAMES: [
+    'OK', 'CANCELLED', 'UNKNOWN', 'INVALID_ARGUMENT', 'DEADLINE_EXCEEDED',
+    'NOT_FOUND', 'ALREADY_EXISTS', 'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED',
+    'FAILED_PRECONDITION', 'ABORTED', 'OUT_OF_RANGE', 'UNIMPLEMENTED',
+    'INTERNAL', 'UNAVAILABLE', 'DATA_LOSS', 'UNAUTHENTICATED',
+  ],
 }

@@ -277,6 +277,8 @@ function assertLlmObsSpanEvent (actual, expected) {
     meta: expectedMeta,
   }
 
+  if (sessionId) expectedSpanEvent.session_id = sessionId
+
   assert.deepStrictEqual(actual, expectedSpanEvent)
 }
 

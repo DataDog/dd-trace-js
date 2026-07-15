@@ -13,6 +13,7 @@ const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 require('../../setup/core')
 
 const {
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestParametersString,
   getTestLevelsMetadataTags,
   getTestSuitePath,
@@ -1251,6 +1252,15 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
 
 describe('getEfdRetryCount', () => {
   const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+
+  it('exports the retry thresholds used to select slow test retry buckets', () => {
+    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS, [
+      { limitMs: 5_000, key: '5s' },
+      { limitMs: 10_000, key: '10s' },
+      { limitMs: 30_000, key: '30s' },
+      { limitMs: 300_000, key: '5m' },
+    ])
+  })
 
   it('returns retries for the matching duration bucket', () => {
     assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)

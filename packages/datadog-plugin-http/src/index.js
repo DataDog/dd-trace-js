@@ -1,6 +1,5 @@
 'use strict'
 
-const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const { enableGCPPubSubPushSubscription } = require('../../dd-trace/src/serverless')
 const log = require('../../dd-trace/src/log')
@@ -17,14 +16,13 @@ class HttpPlugin extends CompositePlugin {
   static get plugins () {
     const plugins = {}
 
-    // Load push subscription plugin first (if enabled) for GCP Cloud Run
+    // Load the push subscription plugin first (if enabled) for GCP Cloud Run.
+    // The require stays inside the gate so the pubsub plugin graph is not pulled
+    // into every process that instruments http — only GCP Cloud Run reaches it.
     if (enableGCPPubSubPushSubscription()) {
-      try {
-        plugins['pubsub-push-subscription'] = PushSubscriptionPlugin
-        log.debug('Loaded GCP Pub/Sub Push Subscription plugin for HTTP requests')
-      } catch (e) {
-        log.debug('Failed to load GCP Pub/Sub Push Subscription plugin:', e)
-      }
+      plugins['pubsub-push-subscription'] =
+        require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
+      log.debug('Loaded GCP Pub/Sub Push Subscription plugin for HTTP requests')
     }
 
     plugins.server = HttpServerPlugin

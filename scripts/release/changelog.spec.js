@@ -144,6 +144,84 @@ describe('release changelog', () => {
     ].join('\n'))
   })
 
+  it('renders breaking changes at the top of the release changelog', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'fix(core): keep existing behavior stable (#9001)',
+        author: '@alice',
+      },
+    ], [
+      {
+        sha: 'abc002',
+        subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
+        author: '@bob',
+      },
+      {
+        sha: 'abc003',
+        subject: 'chore(deps-dev): bump eslint from 9.0.0 to 10.0.0 (#9003)',
+      },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Breaking Changes',
+      `- **Dependencies:** Bump eslint from 9.0.0 to 10.0.0 ${prLink(9003)}`,
+      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)}`,
+      '',
+      '### Fixes',
+      `- **General:** Keep existing behavior stable ${prLink(9001)}`,
+      '',
+      '### Contributors',
+      '',
+      `${avatar('alice')} ${avatar('bob')}`,
+      '',
+    ].join('\n'))
+  })
+
+  it('does not promote the release to minor for breaking-only features', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'fix(core): keep existing behavior stable (#9001)',
+      },
+    ], [
+      {
+        sha: 'abc002',
+        subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
+      },
+    ])
+
+    assert.strictEqual(changelog.isMinor, false)
+  })
+
+  it('drops regular release note entries already listed as breaking changes', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(core): keep existing behavior stable (#9001)',
+      },
+    ], [
+      {
+        sha: 'abc003',
+        subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
+      },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Breaking Changes',
+      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)}`,
+      '',
+      '### Fixes',
+      `- **General:** Keep existing behavior stable ${prLink(9001)}`,
+      '',
+    ].join('\n'))
+    assert.strictEqual(changelog.isMinor, false)
+  })
+
   it('handles breaking markers and subjects without pull request numbers', () => {
     const changelog = createReleaseChangelog([
       {

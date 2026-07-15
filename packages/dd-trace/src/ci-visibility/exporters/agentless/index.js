@@ -31,6 +31,8 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     }
 
     this._apiUrl = url || new URL(`https://api.${site}`)
+    // Media uploads (raw bytes + DD-API-KEY) go to the same api.<site> host as the rest of the API.
+    this._testScreenshotUploadUrl = this._apiUrl
     // Agentless is always gzip compatible
     this._isGzipCompatible = true
   }
@@ -40,6 +42,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     try {
       apiUrl = new URL(apiUrl)
       this._apiUrl = apiUrl
+      this._testScreenshotUploadUrl = apiUrl
     } catch (e) {
       log.error('Error setting CI exporter api url', e)
     }

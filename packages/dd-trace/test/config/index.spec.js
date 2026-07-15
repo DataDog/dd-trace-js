@@ -782,6 +782,33 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0.5)
   })
 
+  it('auto-enables OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+  })
+
+  it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER is not otlp', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+  })
+
+  it('should not auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when DD_METRICS_OTEL_ENABLED is false', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+  })
+
+  it('should respect explicit OTEL_TRACES_SPAN_METRICS_ENABLED over auto-enable', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'false'
+    const config = getConfig()
+    assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
@@ -2918,6 +2945,53 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
+  describe('graphql plugin config env vars', () => {
+    it('parses the defaults onto the config object', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_GRAPHQL_COLLAPSE, true)
+      assert.strictEqual(config.DD_TRACE_GRAPHQL_DEPTH, -1)
+      assert.deepStrictEqual(config.DD_TRACE_GRAPHQL_VARIABLES, [])
+      assert.deepStrictEqual(config.DD_TRACE_GRAPHQL_ERROR_EXTENSIONS, [])
+    })
+
+    it('parses DD_TRACE_GRAPHQL_COLLAPSE as a boolean', () => {
+      process.env.DD_TRACE_GRAPHQL_COLLAPSE = 'false'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_COLLAPSE, false)
+    })
+
+    it('parses DD_TRACE_GRAPHQL_DEPTH as an integer', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '2'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, 2)
+    })
+
+    it('accepts the depth=0 boundary', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '0'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, 0)
+    })
+
+    it('rejects a non-integer depth and falls back to the default', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = 'foo'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, -1)
+    })
+
+    it('rejects an out-of-contract negative depth and falls back to the default', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '-5'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, -1)
+    })
+
+    it('parses DD_TRACE_GRAPHQL_VARIABLES as an array', () => {
+      process.env.DD_TRACE_GRAPHQL_VARIABLES = 'foo,bar'
+
+      assert.deepStrictEqual(getConfig().DD_TRACE_GRAPHQL_VARIABLES, ['foo', 'bar'])
+    })
+  })
+
   describe('flushInterval in Lambda', () => {
     afterEach(() => {
       existsSyncReturn = undefined
@@ -3346,6 +3420,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
+      delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3413,6 +3488,20 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, false)
+      })
+      it('should disable test failure screenshots by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, undefined)
+      })
+      it('should enable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true', () => {
+        process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, true)
+      })
+      it('should disable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is false', () => {
+        process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'

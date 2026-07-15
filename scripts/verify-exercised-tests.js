@@ -440,6 +440,16 @@ function extractScriptInvocations (run, knownScripts) {
         out.push({ tool: 'npm', script, explicit: true })
       }
     }
+
+    // `node scripts/c8-ci.js <script>` runs an in-process suite under V8 coverage; its first
+    // argument names the package script whose glob actually selects the specs. Treat it like
+    // `npm run <script>` so the chain from a `:ci` script to its underlying glob stays traceable.
+    if (t === 'node' && /(^|\/)scripts\/c8-ci\.js$/.test(String(tokens[i + 1] ?? ''))) {
+      const script = tokens[i + 2]
+      if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
+        out.push({ tool: 'npm', script, explicit: true })
+      }
+    }
   }
 
   return out

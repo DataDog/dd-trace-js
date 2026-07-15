@@ -6,11 +6,10 @@ const { wrapThen } = require('./helpers/promise')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
-// Bound around the deferred query execution. A subscriber returns the store that
-// stays active for the whole async scope that reaches the mongodb driver, so the
-// nested driver query can see the parent's analysis marker without it leaking
-// past the query. `runStores` enters the store only for that scope and restores
-// the parent on its own.
+// Bound around the deferred query execution. The `bindStore` transform returns a
+// child store with the analysis marker set, covering the whole async scope that
+// reaches the mongodb driver. `runStores` enters the child only for that scope
+// and restores the parent on its own.
 const execCh = channel('datadog:mongoose:model:filter:exec')
 // this channel is for wrapping the callback of exec methods and handling store context
 const execStartCh = channel('apm:mongoose:exec:start')

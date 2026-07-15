@@ -25,12 +25,21 @@ describe('breakpoints', function () {
   let sessionMock
   /**
    * @type {{
+   *   getGeneratedPosition: sinon.SinonStub;
+   *   '@noCallThru': boolean;
+   * }}
+   */
+  let sourceMapsMock
+  /**
+   * @type {{
    *   debug: sinon.SinonStub;
    *   error: sinon.SinonStub;
    *   '@noCallThru': boolean;
    * }}
    */
   let logMock
+  /** @type {() => void} */
+  let scriptLoadingStabilizedCallback
   /**
    * @type {{
    *   findScriptFromPartialPath: sinon.SinonStub;
@@ -77,11 +86,19 @@ describe('breakpoints', function () {
       }),
       /**
        * @param {string} event
-       * @param {Function} callback
+       * @param {() => void} callback
        */
       on (event, callback) {
-        if (event === 'scriptLoadingStabilized') callback()
+        if (event === 'scriptLoadingStabilized') {
+          scriptLoadingStabilizedCallback = callback
+          callback()
+        }
       },
+      '@noCallThru': true,
+    }
+
+    sourceMapsMock = {
+      getGeneratedPosition: sinon.stub(),
       '@noCallThru': true,
     }
 
@@ -108,6 +125,7 @@ describe('breakpoints', function () {
 
     breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
+      './source-maps': sourceMapsMock,
       './state': stateMock,
       './log': logMock,
     })
@@ -173,6 +191,51 @@ describe('breakpoints', function () {
         probe.nsBetweenSampling,
         2000000000n,
         'nsBetweenSampling should be 2 seconds for 0.5 samples/second'
+      )
+    })
+
+    it('should translate source-mapped locations before setting the breakpoint', async function () {
+      stateMock.findScriptFromPartialPath.returns({
+        url: 'file:///path/to/test.js',
+        scriptId: 'script-1',
+        sourceMapURL: 'test.js.map',
+        source: 'source',
+      })
+      sourceMapsMock.getGeneratedPosition.resolves({ line: 12, column: 4 })
+
+      await addProbe()
+
+      sinon.assert.calledOnceWithExactly(
+        sourceMapsMock.getGeneratedPosition,
+        'file:///path/to/test.js',
+        'source',
+        10,
+        'test.js.map'
+      )
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        location: {
+          scriptId: 'script-1',
+          lineNumber: 11,
+          columnNumber: 4,
+        },
+        condition: compileBreakpointCondition([{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n }]),
+      })
+    })
+
+    it('should throw if a source map cannot resolve the generated location', async function () {
+      stateMock.findScriptFromPartialPath.returns({
+        url: 'file:///path/to/test.js',
+        scriptId: 'script-1',
+        sourceMapURL: 'test.js.map',
+        source: 'source',
+      })
+      sourceMapsMock.getGeneratedPosition.resolves({ line: null, column: null })
+
+      await assert.rejects(
+        addProbe(),
+        {
+          message: 'Could not find generated position for file:///path/to/test.js:10:0 (probe: probe-1, version: 1)',
+        }
       )
     })
 
@@ -466,6 +529,26 @@ describe('breakpoints', function () {
             'Cannot compile expression: this is an invalid condition (probe: probe-1, version: 1)'
           )
         })
+    })
+
+    it('should wrap errors when setting a new breakpoint fails', async function () {
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.reject(cause)
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        addProbe(),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error setting breakpoint for probe probe-1 (version: 1)')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
     })
 
     it('should wrap errors when replacing a breakpoint while adding a probe fails', async function () {
@@ -942,6 +1025,35 @@ describe('breakpoints', function () {
       })
     })
 
+    it('should wrap errors when removing a breakpoint fails', async function () {
+      await addProbe()
+      await addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.removeBreakpoint') {
+          return Promise.reject(cause)
+        }
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.resolve({
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+          })
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        breakpoints.removeBreakpoint({ id: 'probe-1' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error removing breakpoint for probe probe-1')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+    })
+
     it('should throw error if debugger not started', async function () {
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
         .then(() => {
@@ -1029,6 +1141,26 @@ describe('breakpoints', function () {
         ]),
       })
       sinon.assert.calledThrice(sessionMock.post)
+    })
+  })
+
+  describe('re-evaluation', function () {
+    it('should log errors from async probe re-evaluation', async function () {
+      await addProbe()
+      logMock.error.resetHistory()
+
+      const cause = new Error('script lookup failure')
+      stateMock.findScriptFromPartialPath.throws(cause)
+
+      scriptLoadingStabilizedCallback()
+      await Promise.resolve()
+
+      sinon.assert.calledWith(
+        logMock.error,
+        '[debugger:devtools_client] Error re-evaluating probe %s',
+        'probe-1',
+        cause
+      )
     })
   })
 

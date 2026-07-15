@@ -1,7 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { addOpMeta, unwrapDurableError } = require('./util')
+const { addOpMeta, getStepDataForNext, unwrapDurableError } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -29,7 +29,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     if (operationName) {
       meta['aws.durable.operation_name'] = operationName
     }
-    addOpMeta(meta, ctx.self)
+    addOpMeta(meta, getStepDataForNext(ctx.self))
 
     this.startSpan(this.operationName(), {
       resource: operationName,

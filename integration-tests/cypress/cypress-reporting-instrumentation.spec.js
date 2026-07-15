@@ -113,7 +113,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }

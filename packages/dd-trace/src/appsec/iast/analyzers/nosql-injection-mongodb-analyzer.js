@@ -46,15 +46,6 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
           this.analyze({ filter }, store)
         }
       }
-
-      return store
-    }
-
-    // mquery analyzes and marks on the same channel: its tracing start both reaches
-    // the driver scope and is the first place the filters are available.
-    const onStartAndBind = (message) => {
-      onStart(message)
-      return markExecStore()
     }
 
     this.addSub('datadog:mongodb:collection:filter:start', onStart)
@@ -65,8 +56,10 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:mongoose:model:filter:start', onStart)
     this.addBind('datadog:mongoose:model:filter:exec', markExecStore)
 
+    // mquery analyzes filters at the prepare step and marks the execution scope at
+    // tracing start, where the deferred driver call runs under the marked store.
     this.addSub('datadog:mquery:filter:prepare', onStart)
-    this.addBind('tracing:datadog:mquery:filter:start', onStartAndBind)
+    this.addBind('tracing:datadog:mquery:filter:start', markExecStore)
   }
 
   configureSanitizers () {

@@ -233,6 +233,7 @@ interface Plugins {
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
+  "claude-agent-sdk": tracer.plugins.claude_agent_sdk;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
@@ -2192,6 +2193,12 @@ declare namespace tracer {
     interface anthropic extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
+     */
+    interface claude_agent_sdk extends Instrumentation {}
+
+    /**
      * Currently this plugin automatically instruments
      * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
      * This module uses graphql operations to service requests & thus generates graphql spans.
@@ -2507,6 +2514,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [graphql](https://github.com/graphql/graphql-js) module.
      *
+     * It also instruments [mercurius](https://github.com/mercurius-js/mercurius)
+     * (the Fastify GraphQL adapter): every request through `app.graphql` /
+     * `reply.graphql` opens a top-level `graphql.request` span that parents the
+     * `graphql.parse`/`graphql.validate`/`graphql.execute` spans and carries the
+     * request text. This span is produced even when mercurius serves the query
+     * from its JIT-compiled path, where `graphql.execute` does not run.
+     *
      * The `graphql` integration uses the operation name as the span resource name.
      * If no operation name is set, the resource name will always be just `query`,
      * `mutation` or `subscription`.
@@ -2535,6 +2549,7 @@ declare namespace tracer {
        * count toward the limit, regardless of `collapse`.
        *
        * @default -1
+       * @env DD_TRACE_GRAPHQL_DEPTH
        */
       depth?: number;
 
@@ -2551,7 +2566,10 @@ declare namespace tracer {
       /**
        * An array of variable names to record. Can also be a callback that returns
        * the key/value pairs to record. For example, using
-       * `variables => variables` would record all variables.
+       * `variables => variables` would record all variables. The environment
+       * variable only accepts the array form (comma-separated variable names).
+       *
+       * @env DD_TRACE_GRAPHQL_VARIABLES
        */
       variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
@@ -2560,8 +2578,17 @@ declare namespace tracer {
        * `users.*.name` span instead of `users.0.name`, `users.1.name`, etc)
        *
        * @default true
+       * @env DD_TRACE_GRAPHQL_COLLAPSE
        */
       collapse?: boolean;
+
+      /**
+       * An array of error `extensions` keys to attach to the span error event
+       * for each GraphQL error.
+       *
+       * @env DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+       */
+      errorExtensions?: string[];
 
       /**
        * Whether to enable signature calculation for the resource name. This can

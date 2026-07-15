@@ -1,7 +1,9 @@
 'use strict'
 
+const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
+const { version: tracerVersion } = require('../../../../../package.json')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -10,10 +12,13 @@ const { getTestManagementTests: getTestManagementTestsRequest } =
 const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
+const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+
+const hostname = getHostname()
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -37,6 +42,34 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
+function appendLogTag (tags, key, value) {
+  if (value !== undefined) {
+    tags.push(`${key}:${value}`)
+  }
+}
+
+function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSha) {
+  const tags = []
+  if (Array.isArray(logMessage.ddtags)) {
+    for (const tag of logMessage.ddtags) {
+      tags.push(tag)
+    }
+  } else if (logMessage.ddtags) {
+    for (const tag of logMessage.ddtags.split(',')) {
+      tags.push(tag)
+    }
+  }
+
+  appendLogTag(tags, 'env', env)
+  appendLogTag(tags, 'version', version)
+  appendLogTag(tags, 'debugger_version', tracerVersion)
+  appendLogTag(tags, 'host_name', hostname)
+  appendLogTag(tags, GIT_COMMIT_SHA, gitCommitSha)
+  appendLogTag(tags, GIT_REPOSITORY_URL, gitRepositoryUrl)
+
+  return tags.join(',')
+}
+
 class CiVisibilityExporter extends BufferingExporter {
   constructor (config) {
     super(config)
@@ -48,6 +81,9 @@ class CiVisibilityExporter extends BufferingExporter {
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
+
+    this._isTestFailureScreenshotsEnabled =
+      Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
@@ -338,21 +374,18 @@ class CiVisibilityExporter extends BufferingExporter {
     const { service, env, version } = this._config
 
     return {
-      ddtags: [
-        ...(logMessage.ddtags || []),
-        `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
-        `${GIT_COMMIT_SHA}:${gitCommitSha}`,
-      ].join(','),
+      ...logMessage,
+      ddtags: getLogTags(logMessage, { env, version }, gitRepositoryUrl, gitCommitSha),
       level: 'error',
       service,
+      hostname,
       dd: {
-        ...(logMessage.dd || []),
+        ...logMessage.dd,
         service,
         env,
         version,
       },
       ddsource: 'dd_debugger',
-      ...logMessage,
     }
   }
 
@@ -454,6 +487,41 @@ class CiVisibilityExporter extends BufferingExporter {
       format,
       testEnvironmentMetadata,
       url: this._codeCoverageReportUrl,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      evpProxyPrefix: this.evpProxyPrefix,
+    }, callback)
+  }
+
+  /**
+   * Returns whether the exporter can upload test failure screenshots.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestScreenshots () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
+  }
+
+  /**
+   * Uploads a single test screenshot to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the screenshot file
+   * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs }, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test screenshot upload URL not configured'))
+    }
+
+    uploadTestScreenshotRequest({
+      filePath,
+      traceId,
+      idempotencyKey,
+      capturedAtMs,
+      url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
     }, callback)

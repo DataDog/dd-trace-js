@@ -52,6 +52,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
 
     this.startSpan(this.operationName(), {
       resource: handler?.name,
+      type: this.constructor.type,
       kind: this.constructor.kind,
       meta,
     }, ctx)

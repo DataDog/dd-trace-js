@@ -4,7 +4,56 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
-## 5.0 to 6.0 (unreleased)
+## 5.0 to 6.0
+
+### Node 18 and 20 are no longer supported
+
+Node.js 18 reached EOL in April 2025 and Node.js 20 reached EOL in April 2026;
+neither is supported in v6. We highly recommend always keeping Node.js up to
+date regardless of our support policy.
+
+### Minimum versions bumped for test framework integrations
+
+Make sure to update any of the below frameworks to a v6 supported minimum version.
+
+| Framework  | v5 minimum | v6 minimum |
+| :---:      | :---:      | :---:      |
+| Jest       | 24.8.0     | 28.0.0     |
+| Mocha      | 5.2.0      | 8.0.0      |
+| Cypress    | 6.7.0      | 12.0.0     |
+| Playwright | 1.18.0     | 1.38.0     |
+
+### Nx service name default value
+
+The `NX_TASK_TARGET_PROJECT` environment variable set automatically by `nx`
+is now used as the default test service name `test.service` unless
+`DD_SERVICE` is explicitly set. On v5 this behavior required
+`DD_ENABLE_NX_SERVICE_NAME` to opt in. Remove the opt-in variable if you had
+it set; the behavior is now unconditional.
+
+### Lage test session name default value
+
+The `LAGE_PACKAGE_NAME` environment variable set automatically by `lage` is
+now used as the default test session name `test_session.name` unless
+`DD_TEST_SESSION_NAME` is explicitly set. On v5 this behavior required
+`DD_ENABLE_LAGE_PACKAGE_NAME=true` to opt in. Remove the opt-in variable if
+you had it set; the behavior is now unconditional.
+
+### CI test session `test_session.name` is now the trimmed command
+
+The `test_session.name` tag on test session spans now defaults to only the
+framework invocation (e.g. `jest`, `mocha`, `playwright test`, `cucumber-js`)
+rather than the full command line, when no explicit name is otherwise
+configured. The `test.command` tag is unaffected and still
+contains the full command. Update any monitors or dashboards that matched on
+`test_session.name` with the full command string.
+
+### OpenAI span resource name is now the normalized method name
+
+The `resource.name` on `openai.request` spans now uses a normalized,
+SDK-version-independent name (e.g. `createChatCompletion`) instead of the raw
+SDK method name (e.g. `chat.completions.create`). Update any monitors or
+dashboards that matched on the dotted v4 SDK method names.
 
 ### IAST security controls is env-only
 

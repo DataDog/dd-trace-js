@@ -269,9 +269,6 @@ describe('Plugin', () => {
               const otherKafka = new Kafka({
                 clientId: `kafkajs-test-${version}`,
                 brokers: ['127.0.0.1:9092'],
-                retry: {
-                  retries: 0,
-                },
               })
 
               sendRequestStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
@@ -492,7 +489,6 @@ describe('Plugin', () => {
               const otherKafka = new Kafka({
                 clientId: `kafkajs-test-${version}`,
                 brokers: ['127.0.0.1:9092'],
-                retry: { retries: 0 },
               })
               produceStub = sinon.stub(Broker.prototype, 'produce').rejects(error)
               producer = otherKafka.producer({ transactionTimeout: 10 })

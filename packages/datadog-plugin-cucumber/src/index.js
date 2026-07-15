@@ -1,9 +1,5 @@
 'use strict'
 
-// Capture real timers at module load time, before any test can install fake timers.
-const realDateNow = Date.now.bind(Date)
-const realSetTimeout = setTimeout
-
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
@@ -53,9 +49,6 @@ const {
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
 
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
@@ -248,17 +241,14 @@ class CucumberPlugin extends CiPlugin {
       ctx.currentStore = { ...store, span }
 
       this.activeTestSpan = span
-      // Time we give the breakpoint to be hit
       if (promises && this.runningTestProbe) {
-        promises.hitBreakpointPromise = new Promise((resolve) => {
-          realSetTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-        })
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
       }
 
       return ctx.currentStore
     })
 
-    this.addSub('ci:cucumber:test:retry', ({ span, isFirstAttempt, error, isAtrRetry }) => {
+    this.addSub('ci:cucumber:test:retry', ({ span, isFirstAttempt, error, isAtrRetry, promises, canWaitForDi }) => {
       if (!isFirstAttempt) {
         span.setTag(TEST_IS_RETRY, 'true')
         if (isAtrRetry) {
@@ -268,18 +258,18 @@ class CucumberPlugin extends CiPlugin {
         }
       }
       span.setTag('error', error)
-      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
-        const probeInformation = this.addDiProbe(error)
-        if (probeInformation) {
-          const { file, line, stackIndex } = probeInformation
-          this.runningTestProbe = { file, line }
-          this.testErrorStackIndex = stackIndex
-          const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
-          while (realDateNow() < waitUntil) {
-            // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
-            // However, Cucumber doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
-            // fall back to a fixed syncronous delay.
+      if (canWaitForDi !== false && promises && this.di && error && this.libraryConfig?.isDiEnabled) {
+        if (isFirstAttempt) {
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { file, line, stackIndex, setProbePromise } = probeInformation
+            this.runningTestProbe = { file, line }
+            this.testErrorStackIndex = stackIndex
+            this.prepareDiBreakpointHitWait()
+            promises.setProbePromise = this.waitForDiOperation(setProbePromise)
           }
+        } else if (this.runningTestProbe) {
+          this.prepareDiBreakpointHitWait()
         }
       }
       span.setTag(TEST_STATUS, 'fail')
@@ -410,6 +400,7 @@ class CucumberPlugin extends CiPlugin {
           this.tracer._exporter.flush()
         }
         this.activeTestSpan = null
+        this.cancelDiBreakpointHitWait()
         if (this.runningTestProbe) {
           this.removeDiProbe(this.runningTestProbe)
           this.runningTestProbe = null

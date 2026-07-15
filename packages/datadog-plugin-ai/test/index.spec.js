@@ -9,7 +9,7 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../version')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
-const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
+const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
 
 function getAiSdkOpenAiPackage (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {

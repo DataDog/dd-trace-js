@@ -173,7 +173,7 @@ Separate groups with empty line, sort alphabetically within each:
 
 1. Node.js core modules (with `node:` prefix)
 2. Third-party modules
-3. Internal imports (by path proximity, then alpha)
+3. Internal imports (by path proximity, furthest first, then alpha)
 
 ### ECMAScript and Node.js API Standards
 

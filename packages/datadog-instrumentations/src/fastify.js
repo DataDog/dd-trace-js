@@ -22,6 +22,8 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
+let lastPublishedError
+let lastPublishedReq
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -110,16 +112,20 @@ function invokeHookWithContext (name, fn, thisArg, args) {
     const promise = fn.apply(thisArg, args)
 
     if (promise && typeof promise.catch === 'function') {
-      return promise.catch(error => {
+      // Observe the rejection to publish, then hand back the original promise so
+      // the rejection keeps propagating untouched. Returning the handler's
+      // promise instead would resolve with `undefined` and swallow the rejection.
+      promise.catch(error => {
         ctx.error = error
-        return publishError(ctx)
+        publishError(ctx)
       })
     }
 
     return promise
   } catch (error) {
     ctx.error = error
-    throw publishError(ctx)
+    publishError(ctx)
+    throw error
   }
 }
 
@@ -305,11 +311,24 @@ function getRouteConfig (request) {
 }
 
 function publishError (ctx) {
-  if (ctx.error) {
-    publishErrorChannel(ctx)
-  }
+  const error = ctx.error
+  if (!error) return
 
-  return ctx.error
+  // avvio's boot loop (`_encapsulateThreeParam`) re-invokes the same encapsulated
+  // hook after it throws, re-throwing the same error object on every sequential
+  // re-drive (#9099), recursing the subscriber until boot overflows the stack.
+  // The subscribers tag once per request, so the guard collapses only a re-drive
+  // of the same error against the same request; a distinct request reusing a
+  // cached error object still publishes. Boot hooks carry no request, so their
+  // re-drives share the same `undefined` req and collapse after the first. The
+  // re-drive re-throws the one caught error on the trailing hop, so a compare
+  // against the previous publish bounds it without a per-error side table.
+  const req = ctx.req
+  if (error === lastPublishedError && req === lastPublishedReq) return
+  lastPublishedError = error
+  lastPublishedReq = req
+
+  publishErrorChannel(ctx)
 }
 
 function onRoute (routeOptions) {
