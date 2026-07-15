@@ -126,6 +126,37 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('replaces frozen policy snapshots when dependent requests fail', () => {
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.libraryConfig = Object.freeze({
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      isTestManagementEnabled: true,
+    })
+    plugin.tracer._exporter.getKnownTests = (configuration, done) => {
+      done(new Error('known tests failed'))
+    }
+    plugin.tracer._exporter.getTestManagementTests = (configuration, done) => {
+      done(new Error('test management failed'))
+    }
+
+    try {
+      dc.channel('ci:vitest:known-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isKnownTestsEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+
+      dc.channel('ci:vitest:test-management-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, false)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
     const plugin = createPlugin('jest_worker')
     const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
@@ -257,14 +288,14 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
-  function createPlugin (exporter) {
+  function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
     }
 
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
-      enabled: false,
+      enabled,
       experimental: {
         exporter,
       },

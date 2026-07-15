@@ -337,6 +337,33 @@ describe('test-optimization-http-cache', () => {
     }
   })
 
+  it('disables only the malformed feature in cached settings', () => {
+    writeCacheLayout(tmpRoot, {
+      settings: {
+        data: {
+          attributes: {
+            ...SETTINGS_RESPONSE.data.attributes,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': -1,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    const cache = new TestOptimizationHttpCache()
+    const settings = cache.readSettings()
+
+    assert.strictEqual(cache.isAvailable(), true)
+    assert.strictEqual(settings.isCodeCoverageEnabled, true)
+    assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
+    assert.strictEqual(settings.isTestManagementEnabled, true)
+    assert.strictEqual(Object.isFrozen(settings), true)
+  })
+
   it('ignores optional endpoint files after invalid settings disable the cache', () => {
     writeCacheLayout(tmpRoot, { settings: { data: { attributes: { code_coverage: true } } } })
     writeHttpCacheFile(tmpRoot, 'known_tests.json', KNOWN_TESTS_RESPONSE)
