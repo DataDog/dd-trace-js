@@ -2,9 +2,21 @@
 
 const { registerFeature } = require('../feature-registry')
 
+const noop = new (require('./noop'))()
+
+/**
+ * @param {import('../proxy')} proxy
+ * @returns {boolean}
+ */
+function hasFlaggingProvider (proxy) {
+  const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
+
+  return descriptor?.value !== undefined && descriptor.value !== noop
+}
+
 registerFeature({
   name: 'openfeature',
-  noop: new (require('./noop'))(),
+  noop,
   factory: () => require('./index'),
 
   /**
@@ -26,7 +38,9 @@ registerFeature({
   enable (config, tracer, proxy, lazyProxy) {
     if (config.experimental.flaggingProvider.enabled) {
       proxy._modules.openfeature.enable(config)
-      lazyProxy(proxy, 'openfeature', () => require('./flagging_provider'), tracer, config)
+      if (!hasFlaggingProvider(proxy)) {
+        lazyProxy(proxy, 'openfeature', () => require('./flagging_provider'), tracer, config)
+      }
     }
   },
 })
