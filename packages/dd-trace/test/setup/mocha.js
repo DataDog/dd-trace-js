@@ -182,6 +182,14 @@ function withNamingSchema (
   })
 }
 
+/**
+ * @param {() => import('../../src/proxy')} tracer
+ * @param {string} pluginName
+ * @param {((callback: (error?: Error) => void) => unknown) | (() => Promise<unknown>)} spanGenerationFn
+ * @param {string | (() => string)} service
+ * @param {string} serviceSource
+ * @param {{ desc?: string }} [opts]
+ */
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
     this.timeout(10000)
@@ -199,6 +207,13 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     })
 
     it('should compute peer service', async () => {
+      const { expectSomeSpan } = require('../plugins/helpers')
+      const traceAssertion = expectSomeSpan(getAgent(), {
+        meta: {
+          'peer.service': typeof service === 'function' ? service() : service,
+          '_dd.peer.service.source': serviceSource,
+        },
+      })
       const useCallback = spanGenerationFn.length === 1
       const spanGenerationPromise = useCallback
         ? new Promise(/** @type {() => void} */ (resolve, reject) => {
@@ -217,14 +232,14 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
           util.inspect(spanGenerationPromise, { depth: 1 }),
       )
 
-      await Promise.all([
-        getAgent().assertSomeTraces(traces => {
-          const span = traces[0][0]
-          assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
-          assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
-        }),
-        spanGenerationPromise,
-      ])
+      try {
+        await Promise.all([
+          traceAssertion,
+          spanGenerationPromise,
+        ])
+      } finally {
+        traceAssertion.cancel()
+      }
     })
   })
 }
