@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { USER_KEEP } = require('../../../ext/priority')
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
@@ -10,7 +11,19 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get kind () { return 'server' }
 
   bindStart (ctx) {
+    // Continue the trace propagated by the Durable Functions host (W3C traceparent
+    // supplied on the invocation's traceContext) so orchestrator/activity/entity
+    // invocations join the same trace instead of each starting a new root.
+    let childOf
+    if (ctx.traceparent) {
+      childOf = this.tracer.extract('text_map', {
+        traceparent: ctx.traceparent,
+        tracestate: ctx.tracestate,
+      })
+    }
+
     const span = this.startSpan(this.operationName(), {
+      childOf,
       kind: 'internal',
       type: 'serverless',
 
@@ -27,6 +40,17 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       span.setTag('aas.function.operation', ctx.operationName)
       span.setTag('resource.name', `${ctx.trigger} ${ctx.functionName} ${ctx.operationName}`
       )
+    }
+
+    // The Durable Functions host re-propagates the trace with the W3C sampled flag
+    // cleared (traceparent `-00`) even when its tracestate still says keep (`s:1`),
+    // so the continued activity/entity chunk inherits sampling priority 0 and would be
+    // dropped independently of the kept HTTP root — leaving it out of the trace in
+    // Datadog. A `manual.keep` tag is ignored here because the priority is already
+    // locked by propagation, so override it directly to USER_KEEP to ensure every
+    // chunk of the durable trace is retained.
+    if (childOf) {
+      span._prioritySampler.setPriority(span, USER_KEEP)
     }
 
     ctx.span = span
