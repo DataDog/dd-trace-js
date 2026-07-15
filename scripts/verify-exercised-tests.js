@@ -21,6 +21,15 @@ const globCache = new Map()
 let globCacheHits = 0
 let globCacheMisses = 0
 
+const COVERAGE_ACTIONS = new Set([
+  './.github/actions/coverage',
+  './.github/actions/upload-coverage-artifact',
+])
+const COVERAGE_COLLECTORS = new Set([
+  'integration-tests/coverage/run-suite.js',
+  'scripts/c8-ci.js',
+])
+
 /**
  * @param {string} pattern
  * @param {{cwd: string, nodir: boolean, windowsPathsNoEscape: boolean, ignore?: string[]}} opts
@@ -659,6 +668,87 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 }
 
 /**
+ * @param {string} command
+ * @returns {boolean}
+ */
+function invokesCoverageCollector (command) {
+  const tokens = shellSplit(command)
+  for (const token of tokens) {
+    const normalized = token.startsWith('./') ? token.slice(2) : token
+    if (COVERAGE_COLLECTORS.has(normalized)) return true
+  }
+  return false
+}
+
+/**
+ * @param {Record<string, string>} scripts
+ * @param {Set<string>} knownScripts
+ * @returns {Set<string>}
+ */
+function findCoverageScripts (scripts, knownScripts) {
+  const coverageScripts = new Set()
+  let foundCoverage
+
+  do {
+    foundCoverage = false
+    for (const [name, command] of Object.entries(scripts)) {
+      if (coverageScripts.has(name)) continue
+
+      if (
+        invokesCoverageCollector(command) ||
+        extractScriptInvocations(command, knownScripts).some(invocation => coverageScripts.has(invocation.script))
+      ) {
+        coverageScripts.add(name)
+        foundCoverage = true
+      }
+    }
+  } while (foundCoverage)
+
+  return coverageScripts
+}
+
+/**
+ * @param {string} command
+ * @param {Set<string>} knownScripts
+ * @param {Set<string>} coverageScripts
+ * @returns {boolean}
+ */
+function commandProducesCoverage (command, knownScripts, coverageScripts) {
+  if (invokesCoverageCollector(command)) return true
+
+  return extractScriptInvocations(command, knownScripts)
+    .some(invocation => coverageScripts.has(invocation.script))
+}
+
+/**
+ * @param {string} repoRoot
+ * @param {string} uses
+ * @param {Set<string>} visiting
+ * @returns {boolean}
+ */
+function localActionUploadsCoverage (repoRoot, uses, visiting) {
+  if (COVERAGE_ACTIONS.has(uses)) return true
+
+  const actionFile = resolveLocalActionFile(repoRoot, uses)
+  if (!actionFile || visiting.has(actionFile)) return false
+  visiting.add(actionFile)
+
+  const doc = parseYamlFile(repoRoot, actionFile)
+  const steps = doc.runs.steps
+  let uploadsCoverage = false
+
+  for (const step of steps) {
+    if (isUsesStep(step) && localActionUploadsCoverage(repoRoot, step.uses, visiting)) {
+      uploadsCoverage = true
+      break
+    }
+  }
+
+  visiting.delete(actionFile)
+  return uploadsCoverage
+}
+
+/**
  * Returns all combinations of matrix scalar/array values (ignores include/exclude).
  * @param {Record<string, unknown>} matrix
  * @returns {Record<string, string>[]}
@@ -697,11 +787,15 @@ function expandMatrixExpressions (s, matrixValues) {
 
 /**
  * @param {string} repoRoot
- * @returns {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]}
+ * @returns {{
+ *   runs: { workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[],
+ *   coverageUploadJobs: Set<string>
+ * }}
  */
 function collectWorkflowRuns (repoRoot) {
   /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
   const out = []
+  const coverageUploadJobs = new Set()
 
   const files = findWorkflowFiles(repoRoot)
   for (const wf of files) {
@@ -723,6 +817,12 @@ function collectWorkflowRuns (repoRoot) {
 
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
+        if (
+          typeof step.uses === 'string' &&
+          localActionUploadsCoverage(repoRoot, step.uses, new Set())
+        ) {
+          coverageUploadJobs.add(`${wf}#${jobId}`)
+        }
 
         // Merge env. Values can be strings or non-strings; we only keep string-ish.
         /** @type {Record<string, string|undefined>} */
@@ -793,7 +893,7 @@ function collectWorkflowRuns (repoRoot) {
     }
   }
 
-  return out
+  return { runs: out, coverageUploadJobs }
 }
 
 /**
@@ -1064,7 +1164,7 @@ function main () {
     process.exit(1)
   }
 
-  const workflowRuns = collectWorkflowRuns(repoRoot)
+  const { runs: workflowRuns, coverageUploadJobs } = collectWorkflowRuns(repoRoot)
 
   /** @type {{ workflowFile: string, jobId: string, script: string, env: Record<string, string|undefined> }[]} */
   const invoked = []
@@ -1078,6 +1178,19 @@ function main () {
   /** @param {string} msg */
   const pushError = (msg) => {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
+  }
+
+  const coverageProducerJobs = new Set()
+  const coverageScripts = findCoverageScripts(scripts, knownScripts)
+  for (const run of workflowRuns) {
+    if (commandProducesCoverage(run.run, knownScripts, coverageScripts)) {
+      coverageProducerJobs.add(`${run.workflowFile}#${run.jobId}`)
+    }
+  }
+  for (const job of coverageProducerJobs) {
+    if (!coverageUploadJobs.has(job)) {
+      pushError(`${job}: generates coverage but does not upload it`)
+    }
   }
 
   // Transitive closure: a script counts as "invoked" when CI either runs it directly or runs
