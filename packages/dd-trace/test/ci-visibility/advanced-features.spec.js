@@ -78,7 +78,6 @@ describe('test optimization validation advanced features', () => {
       '../offline-output': {
         readOfflineOutput () {
           return {
-            coverageFileCount: 0,
             events: [test],
             initialized: true,
             inputs: {},

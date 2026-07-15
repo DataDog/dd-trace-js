@@ -7,7 +7,12 @@ const { spawn } = require('child_process')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../version')
 const { cleanupCommandOutputs, prepareCommandOutputs } = require('./command-output-policy')
-const { getExecutableForSpawn } = require('./executable')
+const {
+  getExecutableForSpawn,
+  isEnvExecutable,
+  isNodeExecutable,
+  parseArgv,
+} = require('./executable')
 const { sanitizeConsoleText, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
@@ -497,7 +502,7 @@ function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
   for (const name of reservedEnvNames) {
     const escapedName = escapeRegExp(name)
     const assignment = new RegExp(
-      String.raw`(?:^|[\s;&|()'"])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*=`,
+      String.raw`(?:^|[\s;&|()'"])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*\+?=`,
       'i'
     )
     const removal = new RegExp(
@@ -731,121 +736,6 @@ function getDisplayDetails (argv) {
   }
 
   return details
-}
-
-function parseArgv (argv) {
-  const result = {
-    ignoreEnvironment: false,
-    prefixAssignments: [],
-    prefixEnv: {},
-    unsetEnvNames: [],
-    commandIndex: 0,
-    corepackIndex: -1,
-    pathAdjusted: false,
-    unsupportedEnvOption: undefined,
-  }
-
-  if (!Array.isArray(argv) || argv.length === 0) return result
-
-  let index = 0
-  if (isEnvExecutable(argv[index])) {
-    index++
-    while (index < argv.length) {
-      const option = argv[index]
-      if (option === '--') {
-        index++
-        break
-      }
-      if (option === '-' || option === '-i' || option === '--ignore-environment') {
-        result.ignoreEnvironment = true
-        index++
-        continue
-      }
-      if (option === '-u' || option === '--unset') {
-        if (typeof argv[index + 1] === 'string') result.unsetEnvNames.push(argv[index + 1])
-        index += 2
-        continue
-      }
-      const unsetMatch = /^(?:-u|--unset=)(.+)$/.exec(option)
-      if (unsetMatch) {
-        result.unsetEnvNames.push(unsetMatch[1])
-        index++
-        continue
-      }
-      if (option === '-C' || option === '--chdir') {
-        index += 2
-        continue
-      }
-      if (/^(?:-C.+|--chdir=.+)$/.test(option)) {
-        index++
-        continue
-      }
-      if (option === '-S' || option === '--split-string') {
-        break
-      }
-      if (/^(?:-S.+|--split-string=.+)$/.test(option)) {
-        break
-      }
-      if (isSupportedEnvFlag(option)) {
-        index++
-        continue
-      }
-      if (option.startsWith('-')) {
-        result.unsupportedEnvOption = option
-        break
-      }
-      if (!isEnvAssignment(option)) break
-
-      const assignment = argv[index]
-      const equalsIndex = assignment.indexOf('=')
-      const name = assignment.slice(0, equalsIndex)
-      const value = assignment.slice(equalsIndex + 1)
-      result.prefixEnv[name] = value
-
-      if (name === 'PATH') {
-        result.pathAdjusted = true
-      } else {
-        result.prefixAssignments.push(assignment)
-      }
-      index++
-    }
-  }
-
-  result.commandIndex = index
-
-  if (isNodeExecutable(argv[index]) && isCorepackScript(argv[index + 1]) && argv[index + 2]) {
-    result.corepackIndex = index + 1
-  }
-
-  return result
-}
-
-function isSupportedEnvFlag (option) {
-  return /^(?:-0|-v|--null|--debug|--help|--version|--list-signal-handling)$/.test(option) ||
-    /^--(?:block|default|ignore)-signal(?:=.*)?$/.test(option)
-}
-
-function isEnvExecutable (value) {
-  const name = getExecutableName(value)
-  return name === 'env' || name === 'env.exe'
-}
-
-function isEnvAssignment (value) {
-  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(value)
-}
-
-function isNodeExecutable (value = '') {
-  const name = getExecutableName(value)
-  return name === 'node' || name === 'node.exe'
-}
-
-function isCorepackScript (value = '') {
-  const name = getExecutableName(value)
-  return name === 'corepack' || name === 'corepack.exe' || name === 'corepack.js'
-}
-
-function getExecutableName (value = '') {
-  return String(value).split(/[\\/]/).pop().toLowerCase()
 }
 
 module.exports = {

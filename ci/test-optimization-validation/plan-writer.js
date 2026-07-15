@@ -101,7 +101,7 @@ function formatExecutionPlan ({
   const coveredFileVerification = process.platform === 'win32'
     ? []
     : [
-        'Optional: verify every listed validator and executable file against its recorded SHA-256:',
+        'Optional: verify every listed dd-trace package and command executable file against its recorded SHA-256:',
         '',
         codeBlock(sanitizeString(serializeApprovalCommand({
           argv: ['shasum', '-a', '256', '-c', approvalArtifacts.coveredFilesPath],
@@ -1048,10 +1048,12 @@ function appendCommandIntegrity (lines, manifest, requestedScenario) {
     for (const { command } of getPlannedCommands(framework, requestedScenario)) {
       const executable = getApprovedExecutable(command)
       if (executable) {
-        const key = `${executable.invocationPath}:${executable.path}:${executable.sha256}`
-        const entry = executables.get(key) || { executable, labels: new Set() }
-        entry.labels.add(getExecutableLabel(command, executable.invocationPath))
-        executables.set(key, entry)
+        for (const identity of [executable, ...(executable.delegated || [])]) {
+          const key = `${identity.invocationPath}:${identity.path}:${identity.sha256}`
+          const entry = executables.get(key) || { executable: identity, labels: new Set() }
+          entry.labels.add(getExecutableLabel(command, identity.invocationPath))
+          executables.set(key, entry)
+        }
       }
     }
   }

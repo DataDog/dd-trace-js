@@ -288,8 +288,6 @@ describe('test optimization validation scenario artifacts', () => {
 
       assert.strictEqual(run.events.length, 2)
       assert.deepStrictEqual(run.offline.summary, {
-        coverageFilesObserved: 0,
-        coverageFilesRetained: 0,
         errors: [],
         eventsObserved: 2,
         eventsRetained: 2,
@@ -362,7 +360,7 @@ describe('test optimization validation scenario artifacts', () => {
         },
         options: validationOptions(out),
         ciWiring: true,
-      }), /Offline Test Optimization exporter failed: output_record_serialization_failed/)
+      }), /Offline Test Optimization exporter failed: synthetic_exporter_failure/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -534,7 +532,7 @@ function writeFailingExporter (filename) {
     'const sink = new CiValidationSink(process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR, {',
     "  captureMode: process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE || 'strict',",
     '})',
-    'sink.writeCoverage("unsupported")',
+    'sink.recordError("synthetic_exporter_failure")',
     'sink.writeSummary()',
   ].join('\n'))
 }

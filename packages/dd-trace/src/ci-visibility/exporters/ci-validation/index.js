@@ -4,7 +4,6 @@
 
 const TestOptimizationHttpCache = require('../../test-optimization-http-cache').TestOptimizationHttpCache
 const CiVisibilityExporter = require('../ci-visibility-exporter')
-const CiValidationCoverageWriter = require('./coverage-writer')
 const { CiValidationSink } = require('./sink')
 const CiValidationWriter = require('./writer')
 
@@ -36,13 +35,11 @@ class CiValidationExporter extends CiVisibilityExporter {
       captureMode: process.env[VALIDATION_CAPTURE_MODE_ENV] || 'strict',
     })
     this._writer = new CiValidationWriter({ sink: this._sink, tags: config.tags })
-    this._coverageWriter = new CiValidationCoverageWriter(this._sink)
     this._isInitialized = true
     this._isGzipCompatible = false
     this._resolveCanUseCiVisProtocol(true)
     this._resolveGit()
     this.exportUncodedTraces()
-    this.exportUncodedCoverages()
 
     this._finalizeValidation = () => this.flush(() => this._sink.writeSummary())
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this._finalizeValidation)
@@ -122,13 +119,12 @@ class CiValidationExporter extends CiVisibilityExporter {
   exportDiLogs () {}
 
   /**
-   * Rejects coverage-report upload in offline validation mode.
+   * Reports that code coverage is outside the offline validator's scope.
    *
-   * @param {object} options ignored upload options
-   * @param {Function} callback completion callback
+   * @returns {boolean} always false
    */
-  uploadCoverageReport (options, callback) {
-    callback(new Error('Coverage-report upload is disabled during offline Test Optimization validation.'))
+  canReportCodeCoverage () {
+    return false
   }
 
   /**

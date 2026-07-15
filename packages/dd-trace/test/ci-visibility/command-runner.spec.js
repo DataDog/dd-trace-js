@@ -320,6 +320,18 @@ describe('test optimization validation command runner', () => {
         usesShell: true,
         shellCommand: 'unset UNRELATED NODE_OPTIONS; npm test',
       }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'NODE_OPTIONS+=--no-warnings npm test',
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: '$env:NODE_OPTIONS += " --no-warnings"; npm test',
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

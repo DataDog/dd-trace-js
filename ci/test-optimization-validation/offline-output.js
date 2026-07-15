@@ -17,7 +17,6 @@ const MAX_OUTPUT_SUITES = 1000
 const MAX_OUTPUT_TESTS = 2000
 const MAX_OUTPUT_STRING_BYTES = 64 * 1024
 const MAX_SAMPLED_EVENTS_PER_PROCESS = 11
-const MAX_SAMPLED_COVERAGE_FILES_PER_PROCESS = 8
 const INPUT_NAMES = new Set(['known_tests', 'settings', 'skippable_tests', 'test_management'])
 const EVENT_TYPES = new Set(['test', 'test_module_end', 'test_session_end', 'test_suite_end'])
 const META_FIELDS = new Set([
@@ -39,9 +38,8 @@ const META_FIELDS = new Set([
   'test.test_management.is_test_disabled',
 ])
 const METRIC_FIELDS = new Set(['test.is_new', 'test.is_retry'])
-const COVERAGE_FIELDS = new Set(['fileCount', 'test_session_id', 'test_suite_id'])
 const ROOT_ENTRIES = new Set(['completions', 'payloads'])
-const PAYLOAD_KINDS = new Set(['coverage', 'tests'])
+const PAYLOAD_KINDS = new Set(['tests'])
 
 /**
  * Reads bounded projected payloads and reconciles them with authoritative per-process completion records.
@@ -69,7 +67,6 @@ function readOfflineOutput (outputRoot) {
   state.eventCounts = { modules: 0, suites: 0, tests: 0, total: 0 }
   const artifactsByProcess = new Map()
   const events = []
-  const coverage = []
 
   if (exists(payloadsRoot)) {
     assertDirectory(payloadsRoot, 'payloads directory')
@@ -86,11 +83,6 @@ function readOfflineOutput (outputRoot) {
       artifact.payloadFiles++
       artifact.eventsRetained += normalized.length
     })
-    readPayloadFiles(payloadsRoot, 'coverage', state, (processId, value) => {
-      assertCoveragePayload(value)
-      coverage.push(value)
-      getProcessArtifacts(artifactsByProcess, processId).coverageFilesRetained++
-    })
   }
 
   if (completions.length === 0) {
@@ -102,8 +94,6 @@ function readOfflineOutput (outputRoot) {
   return {
     captureMode,
     completionCount: completions.length,
-    coverage,
-    coverageFileCount: summary.coverageFilesRetained,
     events,
     initialized: true,
     inputs: summary.inputs,
@@ -223,19 +213,6 @@ function assertTestPayload (value) {
   }
 }
 
-function assertCoveragePayload (value) {
-  if (!Array.isArray(value) || value.some(record => {
-    if (!isObject(record) || Object.keys(record).some(name => !COVERAGE_FIELDS.has(name))) return true
-    if (record.fileCount !== undefined && !isCount(record.fileCount)) return true
-    return ['test_session_id', 'test_suite_id'].some(name => {
-      const field = record[name]
-      return field !== undefined && typeof field !== 'string' && typeof field !== 'number'
-    })
-  })) {
-    throw new Error('Offline validation coverage payload has an unsupported JSON shape.')
-  }
-}
-
 function assertCompletion (completion, filenameProcessId) {
   if (!isObject(completion) || Object.keys(completion).sort().join(',') !==
     'captureMode,counts,errors,inputs,processId,version' || completion.version !== 1 ||
@@ -244,24 +221,15 @@ function assertCompletion (completion, filenameProcessId) {
     !isObject(completion.inputs) || !Array.isArray(completion.errors) || completion.errors.length > 20) {
     throw invalidCompletionError()
   }
-  const countKeys = [
-    'coverageFilesObserved',
-    'coverageFilesRetained',
-    'eventsObserved',
-    'eventsRetained',
-    'payloadFiles',
-  ]
+  const countKeys = ['eventsObserved', 'eventsRetained', 'payloadFiles']
   if (Object.keys(completion.counts).sort().join(',') !== countKeys.sort().join(',') ||
     countKeys.some(name => !isCount(completion.counts[name])) ||
-    completion.counts.coverageFilesRetained > completion.counts.coverageFilesObserved ||
     completion.counts.eventsRetained > completion.counts.eventsObserved ||
     completion.errors.some(error => typeof error !== 'string' || error.length > 100)) {
     throw invalidCompletionError()
   }
   assertCompletionInputs(completion.inputs)
-  if (completion.captureMode === 'sample' &&
-    (completion.counts.eventsRetained > MAX_SAMPLED_EVENTS_PER_PROCESS ||
-      completion.counts.coverageFilesRetained > MAX_SAMPLED_COVERAGE_FILES_PER_PROCESS)) {
+  if (completion.captureMode === 'sample' && completion.counts.eventsRetained > MAX_SAMPLED_EVENTS_PER_PROCESS) {
     throw invalidCompletionError()
   }
 }
@@ -294,9 +262,7 @@ function reconcileCompletions (completions, artifactsByProcess) {
   for (const completion of completions) {
     const artifacts = artifactsByProcess.get(completion.processId) || emptyProcessArtifacts()
     const counts = completion.counts
-    if (counts.payloadFiles !== artifacts.payloadFiles ||
-      counts.coverageFilesRetained !== artifacts.coverageFilesRetained ||
-      counts.eventsRetained !== artifacts.eventsRetained) {
+    if (counts.payloadFiles !== artifacts.payloadFiles || counts.eventsRetained !== artifacts.eventsRetained) {
       throw new Error('Offline Test Optimization completion evidence does not match retained payload artifacts.')
     }
   }
@@ -304,8 +270,6 @@ function reconcileCompletions (completions, artifactsByProcess) {
 
 function aggregateCompletions (completions) {
   const aggregate = {
-    coverageFilesObserved: 0,
-    coverageFilesRetained: 0,
     errors: [],
     eventsObserved: 0,
     eventsRetained: 0,
@@ -314,8 +278,6 @@ function aggregateCompletions (completions) {
   }
   for (const completion of completions) {
     for (const name of [
-      'coverageFilesObserved',
-      'coverageFilesRetained',
       'eventsObserved',
       'eventsRetained',
       'payloadFiles',
@@ -340,7 +302,7 @@ function getProcessArtifacts (artifacts, processId) {
 }
 
 function emptyProcessArtifacts () {
-  return { coverageFilesRetained: 0, eventsRetained: 0, payloadFiles: 0 }
+  return { eventsRetained: 0, payloadFiles: 0 }
 }
 
 function mergeInputs (aggregate, inputs) {
@@ -399,8 +361,6 @@ function emptyOutput () {
   return {
     captureMode: undefined,
     completionCount: 0,
-    coverage: [],
-    coverageFileCount: 0,
     events: [],
     initialized: false,
     inputs: {},
@@ -437,7 +397,6 @@ function isObject (value) {
 
 module.exports = {
   MAX_COMPLETION_FILES,
-  MAX_DECODED_COLLECTION_ENTRIES,
   MAX_OUTPUT_BYTES,
   MAX_OUTPUT_FILES,
   MAX_OUTPUT_MODULES,

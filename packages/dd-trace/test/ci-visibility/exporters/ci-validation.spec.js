@@ -22,8 +22,7 @@ const {
   readOfflineOutput,
 } = require('../../../../../ci/test-optimization-validation/offline-output')
 const id = require('../../../src/id')
-const CiValidationCoverageWriter = require('../../../src/ci-visibility/exporters/ci-validation/coverage-writer')
-const { CiValidationSink, MAX_OUTPUT_BYTES, MAX_OUTPUT_FILES, SUMMARY_PREFIX } =
+const { CiValidationSink, MAX_OUTPUT_FILES, SUMMARY_PREFIX } =
   require('../../../src/ci-visibility/exporters/ci-validation/sink')
 const CiValidationWriter = require('../../../src/ci-visibility/exporters/ci-validation/writer')
 const CiValidationExporter = require('../../../src/ci-visibility/exporters/ci-validation')
@@ -65,6 +64,7 @@ describe('CI validation offline output', () => {
     const payload = JSON.parse(raw)
     assert.deepStrictEqual(Object.keys(payload), ['version', 'events'])
     assert.doesNotMatch(raw, /"(?:encoding|kind|payload|trace_id)":/)
+    assert.deepStrictEqual(fs.readdirSync(path.join(outputRoot, 'payloads')), ['tests'])
 
     const output = readOfflineOutput(outputRoot)
     assert.strictEqual(output.events.length, 1)
@@ -95,10 +95,21 @@ describe('CI validation offline output', () => {
 
   it('fails closed when the output byte limit is exceeded', () => {
     const sink = new CiValidationSink(outputRoot)
-    sink.writeCoverage({ test_session_id: 'x'.repeat(MAX_OUTPUT_BYTES) })
+    const payload = Buffer.from(msgpack.encode({
+      version: 1,
+      events: Array.from({ length: 500 }, (_, index) => ({
+        type: 'test',
+        content: {
+          meta: { 'test.name': `${index}-${'x'.repeat(18_000)}` },
+          metrics: {},
+        },
+      })),
+    }))
+    sink.writeTestCycle(payload)
+    sink.writeTestCycle(payload)
     sink.writeSummary()
 
-    assert.strictEqual(getPayloadFiles(outputRoot, 'coverage').length, 0)
+    assert.strictEqual(getPayloadFiles(outputRoot, 'tests').length, 1)
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
     assert.deepStrictEqual(summary.errors, ['output_byte_limit_exceeded'])
@@ -128,22 +139,15 @@ describe('CI validation offline output', () => {
     assert.deepStrictEqual(summary.errors, ['output_write_failed'])
   })
 
-  it('writes coverage separately and reports bounded cache input results in one summary', () => {
+  it('reports bounded cache input results in one summary', () => {
     const sink = new CiValidationSink(outputRoot)
-    const coverageWriter = new CiValidationCoverageWriter(sink)
-    let flushed = false
 
-    coverageWriter.append([{ test_session_id: 1 }])
-    coverageWriter.flush(() => { flushed = true })
-    coverageWriter.addMetadataTags()
     sink.writeInputResult('settings')
     sink.writeInputResult('known_tests', new Error(`invalid\n${'x'.repeat(1100)}`))
     sink.writeSummary()
     sink.writeSummary()
 
-    assert.strictEqual(flushed, true)
-    const output = readOfflineOutput(outputRoot)
-    assert.deepStrictEqual(output.coverage, [[{ test_session_id: 1 }]])
+    readOfflineOutput(outputRoot)
     assert.strictEqual(stderrWrite.callCount, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
     assert.deepStrictEqual(summary.errors, ['invalid_known_tests'])
@@ -151,19 +155,7 @@ describe('CI validation offline output', () => {
       known_tests: { status: 'error' },
       settings: { status: 'loaded' },
     })
-    assert.strictEqual(summary.coverageFiles, 1)
     assert.strictEqual(summary.payloadFiles, 0)
-  })
-
-  it('fails closed when an output record cannot be serialized', () => {
-    const sink = new CiValidationSink(outputRoot)
-    sink.writeCoverage('unsupported')
-    sink.writeSummary()
-
-    assert.strictEqual(getPayloadFiles(outputRoot, 'coverage').length, 0)
-    assert.strictEqual(process.exitCode, 1)
-    const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
-    assert.deepStrictEqual(summary.errors, ['output_record_serialization_failed'])
   })
 
   it('fails closed when an encoded test payload cannot be converted', () => {
@@ -215,12 +207,13 @@ describe('CI validation offline output', () => {
 
   it('accepts the last output file and rejects the first file beyond the limit', () => {
     const sink = new CiValidationSink(outputRoot)
-    for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeCoverage({})
+    const payload = Buffer.from(msgpack.encode({ version: 1, events: [] }))
+    for (let index = 0; index <= MAX_OUTPUT_FILES; index++) sink.writeTestCycle(payload)
     sink.writeSummary()
 
     assert.strictEqual(process.exitCode, 1)
     const summary = JSON.parse(stderrWrite.firstCall.args[0].slice(SUMMARY_PREFIX.length))
-    assert.strictEqual(summary.coverageFiles, MAX_OUTPUT_FILES)
+    assert.strictEqual(summary.payloadFiles, MAX_OUTPUT_FILES)
     assert.deepStrictEqual(summary.errors, ['output_file_limit_exceeded'])
   })
 
@@ -288,10 +281,6 @@ describe('CI validation offline output', () => {
       },
     }])
     writer.flush()
-    sink.writeCoverage({
-      test_session_id: 1,
-      files: [{ filename: marker, bitmap: Buffer.from(marker) }],
-    })
     sink.writeSummary()
 
     const persisted = getAllFiles(outputRoot).map(filename => fs.readFileSync(filename, 'utf8')).join('\n')
@@ -486,17 +475,15 @@ describe('CI validation exporter', () => {
   it('disables upload side channels without attempting network access', (done) => {
     const exporter = new CiValidationExporter(createExporterConfig())
 
+    assert.strictEqual(exporter.canReportCodeCoverage(), false)
     assert.strictEqual(exporter.canUploadTestScreenshots(), false)
     exporter.sendGitMetadata()
     exporter.exportDiLogs()
-    exporter.uploadCoverageReport({}, coverageError => {
-      assert.match(coverageError.message, /disabled during offline Test Optimization validation/)
-      exporter.uploadTestScreenshot({}, screenshotError => {
-        assert.match(screenshotError.message, /disabled during offline Test Optimization validation/)
-        assert(networkStubs.every(stub => stub.notCalled))
-        exporter._sink.writeSummary()
-        done()
-      })
+    exporter.uploadTestScreenshot({}, screenshotError => {
+      assert.match(screenshotError.message, /disabled during offline Test Optimization validation/)
+      assert(networkStubs.every(stub => stub.notCalled))
+      exporter._sink.writeSummary()
+      done()
     })
   })
 

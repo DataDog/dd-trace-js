@@ -15,7 +15,7 @@ const {
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 
 describe('test optimization validation approval', () => {
-  it('binds approval to validator-controlled preload files', () => {
+  it('binds approval to every regular installed package file', () => {
     const packageRoot = path.resolve(__dirname, '../../../..')
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-preloads-'))
     const copiedPackageRoot = path.join(root, 'dd-trace')
@@ -31,6 +31,7 @@ describe('test optimization validation approval', () => {
       'ext/exporters.js',
       'packages/dd-trace/src/exporter.js',
       'packages/dd-trace/src/proxy.js',
+      'packages/dd-trace/src/encode/agentless-ci-visibility.js',
     ]
 
     fs.cpSync(path.join(packageRoot, 'ci', 'test-optimization-validation'), copiedValidationDirectory, {
@@ -51,7 +52,7 @@ describe('test optimization validation approval', () => {
     const input = {
       manifest: { __path: path.join(root, 'manifest.json'), repository: { root } },
       offlineFixtureNonce: '0'.repeat(32),
-      out: path.join(root, 'results'),
+      out: path.join(copiedPackageRoot, 'results'),
     }
 
     try {
@@ -62,6 +63,7 @@ describe('test optimization validation approval', () => {
         'loader-hook.mjs',
         'version.js',
         'packages/dd-trace/src/proxy.js',
+        'packages/dd-trace/src/encode/agentless-ci-visibility.js',
         'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
       ]) {
         fs.appendFileSync(path.join(copiedPackageRoot, relativePath), '\n// changed after approval\n')
@@ -69,6 +71,27 @@ describe('test optimization validation approval', () => {
         assert.notStrictEqual(changedDigest, digest, `${relativePath} must affect the approval digest`)
         digest = changedDigest
       }
+
+      const addedRuntimeFile = path.join(copiedPackageRoot, 'packages', 'dd-trace', 'src', 'future-runtime.bin')
+      fs.writeFileSync(addedRuntimeFile, 'new package file')
+      const addedFileDigest = copiedApproval.getApprovalDigest(input)
+      assert.notStrictEqual(addedFileDigest, digest, 'new package files must affect the approval digest')
+      digest = addedFileDigest
+
+      const dependencyFile = path.join(copiedPackageRoot, 'node_modules', 'dependency', 'index.js')
+      fs.mkdirSync(path.dirname(dependencyFile), { recursive: true })
+      fs.writeFileSync(dependencyFile, 'dependency version one')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+      fs.writeFileSync(dependencyFile, 'dependency version two')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+
+      const gitMetadataFile = path.join(copiedPackageRoot, '.git')
+      fs.writeFileSync(gitMetadataFile, 'gitdir: outside-the-package')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+
+      fs.mkdirSync(input.out)
+      fs.writeFileSync(path.join(input.out, 'approval.json'), 'generated approval output')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -99,6 +122,9 @@ describe('test optimization validation approval', () => {
       assert.doesNotMatch(approvalJson, /API_KEY=secret/)
       assert.match(material.commands[0].argv[2], /API_KEY=<redacted>/)
       assert.ok(material.validator.coveredFiles.some(file => file.path === 'package.json'))
+      assert.ok(material.validator.coveredFiles.some(file => {
+        return file.path === 'packages/dd-trace/src/encode/agentless-ci-visibility.js'
+      }))
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

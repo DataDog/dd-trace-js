@@ -52,7 +52,10 @@ function getCoveredFilesManifest (material) {
   for (const file of material.validator.coveredFiles) {
     files.set(path.join(material.validator.packageRoot, ...file.path.split('/')), file.sha256)
   }
-  for (const executable of material.executables) files.set(executable.path, executable.sha256)
+  for (const executable of material.executables) {
+    files.set(executable.path, executable.sha256)
+    for (const delegated of executable.delegated || []) files.set(delegated.path, delegated.sha256)
+  }
 
   return [...files]
     .sort(([left], [right]) => left.localeCompare(right))

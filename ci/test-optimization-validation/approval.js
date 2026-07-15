@@ -12,6 +12,7 @@ const { sanitizeForReport } = require('./redaction')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
+const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', 'node_modules'])
 
 /**
  * Binds an approval to the exact manifest bytes and live validator options.
@@ -79,7 +80,7 @@ function getApprovalMaterial ({
   const packageRoot = path.resolve(validationDirectory, '..', '..')
   const packageJsonPath = path.join(packageRoot, 'package.json')
   const packageMetadata = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-  const validatorFiles = getValidatorFiles(packageRoot, validationDirectory)
+  const packageFiles = getPackageFiles(packageRoot, [manifest.__path, out])
   const executableIdentities = bindManifestExecutables(manifest)
 
   return {
@@ -89,7 +90,7 @@ function getApprovalMaterial ({
       package: packageMetadata.name,
       version: packageMetadata.version,
       packageRoot,
-      coveredFiles: validatorFiles.map(filename => ({
+      coveredFiles: packageFiles.map(filename => ({
         path: path.relative(packageRoot, filename).split(path.sep).join('/'),
         sha256: getFileDigest(filename),
       })),
@@ -130,89 +131,20 @@ function serializeApprovalMaterial (input) {
 }
 
 /**
- * Returns every installed validator/runtime file included in the approval fingerprint.
+ * Returns every regular file owned by the installed dd-trace package.
  *
  * @param {string} packageRoot installed dd-trace package root
- * @param {string} validationDirectory validator source directory
+ * @param {string[]} excludedPaths generated files or directories outside the package snapshot
  * @returns {string[]} sorted absolute file paths
  */
-function getValidatorFiles (packageRoot, validationDirectory) {
-  return [
-    path.resolve(packageRoot, 'package.json'),
-    path.resolve(validationDirectory, '..', 'diagnose.js'),
-    path.resolve(validationDirectory, '..', 'init.js'),
-    path.resolve(validationDirectory, '..', 'validate-test-optimization.js'),
-    path.resolve(packageRoot, 'loader-hook.mjs'),
-    path.resolve(packageRoot, 'register.js'),
-    path.resolve(packageRoot, 'version.js'),
-    path.resolve(packageRoot, 'ext', 'exporters.js'),
-    path.resolve(packageRoot, 'packages', 'dd-trace', 'src', 'exporter.js'),
-    path.resolve(packageRoot, 'packages', 'dd-trace', 'src', 'proxy.js'),
-    path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'exporters',
-      'ci-visibility-exporter.js'
-    ),
-    path.resolve(packageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility', 'test-optimization-http-cache.js'),
-    path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'test-optimization-http-cache-schema.js'
-    ),
-    path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'requests',
-      'get-library-configuration.js'
-    ),
-    path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'early-flake-detection',
-      'get-known-tests.js'
-    ),
-    path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'intelligent-test-runner',
-      'get-skippable-suites.js'
-    ),
-    path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'test-management',
-      'get-test-management-tests.js'
-    ),
-    ...collectJavaScriptFiles(path.resolve(
-      packageRoot,
-      'packages',
-      'dd-trace',
-      'src',
-      'ci-visibility',
-      'exporters',
-      'ci-validation'
-    )),
-    ...collectJavaScriptFiles(validationDirectory),
-  ].sort()
+function getPackageFiles (packageRoot, excludedPaths) {
+  const files = []
+  collectPackageFiles(
+    fs.realpathSync(packageRoot),
+    excludedPaths.map(resolvePhysicalPath),
+    files
+  )
+  return files.sort()
 }
 
 /**
@@ -278,17 +210,52 @@ function getFileDigest (filename) {
   return crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex')
 }
 
-function collectJavaScriptFiles (directory) {
-  const files = []
+/**
+ * Collects regular package files without following package-internal symbolic links.
+ *
+ * @param {string} directory current package directory
+ * @param {string[]} excludedPaths generated paths omitted from the package snapshot
+ * @param {string[]} files collected files
+ */
+function collectPackageFiles (directory, excludedPaths, files) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const filename = path.join(directory, entry.name)
+    if (PACKAGE_SNAPSHOT_EXCLUDED_NAMES.has(entry.name) || isExcludedPackagePath(filename, excludedPaths)) continue
     if (entry.isDirectory()) {
-      files.push(...collectJavaScriptFiles(filename))
-    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      collectPackageFiles(filename, excludedPaths, files)
+    } else if (entry.isFile()) {
       files.push(filename)
     }
   }
-  return files
+}
+
+/**
+ * Checks whether a package path belongs to a generated approval input or output.
+ *
+ * @param {string} filename package path
+ * @param {string[]} excludedPaths generated paths omitted from the package snapshot
+ * @returns {boolean} whether the path is excluded
+ */
+function isExcludedPackagePath (filename, excludedPaths) {
+  return excludedPaths.some(excluded => filename === excluded || filename.startsWith(`${excluded}${path.sep}`))
+}
+
+/**
+ * Resolves an existing path or its nearest existing ancestor through filesystem aliases.
+ *
+ * @param {string} filename path that may not exist yet
+ * @returns {string} physical path
+ */
+function resolvePhysicalPath (filename) {
+  const missingSegments = []
+  let existingPath = path.resolve(filename)
+  while (!fs.existsSync(existingPath)) {
+    missingSegments.unshift(path.basename(existingPath))
+    const parent = path.dirname(existingPath)
+    if (parent === existingPath) return path.resolve(filename)
+    existingPath = parent
+  }
+  return path.join(fs.realpathSync(existingPath), ...missingSegments)
 }
 
 /**

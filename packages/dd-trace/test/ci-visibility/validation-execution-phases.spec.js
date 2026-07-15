@@ -337,7 +337,11 @@ describe('test optimization validator-owned execution phases', () => {
       }
       assert.match(plan, /Approval details: `results-atr\/approval\.json`/)
       assert.match(plan, /Covered file checksums: `results-atr\/approval-files\.sha256`/)
-      assert.match(plan, /shasum -a 256 .*approval\.json/)
+      if (process.platform === 'win32') {
+        assert.match(plan, /certutil -hashfile .*approval\.json"? SHA256/)
+      } else {
+        assert.match(plan, /shasum -a 256 .*approval\.json/)
+      }
       assert.match(plan, new RegExp(`Expected SHA-256: \`${approvalDigest}\``))
       assert.match(plan, /reconstructs the approval JSON from current inputs/)
       assert.match(plan, /saved JSON is for review only and is not trusted as execution authority/)
@@ -541,6 +545,51 @@ describe('test optimization validator-owned execution phases', () => {
       )
       assert.match(result.stderr, /changed after approval/)
       assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('fingerprints an env-wrapped command target and rejects its replacement after approval', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-env-target-'))
+    const bin = path.join(root, 'bin')
+    const target = path.join(bin, 'test-runner')
+    const out = path.join(root, 'results')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: ['/usr/bin/env', `PATH=${bin}`, 'test-runner'],
+    }
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+    fs.mkdirSync(bin)
+    fs.writeFileSync(target, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+    try {
+      const canonicalTarget = fs.realpathSync(target)
+      const plan = formatExecutionPlan({ manifest, out, requestedScenario: 'basic-reporting' })
+      const approval = JSON.parse(fs.readFileSync(path.join(out, 'approval.json'), 'utf8'))
+      const basicReporting = approval.executables.find(entry => entry.label.endsWith(':basic-reporting'))
+      const checksums = fs.readFileSync(path.join(out, 'approval-files.sha256'), 'utf8')
+
+      assert.strictEqual(basicReporting.delegated.length, 1)
+      assert.strictEqual(basicReporting.delegated[0].path, canonicalTarget)
+      assert.match(checksums, new RegExp(escapeRegExp(canonicalTarget)))
+      assert.match(plan, new RegExp('test-runner: `' + escapeRegExp(target) + '`'))
+      assert.strictEqual(getExecutableForSpawn(framework.existingTestCommand).path, fs.realpathSync('/usr/bin/env'))
+
+      fs.writeFileSync(target, '#!/bin/sh\nexit 42\n', { mode: 0o755 })
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

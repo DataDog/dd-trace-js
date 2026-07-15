@@ -14,7 +14,6 @@ const {
 const { getArtifactId } = require('../../../../ci/test-optimization-validation/artifact-id')
 const {
   MAX_COMPLETION_FILES,
-  MAX_DECODED_COLLECTION_ENTRIES,
   MAX_OUTPUT_BYTES,
   MAX_OUTPUT_FILES,
   readOfflineOutput,
@@ -317,35 +316,6 @@ describe('test optimization offline validation artifacts', () => {
     writeCompletion(outputRoot, processId, { eventsObserved: 1, eventsRetained: 1, payloadFiles: 1 })
     assert.throws(() => readOfflineOutput(outputRoot), /unsupported event shape/)
   })
-
-  it('rejects unsupported projected coverage fields before retaining them', () => {
-    const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
-    const coverageDirectory = path.join(outputRoot, 'payloads', 'coverage')
-    fs.writeFileSync(
-      path.join(coverageDirectory, `coverage-${processId}-1-1-1.json`),
-      JSON.stringify([{ test_session_id: 1, sourcePath: 'API_KEY=raw-secret-value' }])
-    )
-    writeCompletion(outputRoot, processId, {
-      coverageFilesObserved: 1,
-      coverageFilesRetained: 1,
-    })
-
-    assert.throws(() => readOfflineOutput(outputRoot), /unsupported JSON shape/)
-  })
-
-  it('applies the decoded-entry budget across payload files', () => {
-    const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
-    const coverageDirectory = path.join(outputRoot, 'payloads', 'coverage')
-    const recordCount = Math.floor(MAX_DECODED_COLLECTION_ENTRIES * 0.6)
-    const payload = JSON.stringify(Array.from({ length: recordCount }, () => ({})))
-    fs.writeFileSync(path.join(coverageDirectory, `coverage-${processId}-1-1-1.json`), payload)
-    fs.writeFileSync(path.join(coverageDirectory, `coverage-${processId}-1-1-2.json`), payload)
-    writeCompletion(outputRoot, processId, {
-      coverageFilesObserved: 2,
-      coverageFilesRetained: 2,
-    })
-    assert.throws(() => readOfflineOutput(outputRoot), /aggregate decoded entries/)
-  })
 })
 
 function createPayloadRoot (repositoryRoot) {
@@ -354,7 +324,6 @@ function createPayloadRoot (repositoryRoot) {
   const testsDirectory = path.join(payloadsRoot, 'tests')
   const completionsDirectory = path.join(outputRoot, 'completions')
   fs.mkdirSync(testsDirectory, { recursive: true })
-  fs.mkdirSync(path.join(payloadsRoot, 'coverage'))
   fs.mkdirSync(completionsDirectory)
   return { outputRoot, testsDirectory, processId: 'a'.repeat(32) }
 }
@@ -372,8 +341,6 @@ function createProjectedEvent (meta = {}) {
 
 function writeCompletion (outputRoot, processId, countOverrides, inputs = {}, errors = []) {
   const counts = {
-    coverageFilesObserved: 0,
-    coverageFilesRetained: 0,
     eventsObserved: 0,
     eventsRetained: 0,
     payloadFiles: 0,

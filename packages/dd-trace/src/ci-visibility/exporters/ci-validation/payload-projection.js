@@ -40,24 +40,6 @@ function projectTestCyclePayload (payload) {
   return { version: 1, events }
 }
 
-/**
- * Projects coverage into bounded linkage fields without persisting source paths or bitmaps.
- *
- * @param {unknown} payload coverage payload
- * @returns {object[]} projected coverage records
- */
-function projectCoveragePayload (payload) {
-  const records = Array.isArray(payload) ? payload : [payload]
-  return records.map(record => {
-    if (!isObject(record)) throw new Error('Test Optimization validation coverage has an unsupported shape.')
-    const projected = {}
-    copyScalar(projected, record, 'test_session_id')
-    copyScalar(projected, record, 'test_suite_id')
-    if (Array.isArray(record.files)) projected.fileCount = record.files.length
-    return projected
-  })
-}
-
 function projectEvent (event) {
   if (!isObject(event) || !EVENT_TYPES.has(event.type) || !isObject(event.content)) {
     throw new Error('Test Optimization validation payload contains an unsupported event shape.')
@@ -98,6 +80,5 @@ function isObject (value) {
 
 module.exports = {
   EVENT_TYPES,
-  projectCoveragePayload,
   projectTestCyclePayload,
 }

@@ -5,10 +5,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { MAX_OUTPUT_BYTES, msgpackToJson } = require('./msgpack-to-json')
-const { projectCoveragePayload, projectTestCyclePayload } = require('./payload-projection')
+const { projectTestCyclePayload } = require('./payload-projection')
 
 const MAX_OUTPUT_FILES = 10_000
-const MAX_SAMPLED_COVERAGE_FILES = 8
 const MAX_SAMPLED_TESTS = 8
 const MAX_SUMMARY_ERRORS = 20
 const SUMMARY_PREFIX = 'DD_TEST_OPTIMIZATION_VALIDATION_V1 '
@@ -19,9 +18,6 @@ class CiValidationSink {
   #bytesWritten = 0
   #captureMode
   #completionDirectory
-  #coverageDirectory
-  #coverageFilesObserved = 0
-  #coverageFilesRetained = 0
   #errors = []
   #eventsObserved = 0
   #eventsRetained = 0
@@ -64,12 +60,6 @@ class CiValidationSink {
       path.join(payloadsRoot, 'tests'),
       'tests'
     )
-    this.#coverageDirectory = createDirectory(
-      payloadsRoot,
-      this.#payloadsDirectory,
-      path.join(payloadsRoot, 'coverage'),
-      'coverage'
-    )
     this.#completionDirectory = createDirectory(
       outputRoot,
       this.#outputRootDirectory,
@@ -107,32 +97,9 @@ class CiValidationSink {
     }
 
     const json = Buffer.from(JSON.stringify(projected))
-    if (this.#writePayloadFile('tests', json)) {
+    if (this.#writePayloadFile(json)) {
       this.#eventsRetained += projected.events.length
       this.#testPayloadFileCount++
-    }
-  }
-
-  /**
-   * Writes one coverage payload in the corresponding payload-file directory.
-   *
-   * @param {object|object[]} payload formatted coverage payload
-   */
-  writeCoverage (payload) {
-    let json
-    try {
-      const serialized = JSON.stringify(projectCoveragePayload(payload))
-      if (serialized === undefined) throw new Error('Coverage payload is not serializable.')
-      json = Buffer.from(serialized)
-    } catch {
-      this.#fail('output_record_serialization_failed')
-      return
-    }
-
-    this.#coverageFilesObserved++
-    if (this.#captureMode === 'sample' && this.#coverageFilesRetained >= MAX_SAMPLED_COVERAGE_FILES) return
-    if (this.#writePayloadFile('coverage', json)) {
-      this.#coverageFilesRetained++
     }
   }
 
@@ -164,7 +131,6 @@ class CiValidationSink {
     this.#summaryWritten = true
     if (this.#captureMode === 'sample') this.#writeSampledEvents()
     const summary = {
-      coverageFiles: this.#coverageFilesRetained,
       events: this.#eventsRetained,
       payloadFiles: this.#testPayloadFileCount,
       input: 'filesystem-cache',
@@ -204,7 +170,7 @@ class CiValidationSink {
     const events = [...this.#sampledTests, ...this.#sampledLifecycle.values()]
     if (events.length === 0) return
     const payload = Buffer.from(JSON.stringify({ version: 1, events }))
-    if (this.#writePayloadFile('tests', payload)) {
+    if (this.#writePayloadFile(payload)) {
       this.#eventsRetained = events.length
       this.#testPayloadFileCount++
     }
@@ -224,8 +190,6 @@ class CiValidationSink {
       processId: this.#processId,
       captureMode: this.#captureMode,
       counts: {
-        coverageFilesObserved: this.#coverageFilesObserved,
-        coverageFilesRetained: this.#coverageFilesRetained,
         eventsObserved: this.#eventsObserved,
         eventsRetained: this.#eventsRetained,
         payloadFiles: this.#testPayloadFileCount,
@@ -250,11 +214,10 @@ class CiValidationSink {
   /**
    * Writes one completed JSON payload to a unique file.
    *
-   * @param {'tests'|'coverage'} kind payload kind
    * @param {Buffer} payload JSON payload
    * @returns {boolean} whether the payload was written
    */
-  #writePayloadFile (kind, payload) {
+  #writePayloadFile (payload) {
     if (this.#fileCount >= MAX_OUTPUT_FILES) {
       this.#fail('output_file_limit_exceeded')
       return false
@@ -264,26 +227,25 @@ class CiValidationSink {
       return false
     }
 
-    const directory = kind === 'tests' ? this.#testsDirectory : this.#coverageDirectory
-    const directoryPath = path.join(this.#outputRoot, 'payloads', kind)
+    const directoryPath = path.join(this.#outputRoot, 'payloads', 'tests')
     const sequence = ++payloadFileSequence
     const timestamp = BigInt(Date.now()) * 1_000_000n + process.hrtime.bigint() % 1_000_000n
     const filename = path.join(
       directoryPath,
-      `${kind}-${this.#processId}-${timestamp}-${process.pid}-${sequence}.json`
+      `tests-${this.#processId}-${timestamp}-${process.pid}-${sequence}.json`
     )
     let writeFailed = false
     try {
       assertDirectoryUnchanged(this.#outputRoot, this.#outputRootDirectory, 'output root')
       assertDirectoryUnchanged(path.join(this.#outputRoot, 'payloads'), this.#payloadsDirectory, 'payloads')
-      assertDirectoryUnchanged(directoryPath, directory, kind)
+      assertDirectoryUnchanged(directoryPath, this.#testsDirectory, 'tests')
       writeNewFile(filename, payload)
     } catch {
       writeFailed = true
     }
     if (writeFailed) {
       this.#fail('output_write_failed')
-      removePartialFile(filename, directoryPath, directory)
+      removePartialFile(filename, directoryPath, this.#testsDirectory)
       return false
     }
 
