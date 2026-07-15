@@ -6,19 +6,14 @@ const fs = require('node:fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const loadHookModules = require('../datadog-instrumentations/src/helpers/load-hook-modules')
 const { matchesOptionalPeerFile } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
 
-for (const hook of Object.values(hooks)) {
-  if (hook !== null && typeof hook === 'object') {
-    hook.fn()
-  } else {
-    hook()
-  }
-}
+loadHookModules(hooks)
 
 const modulesOfInterest = new Set()
 

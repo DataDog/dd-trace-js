@@ -8,6 +8,7 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const loadHookModules = require('../datadog-instrumentations/src/helpers/load-hook-modules')
 const {
   OPTIONAL_PEER_FILTER,
   matchesOptionalPeerFile,
@@ -21,13 +22,7 @@ const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
 
 let rewriter
 
-for (const hook of Object.values(hooks)) {
-  if (hook !== null && typeof hook === 'object') {
-    hook.fn()
-  } else {
-    hook()
-  }
-}
+loadHookModules(hooks)
 
 function moduleOfInterestKey (name, file) {
   return file ? `${name}/${file}` : name
