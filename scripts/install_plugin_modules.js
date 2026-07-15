@@ -126,8 +126,7 @@ async function assertPrerequisites () {
   const packages = collectPackages(moduleNames)
 
   await prefetchPackageVersions(packages)
-  await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
-    assertPackage(name, version, range, external))
+  await mapWithConcurrency(packages, FS_CONCURRENCY, assertPackage)
 
   await assertWorkspaces()
 }
@@ -138,20 +137,25 @@ async function assertPrerequisites () {
  * the nohoisted (isolated) variant wins for any shared folder.
  *
  * @param {string[]} moduleNames
- * @returns {Array<{ name: string, version: string|null, range: string, external: boolean }>}
+ * @returns {Array<{ name: string, version: string|null, range: string }>}
  */
 function collectPackages (moduleNames) {
   const seen = new Set()
-  /** @type {Array<{ name: string, version: string|null, range: string, external: boolean }>} */
+  /** @type {Array<{ name: string, version: string|null, range: string }>} */
   const packages = []
 
-  const addFolder = (name, version, range, external) => {
+  /**
+   * @param {string} name
+   * @param {string|null} version
+   * @param {string} range
+   */
+  const addFolder = (name, version, range) => {
     // File-path requires are resolved from disk; their non-path counterparts already cover them.
     if (isRelativeRequire(name)) return
     const key = basename(name, version)
     if (seen.has(key)) return
     seen.add(key)
-    packages.push({ name, version, range, external })
+    packages.push({ name, version, range })
   }
 
   /**
@@ -182,10 +186,10 @@ function collectPackages (moduleNames) {
 
       // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
       // setup and several plugin specs.
-      if (unversioned) addFolder(name, null, unversioned, external)
+      if (unversioned) addFolder(name, null, unversioned)
 
       for (const { versionKey } of versionList) {
-        addFolder(name, versionKey, versionKey, external)
+        addFolder(name, versionKey, versionKey)
       }
     }
   }
@@ -228,17 +232,15 @@ async function fetchPackageVersions (name) {
   const options = { encoding: 'utf8' }
   let metadata
   try {
-    const [versionsResult, timeResult] = await Promise.all([
-      execFileAsync('bun', ['pm', 'view', name, 'versions', '--json'], options),
-      execFileAsync('bun', ['pm', 'view', name, 'time', '--json'], options),
-    ])
-    metadata = {
-      versions: JSON.parse(versionsResult.stdout.trim()),
-      time: JSON.parse(timeResult.stdout.trim()),
-    }
+    const { stdout } = await execFileAsync(
+      'npm',
+      ['view', name, 'time', 'versions', '--json', '--update-notifier=false'],
+      options
+    )
+    metadata = JSON.parse(stdout.trim())
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
+    console.warn(`npm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
     return
   }
   // npm registry package metadata always exposes the time map.
@@ -246,7 +248,7 @@ async function fetchPackageVersions (name) {
   /* c8 ignore next 7 */
   if (!Array.isArray(metadata?.versions) || !metadata.time || typeof metadata.time !== 'object') {
     // eslint-disable-next-line no-console
-    console.warn(`bun pm view returned incomplete publication metadata for ${name}: ${JSON.stringify(metadata)}; ` +
+    console.warn(`npm view returned incomplete publication metadata for ${name}: ${JSON.stringify(metadata)}; ` +
       'deferring to install-time resolution')
     return
   }
@@ -262,11 +264,9 @@ async function assertFolder (name, version) {
 }
 
 /**
- * @param {string} name
- * @param {string|null} version
- * @param {string} dependencyVersionRange
+ * @param {{ name: string, version: string|null, range: string }} entry
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage ({ name, version, range: dependencyVersionRange }) {
   trustedDependencies.add(name)
   const dependencies = {
     [name]: resolveLatestSatisfying(name, getCappedRange(name, dependencyVersionRange)),
