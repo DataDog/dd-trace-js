@@ -353,7 +353,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.ok(calls.some(c => c.method === 'PATCH' && c.body?.data?.attributes?.status === 'failed'))
   })
 
-  it('stringifies non-primitive categorical values (and empties null)', async () => {
+  it('classifies object-valued evaluator results as json (and empties null categorical values)', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('x')
     await new Experiment(client, {
       name: 'exp-demo',
@@ -362,7 +362,24 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       evaluators: { obj: () => ({ x: 1 }), nul: () => null },
     }).run()
     const metrics = eventsBody().data.attributes.metrics
-    assert.equal(metrics.find(m => m.label === 'obj').categorical_value, '{"x":1}')
+    const objMetric = metrics.find(m => m.label === 'obj')
+    assert.equal(objMetric.metric_type, 'json')
+    assert.deepEqual(objMetric.json_value, { x: 1 })
     assert.equal(metrics.find(m => m.label === 'nul').categorical_value, '')
+  })
+
+  it('keeps array-valued evaluator results categorical, lowercased like dd-trace-py', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'out',
+      evaluators: { arr: () => ['Pass', 'FAIL'], str: () => 'MATCH' },
+    }).run()
+    const metrics = eventsBody().data.attributes.metrics
+    const arrMetric = metrics.find(m => m.label === 'arr')
+    assert.equal(arrMetric.metric_type, 'categorical')
+    assert.equal(arrMetric.categorical_value, '["pass","fail"]')
+    assert.equal(metrics.find(m => m.label === 'str').categorical_value, 'match')
   })
 })

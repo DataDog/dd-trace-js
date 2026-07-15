@@ -5,17 +5,21 @@ const id = require('../../id')
 const { API_BASE_PATH } = require('./client')
 const { Row, ExperimentResult } = require('./result')
 
+// Mirrors dd-trace-py's _generate_metric_from_evaluation classification: dicts
+// (plain objects) are json, everything else non-primitive (including arrays)
+// falls through to the lowercased categorical fallback.
 function inferMetricType (value) {
   if (typeof value === 'boolean') return 'boolean'
   if (typeof value === 'number' && Number.isFinite(value)) return 'score'
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) return 'json'
   return 'categorical'
 }
 
 function stringify (value) {
   if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
+  if (typeof value === 'string') return value.toLowerCase()
+  if (typeof value === 'object') return JSON.stringify(value).toLowerCase()
+  return String(value).toLowerCase()
 }
 
 // Build the tag list, letting auto tags win over user tags on key conflict.
@@ -81,6 +85,7 @@ function toMetric (label, value, errorMessage, spanId, timestampMs, experimentId
   metric.metric_type = type
   if (type === 'boolean') metric.boolean_value = value
   else if (type === 'score') metric.score_value = value
+  else if (type === 'json') metric.json_value = value
   else metric.categorical_value = stringify(value)
   return metric
 }
