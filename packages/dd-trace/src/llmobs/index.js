@@ -113,7 +113,7 @@ function disable () {
 }
 
 // since LLMObs traces can extend between services and be the same trace,
-// we need to propagate the parent id, mlApp, and sampling rate/decision.
+// we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
 function handleLLMObsInjection ({ carrier }) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
