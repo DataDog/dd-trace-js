@@ -1454,7 +1454,7 @@ function parseAnnotations (annotations) {
  * Returns 0 when the test is too slow to retry (≥ 5 min).
  *
  * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
  * @returns {number}
  */
 function getEfdRetryCount (durationMs, slowTestRetries) {
