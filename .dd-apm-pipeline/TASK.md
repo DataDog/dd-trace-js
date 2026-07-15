@@ -18,6 +18,74 @@ over request-scoped state. The LLMObs AI plugin stores every full tool definitio
 reachable. The reporter measured approximately 11 MB retained per stream in production and a large
 gap between the enabled and disabled `ai` plugin.
 
+## Reporter Evidence
+
+GitHub access is not required for this task. The relevant issue details are reproduced here:
+
+- Observed with `dd-trace@5.80.0`; the reporter confirmed the code remained unchanged in
+  `5.111.0` and `6.0.0`.
+- Runtime: Node.js `24.16.0`, ESM application, initialized with
+  `node --import dd-trace/register.js`.
+- Production pattern: approximately 24 tools are created for every chat stream so each tool's
+  `execute` closure can access request-scoped user, repository, and cancellation state.
+- Reported impact: roughly 11 MB retained per stream, with process heap growing from about
+  250 MB to the 2 GB limit during a working day.
+- The retained object graphs included tool schemas, cached schema conversion data, prompt/message
+  strings, and request-scoped closures.
+- Workaround: set `DD_TRACE_DISABLED_PLUGINS=ai` before Node starts.
+
+The reporter ran 30 fully consumed streams, called `global.gc()` twice, and measured retained heap:
+
+| Configuration | Retained heap after GC |
+| --- | ---: |
+| `dd-trace` initialized, `ai` plugin and LLMObs active | +15.5 MB per stream |
+| same process with LLMObs disabled | +12.9 MB per stream |
+| `DD_TRACE_DISABLED_PLUGINS=ai` | +0.3 MB per stream |
+
+These numbers show that the complete enabled-versus-disabled gap may not come only from the two
+LLMObs registries. The diagnosis must isolate how much retention each registry causes and must not
+claim that all AI SDK retention is fixed unless the measurements prove it.
+
+The issue's reproduction shape is:
+
+```js
+import 'dd-trace/init.js'
+import { tool, streamText } from 'ai'
+import { z } from 'zod'
+
+function createTools (requestContext) {
+  return {
+    my_tool: tool({
+      description: 'does things',
+      inputSchema: z.object({
+        q: z.string(),
+        filters: z.array(z.object({ k: z.string(), v: z.string() })),
+      }),
+      execute: async () => ({ ok: true, userId: requestContext.userId }),
+    }),
+  }
+}
+
+for (let i = 0; i < 1000; i++) {
+  const requestContext = {
+    userId: String(i),
+    bigBuffer: 'x'.repeat(1e6),
+  }
+  const result = streamText({
+    model,
+    tools: createTools(requestContext),
+    prompt: 'hi',
+  })
+  for await (const chunk of result.textStream) {
+    void chunk
+  }
+}
+```
+
+Adapt this into a deterministic repository-local reproduction with a fake or recorded model so the
+measurement does not depend on live model variability. Preserve the per-request closure and fully
+consume each stream. Record exact heap samples and slopes, not only a prose conclusion.
+
 ## Goal
 
 Remove unbounded strong retention of tool objects and tool-call IDs while preserving correct tool-name
