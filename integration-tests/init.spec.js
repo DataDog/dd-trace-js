@@ -34,7 +34,7 @@ delete process.env.DD_INJECT_FORCE
  */
 function getGuardrailExecArgv (arg) {
   // Maglev can hang iitm's WASM parser in Linux loader threads before Node.js 22.9.0.
-  return arg === 'loader' &&
+  return (arg === 'loader' || arg === 'import') &&
     process.platform === 'linux' &&
     semver.satisfies(NODE_VERSION, '>=22.0.0 <22.9.0')
     ? ['--no-maglev']
