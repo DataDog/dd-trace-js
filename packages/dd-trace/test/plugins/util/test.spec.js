@@ -34,7 +34,7 @@ const {
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
@@ -1369,19 +1369,16 @@ describe('getEfdRetryCount', () => {
   })
 })
 
-describe('getMaxEfdRetryCount', () => {
-  it('returns the largest retry count from slow test retry buckets', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
+describe('getConfiguredEfdRetryCount', () => {
+  it('uses the maximum slow test retry budget', () => {
+    assert.strictEqual(getConfiguredEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }, 2), 10)
+    assert.strictEqual(getConfiguredEfdRetryCount({ '5s': 0, '10s': 3 }, 2), 3)
+    assert.strictEqual(getConfiguredEfdRetryCount({ '5s': 0, '10s': 0 }, 2), 0)
   })
 
-  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
-  })
-
-  it('returns undefined when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
+  it('uses the fallback when no slow test retry budget is configured', () => {
+    assert.strictEqual(getConfiguredEfdRetryCount({}, 2), 2)
+    assert.strictEqual(getConfiguredEfdRetryCount(undefined, 2), 2)
   })
 })
 

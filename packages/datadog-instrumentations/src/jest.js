@@ -31,6 +31,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getEfdRetryCount,
+  getConfiguredEfdRetryCount,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   getTestOptimizationRequestResults,
@@ -1332,7 +1333,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testsToBeRetried.add(testFullName)
             this.retryTest({
               jestEvent: event,
-              retryCount: earlyFlakeDetectionNumRetries,
+              retryCount: getConfiguredEfdRetryCount(
+                earlyFlakeDetectionSlowTestRetries,
+                earlyFlakeDetectionNumRetries
+              ),
               retryType: 'Impacted tests',
             })
           }

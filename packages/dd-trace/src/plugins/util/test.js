@@ -513,7 +513,7 @@ module.exports = {
   getIsFaultyEarlyFlakeDetection,
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -1537,6 +1537,15 @@ function getMaxEfdRetryCount (slowTestRetries) {
     }
   }
   return maxRetries
+}
+
+/**
+ * @param {Record<string, number> | undefined} slowTestRetries
+ * @param {number} fallbackRetryCount
+ * @returns {number}
+ */
+function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
+  return getMaxEfdRetryCount(slowTestRetries) ?? fallbackRetryCount
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

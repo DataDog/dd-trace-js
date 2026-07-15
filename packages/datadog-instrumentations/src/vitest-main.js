@@ -9,7 +9,7 @@ const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -70,13 +70,6 @@ let isVitestNoWorkerInitActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
 const tinyPoolClassWrappers = new WeakMap()
-
-function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
-  if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
-    return fallbackRetryCount
-  }
-  return getMaxEfdRetryCount(slowTestRetries)
-}
 
 function getTestCommand () {
   return `vitest ${process.argv.slice(2).join(' ')}`

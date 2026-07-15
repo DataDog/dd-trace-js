@@ -15,7 +15,7 @@ const {
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -204,13 +204,6 @@ function getTestEfdKey (test) {
   return [projectKey, repeatEachKey, testFqn].filter(Boolean).join(' ')
 }
 
-function getConfiguredEfdRetryCount () {
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-}
-
 function markEfdManagedTest (test) {
   test._ddIsEfdManagedTest = true
   test._ddEfdSlowTestRetries = earlyFlakeDetectionSlowTestRetries
@@ -260,7 +253,10 @@ function getEfdRetryRepeatEachIndex (fileSuite, projectSuite, retryIndex, retryC
 }
 
 function getEfdRetryCountForTest (test) {
-  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? getConfiguredEfdRetryCount()
+  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? getConfiguredEfdRetryCount(
+    earlyFlakeDetectionSlowTestRetries,
+    earlyFlakeDetectionNumRetries
+  )
 }
 
 function setEfdRetryCountForTest (test, retryCount) {
@@ -1737,7 +1733,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
       ],
-      getConfiguredEfdRetryCount(),
+      getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
       (copiedTest, originalTest, retryIndex) => {
         markEfdRetryTest(copiedTest, retryIndex, originalTest)
         markEfdManagedTest(copiedTest)
@@ -1778,7 +1774,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         fileSuitesWithNewTestsToProjects,
         isNewTest,
         ['_ddIsNew', '_ddIsEfdRetry'],
-        getConfiguredEfdRetryCount(),
+        getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
           markEfdManagedTest(copiedTest)

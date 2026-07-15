@@ -2477,14 +2477,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
     })
 
-    const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+    /**
+     * @param {object} options
+     * @param {boolean} options.isModified
+     * @param {boolean} [options.isEfd]
+     * @param {boolean} [options.isEfdEnabled]
+     * @param {boolean} [options.isNew]
+     * @param {boolean} [options.isParallel]
+     */
+    const getTestAssertions = ({ isModified, isEfd, isEfdEnabled = isEfd, isNew, isParallel }) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const testSession = events.find(event => event.type === 'test_session_end').content
 
-          if (isEfd) {
+          if (isEfdEnabled) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
@@ -2553,12 +2561,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           }
         })
 
+    /**
+     * @param {Mocha.Done} done
+     * @param {object} options
+     * @param {boolean} options.isModified
+     * @param {boolean} [options.isEfd]
+     * @param {boolean} [options.isEfdEnabled]
+     * @param {boolean} [options.isNew]
+     * @param {boolean} [options.isParallel]
+     * @param {Record<string, string>} [extraEnvVars]
+     */
     const runImpactedTest = (
       done,
-      { isModified, isEfd = false, isParallel = false, isNew = false },
+      { isModified, isEfd = false, isEfdEnabled = isEfd, isParallel = false, isNew = false },
       extraEnvVars = {}
     ) => {
-      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isEfdEnabled, isParallel, isNew })
 
       childProcess = exec(
         runTestsCommand,
@@ -2584,6 +2602,31 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         runImpactedTest(done, { isModified: true })
       })
+
+      for (const isParallel of [false, true]) {
+        it(`does not retry impacted tests when the EFD retry budget is zero${
+          isParallel ? ' in parallel' : ''
+        }`, (done) => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '10s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          const extraEnvVars = isParallel
+            ? {
+                TESTS_TO_RUN: 'test-impacted-test/test-impacted',
+                RUN_IN_PARALLEL: 'true',
+              }
+            : {}
+          runImpactedTest(done, { isModified: true, isEfdEnabled: true, isParallel }, extraEnvVars)
+        })
+      }
 
       it('attempt to fix takes precedence over EFD for impacted tests', async () => {
         const NUM_RETRIES_EFD = 2
