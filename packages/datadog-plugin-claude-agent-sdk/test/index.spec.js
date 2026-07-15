@@ -11,7 +11,11 @@ const PROMPT =
   'After that subagent, do it again but for California, not in a subagent. Both should be in fahrenheit.'
 
 describe('Plugin', () => {
-  describe('claude-agent-sdk', () => {
+  describe('claude-agent-sdk', function () {
+    // A full agentic call spawns the claude subprocess and runs several steps, so
+    // give it more room than the 5s mocha default.
+    this.timeout(15000)
+
     useEnv({
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
     })
@@ -113,7 +117,7 @@ describe('Plugin', () => {
             const parent = spanById.get(tool.parent_id.toString())
             assert.equal(parent?.resource, 'claude_agent_sdk.step')
           }
-        })
+        }, { timeoutMs: 10000 })
 
         const stream = client.query({
           prompt: PROMPT,

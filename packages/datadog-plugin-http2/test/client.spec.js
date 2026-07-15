@@ -989,14 +989,11 @@ describe('Plugin', () => {
           }
 
           appListener = server(app, port => {
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('Blocklisted requests should not be recorded.'))
-              })
-              .catch(done)
+              .assertNoTraces(() => {
+                throw new Error('Blocklisted requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`)
               .on('error', done)
@@ -1034,14 +1031,11 @@ describe('Plugin', () => {
           }
 
           appListener = server(app, port => {
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('filtered requests should not be recorded.'))
-              })
-              .catch(done)
+              .assertNoTraces(() => {
+                throw new Error('filtered requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`)
               .on('error', done)

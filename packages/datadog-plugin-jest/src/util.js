@@ -122,28 +122,43 @@ function isMarkedAsUnskippable (test) {
   return false
 }
 
-function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
+function getJestSuitesToRun (skippableSuites, originalTests, rootDir, fallbackRootDir) {
   const unskippableSuites = {}
   const forcedToRunSuites = {}
 
   const skippedSuites = []
   const suitesToRun = []
+  const normalizedSkippableSuites = new Set(skippableSuites.map(suite => suite.replaceAll('\\', '/')))
 
   for (const test of originalTests) {
     const relativePath = getTestSuitePath(test.path, rootDir)
-    const shouldBeSkipped = skippableSuites.includes(relativePath)
+    const testRootDir = test?.context?.config?.rootDir || fallbackRootDir
+    let fallbackRelativePath
+    let skippedSuite = normalizedSkippableSuites.has(relativePath) ? relativePath : undefined
+    if (testRootDir && testRootDir !== rootDir) {
+      fallbackRelativePath = getTestSuitePath(test.path, testRootDir)
+      if (skippedSuite === undefined && normalizedSkippableSuites.has(fallbackRelativePath)) {
+        skippedSuite = fallbackRelativePath
+      }
+    }
     if (isMarkedAsUnskippable(test)) {
       suitesToRun.push(test)
       unskippableSuites[relativePath] = true
-      if (shouldBeSkipped) {
+      if (fallbackRelativePath !== undefined) {
+        unskippableSuites[fallbackRelativePath] = true
+      }
+      if (skippedSuite !== undefined) {
         forcedToRunSuites[relativePath] = true
+        if (fallbackRelativePath !== undefined) {
+          forcedToRunSuites[fallbackRelativePath] = true
+        }
       }
       continue
     }
-    if (shouldBeSkipped) {
-      skippedSuites.push(relativePath)
-    } else {
+    if (skippedSuite === undefined) {
       suitesToRun.push(test)
+    } else {
+      skippedSuites.push(skippedSuite)
     }
   }
 

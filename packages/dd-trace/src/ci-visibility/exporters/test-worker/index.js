@@ -102,14 +102,30 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testEnvironmentMetadata, logMessage })
   }
 
-  // TODO: add to other writers
+  /**
+   * @param {() => void} [onDone]
+   */
   flush (onDone) {
-    this._writer.flush(onDone)
-    this._coverageWriter.flush()
-    this._logsWriter.flush()
-    if (this._telemetryWriter) {
-      this._telemetryWriter.flush()
+    if (!onDone) {
+      this._writer.flush()
+      this._coverageWriter.flush()
+      this._logsWriter.flush()
+      if (this._telemetryWriter) {
+        this._telemetryWriter.flush()
+      }
+      return
     }
+
+    let pendingWriters = this._telemetryWriter ? 4 : 3
+    const onWriterFlushed = () => {
+      pendingWriters--
+      if (pendingWriters === 0) onDone()
+    }
+
+    this._writer.flush(onWriterFlushed)
+    this._coverageWriter.flush(onWriterFlushed)
+    this._logsWriter.flush(onWriterFlushed)
+    this._telemetryWriter?.flush(onWriterFlushed)
   }
 }
 
