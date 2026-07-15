@@ -196,15 +196,11 @@ describe('Plugin Structure Validation', () => {
     assert.deepStrictEqual(missingPlugins, [])
   })
 
-  it('should only load runtime modules for Orchestrion integrations that require activation', () => {
+  it('should not load runtime modules through Orchestrion hook metadata', () => {
     for (const [packageName, hook] of Object.entries(hooks)) {
       if (!hook || typeof hook !== 'object' || !hook.orchestrion) continue
 
-      assert.strictEqual(
-        typeof hook.fn === 'function',
-        hook.activate === true,
-        `Unexpected runtime module loader for ${packageName}`
-      )
+      assert.strictEqual(hook.fn, undefined, `Unexpected runtime module loader for ${packageName}`)
     }
   })
 

@@ -4,7 +4,6 @@ const Module = require('module')
 const assert = require('node:assert/strict')
 
 const sinon = require('sinon')
-const { channel } = require('dc-polyfill')
 
 describe('register', () => {
   let hooksMock
@@ -29,11 +28,6 @@ describe('register', () => {
       },
       bullmq: {
         orchestrion: true,
-      },
-      hybrid: {
-        orchestrion: true,
-        activate: true,
-        fn: sinon.stub().returns('hooked'),
       },
     }
 
@@ -90,9 +84,6 @@ describe('register', () => {
       ['mongodb-core'],
     ])
     assert.strictEqual(hooksMock.bullmq.fn, undefined)
-
-    channel('dd-trace:instrumentation:load').publish({ name: 'hybrid' })
-    sinon.assert.calledOnce(hooksMock.hybrid.fn)
   })
 
   it('should disable hooks that are disabled by DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {

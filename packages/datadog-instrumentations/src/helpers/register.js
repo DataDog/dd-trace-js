@@ -28,12 +28,6 @@ const disabledInstrumentations = new Set(
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-// Load instrumentation-side subscribers that are not activated by the tracing plugin.
-loadChannel.subscribe(({ name }) => {
-  const hook = hooks[name]
-  if (hook && typeof hook === 'object' && hook.activate) hook.fn()
-})
-
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')

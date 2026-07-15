@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../datadog-instrumentations/src/aws-durable-execution-sdk-js')
+
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const checkpointPlugin = require('./checkpoint')
 const clientPlugin = require('./client')
