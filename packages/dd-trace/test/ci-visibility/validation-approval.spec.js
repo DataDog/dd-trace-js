@@ -6,49 +6,12 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const {
-  assertApprovalDigest,
-  getApprovalDigest,
-  getApprovalMaterial,
-  serializeApprovalMaterial,
-} = require('../../../../ci/test-optimization-validation/approval')
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 
 describe('test optimization validation approval', () => {
   it('binds approval to every regular installed package file', () => {
-    const packageRoot = path.resolve(__dirname, '../../../..')
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-preloads-'))
-    const copiedPackageRoot = path.join(root, 'dd-trace')
-    const copiedValidationDirectory = path.join(copiedPackageRoot, 'ci', 'test-optimization-validation')
-    const copiedFiles = [
-      'package.json',
-      'ci/diagnose.js',
-      'ci/init.js',
-      'ci/validate-test-optimization.js',
-      'loader-hook.mjs',
-      'register.js',
-      'version.js',
-      'ext/exporters.js',
-      'packages/dd-trace/src/exporter.js',
-      'packages/dd-trace/src/proxy.js',
-      'packages/dd-trace/src/encode/agentless-ci-visibility.js',
-    ]
-
-    fs.cpSync(path.join(packageRoot, 'ci', 'test-optimization-validation'), copiedValidationDirectory, {
-      recursive: true,
-    })
-    fs.cpSync(
-      path.join(packageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
-      path.join(copiedPackageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
-      { recursive: true }
-    )
-    for (const relativePath of copiedFiles) {
-      const destination = path.join(copiedPackageRoot, relativePath)
-      fs.mkdirSync(path.dirname(destination), { recursive: true })
-      fs.copyFileSync(path.join(packageRoot, relativePath), destination)
-    }
-
-    const copiedApproval = require(path.join(copiedValidationDirectory, 'approval'))
+    const { approval: copiedApproval, packageRoot: copiedPackageRoot } = copyApprovalPackage(root)
     const input = {
       manifest: { __path: path.join(root, 'manifest.json'), repository: { root } },
       offlineFixtureNonce: '0'.repeat(32),
@@ -106,6 +69,7 @@ describe('test optimization validation approval', () => {
 
   it('serializes inspectable material whose bytes reproduce the approval digest', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-material-'))
+    const { approval } = copyApprovalPackage(root)
     const manifestPath = path.join(root, 'manifest.json')
     const manifestSource = getManifest(root, [process.execPath, '-e', 'console.log("API_KEY=secret")'])
     manifestSource.frameworks[0].existingTestCommand.env = { API_KEY: 'secret', SAFE_MODE: 'enabled' }
@@ -118,11 +82,11 @@ describe('test optimization validation approval', () => {
     }
 
     try {
-      const approvalJson = serializeApprovalMaterial(input)
-      const material = getApprovalMaterial(input)
+      const approvalJson = approval.serializeApprovalMaterial(input)
+      const material = approval.getApprovalMaterial(input)
       const independentDigest = crypto.createHash('sha256').update(approvalJson).digest('hex')
 
-      assert.strictEqual(independentDigest, getApprovalDigest(input))
+      assert.strictEqual(independentDigest, approval.getApprovalDigest(input))
       assert.strictEqual(`${JSON.stringify(material, null, 2)}\n`, approvalJson)
       assert.strictEqual(material.commands[0].environment.API_KEY, '<redacted>')
       assert.strictEqual(material.commands[0].environment.SAFE_MODE, 'enabled')
@@ -139,6 +103,7 @@ describe('test optimization validation approval', () => {
 
   it('rejects manifest or option changes made after the plan was rendered', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-'))
+    const { approval } = copyApprovalPackage(root)
     const manifestPath = path.join(root, 'manifest.json')
     const out = path.join(root, 'results')
     const input = {
@@ -153,15 +118,15 @@ describe('test optimization validation approval', () => {
     try {
       fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, ['npm', 'test']))}\n`)
       const approvedManifest = loadManifest(manifestPath)
-      const digest = getApprovalDigest({ manifest: approvedManifest, ...input })
+      const digest = approval.getApprovalDigest({ manifest: approvedManifest, ...input })
 
-      assertApprovalDigest(digest, { manifest: approvedManifest, ...input })
-      assert.throws(() => assertApprovalDigest(digest, {
+      approval.assertApprovalDigest(digest, { manifest: approvedManifest, ...input })
+      assert.throws(() => approval.assertApprovalDigest(digest, {
         manifest: approvedManifest,
         ...input,
         out: path.join(root, 'different-results'),
       }), /changed after approval/)
-      assert.throws(() => assertApprovalDigest(digest, {
+      assert.throws(() => approval.assertApprovalDigest(digest, {
         manifest: approvedManifest,
         ...input,
         offlineFixtureNonce: '1'.repeat(32),
@@ -169,7 +134,7 @@ describe('test optimization validation approval', () => {
 
       fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, ['sh', '-c', 'echo changed']))}\n`)
       const changedManifest = loadManifest(manifestPath)
-      assert.throws(() => assertApprovalDigest(digest, { manifest: changedManifest, ...input }), {
+      assert.throws(() => approval.assertApprovalDigest(digest, { manifest: changedManifest, ...input }), {
         message: /changed after approval/,
       })
     } finally {
@@ -235,6 +200,50 @@ describe('test optimization validation approval', () => {
     }
   })
 })
+
+/**
+ * Copies the approval runtime into an isolated package that parallel tests cannot mutate.
+ *
+ * @param {string} root temporary test root
+ * @returns {{approval: object, packageRoot: string}} copied approval module and package root
+ */
+function copyApprovalPackage (root) {
+  const sourcePackageRoot = path.resolve(__dirname, '../../../..')
+  const packageRoot = path.join(root, 'dd-trace')
+  const validationDirectory = path.join(packageRoot, 'ci', 'test-optimization-validation')
+  const copiedFiles = [
+    'package.json',
+    'ci/diagnose.js',
+    'ci/init.js',
+    'ci/validate-test-optimization.js',
+    'loader-hook.mjs',
+    'register.js',
+    'version.js',
+    'ext/exporters.js',
+    'packages/dd-trace/src/exporter.js',
+    'packages/dd-trace/src/proxy.js',
+    'packages/dd-trace/src/encode/agentless-ci-visibility.js',
+  ]
+
+  fs.cpSync(path.join(sourcePackageRoot, 'ci', 'test-optimization-validation'), validationDirectory, {
+    recursive: true,
+  })
+  fs.cpSync(
+    path.join(sourcePackageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
+    path.join(packageRoot, 'packages', 'dd-trace', 'src', 'ci-visibility'),
+    { recursive: true }
+  )
+  for (const relativePath of copiedFiles) {
+    const destination = path.join(packageRoot, relativePath)
+    fs.mkdirSync(path.dirname(destination), { recursive: true })
+    fs.copyFileSync(path.join(sourcePackageRoot, relativePath), destination)
+  }
+
+  return {
+    approval: require(path.join(validationDirectory, 'approval')),
+    packageRoot,
+  }
+}
 
 function getManifest (root, argv) {
   return {

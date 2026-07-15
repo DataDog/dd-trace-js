@@ -233,8 +233,8 @@ function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, proj
       id: definition.id,
       purpose: definition.purpose,
       runCommand: baseCommand
-        ? buildFocusedCommand(baseCommand, framework, definition.file, true, true)
-        : buildGeneratedRunCommand(framework, projectRoot, definition.file, runner),
+        ? buildFocusedCommand(baseCommand, framework, definition.file, true, true, moduleSystem)
+        : buildGeneratedRunCommand(framework, projectRoot, definition.file, runner, moduleSystem),
       expectedWithoutDatadog: {
         exitCode: definition.id === 'atr-fail-once' ? 1 : 0,
         observedTestCount: 1,
@@ -313,7 +313,9 @@ function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
 
 function getGeneratedTestContent ({ framework, definition, moduleSystem, stateFileExpression }) {
   const imports = []
-  if (framework === 'vitest') imports.push("import { describe, expect, it } from 'vitest'")
+  if (framework === 'vitest' && moduleSystem === 'module') {
+    imports.push("import { describe, expect, it } from 'vitest'")
+  }
   if (framework === 'mocha') {
     imports.push(moduleSystem === 'module'
       ? "import assert from 'node:assert/strict'"
@@ -361,11 +363,11 @@ function getAtrBody ({ moduleSystem, stateFileExpression, assertion }) {
   ].join('\n')
 }
 
-function buildGeneratedRunCommand (framework, projectRoot, filename, runner) {
+function buildGeneratedRunCommand (framework, projectRoot, filename, runner, moduleSystem) {
   const args = {
     jest: ['--runTestsByPath', filename, '--runInBand', '--silent', '--no-watchman'],
     mocha: ['--reporter', 'spec', filename],
-    vitest: ['run', filename],
+    vitest: ['run', filename, ...(moduleSystem === 'commonjs' ? ['--globals'] : [])],
   }[framework]
   return {
     cwd: projectRoot,
@@ -385,12 +387,20 @@ function buildGeneratedRunCommand (framework, projectRoot, filename, runner) {
  * @param {string} filename selected test file
  * @param {boolean} packageScript whether the command invokes a package script
  * @param {boolean} preserveDefaultReporter whether a repository wrapper owns reporter selection
+ * @param {string} [moduleSystem] generated test module system
  * @returns {object} focused project command
  */
-function buildFocusedCommand (baseCommand, framework, filename, packageScript, preserveDefaultReporter) {
+function buildFocusedCommand (
+  baseCommand,
+  framework,
+  filename,
+  packageScript,
+  preserveDefaultReporter,
+  moduleSystem
+) {
   const argv = [...baseCommand.argv]
   if (packageScript && path.basename(argv[0]).toLowerCase() === 'npm') argv.push('--')
-  argv.push(...getFocusedTestArgs(framework, filename, preserveDefaultReporter))
+  argv.push(...getFocusedTestArgs(framework, filename, preserveDefaultReporter, moduleSystem))
 
   return {
     ...baseCommand,
@@ -405,9 +415,10 @@ function buildFocusedCommand (baseCommand, framework, filename, packageScript, p
  * @param {string} framework detected test framework
  * @param {string} filename selected test file
  * @param {boolean} preserveDefaultReporter whether a repository wrapper owns reporter selection
+ * @param {string} [moduleSystem] generated test module system
  * @returns {string[]} focused test arguments
  */
-function getFocusedTestArgs (framework, filename, preserveDefaultReporter) {
+function getFocusedTestArgs (framework, filename, preserveDefaultReporter, moduleSystem) {
   if (framework === 'jest') {
     return [
       '--runTestsByPath',
@@ -417,7 +428,7 @@ function getFocusedTestArgs (framework, filename, preserveDefaultReporter) {
       '--no-watchman',
     ]
   }
-  return [filename]
+  return [filename, ...(framework === 'vitest' && moduleSystem === 'commonjs' ? ['--globals'] : [])]
 }
 
 /**

@@ -53,7 +53,7 @@ async function runInstrumentedCommand ({
     })
     const validationEnv = ciWiring
       ? buildCiWiringEnv({ fixture, outputRoot: rawOutputRoot })
-      : buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework, command })
+      : buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
     result = await runCommand(command, {
       env: {
         ...validationEnv,

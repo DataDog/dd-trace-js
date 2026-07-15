@@ -43,8 +43,7 @@ function getCommandSuitabilityError ({ command, framework, label, repositoryRoot
 
   if (framework.framework === 'vitest' &&
     (label === 'the selected test command' || label.includes('advanced-feature'))) {
-    return getVitestNodeRuntimeError(command) ||
-      getVitestTypecheckError(command, label.includes('advanced-feature'))
+    return getVitestTypecheckError(command, label.includes('advanced-feature'))
   }
 }
 
@@ -93,19 +92,6 @@ function isProducedBySetup (framework, localPath) {
     }
   }
   return false
-}
-
-function getVitestNodeRuntimeError (command) {
-  if (command.usesShell || !Array.isArray(command.argv)) return
-
-  const executable = command.argv[0]
-  if (!path.isAbsolute(executable) || path.basename(executable) !== 'node') return
-  if (path.resolve(executable) === path.resolve(process.execPath)) return
-
-  return `uses the alternate Node executable ${executable} for direct Vitest validation. The validator cannot ` +
-    'safely determine whether that executable supports the --import preload Vitest requires without executing ' +
-    'it during plan rendering. Use "node" to inherit the active runtime, or use the validator process.execPath ' +
-    `${process.execPath}. Preserve an alternate CI runtime only in ciWiringCommand.`
 }
 
 function getRepositoryYarnError (command, repositoryRoot) {

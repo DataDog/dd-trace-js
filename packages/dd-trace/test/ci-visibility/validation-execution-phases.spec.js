@@ -76,6 +76,29 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('refuses inline Datadog initialization before a clean preflight can run', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-inline-preflight-'))
+    const framework = {
+      id: 'mocha:root',
+      framework: 'mocha',
+      existingTestCommand: {
+        cwd: root,
+        argv: ['env', 'NODE_OPTIONS=-r dd-trace/ci/init', process.execPath, '-e', 'process.exit(0)'],
+      },
+    }
+
+    try {
+      await assert.rejects(runFrameworkPreflight({
+        framework,
+        options: { verbose: false },
+        out: path.join(root, 'results'),
+      }), /Cannot create a Datadog-clean command.*inline dd-trace preload/)
+      assert.strictEqual(fs.existsSync(path.join(root, 'results')), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('verifies generated scenarios and removes retry state before advanced validation', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-'))
     const generatedDirectory = path.join(root, 'tests', 'dd-test-optimization-validation')
@@ -953,18 +976,16 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
-  it('prints the Vitest preload supported by the command Node.js version', () => {
+  it('always prints both required Vitest preloads', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-node-version-plan-'))
     const framework = getPlannedFramework(
       root,
       path.join(root, 'dd-test-optimization-validation.test.ts'),
       path.join(root, '.dd-validation-state')
     )
-    const nodeVersionDescriptor = Object.getOwnPropertyDescriptor(process.versions, 'node')
     framework.framework = 'vitest'
 
     try {
-      Object.defineProperty(process.versions, 'node', { value: '18.17.0', configurable: true })
       formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'manifest.json'),
@@ -976,15 +997,13 @@ describe('test optimization validator-owned execution phases', () => {
       })
       const summary = fs.readFileSync(path.join(root, 'results', 'approval-summary.md'), 'utf8')
 
-      assert.match(summary, /NODE_OPTIONS="-r dd-trace\/ci\/init"/)
-      assert.doesNotMatch(summary, /--import dd-trace\/register\.js/)
+      assert.match(summary, /NODE_OPTIONS="--import dd-trace\/register\.js -r dd-trace\/ci\/init"/)
     } finally {
-      Object.defineProperty(process.versions, 'node', nodeVersionDescriptor)
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
-  it('rejects an unknown absolute Node shim for direct Vitest validation', () => {
+  it('allows an alternate Node executable for direct Vitest validation', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-node-shim-'))
     const nodeShim = path.join(root, 'node')
     const framework = getPlannedFramework(
@@ -1000,16 +1019,6 @@ describe('test optimization validator-owned execution phases', () => {
     fs.writeFileSync(nodeShim, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
 
     try {
-      assert.throws(() => formatExecutionPlan({
-        manifest: {
-          __path: path.join(root, 'manifest.json'),
-          repository: { root },
-          frameworks: [framework],
-        },
-        out: path.join(root, 'results'),
-      }), /alternate Node executable.*Use "node".*process\.execPath/s)
-
-      framework.existingTestCommand.argv[0] = process.execPath
       formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'manifest.json'),

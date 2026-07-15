@@ -483,6 +483,63 @@ describe('test optimization validation manifest schema', () => {
     ])
   })
 
+  it('rejects inline Datadog initialization from validator-controlled commands', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.argv = [
+      'env',
+      'NODE_OPTIONS=-r dd-trace/ci/init',
+      'npm',
+      'test',
+    ]
+    manifest.frameworks[0].forcedLocalCommand = {
+      ...getCommand(),
+      usesShell: true,
+      argv: undefined,
+      shellCommand: 'DD_CIVISIBILITY_ENABLED=1 npm test',
+    }
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'Scenario selection is not complete.',
+      scenarios: [{
+        id: 'basic-pass',
+        runCommand: {
+          ...getCommand(),
+          argv: ['node', '-r', 'dd-trace/ci/init', 'node_modules/.bin/mocha'],
+        },
+      }],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand contains an inline dd-trace preload and must be Datadog-clean for local ' +
+        'validation. Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.',
+      'frameworks[0].forcedLocalCommand contains an inline DD_* assignment and must be Datadog-clean for local ' +
+        'validation. Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].runCommand contains an inline dd-trace preload and must be ' +
+        'Datadog-clean for local validation. Remove the inline initialization; preserve exact CI initialization ' +
+        'only in ciWiringCommand.',
+    ])
+  })
+
+  it('preserves inline Datadog initialization in the exact CI wiring replay', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      reason: 'Replay selected.',
+      provider: 'github-actions',
+      configFile: '/repo/.github/workflows/test.yml',
+      job: 'test',
+      step: 'Run tests',
+      whySelected: 'Selected by discovery.',
+      workingDirectory: '/repo',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/repo',
+      argv: ['env', 'NODE_OPTIONS=-r dd-trace/ci/init', 'npm', 'test'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
   it('requires inline secret-like command values to move into the env object', () => {
     const manifest = getManifest()
     manifest.frameworks[0].existingTestCommand.argv = ['npm', 'test', '--token', 'hidden-token']

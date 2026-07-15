@@ -7,6 +7,7 @@ const {
   MAX_GENERATED_FILES,
   getGeneratedFileContentError,
 } = require('./generated-file-policy')
+const { getInlineDatadogInitialization } = require('./local-command')
 const {
   hasUnsafeExecutionCharacter,
   hasUnsafeInvisibleCharacter,
@@ -459,6 +460,14 @@ function validateDatadogCleanCommand (command, prefix, errors) {
     if (name.startsWith('DD_') || (name === 'NODE_OPTIONS' && /dd-trace/.test(String(value)))) {
       errors.push(`${prefix}.env.${name} must not configure Datadog initialization for local validation.`)
     }
+  }
+
+  const inlineInitialization = getInlineDatadogInitialization(command)
+  if (inlineInitialization) {
+    errors.push(
+      `${prefix} ${inlineInitialization} and must be Datadog-clean for local validation. ` +
+      'Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.'
+    )
   }
 }
 

@@ -5,6 +5,9 @@ const path = require('path')
 const { inheritApprovedExecutable } = require('./executable-approval')
 
 const JEST_NO_WATCHMAN_ADJUSTMENT = 'Disable Watchman for local validation to avoid home-directory writes.'
+const INLINE_DATADOG_ENV_PATTERN = /(?:^|[\s;&|()'"])(?:export\s+|set\s+)?["']?(?:\$env:)?DD_[A-Z0-9_]+\s*\+?=/i
+const INIT_PATH = path.resolve(__dirname, '..', 'init.js').replaceAll('\\', '/')
+const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js').replaceAll('\\', '/')
 
 /**
  * Applies semantics-preserving local validation adjustments to a command.
@@ -56,6 +59,14 @@ function isJestCommand (argv) {
  * @returns {object} Datadog-clean command
  */
 function getDatadogCleanCommand (command) {
+  const inlineInitialization = getInlineDatadogInitialization(command)
+  if (inlineInitialization) {
+    throw new Error(
+      `Cannot create a Datadog-clean command because it ${inlineInitialization}. ` +
+      'Remove inline Datadog initialization from the local validation command.'
+    )
+  }
+
   const env = {}
   for (const [name, value] of Object.entries(command.env || {})) {
     if (name.startsWith('DD_') || (name === 'NODE_OPTIONS' && /dd-trace/.test(value))) continue
@@ -66,6 +77,25 @@ function getDatadogCleanCommand (command) {
     ...command,
     env,
   })
+}
+
+/**
+ * Finds Datadog initialization embedded in executable arguments or shell source.
+ *
+ * @param {object} command manifest command
+ * @returns {string|undefined} customer-facing inline initialization description
+ */
+function getInlineDatadogInitialization (command) {
+  const source = command?.usesShell
+    ? String(command.shellCommand || '')
+    : (command?.argv || []).join(' ')
+  const normalized = source.replaceAll('\\', '/')
+
+  if (normalized.includes('dd-trace/ci/init') || normalized.includes('dd-trace/register.js') ||
+    normalized.includes(INIT_PATH) || normalized.includes(REGISTER_PATH)) {
+    return 'contains an inline dd-trace preload'
+  }
+  if (INLINE_DATADOG_ENV_PATTERN.test(source)) return 'contains an inline DD_* assignment'
 }
 
 /**
@@ -128,5 +158,6 @@ function isBourneShell (executable) {
 module.exports = {
   getCiWiringCommand,
   getDatadogCleanCommand,
+  getInlineDatadogInitialization,
   getLocalValidationCommand,
 }

@@ -295,8 +295,20 @@ describe('test optimization validation manifest scaffold', () => {
           assert.match(atrSource, /import \{ existsSync, writeFileSync \} from 'node:fs'/)
           assert.match(atrSource, /join\(dirname\(fileURLToPath\(import\.meta\.url\)\)/)
           assert.doesNotMatch(atrSource, /new URL/)
+          if (definition.framework === 'vitest') {
+            assert.match(atrSource, /import \{ describe, expect, it \} from 'vitest'/)
+            assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
+              return !scenario.runCommand.argv.includes('--globals')
+            }))
+          }
         } else {
           assert.match(atrSource, /const fs = require\('node:fs'\)/)
+          if (definition.framework === 'vitest') {
+            assert.doesNotMatch(atrSource, /(?:import|require).*vitest/)
+            assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
+              return scenario.runCommand.argv.includes('--globals')
+            }))
+          }
         }
       } finally {
         fs.rmSync(root, { recursive: true, force: true })

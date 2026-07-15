@@ -5,12 +5,10 @@
 const path = require('path')
 const { spawn } = require('child_process')
 
-const { NODE_MAJOR, NODE_MINOR } = require('../../version')
 const { cleanupCommandOutputs, prepareCommandOutputs } = require('./command-output-policy')
 const {
   getExecutableForSpawn,
   isEnvExecutable,
-  isNodeExecutable,
   parseArgv,
 } = require('./executable')
 const { sanitizeConsoleText, sanitizeString } = require('./redaction')
@@ -388,7 +386,7 @@ function getBaseEnv (envMode) {
   return cleanEnv
 }
 
-function buildDatadogEnv ({ fixture, outputRoot, scenario, framework, command }) {
+function buildDatadogEnv ({ fixture, outputRoot, scenario, framework }) {
   const offline = buildOfflineValidationEnv({ fixture, outputRoot })
   return {
     ...offline,
@@ -400,7 +398,7 @@ function buildDatadogEnv ({ fixture, outputRoot, scenario, framework, command })
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
     DD_TAGS: `test_optimization.validation.scenario:${scenario}`,
-    NODE_OPTIONS: withCiPreloads('', framework, command),
+    NODE_OPTIONS: withCiPreloads('', framework),
   }
 }
 
@@ -585,10 +583,10 @@ function escapeRegExp (value) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
-function withCiPreloads (nodeOptions = '', framework, command) {
+function withCiPreloads (nodeOptions = '', framework) {
   let result = nodeOptions.trim()
 
-  if (framework?.framework === 'vitest' && supportsImportPreload(command) && !hasRegister(result)) {
+  if (framework?.framework === 'vitest' && !hasRegister(result)) {
     result = `--import ${formatNodeRequire(REGISTER_PATH)}${result ? ` ${result}` : ''}`
   }
 
@@ -604,55 +602,6 @@ function mergeNodeOptions (...nodeOptions) {
     .map(value => String(value || '').trim())
     .filter(Boolean)
     .join(' ')
-}
-
-/**
- * Checks whether the command Node.js version supports --import in NODE_OPTIONS.
- *
- * @param {object} [command] test command
- * @returns {boolean} true when --import can be used
- */
-function supportsImportPreload (command) {
-  const version = getCommandNodeVersion(command)
-  if (version) return versionSupportsImportPreload(version)
-
-  if (command) return false
-  return versionSupportsImportPreload(`${NODE_MAJOR}.${NODE_MINOR}.0`)
-}
-
-/**
- * Resolves the Node.js version for commands that directly execute Node.
- *
- * @param {object} [command] test command
- * @returns {string|undefined} Node.js version
- */
-function getCommandNodeVersion (command) {
-  if (!command) return
-  if (command.usesShell) return process.versions.node
-  if (!Array.isArray(command.argv)) return
-
-  const { commandIndex } = parseArgv(command.argv)
-  const executable = command.argv[commandIndex]
-  if (isNodeExecutable(executable) && path.isAbsolute(executable) &&
-    path.resolve(executable) !== path.resolve(process.execPath)) {
-    return
-  }
-
-  // Do not execute a command-controlled `node` binary just to inspect its version. Package-manager commands
-  // normally inherit the validator runtime; explicit alternate Node executables conservatively omit --import.
-  return process.versions.node
-}
-
-/**
- * Checks whether a Node.js version supports --import in NODE_OPTIONS.
- *
- * @param {string} version Node.js version string
- * @returns {boolean} true when --import can be used
- */
-function versionSupportsImportPreload (version) {
-  const [major, minor] = String(version).split('.').map(Number)
-  if (major > 18) return true
-  return major === 18 && minor >= 18
 }
 
 function hasCiInit (nodeOptions) {
@@ -748,7 +697,6 @@ module.exports = {
   serializeApprovalCommand,
   serializeCommand,
   serializeDisplayCommand,
-  supportsImportPreload,
   withCiPreloads,
   mergeNodeOptions,
 }

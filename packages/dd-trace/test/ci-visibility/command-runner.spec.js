@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const childProcess = require('node:child_process')
 const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -19,6 +18,7 @@ const {
   runCommand,
   serializeApprovalCommand,
   serializeDisplayCommand,
+  withCiPreloads,
 } = require('../../../../ci/test-optimization-validation/command-runner')
 
 function validationRouting () {
@@ -39,78 +39,8 @@ describe('test optimization validation command runner', () => {
     )
   })
 
-  it('does not inject --import for Vitest on Node versions that do not support it', () => {
-    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
-      '../../version': {
-        NODE_MAJOR: 18,
-        NODE_MINOR: 17,
-      },
-    })
+  it('injects both required Vitest preloads without inferring the command Node.js version', () => {
     const nodeOptions = withCiPreloads('', { framework: 'vitest' })
-
-    assert.doesNotMatch(nodeOptions, /--import/)
-    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
-  })
-
-  it('injects --import for Vitest on Node versions that support it', () => {
-    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
-      '../../version': {
-        NODE_MAJOR: 18,
-        NODE_MINOR: 18,
-      },
-    })
-    const nodeOptions = withCiPreloads('', { framework: 'vitest' })
-
-    assert.match(nodeOptions, /--import/)
-    assert.match(nodeOptions, /[\\/]register\.js/)
-    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
-  })
-
-  it('does not execute an unapproved alternate Node binary to inspect its version', () => {
-    const { withCiPreloads } = require('../../../../ci/test-optimization-validation/command-runner')
-    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
-      cwd: process.cwd(),
-      argv: ['/opt/node/18.17.1/bin/node', 'node_modules/.bin/vitest', 'run'],
-    })
-
-    assert.doesNotMatch(nodeOptions, /--import/)
-    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
-  })
-
-  it('conservatively omits --import for any explicit alternate Node executable', () => {
-    const { withCiPreloads } = require('../../../../ci/test-optimization-validation/command-runner')
-    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
-      cwd: process.cwd(),
-      argv: ['/opt/node/18.18.0/bin/node', 'node_modules/.bin/vitest', 'run'],
-    })
-
-    assert.doesNotMatch(nodeOptions, /--import/)
-    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
-  })
-
-  it('injects --import for Vitest package-manager commands without running a hidden version probe', () => {
-    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
-      child_process: {
-        spawn: childProcess.spawn,
-      },
-    })
-    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
-      cwd: process.cwd(),
-      argv: ['pnpm', 'run', 'test'],
-    })
-
-    assert.match(nodeOptions, /--import/)
-    assert.match(nodeOptions, /[\\/]register\.js/)
-    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
-  })
-
-  it('injects --import for Vitest shell commands using the validator Node version', () => {
-    const { withCiPreloads } = require('../../../../ci/test-optimization-validation/command-runner')
-    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
-      cwd: process.cwd(),
-      usesShell: true,
-      shellCommand: 'pnpm run test',
-    })
 
     assert.match(nodeOptions, /--import/)
     assert.match(nodeOptions, /[\\/]register\.js/)
