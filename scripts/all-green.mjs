@@ -1,5 +1,6 @@
-import { setTimeout } from 'timers/promises'
+import { setTimeout } from 'node:timers/promises'
 import { Octokit } from 'octokit'
+
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import {
