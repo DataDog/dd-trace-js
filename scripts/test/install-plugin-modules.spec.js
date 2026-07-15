@@ -81,11 +81,49 @@ describe('scripts/install_plugin_modules.js', function () {
     ])
   })
 
+  it('removes the shared Bun store when the Node ABI changes', () => {
+    const staleMarker = path.join(versionsDir, 'node_modules', 'stale-abi-marker')
+    fs.mkdirSync(path.dirname(staleMarker), { recursive: true })
+    fs.writeFileSync(path.join(versionsDir, '.node-abi'), 'stale')
+    fs.writeFileSync(staleMarker, '')
+
+    runInstall('pino')
+
+    assert.strictEqual(fs.existsSync(staleMarker), false)
+  })
+
   it('defers package ranges to Bun when registry metadata is unavailable', () => {
     const traceFile = path.join(wrapperDirectory, 'failed-metadata-trace.ndjson')
     const result = runInstall('express', wrapperDirectory, traceFile, 'express')
 
     assert.match(result.stderr, /npm view failed for express:/)
+  })
+
+  it('reports guidance when Bun cannot install the generated workspaces', () => {
+    const result = spawnInstall('express', {
+      DD_TEST_FAIL_BUN_INSTALL: 'true',
+      DD_TEST_FAIL_METADATA_PACKAGE: 'express',
+    })
+
+    assert.strictEqual(result.status, 1)
+    assert.match(result.stderr, /If a plugin declares a version range that spans a major version that was never/)
+    assert.match(result.stderr, /Original error:/)
+  })
+
+  it('supports a plugin filter that generates no workspaces', () => {
+    fs.rmSync(path.join(versionsDir, 'node_modules'), { recursive: true, force: true })
+    fs.rmSync(path.join(versionsDir, 'bun.lock'), { force: true })
+
+    runInstall('not-a-plugin')
+  })
+
+  it('ignores malformed entries in Bun\'s central store', () => {
+    runInstall('pino')
+    const dotBun = path.join(versionsDir, 'node_modules', '.bun')
+    fs.mkdirSync(path.join(dotBun, 'malformed'), { recursive: true })
+    fs.mkdirSync(path.join(dotBun, 'package@'), { recursive: true })
+
+    runInstall('pino')
   })
 
   it('skips a published package version inside the release-age window', () => {
@@ -112,6 +150,13 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.match(manifest.dependencies['google-auth-library'], /^9\./)
   })
 
+  it('injects a forced dependency missing from the package manifest', () => {
+    runInstall('moleculer')
+
+    const manifest = require(path.join(versionsDir, 'moleculer', 'package.json'))
+    assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
+  })
+
   it('normalizes unprefixed GitHub shorthand dependencies for Bun', () => {
     runInstall('limitd-client')
 
@@ -129,17 +174,11 @@ describe('scripts/install_plugin_modules.js', function () {
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  */
 function runInstall (plugin, binDirectory, traceFile, metadataFailurePackage, recentMetadataPackage) {
-  const result = spawnSync(process.execPath, [installScript], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      PLUGINS: plugin,
-      PATH: `${binDirectory ?? wrapperDirectory}:/usr/bin:/bin`,
-      ...(traceFile && { DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile }),
-      ...(metadataFailurePackage && { DD_TEST_FAIL_METADATA_PACKAGE: metadataFailurePackage }),
-      ...(recentMetadataPackage && { DD_TEST_RECENT_METADATA_PACKAGE: recentMetadataPackage }),
-    },
+  const result = spawnInstall(plugin, {
+    PATH: `${binDirectory ?? wrapperDirectory}:/usr/bin:/bin`,
+    ...(traceFile && { DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile }),
+    ...(metadataFailurePackage && { DD_TEST_FAIL_METADATA_PACKAGE: metadataFailurePackage }),
+    ...(recentMetadataPackage && { DD_TEST_RECENT_METADATA_PACKAGE: recentMetadataPackage }),
   })
 
   assert.strictEqual(
@@ -149,6 +188,24 @@ function runInstall (plugin, binDirectory, traceFile, metadataFailurePackage, re
       `--- stdout ---\n${result.stdout}\n--- stderr ---\n${result.stderr}`
   )
   return result
+}
+
+/**
+ * @param {string} plugin
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {import('node:child_process').SpawnSyncReturns<string>}
+ */
+function spawnInstall (plugin, env = {}) {
+  return spawnSync(process.execPath, [installScript], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PLUGINS: plugin,
+      PATH: `${wrapperDirectory}:/usr/bin:/bin`,
+      ...env,
+    },
+  })
 }
 
 /**
@@ -167,6 +224,7 @@ const args = process.argv.slice(2)
 if (process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE) {
   appendFileSync(process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE, JSON.stringify(['bun', ...args]) + '\n')
 }
+if (process.env.DD_TEST_FAIL_BUN_INSTALL === 'true' && args[0] === 'install') process.exit(1)
 const result = spawnSync(${JSON.stringify(bunBinary)}, args, { stdio: 'inherit' })
 if (result.error) throw result.error
 process.exit(result.status ?? 1)
