@@ -47,8 +47,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     intake.emit('message', { url: '/api/v2/citestcycle', payload: { i: 3 } })
     child.simulateExit(0)
 
-    await clock.tickAsync(50)
-    await promise
+    await Promise.all([clock.tickAsync(50), promise])
   })
 
   it('does not resolve before child exit, even when the buffer would satisfy the assertion', async () => {
@@ -69,8 +68,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     assert.strictEqual(assertionRuns, 0, 'onPayload must not run before child exit')
 
     child.simulateExit(0)
-    await clock.tickAsync(50)
-    await promise
+    await Promise.all([clock.tickAsync(50), promise])
     assert.strictEqual(assertionRuns, 1, 'onPayload runs exactly once on the post-exit buffer')
   })
 
@@ -91,8 +89,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       intake.emit('message', { url: '/api/v2/citestcycle', payload: { i: 2 } })
     })
 
-    await clock.tickAsync(100)
-    await promise
+    await Promise.all([clock.tickAsync(100), promise])
   })
 
   it('fails when a valid prefix is followed by a duplicate during the grace period', async () => {
@@ -113,8 +110,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       intake.emit('message', { url: '/api/v2/citestcycle', payload: { i: 1 } })
     })
 
-    await clock.tickAsync(50)
-    await rejection
+    await Promise.all([clock.tickAsync(50), rejection])
   })
 
   it('rejects with a clear error when the child exits without any matching payloads', async () => {
