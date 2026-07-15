@@ -1469,12 +1469,17 @@ function getEfdRetryCount (durationMs, slowTestRetries) {
 /**
  * Returns the maximum retry count configured by the backend for EFD.
  *
- * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
- * @returns {number}
+ * @param {Record<string, number> | undefined} slowTestRetries
+ * @returns {number | undefined}
  */
 function getMaxEfdRetryCount (slowTestRetries) {
+  if (slowTestRetries === undefined) return
+
+  const retryCounts = Object.values(slowTestRetries)
+  if (retryCounts.length === 0) return
+
   let maxRetries = 0
-  for (const retryCount of Object.values(slowTestRetries || {})) {
+  for (const retryCount of retryCounts) {
     if (retryCount > maxRetries) {
       maxRetries = retryCount
     }

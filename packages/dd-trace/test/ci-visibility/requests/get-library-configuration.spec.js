@@ -92,6 +92,25 @@ describe('get-library-configuration', () => {
       assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
     })
 
+    it('defaults missing EFD retry budgets without replacing an explicit zero', () => {
+      const missingRetryBudget = parseLibraryConfigurationResponse({
+        early_flake_detection: {
+          enabled: true,
+        },
+      })
+      const zeroRetryBudget = parseLibraryConfigurationResponse({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 0,
+          },
+        },
+      })
+
+      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionNumRetries, 2)
+      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionNumRetries, 0)
+    })
+
     it('validates complete cached settings attributes', () => {
       const apiSettings = parseLibraryConfigurationResponse(JSON.stringify({
         data: {
