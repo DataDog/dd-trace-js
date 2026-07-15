@@ -39,9 +39,9 @@ module.exports = {
   ASM_EXTENDED_DATA_COLLECTION: 1n << 44n,
   APM_TRACING_MULTICONFIG: 1n << 45n,
   FFE_FLAG_CONFIGURATION_RULES: 1n << 46n,
-  // TODO: placeholder bit, not yet registered in the backend source of truth.
-  // Do not merge/ship until RC Core assigns the real bit value.
-  SDK_CONFIGURATION: 1n << 47n,
+  // TODO: bit 49 per ddoghq/dd-source#20088 (CapabilitySDKConfiguration), which is open but not
+  // yet merged. Do not merge/ship until that PR lands in the backend source of truth.
+  SDK_CONFIGURATION: 1n << 49n,
   /*
     DO NOT ADD ARBITRARY CAPABILITIES IN YOUR CODE
     UNLESS THEY ARE ALREADY DEFINED IN THE BACKEND SOURCE OF TRUTH
