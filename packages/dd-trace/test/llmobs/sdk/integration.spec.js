@@ -62,7 +62,7 @@ describe('end to end sdk integration tests', () => {
       inputValue: 'world',
       outputValue: 'hello',
       // The workflow sits under the agent, so it is attributed to it.
-      agentAttribution: { parent_agent_name: 'agent', parent_agent_span_id: llmobsSpans[0].span_id },
+      agentAttribution: { pagent_name: 'agent', pagent_span_id: llmobsSpans[0].span_id },
     })
   })
 
@@ -244,8 +244,8 @@ describe('end to end sdk integration tests', () => {
       const { llmobsSpans } = await getEvents(2)
       const toolEvent = llmobsSpans.find(event => event.name === 'downstream_tool')
       assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
-        parent_agent_name: 'upstream_agent',
-        parent_agent_span_id: agentId,
+        pagent_name: 'upstream_agent',
+        pagent_span_id: agentId,
       })
     })
 
@@ -267,8 +267,8 @@ describe('end to end sdk integration tests', () => {
       // The comma-bearing name was skipped on the wire, so only the id survives; the name is
       // emitted as explicit null (matching dd-trace-py) and the backend resolves it from the id.
       assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
-        parent_agent_name: null,
-        parent_agent_span_id: agentId,
+        pagent_name: null,
+        pagent_span_id: agentId,
       })
     })
 

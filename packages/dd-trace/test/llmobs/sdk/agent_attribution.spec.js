@@ -35,8 +35,8 @@ describe('llmobs agent attribution', () => {
     const toolEvent = eventByName(llmobsSpans, 'my_tool')
 
     assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
-      parent_agent_name: 'my_agent',
-      parent_agent_span_id: agentEvent.span_id,
+      pagent_name: 'my_agent',
+      pagent_span_id: agentEvent.span_id,
     })
   })
 
@@ -50,8 +50,8 @@ describe('llmobs agent attribution', () => {
 
     const { llmobsSpans } = await getEvents(3)
     const expected = {
-      parent_agent_name: 'my_agent',
-      parent_agent_span_id: eventByName(llmobsSpans, 'my_agent').span_id,
+      pagent_name: 'my_agent',
+      pagent_span_id: eventByName(llmobsSpans, 'my_agent').span_id,
     }
 
     assert.deepStrictEqual(eventByName(llmobsSpans, 'my_workflow').meta.agent_attribution, expected)
@@ -71,13 +71,13 @@ describe('llmobs agent attribution', () => {
     const innerId = eventByName(llmobsSpans, 'inner_agent').span_id
 
     assert.deepStrictEqual(eventByName(llmobsSpans, 'inner_agent').meta.agent_attribution, {
-      parent_agent_name: 'outer_agent',
-      parent_agent_span_id: outerId,
+      pagent_name: 'outer_agent',
+      pagent_span_id: outerId,
     })
     // The tool's nearest agent ancestor is the inner agent.
     assert.deepStrictEqual(eventByName(llmobsSpans, 'inner_tool').meta.agent_attribution, {
-      parent_agent_name: 'inner_agent',
-      parent_agent_span_id: innerId,
+      pagent_name: 'inner_agent',
+      pagent_span_id: innerId,
     })
   })
 
@@ -116,7 +116,7 @@ describe('llmobs agent attribution', () => {
     const { llmobsSpans } = await getEvents(2)
     const attribution = eventByName(llmobsSpans, 'my_tool').meta.agent_attribution
 
-    assert.strictEqual(typeof attribution.parent_agent_span_id, 'string')
-    assert.strictEqual(attribution.parent_agent_span_id, agentSpanId)
+    assert.strictEqual(typeof attribution.pagent_span_id, 'string')
+    assert.strictEqual(attribution.pagent_span_id, agentSpanId)
   })
 })

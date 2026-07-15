@@ -2439,8 +2439,8 @@ describe('sdk', () => {
       })
 
       const tags = carrier['x-datadog-tags']
-      assert.ok(tags.includes(`_dd.p.llmobs_parent_agent_id=${agentId}`), tags)
-      assert.ok(tags.includes('_dd.p.llmobs_parent_agent_name=my_agent'), tags)
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=my_agent'), tags)
     })
 
     it('inherits the agent attribution when injecting from a tool under an agent', () => {
@@ -2454,8 +2454,8 @@ describe('sdk', () => {
       })
 
       const tags = carrier['x-datadog-tags']
-      assert.ok(tags.includes(`_dd.p.llmobs_parent_agent_id=${agentId}`), tags)
-      assert.ok(tags.includes('_dd.p.llmobs_parent_agent_name=my_agent'), tags)
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=my_agent'), tags)
     })
 
     it('does not propagate agent attribution when there is no agent in the chain', () => {
@@ -2465,8 +2465,8 @@ describe('sdk', () => {
       })
 
       const tags = carrier['x-datadog-tags']
-      assert.ok(!tags.includes('_dd.p.llmobs_parent_agent_id'), tags)
-      assert.ok(!tags.includes('_dd.p.llmobs_parent_agent_name'), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_span_id'), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
     })
 
     it('skips an unsafe agent name but still propagates the id', () => {
@@ -2478,8 +2478,8 @@ describe('sdk', () => {
       })
 
       const tags = carrier['x-datadog-tags']
-      assert.ok(tags.includes(`_dd.p.llmobs_parent_agent_id=${agentId}`), tags)
-      assert.ok(!tags.includes('_dd.p.llmobs_parent_agent_name'), tags)
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
     })
 
     it('propagates an agent name containing "=" (legal in tagset values)', () => {
@@ -2489,7 +2489,7 @@ describe('sdk', () => {
       })
 
       const tags = carrier['x-datadog-tags']
-      assert.ok(tags.includes('_dd.p.llmobs_parent_agent_name=model=gpt4'), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=model=gpt4'), tags)
     })
   })
 })

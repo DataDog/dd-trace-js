@@ -33,7 +33,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   metrics?: Record<string, number | MockValue> | MockValue,
  *   metadata?: Record<string, unknown> | MockValue,
  *   toolDefinitions?: Array<Record<string, unknown> | MockValue> | MockValue,
- *   agentAttribution?: { parent_agent_name?: string, parent_agent_span_id?: string },
+ *   agentAttribution?: { pagent_name?: string, pagent_span_id?: string },
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
