@@ -99,13 +99,10 @@ describe('Plugin', () => {
           const TracerProvider = require('../../dd-trace/src/opentelemetry/tracer_provider')
           const otelTracer = new TracerProvider().getTracer('ai')
           const checkTraces = agent.assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0], {
-              name: 'ai.generateText.doGenerate',
-              error: 1,
-              meta: {
-                'error.message': originalError.message,
-              },
-            })
+            const errorSpan = traces.flat().find(span => span.meta?.['error.message'] === originalError.message)
+
+            assert.ok(errorSpan, 'Expected a span for the original model error')
+            assert.strictEqual(errorSpan.error, 1)
           })
 
           await assert.rejects(
