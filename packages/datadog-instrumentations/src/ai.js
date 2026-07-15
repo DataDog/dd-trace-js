@@ -117,22 +117,11 @@ function wrapModelWithLifecycle (model) {
 }
 
 /**
- * Builds a per-invocation delegating wrapper around an OTel span.
+ * Wraps an OTel span without changing its method receivers.
  *
- * Every method forwards to the underlying `span` with `this === span` (via
- * `.apply(span, arguments)`), so any private-field access inside the span
- * implementation lands on the real instance. This is why we cannot use
- * `Object.create(span)` or `new Proxy(span, …)` here: both fail a private-field
- * brand check (e.g. dd-trace's own OTel-bridge span stores status in a private
- * `#statusCode` field, so a prototype clone's `setStatus()` throws
- * "Cannot read private member #statusCode").
- *
- * A fresh wrapper per `startActiveSpan` callback also preserves the behavior the
- * shared AI SDK `noopSpan` needs: the publishing methods close over this call's
- * `ctx` without mutating the reused singleton.
- *
- * Only `end`, `setAttributes`, and `recordException` publish to the diagnostic
- * channels before delegating; the rest are straight pass-throughs.
+ * OTel spans may use private fields, so methods must run against the original
+ * span. A per-invocation wrapper also preserves `ctx` without mutating the AI
+ * SDK's shared no-op span.
  *
  * @param {import('@opentelemetry/api').Span} span
  * @param {object} ctx
