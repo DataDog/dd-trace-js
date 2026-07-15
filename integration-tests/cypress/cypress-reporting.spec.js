@@ -218,6 +218,38 @@ moduleTypes.forEach(({
       ])
     })
 
+    it('does not fail tests when the RUM correlation cookie is rejected', async () => {
+      let testOutput = ''
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const specToRun = 'cypress/e2e/rum-cookie-rejection.cy.js'
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_REJECT_DD_RUM_COOKIE: 'true',
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const [exitCode] = await once(childProcess, 'exit')
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
       it('logs a warning if using a deprecated version of cypress', async () => {
         let stdout = ''
