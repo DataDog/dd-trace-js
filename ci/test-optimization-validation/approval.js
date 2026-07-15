@@ -12,7 +12,7 @@ const { sanitizeForReport } = require('./redaction')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
-const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', 'node_modules'])
+const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', '.nyc_output', 'node_modules'])
 
 /**
  * Binds an approval to the exact manifest bytes and live validator options.

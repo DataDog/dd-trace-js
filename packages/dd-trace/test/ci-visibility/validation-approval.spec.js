@@ -85,6 +85,13 @@ describe('test optimization validation approval', () => {
       fs.writeFileSync(dependencyFile, 'dependency version two')
       assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
 
+      const coverageProfile = path.join(copiedPackageRoot, '.nyc_output', 'coverage.json')
+      fs.mkdirSync(path.dirname(coverageProfile), { recursive: true })
+      fs.writeFileSync(coverageProfile, 'coverage version one')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+      fs.writeFileSync(coverageProfile, 'coverage version two')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+
       const gitMetadataFile = path.join(copiedPackageRoot, '.git')
       fs.writeFileSync(gitMetadataFile, 'gitdir: outside-the-package')
       assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
