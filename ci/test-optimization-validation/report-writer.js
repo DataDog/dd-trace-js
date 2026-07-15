@@ -44,7 +44,7 @@ function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {}
       Array.isArray(manifest.omittedTestCommands) ? manifest.omittedTestCommands : []
     ),
     results: sanitizedResults,
-    staticDiagnosisNotes: getStaticDiagnosisNotes(staticDiagnosis?.report),
+    staticDiagnosisNotes: getStaticDiagnosisNotes(staticDiagnosis?.report, sanitizedResults),
     repositoryRoot: manifest.repository?.root,
     artifacts: {
       ...baseArtifacts,
@@ -189,13 +189,14 @@ function buildDiagnosticCheck (result, reportDirectory) {
   const ciReplayUnavailable = result.scenario === 'ci-wiring' &&
     (result.evidence?.manifestIncomplete === true || result.evidence?.ciCommandExecution?.fullReplayRan === false)
   const command = readResultCommand(result)
-  const remediation = ['fail', 'error', 'blocked'].includes(result.status)
+  const incomplete = isIncompleteResult(result)
+  const remediation = !incomplete && ['fail', 'error', 'blocked'].includes(result.status)
     ? getResultRecommendations(result)
     : []
   return {
     id: definition.id,
     name: definition.name,
-    status: toDiagnosticStatus(result.status),
+    status: incomplete ? 'unknown' : toDiagnosticStatus(result.status),
     reason: staticOnly || ['fail', 'error', 'blocked'].includes(result.status) ? result.diagnosis : undefined,
     command: staticOnly || checkLevelFailure || ciReplayUnavailable ? undefined : command?.command,
     exitCode: staticOnly || checkLevelFailure || ciReplayUnavailable || result.evidence?.commandExitCode === undefined
@@ -501,11 +502,27 @@ function getStringArray (values) {
   return values.filter(value => typeof value === 'string')
 }
 
-function getStaticDiagnosisNotes (diagnosis) {
-  const results = Array.isArray(diagnosis?.results) ? diagnosis.results : []
+function getStaticDiagnosisNotes (diagnosis, validationResults) {
+  const diagnosisResults = Array.isArray(diagnosis?.results) ? diagnosis.results : []
   const notes = []
+  const conclusiveCiWiring = getCiWiringResults(validationResults).some(result => {
+    return !isIncompleteResult(result) && (result.status === 'pass' || result.status === 'fail')
+  })
 
-  if (results.some(isMissingStaticInitializationResult)) {
+  if (diagnosisResults.some(isMissingStaticInitializationResult) &&
+    getLiveValidationResults(validationResults).length === 0) {
+    notes.push(
+      'Static diagnosis found no Test Optimization initialization in the inspected CI configuration, but no live ' +
+      'test command ran. Treat this as context only, not as a confirmed CI-wiring failure or remediation. First ' +
+      'make one representative test command runnable and rerun validation.'
+    )
+  } else if (diagnosisResults.some(isMissingStaticInitializationResult) && !conclusiveCiWiring) {
+    notes.push(
+      'Static diagnosis found no Test Optimization initialization in the inspected CI configuration, but the ' +
+      'selected CI replay did not reach a test result. Treat this as context only, not as a confirmed CI-wiring ' +
+      'failure or remediation. Correct the replay command and rerun validation first.'
+    )
+  } else if (diagnosisResults.some(isMissingStaticInitializationResult)) {
     notes.push(
       'Static diagnosis reported missing NODE_OPTIONS/dd-trace/ci/init. In this validation report, that is a ' +
       'CI wiring/static configuration finding, not a direct-initialization Basic Reporting blocker.'
@@ -560,10 +577,10 @@ function appendMarkdownResultDetails (lines, results, reportDirectory) {
   const details = results.filter(shouldRenderResultDetails)
   if (details.length === 0) return
 
-  lines.push('## Failed and Blocked Result Details', '')
+  lines.push('## Failed, Incomplete, and Blocked Result Details', '')
   for (const result of details) {
     lines.push(
-      `### ${markdownText(result.status.toUpperCase())} ${markdownText(getResultFrameworkLabel(result))} ` +
+      `### ${markdownText(getDisplayResultStatus(result))} ${markdownText(getResultFrameworkLabel(result))} ` +
       markdownText(formatScenarioName(result.scenario)),
       ''
     )
@@ -1167,7 +1184,7 @@ function getHowToFixEntries (results) {
       frameworkDisplayName: getResultFrameworkLabel(result),
       scenario: result.scenario,
       recommendations: recommendations.length > 0 ? recommendations : [getFallbackRecommendation(result)],
-      ciRemediation: result.evidence?.ciRemediation,
+      ciRemediation: isIncompleteResult(result) ? undefined : result.evidence?.ciRemediation,
     })
   }
 
@@ -1216,6 +1233,10 @@ function getFallbackRecommendation (result) {
       'rerun Basic Reporting before interpreting CI wiring or advanced features.'
   }
   if (result.scenario === CI_WIRING_SCENARIO) {
+    if (isIncompleteResult(result)) {
+      return 'Correct or replace the selected CI replay command so it reaches a test result, then rerun CI wiring ' +
+        'validation before changing Datadog configuration.'
+    }
     return 'Set `NODE_OPTIONS=-r dd-trace/ci/init` and `DD_CIVISIBILITY_AGENTLESS_ENABLED=true` in the identified ' +
       'CI test step, and provide `DD_API_KEY` from the CI secret store. If a Datadog Agent is available and ' +
       'reachable by the test process, do not pass `DD_API_KEY` or `DD_CIVISIBILITY_AGENTLESS_ENABLED`.'
@@ -1278,7 +1299,7 @@ function appendMarkdownChecks (lines, results) {
   )
   for (const result of liveResults) {
     lines.push(`| ${markdownText(getResultFrameworkLabel(result))} | ${markdownText(getCheckQuestion(result))} | ` +
-      `${markdownText(result.status.toUpperCase())} | ${markdownText(getCompactResultMeaning(result))} |`)
+      `${markdownText(getDisplayResultStatus(result))} | ${markdownText(getCompactResultMeaning(result))} |`)
   }
   lines.push('')
 }
@@ -1304,8 +1325,9 @@ function getScenarioExecutionExplanation (result) {
 }
 
 function getFrameworkVerdicts (results) {
+  const liveResults = getLiveValidationResults(results)
   const frameworkResults = new Map()
-  for (const result of getLiveValidationResults(results)) {
+  for (const result of liveResults) {
     const entries = frameworkResults.get(result.frameworkId) || []
     entries.push(result)
     frameworkResults.set(result.frameworkId, entries)
@@ -1319,6 +1341,9 @@ function getFrameworkVerdicts (results) {
     if (basic?.status === 'pass' && ciWiring?.status === 'fail') {
       verdicts.push(`${label}: dd-trace successfully reports this test suite, but the selected CI job does not ` +
         'load dd-trace when it runs the tests.')
+    } else if (basic?.status === 'pass' && isIncompleteResult(ciWiring)) {
+      verdicts.push(`${label}: dd-trace successfully reports this test suite, but the selected CI command did ` +
+        'not reach a test result. No live CI-wiring conclusion was reached.')
     } else if (basic?.status === 'pass' && ciWiring?.status === 'pass') {
       verdicts.push(`${label}: this test suite reports successfully, including from the selected CI job.`)
     } else if (basic && basic.status !== 'pass') {
@@ -1327,6 +1352,10 @@ function getFrameworkVerdicts (results) {
     } else if (basic?.status === 'pass') {
       verdicts.push(`${label}: this test suite reports successfully when dd-trace is initialized.`)
     }
+  }
+  if (liveResults.length === 0) {
+    verdicts.push('No live Test Optimization validation ran. This result is incomplete; no Basic Reporting, CI ' +
+      'wiring, or advanced-feature conclusion was reached.')
   }
   return verdicts
 }
@@ -1354,14 +1383,25 @@ function getCompactResultMeaning (result) {
     }
     return 'CI ran tests without initializing dd-trace, so no test data was reported.'
   }
+  if (result.scenario === CI_WIRING_SCENARIO && isIncompleteResult(result)) {
+    return result.diagnosis
+  }
   const explanation = getScenarioExecutionExplanation(result)
   if (explanation) return explanation
   return result.diagnosis
 }
 
 function formatCompactConsoleResult (result) {
-  return `${result.status.toUpperCase()} ${getResultFrameworkLabel(result)} - ${getCheckQuestion(result)} ` +
+  return `${getDisplayResultStatus(result)} ${getResultFrameworkLabel(result)} - ${getCheckQuestion(result)} ` +
     `- ${replaceControlCharacters(sanitizeString(getCompactResultMeaning(result)))}`
+}
+
+function isIncompleteResult (result) {
+  return result?.evidence?.manifestIncomplete === true || result?.evidence?.validationIncomplete === true
+}
+
+function getDisplayResultStatus (result) {
+  return isIncompleteResult(result) ? 'INCOMPLETE' : result.status.toUpperCase()
 }
 
 function getFrameworkLabels (manifest) {

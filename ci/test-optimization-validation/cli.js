@@ -23,7 +23,7 @@ const {
 } = require('./ci-discovery')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
-const { formatExecutionPlan } = require('./plan-writer')
+const { formatExecutionPlan, getApprovalSummaryPath, getExecutionPlanPath } = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
 const { writePendingReport, writeReport } = require('./report-writer')
@@ -136,13 +136,13 @@ Options:
   --verbose               Print command progress.
   --validate-manifest     Validate the manifest and exit without running project code.
   --init-manifest         Create a schema-valid manifest scaffold without running project code.
-  --print-plan            Print the normalized execution plan without running project code.
-  --print-approval-sha256 Recalculate and print the approval hash without running project code.
+  --print-plan            Write the plan and approval artifacts without running project code.
+  --print-approval-sha256 Reconstruct and print the approval JSON hash without running project code.
                           Requires the nonce and the same selection/output options shown in the plan.
                           This checks consistency with installed dd-trace; it does not verify package origin.
                           Verify origin through lockfile/integrity metadata or a trusted package tarball.
-  --offline-fixture-nonce Random fixture-root nonce emitted by --print-plan for the approved live run.
-  --approved-plan-sha256  Bind live execution to the exact manifest and options shown by --print-plan.
+  --offline-fixture-nonce Random fixture-root nonce written into the plan by --print-plan.
+  --approved-plan-sha256  Bind live execution to the exact manifest and options recorded by --print-plan.
   --help                  Show this help.
 `)
 }
@@ -174,7 +174,7 @@ async function main (argv) {
     if (options.printPlan) {
       const out = validateOutputPath(manifest, options.out)
       const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      console.log(formatExecutionPlan({
+      formatExecutionPlan({
         manifest: approvalManifest,
         out,
         selectedFrameworkIds: options.frameworks.size > 0
@@ -183,7 +183,13 @@ async function main (argv) {
         requestedScenario: options.requestedScenario,
         keepTempFiles: options.keepTempFiles,
         verbose: options.verbose,
-      }))
+      })
+      console.log(sanitizeConsoleText(
+        '[test-optimization-validator-agent] Customer approval summary written to ' +
+        `${getApprovalSummaryPath(out)}. Read that file and send its complete contents in a user-facing message ` +
+        `before requesting approval. Detailed audit information is in ${getExecutionPlanPath(out)}. ` +
+        'The approval command is available only in the summary.'
+      ))
       return
     }
     if (options.printApprovalSha256) {
@@ -211,7 +217,7 @@ async function main (argv) {
     }
     if (!options.approvedPlanSha256 || !options.offlineFixtureNonce) {
       throw new Error(
-        'Live validation requires the --offline-fixture-nonce and --approved-plan-sha256 values emitted by ' +
+        'Live validation requires the --offline-fixture-nonce and --approved-plan-sha256 values written by ' +
         '--print-plan. ' +
         'Render and approve a fresh execution plan first.'
       )
@@ -356,7 +362,7 @@ async function main (argv) {
       await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
     }
 
-    const validatorExitCode = results.some(isUnsuccessfulResult) ? 1 : 0
+    const validatorExitCode = results.some(isUnsuccessfulResult) || !didRunLiveValidation(results) ? 1 : 0
     await writeReport({
       manifest,
       results,
@@ -525,6 +531,18 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
 
 function isUnsuccessfulResult (result) {
   return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
+}
+
+/**
+ * Reports whether at least one live validation check produced a result.
+ *
+ * Framework discovery-only entries use the synthetic `all` scenario and do not prove Test Optimization behavior.
+ *
+ * @param {object[]} results validation results
+ * @returns {boolean} whether live validation ran
+ */
+function didRunLiveValidation (results) {
+  return results.some(result => result.scenario !== 'all')
 }
 
 /**

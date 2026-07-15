@@ -38,9 +38,9 @@ function getGeneratedFileContentError (contentLines) {
   }
 
   const source = contentLines.join('\n')
-  if (/\bwriteFileSync\s*\(/.test(source) && /\bnew\s+URL\s*\(/.test(source) &&
-    !/\bfileURLToPath\s*\(/.test(source)) {
-    return 'must convert generated state-file URLs with fileURLToPath before passing them to writeFileSync'
+  if (/\bwriteFileSync\s*\(/.test(source) && /\bnew\s+URL\s*\(/.test(source)) {
+    return 'must derive generated state-file paths from fileURLToPath(import.meta.url) without new URL because ' +
+      'browser-like test environments may replace the global URL constructor'
   }
 }
 

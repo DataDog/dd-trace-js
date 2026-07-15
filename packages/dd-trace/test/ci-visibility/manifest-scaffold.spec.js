@@ -277,6 +277,8 @@ describe('test optimization validation manifest scaffold', () => {
         const atrSource = atrFile.contentLines.join('\n')
         if (definition.expectedModuleSystem === 'module') {
           assert.match(atrSource, /import \{ existsSync, writeFileSync \} from 'node:fs'/)
+          assert.match(atrSource, /join\(dirname\(fileURLToPath\(import\.meta\.url\)\)/)
+          assert.doesNotMatch(atrSource, /new URL/)
         } else {
           assert.match(atrSource, /const fs = require\('node:fs'\)/)
         }

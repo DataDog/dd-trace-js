@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -8,6 +9,8 @@ const path = require('node:path')
 const {
   assertApprovalDigest,
   getApprovalDigest,
+  getApprovalMaterial,
+  serializeApprovalMaterial,
 } = require('../../../../ci/test-optimization-validation/approval')
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 
@@ -18,6 +21,7 @@ describe('test optimization validation approval', () => {
     const copiedPackageRoot = path.join(root, 'dd-trace')
     const copiedValidationDirectory = path.join(copiedPackageRoot, 'ci', 'test-optimization-validation')
     const copiedFiles = [
+      'package.json',
       'ci/diagnose.js',
       'ci/init.js',
       'ci/validate-test-optimization.js',
@@ -65,6 +69,36 @@ describe('test optimization validation approval', () => {
         assert.notStrictEqual(changedDigest, digest, `${relativePath} must affect the approval digest`)
         digest = changedDigest
       }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('serializes inspectable material whose bytes reproduce the approval digest', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-material-'))
+    const manifestPath = path.join(root, 'manifest.json')
+    const manifestSource = getManifest(root, [process.execPath, '-e', 'console.log("API_KEY=secret")'])
+    manifestSource.frameworks[0].existingTestCommand.env = { API_KEY: 'secret', SAFE_MODE: 'enabled' }
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
+    const manifest = { ...manifestSource, __path: manifestPath }
+    const input = {
+      manifest,
+      offlineFixtureNonce: '0'.repeat(32),
+      out: path.join(root, 'results'),
+    }
+
+    try {
+      const approvalJson = serializeApprovalMaterial(input)
+      const material = getApprovalMaterial(input)
+      const independentDigest = crypto.createHash('sha256').update(approvalJson).digest('hex')
+
+      assert.strictEqual(independentDigest, getApprovalDigest(input))
+      assert.strictEqual(`${JSON.stringify(material, null, 2)}\n`, approvalJson)
+      assert.strictEqual(material.commands[0].environment.API_KEY, '<redacted>')
+      assert.strictEqual(material.commands[0].environment.SAFE_MODE, 'enabled')
+      assert.doesNotMatch(approvalJson, /API_KEY=secret/)
+      assert.match(material.commands[0].argv[2], /API_KEY=<redacted>/)
+      assert.ok(material.validator.coveredFiles.some(file => file.path === 'package.json'))
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

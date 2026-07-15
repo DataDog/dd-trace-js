@@ -472,6 +472,13 @@ function incomplete (framework, scenario, diagnosis, evidence = {}) {
   }, null)
 }
 
+function inconclusive (framework, scenario, diagnosis, evidence = {}, outDir, extraArtifacts) {
+  return result(framework, scenario, 'error', diagnosis, {
+    ...evidence,
+    validationIncomplete: true,
+  }, outDir, extraArtifacts)
+}
+
 function error (framework, scenario, err, outDir) {
   return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
 }
@@ -514,6 +521,7 @@ module.exports = {
   frameworkOutDir,
   hasAllBasicEventTypes,
   incomplete,
+  inconclusive,
   pass,
   prepareGeneratedScenario,
   requireGeneratedScenario,

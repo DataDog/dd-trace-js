@@ -1,11 +1,12 @@
 'use strict'
 
+/* eslint-disable eslint-rules/eslint-process-env */
+
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 
 const satisfies = require('../vendor/dist/semifies')
-const { getEnvironmentVariables } = require('../packages/dd-trace/src/config/helper')
 const { DD_MAJOR, VERSION } = require('../version')
 
 const MAX_TEXT_FILE_SIZE = 512 * 1024
@@ -228,7 +229,7 @@ const UNSUPPORTED_FRAMEWORKS = [
  */
 function runDiagnosis (options = {}) {
   const root = path.resolve(options.root || process.cwd())
-  const env = options.env || getEnvironmentVariables()
+  const env = options.env || process.env
   const execFile = options.execFile || execFileSync
   const maxFiles = options.maxFiles || MAX_SCANNED_FILES
   const maxTotalBytes = options.maxTotalBytes || MAX_SCANNED_TEXT_BYTES

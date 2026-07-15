@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -109,6 +110,37 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('rejects a fail-once scenario that fails before creating its declared state file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-'))
+    const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
+    const stateFile = path.join(root, 'tests', '.dd-test-optimization-validation-atr-state')
+    const framework = getPlannedFramework(root, generatedFile, stateFile)
+    const atrScenario = framework.generatedTestStrategy.scenarios.find(scenario => scenario.id === 'atr-fail-once')
+    atrScenario.runCommand.argv = [
+      process.execPath,
+      '-e',
+      'console.error("Tests: 1 failed, 1 total"); process.exit(1)',
+    ]
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await verifyGeneratedTestStrategy({
+        framework,
+        options: { verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.match(outcome.failure.diagnosis, /failed without creating its declared fail-once state file/)
+      assert.strictEqual(
+        outcome.failure.evidence.scenarios.find(scenario => scenario.id === 'atr-fail-once').failOnceStateCreated,
+        false
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('verifies only generated scenarios required by the selected advanced check', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-'))
     const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation', 'scenarios.test.js')
@@ -178,28 +210,51 @@ describe('test optimization validator-owned execution phases', () => {
       repository: { root },
       frameworks: [framework, unsupportedFramework],
     }
+    const manifestFile = { ...manifest }
+    delete manifestFile.__path
+    fs.writeFileSync(manifestPath, JSON.stringify(manifestFile))
 
     try {
+      const planOut = path.join(root, 'results-atr')
       const plan = formatExecutionPlan({
         manifest,
-        out: path.join(root, 'results'),
+        out: planOut,
         selectedFrameworkIds: ['jest:root'],
         requestedScenario: 'atr',
       })
       const fullPlan = formatExecutionPlan({
         manifest,
-        out: path.join(root, 'results'),
+        out: path.join(root, 'results-all'),
         selectedFrameworkIds: ['jest:root'],
       })
       const ciOnlyPlan = formatExecutionPlan({
         manifest,
-        out: path.join(root, 'results'),
+        out: path.join(root, 'results-ci'),
         selectedFrameworkIds: ['jest:root'],
         requestedScenario: 'ci-wiring',
       })
 
-      assert.match(plan, /command above requires one approval before validation begins/)
-      assert.doesNotMatch(plan, /Agent next action|command-approval dialog|approval surfaces/)
+      assert.strictEqual(fs.readFileSync(path.join(planOut, 'execution-plan.md'), 'utf8'), `${plan}\n`)
+      const approvalSummary = fs.readFileSync(path.join(planOut, 'approval-summary.md'), 'utf8')
+      assert.match(approvalSummary, /# Test Optimization Validation Approval Summary/)
+      assert.match(approvalSummary, /Test execution without Datadog/)
+      assert.match(approvalSummary, /Test execution with Datadog/)
+      assert.match(approvalSummary, /Advanced Check: Auto Test Retries/)
+      assert.match(approvalSummary, /npm test -- --runInBand --token <redacted> --no-watchman/)
+      assert.match(approvalSummary, /\/\/ generated validation test/)
+      assert.match(approvalSummary, /Files removed after validation/)
+      assert.match(approvalSummary, /--approved-plan-sha256 [a-f0-9]{64}/)
+      if (process.platform === 'win32') {
+        assert.match(approvalSummary, /certutil -hashfile .*approval\.json SHA256/)
+        assert.doesNotMatch(approvalSummary, /shasum -a 256 -c/)
+      } else {
+        assert.match(approvalSummary, /shasum -a 256 .*approval\.json/)
+        assert.match(approvalSummary, /shasum -a 256 -c .*approval-files\.sha256/)
+      }
+      assert.match(approvalSummary, /do not verify where the installed `dd-trace` package came from/)
+      assert.doesNotMatch(approvalSummary, /plan-secret/)
+      assert.doesNotMatch(plan, /Agent presentation requirement|command-approval dialog|approval surfaces/)
+      assert.doesNotMatch(plan, /complete customer execution plan|command output may be collapsed/)
       assert.match(plan, /--no-watchman/)
       const relativeGeneratedFile = path.relative(root, generatedFile).split(path.sep).join('/')
       assert.match(plan, new RegExp(escapeRegExp(relativeGeneratedFile)))
@@ -264,15 +319,37 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64} --framework jest:root --scenario atr/)
       const approvalDigest = plan.match(/--approved-plan-sha256 ([a-f0-9]{64})/)?.[1]
       assert.match(approvalDigest, /^[a-f0-9]{64}$/)
-      assert.match(plan, /--print-approval-sha256 --framework jest:root --scenario atr/)
-      assert.match(plan, new RegExp(`Expected output: \`${approvalDigest}\``))
-      assert.match(plan, /validator generated the nonce and approval hash/)
-      assert.match(plan, /regenerates the hash and stops if any covered input changed/)
+      const approvalJsonPath = path.join(planOut, 'approval.json')
+      const coveredFilesPath = path.join(planOut, 'approval-files.sha256')
+      const approvalJson = fs.readFileSync(approvalJsonPath)
+      const approvalMaterial = JSON.parse(approvalJson)
+      const coveredFiles = fs.readFileSync(coveredFilesPath, 'utf8').trim().split('\n').map(line => {
+        const match = /^([a-f0-9]{64}) {2}(.+)$/.exec(line)
+        assert.ok(match)
+        return { filename: match[2], sha256: match[1] }
+      })
+      assert.strictEqual(crypto.createHash('sha256').update(approvalJson).digest('hex'), approvalDigest)
+      assert.strictEqual(fs.existsSync(coveredFilesPath), true)
+      assert.ok(coveredFiles.some(file => file.filename === manifestPath))
+      for (const file of coveredFiles) {
+        const actualDigest = crypto.createHash('sha256').update(fs.readFileSync(file.filename)).digest('hex')
+        assert.strictEqual(actualDigest, file.sha256)
+      }
+      assert.match(plan, /Approval details: `results-atr\/approval\.json`/)
+      assert.match(plan, /Covered file checksums: `results-atr\/approval-files\.sha256`/)
+      assert.match(plan, /shasum -a 256 .*approval\.json/)
+      assert.match(plan, new RegExp(`Expected SHA-256: \`${approvalDigest}\``))
+      assert.match(plan, /reconstructs the approval JSON from current inputs/)
+      assert.match(plan, /saved JSON is for review only and is not trusted as execution authority/)
+      assert.ok(approvalMaterial.commands.length > 0)
+      assert.ok(approvalMaterial.generatedFiles.some(file => file.path === generatedFile))
+      assert.ok(approvalMaterial.validator.coveredFiles.some(file => file.path.endsWith('/approval.js')))
+      assert.doesNotMatch(approvalJson.toString(), /plan-secret/)
       assert.match(plan, /without running project code/)
-      assert.match(plan, /does not verify where that package came from/)
-      assert.match(plan, /package-manager lockfile and integrity metadata/)
-      assert.match(plan, /validate-test-optimization\.js --help/)
+      assert.match(plan, /does not verify where the installed .* package came from/)
       assert.match(plan, /Run the approved validation command/)
+      assert.doesNotMatch(plan, /not user-visible merely because it appeared in tool output/)
+      assert.doesNotMatch(plan, /Never send only an approval question/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -664,6 +741,48 @@ describe('test optimization validator-owned execution phases', () => {
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
       }), /uses bare "yarn".*repository pins \.yarn\/releases\/yarn-4\.4\.1\.cjs/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a Jest config that references a missing local build input', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-input-plan-'))
+    const projectRoot = path.join(root, 'packages', 'eslint-plugin')
+    const configFile = path.join(projectRoot, 'jest.config.js')
+    const missingInput = path.join(root, 'compiler', 'dist', 'index.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(projectRoot, '__tests__', 'dd-test-optimization-validation.test.js'),
+      path.join(projectRoot, '.dd-validation-state')
+    )
+    framework.project = { root: projectRoot, configFiles: [configFile] }
+    fs.mkdirSync(projectRoot, { recursive: true })
+    fs.writeFileSync(configFile, `module.exports = {
+      coverageDirectory: '<rootDir>/coverage',
+      moduleNameMapper: { '^compiler$': '<rootDir>/../../compiler/dist/index.js' }
+    }\n`)
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), new RegExp(`Jest config .* references missing local input ${escapeRegExp(missingInput)}`))
+
+      fs.mkdirSync(path.dirname(missingInput), { recursive: true })
+      fs.writeFileSync(missingInput, 'module.exports = {}\n')
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      })
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

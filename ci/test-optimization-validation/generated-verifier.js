@@ -1,5 +1,8 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
+
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
@@ -58,6 +61,9 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       })
       const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)
       const expected = scenario.expectedWithoutDatadog
+      const failOnceStateCreated = scenario.id === 'atr-fail-once'
+        ? hasGeneratedRuntimeFile(strategy)
+        : undefined
       const scenarioEvidence = {
         id: scenario.id,
         command: serializeDisplayCommand(command),
@@ -67,11 +73,12 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
         expectedTestCount: expected.observedTestCount,
         localAdjustments: command.localAdjustments || [],
       }
+      if (failOnceStateCreated !== undefined) scenarioEvidence.failOnceStateCreated = failOnceStateCreated
       evidence.scenarios.push(scenarioEvidence)
       artifacts.push(...Object.values(result.artifacts))
 
       if (result.timedOut || result.exitCode !== expected.exitCode ||
-        observedTestCount !== expected.observedTestCount) {
+        observedTestCount !== expected.observedTestCount || failOnceStateCreated === false) {
         cleanupGeneratedRuntimeFiles(framework)
         return getVerificationFailure(framework, evidence, artifacts, scenarioEvidence, result.timedOut)
       }
@@ -135,10 +142,15 @@ function getScenariosToVerify (scenarios, selectedFeatures) {
  * @returns {{ok: false, failure: object}} generated verification failure
  */
 function getVerificationFailure (framework, evidence, artifacts, scenario, timedOut) {
-  const reason = timedOut
-    ? 'timed out'
-    : `exited ${scenario.exitCode} with ${formatObservedCount(scenario.observedTestCount)}; expected exit ` +
+  let reason
+  if (timedOut) {
+    reason = 'timed out'
+  } else if (scenario.id === 'atr-fail-once' && scenario.failOnceStateCreated === false) {
+    reason = 'failed without creating its declared fail-once state file, so it failed for an unrelated reason'
+  } else {
+    reason = `exited ${scenario.exitCode} with ${formatObservedCount(scenario.observedTestCount)}; expected exit ` +
       `${scenario.expectedExitCode} and ${scenario.expectedTestCount} test`
+  }
   return {
     ok: false,
     failure: {
@@ -150,6 +162,25 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, timed
       artifacts,
     },
   }
+}
+
+/**
+ * Checks whether the generated fail-once scenario created a declared runtime state file.
+ *
+ * @param {object} strategy generated test strategy
+ * @returns {boolean} whether a regular declared runtime file exists
+ */
+function hasGeneratedRuntimeFile (strategy) {
+  const generatedFiles = new Set((strategy.files || []).map(file => path.resolve(file.path)))
+  for (const cleanupPath of strategy.cleanupPaths || []) {
+    const filename = path.resolve(cleanupPath)
+    if (generatedFiles.has(filename)) continue
+    try {
+      const stat = fs.lstatSync(filename)
+      if (!stat.isSymbolicLink() && stat.isFile()) return true
+    } catch {}
+  }
+  return false
 }
 
 /**

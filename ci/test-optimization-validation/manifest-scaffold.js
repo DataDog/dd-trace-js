@@ -290,7 +290,7 @@ function getGeneratedTestConvention (representative, projectRoot) {
 
 function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
   const stateFileExpression = moduleSystem === 'module'
-    ? "fileURLToPath(new URL('./.dd-test-optimization-validation-atr-state', import.meta.url))"
+    ? "join(dirname(fileURLToPath(import.meta.url)), '.dd-test-optimization-validation-atr-state')"
     : "path.join(__dirname, '.dd-test-optimization-validation-atr-state')"
   const definitions = [
     { id: 'basic-pass', purpose: 'basic_reporting|efd_candidate', testName: 'basic-pass' },
@@ -321,7 +321,11 @@ function getGeneratedTestContent ({ framework, definition, moduleSystem, stateFi
   }
   if (definition.id === 'atr-fail-once') {
     if (moduleSystem === 'module') {
-      imports.push("import { existsSync, writeFileSync } from 'node:fs'", "import { fileURLToPath } from 'node:url'")
+      imports.push(
+        "import { existsSync, writeFileSync } from 'node:fs'",
+        "import { dirname, join } from 'node:path'",
+        "import { fileURLToPath } from 'node:url'"
+      )
     } else {
       imports.push("const fs = require('node:fs')", "const path = require('node:path')")
     }

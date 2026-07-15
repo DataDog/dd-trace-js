@@ -337,8 +337,9 @@ describe('test optimization CI wiring validation', () => {
         options: validationOptions(out),
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitCode, 1)
+      assert.strictEqual(result.evidence.validationIncomplete, true)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -366,8 +367,9 @@ describe('test optimization CI wiring validation', () => {
         options: validationOptions(out),
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitCode, 1)
+      assert.strictEqual(result.evidence.validationIncomplete, true)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -869,7 +871,7 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
-  it('classifies CI-shaped command failures before observed test output', async () => {
+  it('classifies focused CI commands that match no test files as incomplete', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     try {
       const result = await runCiWiring({
@@ -885,13 +887,47 @@ describe('test optimization CI wiring validation', () => {
         options: validationOptions(out),
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitCode, 3)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-command-failed-before-tests')
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-command-failed-before-tests')
-      assert.match(result.diagnosis, /exited 3 before the validator observed any tests running/)
-      assert.match(result.diagnosis, /No CI wiring conclusion/)
+      assert.strictEqual(result.evidence.validationIncomplete, true)
+      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-test-filter-mismatch')
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-test-filter-mismatch')
+      assert.match(result.diagnosis, /focused test filter matched no files/)
+      assert.match(result.diagnosis, /No CI wiring conclusion was reached/)
+      assert.match(result.evidence.commandFailure.recommendation, /exact CI-loaded project/)
       assert.doesNotMatch(result.diagnosis, /process may not have written the event artifact/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('classifies an invented Vitest project filter as incomplete', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'vitest:date-fns',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [
+              process.execPath,
+              '-e',
+              'console.error(\'Error: No projects matched the filter "main".\'); process.exit(1)',
+            ],
+          },
+        },
+        out,
+        options: validationOptions(out),
+      })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.validationIncomplete, true)
+      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-project-filter-mismatch')
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-project-filter-mismatch')
+      assert.match(result.diagnosis, /project filter `main` is not exposed/)
+      assert.match(result.evidence.commandFailure.recommendation, /Remove the invented project selector/)
+      assert.match(result.evidence.commandFailure.recommendation, /project the original CI command actually loads/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -916,7 +952,8 @@ describe('test optimization CI wiring validation', () => {
         options: validationOptions(out),
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.validationIncomplete, true)
       assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-command-failed-before-tests')
       assert.notStrictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
     } finally {

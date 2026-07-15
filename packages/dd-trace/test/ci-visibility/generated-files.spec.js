@@ -174,17 +174,17 @@ describe('test optimization validation generated files', () => {
     }
   })
 
-  it('refuses URL state paths that are not converted before writeFileSync', () => {
+  it('refuses URL constructors for state paths in browser-like test environments', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const filename = path.join(root, 'dd-test-optimization-validation.test.js')
     const framework = getFramework(root, filename)
     framework.generatedTestStrategy.files[0].contentLines = [
       "const stateFile = new URL('./state', import.meta.url)",
-      "writeFileSync(stateFile, 'failed-once')",
+      "writeFileSync(fileURLToPath(stateFile), 'failed-once')",
     ]
 
     try {
-      assert.throws(() => writeGeneratedFiles(framework), /convert generated state-file URLs with fileURLToPath/)
+      assert.throws(() => writeGeneratedFiles(framework), /without new URL.*browser-like test environments/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

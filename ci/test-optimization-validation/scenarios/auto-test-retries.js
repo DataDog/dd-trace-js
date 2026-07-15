@@ -123,6 +123,12 @@ async function runAutoTestRetries ({ framework, out, options }) {
 function getAutoTestRetriesFailureDiagnosis (framework, evidence) {
   const frameworkName = getFrameworkName(framework)
   const retryTagSummary = getRetryTagSummary(evidence.autoTestRetryEvents)
+  if (evidence.autoTestRetryEvents > 0 || evidence.failedAttempts > 1) {
+    return 'Auto Test Retries executed for the generated test, but every attempt failed. Observed ' +
+      `${formatAttemptCount(evidence.failedAttempts, 'failed')}, ` +
+      `${formatAttemptCount(evidence.passedAttempts, 'passed retry')}, and ${retryTagSummary}. ` +
+      'Review the generated test failure because retry execution itself was observed.'
+  }
   return 'Auto Test Retries was enabled, and the generated failing test was reported, but ' +
     `${frameworkName} ` +
     `did not execute a retry attempt. Observed ${formatAttemptCount(evidence.failedAttempts, 'failed')}, ` +

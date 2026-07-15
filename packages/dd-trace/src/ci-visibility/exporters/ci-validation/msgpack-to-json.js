@@ -103,25 +103,25 @@ class MsgpackJsonConverter {
       case 0xC2: return this.#writer.write('false')
       case 0xC3: return this.#writer.write('true')
       case 0xC4: return this.#writeBinary(this.#readUInt8())
-      case 0xC5: return this.#writeBinary(this.#readUInt16())
-      case 0xC6: return this.#writeBinary(this.#readUInt32())
-      case 0xCA: return this.#writeFloat(this.#readFloat32())
-      case 0xCB: return this.#writeFloat(this.#readFloat64())
+      case 0xC5: return this.#writeBinary(this.#read('readUInt16BE', 2))
+      case 0xC6: return this.#writeBinary(this.#read('readUInt32BE', 4))
+      case 0xCA: return this.#writeFloat(this.#read('readFloatBE', 4))
+      case 0xCB: return this.#writeFloat(this.#read('readDoubleBE', 8))
       case 0xCC: return this.#writer.write(String(this.#readUInt8()))
-      case 0xCD: return this.#writer.write(String(this.#readUInt16()))
-      case 0xCE: return this.#writer.write(String(this.#readUInt32()))
-      case 0xCF: return this.#writer.write(this.#readUInt64().toString())
-      case 0xD0: return this.#writer.write(String(this.#readInt8()))
-      case 0xD1: return this.#writer.write(String(this.#readInt16()))
-      case 0xD2: return this.#writer.write(String(this.#readInt32()))
-      case 0xD3: return this.#writer.write(this.#readInt64().toString())
+      case 0xCD: return this.#writer.write(String(this.#read('readUInt16BE', 2)))
+      case 0xCE: return this.#writer.write(String(this.#read('readUInt32BE', 4)))
+      case 0xCF: return this.#writer.write(this.#read('readBigUInt64BE', 8).toString())
+      case 0xD0: return this.#writer.write(String(this.#read('readInt8', 1)))
+      case 0xD1: return this.#writer.write(String(this.#read('readInt16BE', 2)))
+      case 0xD2: return this.#writer.write(String(this.#read('readInt32BE', 4)))
+      case 0xD3: return this.#writer.write(this.#read('readBigInt64BE', 8).toString())
       case 0xD9: return this.#writeString(this.#readUInt8())
-      case 0xDA: return this.#writeString(this.#readUInt16())
-      case 0xDB: return this.#writeString(this.#readUInt32())
-      case 0xDC: return this.#writeArray(this.#readUInt16(), depth)
-      case 0xDD: return this.#writeArray(this.#readUInt32(), depth)
-      case 0xDE: return this.#writeMap(this.#readUInt16(), depth)
-      case 0xDF: return this.#writeMap(this.#readUInt32(), depth)
+      case 0xDA: return this.#writeString(this.#read('readUInt16BE', 2))
+      case 0xDB: return this.#writeString(this.#read('readUInt32BE', 4))
+      case 0xDC: return this.#writeArray(this.#read('readUInt16BE', 2), depth)
+      case 0xDD: return this.#writeArray(this.#read('readUInt32BE', 4), depth)
+      case 0xDE: return this.#writeMap(this.#read('readUInt16BE', 2), depth)
+      case 0xDF: return this.#writeMap(this.#read('readUInt32BE', 4), depth)
       default:
         throw new Error(`Unsupported MessagePack byte 0x${prefix.toString(16)} at offset ${this.#offset - 1}.`)
     }
@@ -173,16 +173,16 @@ class MsgpackJsonConverter {
     let value
     switch (prefix) {
       case 0xCC: value = this.#readUInt8(); break
-      case 0xCD: value = this.#readUInt16(); break
-      case 0xCE: value = this.#readUInt32(); break
-      case 0xCF: value = this.#readUInt64(); break
-      case 0xD0: value = this.#readInt8(); break
-      case 0xD1: value = this.#readInt16(); break
-      case 0xD2: value = this.#readInt32(); break
-      case 0xD3: value = this.#readInt64(); break
+      case 0xCD: value = this.#read('readUInt16BE', 2); break
+      case 0xCE: value = this.#read('readUInt32BE', 4); break
+      case 0xCF: value = this.#read('readBigUInt64BE', 8); break
+      case 0xD0: value = this.#read('readInt8', 1); break
+      case 0xD1: value = this.#read('readInt16BE', 2); break
+      case 0xD2: value = this.#read('readInt32BE', 4); break
+      case 0xD3: value = this.#read('readBigInt64BE', 8); break
       case 0xD9: return this.#writeString(this.#readUInt8())
-      case 0xDA: return this.#writeString(this.#readUInt16())
-      case 0xDB: return this.#writeString(this.#readUInt32())
+      case 0xDA: return this.#writeString(this.#read('readUInt16BE', 2))
+      case 0xDB: return this.#writeString(this.#read('readUInt32BE', 4))
       default:
         throw new Error(`Unsupported MessagePack map key byte 0x${prefix.toString(16)}.`)
     }
@@ -263,73 +263,17 @@ class MsgpackJsonConverter {
     return this.#input[this.#offset++]
   }
 
-  /** @returns {number} unsigned 16-bit integer */
-  #readUInt16 () {
-    this.#assertAvailable(2)
-    const value = this.#input.readUInt16BE(this.#offset)
-    this.#offset += 2
-    return value
-  }
-
-  /** @returns {number} unsigned 32-bit integer */
-  #readUInt32 () {
-    this.#assertAvailable(4)
-    const value = this.#input.readUInt32BE(this.#offset)
-    this.#offset += 4
-    return value
-  }
-
-  /** @returns {bigint} unsigned 64-bit integer */
-  #readUInt64 () {
-    this.#assertAvailable(8)
-    const value = this.#input.readBigUInt64BE(this.#offset)
-    this.#offset += 8
-    return value
-  }
-
-  /** @returns {number} signed 8-bit integer */
-  #readInt8 () {
-    this.#assertAvailable(1)
-    return this.#input.readInt8(this.#offset++)
-  }
-
-  /** @returns {number} signed 16-bit integer */
-  #readInt16 () {
-    this.#assertAvailable(2)
-    const value = this.#input.readInt16BE(this.#offset)
-    this.#offset += 2
-    return value
-  }
-
-  /** @returns {number} signed 32-bit integer */
-  #readInt32 () {
-    this.#assertAvailable(4)
-    const value = this.#input.readInt32BE(this.#offset)
-    this.#offset += 4
-    return value
-  }
-
-  /** @returns {bigint} signed 64-bit integer */
-  #readInt64 () {
-    this.#assertAvailable(8)
-    const value = this.#input.readBigInt64BE(this.#offset)
-    this.#offset += 8
-    return value
-  }
-
-  /** @returns {number} 32-bit floating-point value */
-  #readFloat32 () {
-    this.#assertAvailable(4)
-    const value = this.#input.readFloatBE(this.#offset)
-    this.#offset += 4
-    return value
-  }
-
-  /** @returns {number} 64-bit floating-point value */
-  #readFloat64 () {
-    this.#assertAvailable(8)
-    const value = this.#input.readDoubleBE(this.#offset)
-    this.#offset += 8
+  /**
+   * Reads one fixed-width numeric value.
+   *
+   * @param {keyof Buffer} method Buffer reader method
+   * @param {number} bytes encoded width
+   * @returns {number|bigint} decoded value
+   */
+  #read (method, bytes) {
+    this.#assertAvailable(bytes)
+    const value = this.#input[method](this.#offset)
+    this.#offset += bytes
     return value
   }
 }

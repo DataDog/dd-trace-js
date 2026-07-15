@@ -701,7 +701,7 @@ describe('test optimization validation report writer', () => {
       assert.doesNotMatch(humanReadableReport, /pnpm run test:types was omitted/)
       assert.doesNotMatch(humanReadableReport, /pnpm run legacy-test was omitted/)
       assert.ok(markdown.includes('Typecheck commands \\(1 command\\): do not execute supported runtime tests.'))
-      assert.match(markdown, /## Failed and Blocked Result Details/)
+      assert.match(markdown, /## Failed, Incomplete, and Blocked Result Details/)
       assert.match(markdown, /Command: `pnpm test`/)
       assert.match(markdown, /Cwd: `/)
       assert.match(markdown, /Exit code: `1`/)
@@ -802,6 +802,78 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('reports a CI command failure before tests as incomplete without Datadog remediation', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const packageJsonPath = path.join(tmpDir, 'package.json')
+    const manifest = {
+      repository: { root: tmpDir },
+      frameworks: [{
+        id: 'vitest:date-fns',
+        framework: 'vitest',
+        project: { name: 'date-fns', root: tmpDir, packageJson: packageJsonPath },
+      }],
+    }
+    const results = [{
+      frameworkId: 'vitest:date-fns',
+      scenario: 'basic-reporting',
+      status: 'pass',
+      diagnosis: 'Basic Reporting passed.',
+      evidence: {},
+      artifacts: [],
+    }, {
+      frameworkId: 'vitest:date-fns',
+      scenario: 'ci-wiring',
+      status: 'error',
+      diagnosis: 'The CI-shaped command exited 1 before the validator observed any tests running.',
+      evidence: {
+        validationIncomplete: true,
+        commandFailure: {
+          recommendation: 'Correct the focused test filter, then rerun CI wiring validation.',
+        },
+        ciRemediation: {
+          variants: [{
+            id: 'agentless',
+            name: 'Agentless reporting',
+            prerequisite: 'Store an API key.',
+            requiredValues: [],
+            recommendedValues: [],
+            optionalValues: [],
+            snippet: 'DD_API_KEY=<redacted>',
+          }],
+        },
+      },
+      artifacts: [],
+    }]
+    fs.writeFileSync(packageJsonPath, '{}\n')
+    fs.mkdirSync(out)
+
+    try {
+      writeReport({
+        manifest,
+        results,
+        out,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
+        staticDiagnosis: {
+          report: {
+            results: [{ title: 'Missing Test Optimization initialization' }],
+          },
+        },
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      assert.match(markdown, /selected CI command did not reach a test result/)
+      assert.match(markdown, /\| INCOMPLETE \|/)
+      assert.match(markdown, /Correct the focused test filter/)
+      assert.match(markdown, /selected CI replay did not reach a test result/)
+      assert.match(markdown, /Treat this as context only, not as a confirmed CI-wiring failure or remediation/)
+      assert.doesNotMatch(markdown, /Agentless reporting/)
+      assert.doesNotMatch(markdown, /DD_API_KEY/)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('marks skipped framework entries as diagnostic-only in the human report', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
@@ -848,11 +920,20 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
+        runSummary: { runCompleted: true, validatorExitCode: 1 },
+        staticDiagnosis: {
+          report: {
+            results: [{ title: 'Missing Test Optimization initialization' }],
+          },
+        },
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
       assert.match(markdown, /## Scope/)
+      assert.match(markdown, /No live Test Optimization validation ran/)
+      assert.match(markdown, /result is incomplete/)
+      assert.match(markdown, /Treat this as context only, not as a confirmed CI-wiring failure or remediation/)
       assert.ok(markdown.includes('requires project setup: example \\(Jest\\)'))
       assert.doesNotMatch(markdown, /## Diagnostic-only and Blocked Frameworks/)
     } finally {

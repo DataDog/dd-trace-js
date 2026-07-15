@@ -20,10 +20,20 @@ const {
   frameworkOutDir,
   hasAllBasicEventTypes,
   incomplete,
+  inconclusive,
   pass,
   runInstrumentedCommand,
   tailInterestingLines,
 } = require('./helpers')
+
+const INCONCLUSIVE_CI_WIRING_FAILURES = new Set([
+  'ci-wiring-command-failed-before-tests',
+  'ci-wiring-command-timed-out',
+  'ci-wiring-no-observed-tests',
+  'ci-wiring-project-filter-mismatch',
+  'ci-wiring-test-filter-mismatch',
+  'no-test-optimization-events',
+])
 
 async function runCiWiring ({ manifest, framework, out, options, basicResult }) {
   const scenarioName = 'ci-wiring'
@@ -79,6 +89,16 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
       if (probe.summary) evidence.initializationProbe = probe.summary
       evidence.monorepoFindings = getMonorepoFindings({ framework, command, probe: probe.summary })
       evidence.eventLevelFailure = getCiWiringEventFailure({ framework, result, evidence, basicResult })
+      if (isInconclusiveCiWiringFailure(evidence.eventLevelFailure)) {
+        return inconclusive(
+          framework,
+          scenarioName,
+          evidence.eventLevelFailure.summary,
+          evidence,
+          outDir,
+          probe.artifacts
+        )
+      }
       return fail(framework, scenarioName, evidence.eventLevelFailure.summary, evidence, outDir, probe.artifacts)
     }
 
@@ -117,6 +137,10 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
   } catch (err) {
     return error(framework, scenarioName, err)
   }
+}
+
+function isInconclusiveCiWiringFailure (failure) {
+  return INCONCLUSIVE_CI_WIRING_FAILURES.has(failure.kind)
 }
 
 function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command }) {
@@ -437,13 +461,40 @@ function summarizeCiCommandFailure (result, evidence) {
 
   if (result.exitCode !== 0 && !testsRan) {
     const termination = Number.isInteger(result.exitCode) ? `exited ${result.exitCode}` : 'failed'
+    const projectFilterMismatch = output.match(/No projects matched the filter\s+["']([^"']+)["']/i)
+    if (projectFilterMismatch) {
+      return {
+        ...common,
+        kind: 'ci-wiring-project-filter-mismatch',
+        signals: [projectFilterMismatch[0]],
+        summary: `The CI-shaped command ${termination} before tests because its added project filter ` +
+          `\`${projectFilterMismatch[1]}\` is not exposed by the configuration loaded from the CI working ` +
+          'directory. No CI wiring conclusion was reached.',
+        recommendation: 'Remove the invented project selector. Choose a representative test from a project the ' +
+          'original CI command actually loads, or mark CI replay unavailable when the real CI wrapper cannot be ' +
+          'focused safely.',
+      }
+    }
+
+    if (/No test files found/i.test(output)) {
+      return {
+        ...common,
+        kind: 'ci-wiring-test-filter-mismatch',
+        signals: findInterestingLines(output, [/No test files found/, /filter:/, /include:/]),
+        summary: `The CI-shaped command ${termination} before tests because its focused test filter matched no ` +
+          'files in the project configuration loaded by CI. No CI wiring conclusion was reached.',
+        recommendation: 'Choose a real test included by the exact CI-loaded project and use it consistently for ' +
+          'Basic Reporting and CI wiring. If the CI command cannot be focused without changing its project, cwd, ' +
+          'or wrapper chain, mark CI replay unavailable.',
+      }
+    }
+
     const buildErrors = findInterestingLines(output, [
       /Cannot find module/,
       /Module not found/,
       /Error \[ERR_MODULE_NOT_FOUND\]/,
       /Could not resolve /,
       /command not found/,
-      /No test files found/,
     ])
 
     return {

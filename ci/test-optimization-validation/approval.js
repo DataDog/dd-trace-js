@@ -4,8 +4,11 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { bindManifestExecutables } = require('./executable')
+const { getCommandOutputPaths } = require('./command-output-policy')
+const { getCommandExecutionSettings } = require('./command-runner')
+const { bindManifestExecutables, getManifestCommands } = require('./executable')
 const { getFixtureRecipeDigests } = require('./offline-fixtures')
+const { sanitizeForReport } = require('./redaction')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
@@ -32,33 +35,110 @@ function getApprovalDigest ({
   keepTempFiles = false,
   verbose = false,
 }) {
+  const approvalJson = serializeApprovalMaterial({
+    manifest,
+    out,
+    selectedFrameworkIds,
+    requestedScenario,
+    offlineFixtureNonce,
+    keepTempFiles,
+    verbose,
+  })
+  return crypto.createHash('sha256').update(approvalJson).digest('hex')
+}
+
+/**
+ * Builds the complete, inspectable material covered by one approval fingerprint.
+ *
+ * Secret-like values are redacted for the artifact while the raw manifest digest still binds their exact bytes.
+ *
+ * @param {object} input approval inputs
+ * @param {object} input.manifest loaded validation manifest
+ * @param {string} input.out validation output directory
+ * @param {string[]} [input.selectedFrameworkIds] selected framework identifiers
+ * @param {string|null} [input.requestedScenario] selected validation scenario
+ * @param {string} input.offlineFixtureNonce private offline fixture nonce
+ * @param {boolean} [input.keepTempFiles] whether generated files remain after validation
+ * @param {boolean} [input.verbose] whether verbose validation output is enabled
+ * @returns {object} deterministic approval material
+ */
+function getApprovalMaterial ({
+  manifest,
+  out,
+  selectedFrameworkIds = [],
+  requestedScenario = null,
+  offlineFixtureNonce,
+  keepTempFiles = false,
+  verbose = false,
+}) {
   if (!OFFLINE_FIXTURE_NONCE_PATTERN.test(String(offlineFixtureNonce || ''))) {
     throw new Error('Invalid offline fixture nonce. Render a fresh plan with --print-plan.')
   }
-  const scope = {
-    manifestPath: path.resolve(manifest.__path),
-    manifestSha256: getManifestDigest(manifest),
-    out: path.resolve(out),
-    selectedFrameworkIds: [...selectedFrameworkIds],
-    requestedScenario,
-    offlineFixtureNonce,
+
+  const validationDirectory = __dirname
+  const packageRoot = path.resolve(validationDirectory, '..', '..')
+  const packageJsonPath = path.join(packageRoot, 'package.json')
+  const packageMetadata = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+  const validatorFiles = getValidatorFiles(packageRoot, validationDirectory)
+  const executableIdentities = bindManifestExecutables(manifest)
+
+  return {
+    schemaVersion: 1,
+    sharingWarning: 'Internal diagnostic material. Review repository paths, commands, and CI metadata before sharing.',
+    validator: {
+      package: packageMetadata.name,
+      version: packageMetadata.version,
+      packageRoot,
+      coveredFiles: validatorFiles.map(filename => ({
+        path: path.relative(packageRoot, filename).split(path.sep).join('/'),
+        sha256: getFileDigest(filename),
+      })),
+    },
+    manifest: {
+      path: path.resolve(manifest.__path),
+      sha256: getManifestDigest(manifest),
+    },
+    selection: {
+      frameworks: [...selectedFrameworkIds],
+      scenario: requestedScenario,
+    },
+    validation: {
+      outputDirectory: path.resolve(out),
+      offlineFixtureNonce,
+      keepTemporaryFiles: keepTempFiles,
+      verbose,
+    },
     fixtureRecipeDigests: getFixtureRecipeDigests({
       frameworks: manifest.frameworks || [],
       selectedFrameworkIds,
       requestedScenario,
     }),
-    executableIdentities: bindManifestExecutables(manifest),
-    keepTempFiles,
-    verbose,
-    validatorSha256: getValidatorDigest(),
+    commands: getManifestCommands(manifest).map(([id, command]) => getApprovalCommand(id, command)),
+    generatedFiles: getGeneratedFileMaterial(manifest),
+    executables: executableIdentities,
   }
-  return crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex')
 }
 
-function getValidatorDigest () {
-  const validationDirectory = __dirname
-  const packageRoot = path.resolve(validationDirectory, '..', '..')
-  const files = [
+/**
+ * Serializes approval material using stable formatting suitable for independent SHA-256 tools.
+ *
+ * @param {object} input approval inputs
+ * @returns {string} UTF-8 JSON text ending in one newline
+ */
+function serializeApprovalMaterial (input) {
+  return `${JSON.stringify(getApprovalMaterial(input), null, 2)}\n`
+}
+
+/**
+ * Returns every installed validator/runtime file included in the approval fingerprint.
+ *
+ * @param {string} packageRoot installed dd-trace package root
+ * @param {string} validationDirectory validator source directory
+ * @returns {string[]} sorted absolute file paths
+ */
+function getValidatorFiles (packageRoot, validationDirectory) {
+  return [
+    path.resolve(packageRoot, 'package.json'),
     path.resolve(validationDirectory, '..', 'diagnose.js'),
     path.resolve(validationDirectory, '..', 'init.js'),
     path.resolve(validationDirectory, '..', 'validate-test-optimization.js'),
@@ -133,14 +213,69 @@ function getValidatorDigest () {
     )),
     ...collectJavaScriptFiles(validationDirectory),
   ].sort()
-  const hash = crypto.createHash('sha256')
-  for (const filename of files) {
-    hash.update(path.relative(path.dirname(validationDirectory), filename))
-    hash.update('\0')
-    hash.update(fs.readFileSync(filename))
-    hash.update('\0')
+}
+
+/**
+ * Converts one manifest command into its sanitized, execution-relevant approval shape.
+ *
+ * @param {string} id stable command identifier
+ * @param {object} command structured command
+ * @returns {object} command approval material
+ */
+function getApprovalCommand (id, command) {
+  const shape = {
+    id,
+    required: command.required !== false,
+    usesShell: command.usesShell === true,
+    cwd: path.resolve(command.cwd),
+    environmentMode: 'clean',
+    environment: command.env || {},
+    ...getCommandExecutionSettings(command),
+    outputPaths: getCommandOutputPaths(command),
   }
-  return hash.digest('hex')
+  if (command.usesShell) {
+    shape.shell = command.shell || null
+    shape.shellCommand = command.shellCommand
+  } else {
+    shape.argv = command.argv
+  }
+  return sanitizeForReport(shape)
+}
+
+/**
+ * Returns exact generated test source and cleanup policy covered by the manifest digest.
+ *
+ * @param {object} manifest loaded manifest
+ * @returns {object[]} generated file approval material
+ */
+function getGeneratedFileMaterial (manifest) {
+  const files = []
+  for (const framework of manifest.frameworks || []) {
+    const strategy = framework.generatedTestStrategy
+    for (const file of strategy?.files || []) {
+      const content = `${file.contentLines.join('\n')}\n`
+      files.push(sanitizeForReport({
+        frameworkId: framework.id,
+        path: path.resolve(file.path),
+        sha256: crypto.createHash('sha256').update(content).digest('hex'),
+        content,
+        removeAfterValidation: (strategy.cleanupPaths || []).some(cleanupPath => {
+          return path.resolve(cleanupPath) === path.resolve(file.path)
+        }),
+      }))
+    }
+  }
+  return files
+}
+
+/**
+ * Hashes one covered regular file.
+ *
+ * @param {string} filename absolute filename
+ * @returns {string} lowercase SHA-256 digest
+ */
+function getFileDigest (filename) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex')
 }
 
 function collectJavaScriptFiles (directory) {
@@ -188,4 +323,6 @@ function getManifestDigest (manifest) {
 module.exports = {
   assertApprovalDigest,
   getApprovalDigest,
+  getApprovalMaterial,
+  serializeApprovalMaterial,
 }

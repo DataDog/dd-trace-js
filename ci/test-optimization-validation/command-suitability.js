@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const MAX_CONFIG_BYTES = 512 * 1024
+const JEST_LOCAL_PATH_PATTERN = /(['"])(<rootDir>\/[^'"\r\n]+)\1/g
+const JEST_ROOT_DIR_PATTERN = /\brootDir\s*:\s*(['"])([^'"]+)\1/
 const TYPECHECK_ENABLED_PATTERN = /typecheck\s*:\s*\{[\s\S]{0,2000}?enabled\s*:\s*true/
 const VITEST_CONFIG_FILENAMES = [
   'vitest.config.js',
@@ -34,11 +36,63 @@ function getCommandSuitabilityError ({ command, framework, label, repositoryRoot
   const yarnError = getRepositoryYarnError(command, repositoryRoot)
   if (yarnError) return yarnError
 
+  if (framework.framework === 'jest') {
+    const missingInputError = getJestMissingLocalInputError(framework)
+    if (missingInputError) return missingInputError
+  }
+
   if (framework.framework === 'vitest' &&
     (label === 'the selected test command' || label.includes('advanced-feature'))) {
     return getVitestNodeRuntimeError(command) ||
       getVitestTypecheckError(command, label.includes('advanced-feature'))
   }
+}
+
+/**
+ * Returns an error for an exact local file referenced by Jest config but absent before execution.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {string|undefined} suitability error
+ */
+function getJestMissingLocalInputError (framework) {
+  for (const configFile of framework.project?.configFiles || []) {
+    const config = readConfig(configFile)
+    if (!config) continue
+
+    const rootDirMatch = config.match(JEST_ROOT_DIR_PATTERN)
+    const rootDir = rootDirMatch
+      ? path.resolve(path.dirname(configFile), rootDirMatch[2])
+      : path.dirname(configFile)
+
+    for (const match of config.matchAll(JEST_LOCAL_PATH_PATTERN)) {
+      const configuredPath = match[2]
+      if (/[$*?{}[\]]/.test(configuredPath) || !/\.(?:[cm]?[jt]sx?|json)$/.test(configuredPath)) continue
+
+      const localPath = path.resolve(rootDir, configuredPath.slice('<rootDir>/'.length))
+      if (fs.existsSync(localPath) || isProducedBySetup(framework, localPath)) continue
+
+      return `uses Jest config ${configFile}, which references missing local input ${localPath}. ` +
+        'Choose a representative whose config inputs already exist, or declare the reviewed setup command and ' +
+        'its output path before marking this framework runnable.'
+    }
+  }
+}
+
+/**
+ * Checks whether an approved setup command declares the missing input as an output.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string} localPath missing local input
+ * @returns {boolean} whether setup declares the input
+ */
+function isProducedBySetup (framework, localPath) {
+  for (const command of framework.setup?.commands || []) {
+    for (const outputPath of command.outputPaths || []) {
+      const relative = path.relative(path.resolve(outputPath), localPath)
+      if (relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))) return true
+    }
+  }
+  return false
 }
 
 function getVitestNodeRuntimeError (command) {
@@ -123,13 +177,22 @@ function isFile (filename) {
 }
 
 function configEnablesTypecheck (filename) {
+  const config = readConfig(filename)
+  return config ? TYPECHECK_ENABLED_PATTERN.test(config) : false
+}
+
+/**
+ * Reads a bounded test-runner config file.
+ *
+ * @param {string} filename config path
+ * @returns {string|undefined} config text
+ */
+function readConfig (filename) {
   try {
     const stat = fs.statSync(filename)
-    if (!stat.isFile() || stat.size > MAX_CONFIG_BYTES) return false
-    return TYPECHECK_ENABLED_PATTERN.test(fs.readFileSync(filename, 'utf8'))
-  } catch {
-    return false
-  }
+    if (!stat.isFile() || stat.size > MAX_CONFIG_BYTES) return
+    return fs.readFileSync(filename, 'utf8')
+  } catch {}
 }
 
 function unquote (value) {

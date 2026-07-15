@@ -3,6 +3,7 @@
 /* eslint-disable no-console */
 
 const assert = require('node:assert/strict')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const { builtinModules } = require('node:module')
 const os = require('node:os')
@@ -309,9 +310,34 @@ describe('test optimization validation cli', () => {
         '--framework', manifest.frameworks[0].id,
         '--print-plan',
       ])
-      const plan = logs.pop()
+      const presentationReminder = logs.pop()
+      const executionPlanPath = path.join(out, 'execution-plan.md')
+      const approvalSummaryPath = path.join(out, 'approval-summary.md')
+      const plan = fs.readFileSync(executionPlanPath, 'utf8')
+      const approvalSummary = fs.readFileSync(approvalSummaryPath, 'utf8')
       const nonce = plan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
-      const expectedDigest = plan.match(/Expected output: `([a-f0-9]{64})`/)?.[1]
+      const expectedDigest = plan.match(/Expected SHA-256: `([a-f0-9]{64})`/)?.[1]
+      const approvalJsonPath = path.join(out, 'approval.json')
+      const coveredFilesPath = path.join(out, 'approval-files.sha256')
+
+      assert.strictEqual(fs.existsSync(approvalJsonPath), true)
+      assert.strictEqual(fs.existsSync(coveredFilesPath), true)
+      assert.match(presentationReminder, /Customer approval summary written to/)
+      assert.ok(presentationReminder.includes(approvalSummaryPath))
+      assert.ok(presentationReminder.includes(executionPlanPath))
+      assert.match(presentationReminder, /send its complete contents in a user-facing message/)
+      assert.doesNotMatch(presentationReminder, /--approved-plan-sha256/)
+      assert.doesNotMatch(presentationReminder, /--offline-fixture-nonce [a-f0-9]{32}/)
+      assert.doesNotMatch(presentationReminder, /[a-f0-9]{64}/)
+      assert.match(approvalSummary, /# Test Optimization Validation Approval Summary/)
+      assert.match(approvalSummary, /## Commands/)
+      assert.match(approvalSummary, /## Safety and Outputs/)
+      assert.match(approvalSummary, /## Approval Command/)
+      assert.match(approvalSummary, /--approved-plan-sha256 [a-f0-9]{64}/)
+      assert.strictEqual(
+        crypto.createHash('sha256').update(fs.readFileSync(approvalJsonPath)).digest('hex'),
+        expectedDigest
+      )
 
       await runValidationCli([
         '--manifest', manifestPath,
@@ -322,7 +348,7 @@ describe('test optimization validation cli', () => {
       ])
 
       assert.strictEqual(logs.pop(), expectedDigest)
-      assert.strictEqual(fs.existsSync(out), false)
+      assert.strictEqual(fs.existsSync(out), true)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -504,31 +530,7 @@ describe('test optimization validation cli', () => {
   })
 
   it('skips CI wiring when direct-initialization Basic Reporting fails', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    let capturedResults
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          fs.mkdirSync(out, { recursive: true })
-          fs.writeFileSync(staticDiagnosisPath, '{}\n')
-          return {
-            report: {},
-            reportPath: staticDiagnosisPath,
-          }
-        },
-      },
+    const validation = await runCliFixture({
       './scenarios/basic-reporting': {
         async runBasicReporting ({ framework }) {
           return {
@@ -546,460 +548,238 @@ describe('test optimization validation cli', () => {
           throw new Error('CI wiring should not run until Basic Reporting passes')
         },
       },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        async writeReport ({ results }) {
-          capturedResults = results
-        },
-      },
+    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root))
+
+    assert.strictEqual(validation.exitCode, 1)
+    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
+      'basic-reporting:fail',
+      'ci-wiring:skip',
+      'efd:skip',
+      'atr:skip',
+      'test-management:skip',
+    ])
+    assert.match(validation.results[1].diagnosis, /Skipped CI wiring validation because Basic Reporting/)
+    assert.strictEqual(validation.results[1].evidence.basicReportingStatus, 'fail')
+    assert.deepStrictEqual(validation.results[1].evidence.featureEligibility, {
+      eligible: false,
+      blockedBy: 'basic-reporting',
+      reasonCode: 'basic-reporting-failed',
+      scenario: 'ci-wiring',
     })
-    const manifest = getRunnableManifest(tmpDir)
-    const originalExitCode = process.exitCode
-
-    setReplayableCiWiring(manifest.frameworks[0], tmpDir)
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
-
-    try {
-      await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
-
-      assert.strictEqual(process.exitCode, 1)
-      assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
-        'basic-reporting:fail',
-        'ci-wiring:skip',
-        'efd:skip',
-        'atr:skip',
-        'test-management:skip',
-      ])
-      assert.match(capturedResults[1].diagnosis, /Skipped CI wiring validation because Basic Reporting/)
-      assert.strictEqual(capturedResults[1].evidence.basicReportingStatus, 'fail')
-      assert.deepStrictEqual(capturedResults[1].evidence.featureEligibility, {
-        eligible: false,
-        blockedBy: 'basic-reporting',
-        reasonCode: 'basic-reporting-failed',
-        scenario: 'ci-wiring',
-      })
-      assert.deepStrictEqual(capturedResults[2].evidence.featureEligibility, {
-        eligible: false,
-        blockedBy: 'basic-reporting',
-        reasonCode: 'basic-reporting-failed',
-        scenario: 'efd',
-      })
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
+    assert.deepStrictEqual(validation.results[2].evidence.featureEligibility, {
+      eligible: false,
+      blockedBy: 'basic-reporting',
+      reasonCode: 'basic-reporting-failed',
+      scenario: 'efd',
+    })
   })
 
   it('does not run CI wiring when only Basic Reporting is selected', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    let capturedResults
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          fs.mkdirSync(out, { recursive: true })
-          fs.writeFileSync(staticDiagnosisPath, '{}\n')
-          return {
-            report: {},
-            reportPath: staticDiagnosisPath,
-          }
-        },
-      },
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'pass',
-            diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-            evidence: {},
-            artifacts: [],
-          }
-        },
-      },
+    const validation = await runCliFixture({
       './scenarios/ci-wiring': {
         async runCiWiring () {
           throw new Error('CI wiring should not run when only Basic Reporting is selected')
         },
       },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        async writeReport ({ results }) {
-          capturedResults = results
-        },
-      },
-    })
-    const manifest = getRunnableManifest(tmpDir)
-    const originalExitCode = process.exitCode
+    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root), [
+      '--scenario', 'basic-reporting',
+    ])
 
-    setReplayableCiWiring(manifest.frameworks[0], tmpDir)
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
-
-    try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting', ...APPROVAL_ARGS])
-
-      assert.strictEqual(process.exitCode, 0)
-      assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
-        'basic-reporting:pass',
-      ])
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
+    assert.strictEqual(validation.exitCode, 0)
+    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
+      'basic-reporting:pass',
+    ])
   })
 
   it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    let capturedResults
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          fs.mkdirSync(out, { recursive: true })
-          fs.writeFileSync(staticDiagnosisPath, '{}\n')
-          return {
-            report: {},
-            reportPath: staticDiagnosisPath,
-          }
-        },
-      },
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'pass',
-            diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-            evidence: {},
-            artifacts: [],
-          }
-        },
-      },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        async writeReport ({ results }) {
-          capturedResults = results
-        },
-      },
-    })
-    const manifest = getRunnableManifest(tmpDir)
-    manifest.frameworks[0].ciWiring = {
-      status: 'unknown',
-      reason: 'No replayable CI command was identified.',
-    }
-    const originalExitCode = process.exitCode
+    const validation = await runCliFixture({}, manifest => {
+      manifest.frameworks[0].ciWiring = {
+        status: 'unknown',
+        reason: 'No replayable CI command was identified.',
+      }
+    }, ['--scenario', 'ci-wiring'])
 
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
-
-    try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'ci-wiring', ...APPROVAL_ARGS])
-
-      assert.strictEqual(process.exitCode, 1)
-      assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
-        'basic-reporting:pass',
-        'ci-wiring:error',
-      ])
-      assert.strictEqual(capturedResults[1].diagnosis,
-        'CI wiring was not replayed: No replayable CI command was identified. ' +
-        'No live CI-wiring conclusion was reached.')
-      assert.strictEqual(capturedResults[1].evidence.manifestIncomplete, true)
-      assert.strictEqual(capturedResults[1].evidence.recommendation, 'Add ciWiringCommand to the manifest when ' +
-        'a CI test step can be safely replayed locally.')
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
+    assert.strictEqual(validation.exitCode, 1)
+    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
+      'basic-reporting:pass',
+      'ci-wiring:error',
+    ])
+    assert.strictEqual(validation.results[1].diagnosis,
+      'CI wiring was not replayed: No replayable CI command was identified. ' +
+      'No live CI-wiring conclusion was reached.')
+    assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
+    assert.strictEqual(validation.results[1].evidence.recommendation, 'Add ciWiringCommand to the manifest when ' +
+      'a CI test step can be safely replayed locally.')
   })
 
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    let capturedResults
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          fs.mkdirSync(out, { recursive: true })
-          fs.writeFileSync(staticDiagnosisPath, '{}\n')
-          return {
-            report: {},
-            reportPath: staticDiagnosisPath,
-          }
-        },
-      },
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'pass',
-            diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-            evidence: {},
-            artifacts: [],
-          }
-        },
-      },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        async writeReport ({ results }) {
-          capturedResults = results
-        },
-      },
-    })
-    const manifest = getRunnableManifest(tmpDir)
-    const originalExitCode = process.exitCode
+    const validation = await runCliFixture({}, manifest => {
+      const root = manifest.repository.root
+      manifest.frameworks.unshift({
+        id: 'jest:fixture',
+        framework: 'jest',
+        frameworkVersion: '29.7.0',
+        status: 'requires_manual_setup',
+        project: { root },
+        notes: ['The fixture requires package-specific install and build steps.'],
+      }, {
+        id: 'node-test:root',
+        framework: 'node:test',
+        frameworkVersion: '22.0.0',
+        status: 'unsupported_by_validator',
+        project: { root },
+        notes: ['node:test is detected for diagnosis only.'],
+      })
+    }, ['--scenario', 'basic-reporting'])
 
-    manifest.frameworks.unshift({
-      id: 'jest:fixture',
-      framework: 'jest',
-      frameworkVersion: '29.7.0',
-      status: 'requires_manual_setup',
-      project: {
-        root: tmpDir,
-      },
-      notes: [
-        'The fixture requires package-specific install and build steps.',
-      ],
-    }, {
-      id: 'node-test:root',
-      framework: 'node:test',
-      frameworkVersion: '22.0.0',
-      status: 'unsupported_by_validator',
-      project: {
-        root: tmpDir,
-      },
-      notes: [
-        'node:test is detected for diagnosis only.',
-      ],
-    })
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
-
-    try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting', ...APPROVAL_ARGS])
-
-      assert.strictEqual(process.exitCode, 0)
-      const statuses = capturedResults.map(result => `${result.frameworkId}:${result.scenario}:${result.status}`)
-
-      assert.deepStrictEqual(statuses, [
-        'jest:fixture:all:skip',
-        'node-test:root:all:skip',
-        'jest:root:basic-reporting:pass',
-      ])
-      assert.match(capturedResults[0].diagnosis, /no runnable validation command/)
-      assert.strictEqual(capturedResults[0].evidence.frameworkStatus, 'requires_manual_setup')
-      assert.match(capturedResults[1].diagnosis, /not supported/)
-      assert.strictEqual(capturedResults[1].evidence.frameworkStatus, 'unsupported_by_validator')
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
+    assert.strictEqual(validation.exitCode, 0)
+    assert.deepStrictEqual(validation.results.map(result => {
+      return `${result.frameworkId}:${result.scenario}:${result.status}`
+    }), ['jest:fixture:all:skip', 'node-test:root:all:skip', 'jest:root:basic-reporting:pass'])
+    assert.match(validation.results[0].diagnosis, /no runnable validation command/)
+    assert.strictEqual(validation.results[0].evidence.frameworkStatus, 'requires_manual_setup')
+    assert.match(validation.results[1].diagnosis, /not supported/)
+    assert.strictEqual(validation.results[1].evidence.frameworkStatus, 'unsupported_by_validator')
   })
 
   it('includes Mocha rc files in non-runnable status evidence', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    let capturedResults
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './setup-runner': {
-        async runSetupCommands () {
-          throw new Error('setup should not run for non-runnable entries')
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          fs.mkdirSync(out, { recursive: true })
-          fs.writeFileSync(staticDiagnosisPath, '{}\n')
-          return {
-            report: {},
-            reportPath: staticDiagnosisPath,
-          }
-        },
-      },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        async writeReport ({ results }) {
-          capturedResults = results
-        },
-      },
-    })
-    const manifest = getRunnableManifest(tmpDir)
-    const originalExitCode = process.exitCode
-
-    manifest.frameworks = [
-      {
+    const validation = await runCliFixture({}, manifest => {
+      const root = manifest.repository.root
+      manifest.frameworks = [{
         id: 'mocha:root',
         framework: 'mocha',
         frameworkVersion: '10.0.0',
         status: 'requires_manual_setup',
         project: {
-          root: tmpDir,
+          root,
         },
         notes: [
           'No small representative Mocha command was selected.',
         ],
-      },
-    ]
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), `${JSON.stringify({
-      devDependencies: {
-        mocha: '10.0.0',
-      },
-    }, null, 2)}\n`)
-    fs.writeFileSync(path.join(tmpDir, '.mocharc.json'), '{}\n')
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
+      }]
+      fs.writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({
+        devDependencies: {
+          mocha: '10.0.0',
+        },
+      }, null, 2)}\n`)
+      fs.writeFileSync(path.join(root, '.mocharc.json'), '{}\n')
+    })
 
-    try {
-      await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
-
-      assert.strictEqual(process.exitCode, 0)
-      assert.deepStrictEqual(capturedResults[0].evidence.configFiles, ['.mocharc.json'])
-      assert.deepStrictEqual(capturedResults[0].evidence.directDependency, {
-        field: 'devDependencies',
-        version: '10.0.0',
-      })
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
+    assert.strictEqual(validation.exitCode, 1)
+    assert.deepStrictEqual(validation.results[0].evidence.configFiles, ['.mocharc.json'])
+    assert.deepStrictEqual(validation.results[0].evidence.directDependency, {
+      field: 'devDependencies',
+      version: '10.0.0',
+    })
   })
 
   it('uses static diagnosis framework config patterns in non-runnable status evidence', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const out = path.join(tmpDir, 'results')
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    let capturedResults
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './setup-runner': {
-        async runSetupCommands () {
-          throw new Error('setup should not run for non-runnable entries')
+    const validation = await runCliFixture({}, manifest => {
+      const root = manifest.repository.root
+      manifest.frameworks = [
+        {
+          id: 'jest:root',
+          framework: 'jest',
+          frameworkVersion: '29.7.0',
+          status: 'requires_manual_setup',
+          project: { root },
+          notes: ['No representative Jest command was selected.'],
         },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
+        {
+          id: 'cypress:root',
+          framework: 'cypress',
+          frameworkVersion: '13.0.0',
+          status: 'requires_manual_setup',
+          project: { root },
+          notes: ['No representative Cypress command was selected.'],
         },
-        runStaticDiagnosis () {
-          fs.mkdirSync(out, { recursive: true })
-          fs.writeFileSync(staticDiagnosisPath, '{}\n')
-          return {
-            report: {},
-            reportPath: staticDiagnosisPath,
-          }
+        {
+          id: 'cucumber:root',
+          framework: 'cucumber',
+          frameworkVersion: '10.0.0',
+          status: 'requires_manual_setup',
+          project: { root },
+          notes: ['No representative Cucumber command was selected.'],
         },
-      },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        async writeReport ({ results }) {
-          capturedResults = results
-        },
-      },
+      ]
+      fs.writeFileSync(path.join(root, 'config-jest.js'), 'module.exports = {}\n')
+      fs.writeFileSync(path.join(root, 'cypress.json'), '{}\n')
+      fs.writeFileSync(path.join(root, 'cucumber.js'), 'module.exports = {}\n')
     })
-    const originalExitCode = process.exitCode
-    const manifest = getRunnableManifest(tmpDir)
 
-    manifest.frameworks = [
-      {
-        id: 'jest:root',
-        framework: 'jest',
-        frameworkVersion: '29.7.0',
-        status: 'requires_manual_setup',
-        project: { root: tmpDir },
-        notes: ['No representative Jest command was selected.'],
-      },
-      {
-        id: 'cypress:root',
-        framework: 'cypress',
-        frameworkVersion: '13.0.0',
-        status: 'requires_manual_setup',
-        project: { root: tmpDir },
-        notes: ['No representative Cypress command was selected.'],
-      },
-      {
-        id: 'cucumber:root',
-        framework: 'cucumber',
-        frameworkVersion: '10.0.0',
-        status: 'requires_manual_setup',
-        project: { root: tmpDir },
-        notes: ['No representative Cucumber command was selected.'],
-      },
-    ]
-    fs.writeFileSync(path.join(tmpDir, 'config-jest.js'), 'module.exports = {}\n')
-    fs.writeFileSync(path.join(tmpDir, 'cypress.json'), '{}\n')
-    fs.writeFileSync(path.join(tmpDir, 'cucumber.js'), 'module.exports = {}\n')
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
-
-    try {
-      await main(['--manifest', manifestPath, '--out', out, ...APPROVAL_ARGS])
-
-      assert.strictEqual(process.exitCode, 0)
-      assert.deepStrictEqual(capturedResults.map(result => result.evidence.configFiles), [
-        ['config-jest.js'],
-        ['cypress.json'],
-        ['cucumber.js'],
-      ])
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
+    assert.strictEqual(validation.exitCode, 1)
+    assert.deepStrictEqual(validation.results.map(result => result.evidence.configFiles), [
+      ['config-jest.js'],
+      ['cypress.json'],
+      ['cucumber.js'],
+    ])
   })
 })
+
+/**
+ * Runs the live CLI against an isolated manifest while replacing external phases.
+ *
+ * @param {object} stubs proxyquire overrides
+ * @param {(manifest: object) => void} [prepare] manifest fixture customization
+ * @param {string[]} [args] additional CLI arguments
+ * @returns {Promise<{exitCode: number|undefined, results: object[]}>} captured validation result
+ */
+async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+  const manifestPath = path.join(root, 'dd-test-optimization-validation-manifest.json')
+  const out = path.join(root, 'results')
+  const manifest = getRunnableManifest(root)
+  const originalExitCode = process.exitCode
+  let results
+  const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+    ...PASSING_VALIDATION_PHASES,
+    './generated-files': {
+      async cleanupGeneratedFiles () {},
+    },
+    './report-writer': {
+      writePendingReport () {},
+      async writeReport (report) {
+        results = report.results
+      },
+    },
+    './scenarios/basic-reporting': {
+      async runBasicReporting ({ framework }) {
+        return {
+          frameworkId: framework.id,
+          scenario: 'basic-reporting',
+          status: 'pass',
+          diagnosis: 'Basic Reporting passed.',
+          evidence: {},
+          artifacts: [],
+        }
+      },
+    },
+    './setup-runner': {
+      async runSetupCommands () {
+        return { ok: true }
+      },
+    },
+    './static-diagnosis': {
+      getStaticBlocker () {},
+      runStaticDiagnosis () {
+        return { report: {} }
+      },
+    },
+    ...stubs,
+  })
+
+  prepare(manifest)
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  process.exitCode = undefined
+
+  try {
+    await main(['--manifest', manifestPath, '--out', out, ...args, ...APPROVAL_ARGS])
+    return { exitCode: process.exitCode, results }
+  } finally {
+    process.exitCode = originalExitCode
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+}
 
 function getRunnableManifest (root) {
   return {

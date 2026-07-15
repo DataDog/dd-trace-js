@@ -89,10 +89,12 @@ function runCommand (command, options = {}) {
   } = options
   const artifactRoot = options.artifactRoot || path.dirname(outDir)
   const startedAt = Date.now()
-  const timeoutMs = command.timeoutMs || 300_000
-  const timeoutKillGraceMs = command.timeoutKillGraceMs || TIMEOUT_KILL_GRACE_MS
-  const timeoutFinalizeGraceMs = command.timeoutFinalizeGraceMs || TIMEOUT_FINALIZE_GRACE_MS
-  const maxOutputBytes = command.maxOutputBytes || DEFAULT_MAX_OUTPUT_BYTES
+  const {
+    maxOutputBytes,
+    timeoutFinalizeGraceMs,
+    timeoutKillGraceMs,
+    timeoutMs,
+  } = getCommandExecutionSettings(command)
   const result = {
     label,
     command: serializeCommand(command),
@@ -298,6 +300,22 @@ function runCommand (command, options = {}) {
       resolve(result)
     }
   })
+}
+
+/**
+ * Returns the effective bounded execution settings used for one project command.
+ *
+ * @param {object} command structured command
+ * @returns {{maxOutputBytes: number, timeoutFinalizeGraceMs: number, timeoutKillGraceMs: number, timeoutMs: number}}
+ * execution settings
+ */
+function getCommandExecutionSettings (command) {
+  return {
+    maxOutputBytes: command.maxOutputBytes || DEFAULT_MAX_OUTPUT_BYTES,
+    timeoutFinalizeGraceMs: command.timeoutFinalizeGraceMs || TIMEOUT_FINALIZE_GRACE_MS,
+    timeoutKillGraceMs: command.timeoutKillGraceMs || TIMEOUT_KILL_GRACE_MS,
+    timeoutMs: command.timeoutMs || 300_000,
+  }
 }
 
 /**
@@ -836,6 +854,7 @@ module.exports = {
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,
+  getCommandExecutionSettings,
   serializeApprovalCommand,
   serializeCommand,
   serializeDisplayCommand,

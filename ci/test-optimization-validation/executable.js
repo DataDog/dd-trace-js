@@ -239,6 +239,7 @@ module.exports = {
   bindManifestExecutables,
   getApprovedExecutable,
   getExecutableForSpawn,
+  getManifestCommands,
   getResolvedExecutable,
   getUnavailableExecutable,
   isExplicitExecutablePath,
