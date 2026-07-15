@@ -41,11 +41,12 @@ const defaultStopProcTimeoutMs = 2_000
 /**
  * @param {string} filename
  * @param {string} cwd
- * @param {string|((out: Promise<string>) => void)} expectedOut
- * @param {string} expectedSource
+ * @param {string|((out: string) => void)} expectedOut
+ * @param {string} [expectedSource]
+ * @param {string[]} execArgv
  */
-async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
-  const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
+async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource, execArgv) {
+  const proc = spawn(process.execPath, [...execArgv, filename], { cwd, stdio: 'pipe' })
   assert.notStrictEqual(proc.pid, undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
@@ -86,14 +87,17 @@ let sandbox
  * This _must_ be used with the useSandbox function
  *
  * @param {string} filename
- * @param {string|((out: Promise<string>) => void)} expectedOut
+ * @param {string|((out: string) => void)} expectedOut
  * @param {string[]} expectedTelemetryPoints
- * @param {string} expectedSource
+ * @param {string} [expectedSource]
+ * @param {string[]} [execArgv]
  */
-async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
+async function runAndCheckWithTelemetry (
+  filename, expectedOut, expectedTelemetryPoints, expectedSource, execArgv = []
+) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints.length > 0)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource, execArgv)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent

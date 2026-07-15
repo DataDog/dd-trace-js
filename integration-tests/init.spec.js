@@ -29,6 +29,23 @@ const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
 delete process.env.DD_INJECTION_ENABLED
 delete process.env.DD_INJECT_FORCE
 
+/**
+ * @param {'require'|'loader'|'import'} arg
+ */
+function getGuardrailExecArgv (arg) {
+  // Maglev can hang iitm's WASM parser in Linux loader threads before Node.js 22.9.0.
+  return arg === 'loader' &&
+    process.platform === 'linux' &&
+    semver.satisfies(NODE_VERSION, '>=22.0.0 <22.9.0')
+    ? ['--no-maglev']
+    : undefined
+}
+
+/**
+ * @param {'require'|'loader'|'import'} arg
+ * @param {'init.js'|'initialize.mjs'} filename
+ * @param {boolean} [esmWorks]
+ */
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
 
@@ -37,6 +54,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
   const isNode1800 = process.versions.node === '18.0.0'
   const tracerFile = arg === 'loader' && !isNode1800 ? 'init/trace.mjs' : 'init/trace.js'
   const instrFile = arg === 'loader' && !isNode1800 ? 'init/instrument.mjs' : 'init/instrument.js'
+  const injectedExecArgv = getGuardrailExecArgv(arg)
 
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
@@ -57,11 +75,14 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
-        it('should not initialize the tracer', () => testFile(tracerFile, 'false\n', [], ''))
+        it('should not initialize the tracer', () =>
+          testFile(tracerFile, 'false\n', [], '', injectedExecArgv))
 
-        it('should not initialize instrumentation', () => testFile(instrFile, 'false\n', [], ''))
+        it('should not initialize instrumentation', () =>
+          testFile(instrFile, 'false\n', [], '', injectedExecArgv))
 
-        it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
+        it('should not initialize ESM instrumentation', () =>
+          testFile('init/instrument.mjs', 'false\n', [], '', injectedExecArgv))
       })
     })
 
@@ -81,31 +102,50 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED, DD_TRACE_DEBUG })
 
-        it('should initialize the tracer', () => testFile(tracerFile, 'true\n', telemetryGood, 'ssi'))
+        it('should initialize the tracer', () =>
+          testFile(tracerFile, 'true\n', telemetryGood, 'ssi', injectedExecArgv))
 
-        it('should initialize instrumentation', () => testFile(instrFile, 'true\n', telemetryGood, 'ssi'))
+        it('should initialize instrumentation', () =>
+          testFile(instrFile, 'true\n', telemetryGood, 'ssi', injectedExecArgv))
 
         it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          testFile('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi'))
+          testFile('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi', injectedExecArgv))
       })
     })
   })
 }
 
+/**
+ * @param {'require'|'loader'|'import'} arg
+ * @param {'init.js'|'initialize.mjs'} filename
+ */
 function testRuntimeVersionChecks (arg, filename) {
   const skipRuntimeVersionChecks = filename === 'initialize.mjs' &&
-    ['22.0.0', '24.0.0'].includes(process.versions.node)
+    process.versions.node === '24.0.0'
   const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
 
   runtimeVersionContext('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
+    const execArgv = getGuardrailExecArgv(arg)
+
+    /**
+     * @param {string} expectedOut
+     * @param {string[]} expectedTelemetryPoints
+     * @param {string} [expectedSource]
+     */
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
-      testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource)
+      testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource, execArgv)
+
+    /**
+     * @param {string} expectedOut
+     * @param {string[]} expectedTelemetryPoints
+     * @param {string} [expectedSource]
+     */
     const doTestForced = async (expectedOut, expectedTelemetryPoints, expectedSource) => {
       Object.assign(process.env, { DD_INJECT_FORCE })
       try {
-        await testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource)
+        await doTest(expectedOut, expectedTelemetryPoints, expectedSource)
       } finally {
         delete process.env.DD_INJECT_FORCE
       }
