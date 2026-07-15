@@ -6,7 +6,10 @@ const path = require('node:path')
 const log = require('../log')
 const { getNumFromKnownTests } = require('../plugins/util/test')
 const { parseKnownTestsResponse } = require('./early-flake-detection/get-known-tests')
-const { parseSkippableSuitesResponse } = require('./intelligent-test-runner/get-skippable-suites')
+const {
+  logSkippableSuitesResponse,
+  parseSkippableSuitesResponse,
+} = require('./intelligent-test-runner/get-skippable-suites')
 const { parseLibraryConfigurationResponse } = require('./requests/get-library-configuration')
 const {
   getNumFromTestManagementTests,
@@ -112,6 +115,7 @@ class TestOptimizationHttpCache {
       const parsedResponse = JSON.parse(payload)
       const result = parseSkippableSuitesResponse(parsedResponse, { ...options, validateRequiredFields: true })
       const testLevel = options.testLevel || 'suite'
+      logSkippableSuitesResponse(result, testLevel)
       const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
       incrementCountMetric(
         testLevel === 'test'

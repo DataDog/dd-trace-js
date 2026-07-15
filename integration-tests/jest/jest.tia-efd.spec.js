@@ -691,6 +691,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('works with multi project setup and test skipping', (done) => {
+      const projects = ['standard', 'node'].map(displayName => ({
+        displayName,
+        rootDir: 'ci-visibility/test',
+        testPathIgnorePatterns: ['/node_modules/'],
+        cache: false,
+        testMatch: ['**/ci-visibility-test*'],
+        testRunner: 'jest-circus/runner',
+        testEnvironment: 'node',
+      }))
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -727,10 +736,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
 
       childProcess = exec(
-        'node ./node_modules/jest/bin/jest --config config-jest-multiproject.js',
+        'node ./node_modules/jest/bin/jest --config config-jest.js',
         {
           cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PROJECTS: JSON.stringify(projects),
+          },
         }
       )
 
@@ -913,8 +925,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('skips repository-relative suites when jest rootDir is a subproject', async () => {
-      const suite = 'ci-visibility/subproject/subproject-test.js'
+    it('skips rootDir-relative suites and backfills legacy Windows coverage paths', async () => {
+      const suite = 'subproject-test.js'
+      const suiteCoveragePath = 'ci-visibility\\subproject\\subproject-test.js'
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -930,8 +943,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       ])
       receiver.setSkippableCoverage({
-        [suite]: getLinesBitmapBase64(1, 11),
-        'ci-visibility/subproject/dependency.js': getLinesBitmapBase64(1, 5),
+        [suiteCoveragePath]: getLinesBitmapBase64(1, 11),
+        'ci-visibility\\subproject\\dependency.js': getLinesBitmapBase64(1, 5),
       })
 
       const eventsPromise = receiver

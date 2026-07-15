@@ -74,6 +74,13 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     settings.isSuitesSkippingEnabled = true
     log.debug('Dangerously set test skipping to true')
   }
+  if (
+    settings.isCoverageReportUploadEnabled &&
+    !config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
+  ) {
+    settings.isCoverageReportUploadEnabled = false
+    log.debug('Code coverage report upload was disabled by the environment variable')
+  }
 
   return settings
 }
