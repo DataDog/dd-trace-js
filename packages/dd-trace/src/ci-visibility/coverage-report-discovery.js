@@ -52,7 +52,13 @@ function discoverCoverageReports (rootDir) {
     const fullPath = path.join(rootDir, pattern.path)
 
     try {
-      const stats = fs.lstatSync(fullPath, { throwIfNoEntry: false })
+      let currentPath = rootDir
+      let stats
+      for (const pathSegment of pattern.path.split('/')) {
+        currentPath = path.join(currentPath, pathSegment)
+        stats = fs.lstatSync(currentPath, { throwIfNoEntry: false })
+        if (!stats || stats.isSymbolicLink()) break
+      }
 
       // Only include regular files, not directories or symlinks
       if (stats?.isFile()) {

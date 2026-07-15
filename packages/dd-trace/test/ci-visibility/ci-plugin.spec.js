@@ -131,15 +131,18 @@ describe('CiPlugin', () => {
 
   it('uploads regular coverage reports and excludes symlinks', () => {
     const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
-    const coverageDir = path.join(rootDir, 'coverage')
-    const regularReportPath = path.join(coverageDir, 'lcov.info')
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-outside-'))
+    const regularReportPath = path.join(rootDir, 'lcov.info')
+    const outsideReportPath = path.join(outsideDir, 'lcov.info')
     const symlinkTargetPath = path.join(rootDir, 'symlink-target.info')
-    const symlinkReportPath = path.join(rootDir, 'lcov.info')
+    const symlinkReportPath = path.join(rootDir, 'clover.xml')
+    const symlinkDirPath = path.join(rootDir, 'coverage')
 
-    fs.mkdirSync(coverageDir)
     fs.writeFileSync(regularReportPath, 'regular coverage')
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
     fs.writeFileSync(symlinkTargetPath, 'symlinked coverage')
     fs.symlinkSync(symlinkTargetPath, symlinkReportPath)
+    fs.symlinkSync(outsideDir, symlinkDirPath)
 
     try {
       const plugin = createPlugin('jest_worker')
@@ -156,6 +159,7 @@ describe('CiPlugin', () => {
       })
     } finally {
       fs.rmSync(rootDir, { recursive: true, force: true })
+      fs.rmSync(outsideDir, { recursive: true, force: true })
     }
   })
 
