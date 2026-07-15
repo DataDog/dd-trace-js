@@ -26,6 +26,7 @@ async function runBasicReporting ({ framework, out, options }) {
       scenarioName,
       command,
       options,
+      allowMissingInitialization: true,
     })
 
     const evidence = {
@@ -36,12 +37,13 @@ async function runBasicReporting ({ framework, out, options }) {
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
       preflight: summarizePreflight(framework.preflight),
+      offlineExporterInitialized: offline.initialized,
       settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
       offlineExporterSummary: offline.summary,
       ...basicEventEvidence(events),
     }
 
-    if (!evidence.settingsLoadedFromCache) {
+    if (evidence.offlineExporterInitialized && !evidence.settingsLoadedFromCache) {
       return error(
         framework,
         scenarioName,

@@ -35,6 +35,7 @@ async function runInstrumentedCommand ({
   extraEnv,
   fixtureConfig,
   ciWiring = false,
+  allowMissingInitialization = false,
 }) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
   const rawOutputRoot = path.join(outDir, '.offline-payloads')
@@ -81,7 +82,7 @@ async function runInstrumentedCommand ({
       `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
       'scenario result artifact'
     )
-    if (!offline.initialized && !ciWiring) {
+    if (!offline.initialized && !ciWiring && !allowMissingInitialization) {
       const stderr = sanitizeString(result.stderr).trim().slice(-2000)
       throw new Error(
         'Offline Test Optimization exporter did not initialize or write completion evidence. ' +
@@ -158,6 +159,7 @@ async function runDebugInstrumentedCommand ({
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'debug',
       },
+      allowMissingInitialization: true,
     })
 
     return {
@@ -381,7 +383,7 @@ function copy (target, source, key) {
   if (source && source[key] !== undefined) target[key] = source[key]
 }
 
-function summarizeDebugRerun ({ result, events, outDir }) {
+function summarizeDebugRerun ({ result, events, offline, outDir }) {
   const output = `${result.stdout}\n${result.stderr}`
 
   return {
@@ -389,6 +391,7 @@ function summarizeDebugRerun ({ result, events, outDir }) {
     commandExitCode: result.exitCode,
     commandTimedOut: result.timedOut,
     debugCommandFailed: result.exitCode !== 0 || result.timedOut === true,
+    offlineExporterInitialized: offline.initialized,
     artifactDirectory: outDir,
     ...basicEventEvidence(events),
     debugLines: findInterestingLines(output, [

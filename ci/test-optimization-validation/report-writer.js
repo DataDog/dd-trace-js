@@ -1117,7 +1117,11 @@ function getDiagnosticCategory (result) {
       reason: 'the required build, service, or fixture setup was not available.',
     }
   }
-  if (evidence.frameworkStatus === 'unsupported' || evidence.frameworkStatus === 'detected_not_runnable') {
+  if (
+    evidence.frameworkStatus === 'unsupported' ||
+    evidence.frameworkStatus === 'unsupported_by_validator' ||
+    evidence.frameworkStatus === 'detected_not_runnable'
+  ) {
     return {
       id: 'unsupported',
       label: 'Unsupported or non-runnable frameworks',

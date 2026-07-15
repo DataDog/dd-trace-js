@@ -44,11 +44,17 @@ function validationOptions (repositoryRoot) {
 }
 
 describe('test optimization validation scenario artifacts', () => {
-  it('preserves command artifacts when offline initialization fails', async () => {
+  it('diagnoses missing offline initialization while preserving command artifacts', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-initialization-failure-'))
+    const testRunner = path.join(out, 'test-runner.js')
+    const wrapper = path.join(out, process.platform === 'win32' ? 'run-tests.cmd' : 'run-tests.sh')
+    fs.writeFileSync(testRunner, "console.log('1 passing')\n")
+    fs.writeFileSync(wrapper, process.platform === 'win32'
+      ? `@echo off\r\nset "NODE_OPTIONS="\r\n"${process.execPath}" "${testRunner}"\r\n`
+      : `#!/bin/sh\nunset NODE_OPTIONS\nexec "${process.execPath}" "${testRunner}"\n`)
     const command = process.platform === 'win32'
-      ? [process.env.ComSpec, '/d', '/s', '/c', 'echo command-ran']
-      : ['/bin/sh', '-c', 'echo command-ran']
+      ? [process.env.ComSpec, '/d', '/s', '/c', wrapper]
+      : ['/bin/sh', wrapper]
     const framework = {
       id: 'mocha:initialization-failure',
       framework: 'mocha',
@@ -62,9 +68,12 @@ describe('test optimization validation scenario artifacts', () => {
     try {
       const result = await runBasicReporting({ framework, out, options: validationOptions(out) })
 
-      assert.strictEqual(result.status, 'error')
-      assert.match(result.diagnosis, /Offline Test Optimization exporter did not initialize/)
-      assert.strictEqual(result.artifacts.length, 5)
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.offlineExporterInitialized, false)
+      assert.strictEqual(result.evidence.debugRerun.offlineExporterInitialized, false)
+      assert.strictEqual(result.evidence.localDiagnosis.kind, 'tests-ran-no-test-optimization-events')
+      assert.match(result.diagnosis, /selected command ran tests, but no Test Optimization events reached/)
+      assert.strictEqual(result.artifacts.length, 10)
       const outDir = path.dirname(result.artifacts[0])
       assert.deepStrictEqual(result.artifacts, [
         path.join(outDir, 'command.json'),
@@ -72,6 +81,11 @@ describe('test optimization validation scenario artifacts', () => {
         path.join(outDir, 'stderr.txt'),
         path.join(outDir, 'events.ndjson'),
         path.join(outDir, 'result.json'),
+        path.join(`${outDir}-debug`, 'command.json'),
+        path.join(`${outDir}-debug`, 'stdout.txt'),
+        path.join(`${outDir}-debug`, 'stderr.txt'),
+        path.join(`${outDir}-debug`, 'events.ndjson'),
+        path.join(`${outDir}-debug`, 'result.json'),
       ])
       assert.ok(result.artifacts.every(filename => fs.existsSync(filename)))
     } finally {

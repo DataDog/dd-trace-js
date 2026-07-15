@@ -895,6 +895,15 @@ describe('test optimization validation report writer', () => {
             packageJson: packageJsonPath,
           },
         },
+        {
+          id: 'node:test:root',
+          framework: 'node:test',
+          project: {
+            name: 'node-tests',
+            root: tmpDir,
+            packageJson: packageJsonPath,
+          },
+        },
       ],
     }
     const results = [
@@ -905,6 +914,16 @@ describe('test optimization validation report writer', () => {
         diagnosis: 'jest was detected, but no runnable validation command was available.',
         evidence: {
           frameworkStatus: 'requires_external_service',
+        },
+        artifacts: [],
+      },
+      {
+        frameworkId: 'node:test:root',
+        scenario: 'all',
+        status: 'skip',
+        diagnosis: 'node:test is not supported by the validator.',
+        evidence: {
+          frameworkStatus: 'unsupported_by_validator',
         },
         artifacts: [],
       },
@@ -935,6 +954,8 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /result is incomplete/)
       assert.match(markdown, /Treat this as context only, not as a confirmed CI-wiring failure or remediation/)
       assert.ok(markdown.includes('requires project setup: example \\(Jest\\)'))
+      assert.ok(markdown.includes('unsupported or non-runnable frameworks: node-tests \\(Node:test\\)'))
+      assert.doesNotMatch(markdown, /not selected for live validation/)
       assert.doesNotMatch(markdown, /## Diagnostic-only and Blocked Frameworks/)
     } finally {
       console.log = originalLog
