@@ -20,6 +20,7 @@ const { join } = require('node:path')
 const { request } = require('node:https')
 
 const rootPackageJson = require('../package.json')
+const mapWithConcurrency = require('./helpers/concurrency')
 const {
   collectAliasMap,
   listBunLockDependencies,
@@ -208,20 +209,20 @@ async function fillMetadata (wanted, previous) {
 
   /** @type {Map<string, Array<Awaited<ReturnType<typeof fetchPackageMetadata>>>>} */
   const metadataByName = new Map()
-  const queue = [...toFetch]
-  await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, queue.length) }, async () => {
-    while (queue.length > 0) {
-      const entry = queue.shift()
-      // eslint-disable-next-line no-await-in-loop
-      const meta = await fetchPackageMetadata(entry.name, entry.version)
-      const componentMetadata = metadataByName.get(entry.name)
-      if (componentMetadata) {
-        componentMetadata.push(meta)
-      } else {
-        metadataByName.set(entry.name, [meta])
-      }
+  const fetchedMetadata = await mapWithConcurrency(
+    toFetch,
+    FETCH_CONCURRENCY,
+    fetchPackageMetadata
+  )
+  for (let i = 0; i < toFetch.length; i++) {
+    const name = toFetch[i].name
+    const componentMetadata = metadataByName.get(name)
+    if (componentMetadata) {
+      componentMetadata.push(fetchedMetadata[i])
+    } else {
+      metadataByName.set(name, [fetchedMetadata[i]])
     }
-  }))
+  }
 
   for (const [name, metadata] of metadataByName) {
     const licenses = new Set()
@@ -235,7 +236,7 @@ async function fillMetadata (wanted, previous) {
       component: name,
       origin: prev?.origin ?? metadata[0].origin,
       license: pythonList([...licenses]),
-      copyright: prev?.copyright ?? pythonList([...copyright]),
+      copyright: prev && metadata.length === 1 ? prev.copyright : pythonList([...copyright]),
     })
   }
 
@@ -267,18 +268,15 @@ function rootSelfMetadata () {
 }
 
 /**
- * @param {string} name
- * @param {string} [version]
+ * @param {{ name: string, version: string }} entry
  * @returns {Promise<{ origin: string, licenses: string[], copyright: string[] }>}
  */
-async function fetchPackageMetadata (name, version) {
-  const url = version
-    ? `${REGISTRY}/${encodeRegistryName(name)}/${encodeURIComponent(version)}`
-    : `${REGISTRY}/${encodeRegistryName(name)}/latest`
+async function fetchPackageMetadata ({ name, version }) {
+  const url = `${REGISTRY}/${encodeRegistryName(name)}/${encodeURIComponent(version)}`
   const data = await getJson(url)
   const licenses = extractLicenses(data)
   if (licenses.length === 0) {
-    throw new Error(`${name}@${version ?? 'latest'} does not declare a license in npm metadata`)
+    throw new Error(`${name}@${version} does not declare a license in npm metadata`)
   }
 
   return {

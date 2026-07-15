@@ -82,7 +82,7 @@
 "rfdc","https://github.com/davidmarkclements/rfdc","['MIT']","['David Mark Clements']"
 "semifies","https://github.com/holepunchto/semifies","['Apache-2.0']","['Holepunch Inc']"
 "shell-quote","https://github.com/ljharb/shell-quote","['MIT']","['James Halliday']"
-"source-map","https://github.com/mozilla/source-map","['BSD-3-Clause']","['Nick Fitzgerald']"
+"source-map","https://github.com/mozilla/source-map","['BSD-3-Clause']","['Nick Fitzgerald', 'Tobias Koppers', 'Duncan Beevers', 'Stephen Crane', 'Ryan Seddon', 'Miles Elam', 'Mihai Bazon', 'Michael Ficarra', 'Todd Wolfson', 'Alexander Solovyov', 'Felix Gnass', 'Conrad Irwin', 'usrbincc', 'David Glasser', 'Chase Douglas', 'Evan Wallace', 'Heather Arthur', 'Hugh Kennedy', 'Simon Lydell', 'Jmeas Smith', 'Michael Z Goddard', 'azu', 'John Gozde', 'Adam Kirkton', 'Chris Montgomery', 'J. Ryan Stinnett', 'Jack Herrington', 'Chris Truter', 'Daniel Espeset', 'Jamie Wong', 'Eddy Bruël', 'Hawken Rives', 'Gilad Peleg', 'djchie', 'Gary Ye', 'Nicolas Lalevée']"
 "spark-md5","https://github.com/satazor/js-spark-md5","['(WTFPL OR MIT)']","['André Cruz']"
 "tlhunter-sorted-set","https://github.com/tlhunter/node-sorted-set","['MIT']","['Thomas Hunter II']"
 "tslib","https://github.com/microsoft/tslib","['0BSD']","['Microsoft Corp.']"
