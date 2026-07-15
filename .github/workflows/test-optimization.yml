@@ -282,6 +282,9 @@ jobs:
         with:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
 
+  # Unit tests for `packages/datadog-plugin-cucumber`. The `integration-cucumber` matrix above only
+  # runs `integration-tests/cucumber/*.spec.js`, so this is the only CI invocation whose glob expands
+  # to cover `packages/datadog-plugin-cucumber/test/index.spec.js`.
   cucumber:
     runs-on: ubuntu-latest
     permissions:
@@ -291,7 +294,6 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
-      - run: npm run test:instrumentations:ci
 
   selenium-image:
     name: Ensure Selenium Docker image

@@ -808,7 +808,6 @@ addHook({
     }
 
     await getChannelPromise(testSuiteFinishCh, {
-      frameworkVersion,
       status: testSuiteResult.state,
       ...testSuiteCtx.currentStore,
     })

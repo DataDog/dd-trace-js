@@ -106,4 +106,24 @@ describe('packages/datadog-instrumentations/src/cucumber.js', () => {
       sessionFinishCh.unsubscribe(onSessionFinish)
     }
   })
+
+  // The library-configuration subscriber that disables itself without producing a
+  // response resolves the request to `undefined`; the `|| {}` guard in getWrappedStart
+  // must let the run finish with every remote feature treated as disabled.
+  it('finishes the run when the configuration subscriber disables itself without responding', async () => {
+    const libraryConfigurationCh = channel('ci:cucumber:library-configuration')
+    const onLibraryConfiguration = () => {
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+    }
+
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+
+    try {
+      const { Coordinator: WrappedCoordinator } = COORDINATOR_HOOK({ Coordinator }, '13.0.0')
+
+      assert.strictEqual(await new WrappedCoordinator().run(), true)
+    } finally {
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+    }
+  })
 })
