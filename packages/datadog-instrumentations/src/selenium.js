@@ -5,6 +5,7 @@ const realSetTimeout = setTimeout
 
 const shimmer = require('../../datadog-shimmer')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const log = require('../../dd-trace/src/log')
 const { addHook, channel } = require('./helpers/instrument')
 
 const ciSeleniumDriverGetStartCh = channel('ci:selenium:driver:get')
@@ -38,22 +39,26 @@ addHook({
     }
     const getResult = await get.apply(this, arguments)
 
-    const isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
-    const capabilities = await this.getCapabilities()
+    try {
+      const isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
+      const capabilities = await this.getCapabilities()
 
-    ciSeleniumDriverGetStartCh.publish({
-      setTraceId,
-      seleniumVersion,
-      browserName: capabilities.getBrowserName(),
-      browserVersion: capabilities.getBrowserVersion(),
-      isRumActive,
-    })
-
-    if (traceId && isRumActive) {
-      await this.manage().addCookie({
-        name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
-        value: traceId,
+      ciSeleniumDriverGetStartCh.publish({
+        setTraceId,
+        seleniumVersion,
+        browserName: capabilities.getBrowserName(),
+        browserVersion: capabilities.getBrowserVersion(),
+        isRumActive,
       })
+
+      if (traceId && isRumActive) {
+        await this.manage().addCookie({
+          name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
+          value: traceId,
+        })
+      }
+    } catch (error) {
+      log.error('Error setting up Selenium RUM correlation: %s', error.message, error)
     }
 
     return getResult
@@ -63,16 +68,20 @@ addHook({
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
       return quit.apply(this, arguments)
     }
-    const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
+    try {
+      const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
 
-    if (isRumActive) {
-      // We'll have time for RUM to flush the events (there's no callback to know when it's done)
-      await new Promise(resolve => {
-        realSetTimeout(() => {
-          resolve()
-        }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
-      })
-      await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
+      if (isRumActive) {
+        // We'll have time for RUM to flush the events (there's no callback to know when it's done)
+        await new Promise(resolve => {
+          realSetTimeout(() => {
+            resolve()
+          }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
+        })
+        await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
+      }
+    } catch (error) {
+      log.error('Error cleaning up Selenium RUM correlation: %s', error.message, error)
     }
 
     return quit.apply(this, arguments)
