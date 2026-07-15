@@ -50,7 +50,7 @@ jobs:
               && yarn config set --json npmPreapprovedPackages '["@datadog/*","import-in-the-middle"]'
               && yarn add
           - name: bun
-            install: bun add --linker=hoisted
+            install: bun --config="$GITHUB_WORKSPACE/bunfig.toml" add --linker=hoisted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

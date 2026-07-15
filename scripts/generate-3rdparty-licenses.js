@@ -15,19 +15,48 @@
 //   node scripts/generate-3rdparty-licenses.js --check   # exit 1 if CSV drifted
 //   node scripts/generate-3rdparty-licenses.js           # rewrite CSV in place
 
-const { existsSync, readFileSync, writeFileSync } = require('node:fs')
+const { readFileSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { request } = require('node:https')
+
+const rootPackageJson = require('../package.json')
+const {
+  collectAliasMap,
+  listBunLockDependencies,
+  listNpmLockDependencies,
+} = require('./third-party-dependencies')
 
 const repoRoot = join(__dirname, '..')
 const csvPath = join(repoRoot, 'LICENSE-3rdparty.csv')
 const bunLockPath = join(repoRoot, 'bun.lock')
 const vendorLockPath = join(repoRoot, 'vendor', 'package-lock.json')
 const vendoredCsvPath = join(repoRoot, '.github', 'vendored-dependencies.csv')
-const rootPackageJson = require('../package.json')
-const aliasMap = collectAliasMap()
+const aliasMap = collectAliasMap([
+  join(repoRoot, 'package.json'),
+  join(repoRoot, 'vendor', 'package.json'),
+])
 const REGISTRY = 'https://registry.npmjs.org'
 const FETCH_CONCURRENCY = 16
+
+/**
+ * @typedef {{
+ *   author?: string | { name?: string },
+ *   contributors?: Array<string | { name?: string }>,
+ *   homepage?: string,
+ *   license?: string | { type?: string },
+ *   licenses?: Array<string | { type?: string }>,
+ *   repository?: string | { url?: string }
+ * }} RegistryPackageMetadata
+ */
+
+/**
+ * @typedef {{
+ *   name: string,
+ *   versions?: Set<string>,
+ *   isRoot?: boolean,
+ *   metadata?: { component: string, origin: string, license: string, copyright: string }
+ * }} WantedComponent
+ */
 
 run().catch(error => {
   console.error(error)
@@ -37,7 +66,7 @@ run().catch(error => {
 async function run () {
   const wanted = collectWantedComponents()
   const previous = parseCsv(readFileSync(csvPath, 'utf8'))
-  const augmented = await fillMissingMetadata(wanted, previous)
+  const augmented = await fillMetadata(wanted, previous)
   const next = formatCsv(augmented)
 
   const check = process.argv.includes('--check')
@@ -59,151 +88,56 @@ async function run () {
  * normalized via `npm:` aliases declared in `package.json` so e.g. an aliased
  * `@datadog/source-map -> source-map` is recorded under the upstream name.
  *
- * @returns {Map<string, { name: string, version: string }>}
+ * @returns {Map<string, WantedComponent>}
  */
 function collectWantedComponents () {
   // The previous generator (`dd-license-attribution`) recorded the project
   // itself as a row keyed by the root `package.json`'s `name`. Seed the map
   // with that self-row so the CSV diff stays narrow.
   const wanted = new Map([
-    [rootPackageJson.name, { name: rootPackageJson.name, version: rootPackageJson.version, isRoot: true }],
+    [rootPackageJson.name, { name: rootPackageJson.name, isRoot: true }],
   ])
 
-  addBunLockComponents(wanted)
-  addNpmLockComponents(wanted)
+  for (const { name, version } of listBunLockDependencies(bunLockPath)) {
+    addWantedVersion(wanted, name, version)
+  }
+  for (const { name, version } of listNpmLockDependencies(vendorLockPath)) {
+    addWantedVersion(wanted, name, version)
+  }
 
-  for (const dep of readVendoredCsv()) wanted.set(dep, { name: dep })
+  for (const metadata of parseCsv(readFileSync(vendoredCsvPath, 'utf8'), false).values()) {
+    wanted.set(metadata.component, { name: metadata.component, metadata })
+  }
 
   return wanted
 }
 
 /**
- * @param {Map<string, { name: string, version?: string }>} wanted
+ * @param {Map<string, WantedComponent>} wanted
+ * @param {string} name
+ * @param {string} version
  */
-function addBunLockComponents (wanted) {
-  const lock = parseBunLock(readFileSync(bunLockPath, 'utf8'))
-  const root = lock.workspaces?.['']
-  if (!root) return
-
-  const visited = new Set()
-  const queue = [
-    ...Object.keys(root.dependencies ?? {}),
-    ...Object.keys(root.optionalDependencies ?? {}),
-  ]
-
-  while (queue.length > 0) {
-    const key = queue.pop()
-    if (visited.has(key)) continue
-    visited.add(key)
-
-    const entry = lock.packages?.[key]
-    if (!Array.isArray(entry)) continue
-
-    const spec = entry[0]
-    if (typeof spec === 'string') {
-      const versionStart = spec.lastIndexOf('@')
-      const name = versionStart > 0 ? spec.slice(0, versionStart) : spec
-      const version = versionStart > 0 ? spec.slice(versionStart + 1) : ''
-      const normalized = aliasMap.get(name) ?? name
-      const existing = wanted.get(normalized)
-      if (!existing || !existing.version) wanted.set(normalized, { name: normalized, version })
-    }
-
-    const meta = entry[2]
-    if (!meta || typeof meta !== 'object') continue
-
-    for (const child of Object.keys(meta.dependencies ?? {})) queue.push(resolveBunLockKey(lock, key, child))
-    for (const child of Object.keys(meta.optionalDependencies ?? {})) queue.push(resolveBunLockKey(lock, key, child))
+function addWantedVersion (wanted, name, version) {
+  const normalized = aliasMap.get(name) ?? name
+  let component = wanted.get(normalized)
+  if (!component) {
+    component = { name: normalized, versions: new Set() }
+    wanted.set(normalized, component)
   }
-}
-
-/**
- * @param {Map<string, { name: string, version?: string }>} wanted
- */
-function addNpmLockComponents (wanted) {
-  const lock = JSON.parse(readFileSync(vendorLockPath, 'utf8'))
-  for (const [packagePath, entry] of Object.entries(lock.packages ?? {})) {
-    if (!packagePath || entry.dev) continue
-    const inferred = entry.name ?? packagePath.split('node_modules/').at(-1)
-    const normalized = aliasMap.get(inferred) ?? inferred
-    const existing = wanted.get(normalized)
-    if (!existing || !existing.version) wanted.set(normalized, { name: normalized, version: entry.version ?? '' })
-  }
-}
-
-function readVendoredCsv () {
-  if (!existsSync(vendoredCsvPath)) return []
-  const out = []
-  for (const line of readFileSync(vendoredCsvPath, 'utf8').split('\n')) {
-    if (!line.trim()) continue
-    const component = line.split(',')[0].replaceAll(/^"|"$/g, '')
-    out.push(component)
-  }
-  return out
-}
-
-/**
- * `bun.lock` is JSONC — JSON with structural trailing commas before `}`/`]`. Strip them
- * and `JSON.parse`. Quoted values in this file never end in `,]` or `,}`, so the regex is safe.
- *
- * @param {string} content
- */
-function parseBunLock (content) {
-  return JSON.parse(content.replaceAll(/,(\s*[}\]])/g, '$1'))
-}
-
-/**
- * Pick the version installed under the parent's context (`A/B/foo`) over the top-level
- * (`foo`), matching how bun resolves transitive deps with conflicting versions.
- *
- * @param {{ packages: Record<string, unknown[]> }} lock
- * @param {string} parentKey
- * @param {string} childName
- */
-function resolveBunLockKey (lock, parentKey, childName) {
-  const nestedKey = `${parentKey}/${childName}`
-  return lock.packages[nestedKey] ? nestedKey : childName
-}
-
-/**
- * Map alias -> upstream name from `npm:` aliases declared in root and vendor
- * `package.json`s, so the CSV records the upstream component instead of the alias.
- *
- * @returns {Map<string, string>}
- */
-function collectAliasMap () {
-  const map = new Map()
-  collectAliasesFromPackageJson(rootPackageJson, map)
-  const vendorPath = join(repoRoot, 'vendor', 'package.json')
-  if (existsSync(vendorPath)) collectAliasesFromPackageJson(require(vendorPath), map)
-  return map
-}
-
-/**
- * @param {{ dependencies?: Record<string, string>, optionalDependencies?: Record<string, string> }} pkg
- * @param {Map<string, string>} map
- */
-function collectAliasesFromPackageJson (pkg, map) {
-  for (const section of ['dependencies', 'optionalDependencies']) {
-    for (const [alias, spec] of Object.entries(pkg[section] ?? {})) {
-      if (typeof spec !== 'string' || !spec.startsWith('npm:')) continue
-      const rawTarget = spec.slice('npm:'.length)
-      const atIndex = rawTarget.lastIndexOf('@')
-      const target = atIndex > 0 ? rawTarget.slice(0, atIndex) : rawTarget
-      if (target) map.set(alias, target)
-    }
-  }
+  component.versions ??= new Set()
+  component.versions.add(version)
 }
 
 /**
  * @param {string} content
+ * @param {boolean} [hasHeader]
  * @returns {Map<string, { component: string, origin: string, license: string, copyright: string }>}
  */
-function parseCsv (content) {
+function parseCsv (content, hasHeader = true) {
   const rows = new Map()
   const lines = content.split('\n')
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]
+  for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
+    const line = lines[i].endsWith('\r') ? lines[i].slice(0, -1) : lines[i]
     if (!line.trim()) continue
     const parsed = parseCsvLine(line)
     if (!parsed) continue
@@ -250,46 +184,60 @@ function parseCsvLine (line) {
 }
 
 /**
- * Fill in `origin`/`license`/`copyright` for every wanted component, preferring
- * what the previously-committed CSV had so reviewers don't see noise from npm
- * registry copy edits and so the same metadata is preserved for re-runs. Only
- * components with no prior row are fetched from the registry.
- *
- * @param {Map<string, { name: string, version?: string }>} wanted
+ * @param {Map<string, WantedComponent>} wanted
  * @param {Map<string, { component: string, origin: string, license: string, copyright: string }>} previous
  */
-async function fillMissingMetadata (wanted, previous) {
+async function fillMetadata (wanted, previous) {
   const out = []
-  /** @type {Array<{ name: string, version?: string }>} */
+  /** @type {Array<{ name: string, version: string }>} */
   const toFetch = []
   for (const entry of wanted.values()) {
     if (entry.isRoot) {
       out.push({ component: entry.name, ...rootSelfMetadata() })
       continue
     }
-    const prev = previous.get(entry.name)
-    if (prev) {
-      out.push(prev)
-    } else {
-      toFetch.push(entry)
+    if (entry.metadata) {
+      out.push(entry.metadata)
+      continue
+    }
+    for (const version of entry.versions ?? []) {
+      if (!version) throw new Error(`Cannot fetch exact npm metadata for ${entry.name} without a locked version`)
+      toFetch.push({ name: entry.name, version })
     }
   }
-  if (toFetch.length === 0) return out
 
+  /** @type {Map<string, Array<Awaited<ReturnType<typeof fetchPackageMetadata>>>>} */
+  const metadataByName = new Map()
   const queue = [...toFetch]
   await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, queue.length) }, async () => {
     while (queue.length > 0) {
       const entry = queue.shift()
       // eslint-disable-next-line no-await-in-loop
       const meta = await fetchPackageMetadata(entry.name, entry.version)
-      out.push({
-        component: entry.name,
-        origin: meta.origin,
-        license: meta.license,
-        copyright: meta.copyright,
-      })
+      const componentMetadata = metadataByName.get(entry.name)
+      if (componentMetadata) {
+        componentMetadata.push(meta)
+      } else {
+        metadataByName.set(entry.name, [meta])
+      }
     }
   }))
+
+  for (const [name, metadata] of metadataByName) {
+    const licenses = new Set()
+    const copyright = new Set()
+    for (const { licenses: packageLicenses, copyright: packageCopyright } of metadata) {
+      for (const license of packageLicenses) licenses.add(license)
+      for (const owner of packageCopyright) copyright.add(owner)
+    }
+    const prev = previous.get(name)
+    out.push({
+      component: name,
+      origin: prev?.origin ?? metadata[0].origin,
+      license: pythonList([...licenses]),
+      copyright: prev?.copyright ?? pythonList([...copyright]),
+    })
+  }
 
   return out
 }
@@ -321,19 +269,45 @@ function rootSelfMetadata () {
 /**
  * @param {string} name
  * @param {string} [version]
- * @returns {Promise<{ origin: string, license: string, copyright: string }>}
+ * @returns {Promise<{ origin: string, licenses: string[], copyright: string[] }>}
  */
 async function fetchPackageMetadata (name, version) {
   const url = version
     ? `${REGISTRY}/${encodeRegistryName(name)}/${encodeURIComponent(version)}`
     : `${REGISTRY}/${encodeRegistryName(name)}/latest`
-  const data = await getJson(url).catch(() => null)
-  if (!data) return { origin: `npm:${name}`, license: '[]', copyright: '[]' }
+  const data = await getJson(url)
+  const licenses = extractLicenses(data)
+  if (licenses.length === 0) {
+    throw new Error(`${name}@${version ?? 'latest'} does not declare a license in npm metadata`)
+  }
 
   return {
     origin: extractOrigin(data, name),
-    license: pythonList(data.license ? [String(data.license)] : []),
-    copyright: pythonList(extractCopyright(data)),
+    licenses,
+    copyright: extractCopyright(data),
+  }
+}
+
+/**
+ * @param {RegistryPackageMetadata} data
+ * @returns {string[]}
+ */
+function extractLicenses (data) {
+  const licenses = []
+  addLicense(data.license, licenses)
+  for (const license of data.licenses ?? []) addLicense(license, licenses)
+  return [...new Set(licenses)]
+}
+
+/**
+ * @param {string | { type?: string } | undefined} license
+ * @param {string[]} licenses
+ */
+function addLicense (license, licenses) {
+  if (typeof license === 'string') {
+    licenses.push(license)
+  } else if (license && typeof license.type === 'string') {
+    licenses.push(license.type)
   }
 }
 
@@ -350,7 +324,7 @@ function encodeRegistryName (name) {
 }
 
 /**
- * @param {{ repository?: string | { url?: string }, homepage?: string }} data
+ * @param {RegistryPackageMetadata} data
  * @param {string} name
  */
 function extractOrigin (data, name) {
@@ -373,7 +347,7 @@ function normalizeRepoUrl (url) {
 }
 
 /**
- * @param {{ author?: string | { name?: string }, contributors?: Array<string | { name?: string }> }} data
+ * @param {RegistryPackageMetadata} data
  */
 function extractCopyright (data) {
   const out = []
@@ -427,7 +401,7 @@ function pythonList (items) {
 
 /**
  * @param {string} url
- * @returns {Promise<unknown>}
+ * @returns {Promise<RegistryPackageMetadata>}
  */
 function getJson (url) {
   return /** @type {Promise<unknown>} */ (new Promise((resolve, reject) => {
@@ -463,7 +437,10 @@ function formatCsv (entries) {
   const sorted = [...entries].sort((a, b) => a.component.localeCompare(b.component))
   const lines = ['"component","origin","license","copyright"']
   for (const entry of sorted) {
-    lines.push(`"${entry.component}","${entry.origin}","${escapeCsv(entry.license)}","${escapeCsv(entry.copyright)}"`)
+    lines.push(
+      `"${escapeCsv(entry.component)}","${escapeCsv(entry.origin)}",` +
+      `"${escapeCsv(entry.license)}","${escapeCsv(entry.copyright)}"`
+    )
   }
   return `${lines.join('\n')}\n`
 }
