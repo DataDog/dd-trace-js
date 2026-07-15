@@ -1232,6 +1232,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isParallel,
       onDone,
     })
+    if (!sessionFinishCh.hasSubscribers) onDone()
+
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
