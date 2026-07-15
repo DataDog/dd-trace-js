@@ -29,7 +29,7 @@ class Experiments {
   #projectName
 
   constructor (config) {
-    this.#projectName = config.llmobs?.mlApp
+    this.#projectName = config.llmobs?.mlApp || config.service
     this.#client = new ExperimentsClient({
       apiKey: config.DD_API_KEY,
       appKey: config.DD_APP_KEY,
@@ -133,6 +133,14 @@ function createExperiments (config) {
   if (!(config.DD_API_KEY) || !config.DD_APP_KEY) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
+  }
+  if (!config.llmobs?.mlApp && !config.service) {
+    log.warn('LLMObs experiments: no project name configured, set DD_LLMOBS_ML_APP or DD_SERVICE')
+    return new NoopExperiments(
+      'no project name configured; set the DD_LLMOBS_ML_APP environment variable (or llmobs.mlApp in ' +
+      'tracer.init()) to name the LLM Obs project, or DD_SERVICE (or service in tracer.init()) as a fallback, ' +
+      'then retry'
+    )
   }
   return new Experiments(config)
 }

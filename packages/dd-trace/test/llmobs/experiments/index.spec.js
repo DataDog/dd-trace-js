@@ -47,6 +47,27 @@ describe('LLMObs Experiments facade', () => {
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
     })
+
+    it('falls back to config.service for the project name when llmobs.mlApp is not set', async () => {
+      global.fetch.callsFake(async () => ({
+        ok: true,
+        status: 200,
+        text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })),
+      }))
+
+      const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
+      await exp.createDataset('d').push()
+
+      const [url, opts] = global.fetch.getCall(0).args
+      assert.equal(new URL(url).pathname, '/api/v2/llm-obs/v1/projects')
+      assert.equal(JSON.parse(opts.body).data.attributes.name, 'my-service')
+    })
+
+    it('returns a no-op with actionable steps when neither mlApp nor service is set', () => {
+      const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
+      assert.ok(exp instanceof NoopExperiments)
+      assert.throws(() => exp.createDataset('d'), /DD_LLMOBS_ML_APP.*DD_SERVICE/)
+    })
   })
 
   describe('no-op (disabled / missing keys)', () => {
