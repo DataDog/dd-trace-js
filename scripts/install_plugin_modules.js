@@ -1,12 +1,13 @@
 'use strict'
 
-const { execFileSync } = require('child_process')
+const { execFile } = require('child_process')
 const { createHash } = require('crypto')
 const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
 const { join } = require('path')
+const { promisify } = require('util')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -21,6 +22,7 @@ const mapWithConcurrency = require('./helpers/concurrency')
 const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
+const execFileAsync = promisify(execFile)
 
 const versionsBunConfig = readFileSync(join(__dirname, '..', 'versions', 'bunfig.toml'), 'utf8')
 const minimumReleaseAgeMatch = /^minimumReleaseAge = (\d+)$/m.exec(versionsBunConfig)
@@ -33,14 +35,17 @@ const minimumReleaseTimestamp = Date.now() - Number(minimumReleaseAgeMatch[1]) *
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
 // descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
+// Each worker starts the versions and publication-time lookups together.
+const REGISTRY_CONCURRENCY = 4
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
-// Per-process cache of `bun pm view` lookups so a matrix run doesn't hit the registry twice
-// for the same `<name>@<range>` pair across the script's two install passes.
+// Package metadata is independent of the requested range; fetch it once per process.
+const packageMetadataCache = new Map()
+// Cache resolved ranges across the script's two install passes.
 const resolvedRangeCache = new Map()
 // Names of every package the synthesized workspaces install, both directly (via
 // `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
@@ -120,6 +125,7 @@ async function assertPrerequisites () {
 
   const packages = collectPackages(moduleNames)
 
+  await prefetchPackageVersions(packages)
   await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
     assertPackage(name, version, range, external))
 
@@ -194,6 +200,57 @@ function collectPackages (moduleNames) {
   }
 
   return packages
+}
+
+/**
+ * @param {Array<{ name: string, range: string }>} packages
+ * @returns {Promise<void>}
+ */
+async function prefetchPackageVersions (packages) {
+  const names = new Set()
+  const generatedNames = new Set()
+  for (const { name, range } of packages) {
+    generatedNames.add(name)
+    if (!semver.valid(getCappedRange(name, range))) names.add(name)
+  }
+  for (const [externalName, dependencies] of externalDeps) {
+    if (!generatedNames.has(externalName)) continue
+    for (const { name } of dependencies) names.add(name)
+  }
+  await mapWithConcurrency([...names], REGISTRY_CONCURRENCY, fetchPackageVersions)
+}
+
+/**
+ * @param {string} name
+ * @returns {Promise<void>}
+ */
+async function fetchPackageVersions (name) {
+  const options = { encoding: 'utf8' }
+  let metadata
+  try {
+    const [versionsResult, timeResult] = await Promise.all([
+      execFileAsync('bun', ['pm', 'view', name, 'versions', '--json'], options),
+      execFileAsync('bun', ['pm', 'view', name, 'time', '--json'], options),
+    ])
+    metadata = {
+      versions: JSON.parse(versionsResult.stdout.trim()),
+      time: JSON.parse(timeResult.stdout.trim()),
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
+    return
+  }
+  // npm registry package metadata always exposes the time map.
+  /* istanbul ignore if */
+  /* c8 ignore next 7 */
+  if (!Array.isArray(metadata?.versions) || !metadata.time || typeof metadata.time !== 'object') {
+    // eslint-disable-next-line no-console
+    console.warn(`bun pm view returned incomplete publication metadata for ${name}: ${JSON.stringify(metadata)}; ` +
+      'deferring to install-time resolution')
+    return
+  }
+  packageMetadataCache.set(name, metadata)
 }
 
 /**
@@ -611,32 +668,8 @@ function resolveLatestSatisfying (name, range) {
   const cacheKey = `${name}@${range}`
   const cached = resolvedRangeCache.get(cacheKey)
   if (cached) return cached
-  let metadata
-  try {
-    const options = {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-    const versions = execFileSync('bun', ['pm', 'view', name, 'versions', '--json'], options).trim()
-    const time = execFileSync('bun', ['pm', 'view', name, 'time', '--json'], options).trim()
-    metadata = {
-      versions: JSON.parse(versions),
-      time: JSON.parse(time),
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(`bun pm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
-    return range
-  }
-  // npm registry package metadata always exposes the time map.
-  /* istanbul ignore if */
-  /* c8 ignore next 6 */
-  if (!Array.isArray(metadata?.versions) || !metadata.time || typeof metadata.time !== 'object') {
-    // eslint-disable-next-line no-console
-    console.warn(`bun pm view returned incomplete publication metadata for ${name}: ${JSON.stringify(metadata)}; ` +
-      'deferring to install-time resolution')
-    return range
-  }
+  const metadata = packageMetadataCache.get(name)
+  if (!metadata) return range
   const versions = []
   for (const version of metadata.versions) {
     const publishedAt = metadata.time[version]
