@@ -1178,7 +1178,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const success = await start.apply(this, arguments)
+    const result = await start.apply(this, arguments)
+    const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
     let untestedCoverage
     if (getCodeCoverageCh.hasSubscribers) {
@@ -1228,7 +1229,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
-    return success
+    return result
   }
 }
 
