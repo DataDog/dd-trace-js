@@ -15,6 +15,7 @@ const testStartCh = channel('dd-trace:ci:manual:test:start')
 
 function createTestSpan () {
   const span = {
+    _store: legacyStorage.getHandle(),
     context: () => ({
       _trace: {
         started: [span],
@@ -40,11 +41,17 @@ describe('TestApiManualPlugin', () => {
 
   it('restores each previous store as nested tests finish', () => {
     const parentStore = { span: { name: 'parent' } }
-    const outerTestSpan = createTestSpan()
-    const innerTestSpan = createTestSpan()
-    sinon.stub(plugin, 'startTestSpan')
-      .onFirstCall().returns(outerTestSpan)
-      .onSecondCall().returns(innerTestSpan)
+    let outerTestSpan
+    let innerTestSpan
+    sinon.stub(plugin, 'startTestSpan').callsFake(() => {
+      const testSpan = createTestSpan()
+      if (outerTestSpan) {
+        innerTestSpan = testSpan
+      } else {
+        outerTestSpan = testSpan
+      }
+      return testSpan
+    })
 
     legacyStorage.run(parentStore, () => {
       testStartCh.publish({ testName: 'outer test', testSuite: __filename })
@@ -65,5 +72,17 @@ describe('TestApiManualPlugin', () => {
     sinon.assert.calledOnceWithExactly(outerTestSpan.setTag, TEST_STATUS, 'fail')
     sinon.assert.calledOnce(innerTestSpan.finish)
     sinon.assert.calledOnce(outerTestSpan.finish)
+  })
+
+  it('restores an empty previous store', () => {
+    const testSpan = createTestSpan()
+    testSpan._store = undefined
+    sinon.stub(plugin, 'startTestSpan').returns(testSpan)
+
+    testStartCh.publish({ testName: 'root test', testSuite: __filename })
+    assert.strictEqual(legacyStorage.getStore().span, testSpan)
+
+    testFinishCh.publish({ status: 'pass' })
+    assert.strictEqual(legacyStorage.getStore(), undefined)
   })
 })

@@ -13,8 +13,6 @@ const legacyStorage = storage('legacy')
 class TestApiManualPlugin extends CiPlugin {
   static id = 'test-api-manual'
 
-  #previousStores = new WeakMap()
-
   constructor (...args) {
     super(...args)
     this._isEnvDataCalcualted = false
@@ -24,15 +22,15 @@ class TestApiManualPlugin extends CiPlugin {
       const store = legacyStorage.getStore()
       const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
       const testSpan = this.startTestSpan(testName, testSuiteRelative)
-      this.#previousStores.set(testSpan, store)
       this.enter(testSpan, store)
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
       const store = legacyStorage.getStore()
       const testSpan = store && store.span
-      if (testSpan && this.#previousStores.has(testSpan)) {
-        const previousStore = this.#previousStores.get(testSpan)
-        this.#previousStores.delete(testSpan)
+      if (testSpan) {
+        const previousStore = testSpan._store === undefined
+          ? undefined
+          : legacyStorage.getStore(testSpan._store)
         testSpan.setTag(TEST_STATUS, status)
         if (error) {
           testSpan.setTag('error', error)
