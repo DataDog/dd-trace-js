@@ -49,6 +49,9 @@ const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
+const cypressVersionsSupportingNode18 = DD_MAJOR === 5
+  ? ['10.2.0', '11.0.0', '12.0.0', '14.5.4']
+  : ['12.0.0', '14.5.4']
 
 function cleanupPrecompiledSourceLineDist (cwd) {
   fs.rmSync(path.join(cwd, CYPRESS_PRECOMPILED_SPEC_DIST_DIR), { recursive: true, force: true })
@@ -108,9 +111,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   if (DD_MAJOR >= 6) {
@@ -120,9 +123,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   return false
@@ -162,7 +165,16 @@ moduleTypes.forEach(({
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    const sandboxDependencies = [`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript']
+    if (type === 'commonJS' && version === 'latest') {
+      sandboxDependencies.push(
+        '@vitejs/plugin-react@4.3.4',
+        'react@18.3.1',
+        'react-dom@18.3.1',
+        'vite@6.1.0'
+      )
+    }
+    useSandbox(sandboxDependencies, true)
 
     before(async function () {
       this.timeout(180_000)
@@ -262,7 +274,7 @@ moduleTypes.forEach(({
         .filter(line => !line.includes("require('dd-trace/ci/cypress/support')"))
         .join('\n')
 
-      const getSupportWrappers = () => fs.readdirSync(os.tmpdir())
+      const getSupportWrappers = () => fs.readdirSync(path.dirname(supportFilePath))
         .filter(filename => filename.startsWith('dd-cypress-support-'))
         .sort()
 
@@ -560,6 +572,215 @@ moduleTypes.forEach(({
       ])
 
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    over10It(
+      'uses one tracer when auto-instrumentation and the manual plugin are different package copies',
+      async () => {
+        const externalPackageDir = path.join(cwd, 'external-tracer', 'node_modules', 'dd-trace')
+        fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
+        fs.mkdirSync(path.dirname(externalPackageDir), { recursive: true })
+        fs.cpSync(path.join(cwd, 'node_modules', 'dd-trace'), externalPackageDir, { recursive: true })
+
+        const legacyConfigFile = type === 'esm'
+          ? 'cypress-legacy-plugin.config.mjs'
+          : 'cypress-legacy-plugin.config.js'
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        let testOutput = ''
+
+        try {
+          childProcess = exec(
+            `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                NODE_OPTIONS: `-r ${path.join(externalPackageDir, 'ci', 'init')}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (data) => { testOutput += data })
+          childProcess.stderr?.on('data', (data) => { testOutput += data })
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                assert.strictEqual(events.filter(event => event.type === 'test_session_end').length, 1)
+                assert.strictEqual(events.filter(event => event.type === 'test_module_end').length, 1)
+                assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+
+                const testEvents = events.filter(event => event.type === 'test')
+                assert.strictEqual(testEvents.length, 1)
+                assertObjectContains(testEvents[0].content, {
+                  meta: {
+                    [TEST_STATUS]: 'pass',
+                    [TEST_FRAMEWORK]: 'cypress',
+                  },
+                })
+              }, { hardTimeout: 60000 })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+          assert.doesNotMatch(testOutput, /Multiple attempts to register the following task/)
+        } finally {
+          fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
+        }
+      }
+    )
+
+    over10It('reports real test statuses when supportFile is false', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const getSupportWrappers = () => fs.readdirSync(cwd)
+        .filter(filename => filename.startsWith('dd-cypress-support-'))
+        .sort()
+      const supportWrappersBefore = getSupportWrappers()
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-support-file-false.config.js',
+        { cwd, env: envVars }
+      )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const testEvents = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+
+            assert.strictEqual(testEvents.length, 2)
+            const statuses = Object.fromEntries(testEvents.map(event => [
+              event.content.resource,
+              event.content.meta[TEST_STATUS],
+            ]))
+            assert.deepStrictEqual(statuses, {
+              'cypress/e2e/support-file-false.cy.js.support file false suite passes without a user support file':
+                'pass',
+              'cypress/e2e/support-file-false.cy.js.support file false suite skips without a user support file':
+                'skip',
+            })
+          }, { hardTimeout: 60000 })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.deepStrictEqual(getSupportWrappers(), supportWrappersBefore)
+    })
+
+    const readOnlyConfigIt = process.platform === 'win32' ? it.skip : over10It
+    readOnlyConfigIt('auto-instruments a plain-object config in a read-only directory', async () => {
+      const readOnlyConfigDir = path.join(cwd, 'read-only-config')
+      const configExtension = type === 'esm' ? '.mjs' : '.js'
+      const sourceConfig = path.join(cwd, `cypress-plain-object-auto.config${configExtension}`)
+      const readOnlyConfig = path.join(readOnlyConfigDir, `plain-object${configExtension}`)
+
+      fs.rmSync(readOnlyConfigDir, { recursive: true, force: true })
+      fs.mkdirSync(readOnlyConfigDir)
+      fs.copyFileSync(sourceConfig, readOnlyConfig)
+      fs.chmodSync(readOnlyConfigDir, 0o555)
+      const getConfigWrappers = () => fs.readdirSync(cwd)
+        .filter(filename => filename.startsWith('.dd-cypress-config-'))
+        .sort()
+      const configWrappersBefore = getConfigWrappers()
+
+      try {
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${readOnlyConfig}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
+          }
+        )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const testEvents = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+              const passedTest = testEvents.find(event =>
+                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+              )
+
+              assertObjectContains(passedTest?.content, {
+                meta: {
+                  [TEST_STATUS]: 'pass',
+                  [TEST_FRAMEWORK]: 'cypress',
+                },
+              })
+            }, { hardTimeout: 60000 })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        assert.deepStrictEqual(getConfigWrappers(), configWrappersBefore)
+      } finally {
+        fs.chmodSync(readOnlyConfigDir, 0o755)
+        fs.rmSync(readOnlyConfigDir, { recursive: true, force: true })
+      }
+    })
+
+    const componentIt = type === 'commonJS' && version === 'latest' ? it : it.skip
+    componentIt('auto-instruments component tests with the Vite dev server', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const supportDirectory = path.join(cwd, 'cypress', 'support')
+      const getSupportWrappers = () => fs.readdirSync(supportDirectory)
+        .filter(filename => filename.startsWith('dd-cypress-support-'))
+        .sort()
+      const supportWrappersBefore = getSupportWrappers()
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --component --config-file cypress-component.config.js',
+        { cwd, env: envVars }
+      )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testEvents = events.filter(event => event.type === 'test')
+
+            assert.strictEqual(events.filter(event => event.type === 'test_session_end').length, 1)
+            assert.strictEqual(events.filter(event => event.type === 'test_module_end').length, 1)
+            assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+            assert.strictEqual(testEvents.length, 1)
+            assertObjectContains(testEvents[0].content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          }, { hardTimeout: 60000 })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.deepStrictEqual(getSupportWrappers(), supportWrappersBefore)
     })
 
     // Exercises the manual plugin path without NODE_OPTIONS when users also register

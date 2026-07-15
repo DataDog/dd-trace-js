@@ -38,6 +38,9 @@ const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
+const cypressVersionsSupportingNode18 = DD_MAJOR === 5
+  ? ['10.2.0', '11.0.0', '12.0.0', '14.5.4']
+  : ['12.0.0', '14.5.4']
 
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
@@ -47,9 +50,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   if (DD_MAJOR >= 6) {
@@ -59,9 +62,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   return false

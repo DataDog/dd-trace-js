@@ -1,12 +1,11 @@
 'use strict'
 
 const fs = require('fs')
-const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const { channel } = require('./helpers/instrument')
 
-const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
+const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
 
 const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
 
@@ -25,6 +24,18 @@ const noopTask = {
   'dd:afterEach': () => null,
   'dd:addTags': () => null,
   'dd:log': () => null,
+}
+
+/**
+ * @param {unknown} handler Cypress task registration
+ * @returns {boolean}
+ */
+function isDatadogTaskRegistration (handler) {
+  return !!handler && typeof handler === 'object' &&
+    typeof handler['dd:testSuiteStart'] === 'function' &&
+    typeof handler['dd:beforeEach'] === 'function' &&
+    typeof handler['dd:afterEach'] === 'function' &&
+    typeof handler['dd:addTags'] === 'function'
 }
 
 /**
@@ -63,44 +74,135 @@ function mergeReturnedConfig (config, updatedConfig) {
 }
 
 /**
- * Creates a temporary wrapper support file under os.tmpdir() that loads
- * dd-trace's browser-side hooks before the user's original support file.
- * Returns the wrapper path (for cleanup) or undefined if injection was skipped.
+ * @param {string} rootPath parent path
+ * @param {string} candidatePath path that should be inside rootPath
+ * @returns {boolean}
+ */
+function isPathInside (rootPath, candidatePath) {
+  const relativePath = path.relative(path.resolve(rootPath), path.resolve(candidatePath))
+  return relativePath === '' || (!relativePath.startsWith(`..${path.sep}`) && relativePath !== '..')
+}
+
+/**
+ * @param {string} fromDirectory directory containing the importing file
+ * @param {string} importedFile file to import
+ * @returns {string}
+ */
+function getRelativeImportPath (fromDirectory, importedFile) {
+  let relativePath = path.relative(fromDirectory, importedFile).split(path.sep).join('/')
+  if (!relativePath.startsWith('./') && !relativePath.startsWith('../')) {
+    relativePath = `./${relativePath}`
+  }
+  return relativePath
+}
+
+/**
+ * Creates project-local support files that Cypress's E2E and component
+ * bundlers can both serve. The browser hook is copied because an action-style
+ * NODE_OPTIONS preload can live outside Vite's allowed filesystem roots.
+ *
+ * @param {string} directory writable directory inside the Cypress project
+ * @param {string|false|undefined} originalSupportFile user's support file
+ * @returns {string[]} generated files
+ */
+function createSupportWrapper (directory, originalSupportFile) {
+  const suffix = `${process.pid}`
+  const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
+  const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
+  const browserHooksSource = fs.readFileSync(
+    require.resolve('../../datadog-plugin-cypress/src/support'),
+    'utf8'
+  )
+  const wrapperImports = [
+    `import ${JSON.stringify(getRelativeImportPath(directory, browserHooksFile))}`,
+  ]
+
+  if (originalSupportFile) {
+    wrapperImports.push(`import ${JSON.stringify(getRelativeImportPath(directory, originalSupportFile))}`)
+  }
+
+  fs.writeFileSync(browserHooksFile, browserHooksSource, { flag: 'wx' })
+  try {
+    fs.writeFileSync(wrapperFile, `${wrapperImports.join('\n')}\n`, { flag: 'wx' })
+  } catch (error) {
+    try { fs.unlinkSync(browserHooksFile) } catch { /* best effort */ }
+    throw error
+  }
+
+  return [browserHooksFile, wrapperFile]
+}
+
+/**
+ * Creates temporary project-local support files that load dd-trace's
+ * browser-side hooks before the user's original support file. Returns the
+ * generated paths for cleanup, or undefined if injection was skipped.
  *
  * @param {object} config Cypress resolved config object
- * @returns {string|undefined} wrapper file path, or undefined if skipped
+ * @returns {string[]|undefined} generated file paths, or undefined if skipped
  */
 function injectSupportFile (config) {
   const originalSupportFile = config.supportFile
-  if (!originalSupportFile || originalSupportFile === false) return
 
-  try {
-    const content = fs.readFileSync(originalSupportFile, 'utf8')
-    // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
-    const hasActiveDdTraceImport = content.split('\n').some(line => {
-      const trimmed = line.trim()
-      return trimmed.includes('dd-trace/ci/cypress/support') &&
-        !trimmed.startsWith('//') && !trimmed.startsWith('*')
-    })
-    if (hasActiveDdTraceImport) return
-  } catch {
+  if (originalSupportFile) {
+    try {
+      const content = fs.readFileSync(originalSupportFile, 'utf8')
+      // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
+      const hasActiveDdTraceImport = content.split('\n').some(line => {
+        const trimmed = line.trim()
+        return trimmed.includes('dd-trace/ci/cypress/support') &&
+          !trimmed.startsWith('//') && !trimmed.startsWith('*')
+      })
+      if (hasActiveDdTraceImport) return
+    } catch {
+      return
+    }
+  }
+
+  const projectRoot = config.projectRoot
+  const candidateDirectories = []
+  if (originalSupportFile) candidateDirectories.push(path.dirname(originalSupportFile))
+  if (projectRoot) candidateDirectories.push(projectRoot)
+
+  for (const directory of new Set(candidateDirectories)) {
+    if (projectRoot && !isPathInside(projectRoot, directory)) continue
+    try {
+      const generatedFiles = createSupportWrapper(directory, originalSupportFile)
+      config.supportFile = generatedFiles[1]
+      return generatedFiles
+    } catch {
+      // Try the next directory inside the project.
+    }
+  }
+}
+
+/**
+ * Registers screenshot handlers collected from a manual plugin call. User
+ * handlers run first so a renamed screenshot path reaches the Datadog handler.
+ *
+ * @param {Function} on Cypress event registration function
+ * @param {Function[]} handlers collected after:screenshot handlers
+ * @param {Function|undefined} datadogHandler manual Datadog screenshot handler
+ * @returns {void}
+ */
+function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
+  const userHandlers = handlers.filter(handler => handler !== datadogHandler)
+  if (userHandlers.length === 0) {
+    if (datadogHandler) on('after:screenshot', datadogHandler)
     return
   }
 
-  const ddSupportFile = require.resolve('../../../ci/cypress/support')
-  const wrapperFile = path.join(os.tmpdir(), `dd-cypress-support-${process.pid}.mjs`)
-
-  // Always use ESM: it can import both CJS and ESM support files.
-  const wrapperContent =
-    `import ${JSON.stringify(ddSupportFile)}\nimport ${JSON.stringify(originalSupportFile)}\n`
-
-  try {
-    fs.writeFileSync(wrapperFile, wrapperContent)
-    config.supportFile = wrapperFile
-    return wrapperFile
-  } catch {
-    // Can't write wrapper - skip injection
-  }
+  on('after:screenshot', (details) => {
+    const chain = userHandlers.reduce(
+      (promise, handler) => promise.then((latestDetails) => Promise.resolve(handler(latestDetails)).then(
+        returned => (returned == null ? latestDetails : { ...latestDetails, ...returned })
+      )),
+      Promise.resolve(details)
+    )
+    return chain.then((finalDetails) => {
+      if (!datadogHandler) return finalDetails
+      return Promise.resolve(datadogHandler(finalDetails)).then(() => finalDetails)
+    })
+  })
 }
 
 /**
@@ -114,14 +216,24 @@ function injectSupportFile (config) {
  * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
  * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
  * @param {Function[]} userAfterScreenshotHandlers user's after:screenshot handlers collected from wrappedOn
+ * @param {object} manualPlugin manual plugin registration state
  * @returns {object} the config object (possibly modified)
  */
-function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers, userAfterScreenshotHandlers) {
-  const wrapperFile = injectSupportFile(config)
+function registerDdTraceHooks (
+  on,
+  config,
+  userAfterSpecHandlers,
+  userAfterRunHandlers,
+  userAfterScreenshotHandlers,
+  manualPlugin
+) {
+  const generatedSupportFiles = injectSupportFile(config)
 
   const cleanupWrapper = () => {
-    if (wrapperFile) {
-      try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
+    if (generatedSupportFiles) {
+      for (const generatedFile of generatedSupportFiles) {
+        try { fs.unlinkSync(generatedFile) } catch { /* best effort */ }
+      }
     }
   }
 
@@ -140,6 +252,13 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     for (const h of userAfterScreenshotHandlers) on('after:screenshot', h)
     registerAfterRunWithCleanup()
     on('task', noopTask)
+  }
+
+  if (manualPlugin.detected) {
+    for (const handler of userAfterSpecHandlers) on('after:spec', handler)
+    registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
+    registerAfterRunWithCleanup()
+    return config
   }
 
   if (!setupNodeEventsCh.hasSubscribers) {
@@ -180,6 +299,10 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
     const userAfterSpecHandlers = []
     const userAfterRunHandlers = []
     const userAfterScreenshotHandlers = []
+    const manualPlugin = {
+      detected: false,
+      afterScreenshotHandler: undefined,
+    }
 
     const wrappedOn = (event, handler) => {
       if (event === 'after:spec') {
@@ -189,6 +312,11 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       } else if (event === 'after:screenshot') {
         userAfterScreenshotHandlers.push(handler)
       } else {
+        if (event === 'task' && isDatadogTaskRegistration(handler)) {
+          manualPlugin.detected = true
+          manualPlugin.afterScreenshotHandler =
+            userAfterScreenshotHandlers[userAfterScreenshotHandlers.length - 1]
+        }
         on(event, handler)
       }
     }
@@ -204,7 +332,8 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
           mergeReturnedConfig(config, result),
           userAfterSpecHandlers,
           userAfterRunHandlers,
-          userAfterScreenshotHandlers
+          userAfterScreenshotHandlers,
+          manualPlugin
         )
       })
     }
@@ -214,7 +343,8 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       mergeReturnedConfig(config, maybePromise),
       userAfterSpecHandlers,
       userAfterRunHandlers,
-      userAfterScreenshotHandlers
+      userAfterScreenshotHandlers,
+      manualPlugin
     )
   }
 }
@@ -261,9 +391,10 @@ function isUnderEsmPackage (filePath) {
 
 /**
  * @param {string} originalConfigFile absolute path to the original config file
+ * @param {string} wrapperDirectory directory for the generated wrapper
  * @returns {string} path to the generated wrapper file
  */
-function createConfigWrapper (originalConfigFile) {
+function createConfigWrapper (originalConfigFile, wrapperDirectory) {
   // Decide the wrapper's module mode (ESM vs CJS). It must match how
   // Cypress would interpret the user's original config so that (1) Cypress
   // keeps the loader it would have used (notably the ts-node registration
@@ -283,7 +414,7 @@ function createConfigWrapper (originalConfigFile) {
   }
 
   const wrapperFile = path.join(
-    path.dirname(originalConfigFile),
+    wrapperDirectory,
     `.dd-cypress-config-${process.pid}${wrapperExt}`
   )
 
@@ -408,8 +539,19 @@ function wrapCliConfigFileOptions (options) {
 
   if (!configFilePath || !fs.existsSync(configFilePath)) return noop
 
+  let wrapperFile
+  for (const wrapperDirectory of new Set([path.dirname(configFilePath), projectRoot])) {
+    try {
+      wrapperFile = createConfigWrapper(configFilePath, wrapperDirectory)
+      break
+    } catch {
+      // Try the project root if the config directory is read-only.
+    }
+  }
+
+  if (!wrapperFile) return noop
+
   try {
-    const wrapperFile = createConfigWrapper(configFilePath)
     const restoreTsNodeCompilerOptions = configureTsNodeForTypeScript6(projectRoot, configFilePath)
 
     return {
@@ -420,8 +562,7 @@ function wrapCliConfigFileOptions (options) {
       },
     }
   } catch {
-    // Config directory may be read-only — fall back to no wrapping.
-    // The defineConfig shimmer will still handle configs that use defineConfig.
+    try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
     return noop
   }
 }
