@@ -51,13 +51,16 @@ describe('Tracing Remote Config', () => {
         RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities,
         RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities,
+        RemoteConfigCapabilities.SDK_CONFIGURATION, true)
     })
 
-    it('should register APM_TRACING batch handler', () => {
+    it('should register APM_TRACING and SDK_CONFIGURATION batch handler', () => {
       enable(rc, config, onConfigUpdated)
 
-      sinon.assert.calledOnceWithExactly(rc.subscribeProducts, 'APM_TRACING')
-      sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING'], sinon.match.func)
+      sinon.assert.calledWithExactly(rc.subscribeProducts, 'APM_TRACING')
+      sinon.assert.calledWithExactly(rc.subscribeProducts, 'SDK_CONFIGURATION')
+      sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING', 'SDK_CONFIGURATION'], sinon.match.func)
     })
 
     describe('APM_TRACING handler', () => {

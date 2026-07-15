@@ -175,34 +175,48 @@ function enable (rc, config, onConfigUpdated) {
   // Code Origin
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
 
+  // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
+  rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
+
   const rcClientLibConfigManager = new RCClientLibConfigManager(config.service, config.env)
+  const sdkConfigManager = new RCClientLibConfigManager(config.service, config.env)
 
-  // Subscribe to APM_TRACING product (setBatchHandler used below doesn't automatically subscribe)
+  // Subscribe to both products (setBatchHandler used below doesn't automatically subscribe)
   rc.subscribeProducts('APM_TRACING')
+  rc.subscribeProducts('SDK_CONFIGURATION')
 
-  // Use a batch handler to process all changes before updating the config. This is important in case there's
-  // conflicting configs between, for example, the org and service level.
-  rc.setBatchHandler(['APM_TRACING'], (transaction) => {
+  // Use a single batch handler across both products so a transaction touching both is resolved
+  // deterministically instead of racing two independent handlers.
+  rc.setBatchHandler(['APM_TRACING', 'SDK_CONFIGURATION'], (transaction) => {
     const { toUnapply, toApply, toModify } = transaction
 
     for (const item of toUnapply) {
-      rcClientLibConfigManager.removeConfig(item.id)
+      const manager = item.product === 'SDK_CONFIGURATION' ? sdkConfigManager : rcClientLibConfigManager
+      manager.removeConfig(item.id)
       transaction.ack(item.path)
     }
 
     for (const item of [...toApply, ...toModify]) {
-      rcClientLibConfigManager.addConfig(item.id, item.file)
+      const manager = item.product === 'SDK_CONFIGURATION' ? sdkConfigManager : rcClientLibConfigManager
+      manager.addConfig(item.id, item.file)
       transaction.ack(item.path)
     }
 
-    /** @type {import('../config').TracerOptions|null|RemoteConfigOptions} */
-    let mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
+    // SDK_CONFIGURATION fully drives config application when present, regardless of whether
+    // APM_TRACING also has active config this turn.
+    const mergedSdkConfig = sdkConfigManager.getMergedLibConfig()
+    if (mergedSdkConfig) {
+      config.setRemoteConfigFromSdkConfig(mergedSdkConfig)
+    } else {
+      /** @type {import('../config').TracerOptions|null|RemoteConfigOptions} */
+      let mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
 
-    if (mergedLibConfig) {
-      mergedLibConfig = transformRemoteConfigToLocalOption(mergedLibConfig)
+      if (mergedLibConfig) {
+        mergedLibConfig = transformRemoteConfigToLocalOption(mergedLibConfig)
+      }
+
+      config.setRemoteConfigFromLibConfig(mergedLibConfig)
     }
-
-    config.setRemoteConfigFromLibConfig(mergedLibConfig)
 
     onConfigUpdated()
   })
