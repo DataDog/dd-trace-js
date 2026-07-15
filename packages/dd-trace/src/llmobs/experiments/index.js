@@ -73,16 +73,24 @@ class Experiments {
           if (datasetId === null) return false
         }
 
-        const resp = await this.#client.request(
-          'GET',
-          `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records`
-        )
         const recs = []
         const ids = []
-        for (const item of resp?.data ?? []) {
-          const attrs = item?.attributes ?? item
-          recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
-          ids.push(String(item?.id ?? ''))
+        let cursor = ''
+        // Follow the meta.after / page[cursor] pagination until the last page.
+        for (;;) {
+          const query = cursor ? `?page[cursor]=${encodeURIComponent(cursor)}` : ''
+          // eslint-disable-next-line no-await-in-loop
+          const resp = await this.#client.request(
+            'GET',
+            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${query}`
+          )
+          for (const item of resp?.data ?? []) {
+            const attrs = item?.attributes ?? item
+            recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
+            ids.push(String(item?.id ?? ''))
+          }
+          cursor = resp?.meta?.after ?? ''
+          if (!cursor) break
         }
         records = recs
         recordIds = ids

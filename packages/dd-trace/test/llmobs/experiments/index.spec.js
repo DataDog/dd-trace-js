@@ -139,5 +139,30 @@ describe('LLMObs Experiments facade', () => {
         /expected 3.*backend may not have finished ingesting/
       )
     })
+
+    it('follows the meta.after / page[cursor] pagination across multiple pages', async () => {
+      const pages = {
+        '': { data: [{ id: 'r1', attributes: { input: 'i1' } }], meta: { after: 'cursor1' } },
+        cursor1: { data: [{ id: 'r2', attributes: { input: 'i2' } }], meta: { after: '' } },
+      }
+      global.fetch.callsFake(async (url) => {
+        const u = new URL(url)
+        let payload
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
+          payload = pages[u.searchParams.get('page[cursor]') ?? '']
+        } else {
+          payload = {}
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
+      assert.deepEqual(ds.records().map((r) => r.input), ['i1', 'i2'])
+      assert.deepEqual(ds.recordIds(), ['r1', 'r2'])
+    })
   })
 })
