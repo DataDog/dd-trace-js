@@ -27,7 +27,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   outputValue: Record<string, unknown>,
  *   metrics: { [key: string]: number },
  *   metadata: Record<string, unknown>,
- *   agentAttribution?: { parent_agent_name?: string, parent_agent_span_id?: string },
+ *   agentAttribution?: { pagent_name?: string, pagent_span_id?: string },
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,

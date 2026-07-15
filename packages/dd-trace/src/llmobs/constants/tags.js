@@ -24,8 +24,8 @@ module.exports = {
   // and must pass `agentNameWireSafe` before being written to the `x-datadog-tags` tagset.
   PARENT_AGENT_NAME: '_ml_obs.parent_agent_name',
   PARENT_AGENT_SPAN_ID: '_ml_obs.parent_agent_span_id',
-  PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_parent_agent_id',
-  PROPAGATED_PARENT_AGENT_NAME_KEY: '_dd.p.llmobs_parent_agent_name',
+  PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_pagent_span_id',
+  PROPAGATED_PARENT_AGENT_NAME_KEY: '_dd.p.llmobs_pagent_name',
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',
   PROPAGATED_SAMPLING_DECISION_KEY: '_dd.p.llmobs_sd',
   SAMPLE_RATE: '_ml_obs.sample_rate',

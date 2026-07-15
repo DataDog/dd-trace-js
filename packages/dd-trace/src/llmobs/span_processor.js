@@ -167,8 +167,8 @@ class LLMObsSpanProcessor {
     const parentAgentSpanId = mlObsTags[PARENT_AGENT_SPAN_ID]
     if (parentAgentName != null || parentAgentSpanId != null) {
       meta.agent_attribution = {
-        parent_agent_name: parentAgentName ?? null,
-        parent_agent_span_id: parentAgentSpanId,
+        pagent_name: parentAgentName ?? null,
+        pagent_span_id: parentAgentSpanId,
       }
     }
 
