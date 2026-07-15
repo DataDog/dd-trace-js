@@ -306,6 +306,9 @@ class Tracer extends NoopProxy {
       for (const feature of Object.values(features)) {
         feature.enable?.(config, this._tracer, this, lazyProxy)
       }
+      if (config.experimental?.aiguard?.enabled) {
+        this._modules.aiguard.enable(this._tracer, config)
+      }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
       }
