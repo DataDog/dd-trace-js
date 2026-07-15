@@ -77,7 +77,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
@@ -902,19 +902,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns how many EFD retries must be scheduled before the first duration is known.
-   *
-   * @returns {number}
-   */
-  getConfiguredEfdRetryCount () {
-    const { earlyFlakeDetectionSlowTestRetries } = this
-    if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-      return this.earlyFlakeDetectionNumRetries
-    }
-    return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  }
-
-  /**
    * Returns the selected EFD retry count for a test, or the scheduling count if it has not run yet.
    *
    * @param {string} testSuite
@@ -924,7 +911,10 @@ class CypressPlugin {
   getEfdRetryCountForTest (testSuite, testName) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
     if (!testSuiteRetries || testSuiteRetries[testName] === undefined) {
-      return this.getConfiguredEfdRetryCount()
+      return getConfiguredEfdRetryCount(
+        this.earlyFlakeDetectionSlowTestRetries,
+        this.earlyFlakeDetectionNumRetries
+      )
     }
     return testSuiteRetries[testName]
   }
@@ -1702,7 +1692,10 @@ class CypressPlugin {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.getConfiguredEfdRetryCount(),
+          earlyFlakeDetectionNumRetries: getConfiguredEfdRetryCount(
+            this.earlyFlakeDetectionSlowTestRetries,
+            this.earlyFlakeDetectionNumRetries
+          ),
           earlyFlakeDetectionSlowTestRetries: this.earlyFlakeDetectionSlowTestRetries,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,

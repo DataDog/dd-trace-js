@@ -11,7 +11,7 @@ const {
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -99,13 +99,6 @@ let tiaRepositoryRoot = process.cwd()
 const tinyPoolClassWrappers = new WeakMap()
 const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
 const skippableSuitesCh = channel('ci:vitest:test-suite:skippable')
-
-function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
-  if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
-    return fallbackRetryCount
-  }
-  return getMaxEfdRetryCount(slowTestRetries)
-}
 
 function getTestCommand () {
   return `vitest ${process.argv.slice(2).join(' ')}`

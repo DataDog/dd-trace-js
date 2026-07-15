@@ -9,6 +9,7 @@ const {
   getEfdRetryCount,
   getMaxEfdRetryCount,
   recordTestManagementExecution,
+  getConfiguredEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -267,14 +268,6 @@ function retryTest (test, numRetries, tags, slowTestRetries) {
       }
     }
   }
-}
-
-function getConfiguredEfdRetryCount (config) {
-  const { earlyFlakeDetectionSlowTestRetries } = config
-  if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-    return config.earlyFlakeDetectionNumRetries
-  }
-  return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
 }
 
 function getSuitesByTestFile (root) {
@@ -590,7 +583,10 @@ function getTestFinishInfo (test, status, config, error) {
   const testStatuses = testsStatuses.get(testName)
 
   const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
-  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? getConfiguredEfdRetryCount(config)
+  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? getConfiguredEfdRetryCount(
+    config.earlyFlakeDetectionSlowTestRetries,
+    config.earlyFlakeDetectionNumRetries
+  )
   const isLastEfdRetry = testStatuses.length === efdRetryCount + 1
   const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
 
@@ -1026,7 +1022,10 @@ function getRunTestsWrapper (runTests, config) {
               ) {
                 retryTest(
                   test,
-                  getConfiguredEfdRetryCount(config),
+                  getConfiguredEfdRetryCount(
+                    config.earlyFlakeDetectionSlowTestRetries,
+                    config.earlyFlakeDetectionNumRetries
+                  ),
                   ['_ddIsModified', '_ddIsEfdRetry'],
                   config.earlyFlakeDetectionSlowTestRetries
                 )
@@ -1050,7 +1049,10 @@ function getRunTestsWrapper (runTests, config) {
           ) {
             retryTest(
               test,
-              getConfiguredEfdRetryCount(config),
+              getConfiguredEfdRetryCount(
+                config.earlyFlakeDetectionSlowTestRetries,
+                config.earlyFlakeDetectionNumRetries
+              ),
               ['_ddIsNew', '_ddIsEfdRetry'],
               config.earlyFlakeDetectionSlowTestRetries
             )

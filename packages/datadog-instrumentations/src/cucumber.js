@@ -18,7 +18,7 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
+  getConfiguredEfdRetryCount,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
   recordTestManagementExecution,
@@ -191,11 +191,6 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
     return 'skip'
   }
   return 'pass'
-}
-
-function getConfiguredEfdRetryCount () {
-  const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  return maxSlowTestRetryCount ?? earlyFlakeDetectionNumRetries
 }
 
 function publishWorkerEfdRetryCount (pickle, retryCount) {
@@ -371,7 +366,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
     if (efdRetryCount === undefined) {
       efdRetryCount = status === 'skip'
         ? 0
-        : getConfiguredEfdRetryCount()
+        : getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries)
       efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
       if (efdRetryCount === 0 && status !== 'skip') {
         efdSlowAbortedPickleIds.add(pickle.id)
