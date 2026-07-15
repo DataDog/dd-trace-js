@@ -31,6 +31,22 @@ const COVERAGE_COLLECTORS = new Set([
 ])
 
 /**
+ * @typedef {{
+ *   run: string,
+ *   env: Record<string, string|undefined>
+ * } | {
+ *   uploadsCoverage: true
+ * }} LocalActionEvent
+ */
+
+/**
+ * @typedef {{
+ *   workflowFile: string,
+ *   jobId: string
+ * } & LocalActionEvent} WorkflowEvent
+ */
+
+/**
  * @param {string} pattern
  * @param {{cwd: string, nodir: boolean, windowsPathsNoEscape: boolean, ignore?: string[]}} opts
  * @returns {string[]}
@@ -605,13 +621,13 @@ function isUsesStep (step) {
  * @param {string} uses
  * @param {Record<string, string|undefined>} env
  * @param {Set<string>} visiting
- * @returns {{ run: string, env: Record<string, string|undefined> }[]}
+ * @returns {LocalActionEvent[]}
  */
-function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
+function expandLocalCompositeActionEvents (repoRoot, uses, env, visiting) {
+  if (COVERAGE_ACTIONS.has(uses)) return [{ uploadsCoverage: true }]
+
   const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile) return []
-  if (visiting.has(actionFile)) return []
-  visiting.add(actionFile)
+  if (!actionFile || visiting.has(actionFile)) return []
 
   const doc = parseYamlFile(repoRoot, actionFile)
   if (!isPlainObject(doc)) return []
@@ -619,8 +635,9 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
   const runs = doc.runs
   if (!isPlainObject(runs) || runs.using !== 'composite') return []
   const steps = Array.isArray(runs.steps) ? runs.steps : []
+  visiting.add(actionFile)
 
-  /** @type {{ run: string, env: Record<string, string|undefined> }[]} */
+  /** @type {LocalActionEvent[]} */
   const out = []
 
   for (const s of steps) {
@@ -658,7 +675,7 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
       if (isPlainObject(s.env)) {
         for (const [k, v] of Object.entries(s.env)) nextEnv[k] = typeof v === 'string' ? v : String(v)
       }
-      const nested = expandLocalCompositeActionRuns(repoRoot, s.uses, nextEnv, visiting)
+      const nested = expandLocalCompositeActionEvents(repoRoot, s.uses, nextEnv, visiting)
       for (const n of nested) out.push(n)
     }
   }
@@ -721,34 +738,6 @@ function commandProducesCoverage (command, knownScripts, coverageScripts) {
 }
 
 /**
- * @param {string} repoRoot
- * @param {string} uses
- * @param {Set<string>} visiting
- * @returns {boolean}
- */
-function localActionUploadsCoverage (repoRoot, uses, visiting) {
-  if (COVERAGE_ACTIONS.has(uses)) return true
-
-  const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile || visiting.has(actionFile)) return false
-  visiting.add(actionFile)
-
-  const doc = parseYamlFile(repoRoot, actionFile)
-  const steps = doc.runs.steps
-  let uploadsCoverage = false
-
-  for (const step of steps) {
-    if (isUsesStep(step) && localActionUploadsCoverage(repoRoot, step.uses, visiting)) {
-      uploadsCoverage = true
-      break
-    }
-  }
-
-  visiting.delete(actionFile)
-  return uploadsCoverage
-}
-
-/**
  * Returns all combinations of matrix scalar/array values (ignores include/exclude).
  * @param {Record<string, unknown>} matrix
  * @returns {Record<string, string>[]}
@@ -787,15 +776,11 @@ function expandMatrixExpressions (s, matrixValues) {
 
 /**
  * @param {string} repoRoot
- * @returns {{
- *   runs: { workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[],
- *   coverageUploadJobs: Set<string>
- * }}
+ * @returns {WorkflowEvent[]}
  */
-function collectWorkflowRuns (repoRoot) {
-  /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
+function collectWorkflowEvents (repoRoot) {
+  /** @type {WorkflowEvent[]} */
   const out = []
-  const coverageUploadJobs = new Set()
 
   const files = findWorkflowFiles(repoRoot)
   for (const wf of files) {
@@ -817,12 +802,6 @@ function collectWorkflowRuns (repoRoot) {
 
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
-        if (
-          typeof step.uses === 'string' &&
-          localActionUploadsCoverage(repoRoot, step.uses, new Set())
-        ) {
-          coverageUploadJobs.add(`${wf}#${jobId}`)
-        }
 
         // Merge env. Values can be strings or non-strings; we only keep string-ish.
         /** @type {Record<string, string|undefined>} */
@@ -862,9 +841,9 @@ function collectWorkflowRuns (repoRoot) {
         }
 
         if (typeof step.uses === 'string' && step.uses.startsWith('./')) {
-          const expanded = expandLocalCompositeActionRuns(repoRoot, step.uses, env, new Set())
+          const expanded = expandLocalCompositeActionEvents(repoRoot, step.uses, env, new Set())
           for (const e of expanded) {
-            out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
+            out.push({ workflowFile: wf, jobId, ...e })
           }
         }
 
@@ -893,7 +872,7 @@ function collectWorkflowRuns (repoRoot) {
     }
   }
 
-  return { runs: out, coverageUploadJobs }
+  return out
 }
 
 /**
@@ -1164,7 +1143,22 @@ function main () {
     process.exit(1)
   }
 
-  const { runs: workflowRuns, coverageUploadJobs } = collectWorkflowRuns(repoRoot)
+  const workflowEvents = collectWorkflowEvents(repoRoot)
+  /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
+  const workflowRuns = []
+  const coverageJobsPendingUpload = new Set()
+  const coverageScripts = findCoverageScripts(scripts, knownScripts)
+  for (const event of workflowEvents) {
+    const job = `${event.workflowFile}#${event.jobId}`
+    if ('uploadsCoverage' in event) {
+      coverageJobsPendingUpload.delete(job)
+    } else {
+      workflowRuns.push(event)
+      if (commandProducesCoverage(event.run, knownScripts, coverageScripts)) {
+        coverageJobsPendingUpload.add(job)
+      }
+    }
+  }
 
   /** @type {{ workflowFile: string, jobId: string, script: string, env: Record<string, string|undefined> }[]} */
   const invoked = []
@@ -1180,17 +1174,8 @@ function main () {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
-  const coverageProducerJobs = new Set()
-  const coverageScripts = findCoverageScripts(scripts, knownScripts)
-  for (const run of workflowRuns) {
-    if (commandProducesCoverage(run.run, knownScripts, coverageScripts)) {
-      coverageProducerJobs.add(`${run.workflowFile}#${run.jobId}`)
-    }
-  }
-  for (const job of coverageProducerJobs) {
-    if (!coverageUploadJobs.has(job)) {
-      pushError(`${job}: generates coverage but does not upload it`)
-    }
+  for (const job of coverageJobsPendingUpload) {
+    pushError(`${job}: generates coverage but does not upload it`)
   }
 
   // Transitive closure: a script counts as "invoked" when CI either runs it directly or runs
