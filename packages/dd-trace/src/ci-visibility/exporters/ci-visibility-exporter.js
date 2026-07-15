@@ -305,8 +305,14 @@ class CiVisibilityExporter extends BufferingExporter {
         isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       earlyFlakeDetectionNumRetries:
         hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries:
-        hasEarlyFlakeDetectionRetryCount ? { all: earlyFlakeDetectionRetryCount } : earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionSlowTestRetries: hasEarlyFlakeDetectionRetryCount
+        ? {
+            '5s': earlyFlakeDetectionRetryCount,
+            '10s': earlyFlakeDetectionRetryCount,
+            '30s': earlyFlakeDetectionRetryCount,
+            '5m': earlyFlakeDetectionRetryCount,
+          }
+        : earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,

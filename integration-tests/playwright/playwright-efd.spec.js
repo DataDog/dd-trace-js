@@ -239,7 +239,7 @@ versions.forEach((version) => {
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('uses the EFD retry count environment variable regardless of test duration', async (receiver, run) => {
+      it('overrides slow test retries with the EFD retry count environment variable', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,

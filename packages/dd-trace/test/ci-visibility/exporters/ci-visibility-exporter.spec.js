@@ -370,7 +370,12 @@ describe('CI Visibility Exporter', () => {
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
       assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 2)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, { all: 2 })
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
+        '5s': 2,
+        '10s': 2,
+        '30s': 2,
+        '5m': 2,
+      })
     })
 
     it('replaces the backend EFD duration policy with zero retries', () => {
@@ -382,7 +387,12 @@ describe('CI Visibility Exporter', () => {
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
       assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 0)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, { all: 0 })
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
+        '5s': 0,
+        '10s': 0,
+        '30s': 0,
+        '5m': 0,
+      })
     })
   })
 
