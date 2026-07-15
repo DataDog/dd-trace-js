@@ -311,7 +311,7 @@ class Config extends ConfigBase {
    */
   setRemoteConfigFromLibConfig (options) {
     // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCClientLibConfigManager` class
+    // State is instead managed by the `RCConfigMerger` class
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
@@ -333,7 +333,7 @@ class Config extends ConfigBase {
    */
   setRemoteConfigFromSdkConfig (options) {
     // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCClientLibConfigManager` class
+    // State is instead managed by the `RCConfigMerger` class
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
