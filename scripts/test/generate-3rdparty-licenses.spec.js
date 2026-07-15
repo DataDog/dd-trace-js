@@ -10,6 +10,7 @@ const { promisify } = require('node:util')
 const execFileAsync = promisify(execFile)
 const repoRoot = path.resolve(__dirname, '..', '..')
 const generatorPath = path.join(repoRoot, 'scripts', 'generate-3rdparty-licenses.js')
+const concurrencyHelperPath = path.join(repoRoot, 'scripts', 'helpers', 'concurrency.js')
 const dependencyHelperPath = path.join(repoRoot, 'scripts', 'third-party-dependencies.js')
 
 describe('scripts/generate-3rdparty-licenses.js', () => {
@@ -19,8 +20,10 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
     fixtureDirectory = fs.mkdtempSync(path.join(tmpdir(), 'dd-trace-license-generator-'))
     fs.mkdirSync(path.join(fixtureDirectory, '.github'))
     fs.mkdirSync(path.join(fixtureDirectory, 'scripts'))
+    fs.mkdirSync(path.join(fixtureDirectory, 'scripts', 'helpers'))
     fs.mkdirSync(path.join(fixtureDirectory, 'vendor'))
     fs.copyFileSync(generatorPath, path.join(fixtureDirectory, 'scripts', 'generate-3rdparty-licenses.js'))
+    fs.copyFileSync(concurrencyHelperPath, path.join(fixtureDirectory, 'scripts', 'helpers', 'concurrency.js'))
     fs.copyFileSync(dependencyHelperPath, path.join(fixtureDirectory, 'scripts', 'third-party-dependencies.js'))
     fs.writeFileSync(path.join(fixtureDirectory, 'package.json'), JSON.stringify({
       name: 'dd-fixture',
@@ -95,7 +98,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       [
         '"component","origin","license","copyright"',
         '"dd-fixture","https://github.com/DataDog/dd-fixture","[\'BSD-3-Clause\']","[\'Fixture author\']"',
-        '"foo","https://old.example/""quoted""","[\'MIT\', \'Apache-2.0\']","[\'Old author\']"',
+        '"foo","https://old.example/""quoted""","[\'MIT\', \'Apache-2.0\']","[\'Old author\', \'New author\']"',
         '"vendored","https://vendored.example","[\'ISC\']","[\'Vendored author\']"',
       ]
     )
@@ -189,12 +192,14 @@ https.request = function request (url, options, callback) {
     response.headers = {}
     response.resume = function resume () {}
     callback(response)
-    process.nextTick(() => {
+    const emitMetadata = () => {
       const metadata = JSON.parse(process.env.DD_TEST_LICENSE_METADATA)
       const version = url.slice(url.lastIndexOf('/') + 1)
       response.emit('data', Buffer.from(JSON.stringify(metadata[version])))
       response.emit('end')
-    })
+    }
+    if (url.endsWith('/1.0.0')) setImmediate(emitMetadata)
+    else process.nextTick(emitMetadata)
   }
   return request
 }
