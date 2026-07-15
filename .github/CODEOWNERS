@@ -4,6 +4,7 @@
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
 /.github/actions/ @DataDog/lang-platform-js
+/.github/all-green/ @DataDog/lang-platform-js
 /scripts/ @DataDog/lang-platform-js
 
 # AppSec
@@ -309,8 +310,7 @@
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
-/.github/workflows/install-smoke.yml @DataDog/lang-platform-js
-/docs/ @DataDog/lang-platform-js
+/docs/bun.lock @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/release.yml @DataDog/lang-platform-js

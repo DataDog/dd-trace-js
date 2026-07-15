@@ -148,12 +148,12 @@ such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
 unsure which version of Node.js to use, just use the latest version, which
 should always work.
 
-We use [bun](https://bun.com/) (~1.3.13, matching `engines.bun` in `package.json`) for installing
+We use [bun](https://bun.com/) (1.3.1, matching `devDependencies.bun` in `package.json`) for installing
 dependencies and the per-plugin sandbox installs. Run-scripts (`test:*`, `lint`, …) go through
 `npm`. The easiest way to install bun:
 
 ```sh
-$ npm install -g bun
+$ npm install -g bun@1.3.1
 ```
 
 To install dependencies once you have Node and bun installed, run this in the project directory:
@@ -169,7 +169,7 @@ considering a freshly-published npm version. The window is set in `bunfig.toml` 
 `versions/bunfig.toml` via `minimumReleaseAge = 259200` and is meant to widen the gap in which
 a freshly-published compromised release gets caught and pulled from the registry before it lands
 in our installs. The Datadog-owned packages listed in the root `minimumReleaseAgeExcludes` bypass
-the wait because our publishing pipeline is their trust boundary. Bun 1.3.14 only supports exact
+the wait because our publishing pipeline is their trust boundary. Bun 1.3.1 only supports exact
 package names in this list; it does not expand the `@datadog/*` pattern used by Dependabot.
 
 CI runs `bun install --frozen-lockfile` (see `.github/actions/install/action.yml`); a `bun.lock`

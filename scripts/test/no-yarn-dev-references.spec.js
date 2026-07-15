@@ -127,7 +127,7 @@ describe('no yarn dev references', function () {
     assert.deepStrictEqual(offendingMatches, [])
   })
 
-  it('enforces frozen installs and release-age cooldowns', () => {
+  it('enforces frozen installs, release-age cooldowns, and aligned dependency locks', () => {
     const installAction = fs.readFileSync(path.join(repoRoot, '.github/actions/install/action.yml'), 'utf8')
     assert.match(installAction, /command: bun install --frozen-lockfile --linker=hoisted/)
     assert.doesNotMatch(installAction, /command: bun install [^\n]*--trust/)
@@ -151,6 +151,55 @@ describe('no yarn dev references', function () {
     const versionsBunConfig = fs.readFileSync(path.join(repoRoot, 'versions/bunfig.toml'), 'utf8')
     assert.match(versionsBunConfig, /^minimumReleaseAge = 259200$/m)
 
+    const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+    assert.strictEqual(packageJson.devDependencies.bun, '1.3.1')
+    const nodeSetupAction = fs.readFileSync(path.join(repoRoot, '.github/actions/node/setup/action.yml'), 'utf8')
+    const setupBunVersion = /npm install -g bun@(\d+\.\d+\.\d+)/.exec(nodeSetupAction)
+    assert.ok(setupBunVersion)
+    assert.strictEqual(setupBunVersion[1], packageJson.devDependencies.bun)
+
+    const allGreenWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/all-green.yml'), 'utf8')
+    const allGreenInstall = 'bun install --frozen-lockfile --ignore-scripts'
+    assert.ok(allGreenWorkflow.includes(allGreenInstall))
+    assert.match(allGreenWorkflow, /working-directory: \.github\/all-green/)
+    assert.match(allGreenWorkflow, /ln -s \.\.\/\.github\/all-green\/node_modules scripts\/node_modules/)
+    assert.ok(
+      allGreenWorkflow.indexOf(allGreenInstall) <
+        allGreenWorkflow.indexOf('uses: DataDog/dd-octo-sts-action@'),
+      'all-green dependencies must be installed before minting the STS token'
+    )
+    const allGreenPackage = JSON.parse(fs.readFileSync(
+      path.join(repoRoot, '.github/all-green/package.json'),
+      'utf8'
+    ))
+    assert.deepStrictEqual(Object.keys(allGreenPackage.dependencies).sort(), [
+      '@actions/core',
+      '@actions/github',
+      'octokit',
+    ])
+    assert.strictEqual(fs.existsSync(path.join(repoRoot, '.github/all-green/bun.lock')), true)
+
+    const integrationHelpers = fs.readFileSync(path.join(repoRoot, 'integration-tests/helpers/index.js'), 'utf8')
+    assert.match(integrationHelpers, /const \{ BUN, BUN_CONFIG, withBun \} = require\('\.\/bun'\)/)
+    assert.match(integrationHelpers, /`--config=\$\{JSON\.stringify\(BUN_CONFIG\)\}`/)
+    const platformWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/platform.yml'), 'utf8')
+    assert.match(platformWorkflow, /bun --config="\$GITHUB_WORKSPACE\/bunfig\.toml" add --linker=hoisted/)
+    const projectWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/project.yml'), 'utf8')
+    assert.match(projectWorkflow, /bun --config=\/tmp\/dd-trace-bunfig\.toml install/)
+
+    const actionPackage = JSON.parse(fs.readFileSync(
+      path.join(repoRoot, '.github/actions/datadog-ci/package.json'),
+      'utf8'
+    ))
+    const actionLock = JSON.parse(fs.readFileSync(
+      path.join(repoRoot, '.github/actions/datadog-ci/package-lock.json'),
+      'utf8'
+    ))
+    assert.strictEqual(
+      actionLock.packages[''].dependencies['@datadog/datadog-ci'],
+      actionPackage.dependencies['@datadog/datadog-ci']
+    )
+
     const dependabot = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/dependabot.yml'), 'utf8'))
     let bunUpdate
     let actionUsesNpm = false
@@ -163,7 +212,7 @@ describe('no yarn dev references', function () {
       }
     }
     assert.ok(bunUpdate)
-    assert.deepStrictEqual(bunUpdate.directories, ['/', '/docs'])
+    assert.deepStrictEqual(bunUpdate.directories, ['/', '/docs', '/.github/all-green'])
     assert.strictEqual(actionUsesNpm, true)
   })
 })
