@@ -39,9 +39,15 @@ function findExportByName (pkg, name) {
   }
 }
 
+/**
+ * @param {import('node:diagnostics_channel').Channel} channelToPublishTo
+ * @param {string} [frameworkVersion]
+ * @param {Record<string, unknown>} [payload]
+ */
 function getChannelPromise (channelToPublishTo, frameworkVersion, payload) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ ...payload, onDone: resolve, frameworkVersion })
+    if (!channelToPublishTo.hasSubscribers) resolve()
   })
 }
 

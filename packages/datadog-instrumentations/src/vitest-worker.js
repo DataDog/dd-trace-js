@@ -22,6 +22,7 @@ const {
   testSuiteFinishCh,
   testSuiteErrorCh,
   findExportByName,
+  getChannelPromise,
   getTestRunnerExport,
   getTypeTasks,
   getTestName,
@@ -661,11 +662,6 @@ addHook({
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
 
-    let onFinish = null
-    const onFinishPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
-
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
     const testEventPromises = []
 
@@ -811,9 +807,10 @@ addHook({
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
-    testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
-
-    await onFinishPromise
+    await getChannelPromise(testSuiteFinishCh, frameworkVersion, {
+      status: testSuiteResult.state,
+      ...testSuiteCtx.currentStore,
+    })
 
     return startTestsResponse
   })

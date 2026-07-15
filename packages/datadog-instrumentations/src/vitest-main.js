@@ -812,18 +812,13 @@ function getFinishWrapper (exitOrClose) {
       return exitOrClose.apply(this, arguments)
     }
 
-    let onFinish
-
-    const flushPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
     const failedSuites = this.state.getFailedFilepaths()
     let error
     if (failedSuites.length) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
-    testSessionFinishCh.publish({
+    const flushPromise = getChannelPromise(testSessionFinishCh, undefined, {
       status: getSessionStatus(this.state),
       testCodeCoverageLinesTotal,
       error,
@@ -833,7 +828,6 @@ function getFinishWrapper (exitOrClose) {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
-      onFinish,
     })
 
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
@@ -842,9 +836,7 @@ function getFinishWrapper (exitOrClose) {
 
     // If coverage was generated, publish coverage report channel for upload
     if (coverageRootDir && codeCoverageReportCh.hasSubscribers) {
-      await new Promise((resolve) => {
-        codeCoverageReportCh.publish({ rootDir: coverageRootDir, onDone: resolve })
-      })
+      await getChannelPromise(codeCoverageReportCh, undefined, { rootDir: coverageRootDir })
     }
 
     return exitOrClose.apply(this, arguments)
@@ -1213,16 +1205,10 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
     testSuiteErrorCh.runStores(testSuiteCtx, () => {})
   }
 
-  let onFinish
-  const onFinishPromise = new Promise(resolve => {
-    onFinish = resolve
-  })
-  testSuiteFinishCh.publish({
+  await getChannelPromise(testSuiteFinishCh, frameworkVersion, {
     status: getTypecheckTaskStatus(file),
-    onFinish,
     ...testSuiteCtx.currentStore,
   })
-  await onFinishPromise
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
