@@ -68,6 +68,19 @@ async function runInstrumentedCommand ({
       verbose: options.verbose,
     })
     offline = readOfflineOutput(rawOutputRoot)
+    const sanitizedEvents = sanitizeForReport(offline.events)
+    writeFileSafely(
+      out,
+      path.join(outDir, 'events.ndjson'),
+      sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n',
+      'scenario events artifact'
+    )
+    writeFileSafely(
+      out,
+      path.join(outDir, 'result.json'),
+      `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
+      'scenario result artifact'
+    )
     if (!offline.initialized && !ciWiring) {
       const stderr = sanitizeString(result.stderr).trim().slice(-2000)
       throw new Error(
@@ -79,27 +92,15 @@ async function runInstrumentedCommand ({
     if (offline.summary?.errors.length > 0) {
       throw new Error(`Offline Test Optimization exporter failed: ${offline.summary.errors.join(', ')}`)
     }
+  } catch (err) {
+    err.artifactDirectory = outDir
+    throw err
   } finally {
     if (fixture) cleanupOfflineFixture(fixture.root)
     fs.rmSync(rawOutputRoot, { force: true, recursive: true })
   }
 
-  const events = offline.events
-  const sanitizedEvents = sanitizeForReport(events)
-  writeFileSafely(
-    out,
-    path.join(outDir, 'events.ndjson'),
-    sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n',
-    'scenario events artifact'
-  )
-  writeFileSafely(
-    out,
-    path.join(outDir, 'result.json'),
-    `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
-    'scenario result artifact'
-  )
-
-  return { result, events, offline, outDir }
+  return { result, events: offline.events, offline, outDir }
 }
 
 async function failWithDebugRerun ({
@@ -479,7 +480,7 @@ function inconclusive (framework, scenario, diagnosis, evidence = {}, outDir, ex
   }, outDir, extraArtifacts)
 }
 
-function error (framework, scenario, err, outDir) {
+function error (framework, scenario, err, outDir = err?.artifactDirectory) {
   return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
 }
 

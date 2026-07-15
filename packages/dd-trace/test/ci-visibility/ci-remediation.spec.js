@@ -80,7 +80,10 @@ describe('test optimization CI remediation', () => {
       ciWiringCommand: {
         cwd: '/repo',
         argv: ['npm', 'test'],
-        env: { DD_AGENT_HOST: 'datadog-agent' },
+        env: {
+          DD_AGENT_HOST: 'datadog-agent',
+          DD_API_KEY: 'dd-validation-placeholder',
+        },
       },
     })
 
@@ -91,6 +94,22 @@ describe('test optimization CI remediation', () => {
     assert.match(remediation.variants[0].snippet, /DD_TEST_SESSION_NAME: "jest-tests"/)
     assert.deepStrictEqual(remediation.variants[0].optionalValues.map(value => value.name), [
     ])
+  })
+
+  it('does not infer agentless transport from a bare API key', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      ciWiring: { provider: 'github-actions' },
+      ciWiringCommand: {
+        cwd: '/repo',
+        argv: ['npm', 'test'],
+        env: { DD_API_KEY: 'dd-validation-placeholder' },
+      },
+    })
+
+    assert.strictEqual(remediation.transport, 'unknown')
+    assert.deepStrictEqual(remediation.variants.map(variant => variant.id), ['agentless'])
+    assert.match(remediation.summary, /If a Datadog Agent is available and reachable/)
   })
 
   it('preserves the discovered CI command when live replay is unavailable', () => {

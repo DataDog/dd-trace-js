@@ -80,7 +80,11 @@ function getApprovalMaterial ({
   const packageRoot = path.resolve(validationDirectory, '..', '..')
   const packageJsonPath = path.join(packageRoot, 'package.json')
   const packageMetadata = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-  const packageFiles = getPackageFiles(packageRoot, [manifest.__path, out])
+  const packageFiles = getPackageFiles(packageRoot, [
+    manifest.__path,
+    out,
+    path.join(packageRoot, '.junit-tmp'),
+  ])
   const executableIdentities = bindManifestExecutables(manifest)
 
   return {

@@ -55,6 +55,13 @@ describe('test optimization validation approval', () => {
       fs.writeFileSync(coverageProfile, 'coverage version two')
       assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
 
+      const junitShard = path.join(copiedPackageRoot, '.junit-tmp', 'worker.xml')
+      fs.mkdirSync(path.dirname(junitShard), { recursive: true })
+      fs.writeFileSync(junitShard, 'junit version one')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+      fs.writeFileSync(junitShard, 'junit version two')
+      assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)
+
       const gitMetadataFile = path.join(copiedPackageRoot, '.git')
       fs.writeFileSync(gitMetadataFile, 'gitdir: outside-the-package')
       assert.strictEqual(copiedApproval.getApprovalDigest(input), digest)

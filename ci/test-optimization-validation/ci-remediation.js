@@ -48,7 +48,7 @@ function buildCiRemediation (framework) {
 
 function getConfiguredTransport (framework) {
   const env = collectCiEnv(framework)
-  if (isTrue(env.DD_CIVISIBILITY_AGENTLESS_ENABLED) || env.DD_API_KEY) return 'agentless'
+  if (isTrue(env.DD_CIVISIBILITY_AGENTLESS_ENABLED)) return 'agentless'
   if (env.DD_AGENT_HOST || env.DD_TRACE_AGENT_URL || env.DD_TRACE_AGENT_HOSTNAME) return 'agent'
   return 'unknown'
 }

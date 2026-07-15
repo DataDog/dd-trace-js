@@ -296,6 +296,8 @@ describe('test optimization validation cli', () => {
     const logs = []
     const originalLog = console.log
     const manifest = getRunnableManifest(tmpDir)
+    const junitDirectory = path.resolve(__dirname, '../../../..', '.junit-tmp')
+    const junitShard = path.join(junitDirectory, `validation-cli-${process.pid}.xml`)
     manifest.frameworks.push({
       ...manifest.frameworks[0],
       id: 'jest:other',
@@ -339,6 +341,9 @@ describe('test optimization validation cli', () => {
         expectedDigest
       )
 
+      fs.mkdirSync(junitDirectory, { recursive: true })
+      fs.writeFileSync(junitShard, '<testsuite tests="1"/>\n')
+
       await runValidationCli([
         '--manifest', manifestPath,
         '--out', out,
@@ -351,6 +356,10 @@ describe('test optimization validation cli', () => {
       assert.strictEqual(fs.existsSync(out), true)
     } finally {
       console.log = originalLog
+      fs.rmSync(junitShard, { force: true })
+      if (fs.existsSync(junitDirectory) && fs.readdirSync(junitDirectory).length === 0) {
+        fs.rmdirSync(junitDirectory)
+      }
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })

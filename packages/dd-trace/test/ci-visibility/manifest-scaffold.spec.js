@@ -101,6 +101,33 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  for (const definition of [
+    { framework: 'cucumber', dependency: '@cucumber/cucumber', version: '10.0.0', command: 'cucumber-js' },
+    { framework: 'cypress', dependency: 'cypress', version: '13.0.0', command: 'cypress run' },
+    { framework: 'playwright', dependency: '@playwright/test', version: '1.50.0', command: 'playwright test' },
+  ]) {
+    it(`records ${definition.framework} as detected but not runnable without automatic scaffolding`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+        name: `${definition.framework}-project`,
+        devDependencies: { [definition.dependency]: definition.version },
+        scripts: { test: definition.command },
+      }))
+
+      try {
+        const manifest = createManifestScaffold({ root })
+
+        assert.deepStrictEqual(validateManifest(manifest), [])
+        assert.strictEqual(manifest.frameworks.length, 1)
+        assert.strictEqual(manifest.frameworks[0].framework, definition.framework)
+        assert.strictEqual(manifest.frameworks[0].status, 'detected_not_runnable')
+        assert.match(manifest.frameworks[0].notes[0], /automatic generated-test scaffolding is not available/)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
   it('keeps installed runners runnable when a nested detected runner is unavailable', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
     const mochaRoot = path.dirname(require.resolve('mocha/package.json'))

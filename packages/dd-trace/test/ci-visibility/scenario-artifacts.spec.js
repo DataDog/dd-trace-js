@@ -44,6 +44,41 @@ function validationOptions (repositoryRoot) {
 }
 
 describe('test optimization validation scenario artifacts', () => {
+  it('preserves command artifacts when offline initialization fails', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-initialization-failure-'))
+    const command = process.platform === 'win32'
+      ? [process.env.ComSpec, '/d', '/s', '/c', 'echo command-ran']
+      : ['/bin/sh', '-c', 'echo command-ran']
+    const framework = {
+      id: 'mocha:initialization-failure',
+      framework: 'mocha',
+      existingTestCommand: {
+        cwd: out,
+        argv: command,
+        timeoutMs: 10_000,
+      },
+    }
+
+    try {
+      const result = await runBasicReporting({ framework, out, options: validationOptions(out) })
+
+      assert.strictEqual(result.status, 'error')
+      assert.match(result.diagnosis, /Offline Test Optimization exporter did not initialize/)
+      assert.strictEqual(result.artifacts.length, 5)
+      const outDir = path.dirname(result.artifacts[0])
+      assert.deepStrictEqual(result.artifacts, [
+        path.join(outDir, 'command.json'),
+        path.join(outDir, 'stdout.txt'),
+        path.join(outDir, 'stderr.txt'),
+        path.join(outDir, 'events.ndjson'),
+        path.join(outDir, 'result.json'),
+      ])
+      assert.ok(result.artifacts.every(filename => fs.existsSync(filename)))
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('validates reporting, CI wiring, EFD, ATR, and Test Management with all socket operations blocked', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-offline-scenarios-'))
     const existingTest = path.join(out, 'existing.spec.js')

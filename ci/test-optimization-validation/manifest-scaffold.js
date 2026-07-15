@@ -31,8 +31,7 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
   const repositoryRoot = path.resolve(root)
   const diagnosis = runDiagnosis({ root: repositoryRoot, env: {} })
   const selected = diagnosis.eligibleFrameworks.filter(framework => {
-    return SUPPORTED_SCAFFOLD_FRAMEWORKS.has(framework.id) &&
-      (frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0]))
+    return frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0])
   })
   const unsupported = diagnosis.unsupportedFrameworks.filter(framework => {
     return frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0])
@@ -106,8 +105,19 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
   const projectRoot = path.dirname(packageJsonPath)
   const packageJson = readJson(packageJsonPath) || {}
   const framework = detection.id
-  const runner = tryResolveRunner(framework, projectRoot)
 
+  if (!SUPPORTED_SCAFFOLD_FRAMEWORKS.has(framework)) {
+    return {
+      id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+      framework,
+      frameworkVersion: detection.version,
+      status: 'detected_not_runnable',
+      project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+      notes: [`${detection.name} was detected, but automatic generated-test scaffolding is not available.`],
+    }
+  }
+
+  const runner = tryResolveRunner(framework, projectRoot)
   if (!runner) {
     return {
       id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
@@ -133,17 +143,6 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
   const command = representative
     ? buildFocusedCommand(baseCommand, framework, representative, Boolean(scriptName), preserveProjectWrapper)
     : baseCommand
-
-  if (!SUPPORTED_SCAFFOLD_FRAMEWORKS.has(framework)) {
-    return {
-      id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
-      framework,
-      frameworkVersion: detection.version,
-      status: 'detected_not_runnable',
-      project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
-      notes: [`${detection.name} was detected, but automatic generated-test scaffolding is not available.`],
-    }
-  }
 
   const generatedTestStrategy = buildGeneratedTestStrategy({
     baseCommand: preserveProjectWrapper ? baseCommand : undefined,
