@@ -575,9 +575,14 @@ function getTestByTestId (dispatcher, testId) {
   }
 }
 
+/**
+ * @param {import('node:diagnostics_channel').Channel} channelToPublishTo
+ * @param {Record<string, unknown>} [params]
+ */
 function getChannelPromise (channelToPublishTo, params) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ onDone: resolve, ...params })
+    if (!channelToPublishTo.hasSubscribers) resolve()
   })
 }
 
@@ -1142,8 +1147,6 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
-    let onDone
-
     rootDir = getRootDir(this, config)
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
@@ -1308,17 +1311,12 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
     loggedAttemptToFixTests.clear()
 
-    const flushWait = new Promise(resolve => {
-      onDone = resolve
-    })
-    testSessionFinishCh.publish({
+    await getChannelPromise(testSessionFinishCh, {
       status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone,
     })
-    await flushWait
 
     startedSuites = []
     remainingTestsByFile = {}
@@ -1979,12 +1977,6 @@ function instrumentWorkerMainMethods (workerMain) {
       annotationTags = parseAnnotations(annotations)
     }
 
-    let onDone
-
-    const flushPromise = new Promise(resolve => {
-      onDone = resolve
-    })
-
     // Wait for the properties to be received, but do not block the worker forever if IPC fails.
     const ddPropertiesTimeoutPromise = new Promise(resolve => {
       const ddPropertiesTimeout = realSetTimeout(() => {
@@ -2010,7 +2002,7 @@ function instrumentWorkerMainMethods (workerMain) {
       testStatus: STATUS_TO_TEST_STATUS[status],
     })
 
-    testFinishCh.publish({
+    await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
       error,
@@ -2028,13 +2020,10 @@ function instrumentWorkerMainMethods (workerMain) {
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       isAtrRetry: test._ddIsAtrRetry,
       isModified: test._ddIsModified,
-      onDone,
       finalStatus,
       earlyFlakeAbortReason: test._ddEarlyFlakeAbortReason,
       ...testCtx.currentStore,
     })
-
-    await flushPromise
 
     return res
   })
