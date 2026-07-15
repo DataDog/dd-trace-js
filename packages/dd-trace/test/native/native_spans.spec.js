@@ -18,6 +18,7 @@ describe('NativeSpansInterface', () => {
   let mockState
   let OpCode
   let fakeWasmMemory
+  let metricsCount
   // The op handle used by most queueOp tests. The native API addresses
   // spans by their 8-byte LE span id, not by a u32 slot number.
   const spanId = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
@@ -72,6 +73,8 @@ describe('NativeSpansInterface', () => {
       setOtlpHeaders: sinon.stub(),
     }
 
+    metricsCount = sinon.stub()
+
     WasmSpanState = sinon.stub().returns(mockState)
 
     // Real ArrayBuffer backing for the WASM memory shim. NativeSpansInterface
@@ -88,6 +91,7 @@ describe('NativeSpansInterface', () => {
         wasmMemory: fakeWasmMemory,
         OpCode,
       },
+      '../runtime_metrics': { count: metricsCount },
     })
 
     nativeSpans = new NativeSpansInterface({
@@ -460,6 +464,53 @@ describe('NativeSpansInterface', () => {
       // force=true so the current (partial) bucket ships, unlike the 10s interval
       sinon.assert.calledOnceWithExactly(mockState.flushStats, true)
       assert.strictEqual(result, true)
+    })
+
+    it('emits collapsed-span metric and preserves boolean result for native object results', async () => {
+      nativeSpans._options.statsEnabled = true
+      mockState.flushStats.resolves({ sent: true, collapsedSpans: 12 })
+
+      const result = await nativeSpans.flushStats()
+
+      assert.strictEqual(result, true)
+      sinon.assert.calledOnceWithExactly(mockState.flushStats, true)
+      sinon.assert.calledOnceWithExactly(
+        metricsCount,
+        'datadog.tracer.stats.collapsed_spans',
+        12,
+        'collapsed_spans:whole_key',
+        true
+      )
+    })
+
+    it('emits collapsed-span metric from the periodic stats flush', async () => {
+      const clock = sinon.useFakeTimers()
+      let statsNativeSpans
+      mockState.flushStats.resetHistory()
+      mockState.flushStats.resolves({ sent: false, collapsedSpans: 7 })
+
+      try {
+        statsNativeSpans = new NativeSpansInterface({
+          agentUrl: 'http://localhost:8126',
+          tracerVersion: '1.0.0',
+          tracerService: 'test-service',
+          statsEnabled: true,
+        })
+
+        await clock.tickAsync(10_000)
+
+        sinon.assert.calledOnceWithExactly(mockState.flushStats, false)
+        sinon.assert.calledOnceWithExactly(
+          metricsCount,
+          'datadog.tracer.stats.collapsed_spans',
+          7,
+          'collapsed_spans:whole_key',
+          true
+        )
+      } finally {
+        clearInterval(statsNativeSpans?._statsInterval)
+        clock.restore()
+      }
     })
   })
 

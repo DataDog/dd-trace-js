@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../log')
+const runtimeMetrics = require('../runtime_metrics')
 const { WasmSpanState, wasmMemory } = require('./index')
 
 // A queued op (or an extracted chunk) referenced a span id that is absent from
@@ -13,6 +14,9 @@ function isSpanNotFoundError (e) {
 const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
+
+const COLLAPSED_SPANS_HEALTH_METRIC = 'datadog.tracer.stats.collapsed_spans'
+const COLLAPSED_SPANS_WHOLE_KEY_TAG = 'collapsed_spans:whole_key'
 
 // OpCode values are small u32 integers, written as u64 LE via two u32 writes.
 
@@ -101,6 +105,17 @@ function normalizeAgentUrl (url) {
   return url
 }
 
+function normalizeStatsFlushResult (result) {
+  if (result == null || typeof result !== 'object') return result
+
+  const collapsedSpans = result.collapsedSpans
+  if (typeof collapsedSpans === 'number' && collapsedSpans > 0) {
+    runtimeMetrics.count(COLLAPSED_SPANS_HEALTH_METRIC, collapsedSpans, COLLAPSED_SPANS_WHOLE_KEY_TAG, true)
+  }
+
+  return result.sent === true
+}
+
 class NativeSpansInterface {
   /**
    * @param {object} options Configuration options
@@ -185,7 +200,7 @@ class NativeSpansInterface {
     // Start stats flush interval if stats are enabled
     if (this._options.statsEnabled) {
       this._statsInterval = setInterval(() => {
-        this._state.flushStats(false).catch((err) => {
+        this._state.flushStats(false).then(normalizeStatsFlushResult).catch((err) => {
           log.error('Error flushing native stats:', err)
         })
       }, 10_000)
@@ -194,7 +209,7 @@ class NativeSpansInterface {
       // Force flush stats on process exit. Failure here loses buffered stats —
       // we cannot retry past beforeExit, but we must surface the cause.
       const handler = () => {
-        this._state.flushStats(true).catch((err) => {
+        this._state.flushStats(true).then(normalizeStatsFlushResult).catch((err) => {
           log.warn('Failed final native stats flush on exit:', err)
         })
       }
@@ -337,14 +352,15 @@ class NativeSpansInterface {
    * the current (possibly partial) buckets, unlike the 10s interval which only
    * flushes completed ones. Intended for explicit flush points (process exit,
    * the parametric test client's stats-flush) rather than the hot path. Resolves
-   * to whatever the native flush returns; a no-op resolving `true` when stats
-   * collection is disabled.
+   * to a boolean: current boolean-returning native packages pass through, while
+   * object-returning packages (`{ sent, collapsedSpans }`) report collapsed span
+   * health metrics and return `sent`.
    *
    * @returns {Promise<boolean>}
    */
   flushStats () {
     if (!this._options.statsEnabled) return Promise.resolve(true)
-    return this._state.flushStats(true)
+    return this._state.flushStats(true).then(normalizeStatsFlushResult)
   }
 
   /**
