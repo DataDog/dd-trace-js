@@ -129,8 +129,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
 
     child.simulateExit(1)
 
-    await clock.tickAsync(50)
-    await rejection
+    await Promise.all([clock.tickAsync(50), rejection])
   })
 
   it('rejects with the caller assertion error when the post-exit buffer fails the assertion', async () => {
@@ -148,8 +147,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     intake.emit('message', { url: '/api/v2/citestcycle', payload: { i: 1 } })
     child.simulateExit(0)
 
-    await clock.tickAsync(50)
-    await rejection
+    await Promise.all([clock.tickAsync(50), rejection])
   })
 
   it('settles once on hard timeout when the child does not exit', async () => {
@@ -165,8 +163,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     )
     const rejection = assert.rejects(promise, /hard timeout of 100ms/)
 
-    await clock.tickAsync(100)
-    await rejection
+    await Promise.all([clock.tickAsync(100), rejection])
 
     child.simulateExit(0)
     intake.emit('message', { url: '/api/v2/citestcycle', payload: {} })
@@ -193,8 +190,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       child.simulateExit(0)
     }, 80)
 
-    await clock.tickAsync(130)
-    await promise
+    await Promise.all([clock.tickAsync(130), promise])
   })
 
   it('treats a child that already exited as exit + grace', async () => {
@@ -211,7 +207,6 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     )
     const rejection = assert.rejects(promise, /child exited with no matching payloads/)
 
-    await clock.tickAsync(50)
-    await rejection
+    await Promise.all([clock.tickAsync(50), rejection])
   })
 })
