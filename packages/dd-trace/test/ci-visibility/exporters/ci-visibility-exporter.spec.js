@@ -42,6 +42,29 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('sendGitMetadata', () => {
+    it('should resolve git upload readiness immediately when git upload is disabled', async () => {
+      const clock = sinon.useFakeTimers()
+      const scope = nock(url)
+        .post('/api/v2/git/repository/search_commits')
+        .reply(200)
+        .post('/api/v2/git/repository/packfile')
+        .reply(202)
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: false },
+      })
+      const onGitUploadReady = sinon.spy()
+
+      ciVisibilityExporter._gitUploadPromise.then(onGitUploadReady)
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
+      await Promise.resolve()
+
+      sinon.assert.calledOnceWithExactly(onGitUploadReady, undefined)
+      assert.strictEqual(clock.now, 0)
+      assert.strictEqual(scope.isDone(), false)
+    })
+
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
@@ -286,8 +309,13 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          url, testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
         })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assert.strictEqual(scope.isDone(), true)
@@ -338,6 +366,60 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveGit()
+      })
+    })
+  })
+
+  describe('filterConfiguration', () => {
+    const remoteConfiguration = {
+      isEarlyFlakeDetectionEnabled: true,
+      earlyFlakeDetectionNumRetries: 10,
+      earlyFlakeDetectionSlowTestRetries: { '5s': 10, '10s': 5, '30s': 3, '5m': 2 },
+    }
+
+    it('preserves the backend EFD retry configuration when the local retry count is unset', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+
+      const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
+
+      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 10)
+      assert.deepStrictEqual(
+        configuration.earlyFlakeDetectionSlowTestRetries,
+        remoteConfiguration.earlyFlakeDetectionSlowTestRetries
+      )
+    })
+
+    it('replaces the backend EFD duration policy when the local retry count is set', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 2 },
+      })
+
+      const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
+
+      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 2)
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
+        '5s': 2,
+        '10s': 2,
+        '30s': 2,
+        '5m': 2,
+      })
+    })
+
+    it('replaces the backend EFD duration policy with zero retries', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 0 },
+      })
+
+      const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
+
+      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 0)
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
+        '5s': 0,
+        '10s': 0,
+        '30s': 0,
+        '5m': 0,
       })
     })
   })

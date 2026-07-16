@@ -90,40 +90,48 @@ function collectPackages (moduleNames) {
   }
 
   /**
-   * @param {{ name: string, versions?: string[], node?: string }} instrumentation
+   * @param {Array<{ name: string, versions?: string[], node?: string }>} instrumentations
    * @param {boolean} external
    * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
    *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
    *   major to install on every job.
    */
-  const addInstrumentation = (instrumentation, external, pluginName) => {
-    const { versionList, unversioned } = resolvePluginVersions({
-      name: instrumentation.name,
-      declaredVersions: instrumentation.versions || [],
-      nodeRange: instrumentation.node,
-      honourEnvRange: !external || instrumentation.name === pluginName,
-    })
+  const addInstrumentations = (instrumentations, external, pluginName) => {
+    const declarationsByName = new Map()
 
-    // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
-    // setup and several plugin specs.
-    if (unversioned) addFolder(instrumentation.name, null, unversioned, external)
+    for (const instrumentation of instrumentations) {
+      const declarations = declarationsByName.get(instrumentation.name)
+      if (declarations) {
+        declarations.push(instrumentation)
+      } else {
+        declarationsByName.set(instrumentation.name, [instrumentation])
+      }
+    }
 
-    for (const { versionKey } of versionList) {
-      addFolder(instrumentation.name, versionKey, versionKey, external)
+    for (const [name, declarations] of declarationsByName) {
+      const { versionList, unversioned } = resolvePluginVersions({
+        name,
+        declarations,
+        honourEnvRange: !external || name === pluginName,
+      })
+
+      // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
+      // setup and several plugin specs.
+      if (unversioned) addFolder(name, null, unversioned, external)
+
+      for (const { versionKey } of versionList) {
+        addFolder(name, versionKey, versionKey, external)
+      }
     }
   }
 
   for (const moduleName of moduleNames) {
-    for (const instrumentation of getInstrumentation(moduleName)) {
-      addInstrumentation(instrumentation, false)
-    }
+    addInstrumentations(getInstrumentation(moduleName), false)
   }
 
   for (const name of Object.keys(externals)) {
     if (!moduleNames.includes(name)) continue
-    for (const instrumentation of externals[name]) {
-      addInstrumentation(instrumentation, true, name)
-    }
+    addInstrumentations(externals[name], true, name)
   }
 
   return packages

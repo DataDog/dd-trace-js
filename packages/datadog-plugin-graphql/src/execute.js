@@ -5,7 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, getOperation, getSignature } = require('./utils')
+const { extractErrorIntoSpanEvent, getOperation, getSignature, isApolloHealthCheck } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -26,11 +26,23 @@ const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
-const patchedTypes = new WeakSet()
+
+// Visited types per caller-owned schema. The walk reaches union members and
+// interface implementations through the schema (`getTypes`/`getPossibleTypes`),
+// so it differs per schema: a global guard would stop the second schema at any
+// type the first already walked and leave its own implementations unwrapped.
+// `patchedResolvers` keeps wrapping idempotent, so re-walking a shared type is
+// safe and this set only terminates cycles.
+const walkedTypes = new WeakMap()
 
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
 let depthDisabled = false
+
+// Initial key for the per-operation variables-filter cache. A unique sentinel
+// so the first #filterVariables call never falsely matches, even when the
+// operation's variableValues is undefined.
+const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
 
 class AbortError extends Error {
   constructor (message) {
@@ -111,6 +123,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation?.name?.value
     const source = this.config.source && docSource
 
+    // Apollo Server may execute a cached document without parsing it first.
+    // Match the full gateway operation here so caller-owned AST transformations
+    // cannot suppress execute/resolver AppSec and IAST channels.
+    if (name === '__ApolloServiceHealthCheck__' &&
+        document.definitions.length === 1 &&
+        isApolloHealthCheck(operation)) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     ctx.collapse = this.config.collapse
 
     const signature = getSignature(document, name, type, this.config.signature)
@@ -165,9 +187,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const schema = args.schema
     if (schema) {
-      wrapFields(schema._queryType)
-      wrapFields(schema._mutationType)
-      wrapFields(schema._subscriptionType)
+      wrapFields(schema._queryType, schema)
+      wrapFields(schema._mutationType, schema)
+      wrapFields(schema._subscriptionType, schema)
     }
 
     const rootCtx = {
@@ -179,6 +201,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
       abortController,
       executeSpan: span,
       plugin: this,
+      // graphql.resolve variable tags: memoize the filtered result for the
+      // last-seen variableValues object (see #filterVariables).
+      filteredVariablesKey: NO_VARIABLES_CACHED,
+      filteredVariables: undefined,
     }
     ctx.ddRootCtx = rootCtx
     if (isWeakMapKey(contextValue)) {
@@ -291,7 +317,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     field.span = span
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(variableValues)
+      const variables = this.#filterVariables(rootCtx, variableValues)
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
           const name = arg.value.name.value
@@ -301,6 +327,27 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     return span
+  }
+
+  // Memoize the user variables filter against the last-seen variableValues
+  // object. graphql hands every resolver in one execute the same coerced
+  // variableValues object, so all arg-bearing fields hit the identity fast
+  // path and the filter runs once per operation. A nested execute() sharing
+  // the same object contextValue reuses the outer rootCtx but carries its own
+  // variableValues; comparing by identity recomputes for it (and any later
+  // fields on that inner object reuse the slot), so each field's tags stay
+  // correct. A single slot beats a WeakMap here: no per-operation allocation,
+  // and the common single-object case is a bare `===` (see the microbenchmark
+  // numbers in the commit body).
+  #filterVariables (rootCtx, variableValues) {
+    if (rootCtx.filteredVariablesKey === variableValues) {
+      return rootCtx.filteredVariables
+    }
+
+    const filtered = this.config.variables(variableValues)
+    rootCtx.filteredVariablesKey = variableValues
+    rootCtx.filteredVariables = filtered
+    return filtered
   }
 
   // Public — called from wrapResolve. endTime reflects when the resolver
@@ -432,15 +479,44 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function wrapFields (type) {
-  if (!type?._fields || patchedTypes.has(type)) return
+function wrapFields (type, schema) {
+  if (!type || !markWalked(schema, type)) return
 
-  patchedTypes.add(type)
+  const tag = type[Symbol.toStringTag]
 
-  for (const field of Object.values(type._fields)) {
-    wrapFieldResolve(field)
-    wrapFieldType(field)
+  // Union types (e.g. Apollo Federation's `_Entity`) hold their members on
+  // `_types`, not `_fields`. Their member object types are reachable only here,
+  // so descend into each to wrap the entity resolvers a `_entities` query runs.
+  if (tag === 'GraphQLUnionType') {
+    for (const member of type.getTypes()) wrapFields(member, schema)
+    return
   }
+
+  if (type._fields) {
+    for (const field of Object.values(type._fields)) {
+      wrapFieldResolve(field)
+      wrapFieldType(field, schema)
+    }
+  }
+
+  // Interface implementations carry their own resolvers and are reachable only
+  // through `getPossibleTypes`; an interface return type alone never wraps them.
+  if (schema && tag === 'GraphQLInterfaceType') {
+    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
+  }
+}
+
+// Marks the guard on entry so recursive types (a field looping back to its own
+// type, an interface an implementation returns) terminate the walk.
+function markWalked (schema, type) {
+  let walked = walkedTypes.get(schema)
+  if (walked === undefined) {
+    walked = new WeakSet()
+    walkedTypes.set(schema, walked)
+  }
+  if (walked.has(type)) return false
+  walked.add(type)
+  return true
 }
 
 function wrapFieldResolve (field) {
@@ -448,13 +524,13 @@ function wrapFieldResolve (field) {
   field.resolve = wrapResolve(field.resolve)
 }
 
-function wrapFieldType (field) {
+function wrapFieldType (field, schema) {
   if (!field?.type) return
 
   let unwrapped = field.type
   while (unwrapped.ofType) unwrapped = unwrapped.ofType
 
-  wrapFields(unwrapped)
+  wrapFields(unwrapped, schema)
 }
 
 // Runs the resolver inside `store`, including any code after an internal

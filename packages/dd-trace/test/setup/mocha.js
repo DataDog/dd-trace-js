@@ -291,32 +291,27 @@ function withVersions (plugin, modules, range, cb) {
     /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
-    let moduleMatched = false
+    const declarations = []
     for (const instrumentation of instrumentations) {
-      if (instrumentation.name !== moduleName) continue
-      moduleMatched = true
-
-      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
-      // Treat those as "not a test target" instead of crashing.
-      // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
-      // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
-      const { versionList } = resolvePluginVersions({
-        name: moduleName,
-        declaredVersions: normalizeVersions(instrumentation.versions),
-        nodeRange: instrumentation.node,
-      })
-
-      for (const { versionKey, range: declaredRange } of versionList) {
-        // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
-        const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
-        testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
-      }
+      if (instrumentation.name === moduleName) declarations.push(instrumentation)
     }
 
     // A module no instrumentation declares would silently run zero tests instead of failing.
-    if (!moduleMatched) {
+    if (declarations.length === 0) {
       throw new Error(`withVersions: no instrumentation declares the module "${moduleName}". Pass the integration ` +
         `name as the first argument (e.g. 'express'), or register "${moduleName}" in test/plugins/externals.js.`)
+    }
+
+    // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+    // Treat those as "not a test target" instead of crashing.
+    // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
+    // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
+    const { versionList } = resolvePluginVersions({ name: moduleName, declarations })
+
+    for (const { versionKey, range: declaredRange } of versionList) {
+      // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
+      const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
+      testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
     }
 
     const testCases = Array.from(testVersions.values())
@@ -368,11 +363,6 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
-}
-
-function normalizeVersions (versions) {
-  if (!versions) return []
-  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**
@@ -474,10 +464,12 @@ exports.mochaHooks = {
     watchdog.unref()
   },
   afterEach () {
-    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
+    // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
+    // ordering keeps that throw from skipping the unconditional cleanup above.
+    if (_agent) _agent.reset()
   },
 }
