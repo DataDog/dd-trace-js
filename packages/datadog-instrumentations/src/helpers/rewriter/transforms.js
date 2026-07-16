@@ -14,7 +14,74 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
-module.exports = { waitForAsyncEnd }
+module.exports = { syncNoSubscriberFastPath, waitForAsyncEnd }
+
+/**
+ * Hoists a sync wrapper's subscriber check ahead of its generated argument,
+ * context, and closure allocations. The original body is copied into the fast
+ * branch so disabled instrumentation pays only the channel predicate.
+ *
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @returns {void}
+ */
+function syncNoSubscriberFastPath (_state, node) {
+  const statements = node.body.body
+  const tracedDeclaration = findVariableDeclaration(statements, '__apm$traced')
+  const tracedFunction = tracedDeclaration?.declarations[0].init
+  assert(tracedFunction?.type === 'ArrowFunctionExpression', 'sync fast path: traced function not found')
+  assert(tracedFunction.body.type === 'BlockStatement', 'sync fast path: traced function body not found')
+
+  const wrappedDeclaration = findVariableDeclaration(tracedFunction.body.body, '__apm$wrapped')
+  const originalFunction = wrappedDeclaration?.declarations[0].init
+  assert(originalFunction?.type === 'FunctionExpression', 'sync fast path: original function not found')
+
+  const subscriberGate = statements.find(statement => statement.type === 'IfStatement')
+  assert(subscriberGate?.type === 'IfStatement', 'sync fast path: subscriber gate not found')
+
+  const aliases = []
+  for (let index = 0; index < originalFunction.params.length; index++) {
+    const originalParam = originalFunction.params[index]
+    const wrapperParam = node.params[index]
+    assert(originalParam.type === 'Identifier', 'sync fast path: original parameter must be an identifier')
+    assert(wrapperParam.type === 'Identifier', 'sync fast path: wrapper parameter must be an identifier')
+    aliases.push(`${originalParam.name} = ${wrapperParam.name}`)
+  }
+
+  const fastStatements = clone(originalFunction.body.body)
+  if (aliases.length > 0) {
+    fastStatements.unshift(parse(`function wrapper () { const ${aliases.join(', ')} }`).body[0].body.body[0])
+  }
+  fastStatements.push(parse('function wrapper () { return }').body[0].body.body[0])
+
+  statements.unshift({
+    type: 'IfStatement',
+    test: clone(subscriberGate.test),
+    consequent: {
+      type: 'BlockStatement',
+      body: fastStatements,
+    },
+    alternate: null,
+  })
+}
+
+/**
+ * @param {import('estree').Statement[]} statements
+ * @param {string} name
+ * @returns {import('estree').VariableDeclaration | undefined}
+ */
+function findVariableDeclaration (statements, name) {
+  let declaration
+  for (const statement of statements) {
+    if (statement.type === 'VariableDeclaration' &&
+        statement.declarations[0]?.id.type === 'Identifier' &&
+        statement.declarations[0].id.name === name) {
+      declaration = statement
+      break
+    }
+  }
+  return declaration
+}
 
 /**
  * Injects settlement-specific asyncEnd waits into a generated `tracePromise`
