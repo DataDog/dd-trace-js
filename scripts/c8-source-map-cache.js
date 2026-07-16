@@ -22,6 +22,9 @@ function markCoverageDirectory (coverageDir) {
 }
 
 function warmSourceMaps () {
+  // Electron renderers are initialized without a usable Node inspector.
+  if (process.versions.electron && process.type === 'renderer') return
+
   const inspector = require('node:inspector')
   const { findSourceMap } = require('node:module')
   const { debuglog } = require('node:util')
@@ -58,15 +61,26 @@ function warmSourceMaps () {
     }
   }
 
-  function finishWarmingSourceMaps () {
-    warmPendingSourceMaps()
+  function disconnectSourceMapObserver () {
     session.disconnect()
+  }
+
+  const originalExit = process.exit
+
+  /**
+   * @param {number|string|undefined} code
+   * @returns {never}
+   */
+  function exitWithWarmedSourceMaps (code) {
+    warmPendingSourceMaps()
+    originalExit(code)
   }
 
   session.connect()
   session.on('Debugger.scriptParsed', onScriptParsed)
   session.post('Debugger.enable')
-  process.once('exit', finishWarmingSourceMaps)
+  process.exit = exitWithWarmedSourceMaps
+  process.once('exit', disconnectSourceMapObserver)
 }
 
 module.exports = { markCoverageDirectory }

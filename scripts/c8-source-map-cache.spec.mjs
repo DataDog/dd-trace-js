@@ -21,17 +21,17 @@ const { markCoverageDirectory } = require('./c8-source-map-cache')
  * @param {string} fixtureDir
  * @param {object} [options]
  * @param {string} [options.childCoverageDir]
+ * @param {boolean} [options.exitImmediately]
  * @param {boolean} [options.failLookup]
- * @param {boolean} [options.loadAtExit]
  * @param {number} [options.moduleCount]
  */
 async function runFixture (coverageDir, fixtureDir, options = {}) {
   const childCoverageDir = options.childCoverageDir ?? coverageDir
   const moduleCount = options.moduleCount ?? 0
   const childCoverageLog = path.join(fixtureDir, 'child-coverage-dir.txt')
+  const exitMarker = path.join(fixtureDir, 'exit-started')
   const lookupLog = path.join(fixtureDir, 'source-map-lookups.txt')
   const modulesDir = path.join(fixtureDir, 'modules')
-  const lateFile = path.join(fixtureDir, 'late.js')
   const observerFile = path.join(fixtureDir, 'observe-source-map-lookups.js')
   const parentFile = path.join(fixtureDir, 'parent.js')
   const targetFile = path.join(fixtureDir, 'target.mjs')
@@ -58,7 +58,8 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
       fs.appendFileSync(${JSON.stringify(lookupLog)}, 'disconnect\n')
     }
     Module.findSourceMap = function (url) {
-      fs.appendFileSync(${JSON.stringify(lookupLog)}, url + '\n')
+      const phase = fs.existsSync(${JSON.stringify(exitMarker)}) ? 'exit:' : ''
+      fs.appendFileSync(${JSON.stringify(lookupLog)}, phase + url + '\n')
       ${options.failLookup
         ? `const error = new Error('source map lookup failed')
       if (url.endsWith('/target.mjs')) error.stack = undefined
@@ -67,7 +68,6 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
       return originalFindSourceMap(url)
     }
   `)
-  await writeFile(lateFile, 'module.exports = true\n//# sourceMappingURL=late.js.map\n')
   await writeFile(parentFile, `
     'use strict'
     const { spawnSync } = require('node:child_process')
@@ -97,15 +97,14 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
       ${JSON.stringify(childCoverageLog)},
       process.env.NODE_V8_COVERAGE ?? ''
     )
-    function coveredAtBeforeExit () {
+    function markCoverageTail () {
       globalThis.coverageTail = true
     }
-    process.once('beforeExit', coveredAtBeforeExit)
-    ${options.loadAtExit
-      ? `process.prependOnceListener('exit', function loadLateSourceMap () {
-      require(${JSON.stringify(lateFile)})
-    })`
-      : ''}
+    ${options.exitImmediately
+      ? `process.prependOnceListener('exit', () => writeFileSync(${JSON.stringify(exitMarker)}, ''))
+    markCoverageTail()
+    process.exit()`
+      : "process.once('beforeExit', markCoverageTail)"}
   `)
 
   const env = {
@@ -116,7 +115,6 @@ async function runFixture (coverageDir, fixtureDir, options = {}) {
 
   return {
     childCoverageLog,
-    lateFile: await realpath(lateFile),
     lookupLog,
     targetFile: await realpath(targetFile),
   }
@@ -148,12 +146,12 @@ async function assertTailCovered (coverageDir, targetFile) {
   assert.ok(targetCoverage, `No coverage found for ${targetUrl}`)
   let functionCoverage
   for (const entry of targetCoverage.functions) {
-    if (entry.functionName === 'coveredAtBeforeExit') {
+    if (entry.functionName === 'markCoverageTail') {
       functionCoverage = entry
       break
     }
   }
-  assert.ok(functionCoverage, 'No coverage found for coveredAtBeforeExit')
+  assert.ok(functionCoverage, 'No coverage found for markCoverageTail')
   assert.strictEqual(functionCoverage.ranges[0].count, 1)
 }
 
@@ -215,18 +213,21 @@ describe('c8 source map cache', () => {
     await assertTailCovered(ownCoverageDir, targetFile)
   })
 
-  it('warms exit-time source maps before disconnecting the inspector', async () => {
+  it('warms pending source maps before explicit exit', async () => {
     const ownCoverageDir = path.join(fixtureDir, 'own-coverage')
     markCoverageDirectory(ownCoverageDir)
-    const { lateFile, lookupLog, targetFile } =
-      await runFixture(ownCoverageDir, fixtureDir, { loadAtExit: true })
+    const { lookupLog, targetFile } =
+      await runFixture(ownCoverageDir, fixtureDir, { exitImmediately: true, moduleCount: 200 })
 
     const lookupLogContent = await readFile(lookupLog, 'utf8')
     const entries = lookupLogContent.trimEnd().split('\n')
-    const lateUrl = pathToFileURL(lateFile).href
-    const lateIndex = entries.indexOf(lateUrl)
     const disconnectIndex = entries.indexOf('disconnect')
-    assert.notStrictEqual(lateIndex, -1, `No source map lookup found for ${lateFile}`)
+    let moduleLookups = 0
+    for (const entry of entries) {
+      assert.strictEqual(entry.startsWith('exit:'), false, `Source map lookup ran during exit: ${entry}`)
+      if (entry.includes('/modules/')) moduleLookups++
+    }
+    assert.strictEqual(moduleLookups, 200)
     assert.strictEqual(disconnectIndex, entries.length - 1)
     assert.strictEqual(entries.lastIndexOf('disconnect'), disconnectIndex)
     await assertTailCovered(ownCoverageDir, targetFile)
