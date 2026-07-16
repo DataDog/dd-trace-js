@@ -21,8 +21,11 @@ const { rmSync } = require('node:fs')
 const path = require('node:path')
 
 const { convertV8DirToReport } = require('../integration-tests/coverage/merge-lcov')
+const baseNycConfig = require('../nyc.config')
+const { markCoverageDirectory } = require('./c8-source-map-cache')
 
 const repoRoot = path.resolve(__dirname, '..')
+const sourceMapCacheFile = require.resolve('./c8-source-map-cache')
 
 const script = process.argv[2]
 if (!script) {
@@ -31,17 +34,19 @@ if (!script) {
 }
 const extraArgs = process.argv.slice(3)
 
-let event = process.env.npm_lifecycle_event ?? ''
-if (process.env.PLUGINS) event += `-${process.env.PLUGINS}`
-const label = `-${event.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')}`
-const v8Dir = path.join(repoRoot, '.nyc_output', `node-${process.version}${label}`, 'v8')
-const reportDir = path.join(repoRoot, 'coverage', `node-${process.version}${label}`)
+const v8Dir = path.join(repoRoot, baseNycConfig.tempDir, 'v8')
+const reportDir = path.join(repoRoot, baseNycConfig.reportDir)
 
 // Fresh collector each run so a previous run's profiles don't leak in.
 rmSync(v8Dir, { force: true, recursive: true })
 rmSync(reportDir, { force: true, recursive: true })
+markCoverageDirectory(v8Dir)
 
-const coverageEnv = { ...process.env, NODE_V8_COVERAGE: v8Dir }
+const sourceMapCacheRequire = `--require=${sourceMapCacheFile}`
+const nodeOptions = process.env.NODE_OPTIONS
+  ? `${sourceMapCacheRequire} ${process.env.NODE_OPTIONS}`
+  : sourceMapCacheRequire
+const coverageEnv = { ...process.env, NODE_OPTIONS: nodeOptions, NODE_V8_COVERAGE: v8Dir }
 
 /**
  * @param {string[]} command command + args to run with V8 coverage enabled
