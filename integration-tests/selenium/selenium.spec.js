@@ -150,6 +150,34 @@ versionRange.forEach(version => {
       })
     })
 
+    for (const failure of ['throw', 'reject']) {
+      it(`does not fail tests when RUM correlation cookie operations ${failure}`, async () => {
+        let testOutput = ''
+        childProcess = exec(
+          './node_modules/.bin/mocha ./ci-visibility/test/selenium-test.js --timeout 60000',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              WEB_APP_URL: `http://localhost:${webAppPort}`,
+              TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*',
+              RUM_COOKIE_FAILURE: failure,
+            },
+          }
+        )
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        const [exitCode] = await once(childProcess, 'exit')
+
+        assert.strictEqual(exitCode, 0, testOutput)
+      })
+    }
+
     it('does not crash when used outside a known test framework', (done) => {
       let testOutput = ''
       childProcess = exec(

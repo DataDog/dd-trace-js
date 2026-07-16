@@ -32,13 +32,8 @@ class SeleniumPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('ci:selenium:driver:get', ({
-      setTraceId,
-      seleniumVersion,
-      browserName,
-      browserVersion,
-      isRumActive,
-    }) => {
+    this.addSub('ci:selenium:driver:get', (ctx) => {
+      const { seleniumVersion, browserName, browserVersion, isRumActive } = ctx
       const store = storage('legacy').getStore()
       const span = store?.span
       if (!span) {
@@ -48,9 +43,7 @@ class SeleniumPlugin extends CiPlugin {
       if (!testSpan) {
         return
       }
-      if (setTraceId) {
-        setTraceId(testSpan.context().toTraceId())
-      }
+      ctx.testExecutionId = testSpan.context().toTraceId()
       if (isRumActive) {
         testSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
       }
