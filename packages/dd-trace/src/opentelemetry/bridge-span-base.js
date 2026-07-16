@@ -1,5 +1,6 @@
 'use strict'
 
+const { isRetiredSpan } = require('../active-span')
 const {
   addOtelEvent,
   addOtelLink,
@@ -34,7 +35,7 @@ class BridgeSpanBase {
   }
 
   get ended () {
-    return this._ddSpan._duration !== undefined
+    return isRetiredSpan(this._ddSpan) || this._ddSpan._duration !== undefined
   }
 
   isRecording () {

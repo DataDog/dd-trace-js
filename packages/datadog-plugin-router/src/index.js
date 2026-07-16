@@ -3,8 +3,14 @@
 const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const {
+  createStoreRetirement,
+  enterSpanForRetirement,
+} = require('../../dd-trace/src/active-span')
 const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+
+const legacyStorage = storage('legacy')
 
 class RouterPlugin extends WebPlugin {
   static id = 'router'
@@ -19,7 +25,7 @@ class RouterPlugin extends WebPlugin {
       // per-request context exists yet) and the `storeStack` push below.
       // The previous shape paid an ALS read inside `#getStoreSpan` and a
       // second one here for the saved-store push.
-      const store = storage('legacy').getStore()
+      const store = legacyStorage.getStore()
       let context = this.#contexts.get(req)
       let childOf
       if (context !== undefined) {
@@ -38,7 +44,7 @@ class RouterPlugin extends WebPlugin {
       }
 
       context.storeStack.push(store)
-      this.enter(span, store)
+      enterSpanForRetirement(span, store, context.retirement)
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -63,8 +69,7 @@ class RouterPlugin extends WebPlugin {
     this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
       const context = this.#contexts.get(req)
       const savedStore = context && context.storeStack.pop()
-      const span = savedStore && savedStore.span
-      this.enter(span, savedStore)
+      legacyStorage.enterWith(savedStore)
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:error`, ({ req, error }) => {
@@ -91,6 +96,14 @@ class RouterPlugin extends WebPlugin {
       while ((span = context.middleware.pop())) {
         span.finish()
       }
+    })
+
+    this.addSub('apm:http:server:request:postfinish', ({ req }) => {
+      const context = this.#contexts.get(req)
+      if (!context) return
+
+      context.retirement.retire()
+      this.#contexts.delete(req)
     })
   }
 
@@ -130,7 +143,7 @@ class RouterPlugin extends WebPlugin {
       return context
     }
 
-    // Five-property shape pinned at allocation so every request shares the
+    // Six-property shape pinned at allocation so every request shares the
     // same hidden class — no per-field transitions after construction.
     context = {
       span,
@@ -138,6 +151,7 @@ class RouterPlugin extends WebPlugin {
       route,
       middleware: [],
       storeStack: [],
+      retirement: createStoreRetirement(span.context()),
     }
 
     this.#contexts.set(req, context)

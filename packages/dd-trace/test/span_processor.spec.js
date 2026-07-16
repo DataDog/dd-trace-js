@@ -8,6 +8,11 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+const {
+  createStoreRetirement,
+  isRetiredSpan,
+  kStoreRetirement,
+} = require('../src/active-span')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -105,6 +110,22 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(finishedSpan.context().getTags(), {})
   })
 
+  it('should retire pending stores after erasing the trace', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const retirement = createStoreRetirement()
+    const store = { span: finishedSpan, [kStoreRetirement]: retirement }
+    retirement.add(store)
+    retirement.retire()
+
+    assert.strictEqual(store.span, finishedSpan)
+
+    processor.process(finishedSpan)
+
+    assert.strictEqual(isRetiredSpan(store.span), true)
+    assert.strictEqual(store.span.context(), finishedSpan.context())
+  })
+
   it('should not flush a partial trace below the flushMinSpans threshold', () => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
@@ -119,9 +140,35 @@ describe('SpanProcessor', () => {
     trace.record = false
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
-    processor.process(activeSpan)
+    processor.process(finishedSpan)
 
     sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should erase finished spans from an unrecorded partial trace at the flush threshold', () => {
+    trace.record = false
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should preserve an unrecorded partial trace below the flush threshold', () => {
+    trace.record = false
+    trace.started = [activeSpan, finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan, finishedSpan])
+    assert.deepStrictEqual(trace.finished, [finishedSpan])
   })
 
   it('should export a partial trace with span count above configured threshold', () => {

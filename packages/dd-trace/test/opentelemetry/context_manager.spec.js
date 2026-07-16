@@ -5,7 +5,12 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
+const { storage } = require('../../../datadog-core')
 const { assertObjectContains, ANY_STRING } = require('../../../../integration-tests/helpers')
+const {
+  createStoreRetirement,
+  enterSpanForRetirement,
+} = require('../../src/active-span')
 const { getAllBaggageItems, removeAllBaggageItems, removeBaggageItem, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
@@ -372,6 +377,46 @@ describe('OTel Context Manager', () => {
     it('caches the proxy so repeated calls return the same object', () => {
       ddTracer.trace('dd-active', () => {
         assert.strictEqual(trace.getActiveSpan(), trace.getActiveSpan())
+      })
+    })
+
+    it('keeps the active proxy after the Datadog span retires', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const retirement = createStoreRetirement()
+        enterSpanForRetirement(ddSpan, storage('legacy').getStore(), retirement)
+        const active = trace.getActiveSpan()
+
+        ddSpan.finish()
+        retirement.retire()
+
+        assert.strictEqual(trace.getActiveSpan(), active)
+        assert.notStrictEqual(active._ddSpan, ddSpan)
+        assert.strictEqual(active._ddSpan.context(), ddSpan.context())
+        assert.strictEqual(active.isRecording(), false)
+        assert.strictEqual(active.spanContext().traceId, ddSpan.context().toTraceId(true))
+        active.setAttribute('after.retirement', 'no')
+        assert.strictEqual(ddSpan.context().getTag('after.retirement'), undefined)
+
+        const contextWithSpan = trace.setSpan(ROOT_CONTEXT, active)
+        contextManager.with(contextWithSpan, () => {
+          assert.strictEqual(ddTracer.scope().active().context(), active._ddSpan.context())
+        })
+      })
+    })
+
+    it('creates a non-recording OTel span from retired Datadog context', () => {
+      ddTracer.trace('dd-active', (ddSpan) => {
+        const retirement = createStoreRetirement(ddSpan.context())
+        enterSpanForRetirement(ddSpan, storage('legacy').getStore(), retirement)
+
+        ddSpan.finish()
+        retirement.retire()
+
+        const active = trace.getActiveSpan()
+        assert.ok(active)
+        assert.strictEqual(active.isRecording(), false)
+        assert.strictEqual(active.spanContext().traceId, ddSpan.context().toTraceId(true))
+        assert.strictEqual(active.spanContext().spanId, ddSpan.context().toSpanId(true))
       })
     })
 

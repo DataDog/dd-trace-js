@@ -3,6 +3,7 @@
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
+const { getLiveSpan, isRetiredSpan, kStoreRetirement } = require('../active-span')
 
 const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')
@@ -16,7 +17,9 @@ class ContextManager {
   active () {
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
-    const activeSpan = storage('legacy').getStore()?.span
+    const legacyStore = storage('legacy').getStore()
+    const activeSpan = getLiveSpan(legacyStore)
+    const parent = legacyStore?.span
 
     const storedSpan = store ? trace.getSpan(store) : null
 
@@ -38,12 +41,12 @@ class ContextManager {
       return store
     }
 
-    if (!activeSpan) {
+    if (!parent) {
       if (otelBaggages) return propagation.setBaggage(baseContext, otelBaggages)
       return baseContext
     }
 
-    const ddContext = activeSpan.context()
+    const ddContext = parent.context()
 
     if (!ddContext._otelSpanContext) {
       ddContext._otelSpanContext = new SpanContext(ddContext)
@@ -54,7 +57,9 @@ class ContextManager {
     // onto the active Datadog span rather than returning a NonRecordingSpan
     // whose mutation methods are silent no-ops.
     if (!ddContext._otelActiveSpan) {
-      ddContext._otelActiveSpan = new ActiveSpanProxy(activeSpan, ddContext._otelSpanContext)
+      ddContext._otelActiveSpan = activeSpan
+        ? new ActiveSpanProxy(activeSpan, ddContext._otelSpanContext)
+        : trace.wrapSpanContext(ddContext._otelSpanContext)
     }
 
     if (store && trace.getSpan(store) === ddContext._otelActiveSpan) {
@@ -86,8 +91,14 @@ class ContextManager {
     }
     if (span && span._ddSpan) {
       const ddSpan = span._ddSpan
-      const parentStore = storage('legacy').getStore(ddSpan._store) ?? storage('legacy').getStore()
-      return storage('legacy').run({ ...parentStore, span: ddSpan }, run)
+      const parentStore = isRetiredSpan(ddSpan)
+        ? storage('legacy').getStore()
+        : (storage('legacy').getStore(ddSpan._store) ?? storage('legacy').getStore())
+      return storage('legacy').run({
+        ...parentStore,
+        span: ddSpan,
+        [kStoreRetirement]: undefined,
+      }, run)
     }
     return run()
   }

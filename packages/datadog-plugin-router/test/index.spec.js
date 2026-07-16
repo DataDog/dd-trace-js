@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { AsyncResource } = require('node:async_hooks')
 const { once } = require('node:events')
 const http = require('node:http')
 
 const axios = require('axios')
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -14,6 +16,7 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 describe('Plugin', () => {
   let Router
   let appListener
+  let tracer
 
   function defaultErrorHandler (req, res) {
     return err => {
@@ -89,8 +92,8 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load(['http', 'router'])
+        before(async () => {
+          tracer = await agent.load(['http', 'router'])
         })
 
         after(() => {
@@ -120,6 +123,10 @@ describe('Plugin', () => {
           const index = router.stack.length - 1
           assert.strictEqual(router.stack[index].handle.hello, 'goodbye')
           assert.strictEqual(router.stack[index].handle.foo, 'bar')
+        })
+
+        it('should ignore postfinish for an untracked request', () => {
+          dc.channel('apm:http:server:request:postfinish').publish({ req: {} })
         })
 
         it('should add the route to the request span', done => {
@@ -197,6 +204,128 @@ describe('Plugin', () => {
           const reqPromise = axios.get(`http://localhost:${port}/foo`)
 
           return Promise.all([agentPromise, reqPromise])
+        })
+
+        it('should preserve the parent context after the response finishes', async () => {
+          const router = Router()
+          let continueHandler
+          let finishActiveSpan
+          let handlerActiveSpan
+          let lateSpan
+          let rootContext
+          let requestSpan
+          const gate = new Promise(resolve => {
+            continueHandler = resolve
+          })
+          let finishHandler
+          const handlerFinished = new Promise(resolve => {
+            finishHandler = resolve
+          })
+
+          router.get('/late', async (req, res) => {
+            requestSpan = tracer.scope().active()
+            rootContext = requestSpan.context()._trace.started[0].context()
+            res.once('finish', () => {
+              finishActiveSpan = tracer.scope().active()
+            })
+            res.end()
+
+            await gate
+
+            handlerActiveSpan = tracer.scope().active()
+            tracer.trace('late.operation', span => {
+              lateSpan = span
+            })
+            finishHandler()
+          })
+
+          appListener = server(router).listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+
+          await axios.get(`http://localhost:${port}/late`)
+          continueHandler()
+          await handlerFinished
+
+          assert.strictEqual(finishActiveSpan, requestSpan)
+          assert.notStrictEqual(handlerActiveSpan, requestSpan)
+          assert.strictEqual(handlerActiveSpan.context()._traceId, rootContext._traceId)
+          assert.strictEqual(handlerActiveSpan.context()._spanId, rootContext._spanId)
+          assert.strictEqual(lateSpan.context()._traceId, requestSpan.context()._traceId)
+          assert.strictEqual(lateSpan.context()._parentId, rootContext._spanId)
+        })
+
+        it('should release the finished span from a retained async resource', async function () {
+          if (!global.gc) this.skip()
+
+          const router = Router()
+          let context
+          let resource
+          let spanReference
+
+          router.get('/retained', (req, res) => {
+            const span = tracer.scope().active()
+            context = span.context()._trace.started[0].context()
+            spanReference = new WeakRef(span)
+            resource = new AsyncResource('router-retirement', { requireManualDestroy: true })
+            res.end()
+          })
+
+          appListener = server(router).listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+          await axios.get(`http://localhost:${port}/retained`)
+
+          for (let i = 0; i < 10; i++) {
+            global.gc()
+            await new Promise(resolve => setImmediate(resolve))
+          }
+
+          assert.strictEqual(spanReference.deref(), undefined)
+          resource.runInAsyncScope(() => {
+            const activeSpan = tracer.scope().active()
+            assert.strictEqual(activeSpan.context()._traceId, context._traceId)
+            assert.strictEqual(activeSpan.context()._spanId, context._spanId)
+          })
+          resource.emitDestroy()
+        })
+
+        it('should release the restored span from work scheduled after next', async function () {
+          if (!global.gc) this.skip()
+
+          const router = Router()
+          let context
+          let resource
+          let spanReference
+
+          router.use((req, res, next) => {
+            const span = tracer.scope().active()
+            context = span.context()._trace.started[0].context()
+            next()
+            spanReference = new WeakRef(span)
+            resource = new AsyncResource('router-after-next', { requireManualDestroy: true })
+          })
+          router.get('/after-next', (req, res) => {
+            res.end()
+          })
+
+          appListener = server(router).listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+          await axios.get(`http://localhost:${port}/after-next`)
+
+          for (let i = 0; i < 10; i++) {
+            global.gc()
+            await new Promise(resolve => setImmediate(resolve))
+          }
+
+          assert.strictEqual(spanReference.deref(), undefined)
+          resource.runInAsyncScope(() => {
+            const activeSpan = tracer.scope().active()
+            assert.strictEqual(activeSpan.context()._traceId, context._traceId)
+            assert.strictEqual(activeSpan.context()._spanId, context._spanId)
+          })
+          resource.emitDestroy()
         })
       })
     })

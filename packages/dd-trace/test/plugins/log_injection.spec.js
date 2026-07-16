@@ -2,12 +2,23 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
+const { storage } = require('../../../datadog-core')
 
 require('../setup/core')
+const {
+  createStoreRetirement,
+  enterSpanForRetirement,
+} = require('../../src/active-span')
 const { buildLogHolder, messageProxy } = require('../../src/plugins/log_injection')
 
+const legacyStorage = storage('legacy')
+
 describe('log_injection', () => {
+  afterEach(() => {
+    legacyStorage.enterWith(undefined)
+  })
+
   describe('buildLogHolder', () => {
     it('returns undefined when the propagator wrote nothing', () => {
       const tracer = { inject () {} }
@@ -22,6 +33,29 @@ describe('log_injection', () => {
       }
       const logHolder = buildLogHolder(tracer)
       assert.deepStrictEqual(logHolder.dd, { service: 'svc' })
+    })
+
+    it('injects the retired span context', () => {
+      const context = { _trace: { started: [] } }
+      let injected
+      const tracer = {
+        inject (parent, _format, carrier) {
+          injected = parent
+          carrier.dd = { trace_id: '1' }
+        },
+      }
+      const span = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const retirement = createStoreRetirement()
+      enterSpanForRetirement(span, {}, retirement)
+      retirement.retire()
+
+      buildLogHolder(tracer)
+
+      assert.strictEqual(injected.context(), context)
     })
   })
 

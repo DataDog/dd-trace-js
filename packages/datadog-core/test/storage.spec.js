@@ -6,7 +6,7 @@ const { executionAsyncResource } = require('async_hooks')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('../../dd-trace/test/setup/core')
-const { storage } = require('../src/storage')
+const { kStoreRetirement, storage } = require('../src/storage')
 
 describe('storage', () => {
   let testStorage
@@ -49,6 +49,21 @@ describe('storage', () => {
 
   it('should return the same storage for a namespace', () => {
     assert.strictEqual(storage('test'), testStorage)
+  })
+
+  it('should register entered stores with their retirement group', () => {
+    const entered = []
+    const store = {
+      [kStoreRetirement]: {
+        add (value) {
+          entered.push(value)
+        },
+      },
+    }
+
+    testStorage.enterWith(store)
+
+    assert.deepStrictEqual(entered, [store])
   })
 
   it('should not have its store referenced by the underlying async resource', () => {

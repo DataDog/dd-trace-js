@@ -1,10 +1,11 @@
 'use strict'
 
+const { kPendingStoreRetirements, retirePendingSpans } = require('./active-span')
+const GitMetadataTagger = require('./git_metadata_tagger')
 const log = require('./log')
+const processTags = require('./process-tags')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
-const GitMetadataTagger = require('./git_metadata_tagger')
-const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 
 const startedSpans = new WeakSet()
@@ -44,7 +45,17 @@ class SpanProcessor {
     const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
-    if (trace.record === false) return
+    if (trace.record === false) {
+      if (started.length === finished.length || finished.length >= flushMinSpans) {
+        for (const startedSpan of started) {
+          if (startedSpan._duration === undefined) {
+            active.push(startedSpan)
+          }
+        }
+        this._erase(trace, active)
+      }
+      return
+    }
     if (DD_TRACE_ENABLED === false) {
       this._erase(trace, active)
       return
@@ -165,6 +176,8 @@ class SpanProcessor {
 
     trace.started = active
     trace.finished = []
+    const retirements = trace[kPendingStoreRetirements]
+    if (retirements) retirePendingSpans(trace, retirements)
   }
 }
 

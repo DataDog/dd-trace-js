@@ -224,6 +224,7 @@
 /benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/sampling/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/span-format/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/span-retention/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
 /benchmark/sirun/test-optimization/ @DataDog/ci-app-libraries
@@ -249,6 +250,8 @@
 /packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/active-span.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/active-span.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/baggage.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/sampler.js @DataDog/apm-sdk-capabilities-js

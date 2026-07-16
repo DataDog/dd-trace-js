@@ -10,7 +10,7 @@ const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('client', () => {
-  let url, http, startChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
+  let tracer, url, http, startChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
 
   const startChannel = dc.channel('apm:http:client:request:start')
   const endChannel = dc.channel('apm:http:client:request:end')
@@ -18,9 +18,11 @@ describe('client', () => {
   const errorChannel = dc.channel('apm:http:client:request:error')
   const responseFinishChannel = dc.channel('apm:http:client:response:finish')
   const responseStartChannel = dc.channel('apm:http:client:response:start')
+  const serverFinishChannel = dc.channel('apm:http:server:request:finish')
+  const serverPostFinishChannel = dc.channel('apm:http:server:request:postfinish')
 
   before(async () => {
-    await agent.load('http')
+    tracer = await agent.load('http')
   })
 
   after(() => {
@@ -291,6 +293,60 @@ describe('client', () => {
         const describeIfHttp = httpSchema === 'http' ? describe : describe.skip
 
         describeIfHttp('with local http server', () => {
+          it('keeps response events unchanged without lifecycle subscribers', async () => {
+            tracer.use('http', false)
+            let finished = false
+            const server = http.createServer((req, res) => {
+              res.on('finish', () => {
+                finished = true
+              })
+              res.end()
+            })
+
+            try {
+              await new Promise(resolve => server.listen(0, resolve))
+              await new Promise((resolve, reject) => {
+                http.get(`http://127.0.0.1:${server.address().port}/`, res => {
+                  res.resume()
+                  res.on('end', resolve)
+                }).on('error', reject)
+              })
+            } finally {
+              await new Promise(resolve => server.close(resolve))
+              tracer.use('http', {})
+            }
+
+            assert.strictEqual(finished, true)
+          })
+
+          it('publishes server postfinish after response listeners', async () => {
+            const calls = []
+            const onFinish = () => calls.push('finish')
+            const onPostFinish = () => calls.push('postfinish')
+            serverFinishChannel.subscribe(onFinish)
+            serverPostFinishChannel.subscribe(onPostFinish)
+            const server = http.createServer((req, res) => {
+              res.on('finish', () => calls.push('listener'))
+              res.end()
+            })
+
+            try {
+              await new Promise(resolve => server.listen(0, resolve))
+              await new Promise((resolve, reject) => {
+                http.get(`http://127.0.0.1:${server.address().port}/`, res => {
+                  res.resume()
+                  res.on('end', resolve)
+                }).on('error', reject)
+              })
+            } finally {
+              serverFinishChannel.unsubscribe(onFinish)
+              serverPostFinishChannel.unsubscribe(onPostFinish)
+              await new Promise(resolve => server.close(resolve))
+            }
+
+            assert.deepStrictEqual(calls, ['finish', 'listener', 'postfinish'])
+          })
+
           function requestWithLocalServer ({ responseHeaders, responseBody, onResponse }, done) {
             const server = http.createServer((req, res) => {
               res.writeHead(200, responseHeaders)
