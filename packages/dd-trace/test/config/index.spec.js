@@ -4730,11 +4730,9 @@ rules:
     it('should silently ignore keys this tracer version does not recognize', () => {
       const config = getConfig()
       assert.strictEqual(config.sampleRate, undefined)
-      assert.doesNotThrow(() => {
-        config.setRemoteConfigFromSdkConfig({
-          DD_TRACE_SAMPLE_RATE: '0.5',
-          DD_SOME_FUTURE_UNRECOGNIZED_SETTING: 'value',
-        })
+      config.setRemoteConfigFromSdkConfig({
+        DD_TRACE_SAMPLE_RATE: '0.5',
+        DD_SOME_FUTURE_UNRECOGNIZED_SETTING: 'value',
       })
       assert.strictEqual(config.sampleRate, 0.5)
     })
