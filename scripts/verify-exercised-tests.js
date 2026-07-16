@@ -21,21 +21,25 @@ const globCache = new Map()
 let globCacheHits = 0
 let globCacheMisses = 0
 
-const COVERAGE_ACTIONS = new Set([
-  './.github/actions/coverage',
-  './.github/actions/upload-coverage-artifact',
+const COVERAGE_UPLOAD_ACTION_FILES = new Set([
+  path.join('.github', 'actions', 'upload-coverage-artifact', 'action.yml'),
+  path.join('.github', 'actions', 'upload-coverage-artifact', 'action.yaml'),
 ])
 const COVERAGE_COLLECTORS = new Set([
   'integration-tests/coverage/run-suite.js',
   'scripts/c8-ci.js',
 ])
+const CONDITION_WHITESPACE_PATTERN = /\s+/g
+const RETRY_ACTION_PATTERN = /^nick-fields\/retry@/
 
 /**
  * @typedef {{
  *   run: string,
- *   env: Record<string, string|undefined>
+ *   env: Record<string, string|undefined>,
+ *   conditions: string[]
  * } | {
- *   uploadsCoverage: true
+ *   uploadsCoverage: true,
+ *   conditions: string[]
  * }} LocalActionEvent
  */
 
@@ -602,7 +606,7 @@ function resolveLocalActionFile (repoRoot, uses) {
 
 /**
  * @param {unknown} step
- * @returns {step is { run: string, env?: Record<string, unknown> }}
+ * @returns {step is { run: string, env?: Record<string, unknown>, if?: unknown }}
  */
 function isRunStep (step) {
   return isPlainObject(step) && typeof step.run === 'string'
@@ -610,24 +614,133 @@ function isRunStep (step) {
 
 /**
  * @param {unknown} step
- * @returns {step is { uses: string, env?: Record<string, unknown> }}
+ * @returns {step is {
+ *   uses: string,
+ *   env?: Record<string, unknown>,
+ *   if?: unknown,
+ *   with?: Record<string, unknown>
+ * }}
  */
 function isUsesStep (step) {
   return isPlainObject(step) && typeof step.uses === 'string'
 }
 
 /**
- * @param {string} repoRoot
- * @param {string} uses
  * @param {Record<string, string|undefined>} env
+ * @param {unknown} additional
+ * @returns {Record<string, string|undefined>}
+ */
+function mergeEnvironment (env, additional) {
+  const merged = { ...env }
+  if (isPlainObject(additional)) {
+    for (const [name, value] of Object.entries(additional)) {
+      merged[name] = typeof value === 'string' ? value : String(value)
+    }
+  }
+  return merged
+}
+
+/**
+ * @param {string} command
+ * @param {Record<string, string|undefined>} env
+ * @returns {Record<string, string|undefined>}
+ */
+function getCommandEnvironment (command, env) {
+  const commandEnv = { ...env }
+  const exports = parseExportAssignments(command)
+  for (const [name, value] of Object.entries(exports)) commandEnv[name] = value
+
+  const yarnIndex = command.indexOf('yarn ')
+  const npmIndex = command.indexOf('npm ')
+  const commandIndex = yarnIndex === -1
+    ? npmIndex
+    : (npmIndex === -1 ? yarnIndex : Math.min(yarnIndex, npmIndex))
+  if (commandIndex > 0) {
+    const assignments = parseInlineAssignments(command.slice(0, commandIndex))
+    for (const [name, value] of Object.entries(assignments)) commandEnv[name] = value
+  }
+
+  return commandEnv
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string|undefined}
+ */
+function normalizeStepCondition (value) {
+  if (value === undefined || value === true) return
+
+  let condition = String(value).trim()
+  if (condition.startsWith('${{') && condition.endsWith('}}')) {
+    condition = condition.slice(3, -2).trim()
+  }
+  condition = condition.replaceAll(CONDITION_WHITESPACE_PATTERN, ' ')
+
+  if (condition === 'always()' || condition === 'true') return
+  if (condition === '' || condition === 'false' || condition === 'null' || condition === '0' || condition === '-0') {
+    return 'false'
+  }
+  return condition
+}
+
+/**
+ * @param {string[]} conditions
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function appendStepCondition (conditions, value) {
+  const condition = normalizeStepCondition(value)
+  if (condition === undefined || conditions.includes(condition)) return conditions
+  return [...conditions, condition]
+}
+
+/**
+ * @param {string[]} conditions
+ * @returns {boolean}
+ */
+function conditionsCanRun (conditions) {
+  return !conditions.includes('false')
+}
+
+/**
+ * @param {string} repoRoot
+ * @param {{ uses: string, with?: Record<string, unknown> }} step
+ * @param {Record<string, string|undefined>} env
+ * @param {string[]} conditions
  * @param {Set<string>} visiting
  * @returns {LocalActionEvent[]}
  */
-function expandLocalCompositeActionEvents (repoRoot, uses, env, visiting) {
-  if (COVERAGE_ACTIONS.has(uses)) return [{ uploadsCoverage: true }]
+function expandUsesStepEvents (repoRoot, step, env, conditions, visiting) {
+  const actionFile = resolveLocalActionFile(repoRoot, step.uses)
+  if (actionFile) {
+    if (COVERAGE_UPLOAD_ACTION_FILES.has(actionFile)) {
+      return [{ uploadsCoverage: true, conditions }]
+    }
+    return expandLocalCompositeActionEvents(repoRoot, actionFile, env, conditions, visiting)
+  }
 
-  const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile || visiting.has(actionFile)) return []
+  if (RETRY_ACTION_PATTERN.test(step.uses)) {
+    const command = isPlainObject(step.with) && typeof step.with.command === 'string'
+      ? step.with.command
+      : undefined
+    if (command !== undefined) {
+      return [{ run: command, env: getCommandEnvironment(command, env), conditions }]
+    }
+  }
+
+  return []
+}
+
+/**
+ * @param {string} repoRoot
+ * @param {string} actionFile
+ * @param {Record<string, string|undefined>} env
+ * @param {string[]} conditions
+ * @param {Set<string>} visiting
+ * @returns {LocalActionEvent[]}
+ */
+function expandLocalCompositeActionEvents (repoRoot, actionFile, env, conditions, visiting) {
+  if (visiting.has(actionFile)) return []
 
   const doc = parseYamlFile(repoRoot, actionFile)
   if (!isPlainObject(doc)) return []
@@ -641,41 +754,18 @@ function expandLocalCompositeActionEvents (repoRoot, uses, env, visiting) {
   const out = []
 
   for (const s of steps) {
+    if (!isPlainObject(s)) continue
+    const stepEnv = mergeEnvironment(env, s.env)
+    const stepConditions = appendStepCondition(conditions, s.if)
+    if (!conditionsCanRun(stepConditions)) continue
+
     if (isRunStep(s)) {
-      /** @type {Record<string, string|undefined>} */
-      const stepEnv = { ...env }
-      if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) stepEnv[k] = typeof v === 'string' ? v : String(v)
-      }
-
-      // Inline env in composite run: export and prefix assignments.
-      const exports = parseExportAssignments(s.run)
-      for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-
-      const idxYarn = s.run.indexOf('yarn ')
-      const idxNpm = s.run.indexOf('npm ')
-      let idx = idxNpm
-      if (idxYarn !== -1) {
-        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
-      }
-      if (idx > 0) {
-        const prefix = s.run.slice(0, idx)
-        const assigns = parseInlineAssignments(prefix)
-        for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-      }
-
-      out.push({ run: s.run, env: stepEnv })
+      out.push({ run: s.run, env: getCommandEnvironment(s.run, stepEnv), conditions: stepConditions })
       continue
     }
 
     if (isUsesStep(s)) {
-      // Recurse into local composite actions.
-      /** @type {Record<string, string|undefined>} */
-      const nextEnv = { ...env }
-      if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) nextEnv[k] = typeof v === 'string' ? v : String(v)
-      }
-      const nested = expandLocalCompositeActionEvents(repoRoot, s.uses, nextEnv, visiting)
+      const nested = expandUsesStepEvents(repoRoot, s, stepEnv, stepConditions, visiting)
       for (const n of nested) out.push(n)
     }
   }
@@ -738,6 +828,19 @@ function commandProducesCoverage (command, knownScripts, coverageScripts) {
 }
 
 /**
+ * @param {string[]} uploadConditions
+ * @param {string[]} producerConditions
+ * @returns {boolean}
+ */
+function uploadCoversProducer (uploadConditions, producerConditions) {
+  // Fail closed on conditions whose implication would require evaluating the full Actions expression language.
+  for (const condition of uploadConditions) {
+    if (!producerConditions.includes(condition)) return false
+  }
+  return true
+}
+
+/**
  * Returns all combinations of matrix scalar/array values (ignores include/exclude).
  * @param {Record<string, unknown>} matrix
  * @returns {Record<string, string>[]}
@@ -794,23 +897,28 @@ function collectWorkflowEvents (repoRoot) {
       const job = isPlainObject(jobVal) ? jobVal : {}
       const jobEnv = isPlainObject(job.env) ? job.env : {}
       const steps = Array.isArray(job.steps) ? job.steps : []
+      const jobConditions = appendStepCondition([], job.if)
+      if (!conditionsCanRun(jobConditions)) continue
 
       const matrixData = isPlainObject(job.strategy) && isPlainObject(job.strategy.matrix)
         ? /** @type {Record<string, unknown>} */ (job.strategy.matrix)
         : {}
       const matrixCombinations = getMatrixCombinations(matrixData)
 
+      /** @type {Record<string, string|undefined>} */
+      const env = {}
+      for (const [name, value] of Object.entries(topEnv)) {
+        env[name] = typeof value === 'string' ? value : String(value)
+      }
+      for (const [name, value] of Object.entries(jobEnv)) {
+        env[name] = typeof value === 'string' ? value : String(value)
+      }
+
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
-
-        // Merge env. Values can be strings or non-strings; we only keep string-ish.
-        /** @type {Record<string, string|undefined>} */
-        const env = {}
-        for (const [k, v] of Object.entries(topEnv)) env[k] = typeof v === 'string' ? v : String(v)
-        for (const [k, v] of Object.entries(jobEnv)) env[k] = typeof v === 'string' ? v : String(v)
-        if (isPlainObject(step.env)) {
-          for (const [k, v] of Object.entries(step.env)) env[k] = typeof v === 'string' ? v : String(v)
-        }
+        const stepEnv = mergeEnvironment(env, step.env)
+        const conditions = appendStepCondition(jobConditions, step.if)
+        if (!conditionsCanRun(conditions)) continue
 
         if (typeof step.run === 'string') {
           // Expand matrix expressions and emit one entry per combination.
@@ -820,52 +928,21 @@ function collectWorkflowEvents (repoRoot) {
             if (seenRuns.has(run)) continue
             seenRuns.add(run)
 
-            const stepEnv = { ...env }
-
-            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
-            const exports = parseExportAssignments(run)
-            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-
-            const idxYarn = run.indexOf('yarn ')
-            const idxNpm = run.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const prefix = run.slice(0, idx)
-              const assigns = parseInlineAssignments(prefix)
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
-
-            out.push({ workflowFile: wf, jobId, run, env: stepEnv })
+            out.push({
+              workflowFile: wf,
+              jobId,
+              run,
+              env: getCommandEnvironment(run, stepEnv),
+              conditions,
+            })
           }
           continue
         }
 
-        if (typeof step.uses === 'string' && step.uses.startsWith('./')) {
-          const expanded = expandLocalCompositeActionEvents(repoRoot, step.uses, env, new Set())
+        if (isUsesStep(step)) {
+          const expanded = expandUsesStepEvents(repoRoot, step, stepEnv, conditions, new Set())
           for (const e of expanded) {
             out.push({ workflowFile: wf, jobId, ...e })
-          }
-        }
-
-        // Third-party retry wrappers run their `with.command` like an inline `run:`.
-        // Without unwrapping it, the joint check below cannot see that `instrumentation-http`
-        // exercises `test:instrumentations:ci` with `PLUGINS=http`.
-        if (typeof step.uses === 'string' && /^nick-fields\/retry@/.test(step.uses)) {
-          const command = isPlainObject(step.with) && typeof step.with.command === 'string'
-            ? step.with.command
-            : null
-          if (command) {
-            const stepEnv = { ...env }
-            const exports = parseExportAssignments(command)
-            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-            const idxYarn = command.indexOf('yarn ')
-            const idxNpm = command.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const assigns = parseInlineAssignments(command.slice(0, idx))
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
-            out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
           }
         }
       }
@@ -1084,10 +1161,13 @@ function buildLlmobsPluginTestSet (repoRoot) {
   return out
 }
 
-function main () {
+/**
+ * @param {string} repoRoot
+ * @returns {void}
+ */
+function main (repoRoot) {
   const startNs = process.hrtime.bigint()
 
-  const repoRoot = path.resolve(__dirname, '..')
   const packageJsonPath = path.join(repoRoot, 'package.json')
   const pluginsVar = '$' + '{PLUGINS}'
   const bracePluginsVar = '{' + pluginsVar + '}'
@@ -1144,18 +1224,42 @@ function main () {
   }
 
   const workflowEvents = collectWorkflowEvents(repoRoot)
-  /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
+  /**
+   * @type {{
+   *   workflowFile: string,
+   *   jobId: string,
+   *   run: string,
+   *   env: Record<string, string|undefined>,
+   *   conditions: string[]
+   * }[]}
+   */
   const workflowRuns = []
-  const coverageJobsPendingUpload = new Set()
+  /** @type {Map<string, string[][]>} */
+  const coverageJobsPendingUpload = new Map()
   const coverageScripts = findCoverageScripts(scripts, knownScripts)
   for (const event of workflowEvents) {
     const job = `${event.workflowFile}#${event.jobId}`
     if ('uploadsCoverage' in event) {
-      coverageJobsPendingUpload.delete(job)
+      const pendingConditions = coverageJobsPendingUpload.get(job)
+      if (pendingConditions === undefined) continue
+
+      let remaining = 0
+      for (const producerConditions of pendingConditions) {
+        if (!uploadCoversProducer(event.conditions, producerConditions)) {
+          pendingConditions[remaining++] = producerConditions
+        }
+      }
+      pendingConditions.length = remaining
+      if (remaining === 0) coverageJobsPendingUpload.delete(job)
     } else {
       workflowRuns.push(event)
       if (commandProducesCoverage(event.run, knownScripts, coverageScripts)) {
-        coverageJobsPendingUpload.add(job)
+        const pendingConditions = coverageJobsPendingUpload.get(job)
+        if (pendingConditions === undefined) {
+          coverageJobsPendingUpload.set(job, [event.conditions])
+        } else {
+          pendingConditions.push(event.conditions)
+        }
       }
     }
   }
@@ -1174,7 +1278,7 @@ function main () {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
-  for (const job of coverageJobsPendingUpload) {
+  for (const job of coverageJobsPendingUpload.keys()) {
     pushError(`${job}: generates coverage but does not upload it`)
   }
 
@@ -1462,4 +1566,4 @@ function main () {
   process.exit(hasCategoryWarnings ? 1 : 0)
 }
 
-main()
+main(path.resolve(process.argv[2]))

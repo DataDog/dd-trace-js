@@ -110,7 +110,7 @@
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "node scripts/c8-ci.js test:shimmer",
     "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
-    "verify-exercised-tests": "node scripts/verify-exercised-tests-fixtures.js && node scripts/verify-exercised-tests.js"
+    "verify-exercised-tests": "node scripts/verify-exercised-tests.js ."
   },
   "repository": {
     "type": "git",
