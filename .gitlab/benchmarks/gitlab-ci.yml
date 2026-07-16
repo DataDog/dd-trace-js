@@ -22,7 +22,7 @@ variables:
   BASE_CI_IMAGE_PLATFORM: linux/amd64
 
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
-  SLS_CI_BRANCH: main
+  SLS_CI_BRANCH: bengl-layer-size-50mb-v2
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "2.0"

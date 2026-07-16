@@ -13,6 +13,8 @@
 
 const nock = require('nock')
 
+const { createNativeSpanDrain } = require('../native-span-drain')
+
 // Mock the agent so the periodic drain's send resolves instantly and never
 // touches the network (the drain exists only to bound memory, not to measure
 // export).
@@ -21,46 +23,24 @@ nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).re
 
 const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
 
-const nativeSpans = tracer._tracer._nativeSpans
-const pendingNativeIds = nativeSpans ? [] : null
-const DRAIN_THRESHOLD = 5000
+const nativeSpanDrain = createNativeSpanDrain(tracer)
 
 tracer._tracer._processor.process = function (span) {
-  if (pendingNativeIds) {
-    pendingNativeIds.push(span.context()._nativeSpanId)
-  }
+  nativeSpanDrain.add(span)
   this._erase(span.context()._trace, [])
 }
 
-// Extract the accumulated spans from the WASM map (bounds the map) and send the
-// staged chunk (bounds prepared-chunk memory — prepareChunk stages one chunk per
-// call and only sendPreparedChunk drains the staging). Span ids are 8-byte u64
-// LE, written straight into the flush buffer.
-async function drainNative () {
-  if (!pendingNativeIds || pendingNativeIds.length === 0) return
-  nativeSpans.flushChangeQueue()
-  const buf = Buffer.alloc(pendingNativeIds.length * 8)
-  let idx = 0
-  for (const spanId of pendingNativeIds) {
-    buf.set(spanId, idx)
-    idx += 8
-  }
-  nativeSpans._state.prepareChunk(pendingNativeIds.length, false, buf)
-  await nativeSpans._state.sendPreparedChunk().catch(() => {})
-  pendingNativeIds.length = 0
-}
-
-const ITERATIONS = 1_000_000
+const OPERATIONS = Number(process.env.OPERATIONS) || 100_000
 const scenario = process.env.SCENARIO || 'bare'
 
 async function main () {
   if (scenario === 'bare') {
-    for (let i = 0; i < ITERATIONS; i++) {
+    for (let i = 0; i < OPERATIONS; i++) {
       tracer.startSpan('bench.create.bare').finish()
-      if (pendingNativeIds && pendingNativeIds.length >= DRAIN_THRESHOLD) await drainNative()
+      if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
     }
   } else if (scenario === '10tags') {
-    for (let i = 0; i < ITERATIONS; i++) {
+    for (let i = 0; i < OPERATIONS; i++) {
       const span = tracer.startSpan('bench.create.10tags', {
         tags: {
           'service.name': 'my-service',
@@ -76,10 +56,10 @@ async function main () {
         },
       })
       span.finish()
-      if (pendingNativeIds && pendingNativeIds.length >= DRAIN_THRESHOLD) await drainNative()
+      if (nativeSpanDrain.needsDrain()) await nativeSpanDrain.drain()
     }
   }
-  await drainNative()
+  await nativeSpanDrain.drain()
 }
 
 main()
