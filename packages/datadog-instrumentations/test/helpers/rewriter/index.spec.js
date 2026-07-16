@@ -12,6 +12,20 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
 
+const { parse, query } = require('../../../src/helpers/rewriter/compiler')
+const { waitForAsyncEnd } = require('../../../src/helpers/rewriter/transforms')
+
+/**
+ * @typedef {import('node:module').Module & {
+ *   _compile: (content: string, filename: string, format: string) => void
+ * }} CompilableModule
+ * @typedef {typeof Module & {
+ *   _nodeModulePaths: (path: string) => string[]
+ * }} InternalModuleConstructor
+ */
+
+const InternalModule = /** @type {InternalModuleConstructor} */ (Module)
+
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
   let rewriter
@@ -22,13 +36,13 @@ describe('check-require-cache', () => {
   function compile (name, format = 'commonjs') {
     const folder = resolve(__dirname, 'node_modules', ...name.split('/'))
     const filename = name.includes('/') ? folder : join(folder, 'index.js')
-    const mod = new Module(filename, module.parent)
+    const mod = /** @type {CompilableModule} */ (new Module(filename, module.parent || undefined))
 
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format)
 
     mod.filename = filename
-    mod.paths = Module._nodeModulePaths(dirname(filename))
+    mod.paths = InternalModule._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
@@ -37,19 +51,21 @@ describe('check-require-cache', () => {
   // TODO: Move all test files to same folder and replace `compile` with this.
   function compileFile (name, format = 'commonjs') {
     const filename = resolve(__dirname, 'node_modules', 'test', `${name}.js`)
-    const mod = new Module(filename, module.parent)
+    const mod = /** @type {CompilableModule} */ (new Module(filename, module.parent || undefined))
 
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format)
 
     mod.filename = filename
-    mod.paths = Module._nodeModulePaths(dirname(filename))
+    mod.paths = InternalModule._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
   }
 
   beforeEach(() => {
+    ch = undefined
+    subs = undefined
     rewriter = proxyquire('../../../src/helpers/rewriter', {
       './instrumentations': [
         {
@@ -63,6 +79,28 @@ describe('check-require-cache', () => {
             kind: 'Sync',
           },
           channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync-fast-path',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            className: 'Client',
+            methodName: 'dispatch',
+            kind: 'Sync',
+          },
+          channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test-trace-sync-fast-path',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          astQuery: 'ClassBody > MethodDefinition[key.name="dispatch"] > FunctionExpression',
+          transform: 'syncNoSubscriberFastPath',
         },
         {
           module: {
@@ -312,7 +350,7 @@ describe('check-require-cache', () => {
   })
 
   afterEach(() => {
-    ch.unsubscribe(subs)
+    ch?.unsubscribe(subs)
   })
 
   it('should auto instrument sync functions', done => {
@@ -326,6 +364,15 @@ describe('check-require-cache', () => {
     ch.subscribe(subs)
 
     test()
+  })
+
+  it('should run sync functions through the allocation-free path without subscribers', () => {
+    const { Client } = compile('test-trace-sync-fast-path')
+    const client = new Client()
+
+    assert.ok(content.indexOf('if (!tr_ch_apm_hasSubscribers') < content.indexOf('const __apm$arguments'))
+    assert.strictEqual(client.dispatch(1), 2)
+    assert.strictEqual(client.calls, 1)
   })
 
   it('should auto instrument sync functions with super', done => {
@@ -572,7 +619,7 @@ describe('check-require-cache', () => {
         ctx.asyncEndPromise = new Promise(resolve => {
           setImmediate(() => {
             steps.push('asyncEndPromise')
-            resolve()
+            resolve(undefined)
           })
         })
       },
@@ -594,6 +641,24 @@ describe('check-require-cache', () => {
 
     assert.equal(result, 'result')
     assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndPromise', 'resolved'])
+  })
+
+  it('supports both fulfillment handler forms without adding the asyncEnd wait twice', () => {
+    const sources = [
+      'promise.then(result => { return result })',
+      'promise.then(function (result) { return result })',
+    ]
+    for (const source of sources) {
+      const ast = parse(source)
+      const call = /** @type {import('estree').CallExpression} */ (
+        query(ast, 'CallExpression[callee.object.name="promise"][callee.property.name="then"]')[0]
+      )
+
+      waitForAsyncEnd({}, call)
+      waitForAsyncEnd({}, call)
+
+      assert.strictEqual(query(call, '[id.name=__apm$asyncEndPromise]').length, 1)
+    }
   })
 
   it('should use import when rewriting esm modules', () => {

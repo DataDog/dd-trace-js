@@ -7,7 +7,7 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const log = require('../../dd-trace/src/log')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
-const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 
 const {
   HTTP_STATUS_CODE,
@@ -15,49 +15,207 @@ const {
   HTTP_RESPONSE_HEADERS,
 } = tags
 
-// WeakMap to store span context for native undici request objects
+const legacyStorage = storage('legacy')
+const DISPATCH_PREFIX = 'tracing:orchestrion:undici:Client_dispatch'
+const UPGRADE_PREFIX = 'tracing:orchestrion:undici:Request_onUpgrade'
+
+/**
+ * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
+ * @typedef {Record<string, unknown> & { span?: DatadogSpan }} Store
+ * @typedef {Store & { span: DatadogSpan }} SpanStore
+ * @typedef {object} DispatchContext
+ * @property {Array<{ method: string, origin?: string | URL, path?: string }>} [arguments]
+ * @property {SpanStore} currentStore
+ * @property {Store} [parentStore]
+ * @property {unknown} [error]
+ * @property {boolean} [finished]
+ * @property {{ method: string, origin?: string | URL, path?: string }} [options]
+ * @property {string | URL} [origin]
+ * @property {boolean} [requestCreated]
+ * @property {DatadogSpan} [span]
+ * @typedef {object} NativeRequest
+ * @property {string | URL} [origin]
+ * @property {string} path
+ * @property {string} method
+ * @property {unknown} [headers]
+ * @property {(name: string, value: unknown) => void} [addHeader]
+ * @typedef {object} NativeResponseMessage
+ * @property {NativeRequest} request
+ * @property {{ headers: unknown, statusCode: number }} response
+ * @typedef {object} UpgradeContext
+ * @property {[number, unknown]} arguments
+ * @property {NativeRequest} self
+ * @typedef {URL & { headers: Record<string, string>, method: string }} LegacyOptions
+ * @typedef {object} LegacyFetchContext
+ * @property {Request} req
+ * @property {{ options: LegacyOptions }} args
+ * @property {DatadogSpan | undefined} span
+ * @property {Error | undefined} error
+ * @property {boolean | undefined} customRequestTimeout
+ * @property {Response} [result]
+ * @property {Response} [res]
+ * @property {SpanStore} [currentStore]
+ * @typedef {{ type?: string, id?: string, kind?: string } & {
+ *   pluginConfig: object,
+ *   sessionDetails: { host?: string, port?: string }
+ * }} ServiceNameOptions
+ */
+
+/** @type {WeakMap<NativeRequest, { dispatchContext?: DispatchContext, span: DatadogSpan }>} */
 const requestContexts = new WeakMap()
+/** @type {WeakMap<Store, DispatchContext>} */
+const dispatchContexts = new WeakMap()
+/** @type {WeakSet<Store>} */
+const legacyFetchStores = new WeakSet()
+/** @type {WeakSet<Store>} */
+const nodeFetchStores = new WeakSet()
 
 class UndiciPlugin extends HttpClientPlugin {
   static id = 'undici'
-  static prefix = 'tracing:apm:undici:fetch'
+  static prefix = DISPATCH_PREFIX
 
-  constructor (...args) {
-    super(...args)
+  /**
+   * @param {object} tracer
+   * @param {import('../../dd-trace/src/config/config-base')} tracerConfig
+   */
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
 
-    // Subscribe to native undici diagnostic channels for undici >= 4.7.0
-    // These channels fire for ALL undici requests (fetch, request, stream, etc.)
     this.addSub('undici:request:create', this.#onNativeRequestCreate.bind(this))
-    this.addSub('undici:request:bodySent', this.#onNativeRequestBodySent.bind(this))
     this.addSub('undici:request:headers', this.#onNativeRequestHeaders.bind(this))
     this.addSub('undici:request:trailers', this.#onNativeRequestTrailers.bind(this))
     this.addSub('undici:request:error', this.#onNativeRequestError.bind(this))
+    this.addSub(`${UPGRADE_PREFIX}:start`, this.#onNativeRequestUpgrade.bind(this))
+
+    this.addSub(`${DISPATCH_PREFIX}:error`, this.#onDispatchError.bind(this))
+    this.addSub('tracing:apm:fetch:request:start', this.#onNodeFetchStart.bind(this))
+    this.addBind('tracing:apm:undici:fetch:start', this.#bindLegacyStart.bind(this))
+    this.addSub('tracing:apm:undici:fetch:error', this.#onLegacyError.bind(this))
+    this.addSub('tracing:apm:undici:fetch:asyncEnd', this.#onLegacyAsyncEnd.bind(this))
   }
 
-  // ===========================================
-  // Native undici diagnostic channel handlers
-  // These fire for undici >= 4.7.0 for ALL request types (fetch, request, stream, etc.)
-  // ===========================================
+  /**
+   * @param {DispatchContext} ctx
+   */
+  bindStart (ctx) {
+    const parentStore = getStore()
+    if (parentStore && (legacyFetchStores.has(parentStore) || nodeFetchStores.has(parentStore))) {
+      ctx.parentStore = parentStore
+      ctx.currentStore = /** @type {SpanStore} */ (parentStore)
+      return parentStore
+    }
 
-  #onNativeRequestCreate ({ request }) {
-    if (!request) return
+    const options = /** @type {{ method: string, origin?: string | URL, path?: string }} */ (
+      ctx.arguments?.[0] || ctx.options
+    )
+    const activeContext = parentStore && dispatchContexts.get(parentStore)
+    if (activeContext && activeContext.options === options && !activeContext.requestCreated) {
+      ctx.parentStore = parentStore
+      ctx.currentStore = /** @type {SpanStore} */ (parentStore)
+      return parentStore
+    }
 
-    const store = storage('legacy').getStore()
-    const { origin = '', path = '/' } = request
-    const method = request.method?.toUpperCase() ?? 'GET'
+    const method = options.method.toUpperCase()
+    const span = this.#startRequestSpan(method, undefined, ctx)
 
-    // Parse origin to extract protocol, hostname, port
+    ctx.span = span
+    ctx.options = options
+    ctx.origin = options.origin
+    dispatchContexts.set(ctx.currentStore, ctx)
+
+    return ctx.currentStore
+  }
+
+  /**
+   * @param {string} method
+   * @param {DatadogSpan | null | undefined} childOf
+   * @param {DispatchContext | false} enterOrContext
+   */
+  #startRequestSpan (method, childOf, enterOrContext) {
+    return this.startSpan(this.operationName(), {
+      childOf,
+      meta: {
+        'span.kind': 'client',
+        'http.method': method,
+      },
+      resource: method,
+      type: 'http',
+    }, enterOrContext)
+  }
+
+  /**
+   * @param {unknown} message
+   */
+  #onNodeFetchStart (message) {
+    const { currentStore } = /** @type {{ currentStore?: Store }} */ (message)
+    if (currentStore) {
+      nodeFetchStores.add(currentStore)
+    }
+  }
+
+  /**
+   * @param {unknown} message
+   */
+  #onDispatchError (message) {
+    const ctx = /** @type {DispatchContext} */ (message)
+    this.#finishDispatchSpan(ctx)
+  }
+
+  /**
+   * @param {DispatchContext} ctx
+   */
+  end (ctx) {
+    if (ctx.span) {
+      dispatchContexts.delete(ctx.currentStore)
+    }
+    if (!ctx.requestCreated) {
+      this.#finishDispatchSpan(ctx)
+    }
+  }
+
+  /**
+   * @param {DispatchContext} ctx
+   */
+  #finishDispatchSpan (ctx) {
+    if (ctx.finished || !ctx.span) return
+
+    const span = ctx.span
+    if (!ctx.requestCreated) {
+      /** @type {ServiceNameOptions} */
+      const serviceNameOptions = { pluginConfig: this.config, sessionDetails: {} }
+      const service = this.serviceName(serviceNameOptions)
+      this.setServiceName(span, service.name)
+      if (service.source !== undefined) {
+        span.setTag(SVC_SRC_KEY, service.source)
+      }
+    }
+    this.config.hooks.request(span, null, null)
+    span.finish()
+    ctx.finished = true
+  }
+
+  /**
+   * @param {unknown} message
+   */
+  #onNativeRequestCreate (message) {
+    const { request } = /** @type {{ request: NativeRequest }} */ (message)
+    const store = getStore()
+    const dispatchContext = store && dispatchContexts.get(store)
+    if (!dispatchContext && store && (legacyFetchStores.has(store) || nodeFetchStores.has(store))) return
+
+    const origin = request.origin || dispatchContext?.origin || ''
+    const path = request.path
+    const method = request.method.toUpperCase()
+
     let protocol = 'http:'
     let hostname = 'localhost'
     let port = ''
 
-    try {
+    if (origin) {
       const url = new URL(origin)
       protocol = url.protocol
       hostname = url.hostname
       port = url.port
-    } catch {
-      // If origin is not a valid URL, use defaults
     }
 
     const host = port ? `${hostname}:${port}` : hostname
@@ -66,161 +224,134 @@ class UndiciPlugin extends HttpClientPlugin {
     const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
+    const span = dispatchContext
+      ? dispatchContext.currentStore.span
+      : this.#startRequestSpan(method, store && allowed ? store.span : null, false)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    const childOf = store && allowed ? store.span : null
+    /** @type {ServiceNameOptions} */
+    const serviceNameOptions = { pluginConfig: this.config, sessionDetails: { host: hostname, port } }
+    const service = this.serviceName(serviceNameOptions)
 
-    const span = this.startSpan(this.operationName(), {
-      childOf,
-      meta: {
-        'span.kind': 'client',
-        'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
-        'out.host': hostname,
-      },
-      metrics: {
-        [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined,
-      },
-      service: this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } }),
-      resource: method,
-      type: 'http',
-    }, false)
+    span.setTag('http.url', otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri)
+    span.setTag('out.host', hostname)
+    span.setTag(CLIENT_PORT_KEY, port ? Number.parseInt(port, 10) : undefined)
+    this.setServiceName(span, service.name)
+    if (service.source !== undefined) {
+      span.setTag(SVC_SRC_KEY, service.source)
+    }
 
-    // Disable recording if not allowed
     if (!allowed) {
       span._spanContext._trace.record = false
     }
 
-    // Capture request headers if configured
     if (request.headers && this.config.headers) {
       addConfiguredHeaders(span, request.headers, this.config.headers, HTTP_REQUEST_HEADERS)
     }
 
-    // Inject trace headers if propagation is allowed
     if (this.config.propagationFilter(uri)) {
       const headers = {}
       this.tracer.inject(span, HTTP_HEADERS, headers)
 
-      // Use addHeader if available (undici provides this on the request object)
-      if (typeof request.addHeader === 'function') {
+      if (request.addHeader) {
         for (const [name, value] of Object.entries(headers)) {
           request.addHeader(name, value)
         }
       }
     }
 
-    // Store span context for request for later retrieval
     requestContexts.set(request, {
+      dispatchContext,
       span,
-      store,
-      uri,
-      method,
     })
-
-    // Enter the span context
-    storage('legacy').enterWith({ ...store, span })
-  }
-
-  #onNativeRequestBodySent ({ request }) {
-    const ctx = requestContexts.get(request)
-    if (!ctx || ctx.method !== 'CONNECT') return
-
-    const { span, store } = ctx
-
-    this.config.hooks.request(span, null, null)
-
-    span.finish()
-
-    requestContexts.delete(request)
-
-    if (store) {
-      storage('legacy').enterWith(store)
+    if (dispatchContext) {
+      dispatchContext.requestCreated = true
     }
   }
 
-  #onNativeRequestHeaders ({ request, response }) {
+  /**
+   * @param {unknown} message
+   */
+  #onNativeRequestHeaders (message) {
+    const { request, response } = /** @type {NativeResponseMessage} */ (message)
     const ctx = requestContexts.get(request)
     if (!ctx) return
 
     const { span } = ctx
-    const statusCode = response?.statusCode
+    const statusCode = response.statusCode
 
-    if (statusCode) {
-      span.setTag(HTTP_STATUS_CODE, statusCode)
-
-      if (!this.config.validateStatus(statusCode)) {
-        span.setTag('error', 1)
-      }
+    span.setTag(HTTP_STATUS_CODE, statusCode)
+    if (!this.config.validateStatus(statusCode)) {
+      span.setTag('error', 1)
     }
 
-    // Add response headers if configured
-    if (response?.headers && this.config.headers) {
-      addConfiguredHeaders(span, response.headers, this.config.headers, HTTP_RESPONSE_HEADERS)
-    }
+    addConfiguredHeaders(span, response.headers, this.config.headers, HTTP_RESPONSE_HEADERS)
   }
 
-  #onNativeRequestTrailers ({ request }) {
+  /**
+   * @param {unknown} message
+   */
+  #onNativeRequestUpgrade (message) {
+    const { arguments: [statusCode, headers], self: request } = /** @type {UpgradeContext} */ (message)
+    this.#onNativeRequestHeaders({
+      request,
+      response: { headers, statusCode },
+    })
+    this.#finishNativeRequest(request)
+  }
+
+  /**
+   * @param {unknown} message
+   */
+  #onNativeRequestTrailers (message) {
+    const { request } = /** @type {{ request: NativeRequest }} */ (message)
+    this.#finishNativeRequest(request)
+  }
+
+  /**
+   * @param {unknown} message
+   */
+  #onNativeRequestError (message) {
+    const { request, error } = /** @type {{ request: NativeRequest, error?: Error }} */ (message)
+    this.#finishNativeRequest(request, error)
+  }
+
+  /**
+   * @param {NativeRequest} request
+   * @param {Error} [error]
+   */
+  #finishNativeRequest (request, error) {
     const ctx = requestContexts.get(request)
     if (!ctx) return
 
-    const { span, store } = ctx
-
-    // Call the request hook if configured
-    this.config.hooks.request(span, null, null)
-
-    // Finish the span
-    span.finish()
-
-    // Clean up
+    const { dispatchContext, span } = ctx
     requestContexts.delete(request)
-
-    // Restore parent store
-    if (store) {
-      storage('legacy').enterWith(store)
+    if (dispatchContext) {
+      dispatchContext.finished = true
     }
-  }
 
-  #onNativeRequestError ({ request, error }) {
-    const ctx = requestContexts.get(request)
-    if (!ctx) return
-
-    const { span, store } = ctx
-
-    // Don't record AbortError as an error - it's user-initiated cancellation
     if (error && error.name !== 'AbortError') {
       span.setTag('error', error)
     }
 
-    // Call the request hook if configured
     this.config.hooks.request(span, null, null)
-
-    // Finish the span
     span.finish()
-
-    // Clean up
-    requestContexts.delete(request)
-
-    // Restore parent store
-    if (store) {
-      storage('legacy').enterWith(store)
-    }
   }
 
-  // ===========================================
-  // Fetch-based tracing channel handlers
-  // These handle fetch() for undici < 4.7.0 (before native DC was added)
-  // ===========================================
-
-  bindStart (ctx) {
+  /**
+   * @param {unknown} message
+   */
+  #bindLegacyStart (message) {
+    const ctx = /** @type {LegacyFetchContext} */ (message)
     const req = ctx.req
-    const options = new URL(req.url)
+    const options = /** @type {LegacyOptions} */ (new URL(req.url))
     options.headers = Object.fromEntries(req.headers.entries())
     options.method = req.method
 
     ctx.args = { options }
 
     const store = super.bindStart(ctx)
+    legacyFetchStores.add(store)
 
-    // Inject trace headers back into the request
     for (const name of Object.keys(options.headers)) {
       if (!req.headers.has(name)) {
         req.headers.set(name, options.headers[name])
@@ -230,14 +361,21 @@ class UndiciPlugin extends HttpClientPlugin {
     return store
   }
 
-  error (ctx) {
-    // Don't record AbortError as an error - it's user-initiated cancellation
+  /**
+   * @param {unknown} message
+   */
+  #onLegacyError (message) {
+    const ctx = /** @type {LegacyFetchContext} */ (message)
     if (!ctx.error || ctx.error.name !== 'AbortError') {
       return super.error(ctx)
     }
   }
 
-  asyncEnd (ctx) {
+  /**
+   * @param {unknown} message
+   */
+  #onLegacyAsyncEnd (message) {
+    const ctx = /** @type {LegacyFetchContext} */ (message)
     ctx.res = ctx.result
     return this.finish(ctx)
   }
@@ -245,6 +383,13 @@ class UndiciPlugin extends HttpClientPlugin {
   configure (config) {
     return super.configure(normalizeConfig(config))
   }
+}
+
+/**
+ * @returns {Store | undefined}
+ */
+function getStore () {
+  return /** @type {Store | undefined} */ (legacyStorage.getStore())
 }
 
 // Add configured headers to span with appropriate tags
