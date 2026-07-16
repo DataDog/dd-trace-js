@@ -42,6 +42,8 @@ const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
+const patchedJitResolvers = new WeakSet()
+const originalResolvers = new WeakMap()
 
 // Visited types per caller-owned schema. The walk reaches union members and
 // interface implementations through the schema (`getTypes`/`getPossibleTypes`),
@@ -134,13 +136,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // execute internally with the same arguments object — without this we'd
     // double-span). The contextValue check catches object contexts; the args
     // check also catches primitive contexts.
-    if (instrumentedArgs.has(rawArgs?.[0])) {
+    if (!isJit && instrumentedArgs.has(rawArgs?.[0])) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }
 
     const { contextValue } = args
-    if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
+    if (!isJit && contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }
@@ -248,15 +250,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
       filteredVariables: undefined,
     }
     ctx.ddRootCtx = rootCtx
-    if (isWeakMapKey(contextValue)) {
+    if (isJit || !isWeakMapKey(contextValue)) {
+      // Concurrent JIT executions may share a context, so the execution store owns their state.
+      ctx.currentStore.graphqlRootCtx = rootCtx
+    } else {
       contexts.set(contextValue, rootCtx)
       ctx.ddContextValue = contextValue
-    } else {
-      // Primitive / non-keyable contextValue: stash rootCtx on the
-      // orchestrion-scoped store that runStores enters for execute. Wrapped
-      // resolvers read it via legacyStorage.getStore() and it unwinds with the
-      // frame — no enterWith store that leaks past execute.
-      ctx.currentStore.graphqlRootCtx = rootCtx
     }
 
     return ctx.currentStore
@@ -432,12 +431,20 @@ function wrapJitResolvers (message) {
 
   patchedJitResolverMaps.add(resolvers)
   for (const name of Object.keys(resolvers)) {
-    resolvers[name] = wrapResolve(resolvers[name])
+    resolvers[name] = wrapResolve(resolvers[name], true)
   }
 }
 
-function wrapResolve (resolve) {
-  if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
+/**
+ * @param {GraphQLFieldResolver} resolve
+ * @param {boolean} [isJit]
+ */
+function wrapResolve (resolve, isJit = false) {
+  const patched = isJit ? patchedJitResolvers : patchedResolvers
+  if (typeof resolve !== 'function' || patched.has(resolve)) return resolve
+
+  // Replace a schema wrapper with the execution-local JIT variant instead of nesting both.
+  resolve = originalResolvers.get(resolve) ?? resolve
 
   function resolveAsync (source, args, contextValue, info) {
     const hasIastSub = iastResolveCh.hasSubscribers
@@ -449,7 +456,9 @@ function wrapResolve (resolve) {
       return resolve.apply(this, arguments)
     }
 
-    const rootCtx = contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
+    const rootCtx = isJit
+      ? legacyStorage.getStore()?.graphqlRootCtx
+      : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return resolve.apply(this, arguments)
 
     const infoPath = info?.path
@@ -572,7 +581,8 @@ function wrapResolve (resolve) {
     })
   }
 
-  patchedResolvers.add(resolveAsync)
+  patched.add(resolveAsync)
+  originalResolvers.set(resolveAsync, resolve)
   return resolveAsync
 }
 

@@ -155,6 +155,222 @@ describe('Plugin', () => {
         assert.deepStrictEqual(result.data, { slow: 'later' })
       })
 
+      it('publishes resolver security channels once per JIT resolver', async () => {
+        const document = graphql.parse('query ResolverChannels { hello defaultHello }')
+        const { query } = compileQuery(schema, document)
+        const iastChannel = dc.channel('apm:graphql:resolve:start')
+        const appsecChannel = dc.channel('datadog:graphql:resolver:start')
+        const iastFields = []
+        const appsecFields = []
+        /** @param {{ info: { fieldName: string } }} message */
+        const onIastResolve = ({ info }) => iastFields.push(info.fieldName)
+        /** @param {{ resolverInfo: Record<string, unknown> }} message */
+        const onAppsecResolve = ({ resolverInfo }) => appsecFields.push(...Object.keys(resolverInfo))
+
+        iastChannel.subscribe(onIastResolve)
+        appsecChannel.subscribe(onAppsecResolve)
+        try {
+          const assertion = agent.assertSomeTraces(traces => {
+            assert.strictEqual(
+              traces[0].filter(span => span.name === 'graphql.resolve').length,
+              2
+            )
+          }, { spanResourceMatch: /ResolverChannels/ })
+
+          const [, result] = await Promise.all([
+            assertion,
+            (async () => query({ defaultHello: 'default' }, {}, {}))(),
+          ])
+          assert.deepStrictEqual(result.data, { hello: 'world', defaultHello: 'default' })
+        } finally {
+          iastChannel.unsubscribe(onIastResolve)
+          appsecChannel.unsubscribe(onAppsecResolve)
+        }
+
+        assert.deepStrictEqual(iastFields.sort(), ['defaultHello', 'hello'])
+        assert.deepStrictEqual(appsecFields.sort(), ['defaultHello', 'hello'])
+      })
+
+      it('isolates overlapping executions that share a context value', async () => {
+        let releaseSlowResolver = () => {}
+        const slowResolver = new Promise(resolve => {
+          releaseSlowResolver = resolve
+        })
+        const overlappingSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'OverlappingQuery',
+            fields: {
+              slow: {
+                type: graphql.GraphQLString,
+                resolve: () => slowResolver.then(() => 'slow'),
+              },
+              fast: {
+                type: graphql.GraphQLString,
+                resolve: () => 'fast',
+              },
+            },
+          }),
+        })
+        const warmDocument = graphql.parse('query WarmSchemaWrapper { fast }')
+        const warmAssertion = agent.assertSomeTraces(() => {}, {
+          spanResourceMatch: /WarmSchemaWrapper/,
+        })
+        const [, warmResult] = await Promise.all([
+          warmAssertion,
+          graphql.execute({ schema: overlappingSchema, document: warmDocument }),
+        ])
+        assert.strictEqual(warmResult.data?.fast, 'fast')
+        assert.strictEqual(warmResult.errors, undefined)
+
+        const slowQuery = compileQuery(
+          overlappingSchema,
+          graphql.parse('query SlowOverlap { slow }')
+        ).query
+        const fastQuery = compileQuery(
+          overlappingSchema,
+          graphql.parse('query FastOverlap { fast }')
+        ).query
+        const contextValue = {}
+        const resolverControllers = new Map()
+        const resolverChannel = dc.channel('datadog:graphql:resolver:start')
+        /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
+        const onResolver = ({ abortController, resolverInfo }) => {
+          resolverControllers.set(Object.keys(resolverInfo)[0], abortController)
+        }
+
+        const slowAssertion = agent.assertSomeTraces(traces => {
+          const spans = traces.flat()
+          const execute = spans.find(span =>
+            span.name === expectedSchema.server.opName && /SlowOverlap/.test(span.resource))
+          const resolve = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'slow:String')
+          assert.ok(execute, 'expected a SlowOverlap execute span')
+          assert.ok(resolve, 'expected a slow resolver span')
+          assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
+        }, { timeoutMs: 3000 })
+        const fastAssertion = agent.assertSomeTraces(traces => {
+          const spans = traces.flat()
+          const execute = spans.find(span =>
+            span.name === expectedSchema.server.opName && /FastOverlap/.test(span.resource))
+          const resolve = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'fast:String')
+          assert.ok(execute, 'expected a FastOverlap execute span')
+          assert.ok(resolve, 'expected a fast resolver span')
+          assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
+        }, { timeoutMs: 3000 })
+
+        resolverChannel.subscribe(onResolver)
+        try {
+          const slowResult = slowQuery({}, contextValue, {})
+          const fastResult = fastQuery({}, contextValue, {})
+          releaseSlowResolver()
+
+          const [, , slow, fast] = await Promise.all([
+            slowAssertion,
+            fastAssertion,
+            slowResult,
+            fastResult,
+          ])
+          assert.deepStrictEqual(slow.data, { slow: 'slow' })
+          assert.deepStrictEqual(fast.data, { fast: 'fast' })
+        } finally {
+          resolverChannel.unsubscribe(onResolver)
+        }
+
+        assert.notStrictEqual(
+          resolverControllers.get('slow'),
+          resolverControllers.get('fast'),
+          'overlapping executions must not share an abort controller'
+        )
+      })
+
+      it('keeps a function context through overlapping serial execution', async () => {
+        let releaseSlowResolver = () => {}
+        const slowResolver = new Promise(resolve => {
+          releaseSlowResolver = resolve
+        })
+        const overlappingSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'OverlappingQuery',
+            fields: {
+              fast: {
+                type: graphql.GraphQLString,
+                resolve: () => 'fast',
+              },
+            },
+          }),
+          mutation: new graphql.GraphQLObjectType({
+            name: 'OverlappingMutation',
+            fields: {
+              slow: {
+                type: graphql.GraphQLString,
+                resolve: () => slowResolver.then(() => 'slow'),
+              },
+              after: {
+                type: graphql.GraphQLString,
+                resolve: () => 'after',
+              },
+            },
+          }),
+        })
+        const serialQuery = compileQuery(
+          overlappingSchema,
+          graphql.parse('mutation SerialOverlap { slow after }')
+        ).query
+        const fastQuery = compileQuery(
+          overlappingSchema,
+          graphql.parse('query FastFunctionOverlap { fast }')
+        ).query
+        const contextValue = function contextValue () {}
+        const resolverControllers = new Map()
+        const resolverChannel = dc.channel('datadog:graphql:resolver:start')
+        /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
+        const onResolver = ({ abortController, resolverInfo }) => {
+          resolverControllers.set(Object.keys(resolverInfo)[0], abortController)
+        }
+
+        const serialAssertion = agent.assertSomeTraces(traces => {
+          const spans = traces.flat()
+          const execute = spans.find(span =>
+            span.name === expectedSchema.server.opName && /SerialOverlap/.test(span.resource))
+          const slow = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'slow:String')
+          const after = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'after:String')
+          assert.ok(execute, 'expected a SerialOverlap execute span')
+          assert.ok(slow, 'expected a slow resolver span')
+          assert.ok(after, 'expected an after resolver span')
+          assert.strictEqual(slow.parent_id.toString(), execute.span_id.toString())
+          assert.strictEqual(after.parent_id.toString(), execute.span_id.toString())
+        }, { timeoutMs: 3000 })
+        const fastAssertion = agent.assertSomeTraces(traces => {
+          const spans = traces.flat()
+          const execute = spans.find(span =>
+            span.name === expectedSchema.server.opName && /FastFunctionOverlap/.test(span.resource))
+          const resolve = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'fast:String')
+          assert.ok(execute, 'expected a FastFunctionOverlap execute span')
+          assert.ok(resolve, 'expected a fast resolver span')
+          assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
+        }, { timeoutMs: 3000 })
+
+        resolverChannel.subscribe(onResolver)
+        try {
+          const serialResult = serialQuery({}, contextValue, {})
+          const fastResult = fastQuery({}, contextValue, {})
+          releaseSlowResolver()
+
+          const [, , serial, fast] = await Promise.all([
+            serialAssertion,
+            fastAssertion,
+            serialResult,
+            fastResult,
+          ])
+          assert.deepStrictEqual(serial.data, { slow: 'slow', after: 'after' })
+          assert.deepStrictEqual(fast.data, { fast: 'fast' })
+        } finally {
+          resolverChannel.unsubscribe(onResolver)
+        }
+
+        assert.strictEqual(resolverControllers.get('slow'), resolverControllers.get('after'))
+        assert.notStrictEqual(resolverControllers.get('slow'), resolverControllers.get('fast'))
+      })
+
       it('tags the execute span when a resolver errors', async () => {
         const { query } = compileQuery(schema, graphql.parse('query Boom { boom }'))
 
