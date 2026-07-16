@@ -41,14 +41,13 @@ module.exports = {
       name: 'zod',
       versions: ['>=3.25.75'],
       // `ai@4.0.2` declares `zod` as an optional peer (`^3.0.0`) and
-      // `@ai-sdk/openai@1.3.23+` declares it as a required peer. Yarn 1's flat
-      // hoist served the workspace root's `zod` to both consumers; bun's
-      // isolated linker honours each package's own manifest and skips optional
-      // peers entirely, so without `dep: true` the `versions/ai@` sandbox
-      // lands without `zod` and `require('zod')` crashes at load time. The
-      // matching `zod-to-json-schema` override in `install_plugin_modules.js`
-      // keeps the transitive zod chain on a `zod@3`-compatible version.
+      // `@ai-sdk/openai@1.3.23+` declares it as a required peer. Bun's isolated
+      // linker skips optional peers, so inject it into each ai sandbox.
       dep: true,
+      // zod-to-json-schema@3.25.x requires the zod/v3 export absent from zod@3.23.x.
+      overrides: {
+        'zod-to-json-schema': '<3.25.0',
+      },
     },
   ],
   apollo: [
@@ -498,6 +497,16 @@ module.exports = {
       versions: ['>=0.1'],
       dep: true,
     },
+    {
+      // The recorded cassettes match the OpenAI/JS 4.x request shape.
+      name: '@langchain/openai',
+      version: '0.0.34',
+      dep: true,
+      forced: true,
+      overrides: {
+        '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
+      },
+    },
   ],
   langgraph: [
     {
@@ -534,6 +543,15 @@ module.exports = {
     {
       name: 'fastify',
       versions: ['>=3'],
+    },
+  ],
+  'limitd-client': [
+    {
+      name: 'hashlru',
+      // limitd-protocol@2.1.1 uses an unprefixed GitHub shorthand that Bun cannot resolve.
+      overrides: {
+        hashlru: 'github:jfromaniello/hashlru#return_value_on_set',
+      },
     },
   ],
   mariadb: [
@@ -669,6 +687,7 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      trustedDependencies: ['libpq'],
     },
     {
       name: 'express',
@@ -736,6 +755,10 @@ module.exports = {
     {
       name: 'collections',
       versions: ['5'],
+      // q@2 requires collections/shim, which is absent from its declared collections@^2.
+      overrides: {
+        collections: '^5.0.0',
+      },
     },
     {
       name: 'q',
