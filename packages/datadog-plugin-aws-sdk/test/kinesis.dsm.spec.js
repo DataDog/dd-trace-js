@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -14,6 +15,11 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
 const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
+
+const KINESIS_DEFAULT_MAX_RECORD_BYTES = 1_048_576
+
+/** @typedef {{ resource: string, meta: Record<string, string> }} EncodedSpan */
+/** @typedef {EncodedSpan[][]} EncodedTraces */
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -190,6 +196,28 @@ describe('Kinesis', function () {
         }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
+      })
+
+      it('records no DSM checkpoint when context plus the partition key would exceed the default cap', async () => {
+        const partitionKey = 'p'.repeat(256)
+        const data = Buffer.from(JSON.stringify({
+          myData: 'a'.repeat(KINESIS_DEFAULT_MAX_RECORD_BYTES - 500),
+        }))
+        /**
+         * @param {unknown} traces
+         */
+        const assertNoPathwayHash = traces => {
+          const span = /** @type {EncodedTraces} */ (traces)[0][0]
+          assert.match(span.resource, /^putRecord/)
+          assert.strictEqual(span.meta['pathway.hash'], undefined)
+        }
+        const tracePromise = agent.assertSomeTraces(assertNoPathwayHash, { spanResourceMatch: /^putRecord/ })
+        const params = { Data: data, PartitionKey: partitionKey, StreamName: streamNameDSM }
+        const requestPromise = promisesSupported
+          ? callViaPromise(kinesis, 'putRecord', params)
+          : promisify(kinesis.putRecord.bind(kinesis))(params)
+
+        await Promise.all([tracePromise, requestPromise])
       })
 
       it('emits DSM stats to the agent during Kinesis putRecord', done => {

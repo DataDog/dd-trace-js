@@ -12,6 +12,17 @@ const {
   MOCK_NUMBER,
 } = require('../../util')
 
+/**
+ * @param {(version: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (callback) {
+  withVersions('ai', 'ai', '>=7.0.0', version => {
+    withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
+      callback(version, openaiVersion)
+    })
+  })
+}
+
 const MOCK_TELEMETRY_METADATA = {
   userId: '12345',
   organizationId: 'orgAbc123',
@@ -25,14 +36,14 @@ describe('Plugin', () => {
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
 
-  withVersions('ai', 'ai', '>=7.0.0', (version) => {
+  withAiSdkOpenAiVersions((version, openaiVersion) => {
     let ai
     let openai
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAI = require('../../../../../../versions/@ai-sdk/openai').get()
+      const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict',
@@ -959,9 +970,20 @@ describe('Plugin', () => {
       throw new Error(`Unknown scenario: ${scenario}`)
     }
 
+    /**
+     * @param {object} config
+     * @param {string} config.providerName
+     * @param {string} config.packageName
+     * @param {string} config.packageRange
+     * @param {(PackageModule: object, scenario: string) => object} config.buildModel
+     * @param {object} [config.env]
+     * @param {string[]} [config.scenarios]
+     * @param {(options: object) => object} [config.getExpectedMetrics]
+     */
     function describeProviderCacheTests ({
       providerName,
       packageName,
+      packageRange,
       buildModel,
       env,
       scenarios = ['cache-read', 'cache-write'],
@@ -971,43 +993,45 @@ describe('Plugin', () => {
         if (env) useEnv(env)
 
         withVersions('ai', 'ai', '>=7.0.0', (version) => {
-          let ai
-          let PackageModule
+          withVersions('ai', packageName, packageRange, packageVersion => {
+            let ai
+            let PackageModule
 
-          beforeEach(() => {
-            ai = require(`../../../../../../versions/ai@${version}`).get()
-            PackageModule = require(`../../../../../../versions/${packageName}`)
+            beforeEach(() => {
+              ai = require(`../../../../../../versions/ai@${version}`).get()
+              PackageModule = require(`../../../../../../versions/${packageName}@${packageVersion}`)
+            })
+
+            if (scenarios.includes('cache-read')) {
+              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-read')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
+
+                const expected = getExpectedMetrics({ scenario: 'cache-read' })
+                assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+              })
+            }
+
+            if (scenarios.includes('cache-write')) {
+              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-write')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
+
+                const expected = getExpectedMetrics({ scenario: 'cache-write' })
+                assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+                assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+              })
+            }
           })
-
-          if (scenarios.includes('cache-read')) {
-            it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-read')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-read' })
-              assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-            })
-          }
-
-          if (scenarios.includes('cache-write')) {
-            it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-write')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const languageModelCallSpan = llmobsSpans.find(s => s.name === 'languageModelCall')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-write' })
-              assert.equal(languageModelCallSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-              assert.equal(languageModelCallSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-            })
-          }
         })
       })
     }
@@ -1015,6 +1039,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'Bedrock',
       packageName: '@ai-sdk/amazon-bedrock',
+      packageRange: '^5.0.0',
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
         return createAmazonBedrock({
@@ -1032,6 +1057,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'Anthropic',
       packageName: '@ai-sdk/anthropic',
+      packageRange: '^4.0.0',
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
         return createAnthropic({
@@ -1055,6 +1081,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'OpenAI (Chat Completions)',
       packageName: '@ai-sdk/openai',
+      packageRange: '^4.0.0',
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         return createOpenAI({
@@ -1070,6 +1097,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'OpenAI (Responses API)',
       packageName: '@ai-sdk/openai',
+      packageRange: '^4.0.0',
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         return createOpenAI({
@@ -1084,6 +1112,7 @@ describe('Plugin', () => {
     describeProviderCacheTests({
       providerName: 'Google Gemini',
       packageName: '@ai-sdk/google',
+      packageRange: '^4.0.0',
       buildModel: (GoogleModule, scenario) => {
         const { createGoogleGenerativeAI } = GoogleModule.get()
         return createGoogleGenerativeAI({

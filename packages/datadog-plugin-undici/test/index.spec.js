@@ -706,14 +706,11 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('Blocklisted requests should not be recorded.'))
-              })
-              .catch(done)
+              .assertNoTraces(() => {
+                throw new Error('Blocklisted requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             fetch.fetch(`http://localhost:${port}/users`).catch(() => {})
           })
@@ -851,7 +848,12 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              const dispatcher = new fetch.ProxyAgent(`http://localhost:${proxyPort}`)
+              // proxyTunnel forces a CONNECT tunnel for the plain-HTTP-over-HTTP-proxy case.
+              // undici 8.7.0 (nodejs/undici#5116) made that case forward an absolute-form
+              // request instead of tunneling by default, so without this the proxy never sees
+              // a CONNECT and there is no CONNECT span to assert on. The option is a no-op on
+              // undici < 6.22.0, where CONNECT was always used.
+              const dispatcher = new fetch.ProxyAgent({ uri: `http://localhost:${proxyPort}`, proxyTunnel: true })
               fetch.request(`http://localhost:${downstreamPort}/data`, { dispatcher })
                 .then(({ body }) => body.text())
                 .catch(done)

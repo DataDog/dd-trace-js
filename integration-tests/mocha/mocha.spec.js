@@ -6813,18 +6813,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_management: { enabled: true, attempt_to_fix_retries: 2 },
         })
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            assertAttemptToFixFailThenPass(tests)
-          })
-
         childProcess = exec(
           runTestsCommand,
           {
@@ -6841,11 +6829,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         )
 
-        const [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
-        assert.strictEqual(exitCode, 1)
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assertAttemptToFixFailThenPass(tests)
+          },
+          { hardTimeout: 60_000 }
+        )
+        assert.strictEqual(childProcess.exitCode, 1)
       })
 
       onlyLatestIt('does not suppress attempt-to-fix failures for modified tests in parallel mode', async () => {
