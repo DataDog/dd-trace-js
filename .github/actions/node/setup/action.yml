@@ -76,4 +76,4 @@ runs:
     - name: Install Bun
       if: steps.bun-check.outputs.supported == 'true'
       shell: bash
-      run: npm install -g bun@1.3.14 --prefer-offline --no-audit --no-fund
+      run: npm install -g bun@1.3.1 --prefer-offline --no-audit --no-fund

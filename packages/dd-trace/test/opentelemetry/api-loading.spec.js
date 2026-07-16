@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
+const { createRequire } = require('node:module')
 const os = require('node:os')
 const path = require('node:path')
 
@@ -10,11 +11,13 @@ const { describe, it, afterEach } = require('mocha')
 
 const DD_TRACE_PATH = path.join(__dirname, '..', '..', '..', '..')
 const API_OWNER_VERSION = require(path.join(DD_TRACE_PATH, 'package.json')).optionalDependencies['@opentelemetry/api']
-const API_DIRECTORY = findPackageDirectory(require.resolve('@opentelemetry/api-v14'))
+const API_LOGS_V033_REQUIRE = createRequire(require.resolve('dd-trace-otel-api-logs-v033-fixture/package.json'))
+const API_LOGS_V034_REQUIRE = createRequire(require.resolve('dd-trace-otel-api-logs-v034-fixture/package.json'))
+const API_DIRECTORY = findPackageDirectory(API_LOGS_V033_REQUIRE.resolve('@opentelemetry/api'))
 const API_VERSION = require(path.join(API_DIRECTORY, 'package.json')).version
 const API_LOGS_DIRECTORIES = [
-  findPackageDirectory(require.resolve('@opentelemetry/api-logs-v033')),
-  findPackageDirectory(require.resolve('@opentelemetry/api-logs-v034')),
+  findPackageDirectory(API_LOGS_V033_REQUIRE.resolve('@opentelemetry/api-logs')),
+  findPackageDirectory(API_LOGS_V034_REQUIRE.resolve('@opentelemetry/api-logs')),
 ]
 
 describe('OpenTelemetry API copy loading', () => {

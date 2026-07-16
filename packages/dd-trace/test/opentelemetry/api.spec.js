@@ -2,12 +2,15 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const API_V14_REQUIRE = createRequire(require.resolve('dd-trace-otel-api-logs-v033-fixture/package.json'))
+const API_V14_ENTRY = API_V14_REQUIRE.resolve('@opentelemetry/api')
 const API_OWNER_VERSION = require('../../../../package.json').optionalDependencies['@opentelemetry/api']
 
 require('../setup/core')
@@ -114,7 +117,7 @@ describe('opentelemetry/api', () => {
   it('resolves a supported application copy before the fallback', () => {
     const applicationApi = { trace: { application: true } }
     const applicationRequire = sinon.stub().withArgs('@opentelemetry/api').returns(applicationApi)
-    applicationRequire.resolve = sinon.stub().returns(require.resolve('@opentelemetry/api-v14'))
+    applicationRequire.resolve = sinon.stub().returns(API_V14_ENTRY)
     const holder = loadApi({
       'node:module': { createRequire: sinon.stub().returns(applicationRequire) },
     })
@@ -145,7 +148,7 @@ describe('opentelemetry/api', () => {
   it('continues when an application copy cannot be loaded', () => {
     const failure = new Error('load failed')
     const applicationRequire = sinon.stub().throws(failure)
-    applicationRequire.resolve = sinon.stub().returns(require.resolve('@opentelemetry/api-v14'))
+    applicationRequire.resolve = sinon.stub().returns(API_V14_ENTRY)
     const debug = sinon.spy()
     const holder = loadApi({
       'node:module': { createRequire: sinon.stub().returns(applicationRequire) },
@@ -164,7 +167,7 @@ describe('opentelemetry/api', () => {
   it('rejects the first unsupported future application version', () => {
     const applicationApi = { trace: { application: true } }
     const applicationRequire = sinon.stub().returns(applicationApi)
-    applicationRequire.resolve = sinon.stub().returns(require.resolve('@opentelemetry/api-v14'))
+    applicationRequire.resolve = sinon.stub().returns(API_V14_ENTRY)
     const warn = sinon.spy()
     const holder = loadApi({
       'node:fs': {
