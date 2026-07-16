@@ -141,11 +141,10 @@ describe('test optimization validation cli', () => {
 
   it('parses a plan approval digest for live validation', () => {
     const digest = 'a'.repeat(64)
-    const nonce = 'b'.repeat(32)
-    const options = parseArgs(['--offline-fixture-nonce', nonce, '--approved-plan-sha256', digest])
+    const options = parseArgs(['--run-approved-plan', 'results/approval.json', '--sha256', digest])
 
-    assert.strictEqual(options.approvedPlanSha256, digest)
-    assert.strictEqual(options.offlineFixtureNonce, nonce)
+    assert.strictEqual(options.runApprovedPlan, 'results/approval.json')
+    assert.strictEqual(options.approvedArtifactSha256, digest)
   })
 
   it('parses the read-only approval digest verification mode', () => {
@@ -154,7 +153,7 @@ describe('test optimization validation cli', () => {
     assert.strictEqual(options.printApprovalSha256, true)
   })
 
-  it('explains the approval hash trust boundary in help output', async () => {
+  it('documents the short approval-file execution command in help output', async () => {
     const logs = []
     const originalLog = console.log
     console.log = message => logs.push(message)
@@ -162,9 +161,9 @@ describe('test optimization validation cli', () => {
     try {
       await runValidationCli(['--help'])
 
-      assert.match(logs.join('\n'), /--print-approval-sha256/)
-      assert.match(logs.join('\n'), /does not verify package origin/)
-      assert.match(logs.join('\n'), /lockfile\/integrity metadata or a trusted package tarball/)
+      assert.match(logs.join('\n'), /--run-approved-plan/)
+      assert.match(logs.join('\n'), /--sha256 <digest>/)
+      assert.doesNotMatch(logs.join('\n'), /--approved-plan-sha256|--offline-fixture-nonce/)
     } finally {
       console.log = originalLog
     }
@@ -296,8 +295,6 @@ describe('test optimization validation cli', () => {
     const logs = []
     const originalLog = console.log
     const manifest = getRunnableManifest(tmpDir)
-    const junitDirectory = path.resolve(__dirname, '../../../..', '.junit-tmp')
-    const junitShard = path.join(junitDirectory, `validation-cli-${process.pid}.xml`)
     manifest.frameworks.push({
       ...manifest.frameworks[0],
       id: 'jest:other',
@@ -317,7 +314,6 @@ describe('test optimization validation cli', () => {
       const approvalSummaryPath = path.join(out, 'approval-summary.md')
       const plan = fs.readFileSync(executionPlanPath, 'utf8')
       const approvalSummary = fs.readFileSync(approvalSummaryPath, 'utf8')
-      const nonce = plan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
       const expectedDigest = plan.match(/Expected SHA-256: `([a-f0-9]{64})`/)?.[1]
       const approvalJsonPath = path.join(out, 'approval.json')
       const coveredFilesPath = path.join(out, 'approval-files.sha256')
@@ -335,31 +331,14 @@ describe('test optimization validation cli', () => {
       assert.match(approvalSummary, /## Commands/)
       assert.match(approvalSummary, /## Safety and Outputs/)
       assert.match(approvalSummary, /## Approval Command/)
-      assert.match(approvalSummary, /--approved-plan-sha256 [a-f0-9]{64}/)
+      assert.match(approvalSummary, /--run-approved-plan results\/approval\.json --sha256 [a-f0-9]{64}/)
       assert.strictEqual(
         crypto.createHash('sha256').update(fs.readFileSync(approvalJsonPath)).digest('hex'),
         expectedDigest
       )
-
-      fs.mkdirSync(junitDirectory, { recursive: true })
-      fs.writeFileSync(junitShard, '<testsuite tests="1"/>\n')
-
-      await runValidationCli([
-        '--manifest', manifestPath,
-        '--out', out,
-        '--framework', manifest.frameworks[0].id,
-        '--offline-fixture-nonce', nonce,
-        '--print-approval-sha256',
-      ])
-
-      assert.strictEqual(logs.pop(), expectedDigest)
       assert.strictEqual(fs.existsSync(out), true)
     } finally {
       console.log = originalLog
-      fs.rmSync(junitShard, { force: true })
-      if (fs.existsSync(junitDirectory) && fs.readdirSync(junitDirectory).length === 0) {
-        fs.rmdirSync(junitDirectory)
-      }
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
@@ -384,11 +363,90 @@ describe('test optimization validation cli', () => {
 
       assert.strictEqual(process.exitCode, 1)
       assert.strictEqual(fs.existsSync(out), false)
-      assert.match(errors.join('\n'), /requires the --offline-fixture-nonce and --approved-plan-sha256 values/)
+      assert.match(errors.join('\n'), /requires --run-approved-plan and --sha256/)
     } finally {
       console.error = originalError
       process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reconstructs live scope from a hash-verified approval file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approved-cli-'))
+    const manifestPath = path.join(root, 'dd-test-optimization-validation-manifest.json')
+    const approvalPath = path.join(root, 'results', 'approval.json')
+    const out = path.join(root, 'results')
+    const digest = 'c'.repeat(64)
+    const originalExitCode = process.exitCode
+    let approvedInput
+    let writtenReport
+    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(root), null, 2)}\n`)
+
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': {
+        loadApprovedPlan (filename, sha256) {
+          approvedInput = { filename, sha256 }
+          return {
+            material: {
+              manifest: { path: manifestPath },
+              selection: { frameworks: ['jest:root'], scenario: 'basic-reporting' },
+              validation: {
+                outputDirectory: out,
+                offlineFixtureNonce: 'd'.repeat(32),
+                keepTemporaryFiles: false,
+                verbose: false,
+              },
+            },
+            path: approvalPath,
+          }
+        },
+      },
+      './generated-files': {
+        async cleanupGeneratedFiles () {},
+      },
+      './report-writer': {
+        writePendingReport () {},
+        async writeReport (report) {
+          writtenReport = report
+        },
+      },
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return getPassingScenarioResult(framework, 'basic-reporting')
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          return { ok: true }
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {},
+        runStaticDiagnosis () {
+          return { report: {} }
+        },
+      },
+    })
+
+    process.exitCode = undefined
+    try {
+      await main(['--run-approved-plan', approvalPath, '--sha256', digest])
+
+      assert.deepStrictEqual(approvedInput, { filename: approvalPath, sha256: digest })
+      assert.strictEqual(process.exitCode, 0)
+      assert.strictEqual(writtenReport.out, out)
+      assert.deepStrictEqual(writtenReport.results.map(result => result.scenario), ['basic-reporting'])
+      assert.strictEqual(writtenReport.runSummary.validationCoverage, 'partial')
+      assert.deepStrictEqual(writtenReport.runSummary.omittedScenarios, [
+        'ci-wiring',
+        'efd',
+        'atr',
+        'test-management',
+      ])
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
@@ -600,13 +658,8 @@ describe('test optimization validation cli', () => {
     ])
   })
 
-  it('does not run implicit CI wiring when no replayable command was selected', async () => {
+  it('reports non-replayable CI wiring as incomplete during full validation', async () => {
     const validation = await runCliFixture({
-      './scenarios/ci-wiring': {
-        async runCiWiring () {
-          throw new Error('CI wiring should not run without a replayable command')
-        },
-      },
       './scenarios/early-flake-detection': {
         async runEarlyFlakeDetection ({ framework }) {
           return getPassingScenarioResult(framework, 'efd')
@@ -625,23 +678,59 @@ describe('test optimization validation cli', () => {
     }, manifest => {
       manifest.frameworks[0].ciWiring = {
         status: 'unknown',
+        replayability: 'not_replayable',
+        replayBlocker: 'No replayable CI command was identified.',
         reason: 'No replayable CI command was identified.',
       }
     })
 
-    assert.strictEqual(validation.exitCode, 0)
+    assert.strictEqual(validation.exitCode, 1)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:pass',
+      'ci-wiring:error',
       'efd:pass',
       'atr:pass',
       'test-management:pass',
     ])
+    assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
+    assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
+  })
+
+  it('reports complete coverage when every default check produces a result', async () => {
+    const validation = await runCliFixture({
+      './scenarios/ci-wiring': {
+        async runCiWiring ({ framework }) {
+          return getPassingScenarioResult(framework, 'ci-wiring')
+        },
+      },
+      './scenarios/early-flake-detection': {
+        async runEarlyFlakeDetection ({ framework }) {
+          return getPassingScenarioResult(framework, 'efd')
+        },
+      },
+      './scenarios/auto-test-retries': {
+        async runAutoTestRetries ({ framework }) {
+          return getPassingScenarioResult(framework, 'atr')
+        },
+      },
+      './scenarios/test-management': {
+        async runTestManagement ({ framework }) {
+          return getPassingScenarioResult(framework, 'test-management')
+        },
+      },
+    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root))
+
+    assert.strictEqual(validation.exitCode, 0)
+    assert.strictEqual(validation.runSummary.validationCoverage, 'complete')
+    assert.deepStrictEqual(validation.runSummary.omittedScenarios, [])
   })
 
   it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
     const validation = await runCliFixture({}, manifest => {
       manifest.frameworks[0].ciWiring = {
         status: 'unknown',
+        replayability: 'not_replayable',
+        replayBlocker: 'No replayable CI command was identified.',
         reason: 'No replayable CI command was identified.',
       }
     }, ['--scenario', 'ci-wiring'])
@@ -655,8 +744,8 @@ describe('test optimization validation cli', () => {
       'CI wiring was not replayed: No replayable CI command was identified. ' +
       'No live CI-wiring conclusion was reached.')
     assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
-    assert.strictEqual(validation.results[1].evidence.recommendation, 'Add ciWiringCommand to the manifest when ' +
-      'a CI test step can be safely replayed locally.')
+    assert.strictEqual(validation.results[1].evidence.recommendation,
+      'Resolve the recorded CI replay blocker, then add ciWiringCommand and rerun validation.')
   })
 
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
@@ -769,7 +858,7 @@ describe('test optimization validation cli', () => {
  * @param {object} stubs proxyquire overrides
  * @param {(manifest: object) => void} [prepare] manifest fixture customization
  * @param {string[]} [args] additional CLI arguments
- * @returns {Promise<{exitCode: number|undefined, results: object[]}>} captured validation result
+ * @returns {Promise<{exitCode: number|undefined, results: object[], runSummary: object}>} captured result
  */
 async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
@@ -778,6 +867,7 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
   const manifest = getRunnableManifest(root)
   const originalExitCode = process.exitCode
   let results
+  let runSummary
   const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
     ...PASSING_VALIDATION_PHASES,
     './generated-files': {
@@ -787,6 +877,7 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
       writePendingReport () {},
       async writeReport (report) {
         results = report.results
+        runSummary = report.runSummary
       },
     },
     './scenarios/basic-reporting': {
@@ -821,7 +912,7 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
 
   try {
     await main(['--manifest', manifestPath, '--out', out, ...args, ...APPROVAL_ARGS])
-    return { exitCode: process.exitCode, results }
+    return { exitCode: process.exitCode, results, runSummary }
   } finally {
     process.exitCode = originalExitCode
     fs.rmSync(root, { recursive: true, force: true })
@@ -855,9 +946,12 @@ function getRunnableManifest (root) {
         preflight: {
           ran: true,
           exitCode: 0,
+          maxTestCount: 50,
         },
         ciWiring: {
           status: 'skip',
+          replayability: 'not_replayable',
+          replayBlocker: 'No CI test job was found in this fixture.',
           reason: 'No CI test job was found in this fixture.',
         },
       },
@@ -868,6 +962,7 @@ function getRunnableManifest (root) {
 function setReplayableCiWiring (framework, root) {
   framework.ciWiring = {
     status: 'fail',
+    replayability: 'replayable',
     provider: 'github-actions',
     configFile: path.join(root, '.github', 'workflows', 'test.yml'),
     job: 'test',

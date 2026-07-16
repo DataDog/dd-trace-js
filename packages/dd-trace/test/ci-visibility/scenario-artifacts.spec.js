@@ -144,6 +144,7 @@ describe('test optimization validation scenario artifacts', () => {
       existingTestCommand: command(existingTest),
       ciWiring: {
         status: 'unknown',
+        replayability: 'replayable',
         provider: 'test',
         diagnosis: 'The test CI command includes the Datadog preload.',
       },
@@ -151,7 +152,7 @@ describe('test optimization validation scenario artifacts', () => {
         ...command(existingTest),
         env: { NODE_OPTIONS: `-r ${networkBlocker} -r ${init}` },
       },
-      preflight: { ran: true, exitCode: 0, observedTestCount: 1 },
+      preflight: { ran: true, exitCode: 0, observedTestCount: 1, maxTestCount: 1 },
       generatedTestStrategy: {
         status: 'verified',
         files: [{

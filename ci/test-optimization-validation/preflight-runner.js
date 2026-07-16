@@ -16,6 +16,7 @@ const { getObservedTestCount } = require('./test-output')
  * @returns {Promise<{ok: boolean, failure?: object, preflight: object}>} preflight outcome
  */
 async function runFrameworkPreflight ({ framework, out, options }) {
+  const maxTestCount = framework.preflight.maxTestCount
   const command = getDatadogCleanCommand(getBasicReportingCommand(framework))
   const outDir = frameworkOutDir(out, framework, 'preflight')
   const result = await runCommand(command, {
@@ -31,6 +32,7 @@ async function runFrameworkPreflight ({ framework, out, options }) {
   const preflight = {
     ran: true,
     source: 'validator',
+    maxTestCount,
     command: serializeDisplayCommand(command),
     exitCode: result.exitCode,
     durationMs: result.durationMs,
@@ -40,15 +42,20 @@ async function runFrameworkPreflight ({ framework, out, options }) {
   }
   framework.preflight = preflight
 
-  if (!result.timedOut && (result.exitCode === 0 || Number(observedTestCount) > 0)) {
+  const testCountKnown = Number.isInteger(observedTestCount)
+  const scopeMatched = testCountKnown && observedTestCount >= 1 && observedTestCount <= maxTestCount
+  preflight.scopeMatched = scopeMatched
+
+  if (!result.timedOut && scopeMatched && (result.exitCode === 0 || observedTestCount > 0)) {
     return { ok: true, preflight }
   }
 
-  const diagnosis = result.timedOut
-    ? 'The selected test command timed out during the validator-controlled uninstrumented preflight. No Test ' +
-      'Optimization conclusion was reached.'
-    : 'The selected test command failed before the validator could confirm that tests ran without Datadog ' +
-      'initialization. Fix the project command or its setup before validating Test Optimization.'
+  const diagnosis = getPreflightFailureDiagnosis({
+    maxTestCount,
+    observedTestCount,
+    result,
+    testCountKnown,
+  })
 
   return {
     ok: false,
@@ -61,11 +68,44 @@ async function runFrameworkPreflight ({ framework, out, options }) {
       evidence: {
         commandExitCode: result.exitCode,
         commandTimedOut: result.timedOut,
+        representativeScopeMismatch: !scopeMatched,
         preflight,
       },
       artifacts: Object.values(result.artifacts),
     },
   }
+}
+
+/**
+ * Produces the narrowest diagnosis supported by a failed clean preflight.
+ *
+ * @param {object} input diagnosis inputs
+ * @param {number} input.maxTestCount approved representative test limit
+ * @param {number|undefined} input.observedTestCount parsed test count
+ * @param {object} input.result command result
+ * @param {boolean} input.testCountKnown whether the test count was parsed
+ * @returns {string} customer-facing diagnosis
+ */
+function getPreflightFailureDiagnosis ({ maxTestCount, observedTestCount, result, testCountKnown }) {
+  if (result.timedOut) {
+    return 'The selected test command timed out during the validator-controlled uninstrumented preflight. No Test ' +
+      'Optimization conclusion was reached.'
+  }
+  if (!testCountKnown) {
+    return 'The validator could not determine how many tests the selected command ran, so it could not confirm ' +
+      `the approved representative scope of at most ${maxTestCount} tests. Select a command whose output ` +
+      'reports the test count before validating Test Optimization.'
+  }
+  if (observedTestCount > maxTestCount) {
+    return `The selected command ran ${observedTestCount} tests, exceeding the approved representative scope ` +
+      `of at most ${maxTestCount}. Select a narrower test command before validating Test Optimization.`
+  }
+  if (observedTestCount < 1) {
+    return 'The selected command did not report any tests. Select a runnable representative before validating ' +
+      'Test Optimization.'
+  }
+  return 'The selected test command failed before the validator could confirm that tests ran without Datadog ' +
+    'initialization. Fix the project command or its setup before validating Test Optimization.'
 }
 
 module.exports = { runFrameworkPreflight }

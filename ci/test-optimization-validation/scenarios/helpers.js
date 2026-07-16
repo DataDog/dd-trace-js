@@ -415,7 +415,7 @@ function getDebugArtifacts (outDir) {
     'stderr.txt',
     'events.ndjson',
     'result.json',
-  ].map(filename => `${outDir}/${filename}`)
+  ].map(filename => path.join(outDir, filename))
 }
 
 function findInterestingLines (output, patterns, limit = 8) {

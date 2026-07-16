@@ -111,7 +111,7 @@ function getManifestPaths (manifest) {
 
 function getCommands (framework) {
   const commands = []
-  for (const name of ['existingTestCommand', 'forcedLocalCommand', 'ciWiringCommand']) {
+  for (const name of ['existingTestCommand', 'ciWiringCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
   for (const [index, command] of (framework.setup?.commands || []).entries()) {

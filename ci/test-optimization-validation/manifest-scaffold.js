@@ -163,9 +163,12 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
     project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
     setup: { commands: [], services: [] },
     existingTestCommand: command,
-    preflight: { status: 'pending' },
+    preflight: { status: 'pending', maxTestCount: 50 },
     ciWiring: {
       status: 'unknown',
+      replayability: 'not_replayable',
+      replayBlocker: 'CI command selection has not been completed. Inspect the discovered CI configuration and ' +
+        'replace this with a concrete technical blocker only when the selected test command cannot be replayed.',
       diagnosis: 'Select one replayable CI test step and record its exact command and environment before live CI ' +
         'wiring validation.',
       initialization: {
@@ -211,7 +214,8 @@ function buildExistingCommand ({ framework, projectRoot, repositoryRoot, scriptN
 
 function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, projectRoot, representative, runner }) {
   const convention = getGeneratedTestConvention(representative, projectRoot)
-  const moduleSystem = getGeneratedModuleSystem(framework, convention.fileExtension, packageJson.type)
+  const packageType = getNearestPackageType(convention.testDirectory, projectRoot, packageJson.type)
+  const moduleSystem = getGeneratedModuleSystem(framework, convention.fileExtension, packageType)
   const definitions = getGeneratedDefinitions({ framework, convention, moduleSystem })
 
   return {
@@ -255,8 +259,30 @@ function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, proj
 
 function getGeneratedModuleSystem (framework, fileExtension, packageType) {
   if (/\.(?:cjs|cts)$/.test(fileExtension)) return 'commonjs'
-  if (framework === 'vitest' || /\.(?:mjs|mts)$/.test(fileExtension)) return 'module'
-  return packageType === 'module' ? 'module' : 'commonjs'
+  if (framework === 'vitest' || /\.(?:mjs|mts)$/.test(fileExtension)) return 'esm'
+  return packageType === 'module' ? 'esm' : 'commonjs'
+}
+
+/**
+ * Returns the package module type that applies to a generated test directory.
+ *
+ * @param {string} testDirectory generated test directory
+ * @param {string} projectRoot detected project root
+ * @param {string|undefined} fallbackType detected project package type
+ * @returns {string|undefined} nearest package module type
+ */
+function getNearestPackageType (testDirectory, projectRoot, fallbackType) {
+  const root = path.resolve(projectRoot)
+  let directory = path.resolve(testDirectory)
+
+  while (directory === root || isPathInside(root, directory)) {
+    const packageJson = readJson(path.join(directory, 'package.json'))
+    if (typeof packageJson?.type === 'string') return packageJson.type
+    if (directory === root) break
+    directory = path.dirname(directory)
+  }
+
+  return fallbackType
 }
 
 function getGeneratedTestConvention (representative, projectRoot) {
@@ -288,7 +314,7 @@ function getGeneratedTestConvention (representative, projectRoot) {
 }
 
 function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
-  const stateFileExpression = moduleSystem === 'module'
+  const stateFileExpression = moduleSystem === 'esm'
     ? "join(dirname(fileURLToPath(import.meta.url)), '.dd-test-optimization-validation-atr-state')"
     : "path.join(__dirname, '.dd-test-optimization-validation-atr-state')"
   const definitions = [
@@ -312,16 +338,16 @@ function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
 
 function getGeneratedTestContent ({ framework, definition, moduleSystem, stateFileExpression }) {
   const imports = []
-  if (framework === 'vitest' && moduleSystem === 'module') {
+  if (framework === 'vitest' && moduleSystem === 'esm') {
     imports.push("import { describe, expect, it } from 'vitest'")
   }
   if (framework === 'mocha') {
-    imports.push(moduleSystem === 'module'
+    imports.push(moduleSystem === 'esm'
       ? "import assert from 'node:assert/strict'"
       : "const assert = require('node:assert/strict')")
   }
   if (definition.id === 'atr-fail-once') {
-    if (moduleSystem === 'module') {
+    if (moduleSystem === 'esm') {
       imports.push(
         "import { existsSync, writeFileSync } from 'node:fs'",
         "import { dirname, join } from 'node:path'",
@@ -350,8 +376,8 @@ function getGeneratedTestContent ({ framework, definition, moduleSystem, stateFi
 }
 
 function getAtrBody ({ moduleSystem, stateFileExpression, assertion }) {
-  const exists = moduleSystem === 'module' ? 'existsSync' : 'fs.existsSync'
-  const write = moduleSystem === 'module' ? 'writeFileSync' : 'fs.writeFileSync'
+  const exists = moduleSystem === 'esm' ? 'existsSync' : 'fs.existsSync'
+  const write = moduleSystem === 'esm' ? 'writeFileSync' : 'fs.writeFileSync'
   return [
     `    const stateFile = ${stateFileExpression}`,
     `    if (!${exists}(stateFile)) {`,
@@ -510,7 +536,9 @@ function findRepresentativeTestFile (root) {
         continue
       }
       visited++
-      if (/^(?:test\.[cm]?[jt]s|.+[.-](?:test|spec)\.[cm]?[jt]s)$/.test(entry.name)) {
+      const inTestsDirectory = path.relative(root, directory).split(path.sep).includes('__tests__')
+      if (/^(?:test\.[cm]?[jt]s|.+[.-](?:test|spec)\.[cm]?[jt]s)$/.test(entry.name) ||
+        (inTestsDirectory && /\.[cm]?[jt]sx?$/.test(entry.name))) {
         candidates.push(filename)
       }
     }
@@ -680,6 +708,11 @@ function findYarnRelease (root) {
 function getProjectIdentifier (packageJson, projectRoot, repositoryRoot) {
   if (packageJson.name) return packageJson.name.replaceAll(/[^A-Za-z0-9._-]+/g, '-')
   return (path.relative(repositoryRoot, projectRoot) || 'root').replaceAll(path.sep, '-')
+}
+
+function isPathInside (root, filename) {
+  const relative = path.relative(root, filename)
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
 }
 
 function readJson (filename) {

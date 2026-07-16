@@ -134,7 +134,7 @@ describe('test optimization CI wiring validation', () => {
       assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
       assert.match(result.diagnosis, /environment and setup described by the CI job/)
       assert.match(result.diagnosis, /required Datadog initialization directly/)
-      assert.deepStrictEqual(result.evidence.forcedLocalBasicReporting, {
+      assert.deepStrictEqual(result.evidence.directInitializationBasicReporting, {
         ran: true,
         status: 'pass',
         diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
@@ -146,7 +146,7 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
-  it('preserves the manifest CI diagnosis and recommends an existing Datadog test script', async () => {
+  it('uses the live replay diagnosis and recommends an existing Datadog test script', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
       scripts: {
@@ -179,7 +179,8 @@ describe('test optimization CI wiring validation', () => {
       })
 
       assert.strictEqual(result.status, 'fail')
-      assert.match(result.diagnosis, /CI step runs test instead of the existing test:datadog script/)
+      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.doesNotMatch(result.diagnosis, /CI step runs test instead of the existing test:datadog script/)
       assert.deepStrictEqual(result.evidence.existingDatadogInitScripts, [{
         name: 'test:datadog',
         packageJson: path.join(out, 'package.json'),

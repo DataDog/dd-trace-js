@@ -23,8 +23,6 @@ const { getBasicReportingCommand } = require('./scenarios/basic-reporting')
 const { writeFileSafely } = require('./safe-files')
 
 const VALIDATOR_PATH = path.resolve(__dirname, '..', 'validate-test-optimization.js')
-const DEFAULT_MANIFEST_FILENAME = 'dd-test-optimization-validation-manifest.json'
-const DEFAULT_RESULTS_DIRECTORY = 'dd-test-optimization-validation-results'
 const APPROVAL_SUMMARY_FILENAME = 'approval-summary.md'
 const EXECUTION_PLAN_FILENAME = 'execution-plan.md'
 const GENERATED_SCENARIO_DETAILS = {
@@ -89,14 +87,8 @@ function formatExecutionPlan ({
   const approvalDigest = approvalArtifacts.digest
   const validatorArgv = getValidatorArgv({
     approvedPlanSha256: approvalDigest,
-    offlineFixtureNonce,
+    approvalJsonPath: approvalArtifacts.approvalJsonPath,
     repositoryRoot: manifest.repository.root,
-    manifestPath: manifest.__path,
-    out,
-    selectedFrameworkIds,
-    requestedScenario,
-    keepTempFiles,
-    verbose,
   })
   const coveredFileVerification = process.platform === 'win32'
     ? []
@@ -187,10 +179,10 @@ function formatExecutionPlan ({
     `Expected SHA-256: ${inlineCode(approvalDigest)}`,
     '',
     ...coveredFileVerification,
-    'Immediately before project code runs, the validator reconstructs the approval JSON from current inputs and ' +
-      'stops unless its SHA-256 matches the approved command below. The saved JSON is for review only and is not ' +
-      'trusted as execution authority. This detects changes after review; it does not verify where the installed ' +
-      '`dd-trace` package came from.',
+    'Immediately before project code runs, the validator verifies the saved approval JSON against the SHA-256 in ' +
+      'the command below, then reconstructs the approval material from the current manifest, validator package, ' +
+      'generated tests, and executables. Both checks must match. This detects changes after review; it does not ' +
+      'verify where the installed `dd-trace` package came from.',
     '',
     'Run the approved validation command:',
     '',
@@ -341,6 +333,7 @@ function formatApprovalSummary ({
 function appendApprovalSummaryFramework (lines, framework, requestedScenario, repositoryRoot) {
   const basicCommand = getBasicReportingCommand(framework)
   const directInitialization = getDirectInitialization(framework)
+  const maxTestCount = framework.preflight?.maxTestCount ?? 50
   lines.push(`### ${plainText(formatFrameworkLabel(framework, repositoryRoot))}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
@@ -354,17 +347,18 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
   appendApprovalSummaryCommand(lines, {
     command: getDatadogCleanCommand(basicCommand),
     label: 'Test execution without Datadog',
-    note: 'Inherited NODE_OPTIONS and DD_* variables are removed.',
+    note: 'Inherited NODE_OPTIONS and DD_* variables are removed. The command must report between 1 and ' +
+      `${maxTestCount} tests.`,
     repositoryRoot,
-    runs: '1',
+    runs: '1, plus 1 clean confirmation only if the Datadog run exits differently',
   })
   appendApprovalSummaryCommand(lines, {
     command: basicCommand,
     environmentOverrides: { NODE_OPTIONS: directInitialization },
     label: 'Test execution with Datadog',
-    note: 'A second debug run occurs only if test data is missing.',
+    note: 'A second Datadog debug run occurs only when diagnosis needs debug output.',
     repositoryRoot,
-    runs: '1, or 2 when the debug run is needed',
+    runs: '1, plus at most 1 Datadog debug run when needed',
   })
 
   const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
@@ -567,44 +561,22 @@ function getPlannedCommands (framework, requestedScenario) {
  *
  * @param {object} input command options
  * @param {string} input.approvedPlanSha256 digest of the approved manifest and options
- * @param {string} input.offlineFixtureNonce random fixture-root nonce shown in the execution plan
+ * @param {string} input.approvalJsonPath reviewed approval JSON path
  * @param {string} input.repositoryRoot repository root
- * @param {string} input.manifestPath manifest path
- * @param {string} input.out output directory
- * @param {string[]} input.selectedFrameworkIds selected framework ids
- * @param {string|null|undefined} input.requestedScenario selected scenario
- * @param {boolean} input.keepTempFiles whether to retain generated files
- * @param {boolean} input.verbose whether to print command progress
  * @returns {string[]} validator argv
  */
 function getValidatorArgv ({
   approvedPlanSha256,
-  offlineFixtureNonce,
+  approvalJsonPath,
   repositoryRoot,
-  manifestPath,
-  out,
-  selectedFrameworkIds,
-  requestedScenario,
-  keepTempFiles,
-  verbose,
 }) {
   const validatorPath = getPreferredValidatorPath(repositoryRoot)
-  const argv = [validatorPath === VALIDATOR_PATH ? process.execPath : 'node', validatorPath]
-  if (path.resolve(manifestPath) !== path.join(repositoryRoot, DEFAULT_MANIFEST_FILENAME)) {
-    argv.push('--manifest', manifestPath)
-  }
-  if (path.resolve(out) !== path.join(repositoryRoot, DEFAULT_RESULTS_DIRECTORY)) {
-    argv.push('--out', out)
-  }
-  argv.push(
-    '--offline-fixture-nonce', offlineFixtureNonce,
-    '--approved-plan-sha256', approvedPlanSha256
-  )
-  for (const frameworkId of selectedFrameworkIds) argv.push('--framework', frameworkId)
-  if (requestedScenario) argv.push('--scenario', requestedScenario)
-  if (keepTempFiles) argv.push('--keep-temp-files')
-  if (verbose) argv.push('--verbose')
-  return argv
+  return [
+    validatorPath === VALIDATOR_PATH ? process.execPath : 'node',
+    validatorPath,
+    '--run-approved-plan', getRepositoryRelativePath(repositoryRoot, approvalJsonPath),
+    '--sha256', approvedPlanSha256,
+  ]
 }
 
 /**
@@ -647,6 +619,7 @@ function appendFrameworkExecutions (
   const basicCommand = getBasicReportingCommand(framework)
   const frameworkLabel = formatFrameworkLabel(framework, repositoryRoot)
   const directInitialization = getDirectInitialization(framework)
+  const maxTestCount = framework.preflight?.maxTestCount ?? 50
   lines.push(`### ${plainText(frameworkLabel)}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
@@ -662,9 +635,10 @@ function appendFrameworkExecutions (
   const cleanCommand = getDatadogCleanCommand(basicCommand)
   appendExecutionSection(lines, {
     heading: 'Test Execution Without Datadog',
-    description: 'Runs the selected test command without Datadog to confirm that the tests can run normally.',
+    description: 'Runs the selected test command without Datadog to confirm that the tests can run normally and ' +
+      `that it reports between 1 and ${maxTestCount} tests.`,
     command: cleanCommand,
-    executions: '1',
+    executions: '1, plus 1 clean confirmation only if the Datadog run exits differently',
     environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(cleanCommand)}`,
     repositoryRoot,
   })
@@ -672,7 +646,7 @@ function appendFrameworkExecutions (
     heading: 'Test Execution With Datadog',
     description: 'Runs the same test command with Datadog initialized and checks that test data is reported.',
     command: basicCommand,
-    executions: '1, plus 1 debug rerun only if test data is missing',
+    executions: '1, plus at most 1 debug rerun when needed',
     environment: 'Datadog initialization is shown inline. The validator also supplies private offline response ' +
       'paths and noise-suppression settings only while this check runs.',
     environmentOverrides: { NODE_OPTIONS: directInitialization },

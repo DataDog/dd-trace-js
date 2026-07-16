@@ -28,7 +28,11 @@ function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {}
     staticDiagnosis: staticDiagnosis && staticDiagnosis.reportPath,
   }
   const frameworkLabels = getFrameworkLabels(manifest)
-  const sanitizedResults = sanitizeForReport(results).map(result => ({
+  const sanitizedResults = addNotSelectedResults({
+    manifest,
+    results: sanitizeForReport(results),
+    runSummary,
+  }).map(result => ({
     ...result,
     frameworkDisplayName: frameworkLabels.get(result.frameworkId) || result.frameworkId,
   }))
@@ -112,10 +116,13 @@ function renderMarkdown (report) {
     `Generated at: ${report.generatedAt}`,
     `Validation completed: ${report.runSummary.runCompleted === true ? 'yes' : 'no'}`,
     `Validator exit code: ${report.runSummary.validatorExitCode ?? 'not recorded'}`,
+    `Validation coverage: ${report.runSummary.validationCoverage || 'not recorded'}`,
     '',
     `> ${report.sharingWarning}`,
     '',
     `> ${UNTRUSTED_EVIDENCE_WARNING}`,
+    '',
+    getValidationCoverageSummary(report.runSummary),
     '',
     '## Verdict',
     '',
@@ -223,7 +230,7 @@ function getDiagnosticCheckDefinition (scenario) {
     'ci-wiring': { id: 'ci-wiring', name: 'CI wiring' },
     'generated-test-verification': {
       id: 'generated-test-verification',
-      name: 'Generated test verification',
+      name: 'Can the temporary validation test run?',
     },
     efd: { id: 'efd-new-test-detection-and-retry', name: 'EFD new test detection and retry' },
     atr: { id: 'auto-test-retries', name: 'Auto test retries' },
@@ -792,9 +799,6 @@ function getResultDetailLines (result, options = {}) {
   if (Array.isArray(evidence.commandOutputSummary) && evidence.commandOutputSummary.length > 0) {
     lines.push(`Command output summary: ${formatList(evidence.commandOutputSummary, { format })}`)
   }
-  if (evidence.ciConfigurationDiagnosis) {
-    lines.push(`Manifest CI configuration diagnosis: ${evidence.ciConfigurationDiagnosis}`)
-  }
   if (Array.isArray(evidence.existingDatadogInitScripts) && evidence.existingDatadogInitScripts.length > 0) {
     const scripts = evidence.existingDatadogInitScripts.map(script => {
       return `${script.name} (${script.packageJson})`
@@ -1029,6 +1033,7 @@ function renderConsoleSummary (results, reportPath, runSummary) {
   if (runSummary?.runCompleted === true) {
     lines.push(`Validation completed. Validator exit code: ${runSummary.validatorExitCode}.`)
   }
+  if (runSummary?.validationCoverage) lines.push(getValidationCoverageSummary(runSummary))
   const basicReportingResults = getBasicReportingResults(results)
   const ciWiringResults = getCiWiringResults(results)
   const advancedFeatureResults = getAdvancedFeatureResults(results)
@@ -1368,6 +1373,7 @@ function getCheckQuestion (result) {
   return {
     'basic-reporting': 'Can these tests report to Datadog? (Basic Reporting)',
     'ci-wiring': 'Does the selected CI job initialize Datadog? (CI Wiring)',
+    'generated-test-verification': 'Can the temporary validation test run?',
     efd: 'Are new tests retried? (Early Flake Detection)',
     atr: 'Are failed tests retried? (Auto Test Retries)',
     'test-management': 'Can tests be quarantined? (Test Management)',
@@ -1375,6 +1381,7 @@ function getCheckQuestion (result) {
 }
 
 function getCompactResultMeaning (result) {
+  if (result.evidence?.validationNotSelected === true) return result.diagnosis
   if (result.scenario === 'basic-reporting' && result.status === 'pass') {
     return 'Tests emitted session, module, suite, and test data.'
   }
@@ -1405,7 +1412,66 @@ function isIncompleteResult (result) {
 }
 
 function getDisplayResultStatus (result) {
+  if (result.evidence?.validationNotSelected === true) return 'NOT CHECKED'
   return isIncompleteResult(result) ? 'INCOMPLETE' : result.status.toUpperCase()
+}
+
+/**
+ * Adds explicit report-only rows for checks excluded by a scenario-scoped run.
+ *
+ * @param {object} input report inputs
+ * @param {object} input.manifest validation manifest
+ * @param {object[]} input.results sanitized validation results
+ * @param {object} input.runSummary run metadata
+ * @returns {object[]} results including unselected check rows
+ */
+function addNotSelectedResults ({ manifest, results, runSummary }) {
+  const omittedScenarios = Array.isArray(runSummary?.omittedScenarios) ? runSummary.omittedScenarios : []
+  if (omittedScenarios.length === 0) return results
+
+  const selected = formatScenarioList(runSummary.checkedScenarios || [])
+  const additions = []
+  for (const framework of manifest.frameworks || []) {
+    if (framework.status !== 'runnable') continue
+    for (const scenario of omittedScenarios) {
+      if (results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) continue
+      additions.push({
+        frameworkId: framework.id,
+        scenario,
+        status: 'skip',
+        diagnosis: `Not checked because this run was limited to ${selected}.`,
+        evidence: { validationNotSelected: true },
+        artifacts: [],
+      })
+    }
+  }
+  return [...results, ...additions]
+}
+
+/**
+ * Formats validation coverage for console and report readers.
+ *
+ * @param {object} runSummary run metadata
+ * @returns {string} customer-facing coverage sentence
+ */
+function getValidationCoverageSummary (runSummary) {
+  if (runSummary.validationCoverage === 'complete') {
+    return 'Validation coverage: complete. All checks selected by the full workflow produced a result.'
+  }
+  const checked = formatScenarioList(runSummary.checkedScenarios || [])
+  const omitted = formatScenarioList(runSummary.omittedScenarios || [])
+  return `Validation coverage: partial. Checked ${checked || 'no checks'}; ` +
+    `${omitted ? `did not check ${omitted}` : 'one or more selected checks were incomplete'}.`
+}
+
+/**
+ * Formats scenario ids as a readable list.
+ *
+ * @param {string[]} scenarios scenario ids
+ * @returns {string} readable scenario list
+ */
+function formatScenarioList (scenarios) {
+  return scenarios.map(formatScenarioName).join(', ')
 }
 
 function getFrameworkLabels (manifest) {

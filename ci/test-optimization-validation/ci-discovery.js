@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('node:path')
+
 const DEFAULT_CI_SEARCHES = [
   '.github/workflows/*.yml',
   '.github/workflows/*.yaml',
@@ -35,14 +37,15 @@ function buildCiDiscovery ({ manifest, diagnosis }) {
   const declared = isObject(manifest.ciDiscovery) ? manifest.ciDiscovery : {}
   const staticFound = getStaticWorkflowLocations(diagnosis)
   const declaredFound = normalizeStringArray(declared.found)
+  const candidateFound = getManifestWorkflowLocations(manifest)
+  const manifestFound = uniqueStrings([...declaredFound, ...candidateFound])
   const searched = normalizeStringArray(declared.searched)
-  const method = typeof declared.method === 'string' && declared.method
-    ? declared.method
-    : declaredFound.length > 0
-      ? 'manifest'
-      : 'validator-static-diagnosis'
-  const found = declaredFound.length > 0 ? declaredFound : staticFound
-  const contradictions = getCiDiscoveryContradictions({ manifest, declaredFound, staticFound })
+  let method = 'validator-static-diagnosis'
+  if (candidateFound.length > 0) method = 'framework-ci-command'
+  if (declaredFound.length > 0) method = 'manifest'
+  if (typeof declared.method === 'string' && declared.method) method = declared.method
+  const found = manifestFound.length > 0 ? manifestFound : staticFound
+  const contradictions = getCiDiscoveryContradictions({ manifest, declaredFound: manifestFound, staticFound })
 
   return {
     searched: searched.length > 0 ? searched : DEFAULT_CI_SEARCHES,
@@ -53,6 +56,25 @@ function buildCiDiscovery ({ manifest, diagnosis }) {
     notes: normalizeStringArray(declared.notes),
     contradictions,
   }
+}
+
+function getManifestWorkflowLocations (manifest) {
+  const root = manifest.repository?.root
+  const locations = []
+  for (const framework of manifest.frameworks || []) {
+    const configFile = framework.ciWiring?.configFile
+    if (typeof configFile !== 'string') continue
+    if (!root || !path.isAbsolute(configFile)) {
+      locations.push(configFile)
+      continue
+    }
+
+    const relative = path.relative(root, configFile)
+    locations.push(relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+      ? relative.split(path.sep).join('/')
+      : configFile)
+  }
+  return uniqueStrings(locations)
 }
 
 function getFrameworkCiDiscoveryContradiction (framework, manifest) {
@@ -136,6 +158,10 @@ function getStaticWorkflowLocations (diagnosis) {
 function normalizeStringArray (value) {
   if (!Array.isArray(value)) return []
   return value.filter(item => typeof item === 'string')
+}
+
+function uniqueStrings (values) {
+  return [...new Set(values.filter(value => typeof value === 'string' && value !== ''))]
 }
 
 function formatList (values) {

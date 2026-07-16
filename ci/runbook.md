@@ -53,6 +53,11 @@ whether the CI-shaped command carries its own initialization to the final runner
 never proves CI wiring. Live replay is authoritative when available; static/probe evidence only
 explains it. Unsafe/unavailable replay is incomplete or blocked, not a live failure.
 
+If the Datadog run exits differently from its clean preflight, the approved validator reruns the same command once
+without Datadog. A changing clean result is an unstable baseline and remains inconclusive. If both clean runs agree
+but only the Datadog run fails, report a possible dd-trace compatibility problem; never call the failure pre-existing
+unless a clean run reproduces it.
+
 ## Manifest and Temporary Tests
 
 Create the static network-free scaffold:
@@ -61,12 +66,27 @@ Create the static network-free scaffold:
 node ./node_modules/dd-trace/ci/validate-test-optimization.js --init-manifest
 ```
 
-Use required `existingTestCommand` plus pending validator-owned `preflight`; optional existing
-`forcedLocalCommand` for broad wrappers; exact `ciWiringCommand` with non-secret CI env; and isolated
-generated scenario commands. The first three are Datadog-clean and never use generated files. Record
+The scaffold is already schema-valid. Preserve its command boilerplate and edit only repository-specific command,
+CI evidence, and omission fields needed for the selected representatives. Do not reconstruct the manifest from the
+JSON Schema. Run `--validate-manifest` after each edit and follow its field-specific errors.
+
+Use required focused `existingTestCommand` for the clean preflight and Basic Reporting; pending validator-owned
+`preflight`; exact `ciWiringCommand` for the CI-shaped wrapper with non-secret CI env; and isolated generated
+scenario commands. The local command and generated commands are Datadog-clean in the manifest and never use
+generated files outside their declared scenarios. Record
 CI `NODE_OPTIONS`/Datadog variables exactly, replacing only secret values. Validator overlays are not
 CI evidence. Prefer structured `command.env`; if shell semantics are unsafe to represent, retain text
 as evidence and mark replay unavailable.
+
+Set `preflight.maxTestCount` to the smallest defensible bound for the selected representative, normally `1` for
+a file-and-name-filtered test. The scaffold's `50` is only a conservative placeholder: inspect the command and
+lower it before approval when the selected filter is narrower. If the clean preflight cannot determine a test count
+or exceeds the approved bound, the validator stops without drawing a Test Optimization conclusion.
+
+Set `ciWiring.replayability` explicitly. Use `replayable` only with a top-level `ciWiringCommand` that
+preserves the approved CI shape. Use `not_replayable` only with a concrete `replayBlocker` explaining
+the missing service, build, toolchain, or unsafe/unavailable command. A runnable framework cannot omit
+this decision, and a non-replayable CI check makes full validation incomplete rather than successful.
 
 When narrowing a broad CI command to one test, preserve the CI working directory, project/config
 selection, wrapper chain, and runner-specific path semantics. Inspect the selected runner config to
@@ -84,9 +104,12 @@ are proven by the CI-loaded config; do not invent `--project`, `--config`, `--ro
 a wrapper bypass. In particular, do not assume a nested Vitest config's `test.projects` names are exposed
 through a parent workspace config. Record the actual top-level project selected by the CI command.
 
-Keep absolute in-repository paths. Runnable entries need evidence, setup, commands/preflight,
-`ciWiring.initialization`, replay when available, and a generated strategy. Non-runnable entries need
-a status/reason. Consult the adjacent JSON Schema after field errors, then validate without execution:
+Keep schema path fields absolute and inside the repository: repository/project roots, package/config files,
+command working directories and output paths, generated test directories/files/cleanup paths, and test identity
+files. Command arguments may remain relative when the runner resolves them from the command working directory;
+the customer-facing plan also renders repository paths relatively for readability. Runnable entries need evidence,
+setup, commands/preflight, `ciWiring.initialization`, replay when available, and a generated strategy. Non-runnable
+entries need a status/reason. Consult the adjacent JSON Schema after field errors, then validate without execution:
 
 ```bash
 node ./node_modules/dd-trace/ci/validate-test-optimization.js \
@@ -97,7 +120,15 @@ For each runnable supported framework define one-test scenarios: stable `basic-p
 EFD, `atr-fail-once` (clean exit `1`) for retry, and stable `test-management-target` (exit `0`). Use
 separate files or reliable filters, mirror nearby format/config, and show small printable secret-free
 source in the plan. Set `planned`; the validator creates, verifies, runs, and cleans up. Declare exact
-cleanup paths, never overwrite/delete existing files, and use `suite: null` unless events prove it.
+cleanup paths, never overwrite/delete existing files, and use `suite: null` unless events prove it. Every
+framework entry must use its own generated files and cleanup paths in that framework's real test directory;
+never share Jest and Mocha paths or reuse one framework's generated files for another runner.
+
+For Vitest, place generated runtime tests where the selected config's literal `test.include` patterns accept them
+and its literal `test.exclude` patterns do not. Do not use a typecheck-enabled project for Basic Reporting or
+generated runtime tests; select an existing runtime-only config or add `--typecheck.enabled=false` to the approved
+command. Match the generated test's ESM/CommonJS form to the nearest `package.json` that applies to its directory,
+not only the representative project's package metadata.
 
 ## Plan, Approve, Run
 
@@ -125,6 +156,9 @@ Use one approval surface. If the platform offers a command dialog without broade
 submit the exact command immediately and do not ask in chat. Otherwise ask only `Approve executing
 exactly the plan above?`, then run it in the existing sandbox. New commands/resources require a plan.
 
+If an agent platform refuses the installed validator, stop and report that its policy blocked live validation. Leave
+the reviewed command available for the user; do not alter the approved command or repository permissions.
+
 After approval run only the final command; the validator owns setup, clean preflight, generated
 verification, offline fixtures, all checks, debug reruns, artifacts, and cleanup. Malformed, linked,
 incomplete, or oversized data fails closed without network fallback.
@@ -139,6 +173,10 @@ Lead with verdict and compact checks table, then scope, exit code, manifest/repo
 representative results, advanced checks, blockers, and validator `How to fix`. Never invent/apply fixes
 or call skips failures. Link locally to `dd-test-optimization-validation-results/report.md`; inspect
 embedded JSON/artifacts only for a specific failure and never upload them.
+
+State whether validation coverage is `complete` or `partial`. A scenario-scoped run is partial and must
+show every omitted check as `NOT CHECKED`; do not let an unselected CI or advanced check disappear from
+the customer-facing summary. A full run is complete only when every selected check produced a result.
 
 If no live Basic Reporting check ran, report the validation as incomplete even when discovery completed.
 Static CI findings are context only in that case: do not present Datadog CI changes, Git checkout changes,

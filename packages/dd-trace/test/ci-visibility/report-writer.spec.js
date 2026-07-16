@@ -564,7 +564,6 @@ describe('test optimization validation report writer', () => {
             missingLevels: ['test_session_end', 'test'],
             recommendation: 'Verify NODE_OPTIONS reaches Vitest.',
           },
-          ciConfigurationDiagnosis: 'The CI step invokes test instead of test:datadog.',
           existingDatadogInitScripts: [
             {
               name: 'test:datadog',
@@ -707,7 +706,6 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Exit code: `1`/)
       assert.match(markdown, /Timed out: `false`/)
       assert.match(markdown, /Command output summary: `Tests {2}1 failed \| 2 passed \(3\)`/)
-      assert.match(markdown, /Manifest CI configuration diagnosis: The CI step invokes test instead of test:datadog\./)
       assert.match(markdown, /Existing package scripts with Datadog initialization: `test:datadog \(/)
       assert.match(markdown, /Stderr excerpt: `AssertionError: expected true to be false`/)
       assert.match(markdown, /Event failure kind: `ci-wiring-no-test-optimization-events`/)
@@ -957,6 +955,61 @@ describe('test optimization validation report writer', () => {
       assert.ok(markdown.includes('unsupported or non-runnable frameworks: node-tests \\(Node:test\\)'))
       assert.doesNotMatch(markdown, /not selected for live validation/)
       assert.doesNotMatch(markdown, /## Diagnostic-only and Blocked Frameworks/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('labels scenario-scoped validation as partial and shows every unselected check', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-coverage-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const manifest = {
+      __path: manifestPath,
+      repository: { root: tmpDir },
+      frameworks: [{
+        id: 'vitest:unit',
+        framework: 'vitest',
+        status: 'runnable',
+        project: { name: 'unit tests', root: tmpDir },
+      }],
+    }
+    const originalLog = console.log
+    const logs = []
+
+    fs.mkdirSync(out)
+    fs.writeFileSync(manifestPath, '{}\n')
+    console.log = message => logs.push(message)
+
+    try {
+      writeReport({
+        manifest,
+        results: [{
+          frameworkId: 'vitest:unit',
+          scenario: 'basic-reporting',
+          status: 'pass',
+          diagnosis: 'Basic Reporting passed.',
+          evidence: {},
+          artifacts: [],
+        }],
+        out,
+        runSummary: {
+          runCompleted: true,
+          validatorExitCode: 0,
+          validationCoverage: 'partial',
+          checkedScenarios: ['basic-reporting'],
+          omittedScenarios: ['ci-wiring', 'efd', 'atr', 'test-management'],
+          requestedScenario: 'basic-reporting',
+        },
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      assert.match(markdown, /Validation coverage: partial/)
+      assert.match(markdown, /did not check CI Wiring, Early Flake Detection, Auto Test Retries, Test Management/)
+      assert.strictEqual((markdown.match(/NOT CHECKED/g) || []).length, 4)
+      assert.match(logs.join('\n'), /Validation coverage: partial/)
+      assert.match(logs.join('\n'), /NOT CHECKED unit tests \(Vitest\) - Does the selected CI job initialize Datadog/)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })

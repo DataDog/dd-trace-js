@@ -9,6 +9,7 @@ const { getFrameworkDefinitions } = require('../diagnose')
 const { DD_MAJOR } = require('../../version')
 
 const { assertApprovalDigest, getApprovalDigest } = require('./approval')
+const { loadApprovedPlan } = require('./approval-artifacts')
 
 const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
@@ -17,10 +18,7 @@ const { runTestManagement } = require('./scenarios/test-management')
 const { runCiWiring } = require('./scenarios/ci-wiring')
 const { cleanupGeneratedFiles } = require('./generated-files')
 const { verifyGeneratedTestStrategy } = require('./generated-verifier')
-const {
-  annotateCiDiscovery,
-  getFrameworkCiDiscoveryContradiction,
-} = require('./ci-discovery')
+const { annotateCiDiscovery } = require('./ci-discovery')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
 const { formatExecutionPlan, getApprovalSummaryPath, getExecutionPlanPath } = require('./plan-writer')
@@ -55,6 +53,7 @@ function parseArgs (argv) {
     requestedScenario: null,
     keepTempFiles: false,
     verbose: false,
+    approvalOverrides: [],
   }
 
   for (let i = 0; i < argv.length; i++) {
@@ -62,22 +61,28 @@ function parseArgs (argv) {
     switch (arg) {
       case '--manifest':
         options.manifest = requireValue(argv, ++i, arg)
+        options.approvalOverrides.push(arg)
         break
       case '--out':
         options.out = requireValue(argv, ++i, arg)
+        options.approvalOverrides.push(arg)
         break
       case '--framework':
         options.frameworks.add(normalizeFrameworkTarget(requireValue(argv, ++i, arg)))
+        options.approvalOverrides.push(arg)
         break
       case '--scenario':
         options.requestedScenario = requireValue(argv, ++i, arg)
         options.scenarios = normalizeScenarioSelection(options.requestedScenario)
+        options.approvalOverrides.push(arg)
         break
       case '--keep-temp-files':
         options.keepTempFiles = true
+        options.approvalOverrides.push(arg)
         break
       case '--verbose':
         options.verbose = true
+        options.approvalOverrides.push(arg)
         break
       case '--validate-manifest':
         options.validateManifest = true
@@ -96,6 +101,12 @@ function parseArgs (argv) {
         break
       case '--offline-fixture-nonce':
         options.offlineFixtureNonce = requireValue(argv, ++i, arg)
+        break
+      case '--run-approved-plan':
+        options.runApprovedPlan = requireValue(argv, ++i, arg)
+        break
+      case '--sha256':
+        options.approvedArtifactSha256 = requireValue(argv, ++i, arg)
         break
       case '--help':
       case '-h':
@@ -137,12 +148,8 @@ Options:
   --validate-manifest     Validate the manifest and exit without running project code.
   --init-manifest         Create a schema-valid manifest scaffold without running project code.
   --print-plan            Write the plan and approval artifacts without running project code.
-  --print-approval-sha256 Reconstruct and print the approval JSON hash without running project code.
-                          Requires the nonce and the same selection/output options shown in the plan.
-                          This checks consistency with installed dd-trace; it does not verify package origin.
-                          Verify origin through lockfile/integrity metadata or a trusted package tarball.
-  --offline-fixture-nonce Random fixture-root nonce written into the plan by --print-plan.
-  --approved-plan-sha256  Bind live execution to the exact manifest and options recorded by --print-plan.
+  --run-approved-plan     Run the exact approval.json produced by --print-plan.
+  --sha256 <digest>       Require approval.json and reconstructed current inputs to match this SHA-256.
   --help                  Show this help.
 `)
 }
@@ -164,11 +171,14 @@ async function main (argv) {
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
       console.log(sanitizeConsoleText(
         `Created validation manifest scaffold without running project code: ${manifestPath}\n` +
-        'Review the selected test commands and the CI files listed in ciDiscovery, record one replayable CI test ' +
-        'step when available, then run --validate-manifest.'
+        'This scaffold is already schema-valid; preserve its command boilerplate. Review the selected test commands ' +
+        'and CI files listed in ciDiscovery, record one replayable CI test step when available, then run ' +
+        '--validate-manifest and follow its field-specific errors.'
       ))
       return
     }
+
+    if (options.runApprovedPlan) applyApprovedPlanOptions(options)
 
     const manifest = loadManifest(options.manifest)
     if (options.printPlan) {
@@ -217,9 +227,8 @@ async function main (argv) {
     }
     if (!options.approvedPlanSha256 || !options.offlineFixtureNonce) {
       throw new Error(
-        'Live validation requires the --offline-fixture-nonce and --approved-plan-sha256 values written by ' +
-        '--print-plan. ' +
-        'Render and approve a fresh execution plan first.'
+        'Live validation requires --run-approved-plan and --sha256 from a reviewed --print-plan result. Render and ' +
+        'approve a fresh execution plan first.'
       )
     }
     const out = validateOutputPath(manifest, options.out)
@@ -244,11 +253,11 @@ async function main (argv) {
     annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
 
     const results = []
+    const runnableFrameworks = []
 
     try {
       const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
       const liveReadyFrameworks = []
-      const runnableFrameworks = []
 
       for (const framework of frameworks) {
         if (framework.status !== 'runnable') {
@@ -304,8 +313,7 @@ async function main (argv) {
           results.push(basicResult)
         }
 
-        if (options.scenarios.has(CI_WIRING_SCENARIO) &&
-          shouldRunCiWiringValidation(framework, manifest, options)) {
+        if (options.scenarios.has(CI_WIRING_SCENARIO)) {
           if (basicResult && basicResult.status !== 'pass') {
             results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
           } else {
@@ -362,6 +370,7 @@ async function main (argv) {
       await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
     }
 
+    addMissingRequiredResults(results, runnableFrameworks, options.scenarios)
     const validatorExitCode = results.some(isUnsuccessfulResult) || !didRunLiveValidation(results) ? 1 : 0
     await writeReport({
       manifest,
@@ -371,6 +380,15 @@ async function main (argv) {
       runSummary: {
         runCompleted: true,
         validatorExitCode,
+        validationCoverage: getValidationCoverage({
+          results,
+          requestedScenario: options.requestedScenario,
+          frameworks: selectedFrameworks,
+          scenarios: options.scenarios,
+        }),
+        checkedScenarios: [...options.scenarios],
+        omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
+        requestedScenario: options.requestedScenario,
       },
     })
     process.exitCode = validatorExitCode
@@ -378,6 +396,36 @@ async function main (argv) {
     process.exitCode = 1
     console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
   }
+}
+
+/**
+ * Reconstructs live options from a hash-verified approval artifact.
+ *
+ * @param {object} options parsed CLI options
+ * @returns {void}
+ */
+function applyApprovedPlanOptions (options) {
+  if (!options.approvedArtifactSha256) {
+    throw new Error('--run-approved-plan requires --sha256 from the reviewed execution plan.')
+  }
+  if (options.approvalOverrides.length > 0 || options.offlineFixtureNonce || options.approvedPlanSha256) {
+    throw new Error(
+      '--run-approved-plan cannot be combined with manifest, output, selection, or legacy approval flags.'
+    )
+  }
+
+  const { material } = loadApprovedPlan(options.runApprovedPlan, options.approvedArtifactSha256)
+  options.manifest = material.manifest.path
+  options.out = material.validation.outputDirectory
+  options.frameworks = new Set(material.selection.frameworks.map(normalizeFrameworkTarget))
+  options.requestedScenario = material.selection.scenario
+  options.scenarios = options.requestedScenario
+    ? normalizeScenarioSelection(options.requestedScenario)
+    : new Set(getSelectableScenarios())
+  options.offlineFixtureNonce = material.validation.offlineFixtureNonce
+  options.keepTempFiles = material.validation.keepTemporaryFiles === true
+  options.verbose = material.validation.verbose === true
+  options.approvedPlanSha256 = options.approvedArtifactSha256
 }
 
 function validateOutputPath (manifest, outputPath) {
@@ -388,14 +436,6 @@ function validateOutputPath (manifest, outputPath) {
     throw new Error('Validation output directory must be a dedicated child directory inside repository.root.')
   }
   return out
-}
-
-function shouldRunCiWiringValidation (framework, manifest, options) {
-  return options.requestedScenario === CI_WIRING_SCENARIO || hasCiWiringValidation(framework, manifest)
-}
-
-function hasCiWiringValidation (framework, manifest) {
-  return Boolean(framework.ciWiringCommand || getFrameworkCiDiscoveryContradiction(framework, manifest))
 }
 
 function filterFrameworks (frameworks, targets) {
@@ -458,8 +498,68 @@ function getAdvancedScenarios (scenarios) {
   })
 }
 
+/**
+ * Fails closed when orchestration omits a selected check for a runnable framework.
+ *
+ * @param {object[]} results collected validation results
+ * @param {object[]} frameworks runnable frameworks whose live phases started
+ * @param {Set<string>} scenarios selected scenarios
+ * @returns {void}
+ */
+function addMissingRequiredResults (results, frameworks, scenarios) {
+  for (const framework of frameworks) {
+    for (const scenario of scenarios) {
+      if (results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) continue
+      results.push({
+        frameworkId: framework.id,
+        scenario,
+        status: 'error',
+        diagnosis: `${getScenarioDisplayName(scenario)} was selected but produced no validation result.`,
+        evidence: {
+          validationIncomplete: true,
+          recommendation: 'Rerun the validator. If the check remains absent, report this validator orchestration ' +
+            'error instead of treating the validation as successful.',
+        },
+        artifacts: [],
+      })
+    }
+  }
+}
+
+/**
+ * Reports whether all default checks produced results in an unscoped run.
+ *
+ * @param {object} input coverage inputs
+ * @param {object[]} input.results validation results
+ * @param {string|null} input.requestedScenario explicitly selected scenario
+ * @param {object[]} input.frameworks selected manifest frameworks
+ * @param {Set<string>} input.scenarios selected scenarios
+ * @returns {'complete'|'partial'} validation coverage
+ */
+function getValidationCoverage ({ results, requestedScenario, frameworks, scenarios }) {
+  if (requestedScenario) return 'partial'
+  if (results.some(result => result.evidence?.manifestIncomplete || result.evidence?.validationIncomplete)) {
+    return 'partial'
+  }
+
+  const runnableFrameworks = frameworks.filter(framework => framework.status === 'runnable')
+  if (runnableFrameworks.length === 0) return 'partial'
+  for (const framework of runnableFrameworks) {
+    for (const scenario of scenarios) {
+      if (!results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) {
+        return 'partial'
+      }
+    }
+  }
+  return 'complete'
+}
+
 function getSelectableScenarios () {
-  return [...Object.keys(SCENARIOS), CI_WIRING_SCENARIO]
+  return [
+    BASIC_REPORTING_SCENARIO,
+    CI_WIRING_SCENARIO,
+    ...Object.keys(SCENARIOS).filter(scenario => scenario !== BASIC_REPORTING_SCENARIO),
+  ]
 }
 
 function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {
@@ -512,7 +612,7 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
     frameworkId: framework.id,
     scenario,
     status: 'skip',
-    diagnosis: `Skipped because generated test verification did not pass: ${failure.diagnosis}`,
+    diagnosis: `Skipped because the temporary validation test could not run as expected: ${failure.diagnosis}`,
     evidence: {
       blockedBy: 'generated-test-verification',
       verificationStatus: failure.status,
@@ -585,6 +685,8 @@ function logValidationProgress (message) {
  */
 function getScenarioDisplayName (scenario) {
   return {
+    'basic-reporting': 'Basic Reporting',
+    'ci-wiring': 'CI Wiring',
     efd: 'Early Flake Detection',
     atr: 'Auto Test Retries',
     'test-management': 'Test Management',

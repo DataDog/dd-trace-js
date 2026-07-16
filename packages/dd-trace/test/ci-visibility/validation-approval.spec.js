@@ -6,6 +6,10 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const {
+  loadApprovedPlan,
+  writeApprovalArtifacts,
+} = require('../../../../ci/test-optimization-validation/approval-artifacts')
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 
 describe('test optimization validation approval', () => {
@@ -103,6 +107,51 @@ describe('test optimization validation approval', () => {
       assert.ok(material.validator.coveredFiles.some(file => {
         return file.path === 'packages/dd-trace/src/encode/agentless-ci-visibility.js'
       }))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('loads only the exact regular approval file whose bytes the user approved', function () {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approved-file-'))
+    const manifestPath = path.join(root, 'manifest.json')
+    const out = path.join(root, 'results')
+    fs.writeFileSync(manifestPath, `${JSON.stringify(getManifest(root, [process.execPath, '-e', '']))}\n`)
+    const manifest = loadManifest(manifestPath)
+
+    try {
+      const written = writeApprovalArtifacts({
+        manifest,
+        out,
+        selectedFrameworkIds: ['jest:root'],
+        requestedScenario: 'basic-reporting',
+        offlineFixtureNonce: '0'.repeat(32),
+        keepTempFiles: false,
+        verbose: false,
+      })
+      const approved = loadApprovedPlan(written.approvalJsonPath, written.digest)
+
+      assert.strictEqual(approved.path, written.approvalJsonPath)
+      assert.deepStrictEqual(approved.material.selection, {
+        frameworks: ['jest:root'],
+        scenario: 'basic-reporting',
+      })
+
+      fs.appendFileSync(written.approvalJsonPath, ' ')
+      assert.throws(
+        () => loadApprovedPlan(written.approvalJsonPath, written.digest),
+        /approved plan file changed after approval/i
+      )
+
+      if (process.platform !== 'win32') {
+        const storedApproval = path.join(out, 'stored-approval.json')
+        fs.renameSync(written.approvalJsonPath, storedApproval)
+        fs.symlinkSync(storedApproval, written.approvalJsonPath)
+        assert.throws(
+          () => loadApprovedPlan(written.approvalJsonPath, written.digest),
+          /regular file, not a symbolic link/
+        )
+      }
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -263,8 +312,13 @@ function getManifest (root, argv) {
       status: 'runnable',
       project: { root },
       existingTestCommand: { cwd: root, argv },
-      preflight: { ran: false },
-      ciWiring: { status: 'skip', reason: 'No CI command selected.' },
+      preflight: { ran: false, maxTestCount: 50 },
+      ciWiring: {
+        status: 'skip',
+        replayability: 'not_replayable',
+        replayBlocker: 'No CI command selected.',
+        reason: 'No CI command selected.',
+      },
     }],
   }
 }

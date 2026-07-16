@@ -3,14 +3,17 @@
 const fs = require('fs')
 const path = require('path')
 
-const { getLocalValidationCommand } = require('../local-command')
+const { runCommand } = require('../command-runner')
+const { getDatadogCleanCommand, getLocalValidationCommand } = require('../local-command')
 
 const {
   basicEventEvidence,
   error,
   failWithDebugRerun,
   findInterestingLines,
+  frameworkOutDir,
   hasAllBasicEventTypes,
+  inconclusive,
   pass,
   runInstrumentedCommand,
   tailInterestingLines,
@@ -33,7 +36,6 @@ async function runBasicReporting ({ framework, out, options }) {
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
       commandDescription: command?.description,
-      forcedLocalCommandUsed: Boolean(framework.forcedLocalCommand),
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
       preflight: summarizePreflight(framework.preflight),
@@ -98,9 +100,23 @@ async function runBasicReporting ({ framework, out, options }) {
 
     evidence.commandFailure = summarizeCommandFailure(result, evidence)
     evidence.commandExitMatchesPreflight = false
-    return failBasicReportingWithDebugRerun({
+    const cleanConfirmation = await runCleanConfirmation({ command, framework, options, out, scenarioName })
+    evidence.cleanConfirmation = cleanConfirmation.evidence
+
+    if (!cleanConfirmation.evidence.exitMatchesPreflight) {
+      return inconclusive(
+        framework,
+        scenarioName,
+        getUnstableBaselineDiagnosis(framework.preflight, result, cleanConfirmation.result),
+        evidence,
+        outDir,
+        cleanConfirmation.artifacts
+      )
+    }
+
+    const failure = await failBasicReportingWithDebugRerun({
       command,
-      diagnosis: `${evidence.commandFailure.summary} The exit code did not match the dd-trace-less preflight run.`,
+      diagnosis: getPossibleCompatibilityDiagnosis(framework.preflight, result),
       evidence,
       framework,
       options,
@@ -108,13 +124,81 @@ async function runBasicReporting ({ framework, out, options }) {
       outDir,
       scenarioName,
     })
+    failure.artifacts.push(...cleanConfirmation.artifacts)
+    return failure
   } catch (err) {
     return error(framework, scenarioName, err)
   }
 }
 
+/**
+ * Repeats the selected command without Datadog after an instrumented exit-code mismatch.
+ *
+ * @param {object} input confirmation inputs
+ * @param {object} input.command selected project command
+ * @param {object} input.framework manifest framework entry
+ * @param {object} input.options validator options
+ * @param {string} input.out validation output directory
+ * @param {string} input.scenarioName scenario identifier
+ * @returns {Promise<{artifacts: string[], evidence: object, result: object}>} clean confirmation outcome
+ */
+async function runCleanConfirmation ({ command, framework, options, out, scenarioName }) {
+  const outDir = frameworkOutDir(out, framework, `${scenarioName}-clean-confirmation`)
+  const result = await runCommand(getDatadogCleanCommand(command), {
+    artifactRoot: out,
+    envMode: 'clean',
+    label: `${framework.id}:${scenarioName}:clean-confirmation`,
+    outDir,
+    repositoryRoot: options.repositoryRoot,
+    requireExecutableApproval: options.requireExecutableApproval,
+    verbose: options.verbose,
+  })
+  const exitMatchesPreflight = !result.timedOut && matchesPreflightExitCode(framework.preflight, result.exitCode)
+  return {
+    artifacts: Object.values(result.artifacts),
+    result,
+    evidence: {
+      ran: true,
+      exitCode: result.exitCode,
+      timedOut: result.timedOut,
+      exitMatchesPreflight,
+      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
+    },
+  }
+}
+
+/**
+ * Describes an exit mismatch that cannot be attributed because clean executions disagreed.
+ *
+ * @param {object} preflight initial clean preflight evidence
+ * @param {object} instrumented instrumented command result
+ * @param {object} cleanConfirmation repeated clean command result
+ * @returns {string} customer-facing diagnosis
+ */
+function getUnstableBaselineDiagnosis (preflight, instrumented, cleanConfirmation) {
+  const confirmation = cleanConfirmation.timedOut
+    ? 'timed out'
+    : `exited ${cleanConfirmation.exitCode}`
+  return `The selected command exited ${preflight.exitCode} during the initial clean preflight, exited ` +
+    `${instrumented.exitCode} with Datadog initialized, and ${confirmation} during a second clean run. The ` +
+    'non-Datadog baseline was not stable, so no Test Optimization compatibility conclusion was reached.'
+}
+
+/**
+ * Describes an instrumented-only exit mismatch after the clean baseline was reproduced.
+ *
+ * @param {object} preflight initial clean preflight evidence
+ * @param {object} instrumented instrumented command result
+ * @returns {string} customer-facing diagnosis
+ */
+function getPossibleCompatibilityDiagnosis (preflight, instrumented) {
+  return `The selected command exited ${preflight.exitCode} in both runs without Datadog, but exited ` +
+    `${instrumented.exitCode} with Datadog initialized after reporting Test Optimization events. This may indicate ` +
+    'a dd-trace compatibility issue rather than a project baseline failure.'
+}
+
 function getBasicReportingCommand (framework) {
-  return getLocalValidationCommand(framework, framework.forcedLocalCommand || framework.existingTestCommand)
+  return getLocalValidationCommand(framework, framework.existingTestCommand)
 }
 
 async function failBasicReportingWithDebugRerun (options) {

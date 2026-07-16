@@ -271,7 +271,7 @@ function resolvePhysicalPath (filename) {
  */
 function assertApprovalDigest (digest, input) {
   if (!APPROVAL_DIGEST_PATTERN.test(String(digest || ''))) {
-    throw new Error('Invalid --approved-plan-sha256 value. Render a fresh plan with --print-plan.')
+    throw new Error('Invalid approved plan SHA-256. Render a fresh plan with --print-plan.')
   }
 
   const expected = getApprovalDigest(input)

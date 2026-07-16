@@ -148,12 +148,11 @@ function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command })
     commandDescription: command.description,
     ciCommandCandidate: buildCiCommandCandidate(framework),
     ciWiring: framework.ciWiring,
-    ciConfigurationDiagnosis: framework.ciWiring?.diagnosis || framework.ciWiring?.reason,
     ciRemediation: buildCiRemediation(framework),
     nodeOptionsRemoval: findNodeOptionsRemoval(framework, manifest),
     existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
     lateInitialization: findLateInitialization(manifest, framework),
-    forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
+    directInitializationBasicReporting: summarizeBasicReportingResult(basicResult),
   }
 }
 
@@ -201,7 +200,8 @@ function getMissingCiWiringCommandResult (framework, manifest) {
   }
 
   const ciWiring = framework.ciWiring
-  const diagnosis = ciWiring?.diagnosis ||
+  const diagnosis = ciWiring?.replayBlocker ||
+    ciWiring?.diagnosis ||
     ciWiring?.reason ||
     'No replayable CI wiring command was provided in the manifest.'
   const ciRemediation = buildCiRemediation(framework)
@@ -209,7 +209,7 @@ function getMissingCiWiringCommandResult (framework, manifest) {
     ciCommandCandidate: buildCiCommandCandidate(framework),
     ciWiring,
     ciRemediation,
-    recommendation: 'Add ciWiringCommand to the manifest when a CI test step can be safely replayed locally.',
+    recommendation: 'Resolve the recorded CI replay blocker, then add ciWiringCommand and rerun validation.',
   }
 
   return incomplete(
@@ -261,14 +261,11 @@ function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
 
   const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
     'environment and setup described by the CI job, no Test Optimization events reached the offline event artifact.'
-  const configurationSummary = evidence.ciConfigurationDiagnosis
-    ? ` Manifest CI discovery recorded: ${evidence.ciConfigurationDiagnosis}`
-    : ''
   const probeSummary = getInitializationProbeSummary(evidence.initializationProbe, framework)
   const lateInitializationSummary = getLateInitializationSummary(evidence.lateInitialization)
 
   if (basicResult?.status === 'pass') {
-    return `${summary}${configurationSummary}${lateInitializationSummary} ` +
+    return `${summary}${lateInitializationSummary} ` +
       'The same selected test command ' +
       'reported test data when the ' +
       'validator supplied the ' +
@@ -276,7 +273,7 @@ function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
       `correctly.${probeSummary}`
   }
 
-  return `${summary}${configurationSummary}${lateInitializationSummary}${probeSummary}`
+  return `${summary}${lateInitializationSummary}${probeSummary}`
 }
 
 function getCiWiringTestsRanRecommendation ({ basicResult, evidence, framework }) {

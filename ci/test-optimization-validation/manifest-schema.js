@@ -48,6 +48,7 @@ const CI_WIRING_STATUSES = new Set([
   'skip',
   'unknown',
 ])
+const CI_WIRING_REPLAYABILITIES = new Set(['replayable', 'not_replayable'])
 const CI_INITIALIZATION_STATUSES = new Set(['configured', 'not_configured', 'unknown'])
 const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -56,6 +57,7 @@ const MAX_FRAMEWORKS = 100
 const MAX_MANIFEST_ARRAY_ENTRIES = 1000
 const MAX_SETUP_COMMANDS = 100
 const MAX_VALIDATION_ERRORS = 50
+const MAX_REPRESENTATIVE_TESTS = 1000
 const SECRET_PLACEHOLDER = 'dd-validation-placeholder'
 const SAFE_SECRET_FIELD_VALUES = new Set(['', '0', '1', 'false', 'true', 'none', 'disabled'])
 const COMMAND_FIELDS = new Set([
@@ -116,6 +118,7 @@ function validateManifest (manifest) {
     validateUniqueFrameworkIds(frameworks, errors)
     validateUniqueArtifactIds(frameworks, errors)
     validateDuplicateRunnableCoverage(frameworks, errors)
+    validateGeneratedPathCollisions(frameworks, errors)
     for (const [index, framework] of frameworks.entries()) {
       validateFramework(framework, index, errors)
     }
@@ -124,6 +127,38 @@ function validateManifest (manifest) {
   validateRepositoryContainedPaths(manifest, errors)
 
   return errors.finalize()
+}
+
+/**
+ * Rejects generated files or cleanup targets shared by multiple framework entries.
+ *
+ * @param {object[]} frameworks manifest framework entries
+ * @param {{push: function(string): void}} errors bounded validation error collector
+ * @returns {void}
+ */
+function validateGeneratedPathCollisions (frameworks, errors) {
+  const seen = new Map()
+  for (const [index, framework] of frameworks.entries()) {
+    const strategy = framework?.generatedTestStrategy
+    const frameworkPaths = new Map([
+      ...limitedArray(strategy?.files, MAX_GENERATED_FILES).map(file => file?.path),
+      ...limitedArray(strategy?.cleanupPaths, MAX_MANIFEST_ARRAY_ENTRIES),
+    ].filter(filename => typeof filename === 'string' && path.isAbsolute(filename))
+      .map(filename => [path.normalize(filename), filename]))
+
+    for (const [key, filename] of frameworkPaths) {
+      const previous = seen.get(key)
+      if (previous === undefined) {
+        seen.set(key, index)
+        continue
+      }
+      errors.push(
+        `frameworks[${index}].generatedTestStrategy path ${JSON.stringify(filename)} conflicts with ` +
+        `frameworks[${previous}].generatedTestStrategy. Generated files and cleanup paths must be unique across ` +
+        'framework entries.'
+      )
+    }
+  }
 }
 
 function validateDuplicateRunnableCoverage (frameworks, errors) {
@@ -238,7 +273,7 @@ function validateRepositoryContainedPaths (manifest, errors) {
 
 function getFrameworkCommands (framework) {
   const commands = []
-  for (const name of ['existingTestCommand', 'forcedLocalCommand', 'ciWiringCommand']) {
+  for (const name of ['existingTestCommand', 'ciWiringCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
   for (const [index, command] of limitedArray(framework.setup?.commands, MAX_SETUP_COMMANDS).entries()) {
@@ -303,6 +338,7 @@ function validateFramework (framework, index, errors) {
     requiredCommand(framework, 'existingTestCommand', errors, prefix, { datadogClean: true })
     validateDatadogCleanCommand(framework.existingTestCommand, `${prefix}.existingTestCommand`, errors)
     requiredObject(framework, 'preflight', errors, prefix)
+    validatePreflight(framework.preflight, `${prefix}.preflight`, errors)
     requiredObject(framework, 'ciWiring', errors, prefix)
   } else {
     requireNonEmptyNotes(framework, errors, prefix)
@@ -316,9 +352,11 @@ function validateFramework (framework, index, errors) {
     validateCiWiring(framework, prefix, errors)
   }
 
-  if (framework.forcedLocalCommand) {
-    requiredCommand(framework, 'forcedLocalCommand', errors, prefix, { datadogClean: true })
-    validateDatadogCleanCommand(framework.forcedLocalCommand, `${prefix}.forcedLocalCommand`, errors)
+  if (framework.forcedLocalCommand !== undefined) {
+    errors.push(
+      `${prefix}.forcedLocalCommand is not supported. Use the focused existingTestCommand for Basic Reporting ` +
+      'and ciWiringCommand for the CI-shaped replay.'
+    )
   }
 
   if (framework.setup?.commands) {
@@ -334,6 +372,24 @@ function validateFramework (framework, index, errors) {
 
   if (framework.generatedTestStrategy) {
     validateGeneratedTestStrategy(framework.generatedTestStrategy, `${prefix}.generatedTestStrategy`, errors)
+  }
+}
+
+/**
+ * Validates the approved upper bound for a representative test command.
+ *
+ * @param {object} preflight preflight declaration
+ * @param {string} prefix manifest field path
+ * @param {{push: function(string): void}} errors bounded validation error collector
+ * @returns {void}
+ */
+function validatePreflight (preflight, prefix, errors) {
+  if (!preflight || typeof preflight !== 'object' || Array.isArray(preflight)) return
+
+  if (!Number.isInteger(preflight.maxTestCount) || preflight.maxTestCount < 1) {
+    errors.push(`${prefix}.maxTestCount must be a positive integer.`)
+  } else if (preflight.maxTestCount > MAX_REPRESENTATIVE_TESTS) {
+    errors.push(`${prefix}.maxTestCount must not exceed ${MAX_REPRESENTATIVE_TESTS}.`)
   }
 }
 
@@ -400,12 +456,38 @@ function validateCiWiring (framework, prefix, errors) {
     errors.push(`${prefix}.ciWiring.status must be pass, fail, skip, or unknown.`)
   }
 
+  if (!CI_WIRING_REPLAYABILITIES.has(ciWiring.replayability)) {
+    errors.push(`${prefix}.ciWiring.replayability must be replayable or not_replayable.`)
+  }
+  if (Object.hasOwn(ciWiring, 'ciWiringCommand')) {
+    errors.push(`${prefix}.ciWiring.ciWiringCommand is misplaced; use ${prefix}.ciWiringCommand.`)
+  }
+  if (ciWiring.replayability === 'replayable' && !framework.ciWiringCommand) {
+    errors.push(`${prefix}.ciWiringCommand is required when ${prefix}.ciWiring.replayability is replayable.`)
+  }
+  if (ciWiring.replayability === 'not_replayable') {
+    if (ciWiring.status === 'pass' || ciWiring.status === 'fail') {
+      errors.push(`${prefix}.ciWiring.status must be skip or unknown when replayability is not_replayable.`)
+    }
+    if (framework.ciWiringCommand) {
+      errors.push(`${prefix}.ciWiringCommand must be omitted when ${prefix}.ciWiring.replayability is not_replayable.`)
+    }
+    if (!hasNonEmptyString(ciWiring.replayBlocker)) {
+      errors.push(`${prefix}.ciWiring.replayBlocker must explain why CI replay is not_replayable.`)
+    }
+  }
+
   if (ciWiring.initialization !== undefined) {
     validateCiInitialization(ciWiring.initialization, `${prefix}.ciWiring.initialization`, errors)
   }
 
-  if ((ciWiring.status === 'pass' || ciWiring.status === 'fail') && !framework.ciWiringCommand) {
-    errors.push(`${prefix}.ciWiringCommand is required when ciWiring.status is ${ciWiring.status}.`)
+  if (ciWiring.initialization?.status === 'not_configured' &&
+    commandInitializesDatadog(framework.ciWiringCommand)) {
+    errors.push(
+      `${prefix}.ciWiring.initialization.status is not_configured, but ${prefix}.ciWiringCommand adds dd-trace ` +
+      'initialization. The replay command must preserve the discovered CI configuration; remove the added ' +
+      'initialization or correct the initialization status and evidence.'
+    )
   }
 
   if (framework.ciWiringCommand) {
@@ -774,6 +856,7 @@ function join (prefix, field) {
 
 module.exports = {
   MAX_FRAMEWORKS,
+  MAX_REPRESENTATIVE_TESTS,
   MAX_VALIDATION_ERRORS,
   validateManifest,
 }

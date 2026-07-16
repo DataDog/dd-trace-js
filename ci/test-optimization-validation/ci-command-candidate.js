@@ -29,6 +29,8 @@ function buildCiCommandCandidate (framework) {
     command: command ? serializeDisplayCommand(command) : ciWiring.command,
     cwd: command?.cwd || ciWiring.workingDirectory,
     whySelected: ciWiring.whySelected || ciWiring.selectionReason || ciWiring.diagnosis,
+    replayability: ciWiring.replayability,
+    replayBlocker: ciWiring.replayBlocker,
     initialization: ciWiring.initialization,
     env: buildCiEnvSummary(ciWiring, command),
     packageScriptExpansionChain: getFirstArray(

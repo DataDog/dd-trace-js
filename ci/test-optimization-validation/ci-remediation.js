@@ -187,8 +187,13 @@ function formatSnippet (env, ciWiring, command) {
   }
 
   return Object.entries(env).map(([name, value]) => {
-    return `${name}=${name === 'DD_API_KEY' ? '<DD_API_KEY_FROM_CI_SECRET_STORE>' : value}`
+    const safeValue = name === 'DD_API_KEY' ? '<DD_API_KEY_FROM_CI_SECRET_STORE>' : value
+    return `${name}=${quoteShellValue(safeValue)}`
   }).join('\n')
+}
+
+function quoteShellValue (value) {
+  return JSON.stringify(String(value))
 }
 
 function getTestCommand (ciWiring, command) {

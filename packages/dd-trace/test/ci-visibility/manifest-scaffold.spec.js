@@ -47,7 +47,10 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(manifest.frameworks.length, 1)
       assert.strictEqual(manifest.frameworks[0].framework, 'mocha')
       assert.strictEqual(manifest.frameworks[0].preflight.status, 'pending')
+      assert.strictEqual(manifest.frameworks[0].preflight.maxTestCount, 50)
       assert.strictEqual(manifest.frameworks[0].ciWiring.initialization.status, 'unknown')
+      assert.strictEqual(manifest.frameworks[0].ciWiring.replayability, 'not_replayable')
+      assert.match(manifest.frameworks[0].ciWiring.replayBlocker, /CI command selection has not been completed/)
       assert.deepStrictEqual(
         manifest.frameworks[0].generatedTestStrategy.scenarios.map(scenario => scenario.id),
         ['basic-pass', 'atr-fail-once', 'test-management-target']
@@ -94,6 +97,7 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(karma.frameworkVersion, '6.4.4')
       assert.match(karma.notes[0], /not supported by this Test Optimization validator/)
       assert.strictEqual(mocha.ciWiring.status, 'unknown')
+      assert.strictEqual(mocha.ciWiring.replayability, 'not_replayable')
       assert.strictEqual(mocha.ciWiringCommand, undefined)
       assert.deepStrictEqual(manifest.omitted, [])
     } finally {
@@ -242,14 +246,14 @@ describe('test optimization validation manifest scaffold', () => {
       command: 'vitest run',
       packageType: 'module',
       testFilename: 'unit.test.js',
-      expectedModuleSystem: 'module',
+      expectedModuleSystem: 'esm',
     },
     {
       framework: 'jest',
       version: '29.7.0',
       command: 'jest --runInBand',
       testFilename: 'unit.test.mjs',
-      expectedModuleSystem: 'module',
+      expectedModuleSystem: 'esm',
     },
     {
       framework: 'jest',
@@ -318,7 +322,7 @@ describe('test optimization validation manifest scaffold', () => {
         assert.strictEqual(new Set(framework.generatedTestStrategy.files.map(file => file.path)).size, 3)
         const atrFile = framework.generatedTestStrategy.files.find(file => file.path.includes('atr-fail-once'))
         const atrSource = atrFile.contentLines.join('\n')
-        if (definition.expectedModuleSystem === 'module') {
+        if (definition.expectedModuleSystem === 'esm') {
           assert.match(atrSource, /import \{ existsSync, writeFileSync \} from 'node:fs'/)
           assert.match(atrSource, /join\(dirname\(fileURLToPath\(import\.meta\.url\)\)/)
           assert.doesNotMatch(atrSource, /new URL/)
@@ -342,6 +346,68 @@ describe('test optimization validation manifest scaffold', () => {
       }
     })
   }
+
+  it('uses the nearest package module type for generated tests', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
+    const mochaRoot = path.dirname(require.resolve('mocha/package.json'))
+    const testRoot = path.join(root, 'test', 'scripts')
+    fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true })
+    fs.mkdirSync(testRoot, { recursive: true })
+    fs.symlinkSync(mochaRoot, path.join(root, 'node_modules', 'mocha'), 'dir')
+    fs.writeFileSync(path.join(testRoot, 'package.json'), JSON.stringify({ type: 'commonjs' }))
+    fs.writeFileSync(path.join(testRoot, 'unit.spec.js'), 'describe("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'nested-commonjs-tests',
+      type: 'module',
+      devDependencies: { mocha: require('mocha/package.json').version },
+      scripts: { test: 'mocha test/scripts/unit.spec.js' },
+    }))
+
+    try {
+      const manifest = createManifestScaffold({ root })
+      const strategy = manifest.frameworks[0].generatedTestStrategy
+      const atrSource = strategy.files.find(file => file.path.includes('atr-fail-once')).contentLines.join('\n')
+
+      assert.deepStrictEqual(validateManifest(manifest), [])
+      assert.strictEqual(strategy.testDirectory, testRoot)
+      assert.strictEqual(strategy.moduleSystem, 'commonjs')
+      assert.match(atrSource, /const fs = require\('node:fs'\)/)
+      assert.doesNotMatch(atrSource, /import \{ existsSync/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('uses JavaScript files in an established __tests__ directory as representatives', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
+    const runnerRoot = path.join(root, 'node_modules', 'vitest')
+    const testRoot = path.join(root, '__tests__')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(testRoot)
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'vitest',
+      version: '2.1.9',
+      bin: { vitest: 'bin.js' },
+    }))
+    fs.writeFileSync(path.join(testRoot, 'base.js'), 'test("base", () => {})\n')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'vitest-tests-directory',
+      devDependencies: { vitest: '2.1.9' },
+      scripts: { test: 'vitest run' },
+    }))
+
+    try {
+      const manifest = createManifestScaffold({ root })
+      const strategy = manifest.frameworks[0].generatedTestStrategy
+
+      assert.deepStrictEqual(validateManifest(manifest), [])
+      assert.strictEqual(strategy.testDirectory, testRoot)
+      assert.ok(strategy.files.every(file => path.dirname(file.path) === testRoot))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 
   it('preserves an exact test.ts Vitest file convention', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))

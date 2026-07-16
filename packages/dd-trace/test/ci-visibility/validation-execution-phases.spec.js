@@ -56,6 +56,7 @@ describe('test optimization validator-owned execution phases', () => {
           NODE_OPTIONS: '-r dd-trace/ci/init',
         },
       },
+      preflight: { status: 'pending', maxTestCount: 1 },
     }
 
     try {
@@ -85,6 +86,7 @@ describe('test optimization validator-owned execution phases', () => {
         cwd: root,
         argv: ['env', 'NODE_OPTIONS=-r dd-trace/ci/init', process.execPath, '-e', 'process.exit(0)'],
       },
+      preflight: { status: 'pending', maxTestCount: 1 },
     }
 
     try {
@@ -94,6 +96,36 @@ describe('test optimization validator-owned execution phases', () => {
         out: path.join(root, 'results'),
       }), /Cannot create a Datadog-clean command.*inline dd-trace preload/)
       assert.strictEqual(fs.existsSync(path.join(root, 'results')), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('stops when the clean preflight exceeds the approved representative scope', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-scope-'))
+    const framework = {
+      id: 'mocha:root',
+      framework: 'mocha',
+      existingTestCommand: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'console.log("100 passing")'],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.preflight.observedTestCount, 100)
+      assert.strictEqual(outcome.preflight.scopeMatched, false)
+      assert.match(outcome.failure.diagnosis, /exceeding the approved representative scope of at most 1/)
+      assert.strictEqual(outcome.failure.evidence.representativeScopeMismatch, true)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -266,7 +298,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(approvalSummary, /npm test -- --runInBand --token <redacted> --no-watchman/)
       assert.match(approvalSummary, /\/\/ generated validation test/)
       assert.match(approvalSummary, /Files removed after validation/)
-      assert.match(approvalSummary, /--approved-plan-sha256 [a-f0-9]{64}/)
+      assert.match(approvalSummary, /--run-approved-plan results-atr\/approval\.json --sha256 [a-f0-9]{64}/)
       if (process.platform === 'win32') {
         assert.match(approvalSummary, /certutil -hashfile .*approval\.json"? SHA256/)
         assert.doesNotMatch(approvalSummary, /shasum -a 256 -c/)
@@ -334,18 +366,24 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /Credential exposure: unknown/)
       assert.doesNotMatch(fullPlan, /safe-placeholder/)
       assert.doesNotMatch(plan, /plan-secret/)
-      const planNonce = plan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
-      const fullPlanNonce = fullPlan.match(/--offline-fixture-nonce ([a-f0-9]{32})/)?.[1]
+      const approvalJsonPath = path.join(planOut, 'approval.json')
+      const approvalJson = fs.readFileSync(approvalJsonPath)
+      const approvalMaterial = JSON.parse(approvalJson)
+      const fullApprovalMaterial = JSON.parse(fs.readFileSync(path.join(root, 'results-all', 'approval.json')))
+      const planNonce = approvalMaterial.validation.offlineFixtureNonce
+      const fullPlanNonce = fullApprovalMaterial.validation.offlineFixtureNonce
       assert.match(planNonce, /^[a-f0-9]{32}$/)
       assert.match(plan, new RegExp(`dd-test-optimization-validation-${planNonce}`))
       assert.notStrictEqual(planNonce, fullPlanNonce)
-      assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64} --framework jest:root --scenario atr/)
-      const approvalDigest = plan.match(/--approved-plan-sha256 ([a-f0-9]{64})/)?.[1]
+      assert.match(plan, /--run-approved-plan results-atr\/approval\.json --sha256 [a-f0-9]{64}/)
+      assert.doesNotMatch(plan, /--framework jest:root|--scenario atr/)
+      assert.deepStrictEqual(approvalMaterial.selection, {
+        frameworks: ['jest:root'],
+        scenario: 'atr',
+      })
+      const approvalDigest = plan.match(/--sha256 ([a-f0-9]{64})/)?.[1]
       assert.match(approvalDigest, /^[a-f0-9]{64}$/)
-      const approvalJsonPath = path.join(planOut, 'approval.json')
       const coveredFilesPath = path.join(planOut, 'approval-files.sha256')
-      const approvalJson = fs.readFileSync(approvalJsonPath)
-      const approvalMaterial = JSON.parse(approvalJson)
       const coveredFiles = fs.readFileSync(coveredFilesPath, 'utf8').trim().split('\n').map(line => {
         const match = /^([a-f0-9]{64}) {2}(.+)$/.exec(line)
         assert.ok(match)
@@ -366,8 +404,8 @@ describe('test optimization validator-owned execution phases', () => {
         assert.match(plan, /shasum -a 256 .*approval\.json/)
       }
       assert.match(plan, new RegExp(`Expected SHA-256: \`${approvalDigest}\``))
-      assert.match(plan, /reconstructs the approval JSON from current inputs/)
-      assert.match(plan, /saved JSON is for review only and is not trusted as execution authority/)
+      assert.match(plan, /verifies the saved approval JSON against the SHA-256/)
+      assert.match(plan, /reconstructs the approval material from the current manifest/)
       assert.ok(approvalMaterial.commands.length > 0)
       assert.ok(approvalMaterial.generatedFiles.some(file => file.path === generatedFile))
       assert.ok(approvalMaterial.validator.coveredFiles.some(file => file.path.endsWith('/approval.js')))
@@ -444,7 +482,8 @@ describe('test optimization validator-owned execution phases', () => {
       })
 
       assert.match(plan, /node node_modules\/dd-trace\/ci\/validate-test-optimization\.js/)
-      assert.match(plan, /--approved-plan-sha256 [a-f0-9]{64}/)
+      assert.match(plan, /--run-approved-plan dd-test-optimization-validation-results\/approval\.json/)
+      assert.match(plan, /--sha256 [a-f0-9]{64}/)
       assert.doesNotMatch(plan, /--manifest|--out|\.pnpm/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -901,6 +940,131 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('rejects generated Vitest tests outside literal include patterns', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-include-plan-'))
+    const generatedFile = path.join(root, 'test', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.framework = 'vitest'
+    fs.writeFileSync(
+      path.join(root, 'vitest.config.ts'),
+      'export default { test: { include: ["**/__tests__/**/*.[jt]s?(x)"] } }\n'
+    )
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      }), /temporary test path .* does not match the literal test\.include patterns.*__tests__/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts generated Vitest tests matched by literal include patterns', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-include-plan-'))
+    const generatedFile = path.join(root, '__tests__', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.framework = 'vitest'
+    fs.writeFileSync(
+      path.join(root, 'vitest.config.ts'),
+      'export default { test: { include: ["**/__tests__/**/*.[jt]s?(x)"] } }\n'
+    )
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores nested coverage include patterns when checking generated Vitest tests', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-coverage-include-plan-'))
+    const generatedFile = path.join(root, 'test', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.framework = 'vitest'
+    fs.writeFileSync(
+      path.join(root, 'vitest.config.ts'),
+      'export default { test: { coverage: { include: ["src/**/*.js"] } } }\n'
+    )
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not infer a generated Vitest path rule from conflicting literal test configs', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-ambiguous-include-plan-'))
+    const generatedFile = path.join(root, 'test', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.framework = 'vitest'
+    fs.writeFileSync(path.join(root, 'vitest.config.ts'), [
+      'export default {',
+      '  projects: [',
+      '    { test: { include: ["src/**/*.test.js"] } },',
+      '    { test: { include: ["test/**/*.test.js"] } },',
+      '  ],',
+      '}',
+      '',
+    ].join('\n'))
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not infer a generated Vitest path rule from a partially dynamic include array', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-dynamic-include-plan-'))
+    const generatedFile = path.join(root, 'test', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    framework.framework = 'vitest'
+    fs.writeFileSync(
+      path.join(root, 'vitest.config.ts'),
+      'export default { test: { include: [defaultInclude, "src/**/*.test.js"] } }\n'
+    )
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a selected Vitest command under a typecheck-enabled config', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-typecheck-plan-'))
     const configFile = path.join(root, 'vitest.config.ts')
@@ -940,6 +1104,71 @@ describe('test optimization validator-owned execution phases', () => {
       })
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not read an explicit Vitest config outside the repository', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-config-root-'))
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-config-outside-'))
+    const configFile = path.join(outsideRoot, 'vitest.config.ts')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'dd-test-optimization-validation.test.ts'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.framework = 'vitest'
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, '-e', '', '--config', configFile],
+    }
+    fs.writeFileSync(configFile, 'export default { test: { typecheck: { enabled: true } } }\n')
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outsideRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not follow a default Vitest config symlink outside the repository', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-config-root-'))
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-config-outside-'))
+    const outsideConfig = path.join(outsideRoot, 'vitest.config.ts')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'dd-test-optimization-validation.test.ts'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.framework = 'vitest'
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, '-e', ''],
+    }
+    fs.writeFileSync(outsideConfig, 'export default { test: { typecheck: { enabled: true } } }\n')
+    fs.symlinkSync(outsideConfig, path.join(root, 'vitest.config.ts'))
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outsideRoot, { recursive: true, force: true })
     }
   })
 

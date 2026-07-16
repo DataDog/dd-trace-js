@@ -130,4 +130,18 @@ describe('test optimization CI remediation', () => {
     assert.match(remediation.variants[0].snippet, /run: \|\n {4}mise \/\/pkgs\/core:test\/node/)
     assert.doesNotMatch(remediation.variants[0].snippet, /keep the existing test command here/)
   })
+
+  it('quotes shell values for non-GitHub CI providers', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      ciWiring: { provider: 'gitlab-ci' },
+    })
+
+    assert.match(remediation.variants[0].snippet, /^NODE_OPTIONS="-r dd-trace\/ci\/init"$/m)
+    assert.match(
+      remediation.variants[0].snippet,
+      /^DD_API_KEY="<DD_API_KEY_FROM_CI_SECRET_STORE>"$/m
+    )
+    assert.doesNotMatch(remediation.variants[0].snippet, /^NODE_OPTIONS=-r /m)
+  })
 })

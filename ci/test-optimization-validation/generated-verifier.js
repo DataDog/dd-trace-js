@@ -102,8 +102,8 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
         frameworkId: framework.id,
         scenario: 'generated-test-verification',
         status: 'error',
-        diagnosis: 'The validator could not verify the generated test strategy. No advanced-feature conclusion ' +
-          `was reached: ${error.message || error}`,
+        diagnosis: 'The validator could not run the temporary validation test as expected. No advanced-feature ' +
+          `conclusion was reached: ${error.message || error}`,
         evidence,
         artifacts,
       },
@@ -157,7 +157,7 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, timed
       frameworkId: framework.id,
       scenario: 'generated-test-verification',
       status: 'error',
-      diagnosis: `Generated scenario "${scenario.id}" ${reason}. No advanced-feature conclusion was reached.`,
+      diagnosis: `Temporary validation test "${scenario.id}" ${reason}. No advanced-feature conclusion was reached.`,
       evidence,
       artifacts,
     },

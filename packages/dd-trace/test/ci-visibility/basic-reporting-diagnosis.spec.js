@@ -5,6 +5,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+
 const {
   getDebugAwareDiagnosis,
   getBasicReportingCommand,
@@ -18,14 +20,51 @@ const {
 } = require('../../../../ci/test-optimization-validation/scenarios/helpers')
 
 describe('test optimization basic reporting diagnosis', () => {
-  it('uses forcedLocalCommand for direct-initialization Basic Reporting when present', () => {
+  it('uses existingTestCommand for direct-initialization Basic Reporting', () => {
     const existingTestCommand = { argv: ['npm', 'test'] }
-    const forcedLocalCommand = { argv: ['npx', 'jest', '--runTestsByPath', 'test/example.test.js'] }
 
     assert.strictEqual(getBasicReportingCommand({
       existingTestCommand,
-      forcedLocalCommand,
-    }), forcedLocalCommand)
+    }), existingTestCommand)
+  })
+
+  it('reruns the clean command and reports an unstable baseline when its exit changes', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-confirmation-'))
+    let cleanRuns = 0
+    const { runBasicReporting } = getBasicReportingWithExitMismatch({
+      cleanExitCode: 1,
+      onCleanRun: () => cleanRuns++,
+    })
+    const framework = getExitMismatchFramework(root)
+
+    try {
+      const result = await runBasicReporting({ framework, out: root, options: { repositoryRoot: root } })
+
+      assert.strictEqual(cleanRuns, 1)
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.validationIncomplete, true)
+      assert.strictEqual(result.evidence.cleanConfirmation.exitMatchesPreflight, false)
+      assert.match(result.diagnosis, /non-Datadog baseline was not stable/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a possible compatibility issue when both clean exits agree', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-confirmation-'))
+    const { runBasicReporting } = getBasicReportingWithExitMismatch({ cleanExitCode: 0 })
+    const framework = getExitMismatchFramework(root)
+
+    try {
+      const result = await runBasicReporting({ framework, out: root, options: { repositoryRoot: root } })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.cleanConfirmation.exitMatchesPreflight, true)
+      assert.match(result.diagnosis, /may indicate a dd-trace compatibility issue/)
+      assert.doesNotMatch(result.diagnosis, /pre-existing/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('explains Vitest benchmark mode without scheduling a debug rerun', () => {
@@ -273,3 +312,69 @@ describe('test optimization basic reporting diagnosis', () => {
     assert.strictEqual(failure.status, 'error')
   })
 })
+
+function getExitMismatchFramework (root) {
+  return {
+    id: 'mocha:root',
+    framework: 'mocha',
+    existingTestCommand: {
+      cwd: root,
+      argv: [process.execPath, '-e', 'process.exit(0)'],
+    },
+    preflight: {
+      ran: true,
+      exitCode: 0,
+      maxTestCount: 1,
+      observedTestCount: 1,
+    },
+  }
+}
+
+function getBasicReportingWithExitMismatch ({ cleanExitCode, onCleanRun = () => {} }) {
+  return proxyquire('../../../../ci/test-optimization-validation/scenarios/basic-reporting', {
+    '../command-runner': {
+      runCommand: async () => {
+        onCleanRun()
+        return {
+          artifacts: {},
+          exitCode: cleanExitCode,
+          stderr: '',
+          stdout: '1 passing',
+          timedOut: false,
+        }
+      },
+    },
+    './helpers': {
+      basicEventEvidence: () => ({
+        testSessionEvents: 1,
+        testModuleEvents: 1,
+        testSuiteEvents: 1,
+        testEvents: 1,
+      }),
+      failWithDebugRerun: async options => ({
+        artifacts: [],
+        diagnosis: options.diagnosis,
+        evidence: options.evidence,
+        frameworkId: options.framework.id,
+        scenario: options.scenarioName,
+        status: 'fail',
+      }),
+      hasAllBasicEventTypes: () => true,
+      runInstrumentedCommand: async ({ out }) => ({
+        events: [],
+        offline: {
+          initialized: true,
+          inputs: { settings: { status: 'loaded' } },
+          summary: { errors: [] },
+        },
+        outDir: path.join(out, 'basic-reporting'),
+        result: {
+          exitCode: 1,
+          stderr: '',
+          stdout: '1 failing',
+          timedOut: false,
+        },
+      }),
+    },
+  })
+}

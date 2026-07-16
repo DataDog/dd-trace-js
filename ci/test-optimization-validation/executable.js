@@ -285,7 +285,7 @@ function getManifestCommands (manifest) {
   const commands = []
   for (const framework of manifest.frameworks || []) {
     const prefix = `framework:${framework.id}`
-    const basicSource = framework.forcedLocalCommand || framework.existingTestCommand
+    const basicSource = framework.existingTestCommand
     if (basicSource) {
       commands.push([`${prefix}:basic-reporting`, getLocalValidationCommand(framework, basicSource), basicSource])
     }

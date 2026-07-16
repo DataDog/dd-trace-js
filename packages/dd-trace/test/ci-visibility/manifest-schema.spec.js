@@ -9,6 +9,7 @@ describe('test optimization validation manifest schema', () => {
     const errors = validateManifest(getManifest({
       ciWiring: {
         status: 'fail',
+        replayability: 'replayable',
         provider: 'github-actions',
         configFile: '/repo/.github/workflows/test.yml',
         job: 'test',
@@ -31,17 +32,17 @@ describe('test optimization validation manifest schema', () => {
     ])
   })
 
-  it('rejects unresolved placeholders in forced local command argv', () => {
+  it('rejects the removed forced local command role', () => {
     const errors = validateManifest(getManifest({
       forcedLocalCommand: {
         cwd: '/repo',
-        argv: ['npm', 'test', '--', '$' + '{TEST_FILE}'],
+        argv: ['npm', 'test'],
       },
     }))
 
     assert.deepStrictEqual(errors, [
-      'frameworks[0].forcedLocalCommand.argv[3] contains an unresolved placeholder. ' +
-        'Resolve it before live validation.',
+      'frameworks[0].forcedLocalCommand is not supported. Use the focused existingTestCommand for Basic ' +
+        'Reporting and ciWiringCommand for the CI-shaped replay.',
     ])
   })
 
@@ -106,6 +107,29 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
+  it('rejects CI replay initialization that contradicts discovery evidence', () => {
+    const manifest = getManifest({
+      ciWiring: {
+        ...getCiWiring(),
+        initialization: {
+          status: 'not_configured',
+          evidence: ['The selected job has no NODE_OPTIONS or DD_* configuration.'],
+        },
+      },
+      ciWiringCommand: {
+        ...getCiWiringCommand(),
+        env: { NODE_OPTIONS: '--require dd-trace/ci/init' },
+      },
+    })
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.initialization.status is not_configured, but ' +
+        'frameworks[0].ciWiringCommand adds dd-trace initialization. The replay command must preserve the ' +
+        'discovered CI configuration; remove the added initialization or correct the initialization status and ' +
+        'evidence.',
+    ])
+  })
+
   it('rejects conclusive CI initialization status without evidence', () => {
     const manifest = getManifest({
       ciWiring: {
@@ -122,11 +146,61 @@ describe('test optimization validation manifest schema', () => {
       'frameworks[0].ciWiring.initialization.evidence must explain the configured conclusion.',
     ])
   })
+
+  it('requires an explicit CI replayability decision', () => {
+    const manifest = getManifest()
+    delete manifest.frameworks[0].ciWiring.replayability
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.replayability must be replayable or not_replayable.',
+    ])
+  })
+
+  it('requires the CI command when replay is possible', () => {
+    const manifest = getManifest({
+      ciWiring: {
+        ...getCiWiring(),
+        status: 'unknown',
+      },
+    })
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiringCommand is required when frameworks[0].ciWiring.replayability is replayable.',
+    ])
+  })
+
+  it('requires a concrete blocker when CI replay is unavailable', () => {
+    const manifest = getManifest()
+    delete manifest.frameworks[0].ciWiring.replayBlocker
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.replayBlocker must explain why CI replay is not_replayable.',
+    ])
+  })
+
+  it('rejects a conclusive CI status when replay is unavailable', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring.status = 'fail'
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.status must be skip or unknown when replayability is not_replayable.',
+    ])
+  })
+
+  it('rejects a CI command nested inside CI discovery evidence', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring.ciWiringCommand = getCiWiringCommand()
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.ciWiringCommand is misplaced; use frameworks[0].ciWiringCommand.',
+    ])
+  })
 })
 
 function getCiWiring () {
   return {
     status: 'unknown',
+    replayability: 'replayable',
     provider: 'github-actions',
     configFile: '/repo/.github/workflows/test.yml',
     job: 'test',
@@ -167,9 +241,12 @@ function getManifest (frameworkFields) {
         preflight: {
           ran: true,
           exitCode: 0,
+          maxTestCount: 50,
         },
         ciWiring: {
           status: 'skip',
+          replayability: 'not_replayable',
+          replayBlocker: 'No replayable CI test command was selected for this fixture.',
           reason: 'No replayable CI test command was selected for this fixture.',
         },
         ...frameworkFields,
