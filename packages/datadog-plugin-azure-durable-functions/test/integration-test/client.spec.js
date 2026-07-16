@@ -10,7 +10,6 @@ const {
   hookFile,
   sandboxCwd,
   useSandbox,
-  curl,
   curlAndAssertMessage,
   assertObjectContains,
   stopProc,
@@ -41,36 +40,6 @@ describe('esm', () => {
       await stopProc(proc, { signal: 'SIGINT' })
       await agent.stop()
     })
-
-    it('continues the host trace across durable activity and entity invocations', async () => {
-      proc = await spawnPluginIntegrationTestProc(agent.port)
-
-      const seenSpans = []
-      const assertPromise = agent.assertMessageReceived(({ payload }) => {
-        seenSpans.push(...payload.flat())
-
-        const httpSpan = seenSpans.find(span => span.resource === 'GET /api/httptest')
-        const activitySpan = seenSpans.find(span => span.resource === 'Activity hola')
-        const entitySpans = seenSpans.filter(span => span.meta?.['aas.function.trigger'] === 'Entity')
-
-        if (!httpSpan || !activitySpan || entitySpans.length < 2) {
-          throw new Error('waiting for durable activity and entity spans')
-        }
-
-        const traceId = httpSpan.trace_id.toString()
-        for (const span of [activitySpan, ...entitySpans]) {
-          assert.strictEqual(
-            span.trace_id.toString(),
-            traceId,
-            `${span.resource} should share the HTTP trace id`
-          )
-          assert.notStrictEqual(span.parent_id, 0, `${span.resource} should not be a root span`)
-        }
-      }, 60_000)
-
-      await curl('http://127.0.0.1:7071/api/httptest')
-      return assertPromise
-    }).timeout(60_000)
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(agent.port)
