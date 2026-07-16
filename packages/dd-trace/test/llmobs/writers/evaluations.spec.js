@@ -45,7 +45,7 @@ describe('LLMObsEvalMetricsWriter', () => {
   it('builds the payload correctly', () => {
     writer = new LLMObsEvalMetricsWriter({
       site: 'datadoghq.com',
-      apiKey: 'test',
+      DD_API_KEY: 'test',
     })
     writer.setAgentless(true)
 

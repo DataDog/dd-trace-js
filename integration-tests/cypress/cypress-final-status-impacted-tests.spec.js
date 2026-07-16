@@ -30,6 +30,7 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_SESSION_NAME,
   TEST_RETRY_REASON,
+  TEST_HAS_FAILED_ALL_RETRIES,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
@@ -63,7 +64,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }
@@ -329,6 +330,104 @@ moduleTypes.forEach(({
           ])
         }
       )
+
+      over10It('keeps retry status isolated for tests with the same full title in different specs', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 1,
+          early_flake_detection: { enabled: false },
+        })
+
+        const specToRun = 'cypress/e2e/retry-identity-*.js'
+        const testName = 'retry identity has opposite outcomes'
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            /**
+             * @param {Array<{
+             *   payload: { events: Array<{ type: string, content: { meta: Record<string, string> } }> }
+             * }>} payloads
+             */
+            (payloads) => {
+              const testsBySuite = {}
+
+              for (const { payload } of payloads) {
+                for (const event of payload.events) {
+                  if (event.type !== 'test' || event.content.meta[TEST_NAME] !== testName) {
+                    continue
+                  }
+
+                  const testSuite = event.content.meta[TEST_SUITE]
+                  if (testsBySuite[testSuite]) {
+                    testsBySuite[testSuite].push(event.content)
+                  } else {
+                    testsBySuite[testSuite] = [event.content]
+                  }
+                }
+              }
+
+              const eventuallyPassingTests =
+                testsBySuite['cypress/e2e/retry-identity-eventually-passes.js']
+              assert.strictEqual(eventuallyPassingTests.length, 2)
+
+              let eventuallyPassingFinalStatus
+              let eventuallyPassingFailures = 0
+              let eventuallyPassingPasses = 0
+              for (const test of eventuallyPassingTests) {
+                if (test.meta[TEST_STATUS] === 'fail') {
+                  eventuallyPassingFailures++
+                } else if (test.meta[TEST_STATUS] === 'pass') {
+                  eventuallyPassingPasses++
+                }
+                eventuallyPassingFinalStatus ||= test.meta[TEST_FINAL_STATUS]
+              }
+              assert.strictEqual(eventuallyPassingFailures, 1)
+              assert.strictEqual(eventuallyPassingPasses, 1)
+              assert.strictEqual(eventuallyPassingFinalStatus, 'pass')
+
+              const neverPassingTests = testsBySuite['cypress/e2e/retry-identity-never-passes.js']
+              assert.strictEqual(neverPassingTests.length, 2)
+
+              let neverPassingFinalStatus
+              let neverPassingFailures = 0
+              for (const test of neverPassingTests) {
+                if (test.meta[TEST_STATUS] === 'fail') {
+                  neverPassingFailures++
+                }
+                neverPassingFinalStatus ||= test.meta[TEST_FINAL_STATUS]
+              }
+              assert.strictEqual(neverPassingFailures, 2)
+              assert.strictEqual(neverPassingFinalStatus, 'fail')
+              assert.strictEqual(
+                neverPassingTests[neverPassingTests.length - 1].meta[TEST_HAS_FAILED_ALL_RETRIES],
+                'true'
+              )
+            },
+            { hardTimeout: 60_000 }
+          )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
 
       over10It('sets final_status tag on last retry (EFD active only)', async () => {
         const numRetriesEfd = 1
@@ -634,7 +733,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
                 // capabilities logic does not overwrite test session name
-                assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+                assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
               })
             }, { hardTimeout: 25000 })
 

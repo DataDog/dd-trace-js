@@ -3,16 +3,21 @@
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
 
-const MongodbCorePlugin = require('../../../packages/datadog-plugin-mongodb-core/src/index')
+// Resolve `src/index` (stable across branches) rather than the internal `query.js`, so the
+// baseline run of this file against the older source still resolves. The export is the
+// `mongodb-core` composite once the query span is split into a child plugin (`.plugins.query`),
+// and the query plugin class itself on the older single-class source.
+const MongodbCoreExport = require('../../../packages/datadog-plugin-mongodb-core/src/index')
+const MongodbCorePlugin = MongodbCoreExport.plugins?.query ?? MongodbCoreExport
 
 const { VARIANT } = process.env
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced mongo op walks `bindStart` -> `getQuery` ->
 // `sanitiseAndStringify`, builds the meta literal, calls `serviceName` /
 // `startSpan`, and would otherwise reach `injectDbmComment`. Subclassing the
-// real `MongodbCorePlugin` and overriding only the four hooks that reach for
+// real query plugin and overriding only the four hooks that reach for
 // tracer / diagnostic-channel / DBM plumbing keeps the production `bindStart`
 // shape intact while pulling the loop's measured surface back to the
 // per-op sanitiser + meta construction. Subclassing (rather than
@@ -131,7 +136,7 @@ if (VARIANT === 'mixed-ops') {
   for (const ctx of ctxs) preflight(ctx)
   lastMeta = undefined
   const len = ctxs.length
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     plugin.bindStart(ctxs[i % len])
   }
 } else {
@@ -140,7 +145,7 @@ if (VARIANT === 'mixed-ops') {
   const ctx = makeCtx(ops)
   preflight(ctx)
   lastMeta = undefined
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     plugin.bindStart(ctx)
   }
 }

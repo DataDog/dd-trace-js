@@ -12,7 +12,7 @@ require('../../../packages/datadog-instrumentations/src/fs')
 const { channel } = require('../../../packages/datadog-instrumentations/src/helpers/instrument')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 6_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
@@ -90,10 +90,10 @@ assert.deepEqual(
 
 guard.loopStart()
 let sink = 0
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   sink += instrumentedCall()
 }
 guard.done()
 
 // orphan-guard variant returns 0 each call; subscribed returns 1.
-assert.equal(sink, VARIANT === 'subscribed' ? ITERATIONS : 0, 'unexpected sink')
+assert.equal(sink, VARIANT === 'subscribed' ? OPERATIONS : 0, 'unexpected sink')

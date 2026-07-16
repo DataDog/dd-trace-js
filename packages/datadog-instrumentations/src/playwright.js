@@ -59,7 +59,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
+const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const DD_PROPERTIES_TIMEOUT = 5000
 
 let applyRepeatEachIndex = null
@@ -105,6 +105,7 @@ const efdStartedOriginalTestKeys = new Set()
 const efdSlowAbortedTests = new Set()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
+const disabledTestIds = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -113,6 +114,8 @@ const EFD_RETRY_COUNT_REQUEST = 'ddEfdRetryCountRequest'
 const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
+const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
+const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 
 function isValidKnownTests (receivedKnownTests) {
@@ -840,6 +843,8 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
+  const willRetry = testWillRetry(test, testStatus)
+
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
@@ -850,7 +855,7 @@ function testEndHandler ({
       !test._ddIsEfdRetry
 
     const finalStatus = getFinalStatus({
-      isFinalExecution: !testWillRetry(test, testStatus),
+      isFinalExecution: !willRetry,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry,
@@ -888,17 +893,19 @@ function testEndHandler ({
     }
   }
 
-  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-    testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
-  } else {
-    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+  if (!willRetry) {
+    if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
+      testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
+    } else {
+      testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+    }
+
+    if (error) {
+      addErrorToTestSuite(testSuiteAbsolutePath, error)
+    }
   }
 
-  if (error) {
-    addErrorToTestSuite(testSuiteAbsolutePath, error)
-  }
-
-  if (!testWillRetry(test, testStatus)) {
+  if (!willRetry) {
     remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
       .filter(currentTest => currentTest !== test)
   }
@@ -987,14 +994,36 @@ function onDispatcherCreateWorker (dispatcher, worker) {
   const projects = getProjectsFromDispatcher(dispatcher)
   sessionProjects = projects
 
+  if (disabledTestIds.size && !worker[kDdPlaywrightWorkerHostInstrumented] &&
+      typeof worker.runTestGroup === 'function') {
+    Object.defineProperty(worker, kDdPlaywrightWorkerHostInstrumented, { value: true })
+    shimmer.wrap(worker, 'runTestGroup', runTestGroup => function (runPayload) {
+      // Serial retries can restore disabled tests that were filtered from the initial dispatcher groups.
+      let disabledIds
+      for (const { testId } of runPayload.entries) {
+        if (disabledTestIds.has(testId)) {
+          disabledIds ??= []
+          disabledIds.push(testId)
+        }
+      }
+      if (disabledIds) {
+        runPayload._ddDisabledTestIds = disabledIds
+      }
+      return runTestGroup.apply(this, arguments)
+    })
+  }
+
   worker.on('testBegin', ({ testId }) => {
     const test = getTestByTestId(dispatcher, testId)
+    if (!test) return
+
     const browser = getBrowserNameFromProjects(projects, test)
     const shouldCreateTestSpan = test.expectedStatus === 'skipped'
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
   worker.on('testEnd', ({ testId, status, errors, annotations }) => {
     const test = getTestByTestId(dispatcher, testId)
+    if (!test) return
 
     const isTimeout = status === 'timedOut'
     const testStatus = STATUS_TO_TEST_STATUS[status]
@@ -1304,6 +1333,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     efdSlowAbortedTests.clear()
     ddPropertiesByTestId.clear()
     ddPropertiesRequestsByTestId.clear()
+    disabledTestIds.clear()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -1548,6 +1578,7 @@ function processRootSuite (createRootSuiteReturnValue) {
       if (testProperties.disabled) {
         test._ddIsDisabled = true
         if (!testProperties.attemptToFix) {
+          disabledTestIds.add(test.id)
           test.expectedStatus = 'skipped'
           // setting test.expectedStatus to 'skipped' does not work for every case,
           // so we need to filter out disabled tests in dispatcherRunWrapperNew,
@@ -1791,7 +1822,17 @@ function instrumentWorkerMainMethods (workerMain) {
   let steps = []
   const stepInfoByStepId = {}
 
+  shimmer.wrap(workerMain, 'runTestGroup', runTestGroup => function (runPayload) {
+    const disabledIds = runPayload._ddDisabledTestIds
+    this[kDdPlaywrightDisabledTestIds] = disabledIds ? new Set(disabledIds) : undefined
+    return runTestGroup.apply(this, arguments)
+  })
+
   shimmer.wrap(workerMain, '_runTest', _runTest => async function (test) {
+    if (this[kDdPlaywrightDisabledTestIds]?.has(test.id)) {
+      test._ddIsDisabled = true
+      test.expectedStatus = 'skipped'
+    }
     await waitForEfdRetryCount(test)
     if (shouldSkipEfdRetry(test)) {
       test._ddShouldSkipEfdRetry = true
@@ -2038,9 +2079,9 @@ function generateSummaryWrapper (generateSummary) {
   return function (...args) {
     for (const test of this.suite.allTests()) {
       // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
-      const didNotRun = test.outcome() === 'skipped' &&
-        (!test.results.length || test.expectedStatus !== 'skipped')
-      if (didNotRun && !testsReportedInGenerateSummary.has(test)) {
+      const shouldReportAsSkipped = test.outcome() === 'skipped' &&
+        (disabledTestIds.has(test.id) || !test.results.length || test.expectedStatus !== 'skipped')
+      if (shouldReportAsSkipped && !testsReportedInGenerateSummary.has(test)) {
         testsReportedInGenerateSummary.add(test)
         const {
           _requireFile: testSuiteAbsolutePath,

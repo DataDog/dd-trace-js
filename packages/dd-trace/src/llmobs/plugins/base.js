@@ -25,7 +25,7 @@ class LLMObsPlugin extends TracingPlugin {
   start (ctx) {
     // even though llmobs span events won't be enqueued if llmobs is disabled
     // we should avoid doing any computations here (these listeners aren't disabled)
-    const enabled = this._tracerConfig.llmobs.enabled
+    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
     const parentStore = llmobsStorage.getStore()
@@ -52,7 +52,7 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    const enabled = this._tracerConfig.llmobs.enabled
+    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
     // only attempt to restore the context if the current span was an LLMObs span
@@ -67,7 +67,7 @@ class LLMObsPlugin extends TracingPlugin {
   asyncEnd (ctx) {
     // even though llmobs span events won't be enqueued if llmobs is disabled
     // we should avoid doing any computations here (these listeners aren't disabled)
-    const enabled = this._tracerConfig.llmobs.enabled
+    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
     const apmStore = ctx.currentStore
@@ -85,7 +85,7 @@ class LLMObsPlugin extends TracingPlugin {
 
   configure (config) {
     // we do not want to enable any LLMObs plugins if it is disabled on the tracer
-    const llmobsEnabled = this._tracerConfig.llmobs.enabled
+    const llmobsEnabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (llmobsEnabled === false) {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }

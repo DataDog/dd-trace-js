@@ -1,10 +1,16 @@
 'use strict'
 
-const dns = require('dns')
+const assert = require('node:assert')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
-const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const {
+  parsers,
+  programmaticTypeCoercions,
+  transformers,
+  telemetryTransformers,
+  setWarnInvalidValue,
+} = require('./parsers')
 const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
@@ -51,7 +57,6 @@ const defaults = {
   isServiceUserProvided: false,
   plugins: true,
   isCiVisibility: false,
-  lookup: dns.lookup,
   logger: undefined,
 }
 
@@ -72,6 +77,7 @@ for (const [name, value] of Object.entries(defaults)) {
 function generateTelemetry (value = null, origin, optionName) {
   const tableEntry = configurationsTable[optionName]
   const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  const error = parseErrors.get(`${canonicalName}${origin}`)
   // Sensitive configurations are excluded from configuration telemetry: their
   // entry is never added to `configWithOrigin`, the single source for every
   // telemetry path (app-started and app-client-configuration-change).
@@ -83,7 +89,9 @@ function generateTelemetry (value = null, origin, optionName) {
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
   // TODO: How to handle telemetry reporting for aliases?
   if (value !== null) {
-    if (telemetryTransformers[type]) {
+    if (error && typeof value === 'object') {
+      value = util.inspect(value, { customInspect: false, getters: false })
+    } else if (telemetryTransformers[type]) {
       value = telemetryTransformers[type](value)
     } else if (typeof value === 'object' && value !== null) {
       // Custom optionsTable entries (no `configurationsTable` row, e.g. `logger`)
@@ -102,7 +110,6 @@ function generateTelemetry (value = null, origin, optionName) {
     origin,
     seq_id: seqId++,
   }
-  const error = parseErrors.get(`${canonicalName}${origin}`)
   if (error) {
     parseErrors.delete(`${canonicalName}${origin}`)
     telemetryEntry.error = error
@@ -137,12 +144,8 @@ function generateTelemetry (value = null, origin, optionName) {
 const optionsTable = {
   // Additional properties that are not supported by the supported-configurations.json file.
   lookup: {
-    transformer (value) {
-      if (typeof value === 'function') {
-        return value
-      }
-    },
     property: 'lookup',
+    type: 'FUNCTION',
   },
   logger: {
     transformer (object) {
@@ -167,12 +170,15 @@ const optionsTable = {
       }
     },
     property: 'logger',
+    type: 'MAP',
   },
   isCiVisibility: {
     property: 'isCiVisibility',
+    type: 'BOOLEAN',
   },
   plugins: {
     property: 'plugins',
+    type: 'BOOLEAN',
   },
 }
 
@@ -187,13 +193,7 @@ const parser = (value, optionName, source) => {
 
 /**
  * @template {import('./config-types').ConfigPath} TPath
- * @type {Partial<Record<TPath, {
- *   property?: string,
- *   parser: (value: unknown, optionName: string, source: string) => unknown,
- *   canonicalName?: string,
- *   transformer?: (value: unknown, optionName: string, source: string) => unknown,
- *   telemetryTransformer?: (value: unknown) => unknown
- * }>>} ConfigurationsTable
+ * @type {Partial<Record<TPath, import('./config-types').ConfigurationOption>>} ConfigurationsTable
  */
 const configurationsTable = {}
 
@@ -218,12 +218,22 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    // A deprecated entry that only aliases a canonical option must not surface as
+    // its own Config property/default: the canonical entry already owns the value
+    // and the alias is resolved by helper.js. helper.js drops these from the shared
+    // supported-configurations object (after registering the deprecation), but that
+    // mutation is order-dependent on which module loads first. Skip here too so
+    // `defaults` is identical regardless of load order (it differed in v5, where
+    // major-overrides keeps these entries instead of deleting them outright).
+    if (entry.deprecated && entry.aliases) continue
     if (entry.sensitive) {
       sensitiveConfigurations.add(canonicalName)
     }
-    const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
-    const fullPropertyName = configurationNames?.[0] ?? canonicalName
+    const fullPropertyName = entry.namespace
+      ? `${entry.namespace}.${canonicalName}`
+      : (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
     const type = entry.type.toUpperCase()
+    assert.ok(programmaticTypeCoercions[type])
 
     let transformer = transformers[entry.transform]
     if (entry.allowed) {
@@ -285,7 +295,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
 
 // Replace the alias with the canonical property name.
 for (const [fullPropertyName, alias] of fallbackConfigurations) {
-  if (configurationsTable[alias].property) {
+  if (configurationsTable[alias]?.property) {
     fallbackConfigurations.set(fullPropertyName, configurationsTable[alias].property)
   }
 }
@@ -346,4 +356,19 @@ module.exports = {
   parseErrors,
 
   generateTelemetry,
+
+  warnInvalidValue,
 }
+
+// `dns` is instrumented, so requiring it pulls in the dns plugin, which loads
+// `log`, whose bootstrap calls back into `require('./defaults')`. Resolve the
+// `lookup` default last — after the exports above are fully built — so that the
+// re-entrant require during that cascade sees the complete module instead of a
+// half-initialized one.
+defaults.lookup = require('dns').lookup
+configWithOrigin.set('lookupdefault', {
+  name: 'lookup',
+  value: defaults.lookup,
+  origin: 'default',
+  seq_id: seqId++,
+})

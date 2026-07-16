@@ -136,33 +136,38 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // the below is necessary in the case that the span is vercel ai's noopSpan.
-          // while we don't want to patch the noopSpan more than once, we do want to treat each as a
-          // fresh instance. However, this is really not necessary for non-noop spans, but not sure
-          // how to differentiate.
-          const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
-
-          shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function (...args) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, args)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'setAttributes', function (setAttributes) {
-            return function (attributes) {
+          // A plain delegating wrapper is used instead of Object.create(span) because
+          // Object.create (and Proxy) cannot cross private-field brand checks — any span
+          // method that reads a private field (e.g. BridgeSpanBase#statusCode) would throw
+          // "Cannot read private member" on a prototype clone. Every method here calls
+          // through to the real span instance so private fields always resolve correctly.
+          const freshSpan = {
+            spanContext () { return span.spanContext() },
+            setAttribute (key, value) { span.setAttribute(key, value); return freshSpan },
+            setAttributes (attributes) {
               vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              return setAttributes.apply(this, arguments)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'recordException', function (recordException) {
-            return function (exception) {
+              span.setAttributes(attributes)
+              return freshSpan
+            },
+            addEvent (name, attributesOrStartTime, startTime) {
+              span.addEvent(name, attributesOrStartTime, startTime)
+              return freshSpan
+            },
+            addLink (link, attrs) { span.addLink(link, attrs); return freshSpan },
+            addLinks (links) { span.addLinks(links); return freshSpan },
+            setStatus (status) { span.setStatus(status); return freshSpan },
+            updateName (spanName) { span.updateName(spanName); return freshSpan },
+            isRecording () { return span.isRecording() },
+            recordException (exception, timeInput) {
               ctx.error = exception
               vercelAiTracingChannel.error.publish(ctx)
-              return recordException.apply(this, arguments)
-            }
-          })
+              span.recordException(exception, timeInput)
+            },
+            end (...endArgs) {
+              vercelAiTracingChannel.asyncEnd.publish(ctx)
+              span.end(...endArgs)
+            },
+          }
 
           return originalCb.call(this, freshSpan)
         }
@@ -232,5 +237,50 @@ for (const hook of getHooks('ai')) {
     return exports
   })
 }
+
+const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
+const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
+
+// for testing, and possibly actual instrumentation use, we want to
+// guard against double-subscribing to the asyncEnd channel of the
+// vercel ai-provided tracingChannel
+let subscribed = false
+
+// as of the v7 release, the ai sdk does not automatically aggregate streamed responses
+// we will handle emitting the chunks directly for products to handle
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  if (subscribed) return exports
+  subscribed = true
+
+  // ai sdk v7 only supported on node.js 22+
+  // inlining this import here so we only import in those cases
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { TransformStream } = require('node:stream/web')
+
+  aiSdkTelemetryChannel.subscribe({
+    asyncEnd (ctx) {
+      // guard against this event being re-emitted.
+      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+
+      const transform = new TransformStream({
+        transform (chunk, controller) {
+          const done = chunk.type === 'finish'
+
+          aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
+
+          if (done) {
+            aiSdkTelemetryChannel.asyncEnd.publish(ctx)
+          }
+
+          controller.enqueue(chunk) // pass through value
+        },
+      })
+
+      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+    },
+  })
+
+  return exports
+})
 
 module.exports = { wrapModelWithLifecycle }

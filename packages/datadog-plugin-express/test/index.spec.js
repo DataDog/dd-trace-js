@@ -14,8 +14,8 @@ const { NODE_MAJOR } = require('../../../version')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const plugin = require('../src')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -65,12 +65,12 @@ describe('Plugin', () => {
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
-            const timer = setTimeout(done, 100)
 
-            agent.assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Agent received an unexpected trace.'))
-            })
+            agent
+              .assertNoTraces(() => {
+                throw new Error('Agent received an unexpected trace.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             axios
               .get(`http://localhost:${port}/user`)
@@ -1492,12 +1492,16 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions(plugin, 'loopback', loopbackVersion => {
+        withVersions('express', 'loopback', loopbackVersion => {
           let loopback
 
-          beforeEach(function () {
-            this.timeout(5000)
+          before(function () {
+            // The public entry synchronously initializes LoopBack's model, connector, and remoting stack.
+            this.timeout(10000)
 
+            // Legacy loopback emits the deprecated `util._extend` at module
+            // load; allow it so the harness deprecation guard does not throw.
+            temporaryWarningExceptions.add('The `util._extend` API is deprecated. Please use Object.assign() instead.')
             loopback = require(`../../../versions/loopback@${loopbackVersion}`).get()
           })
 
@@ -1674,20 +1678,12 @@ describe('Plugin', () => {
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
-            const spy = sinon.spy()
 
             agent
-              .assertSomeTraces(spy)
-              .catch(done)
-
-            setTimeout(() => {
-              try {
-                sinon.assert.notCalled(spy)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }, 100)
+              .assertNoTraces(() => {
+                throw new Error('Filtered URLs should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             axios
               .get(`http://localhost:${port}/health`)

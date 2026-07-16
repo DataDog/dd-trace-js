@@ -7,7 +7,7 @@
   "instructions": true,
   "variants": {
     "lookup": {
-      "env": { "ITERATIONS": "1000000" }
+      "env": { "OPERATIONS": "1000000" }
     }
   }
 }

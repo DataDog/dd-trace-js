@@ -87,12 +87,12 @@ function getHeaders (config, application, reqType) {
   if (config.DD_ROOT_JS_SESSION_ID) {
     headers['dd-root-session-id'] = config.DD_ROOT_JS_SESSION_ID
   }
-  const debug = config.telemetry && config.telemetry.debug
+  const debug = config.telemetry && config.telemetry.DD_TELEMETRY_DEBUG
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
-  if (config.apiKey) {
-    headers['dd-api-key'] = config.apiKey
+  if (config.DD_API_KEY) {
+    headers['dd-api-key'] = config.DD_API_KEY
   }
   return headers
 }
@@ -137,16 +137,16 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     hostname,
     port,
     isCiVisibility,
-    DD_CIVISIBILITY_AGENTLESS_ENABLED,
+    testOptimization,
   } = config
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility && DD_CIVISIBILITY_AGENTLESS_ENABLED
+  const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
 
   if (isCiVisibilityAgentlessMode) {
     try {
-      url = config.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
+      url = testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
@@ -176,29 +176,31 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && config.apiKey && config.site) {
+    if (error && config.DD_API_KEY && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
       // figure out which data center to send to
-      const backendUrl = getAgentlessTelemetryEndpoint(config.site)
-      const backendHeader = { ...options.headers, 'DD-API-KEY': config.apiKey }
+      let backendUrl
+      try {
+        backendUrl = new URL(getAgentlessTelemetryEndpoint(config.site))
+      } catch {
+        log.error('Invalid Telemetry URL')
+        return
+      }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': config.DD_API_KEY }
       const backendOptions = {
         ...options,
         url: backendUrl,
         headers: backendHeader,
         path: '/api/v2/apmtelemetry',
       }
-      if (backendUrl) {
-        request(data, backendOptions, (error) => {
-          if (error) {
-            log.error('Error sending telemetry data', error)
-          }
-        })
-      } else {
-        log.error('Invalid Telemetry URL')
-      }
+      request(data, backendOptions, (error) => {
+        if (error) {
+          log.error('Error sending telemetry data', error)
+        }
+      })
     }
 
     if (!error && !agentTelemetry) {

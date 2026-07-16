@@ -27,7 +27,7 @@ const ADVANCED_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_advanced_user_schema.json'), 'utf8')
 )
 
-const BASIC_USER_SCHEMA_ID = '1605040621379664412'
+const BASIC_USER_SCHEMA_ID = '15683462889181473629'
 const ADVANCED_USER_SCHEMA_ID = '919692610494986520'
 function compareJson (expected, span) {
   const actual = JSON.parse(span.context().getTag(SCHEMA_DEFINITION))

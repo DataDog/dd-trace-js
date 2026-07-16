@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const proxyquire = require('proxyquire')
@@ -62,6 +64,49 @@ describe('CI Visibility Test Worker Exporter', () => {
       )
     })
 
+    it('signals completion after all queued payloads flush', () => {
+      const callbacks = []
+      send = sinon.stub().callsFake((payload, callback) => {
+        callbacks.push(callback)
+      })
+      process.send = send
+      const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      jestWorkerExporter.export([{ type: 'test' }])
+      jestWorkerExporter.exportCoverage({ sessionId: '1', suiteId: '1', files: ['test.js'] })
+      jestWorkerExporter.exportDiLogs({ testSessionId: '1' }, { message: 'test log' })
+      jestWorkerExporter.exportTelemetry({ type: 'ciVisEvent', name: 'test_event' })
+      jestWorkerExporter.flush(onDone)
+
+      assert.strictEqual(callbacks.length, 4)
+      callbacks[0]()
+      sinon.assert.notCalled(onDone)
+      callbacks[1]()
+      sinon.assert.notCalled(onDone)
+      callbacks[2]()
+      sinon.assert.notCalled(onDone)
+      callbacks[3]()
+      sinon.assert.calledOnce(onDone)
+    })
+
+    it('signals completion when only coverage is queued', () => {
+      const callbacks = []
+      send = sinon.stub().callsFake((payload, callback) => {
+        callbacks.push(callback)
+      })
+      process.send = send
+      const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      jestWorkerExporter.exportCoverage({ sessionId: '1', suiteId: '1', files: ['test.js'] })
+      jestWorkerExporter.flush(onDone)
+
+      assert.strictEqual(callbacks.length, 1)
+      callbacks[0]()
+      sinon.assert.calledOnce(onDone)
+    })
+
     it('does not break if process.send is undefined', () => {
       delete process.send
       const trace = [{ type: 'test' }]
@@ -88,6 +133,23 @@ describe('CI Visibility Test Worker Exporter', () => {
       cucumberWorkerExporter.export(traceSecond)
       cucumberWorkerExporter.flush()
       sinon.assert.calledWith(send, [CUCUMBER_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
+    })
+
+    it('signals completion after traces flush', () => {
+      const callbacks = []
+      send = sinon.stub().callsFake((payload, callback) => {
+        callbacks.push(callback)
+      })
+      process.send = send
+      const cucumberWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      cucumberWorkerExporter.export([{ type: 'test' }])
+      cucumberWorkerExporter.flush(onDone)
+
+      assert.strictEqual(callbacks.length, 1)
+      callbacks[0]()
+      sinon.assert.calledOnce(onDone)
     })
 
     it('does not break if process.send is undefined', () => {
@@ -160,6 +222,7 @@ describe('CI Visibility Test Worker Exporter', () => {
     afterEach(() => {
       delete process.env.DD_VITEST_WORKER
       delete process.env.TINYPOOL_WORKER_ID
+      delete globalThis.__vitest_worker__
     })
 
     it('can export traces (vitest >=4)', () => {
@@ -184,6 +247,25 @@ describe('CI Visibility Test Worker Exporter', () => {
         interprocessCode: VITEST_WORKER_TRACE_PAYLOAD_CODE,
         data: JSON.stringify([trace]),
       })
+    })
+
+    it('can export traces through the worker port in legacy thread workers (vitest <4)', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      delete process.send
+      const postMessage = sinon.spy()
+      const trace = [{ type: 'test' }]
+      globalThis.__vitest_worker__ = {
+        ctx: {
+          port: {
+            postMessage,
+          },
+        },
+      }
+      const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      vitestWorkerExporter.export(trace)
+      vitestWorkerExporter.flush()
+      sinon.assert.calledWith(postMessage, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
+      sinon.assert.notCalled(send)
     })
 
     it('does not break if process.send is undefined', () => {

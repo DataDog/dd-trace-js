@@ -22,17 +22,40 @@ const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
 const {
+  CI_JOB_ID,
   GIT_BRANCH,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
   GIT_TAG,
+  GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
   GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE,
   CI_WORKSPACE_PATH,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
+  CI_JOB_URL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME,
+  CI_PROVIDER_NAME,
+  CI_STAGE_NAME,
   GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
 } = require('./tags')
 const { getRuntimeAndOSMetadata } = require('./env')
 const { getCIMetadata } = require('./ci')
@@ -72,6 +95,8 @@ const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const TEST_SOURCE_START = 'test.source.start'
+const TEST_FAILURE_SCREENSHOT_UPLOADED = 'test.failure_screenshot.uploaded'
+const TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR = 'test.failure_screenshot.upload_error'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
@@ -89,6 +114,12 @@ const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
+const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
+  { limitMs: 5 * 1000, key: '5s' },
+  { limitMs: 10 * 1000, key: '10s' },
+  { limitMs: 30 * 1000, key: '30s' },
+  { limitMs: 5 * 60 * 1000, key: '5m' },
+]
 const CI_APP_ORIGIN = 'ciapp-test'
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
@@ -197,6 +228,43 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_suite_end',
   'test_module_end',
   'test_session_end',
+]
+const TEST_LEVELS_METADATA = 'test_levels'
+const TEST_LEVELS_METADATA_TAGS = [
+  CI_JOB_ID,
+  CI_JOB_NAME,
+  CI_JOB_URL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  CI_STAGE_NAME,
+  CI_WORKSPACE_PATH,
+  GIT_BRANCH,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
 ]
 const TEST_RETRY_REASON_TYPES = {
   efd: 'early_flake_detection',
@@ -367,6 +435,8 @@ module.exports = {
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
   TEST_SOURCE_FILE,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -398,6 +468,7 @@ module.exports = {
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
   getTestCommonTags,
+  getTestLevelsMetadataTags,
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
@@ -432,6 +503,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getEfdRetryCount,
   getMaxEfdRetryCount,
   TEST_BROWSER_DRIVER,
@@ -448,6 +520,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_LEVEL_EVENT_TYPES,
+  TEST_LEVELS_METADATA,
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
@@ -698,6 +771,24 @@ function getTestParametersString (parametersByTestName, testName) {
     // so we ignore the test parameters and move on
     return ''
   }
+}
+
+/**
+ * Extracts CI and Git tags that apply to every test level.
+ *
+ * @param {TestEnvironmentMetadata} testEnvironmentMetadata
+ * @returns {Record<string, string|number>}
+ */
+function getTestLevelsMetadataTags (testEnvironmentMetadata) {
+  const testLevelsMetadataTags = {}
+  for (let i = 0; i < TEST_LEVELS_METADATA_TAGS.length; i++) {
+    const key = TEST_LEVELS_METADATA_TAGS[i]
+    const value = testEnvironmentMetadata[key]
+    if (value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
+  return testLevelsMetadataTags
 }
 
 function getTestTypeFromFramework (testFramework) {
@@ -1363,17 +1454,11 @@ function parseAnnotations (annotations) {
  * Returns 0 when the test is too slow to retry (≥ 5 min).
  *
  * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
  * @returns {number}
  */
 function getEfdRetryCount (durationMs, slowTestRetries) {
-  const thresholds = [
-    { limitMs: 5 * 1000, key: '5s' },
-    { limitMs: 10 * 1000, key: '10s' },
-    { limitMs: 30 * 1000, key: '30s' },
-    { limitMs: 5 * 60 * 1000, key: '5m' },
-  ]
-  for (const { limitMs, key } of thresholds) {
+  for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
     if (durationMs < limitMs) {
       return slowTestRetries[key] ?? 0
     }
@@ -1384,12 +1469,17 @@ function getEfdRetryCount (durationMs, slowTestRetries) {
 /**
  * Returns the maximum retry count configured by the backend for EFD.
  *
- * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
- * @returns {number}
+ * @param {Record<string, number> | undefined} slowTestRetries
+ * @returns {number | undefined}
  */
 function getMaxEfdRetryCount (slowTestRetries) {
+  if (slowTestRetries === undefined) return
+
+  const retryCounts = Object.values(slowTestRetries)
+  if (retryCounts.length === 0) return
+
   let maxRetries = 0
-  for (const retryCount of Object.values(slowTestRetries || {})) {
+  for (const retryCount of retryCounts) {
     if (retryCount > maxRetries) {
       maxRetries = retryCount
     }
@@ -1536,7 +1626,7 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
     : true
 }
 
-function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
+function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = {}) {
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
       ? '1'
@@ -1558,7 +1648,8 @@ function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
       isAttemptToFixSupported(testFramework, frameworkVersion)
         ? '5'
         : undefined,
-    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
+    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: !options.omitFailedTestReplay &&
+      isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'
       : undefined,
   }

@@ -26,6 +26,7 @@ const configWithStartupLogs = {
   runtimeMetrics: true,
   startupLogs: true,
   appsec: { enabled: true },
+  profiling: { DD_PROFILING_ENABLED: false },
   dsmEnabled: true,
 }
 

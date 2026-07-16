@@ -27,13 +27,16 @@ runs:
         }
         case "$VERSION" in
           eol)         version=16 ;;
+          # Pinned to 18 rather than derived from package.json engines.node: CI keeps testing the
+          # oldest version we still exercise (18) even though the shipped engines floor is now >=22.
+          # See the Widen engines.node for CI step below, which restores >=18 on the 18/20 legs.
           oldest)      version=$(node_version 18) ;;
           maintenance) version=$(node_version 20) ;;
           active)      version=$(node_version 24) ;;
           latest)      version=${LATEST_VERSION:-$(node_version 26)}
-                       # When a custom/nightly version is requested via latest,
-                       # force tracer init past the engines upper-bound guard.
-                       [ -n "$LATEST_VERSION" ] && echo "DD_INJECT_FORCE=true" >> "$GITHUB_ENV" || true ;;
+                      # When a custom/nightly version is requested via latest,
+                      # force tracer init past the engines upper-bound guard.
+                      [ -n "$LATEST_VERSION" ] && echo "DD_INJECT_FORCE=true" >> "$GITHUB_ENV" || true ;;
           *)           version=$VERSION ;;
         esac
         echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -42,6 +45,22 @@ runs:
       with:
         node-version: ${{ steps.node-version.outputs.version }}
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
+
+    # The shipped package.json pins engines.node to the supported runtime range, but CI keeps
+    # running the full suite on Node 18/20. Widen the field to >=18 for this checkout so the
+    # runtime guard and the withVersions test helper don't bail and silently skip those jobs.
+    # Gate on the major so this never runs on the ancient runtimes the guardrails-unsupported
+    # job installs (those must keep seeing the shipped >=22 so the guard aborts), and so the
+    # script is only ever parsed by a Node version new enough to run it.
+    - name: Widen engines.node for CI
+      shell: bash
+      run: |
+        MAJOR=$(node -e "process.stdout.write(String(parseInt(process.versions.node)))")
+        if [ "$MAJOR" = "18" ] || [ "$MAJOR" = "20" ]; then
+          node scripts/ci/widen-engines-for-ci.js
+        else
+          echo "Leaving engines.node unchanged on Node $(node -v) (only widened on Node 18/20)."
+        fi
 
     # Persist the resolved version so subsequent runs within this 60-minute window can reuse it.
     - name: Save resolved version

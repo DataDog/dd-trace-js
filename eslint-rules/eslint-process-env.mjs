@@ -9,8 +9,8 @@ export default {
   create (context) {
     const isProcessEnvObject = (node) => {
       return node?.type === 'MemberExpression' &&
-             node.object?.name === 'process' &&
-             node.property?.name === 'env'
+        node.object?.name === 'process' &&
+        node.property?.name === 'env'
     }
 
     const report = (node) => {

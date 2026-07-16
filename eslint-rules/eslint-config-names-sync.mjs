@@ -132,7 +132,9 @@ function getSupportedConfigurationInfo (filePath) {
     const targets = new Set()
 
     for (const entry of entries) {
-      if (typeof entry.internalPropertyName === 'string') {
+      if (typeof entry.namespace === 'string') {
+        targets.add(`${entry.namespace}.${envName}`)
+      } else if (typeof entry.internalPropertyName === 'string') {
         targets.add(entry.internalPropertyName)
       }
 

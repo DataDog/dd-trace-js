@@ -9,7 +9,11 @@ const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
 const OPENAI_PROVIDER_NAME = 'openai'
 
-const SUPPORTED_INTEGRATIONS = new Set(['openai'])
+// Providers that ship their own LLMObs integration. When one of these is also
+// enabled, the LangChain model span is demoted to `workflow` so the provider
+// integration emits the single `llm` span — avoiding two llm spans (and
+// double-counted tokens/cost) for one underlying call.
+const SUPPORTED_INTEGRATIONS = new Set(['openai', 'anthropic'])
 const LLM_SPAN_TYPES = new Set(['llm', 'chat_model', 'embedding'])
 const LLM = 'llm'
 const WORKFLOW = 'workflow'

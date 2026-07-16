@@ -23,19 +23,19 @@ module.exports = {
     },
     {
       name: '@ai-sdk/openai',
-      versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.3.23', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: '@ai-sdk/amazon-bedrock',
-      versions: ['^3.0.0', '>=4.0.0'],
+      versions: ['^3.0.0', '^4.0.0', '>=5.0.0'],
     },
     {
       name: '@ai-sdk/anthropic',
-      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.0.0', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: '@ai-sdk/google',
-      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.0.0', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: 'zod',
@@ -116,6 +116,12 @@ module.exports = {
       versions: ['^3'],
     },
   ],
+  'claude-agent-sdk': [
+    {
+      name: 'zod',
+      versions: ['^4.0.0'],
+    },
+  ],
   'cookie-parser': [
     {
       name: 'express',
@@ -157,7 +163,12 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '6', '>=7'],
+      versions: ['>=3.3 <5', '5', '6'],
+    },
+    {
+      name: 'mongodb',
+      versions: ['>=7'],
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -188,12 +199,13 @@ module.exports = {
       versions: ['>=4', '>=4.0.0 <4.3.0', '>=4.0.0 <5.0.0', '>=4.3.0 <5.0.0'],
     },
     {
-      name: 'mquery',
-      versions: ['>=5.0.0'],
+      name: 'mongodb',
+      versions: ['5', '6'],
     },
     {
       name: 'mongodb',
-      versions: ['5', '>=6'],
+      versions: ['>=7'],
+      node: '>=20.19.0',
     },
   ],
   mysql2: [
@@ -217,7 +229,13 @@ module.exports = {
     },
     {
       name: '@fastify/cookie',
+      versions: ['>=6 <11.1.0'],
+      node: '<22',
+    },
+    {
+      name: '@fastify/cookie',
       versions: ['>=6'],
+      node: '>=22',
     },
     {
       name: '@fastify/multipart',
@@ -237,7 +255,7 @@ module.exports = {
   'google-cloud-pubsub': [
     {
       name: 'google-gax',
-      versions: ['3.5.7'],
+      versions: ['5.0.7'],
     },
   ],
   genai: [
@@ -316,6 +334,15 @@ module.exports = {
       versions: ['^16.6.0'],
     },
   ],
+  '@apollo/server': [
+    {
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
+      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
+      name: 'graphql',
+      dep: true,
+    },
+  ],
   grpc: [
     {
       name: '@grpc/proto-loader',
@@ -338,6 +365,14 @@ module.exports = {
     {
       name: 'sqlite3',
       versions: ['^5.0.8'],
+    },
+    {
+      // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
+      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
+      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
+      // the whole Node CI matrix.
+      name: '@vscode/sqlite3',
+      versions: ['5.1.12-vscode'],
     },
     {
       name: 'pg',
@@ -424,16 +459,25 @@ module.exports = {
       versions: ['>=3'],
     },
   ],
-  lodash: [
-    {
-      name: 'lodash',
-      versions: ['>=4'],
-    },
-  ],
   mariadb: [
     {
       name: 'mariadb',
       versions: ['2.5.6', '3.0.0', '3.4.0'],
+    },
+  ],
+  mercurius: [
+    {
+      // mercurius peers graphql; pin the only supported major (16) so the
+      // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
+      name: 'graphql',
+      versions: ['^16.0.0'],
+    },
+    {
+      // mercurius <=14 needs fastify 4 (fastify-plugin ^4), 15+ needs fastify 5
+      // (fastify-plugin ^5). Install both majors; the peer-dependency patcher
+      // picks the one each mercurius version folder accepts.
+      name: 'fastify',
+      versions: ['>=4'],
     },
   ],
   mocha: [
@@ -651,12 +695,6 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
-    },
-  ],
-  ws: [
-    {
-      name: 'ws',
-      versions: ['>=8.0.0'],
     },
   ],
 }

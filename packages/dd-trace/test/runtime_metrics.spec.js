@@ -12,7 +12,16 @@ const sinon = require('sinon')
 const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const { DogStatsDClient } = require('../src/dogstatsd')
+
+// On Node versions that support `monitorEventLoopDelay({ samplePerIteration })`
+// (landed in v26.5.0) the runtime metrics module unconditionally skips the
+// @datadog/native-metrics path, so the "with native metrics" variant is unreachable.
+const SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
+const NATIVE_METRICS_VARIANTS = SAMPLE_PER_ITERATION_AVAILABLE ? [false] : [true, false]
+// Only runs on a real runtime that actually supports the per-iteration sampler.
+const describeSamplePerIteration = SAMPLE_PER_ITERATION_AVAILABLE ? describe : describe.skip
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
@@ -35,7 +44,7 @@ function createGarbage (count = 50) {
   return util.inspect(obj, { depth: Infinity })
 }
 
-[true, false].forEach((nativeMetrics) => {
+NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
     describe('runtimeMetrics (proxy)', () => {
       let runtimeMetrics
@@ -326,7 +335,12 @@ function createGarbage (count = 50) {
             return value > 0 && Number.isInteger(value)
           })
           const isGC95Percentile = sinon.match((value) => {
-            return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
+            // Nanoseconds, 1µs to 100ms. These bounds guard the unit conversion, not the timing:
+            // a sub-microsecond value means the ms→ns conversion (`entry.duration * 1e6`) was
+            // dropped, and a value over 100ms means it was left in milliseconds or seconds. The
+            // floor used to be 0.1ms, which flaked on fast/idle runners where a single scavenge
+            // pause is the only sample for a gc_type and its p95 sits below that.
+            return value >= 1e3 && value < 1e8
           })
           const isHeapSpace = sinon.match((metricName) => {
             return /^heap_space:[a-z_]+$/.test(metricName)
@@ -522,6 +536,54 @@ function createGarbage (count = 50) {
           sinon.assert.notCalled(nativeMetricsStart)
 
           // Should still collect basic metrics via the JS fallback path
+          clock.tick(10000)
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
+
+          localRuntimeMetrics.stop()
+        })
+
+        it('should not require native metrics when samplePerIteration is available, even if native is true', () => {
+          // Stop the default runtimeMetrics instance started in beforeEach
+          runtimeMetrics.stop()
+
+          const localClient = {
+            gauge: sinon.spy(),
+            increment: sinon.spy(),
+            histogram: sinon.spy(),
+            flush: sinon.spy(),
+          }
+
+          const LocalClient = sinon.spy(function () {
+            return {
+              gauge: localClient.gauge,
+              increment: localClient.increment,
+              histogram: localClient.histogram,
+              flush: localClient.flush,
+            }
+          })
+          LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            './client': proxyquire('../src/runtime_metrics/client', {
+              '../dogstatsd': { DogStatsDClient: LocalClient },
+            }),
+            '../../../../version': { NODE_MAJOR: 26, NODE_MINOR: 5 },
+            '@datadog/native-metrics': {
+              start () {
+                throw new Error('Native metrics should not even be required')
+              },
+            },
+          })
+
+          const configNativeEnabled = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: true },
+          }
+
+          localRuntimeMetrics.start(configNativeEnabled)
+
+          // Should still collect metrics via the JS fallback path
           clock.tick(10000)
           sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
           sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
@@ -890,6 +952,87 @@ function createGarbage (count = 50) {
         })
       })
     })
+  })
+})
+
+describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIteration (Node >= 26.5.0)', () => {
+  let clock
+  let localClient
+  let nativeMetricsStart
+  let localRuntimeMetrics
+  let config
+
+  beforeEach(() => {
+    localClient = {
+      gauge: sinon.spy(),
+      increment: sinon.spy(),
+      histogram: sinon.spy(),
+      flush: sinon.spy(),
+    }
+
+    const LocalClient = sinon.spy(function () {
+      return {
+        gauge: localClient.gauge,
+        increment: localClient.increment,
+        histogram: localClient.histogram,
+        flush: localClient.flush,
+      }
+    })
+    LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+    // If the native addon is ever started on a runtime that has the per-iteration
+    // sampler, this throws and fails the test loudly.
+    nativeMetricsStart = sinon.spy(() => {
+      throw new Error('Native metrics must not be started when samplePerIteration is available')
+    })
+
+    localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+      './client': proxyquire('../src/runtime_metrics/client', {
+        '../dogstatsd': { DogStatsDClient: LocalClient },
+      }),
+      '@datadog/native-metrics': { start: nativeMetricsStart, stop () {} },
+    })
+
+    config = {
+      url: new URL('http://localhost:8126'),
+      dogstatsd: { hostname: 'localhost', port: 8125 },
+      // native is explicitly true to prove the real version gate wins over it.
+      runtimeMetrics: { enabled: true, eventLoop: true, gc: true, native: true },
+      tags: {},
+      DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
+      getOrigin: () => 'default',
+    }
+
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    })
+  })
+
+  afterEach(() => {
+    clock.restore()
+    localRuntimeMetrics.stop()
+  })
+
+  it('collects event loop delay metrics without loading @datadog/native-metrics', async () => {
+    localRuntimeMetrics.start(config)
+
+    // monitorEventLoopDelay is backed by libuv, so fake timers don't advance it.
+    // Turn the real event loop so the per-iteration sampler records samples.
+    for (let i = 0; i < 20; i++) {
+      await setImmediate()
+    }
+
+    clock.tick(10000)
+
+    sinon.assert.notCalled(nativeMetricsStart)
+
+    const isNonNegativeNumber = sinon.match((value) => value >= 0 && Number.isFinite(value))
+    sinon.assert.calledWith(localClient.gauge, 'runtime.node.event_loop.delay.max', isNonNegativeNumber)
+    sinon.assert.calledWith(localClient.gauge, 'runtime.node.event_loop.delay.min', isNonNegativeNumber)
+    sinon.assert.calledWith(localClient.gauge, 'runtime.node.event_loop.delay.avg', isNonNegativeNumber)
+    sinon.assert.calledWith(localClient.increment, 'runtime.node.event_loop.delay.count', isNonNegativeNumber)
+    // The Node.js histogram never reports a median, unlike the native addon.
+    sinon.assert.neverCalledWith(localClient.gauge, 'runtime.node.event_loop.delay.median')
   })
 })
 

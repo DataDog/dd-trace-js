@@ -15,20 +15,20 @@ const timeoutMs = 15 * 1000
 
 function exporterFromURL (url) {
   if (url.protocol === 'file:') {
-    return new FileExporter({ pprofPrefix: fileURLToPath(url) })
+    return new FileExporter({}, fileURLToPath(url))
   }
+  // The subprocess has no tracer config, so mirror the canonical config property
+  // names the exporters read. Normalize the raw env to the parsed profiling.DD_PROFILING_ENABLED
+  // values ('true' | 'false' | 'auto') the main process would have produced.
   const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
-  const activation = ['true', '1'].includes(profilingEnabled)
-    ? 'manual'
-    : profilingEnabled === 'auto'
-      ? 'auto'
-      : 'unknown'
+  const enabled = profilingEnabled === 'auto'
+    ? 'auto'
+    : ['true', '1'].includes(profilingEnabled) ? 'true' : 'false'
   return new AgentExporter({
     url,
-    logger,
-    uploadTimeout: timeoutMs,
-    libraryInjected: !!getValueFromEnvSources('DD_INJECTION_ENABLED'),
-    activation,
+    DD_PROFILING_UPLOAD_TIMEOUT: timeoutMs,
+    DD_INJECTION_ENABLED: getValueFromEnvSources('DD_INJECTION_ENABLED'),
+    profiling: { DD_PROFILING_ENABLED: enabled },
   })
 }
 

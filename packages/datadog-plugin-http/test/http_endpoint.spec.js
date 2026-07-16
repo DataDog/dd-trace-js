@@ -6,6 +6,7 @@ const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const web = require('../../dd-trace/src/plugins/util/web')
 
 describe('Plugin', () => {
   let http
@@ -105,6 +106,27 @@ describe('Plugin', () => {
             .catch(done)
 
           axios.get(`http://localhost:${port}/resources/abc-123`).catch(done)
+        })
+
+        it('keeps http.route when a framework resolves the route at finish time', done => {
+          // Model a framework that resolves the route once the response is
+          // ending: the beforeEnd callback runs after AppSec's pre-finish hook
+          // has already stamped http.endpoint, the same ordering that dropped
+          // http.route on the root span with API Security enabled.
+          app = req => {
+            web.beforeEnd(req, () => web.setRoute(req, '/users/:id'))
+          }
+
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].name, 'web.request')
+              assert.strictEqual(traces[0][0].meta['http.route'], '/users/:id')
+              assert.strictEqual(traces[0][0].resource, 'GET /users/:id')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/users/123`).catch(done)
         })
       })
     })

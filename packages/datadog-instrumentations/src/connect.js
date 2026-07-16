@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:connect:middleware:enter')
 const exitChannel = channel('apm:connect:middleware:exit')
@@ -9,6 +9,7 @@ const errorChannel = channel('apm:connect:middleware:error')
 const nextChannel = channel('apm:connect:middleware:next')
 const finishChannel = channel('apm:connect:middleware:finish')
 const handleChannel = channel('apm:connect:request:handle')
+const publishError = createErrorPublisher(errorChannel)
 
 function wrapConnect (connect) {
   if (typeof connect !== 'function') return connect
@@ -78,7 +79,7 @@ function wrapLayerHandle (layer) {
     try {
       return original.apply(this, args)
     } catch (error) {
-      errorChannel.publish({ req, error })
+      publishError({ req, error })
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
@@ -93,7 +94,7 @@ function wrapNext (req, next) {
   // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
   return shimmer.wrapCallback(next, original => function next (error) {
     if (error) {
-      errorChannel.publish({ req, error })
+      publishError({ req, error })
     }
 
     nextChannel.publish({ req })

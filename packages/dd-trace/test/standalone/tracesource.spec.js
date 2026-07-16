@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
-const { ASM } = require('../../src/standalone/product')
+const { AI_GUARD, ASM } = require('../../src/standalone/product')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { addTraceSourceTag } = require('../../src/standalone/tracesource')
 
@@ -28,6 +28,10 @@ describe('Disabled APM Tracing or Standalone - Tracesource propagation tag', () 
 
     it('should add product', () => {
       assert.strictEqual(addTraceSourceTag(tags, ASM)[TRACE_SOURCE_PROPAGATION_KEY], '02')
+    })
+
+    it('should add AI Guard product', () => {
+      assert.strictEqual(addTraceSourceTag(tags, AI_GUARD)[TRACE_SOURCE_PROPAGATION_KEY], '20')
     })
 
     it('should not modify existing product', () => {

@@ -28,7 +28,7 @@ jobs:
       DAYS: ${{ inputs.days || '7' }}
       OCCURRENCES: ${{ inputs.occurrences || '2' }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
@@ -44,7 +44,7 @@ jobs:
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
       - id: slack
         run: echo "report=$(cat flakiness.txt)" >> $GITHUB_OUTPUT
-      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
         if: github.event_name == 'schedule'
         with:
           method: chat.postMessage

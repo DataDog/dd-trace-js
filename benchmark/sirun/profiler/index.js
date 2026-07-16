@@ -13,7 +13,6 @@ if (PROFILER !== 'wall' && PROFILER !== 'all') {
 if (PROFILER !== 'space' && PROFILER !== 'all') {
   process.env.DD_PROFILING_HEAP_ENABLED = 'false'
 }
-process.env.DD_PROFILING_HEAP_SAMPLING_INTERVAL = '0'
 
 tracer.init({ profiling: 'true' })
 

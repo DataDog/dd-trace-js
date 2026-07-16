@@ -300,6 +300,7 @@ describe('esm', () => {
               ' --module ESNext' +
               ' --strict true' +
               ' --moduleResolution bundler' +
+              ' --skipLibCheck true' +
               ' --esModuleInterop true'
             )
           }

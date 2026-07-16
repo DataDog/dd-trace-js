@@ -30,26 +30,23 @@ describe('profiler', function () {
   let interval
   let flushInterval
 
-  class ConfigStub {
-    constructor (options) {
+  // Stubs the profiling config assembly so the lifecycle tests run against the test's
+  // profiler/exporter doubles instead of real native profilers, while still exercising
+  // the compression and tag derivation.
+  const configStub = {
+    buildProfilingRuntime: (config) => {
       const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
       const [method, level0] = compression.split('-')
       const level = level0 ? Number.parseInt(level0, 10) : undefined
-
-      this.endpointCollectionEnabled = false
-      this.debugSourceMaps = false
-      this.exporters = options.exporters ?? exporters
-      this.flushInterval = options.flushInterval ?? flushInterval
-      this.logger = options.logger ?? logger
-      this.profilers = options.profilers ?? profilers
-      this.sourceMap = options.sourceMap ?? false
-      this.systemInfoReport = {}
-      this.tags = { ...options.tags }
-      this.uploadCompression = {
-        method,
-        level: Number.isNaN(level) ? undefined : level,
+      return {
+        tags: { ...config.tags },
+        exporters,
+        flushInterval: config.DD_PROFILING_UPLOAD_PERIOD * 1000,
+        profilers,
+        uploadCompression: { method, level: Number.isNaN(level) ? undefined : level },
+        systemInfoReport: { oomMonitoring: { enabled: false } },
       }
-    }
+    },
   }
 
   function waitForExport () {
@@ -117,6 +114,7 @@ describe('profiler', function () {
       profilers,
       exporters,
       url: 'http://127.0.0.1:8126',
+      DD_PROFILING_UPLOAD_PERIOD: flushInterval / 1000,
       ...overrides,
     }
   }
@@ -125,9 +123,7 @@ describe('profiler', function () {
     function initProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
-        './config': {
-          Config: ConfigStub,
-        },
+        './config': configStub,
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
@@ -168,6 +164,56 @@ describe('profiler', function () {
 
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
+    })
+
+    it('should propagate custom label keys to the started profilers', async () => {
+      wallProfiler.setCustomLabelKeys = sinon.stub()
+      await profiler.start(makeStartOptions())
+
+      profiler.setCustomLabelKeys(['endpoint', 'resource'])
+
+      sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
+      assert.deepStrictEqual(
+        [...wallProfiler.setCustomLabelKeys.firstCall.args[0]],
+        ['endpoint', 'resource']
+      )
+    })
+
+    it('should delegate runWithLabels to the first profiler that supports it', async () => {
+      wallProfiler.runWithLabels = sinon.stub().callsFake((labels, fn) => fn())
+      await profiler.start(makeStartOptions())
+
+      const result = profiler.runWithLabels({ endpoint: '/foo' }, () => 'wrapped')
+
+      assert.strictEqual(result, 'wrapped')
+      sinon.assert.calledOnce(wallProfiler.runWithLabels)
+    })
+
+    it('should run the callback directly when no profiler supports runWithLabels', async () => {
+      await profiler.start(makeStartOptions())
+
+      assert.strictEqual(profiler.runWithLabels({}, () => 'plain'), 'plain')
+    })
+
+    it('should run the callback directly when called before start', () => {
+      assert.strictEqual(profiler.runWithLabels({}, () => 'early'), 'early')
+    })
+
+    it('should subscribe to span finishes when endpoint collection is enabled', async () => {
+      await profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: true }))
+
+      sinon.assert.calledOnce(wallProfiler.start)
+      profiler.stop()
+    })
+
+    it('should log an error when collecting with no profile types configured', async () => {
+      profilers = []
+      await profiler.start(makeStartOptions({ logger }))
+
+      await profiler._collect('on_shutdown', false)
+
+      sinon.assert.calledOnce(consoleLogger.error)
+      assert.match(consoleLogger.error.firstCall.args[0].message, /No profile types configured/)
     })
 
     it('should stop when starting failed', async () => {
@@ -349,7 +395,7 @@ describe('profiler', function () {
       // Re-proxyquire without stubbing ../log so log.debug actually publishes
       // to the real debugChannel.
       const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
-        './config': { Config: ConfigStub },
+        './config': configStub,
         '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
       }).Profiler
       const realProfiler = new RealLogProfiler()
@@ -403,24 +449,35 @@ describe('profiler', function () {
     })
 
     it('should not pass source mapper to profilers when disabled', async () => {
-      await profiler.start(makeStartOptions({ sourceMap: false }))
+      await profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: false }))
 
       const options = profilers[0].start.args[0][0]
       assert.strictEqual(options.mapper, undefined)
     })
 
     it('should pass source mapper to profilers when enabled', async () => {
-      profiler.start(makeStartOptions({ sourceMap: true }))
+      profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: true }))
 
       const options = profilers[0].start.args[0][0]
       assert.ok(Object.hasOwn(options, 'mapper'), `Available keys: ${inspect(Object.keys(options))}`)
       assert.strictEqual(mapperInstance, options.mapper)
     })
 
+    it('should log loaded source maps when debug source maps are on', async () => {
+      consoleLogger.debug = sinon.stub().callsFake(arg => { if (typeof arg === 'function') arg() })
+      mapperInstance.infoMap = new Map([['a', {}]])
+      profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: true, DD_PROFILING_DEBUG_SOURCE_MAPS: true }))
+      await Promise.resolve() // let loadDirectory().then() run
+      await Promise.resolve()
+
+      assert.strictEqual(profiler.enabled, true)
+      sinon.assert.called(consoleLogger.debug)
+    })
+
     it('should work with a root working dir and source maps on', async () => {
       const error = new Error('fail')
       mapperInstance.loadDirectory.rejects(error)
-      profiler.start(makeStartOptions({ logger, sourceMap: true }))
+      profiler.start(makeStartOptions({ logger, DD_PROFILING_SOURCE_MAP: true }))
       await Promise.resolve() // let .then() propagate the rejection
       await Promise.resolve() // let .catch() callback run
       assert.strictEqual(consoleLogger.error.args[0][0], error)
@@ -495,9 +552,7 @@ describe('profiler', function () {
     function initServerlessProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
-        './config': {
-          Config: ConfigStub,
-        },
+        './config': configStub,
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),

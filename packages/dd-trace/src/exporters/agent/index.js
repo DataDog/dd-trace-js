@@ -13,7 +13,7 @@ class AgentExporter {
     this._url = config.url
 
     const headers = {}
-    if (stats.enabled || apmTracingEnabled === false) {
+    if (stats.DD_TRACE_STATS_COMPUTATION_ENABLED || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 

@@ -10,9 +10,9 @@ const shimmer = require('../../../packages/datadog-shimmer')
 // genuinely different operations here, so WRAP_FUNCTION selects which one. The
 // wrapped function's shape is irrelevant to the wrap cost, so a single sync
 // target is used. A fresh object is wrapped each iteration so nothing nests and
-// memory stays flat as ITERATIONS grows.
+// memory stays flat as OPERATIONS grows.
 const useWrapFunction = process.env.WRAP_FUNCTION === 'true'
-const ITERATIONS = Number(process.env.ITERATIONS) || 1e6
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 let counter = 0
 function target () {
@@ -25,7 +25,7 @@ const passthrough = (original) => function (...args) {
 
 guard.loopStart()
 let lastWrapped
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   if (useWrapFunction) {
     lastWrapped = shimmer.wrapFunction(target, passthrough)
   } else {

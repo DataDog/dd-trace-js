@@ -5,7 +5,11 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
+const getConfig = require('../../src/config')
 const id = require('../../src/id')
+const Span = require('../../src/opentracing/span')
+const PrioritySampler = require('../../src/priority_sampler')
+const { MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 
 describe('SpanContext', () => {
   let SpanContext
@@ -165,6 +169,49 @@ describe('SpanContext', () => {
 
       assert.strictEqual(spanContext.toTraceparent(), '00-00000000000007890000000000000123-0000000000000456-00')
     })
+
+    it('materializes the lazy auto-keep decision so the sampled flag is set before finish', () => {
+      const span = startSpan(new PrioritySampler())
+
+      assert.match(span.context().toTraceparent(), /-01$/)
+    })
+
+    it('reflects an auto-drop decision rather than defaulting the flag to keep', () => {
+      const span = startSpan(new PrioritySampler(undefined, { sampleRate: 0 }))
+
+      assert.match(span.context().toTraceparent(), /-00$/)
+    })
+
+    it('honors a manual drop tag set directly on a non-root context', () => {
+      const prioritySampler = new PrioritySampler()
+      const root = startSpan(prioritySampler)
+      const child = startSpan(prioritySampler, root)
+      child.context().setTag(SAMPLING_PRIORITY, 0)
+
+      assert.match(child.context().toTraceparent(), /-00$/)
+    })
+
+    it('does not override a priority that was already decided', () => {
+      const span = startSpan(new PrioritySampler(undefined, { sampleRate: 0 }))
+      span.setTag(MANUAL_KEEP, true)
+
+      assert.match(span.context().toTraceparent(), /-01$/)
+    })
+
+    /**
+     * Starts a real span backed by a real priority sampler — the collaborator
+     * toTraceparent() reaches through _ensureSamplingPriority() to settle the
+     * lazy decision.
+     *
+     * @param {PrioritySampler} prioritySampler
+     * @param {Span} [parent] Root span to descend from; omit for a root span.
+     * @returns {Span}
+     */
+    function startSpan (prioritySampler, parent) {
+      const tracer = { _config: getConfig() }
+      const processor = { process () {} }
+      return new Span(tracer, processor, prioritySampler, { operationName: 'test', parent: parent?.context() })
+    }
   })
 
   describe('tag accessor API', () => {

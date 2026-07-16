@@ -73,7 +73,8 @@ describe('Plugin', () => {
               aws_service: 'S3',
               'aws.operation': 'listBuckets',
             })
-          }).then(done, done)
+          // first S3 call against localstack on the oldest SDK is slow to connect
+          }, { timeoutMs: 5000 }).then(done, done)
 
           s3.listBuckets({}, e => e && done(e))
         })
@@ -322,6 +323,96 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with a service function', () => {
+        before(() => {
+          return agent.load(['aws-sdk', 'http'], [{
+            service (params) {
+              return params?.Bucket ? `s3-bucket-${params.Bucket}` : undefined
+            },
+          }, { server: false }])
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('derives the service name from the request params', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'completeMultipartUpload my-bucket',
+              service: 's3-bucket-my-bucket',
+            })
+          }).then(done, done)
+
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id',
+          }, () => {})
+        })
+
+        it('falls back to the default service name when the function returns undefined', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'listBuckets',
+              service: 'test-aws-s3',
+            })
+          }).then(done, done)
+
+          s3.listBuckets({}, () => {})
+        })
+      })
+
+      describe('with a service function returning a non-string', () => {
+        before(() => {
+          return agent.load(['aws-sdk', 'http'], [{
+            service (params) {
+              return params?.Bucket ? params.Bucket.length : undefined
+            },
+          }, { server: false }])
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('falls back to the default service name', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'completeMultipartUpload my-bucket',
+              service: 'test-aws-s3',
+            })
+          }).then(done, done)
+
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id',
+          }, () => {})
+        })
+      })
+
       describe('with service configuration', () => {
         before(() => {
           return agent.load(['aws-sdk', 'http'], [{
@@ -343,22 +434,20 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should allow disabling a specific service', (done) => {
-          let total = 0
+        it('should allow disabling a specific service', async () => {
+          // s3 is disabled, so its request must never be traced within the window.
+          const listBucketsNotTraced = agent.assertNoTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.request' && span.resource === 'listBuckets') {
+                  throw new Error('listBuckets must not be traced when s3 is disabled')
+                }
+              }
+            }
+          })
 
-          agent.assertSomeTraces(traces => {
-            const span = sort(traces[0])[0]
-
-            assertObjectContains(span, {
-              name: 'aws.request',
-              resource: 'listBuckets',
-              service: 'test',
-            })
-
-            total++
-          }, { timeoutMs: 100 }).catch(() => {})
-
-          agent.assertSomeTraces(traces => {
+          // sqs stays enabled, so its request must be traced.
+          const listQueuesTraced = agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             assertObjectContains(span, {
@@ -366,21 +455,12 @@ describe('Plugin', () => {
               resource: 'listQueues',
               service: 'test',
             })
-
-            total++
-          }, { timeoutMs: 100 }).catch((e) => {})
+          })
 
           s3.listBuckets({}, () => {})
           sqs.listQueues({}, () => {})
 
-          setTimeout(() => {
-            try {
-              assert.strictEqual(total, 1)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
+          await Promise.all([listBucketsNotTraced, listQueuesTraced])
         })
       })
 

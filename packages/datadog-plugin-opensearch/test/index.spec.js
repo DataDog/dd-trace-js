@@ -14,7 +14,7 @@ describe('Plugin', () => {
   let opensearch
   let tracer
 
-  withVersions('opensearch', ['opensearch', '@opensearch-project/opensearch'], (version, moduleName) => {
+  withVersions('opensearch', ['@opensearch-project/opensearch'], (version, moduleName) => {
     const metaModule = require(`../../../versions/${moduleName}@${version}`)
 
     describe('opensearch', () => {

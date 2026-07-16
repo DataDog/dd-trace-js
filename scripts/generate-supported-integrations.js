@@ -200,8 +200,12 @@ function toCsv (rows) {
 }
 
 async function generateSupportedIntegrations () {
+  const pkg = JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8'))
   const plugins = readPluginMap()
-  const engines = parseEnginesRange(JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8')).engines.node)
+  const engines = parseEnginesRange(pkg.engines.node)
+  if (engines.maxMajor === undefined && pkg.nodeMaxMajor !== undefined) {
+    engines.maxMajor = pkg.nodeMaxMajor - 1
+  }
   const ranges = readInstrumentationRanges(engines)
   const versions = JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies ?? {}
 

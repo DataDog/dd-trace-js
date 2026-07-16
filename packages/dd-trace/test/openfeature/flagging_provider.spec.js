@@ -211,16 +211,15 @@ describe('FlaggingProvider', () => {
     })
   })
 
-  // Pins the bundler-opaque require gate against accidental regression to a
-  // direct `require('@datadog/openfeature-node-server')`, which would leak
-  // the optional peer chain into customer bundles (see #8635).
-  describe('bundler-opaque require gate', () => {
+  // Pins the optional-peer gate against accidental regression to a direct
+  // `require('@datadog/openfeature-node-server')`, which would leak the optional peer chain
+  // into customer bundles (see #8635). The opaque-load mechanism is covered by
+  // `datadog-instrumentations/test/helpers/require-optional-peer.spec.js`.
+  describe('optional-peer gate', () => {
     const modulePath = require.resolve('../../src/openfeature/flagging_provider')
 
     afterEach(() => {
       delete require.cache[modulePath]
-      delete globalThis.__webpack_require__
-      delete globalThis.__non_webpack_require__
     })
 
     it('uses `require` outside a bundler', () => {
@@ -229,24 +228,6 @@ describe('FlaggingProvider', () => {
 
       const ReloadedFlaggingProvider = require(modulePath)
 
-      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
-      assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
-    })
-
-    it('uses `__non_webpack_require__` under a webpack runtime', () => {
-      let escapeHatchCalls = 0
-      globalThis.__webpack_require__ = () => {
-        throw new Error('webpack require must not run for the optional peer')
-      }
-      globalThis.__non_webpack_require__ = (request) => {
-        escapeHatchCalls++
-        return require(request)
-      }
-      delete require.cache[modulePath]
-
-      const ReloadedFlaggingProvider = require(modulePath)
-
-      assert.strictEqual(escapeHatchCalls, 1)
       assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })

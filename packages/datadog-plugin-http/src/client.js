@@ -8,6 +8,7 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -27,13 +28,17 @@ class HttpClientPlugin extends ClientPlugin {
     const protocol = options.protocol || agent.protocol || 'http:'
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
-    const pathname = options.path || options.pathname
+    const base = `${protocol}//${host}`
+    // A URL object (e.g. from the fetch integration) carries the query in
+    // `options.search`, not `options.path`; keep it so url.full retains the query.
+    const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
     const path = pathname ? pathname.split(/[?#]/)[0] : '/'
-    const uri = `${protocol}//${host}${path}`
+    const uri = `${base}${path}`
 
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
@@ -46,7 +51,7 @@ class HttpClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
         'out.host': hostname,
       },
       metrics: {

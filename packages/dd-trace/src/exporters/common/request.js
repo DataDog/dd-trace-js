@@ -11,7 +11,7 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
+const { parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const {
@@ -26,25 +26,6 @@ const legacyStorage = storage('legacy')
 const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
-
-/**
- * @param {string|URL|object} urlObjOrString
- * @returns {object}
- */
-function parseUrl (urlObjOrString) {
-  if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
-
-  const url = urlToHttpOptions(new URL(urlObjOrString))
-
-  // Special handling if we're using named pipes on Windows
-  if (url.protocol === 'unix:' && url.hostname === '.') {
-    const udsPath = urlObjOrString.slice(5)
-    url.path = udsPath
-    url.pathname = udsPath
-  }
-
-  return url
-}
 
 /**
  * @param {string} hostname Host as resolved by {@link parseUrl}; IPv6 is unbracketed (`::1`).

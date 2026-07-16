@@ -28,7 +28,7 @@ plugin.configure({ enabled: true, service: 'redis-prod' })
 const startCh = channel('apm:redis:command:start')
 const finishCh = channel('apm:redis:command:finish')
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 450_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const CONN = { host: 'redis-primary.internal', port: 6379 }
 const COMMANDS = [
@@ -69,7 +69,7 @@ finishCh.publish(preCtx)
 assert.ok(preSpan._duration !== undefined, 'finish channel did not finish the span')
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   const ctx = makeCtx(COMMANDS[i % len])
   startCh.runStores(ctx, NOOP)
   finishCh.publish(ctx)

@@ -51,7 +51,6 @@ describe('sequelize', () => {
               rules: path.join(__dirname, 'rules-example.json'),
               apiSecurity: {
                 enabled: true,
-                sampleDelay: 10,
               },
             },
           }))

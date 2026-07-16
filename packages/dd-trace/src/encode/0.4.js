@@ -1,7 +1,7 @@
 'use strict'
 
 const getConfig = require('../config')
-const { MsgpackChunk } = require('../msgpack')
+const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 const log = require('../log')
 const { normalizeSpan, eventTimeNano } = require('./tags-processors')
 
@@ -265,7 +265,28 @@ class AgentEncoder {
 
     this._traceCount++
 
-    this._encode(bytes, trace)
+    try {
+      this._encode(bytes, trace)
+    } catch (error) {
+      if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+      // The trace, or the queued payload it joined, hit the chunk cap.
+      // Rolling back just the in-flight trace is unsafe: the string cache
+      // may already hold subarrays / indices pointing at bytes we'd
+      // discard, and the next encode would emit stale bytes against a
+      // smaller string table. Drop the whole queued payload so the next
+      // encode starts from a clean state. Emitting a partial buffer would
+      // corrupt the msgpack wire. The virtual `reset()` is called (not
+      // `_reset()`) so subclasses can clear their own per-payload state
+      // (e.g. `AgentlessCiVisibilityEncoder._eventCount`).
+      const dropped = this._traceCount
+      this.reset()
+      log.error(
+        'Trace encoder reset after exceeding the %d byte chunk cap; dropped %d trace(s)',
+        MAX_CHUNK_SIZE,
+        dropped
+      )
+      return
+    }
 
     if (this.#debugEncoding) {
       const end = bytes.length

@@ -10,6 +10,30 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
+// Test adapter: these specs predate the constructor reading canonical DD_PROFILING_*
+// names off the tracer config. Map the legacy flat option names to the (config, runtime)
+// shape the wall profiler now expects. The sampling interval is a fixed constant the
+// profiler imports directly, so it is no longer a configurable option.
+function makeWall (Cls, {
+  asyncContextFrameEnabled = false,
+  codeHotspotsEnabled = false,
+  cpuProfilingEnabled = false,
+  endpointCollectionEnabled = false,
+  flushInterval = 60 * 1e3,
+  heartbeatInterval = 60 * 1e3,
+  timelineEnabled = false,
+  v8ProfilerBugWorkaroundEnabled = false,
+} = {}) {
+  return new Cls({
+    DD_PROFILING_CODEHOTSPOTS_ENABLED: codeHotspotsEnabled,
+    DD_PROFILING_CPU_ENABLED: cpuProfilingEnabled,
+    DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: endpointCollectionEnabled,
+    DD_PROFILING_TIMELINE_ENABLED: timelineEnabled,
+    DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: v8ProfilerBugWorkaroundEnabled,
+    telemetry: { DD_TELEMETRY_HEARTBEAT_INTERVAL: heartbeatInterval },
+  }, { asyncContextFrameEnabled, flushInterval })
+}
+
 describe('profilers/native/wall', () => {
   let NativeWallProfiler
   let pprof
@@ -44,7 +68,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should start the internal time profiler', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     // Verify start/stop profiler idle notifiers are created if not present.
     // These functions may not exist in worker threads.
@@ -85,16 +109,15 @@ describe('profilers/native/wall', () => {
   })
 
   it('should use the provided configuration options', () => {
-    const samplingInterval = 0.5
-    const profiler = new NativeWallProfiler({ samplingInterval })
+    const profiler = makeWall(NativeWallProfiler, { flushInterval: 30000 })
 
     profiler.start()
     profiler.stop()
 
     sinon.assert.calledWith(pprof.time.start,
       {
-        intervalMicros: 500,
-        durationMillis: 60000,
+        intervalMicros: 1e6 / 99,
+        durationMillis: 30000,
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
@@ -105,7 +128,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should not stop when not started', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     profiler.stop()
 
@@ -113,7 +136,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should stop the internal time profiler', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     profiler.start()
     profiler.stop()
@@ -122,7 +145,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should stop the internal time profiler only once', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     profiler.start()
     profiler.stop()
@@ -132,7 +155,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should provide info', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
     profiler.start()
     const info = profiler.getInfo()
     profiler.stop()
@@ -142,7 +165,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should collect profiles from the internal time profiler', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     assert.strictEqual(profiler.isStarted(), false)
     profiler.start()
@@ -161,7 +184,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     profiler.start()
 
@@ -184,7 +207,7 @@ describe('profilers/native/wall', () => {
     warnChannel.subscribe(subscriber)
 
     try {
-      const profiler = new NativeWallProfiler()
+      const profiler = makeWall(NativeWallProfiler)
       profiler.start()
       profiler.profile(true)
       profiler.stop()
@@ -199,7 +222,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should encode profiles calling their encodeAsync method', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     profiler.start()
 
@@ -213,7 +236,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should use mapper if given', () => {
-    const profiler = new NativeWallProfiler()
+    const profiler = makeWall(NativeWallProfiler)
 
     const mapper = {}
 
@@ -234,7 +257,7 @@ describe('profilers/native/wall', () => {
   })
 
   it('should generate appropriate sample labels', () => {
-    const profiler = new NativeWallProfiler({ timelineEnabled: true })
+    const profiler = makeWall(NativeWallProfiler, { timelineEnabled: true })
     profiler.start()
     profiler.stop()
 
@@ -322,7 +345,7 @@ describe('profilers/native/wall', () => {
 
   describe('_generateLabels with custom labels (ACF)', () => {
     it('should include custom labels from array context', () => {
-      const profiler = new NativeWallProfiler({
+      const profiler = makeWall(NativeWallProfiler, {
         timelineEnabled: true,
         asyncContextFrameEnabled: true,
       })
@@ -360,7 +383,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should handle array context with empty profiling context', () => {
-      const profiler = new NativeWallProfiler({
+      const profiler = makeWall(NativeWallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -390,7 +413,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should not treat non-ACF ref context as array', () => {
-      const profiler = new NativeWallProfiler({
+      const profiler = makeWall(NativeWallProfiler, {
         timelineEnabled: true,
         asyncContextFrameEnabled: false,
       })
@@ -458,7 +481,7 @@ describe('profilers/native/wall', () => {
       localPprof.time.getContext.returns({ spanId: '123' })
       localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -484,7 +507,7 @@ describe('profilers/native/wall', () => {
       localPprof.time.getContext.onSecondCall().returns([{ spanId: '123' }, { customer: 'acme' }])
       localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -507,7 +530,7 @@ describe('profilers/native/wall', () => {
       localPprof.time.getContext.onSecondCall().returns([{}, { customer: 'acme' }])
       localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -524,7 +547,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should passthrough when ACF is not enabled', () => {
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: false,
         codeHotspotsEnabled: true,
       })
@@ -544,7 +567,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should passthrough when contexts are not enabled', () => {
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
       })
       profiler.start()
@@ -559,7 +582,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should let internal labels overwrite custom labels with same key', () => {
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -599,7 +622,7 @@ describe('profilers/native/wall', () => {
         return fn()
       })
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -618,7 +641,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should skip setContext when profiling context is unchanged (array)', () => {
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -655,7 +678,7 @@ describe('profilers/native/wall', () => {
     })
 
     it('should skip setContext when context is unchanged (non-array)', () => {
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -692,7 +715,7 @@ describe('profilers/native/wall', () => {
     it('should preserve custom labels in #enter for async continuations after runWithLabels returns', () => {
       // After runWithLabels returns, async continuations still carry the custom
       // labels in their CPED frame. The monotonic flag ensures #enter checks.
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         asyncContextFrameEnabled: true,
         codeHotspotsEnabled: true,
       })
@@ -790,7 +813,7 @@ describe('profilers/native/wall', () => {
 
     it('should resolve webTags via tags update channel (ACF path)', () => {
       const { span: webSpan, tags: webSpanTags } = makeWebSpan()
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: true,
@@ -818,7 +841,7 @@ describe('profilers/native/wall', () => {
 
     it('should resolve webTags via tags update channel (non-ACF path)', () => {
       const { span: webSpan, tags: webSpanTags } = makeWebSpan()
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: false,
@@ -848,7 +871,7 @@ describe('profilers/native/wall', () => {
       const { span: webSpan, tags: webSpanTags, spanId: webSpanId } = makeWebSpan()
       const { span: childSpan } = makeChildSpan(webSpanId, webSpan)
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: true,
@@ -874,7 +897,7 @@ describe('profilers/native/wall', () => {
       const { span: webSpan, spanId: webSpanId } = makeWebSpan()
       const { span: childSpan } = makeChildSpan(webSpanId, webSpan)
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: true,
@@ -895,7 +918,7 @@ describe('profilers/native/wall', () => {
 
     it('should ignore tags update for spans without cached profiling context', () => {
       const { span: webSpan, tags: webSpanTags } = makeWebSpan()
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: true,
@@ -916,7 +939,7 @@ describe('profilers/native/wall', () => {
       const { span: webSpan, tags: webSpanTags } = makeWebSpan()
       webSpanTags['span.type'] = 'web'
 
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: true,
@@ -941,7 +964,7 @@ describe('profilers/native/wall', () => {
       // (Object+Global), so repeated activations of the same span must short-
       // circuit when the CPED already holds the cached profilingContext.
       const { span: webSpan } = makeWebSpan()
-      const profiler = new WallProfiler({
+      const profiler = makeWall(WallProfiler, {
         endpointCollectionEnabled: true,
         codeHotspotsEnabled: true,
         asyncContextFrameEnabled: true,

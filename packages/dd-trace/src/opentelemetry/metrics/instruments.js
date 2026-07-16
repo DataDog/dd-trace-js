@@ -2,6 +2,7 @@
 
 const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { METRIC_TYPES } = require('./constants')
+const { nowUnixNano } = require('./time')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -62,7 +63,7 @@ class Instrument {
       type,
       value,
       attributes: sanitizeAttributes(attributes),
-      timestamp: Number(process.hrtime.bigint()),
+      timestamp: nowUnixNano(),
     }
   }
 }

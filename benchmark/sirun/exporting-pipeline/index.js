@@ -17,7 +17,7 @@ const id = require('../../../packages/dd-trace/src/id')
 // bench, and the real flush is a deferred unref'd timer that barely fires in a
 // short run. A no-op exporter keeps the loop CPU-bound, leaves memory flat (the
 // formatted chunk is discarded each pass) and drops the agent dependency.
-const COUNT = Number(process.env.COUNT) || 200_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 const WITH_STATS = process.env.WITH_STATS === '1'
 const WITH_LINKS = process.env.WITH_LINKS === '1'
 
@@ -41,7 +41,10 @@ const exporter = { export (formatted) { exported += formatted.length; lastFormat
 const prioritySampler = new PrioritySampler()
 const config = {
   flushMinSpans: 100,
-  stats: { enabled: WITH_STATS },
+  stats: {
+    DD_TRACE_STATS_COMPUTATION_ENABLED: WITH_STATS,
+  },
+  appsec: {},
 }
 const sp = new SpanProcessor(exporter, prioritySampler, config)
 
@@ -94,6 +97,10 @@ trace.started = finished
 trace.finished = finished
 sp.process(finished[0])
 assert.equal(exported, 30, 'span processor did not format and export the chunk')
+// The stats variant must actually build the stats processor: a renamed config
+// key would otherwise leave it off and the variant would silently measure the
+// no-stats path, showing up as a spurious A/B improvement.
+assert.equal(Boolean(sp._stats), WITH_STATS, 'stats computation did not match the WITH_STATS variant')
 if (WITH_LINKS) {
   assert.ok(lastFormatted[0].meta['_dd.span_links'], 'span links were not formatted')
   assert.ok(lastFormatted[0].span_events?.length, 'span events were not formatted')
@@ -101,7 +108,7 @@ if (WITH_LINKS) {
 
 guard.loopStart()
 exported = 0
-for (let i = 0; i < COUNT; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   // process() erases trace.finished each pass; restore the chunk so every
   // iteration formats the full set.
   trace.started = finished

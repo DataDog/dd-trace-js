@@ -20,8 +20,11 @@ describe('esm', () => {
   let proc
   let variants
 
-  // test against later versions because server.mjs uses newer package syntax
-  withVersions('restify', 'restify', '>3', version => {
+  // restify 7.x-9.x crash on load on this job's Node >=18 matrix: they assign the now getter-only
+  // `IncomingMessage#closed` (`TypeError: Cannot set property closed`). 4.x-6.x predate that assignment
+  // and 10.x+ dropped it, so exercise those and skip only the broken middle majors. (server.mjs's import
+  // syntax already requires >3.)
+  withVersions('restify', 'restify', '>3 <7 || >=10', version => {
     useSandbox([`'restify@${version}'`],
       false, ['./packages/datadog-plugin-restify/test/integration-test/*'])
 

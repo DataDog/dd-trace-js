@@ -10,14 +10,14 @@
       "env": {
         "ENCODER_VERSION": "0.4",
         "WITH_SPAN_EVENTS": "none",
-        "ENCODE_COUNT": "31000"
+        "OPERATIONS": "31000"
       }
     },
     "0.5": {
       "env": {
         "ENCODER_VERSION": "0.5",
         "WITH_SPAN_EVENTS": "none",
-        "ENCODE_COUNT": "60000"
+        "OPERATIONS": "60000"
       }
     },
     "0.4-events-native": {
@@ -25,7 +25,7 @@
         "ENCODER_VERSION": "0.4",
         "WITH_SPAN_EVENTS": "native",
         "DD_TRACE_NATIVE_SPAN_EVENTS": "true",
-        "ENCODE_COUNT": "13000"
+        "OPERATIONS": "13000"
       }
     },
     "0.4-events-legacy": {
@@ -33,14 +33,14 @@
         "ENCODER_VERSION": "0.4",
         "WITH_SPAN_EVENTS": "legacy",
         "DD_TRACE_NATIVE_SPAN_EVENTS": "false",
-        "ENCODE_COUNT": "10500"
+        "OPERATIONS": "10500"
       }
     },
     "0.5-events-legacy": {
       "env": {
         "ENCODER_VERSION": "0.5",
         "WITH_SPAN_EVENTS": "legacy",
-        "ENCODE_COUNT": "15000"
+        "OPERATIONS": "15000"
       }
     },
     "0.4-wide-tags": {
@@ -48,7 +48,7 @@
         "ENCODER_VERSION": "0.4",
         "WITH_SPAN_EVENTS": "none",
         "WIDE_TAGS": "40",
-        "ENCODE_COUNT": "11000"
+        "OPERATIONS": "11000"
       }
     },
     "0.5-wide-tags": {
@@ -56,7 +56,7 @@
         "ENCODER_VERSION": "0.5",
         "WITH_SPAN_EVENTS": "none",
         "WIDE_TAGS": "40",
-        "ENCODE_COUNT": "19000"
+        "OPERATIONS": "19000"
       }
     }
   }

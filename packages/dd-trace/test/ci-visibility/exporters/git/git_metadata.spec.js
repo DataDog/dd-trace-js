@@ -60,7 +60,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
-    fakeConfig = { apiKey: 'api-key', DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true }
+    fakeConfig = { DD_API_KEY: 'api-key', testOptimization: { DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true } }
 
     // Most tests inject requestStub directly so they never touch nock or the
     // real HTTP stack. This avoids the Windows CI hang caused by nock's
@@ -132,7 +132,7 @@ describe('git_metadata', () => {
   })
 
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
-    fakeConfig.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
+    fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
     requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
     requestStub.onCall(1).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
     requestStub.onCall(2).callsArgWith(2, null, '', 204)

@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const id = require('../../src/id')
+const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -298,5 +299,20 @@ describe('encode 0.5', () => {
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
     // Everything works the same as without meta_struct, and nothing else is added
     assert.strictEqual(trace[0][12], undefined)
+  })
+
+  it('throws ERR_MSGPACK_CHUNK_OVERFLOW when the assembled payload exceeds the cap', () => {
+    // v0.5 concatenates the string table and the trace bytes into one wire
+    // buffer. Each chunk is capped independently at MAX_SIZE, so both can sit
+    // just under the cap while their sum blows past it. `reserve` never fires
+    // here — the overflow only exists once `makePayload` adds the two lengths,
+    // so the size guard lives there.
+    encoder.encode(data)
+
+    const half = Math.ceil(MAX_SIZE / 2)
+    encoder._stringBytes.length = half
+    encoder._traceBytes.length = half
+
+    assert.throws(() => encoder.makePayload(), OverflowError)
   })
 })

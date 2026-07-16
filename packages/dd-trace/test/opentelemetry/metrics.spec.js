@@ -315,6 +315,36 @@ describe('OpenTelemetry Meter Provider', () => {
       setTimeout(() => { validator(); done() }, 150)
     })
 
+    it('timestamps data points with UNIX-epoch nanoseconds, not the monotonic clock', (done) => {
+      // The delta counter pins the per-measurement timestamp; the UpDownCounter
+      // is always CUMULATIVE, so it pins the aggregator's start time too.
+      const lowerBoundNano = Date.now() * 1e6
+      const validator = mockOtlpExport((decoded) => {
+        const upperBoundNano = (Date.now() + 1000) * 1e6
+        const assertEpochNano = (label, value) => {
+          assert(
+            value >= lowerBoundNano && value <= upperBoundNano,
+            `${label} ${value} should be epoch nanoseconds within [${lowerBoundNano}, ${upperBoundNano}]`
+          )
+        }
+
+        const metricsList = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        const counter = metricsList.find(m => m.name === 'counter').sum.dataPoints[0]
+        assertEpochNano('counter.timeUnixNano', counter.timeUnixNano)
+
+        const updown = metricsList.find(m => m.name === 'updown').sum.dataPoints[0]
+        assertEpochNano('updown.timeUnixNano', updown.timeUnixNano)
+        assertEpochNano('updown.startTimeUnixNano', updown.startTimeUnixNano)
+      })
+
+      setupMetrics()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('counter').add(5)
+      meter.createUpDownCounter('updown').add(3)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
     it('uses JSON with string timestamps when configured', (done) => {
       const validator = mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['Content-Type'], 'application/json')
@@ -1145,7 +1175,7 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('HTTP Export Behavior', () => {
-    it('handles timeout and error without network', (done) => {
+    it('handles timeout and error without network', async () => {
       const results = { timeout: false, error: false }
       let requestCount = 0
 
@@ -1153,6 +1183,9 @@ describe('OpenTelemetry Meter Provider', () => {
         httpStub.restore()
         httpStub = null
       }
+
+      // Install fake timers before setupMetrics() so the reader's periodic export interval is faked.
+      const clock = sinon.useFakeTimers()
 
       httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
         requestCount++
@@ -1184,19 +1217,24 @@ describe('OpenTelemetry Meter Provider', () => {
         return mockReq
       })
 
-      setupMetrics()
-      const meter = metrics.getMeter('app')
-      meter.createCounter('test1').add(1)
+      try {
+        const { config } = setupMetrics()
+        const exportIntervalMs = Number(config.OTEL_METRIC_EXPORT_INTERVAL)
+        // One export interval plus a margin for the stub's 10ms socket-handler delay.
+        const exportRoundTripMs = exportIntervalMs + 20
+        const meter = metrics.getMeter('app')
 
-      setTimeout(() => {
+        meter.createCounter('test1').add(1)
+        await clock.tickAsync(exportRoundTripMs)
+        assert(results.timeout, 'first export should surface a socket timeout')
+
+        // Fresh data forces a second (delta) export.
         meter.createCounter('test2').add(2)
-      }, 120)
-
-      setTimeout(() => {
-        assert(results.timeout)
-        assert(results.error)
-        done()
-      }, 300)
+        await clock.tickAsync(exportRoundTripMs)
+        assert(results.error, 'second export should surface a socket error')
+      } finally {
+        clock.restore()
+      }
     })
   })
 })

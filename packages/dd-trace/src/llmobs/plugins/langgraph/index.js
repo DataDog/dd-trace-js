@@ -14,7 +14,7 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const name = ctx.self.name || 'LangGraph'
 
-    const enabled = this._tracerConfig.llmobs.enabled
+    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
     const span = ctx.currentStore?.span

@@ -91,6 +91,19 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
   return makeLowercase ? envPluginName.toLowerCase() : envPluginName
 }
 
+/**
+ * Formats a sampling rate as a string with up to 6 decimal digits and no trailing zeros.
+ *
+ * @param {number} rate
+ */
+function formatKnuthRate (rate) {
+  const string = Number(rate).toFixed(6)
+  for (let i = string.length - 1; i > 0; i--) {
+    if (string[i] === '0') continue
+    return string.slice(0, i + (string[i] === '.' ? 0 : 1))
+  }
+}
+
 module.exports = {
   isEmpty,
   isTrue,
@@ -99,4 +112,5 @@ module.exports = {
   globMatch,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
+  formatKnuthRate,
 }

@@ -458,8 +458,8 @@ describe(`cucumber@${version} commonJS`, () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
               metadataDicts.forEach(metadata => {
-                assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
-                assert.ok(metadata['*'][TEST_COMMAND])
+                assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
+                assert.ok(metadata.test_levels[TEST_COMMAND])
               })
 
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1944,6 +1944,56 @@ describe(`cucumber@${version} commonJS`, () => {
             await eventsPromise
           })
 
+          onlyLatestIt('preserves an all-zero EFD framework retry budget without a worker count', async () => {
+            const testSuitePath = 'ci-visibility/features/farewell.feature'
+            receiver.setSettings({
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '10s': 0,
+                },
+              },
+              known_tests_enabled: true,
+            })
+            receiver.setKnownTests({
+              cucumber: {},
+            })
+
+            childProcess = exec(
+              `./node_modules/.bin/cucumber-js ${testSuitePath} --parallel 2 ` +
+                `--require-module "${path.join(cwd, 'ci-visibility/cucumber-worker-message-delay.js')}"`,
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  DD_TEST_DROP_CUCUMBER_EFD_RETRY_COUNT_MESSAGES: '1',
+                },
+              }
+            )
+
+            await receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                  .filter(test => test.meta[TEST_SUITE] === testSuitePath)
+                const testSuites = events
+                  .filter(event => event.type === 'test_suite_end')
+                  .map(event => event.content)
+                  .filter(testSuite => testSuite.meta[TEST_SUITE] === testSuitePath)
+
+                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 0)
+                assert.strictEqual(testSuites.length, 1)
+              },
+              { hardTimeout: 60_000 }
+            )
+            assert.strictEqual(childProcess.exitCode, 0)
+          })
+
           onlyLatestIt('bails out of EFD if the percentage of new tests is too high', (done) => {
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({
@@ -2425,6 +2475,8 @@ describe(`cucumber@${version} commonJS`, () => {
                 ddsource: 'dd_debugger',
                 level: 'error',
               })
+              assert.ok(diLog.ddtags.includes('git.repository_url:'), `Got: ${inspect(diLog.ddtags)}`)
+              assert.ok(diLog.ddtags.includes('git.commit.sha:'), `Got: ${inspect(diLog.ddtags)}`)
               assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
               assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
                 a: {
@@ -2469,6 +2521,92 @@ describe(`cucumber@${version} commonJS`, () => {
               done()
             }).catch(done)
           })
+        })
+
+        onlyLatestIt('runs every retried attempt with active dynamic instrumentation', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const snapshotIdsByTest = new Set()
+          const spanIdsByTest = new Set()
+          const traceIdsByTest = new Set()
+          const snapshotIdsByLog = new Set()
+          const spanIdsByLog = new Set()
+          const traceIdsByLog = new Set()
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTestsWithDebugInfo = tests.filter(
+                test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr &&
+                  test.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true'
+              )
+
+              assert.strictEqual(retriedTestsWithDebugInfo.length, 2)
+              for (const retriedTest of retriedTestsWithDebugInfo) {
+                assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
+                  .endsWith('ci-visibility/features-di/support/sum.js'), true)
+                assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
+
+                const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
+                assert.ok(retriedTest.meta[snapshotIdKey])
+                snapshotIdsByTest.add(retriedTest.meta[snapshotIdKey])
+                spanIdsByTest.add(retriedTest.span_id.toString())
+                traceIdsByTest.add(retriedTest.trace_id.toString())
+              }
+            })
+
+          const logsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === logsEndpoint, (payloads) => {
+              const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+              assert.strictEqual(diLogs.length, 2)
+              for (const diLog of diLogs) {
+                assertObjectContains(diLog, {
+                  ddsource: 'dd_debugger',
+                  level: 'error',
+                })
+                assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
+                assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
+                  a: {
+                    type: 'number',
+                    value: '11',
+                  },
+                  b: {
+                    type: 'number',
+                    value: '3',
+                  },
+                  localVariable: {
+                    type: 'number',
+                    value: '2',
+                  },
+                })
+                spanIdsByLog.add(diLog.dd.span_id)
+                traceIdsByLog.add(diLog.dd.trace_id)
+                snapshotIdsByLog.add(diLog.debugger.snapshot.id)
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint-multiple-retries.feature ' +
+              '--retry 3',
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+            logsPromise,
+          ])
+          assert.strictEqual(exitCode, 0)
+          assert.deepStrictEqual(snapshotIdsByTest, snapshotIdsByLog)
+          assert.deepStrictEqual(spanIdsByTest, spanIdsByLog)
+          assert.deepStrictEqual(traceIdsByTest, traceIdsByLog)
         })
 
         onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
@@ -3617,7 +3755,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
             })
           })
 

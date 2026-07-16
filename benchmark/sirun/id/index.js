@@ -5,7 +5,7 @@ const guard = require('../startup-guard')
 const id = require('../../../packages/dd-trace/src/id')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 20_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // id() with no argument generates a pseudo-random 64-bit id from a batch buffer
 // that refills every 8192 draws -- the per-span and per-trace cost. id(hex, 16)
@@ -31,7 +31,7 @@ assert.equal(run(), 8, 'id did not yield an 8-byte wire array')
 
 let sink = 0
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   sink += run()
 }
 guard.done()

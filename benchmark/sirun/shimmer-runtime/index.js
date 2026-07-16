@@ -12,7 +12,7 @@ const shimmer = require('../../../packages/datadog-shimmer')
 // allocating promises (not shimmer's cost) and add GC jitter. The wrap-time
 // difference between the two APIs is covered by the shimmer-startup bench.
 const useWrapFunction = process.env.WRAP_FUNCTION === 'true'
-const ITERATIONS = Number(process.env.ITERATIONS) || 5e7
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 let counter = 0
 function target () {
@@ -33,10 +33,10 @@ if (useWrapFunction) {
 }
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   wrapped()
 }
 guard.done()
 
 // Fail loudly if the wrapper stops delegating to the original function.
-assert.equal(counter, ITERATIONS, 'wrapped function did not run ITERATIONS times')
+assert.equal(counter, OPERATIONS, 'wrapped function did not run OPERATIONS times')

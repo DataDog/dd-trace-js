@@ -176,6 +176,27 @@ describe('plugins/util/web', () => {
       })
   })
 
+  describe('OTel semantics network.peer.address', () => {
+    // The HTTP tag renames happen centrally in span_format; only network.peer.address
+    // is set here (the socket isn't available at serialization).
+    it('sets network.peer.address from the socket when OTel semantics are enabled', () => {
+      const otelConfig = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      req.socket = { remoteAddress: '10.0.0.1' }
+
+      const span = web.startSpan(tracer, otelConfig, req, res, 'test.request')
+
+      assert.strictEqual(span.context().getTag('network.peer.address'), '10.0.0.1')
+    })
+
+    it('does not set network.peer.address when OTel semantics are disabled', () => {
+      req.socket = { remoteAddress: '10.0.0.1' }
+
+      const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+      assert.strictEqual(span.context().hasTag('network.peer.address'), false)
+    })
+  })
+
   describe('root', () => {
     it('should return null when not yet instrumented', () => {
       assert.strictEqual(web.root(req), null)
@@ -534,6 +555,61 @@ describe('plugins/util/web', () => {
       web.setRouteOrEndpointTag(req)
 
       assert.strictEqual(tags[HTTP_ROUTE], '/api/users/:id/items')
+    })
+  })
+
+  describe('route resolved after the AppSec pre-finish endpoint fallback', () => {
+    let context
+
+    beforeEach(() => {
+      config = web.normalizeConfig({ resourceRenamingEnabled: true })
+      req.method = 'GET'
+      req.url = '/users/123'
+
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      context = web.getContext(req)
+    })
+
+    it('keeps http.route when the framework resolves the route after http.endpoint was stamped', () => {
+      // AppSec's incomingHttpRequestEnd hook stamps http.endpoint while the
+      // framework route is still unresolved.
+      web.setRouteOrEndpointTag(req)
+      assert.ok(Object.hasOwn(tags, HTTP_ENDPOINT))
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+
+      // The framework resolves the route between the pre-finish hook and finish.
+      web.setRoute(req, '/users/:id')
+
+      web.finishAll(context)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
+    })
+
+    it('uses http.route alone when the route resolves before the pre-finish hook', () => {
+      web.setRoute(req, '/users/:id')
+
+      web.setRouteOrEndpointTag(req)
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
+
+      web.finishAll(context)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
+    })
+
+    it('keeps the http.endpoint fallback when no route ever resolves', () => {
+      web.setRouteOrEndpointTag(req)
+      const endpoint = tags[HTTP_ENDPOINT]
+      assert.ok(endpoint)
+
+      web.finishAll(context)
+
+      assert.strictEqual(tags[HTTP_ENDPOINT], endpoint)
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET')
     })
   })
 

@@ -39,7 +39,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     })
 
     plugin = new BedrockRuntimePlugin({}, {
-      llmobs: { enabled: true, mlApp: 'test' },
+      llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test' },
       service: 'test',
     })
     plugin._tagger = {
