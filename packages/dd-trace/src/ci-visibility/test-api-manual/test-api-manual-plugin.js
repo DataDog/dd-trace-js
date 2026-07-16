@@ -28,12 +28,16 @@ class TestApiManualPlugin extends CiPlugin {
       const store = legacyStorage.getStore()
       const testSpan = store && store.span
       if (testSpan) {
+        const previousStore = testSpan._store === undefined
+          ? undefined
+          : legacyStorage.getStore(testSpan._store)
         testSpan.setTag(TEST_STATUS, status)
         if (error) {
           testSpan.setTag('error', error)
         }
         testSpan.finish()
         finishAllTraceSpans(testSpan)
+        legacyStorage.enterWith(previousStore)
       }
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {
