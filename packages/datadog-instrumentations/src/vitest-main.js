@@ -9,7 +9,6 @@ const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
-  getConfiguredEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -511,8 +510,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
             setProvidedContext(ctx, {
               _ddIsKnownTestsEnabled: isKnownTestsEnabled,
               _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-              _ddEarlyFlakeDetectionNumRetries:
-                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+              _ddEarlyFlakeDetectionNumRetries: earlyFlakeDetectionNumRetries,
               _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
             }, 'Could not send known tests to workers so Early Flake Detection will not work.')
           }
@@ -593,7 +591,6 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       testPropertiesByFilepath: testPropertiesByFilepath || {},
       testSessionConfiguration,
     }, {
-      getConfiguredEfdRetryCount,
       state: getNoWorkerInitState(),
     })
   }

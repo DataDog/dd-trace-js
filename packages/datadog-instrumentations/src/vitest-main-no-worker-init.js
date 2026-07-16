@@ -144,7 +144,7 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 }
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
-  const { getConfiguredEfdRetryCount, state } = options
+  const { state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
 
   const {
@@ -160,10 +160,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
-      earlyFlakeDetectionRetries: getConfiguredEfdRetryCount(
-        state.earlyFlakeDetectionSlowTestRetries,
-        state.earlyFlakeDetectionNumRetries
-      ),
+      earlyFlakeDetectionRetries: state.earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
       earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,

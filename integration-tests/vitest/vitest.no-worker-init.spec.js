@@ -293,9 +293,8 @@ describe('vitest no-worker init instrumentation selection', () => {
         testManagementTestsBySuite: {},
         testSessionConfiguration: {},
       }, {
-        getConfiguredEfdRetryCount: () => 2,
         state: {
-          earlyFlakeDetectionNumRetries: 1,
+          earlyFlakeDetectionNumRetries: 2,
           earlyFlakeDetectionSlowTestRetries: { '5s': 2 },
           isEarlyFlakeDetectionEnabled: true,
           isEarlyFlakeDetectionFaulty: false,
@@ -304,15 +303,15 @@ describe('vitest no-worker init instrumentation selection', () => {
       })
     }
 
-    it('sends EFD retry thresholds to the no-worker setup context', () => {
+    it('sends the EFD retry policy to the no-worker setup context', () => {
       const ctx = getNoWorkerReporterContext()
 
       configureNoWorkerReporter(ctx)
 
-      assert.deepStrictEqual(
-        ctx.getRootProject()._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
-        EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS
-      )
+      const workerSetup = ctx.getRootProject()._provided._ddVitestWorkerSetup
+      assert.strictEqual(workerSetup.earlyFlakeDetectionRetries, 2)
+      assert.deepStrictEqual(workerSetup.earlyFlakeDetectionRetryThresholds, EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS)
+      assert.deepStrictEqual(workerSetup.earlyFlakeDetectionSlowRetries, { '5s': 2 })
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {

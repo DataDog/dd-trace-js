@@ -2411,6 +2411,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         jest: {
           'ci-visibility/test-impacted-test/test-impacted-1.js': [
             'impacted tests can pass normally',
+            'impacted tests use their duration retry budget',
           ],
           'ci-visibility/test-impacted-test/test-impacted-2.js': [
             'impacted tests 2 can pass normally',
@@ -2437,6 +2438,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           })
           it('can fail', () => {
             assert.strictEqual(1 + 2, 4)
+          })
+          const slowIt = process.env.RUN_SLOW_IMPACTED_TEST ? it : it.skip
+          slowIt('use their duration retry budget', (done) => {
+            setTimeout(done, 5_100)
           })
         })`
       )
@@ -2625,6 +2630,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               }
             : {}
           runImpactedTest(done, { isModified: true, isEfdEnabled: true, isParallel }, extraEnvVars)
+        })
+      }
+
+      for (const isParallel of [false, true]) {
+        it(`selects the impacted test retry budget after its first execution${
+          isParallel ? ' in parallel' : ''
+        }`, async () => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 2,
+                '10s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const tests = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test =>
+                  test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js' &&
+                  test.meta[TEST_NAME] === 'impacted tests use their duration retry budget'
+                )
+
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+              assert.strictEqual(tests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+            }, 30_000)
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: isParallel
+                  ? 'test-impacted-test/test-impacted'
+                  : 'test-impacted-test/test-impacted-1',
+                GITHUB_BASE_REF: '',
+                RUN_IN_PARALLEL: isParallel ? 'true' : '',
+                RUN_SLOW_IMPACTED_TEST: '1',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
         })
       }
 
