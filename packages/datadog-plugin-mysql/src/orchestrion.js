@@ -3,9 +3,12 @@
 const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const {
+  channels: databaseChannels,
+  DatabaseQueryProcessor,
+} = require('../../dd-trace/src/events/database')
+const { runSemanticStart } = require('../../dd-trace/src/events/orchestrion')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { startQuerySpan } = require('./shared')
 
 const legacyStorage = storage('legacy')
 
@@ -17,35 +20,37 @@ const poolQueryStartCh = dc.channel('datadog:mysql:pool:query:start')
 const poolQueryFinishCh = dc.channel('datadog:mysql:pool:query:finish')
 
 /**
- * The only span-creating path. Upstream `Pool.query` dispatches through
- * `getConnection` to `Connection.query`, so this fires for both direct and
- * pooled queries; the pool subplugin must therefore stay span-free.
+ * The source adapter for the only span-producing semantic path. Upstream
+ * `Pool.query` dispatches through `getConnection` to `Connection.query`, so
+ * this fires for both direct and pooled queries; the pool adapter stays
+ * span-free.
  *
  * `Connection.prototype.query` is wrapped with a `Sync` operator: `:start`
- * establishes the span store and mutates the args (DBM injection), `:end` fires
- * at synchronous return with `ctx.result` being the returned `Query`. The span
- * finish is deferred to the query's real completion boundary (its `_callback`
- * or its `end` event), matching the legacy shimmer behavior.
+ * enters the store returned by the semantic processor and applies its DBM
+ * mutation, while `:end` receives the returned `Query`. The adapter publishes
+ * semantic completion at the query's real boundary (its `_callback` or `end`
+ * event), matching the legacy shimmer behavior.
  */
-class MysqlConnectionQueryPlugin extends DatabasePlugin {
+class MysqlQueryProcessor extends DatabaseQueryProcessor {
   static id = 'mysql'
   static system = 'mysql'
+}
+
+class MysqlConnectionQueryPlugin extends TracingPlugin {
+  static id = 'mysql'
   static prefix = 'tracing:orchestrion:mysql:Connection_query'
 
   bindStart (ctx) {
     const args = ctx.arguments
     const sql = args[0].sql || args[0]
-    ctx.sql = sql
-    ctx.conf = ctx.self.config
-
-    const store = startQuerySpan(this, ctx)
+    const store = runSemanticStart(ctx, databaseChannels.queryStart, normalizeConnectionQuery)
 
     // `ctx.arguments` is the same array the wrapper applies to the original
     // method, so writing the DBM-injected SQL here is visible to mysql.
     if (args[0].sql) {
-      args[0].sql = ctx.sql
+      args[0].sql = ctx.data.statement
     } else {
-      args[0] = ctx.sql
+      args[0] = ctx.data.statement
     }
 
     // IAST SQL-injection analysis (unchanged channel), original SQL text.
@@ -56,27 +61,31 @@ class MysqlConnectionQueryPlugin extends DatabasePlugin {
 
   end (ctx) {
     const query = ctx.result
-    const span = ctx.currentStore?.span
+    const span = ctx.context?.span
     if (!query || !span) return
 
     if (query._callback) {
       const callback = query._callback
-      const plugin = this
       query._callback = function (error, result) {
         ctx.result = result
         if (error) {
           ctx.error = error
-          plugin.error(ctx)
+          databaseChannels.queryError.publish(ctx)
         }
-        plugin.finish(ctx)
+        databaseChannels.queryFinish.publish(ctx)
 
         // Run the user callback in the caller's context, matching the legacy
         // `apm:mysql:query:finish` bindFinish (which returned `ctx.parentStore`).
         return legacyStorage.run(ctx.parentStore, () => callback.apply(this, arguments))
       }
     } else {
-      query.once('end', () => this.finish(ctx))
+      query.once('end', () => databaseChannels.queryFinish.publish(ctx))
     }
+  }
+
+  error (ctx) {
+    databaseChannels.queryError.publish(ctx)
+    databaseChannels.queryFinish.publish(ctx)
   }
 }
 
@@ -145,10 +154,31 @@ class MysqlPoolGetConnectionPlugin extends TracingPlugin {
 class MysqlOrchestrionPlugin extends CompositePlugin {
   static id = 'mysql'
   static plugins = {
+    queryProcessor: MysqlQueryProcessor,
     connectionQuery: MysqlConnectionQueryPlugin,
     poolQuery: MysqlPoolQueryPlugin,
     poolGetConnection: MysqlPoolGetConnectionPlugin,
   }
+}
+
+function normalizeConnectionQuery (ctx) {
+  const args = ctx.arguments
+
+  ctx.v = 1
+  ctx.kind = 'database'
+  ctx.operation = 'query'
+  ctx.source = MYSQL_SOURCE
+  ctx.data = {
+    statement: args[0].sql || args[0],
+    connection: ctx.self.config,
+  }
+
+  return ctx
+}
+
+const MYSQL_SOURCE = {
+  integration: 'mysql',
+  system: 'mysql',
 }
 
 module.exports = MysqlOrchestrionPlugin
