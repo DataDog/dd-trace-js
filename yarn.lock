@@ -792,25 +792,6 @@
   dependencies:
     "@opentelemetry/api" "^1.3.0"
 
-"@opentelemetry/api-logs@0.33.0":
-  version "0.33.0"
-  resolved "https://registry.yarnpkg.com/@opentelemetry/api-logs/-/api-logs-0.33.0.tgz#2f180853459227d91a17e3aee40e21d4431b1b5b"
-  integrity sha512-B3SocjwflrNEaTQrJXNbmOg4nggJmFpxiJnoat+Ap861I9n4ZIH/nuSn7JfPdIEeoZV+jbFu2QzEKNk2ROZMZQ==
-  dependencies:
-    "@opentelemetry/api" "^1.0.0"
-
-"@opentelemetry/api-logs@0.34.0":
-  version "0.34.0"
-  resolved "https://registry.yarnpkg.com/@opentelemetry/api-logs/-/api-logs-0.34.0.tgz#6c26cefa18137afe674e8a814a7ae99cfe61620d"
-  integrity sha512-6/s7Klnc3IDtLCXjvRlMKYOTp5LgWXwmFDSNF35zMFyk1rNv5LZajWhkk3zXIlEW9auqoesTyoWlP0bgCbr7bw==
-  dependencies:
-    "@opentelemetry/api" "^1.0.0"
-
-"@opentelemetry/api@1.4.1":
-  version "1.4.1"
-  resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.4.1.tgz#ff22eb2e5d476fbc2450a196e40dd243cc20c28f"
-  integrity sha512-O2yRJce1GOc6PAy3QxFM4NzFiWzvScDC1/5ihYBL6BUEVdq0XMWN01sppE+H6bBXbaFYipjwFLEWLg5PaSOThA==
-
 "@opentelemetry/api@1.9.1", "@opentelemetry/api@^1.0.0", "@opentelemetry/api@^1.3.0":
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.9.1.tgz#c1b0346de336ba55af2d5a7970882037baedec05"
@@ -1797,18 +1778,6 @@ dc-polyfill@^0.1.11:
   version "0.1.11"
   resolved "https://registry.yarnpkg.com/dc-polyfill/-/dc-polyfill-0.1.11.tgz#3efa792147f3b5224b8a9274905b1e98fe82a856"
   integrity sha512-TyyeGcjx0YeThAI9fTFtgsvj5qd4R+aGfVmXiUhevbgzWFDr7IK4tv4YjE6jaGzLHQTchk4h7DHdr5q4WGgaZw==
-
-"dd-trace-otel-api-logs-v033-fixture@file:packages/dd-trace/test/opentelemetry/fixtures/api-logs-v033":
-  version "1.0.0"
-  dependencies:
-    "@opentelemetry/api" "1.4.1"
-    "@opentelemetry/api-logs" "0.33.0"
-
-"dd-trace-otel-api-logs-v034-fixture@file:packages/dd-trace/test/opentelemetry/fixtures/api-logs-v034":
-  version "1.0.0"
-  dependencies:
-    "@opentelemetry/api" "1.4.1"
-    "@opentelemetry/api-logs" "0.34.0"
 
 debug@4, debug@^4.1.0, debug@^4.1.1, debug@^4.3.1, debug@^4.3.2, debug@^4.3.4, debug@^4.3.5, debug@^4.4.0, debug@^4.4.3:
   version "4.4.3"
@@ -3737,6 +3706,22 @@ optionator@^0.9.3:
     prelude-ls "^1.2.1"
     type-check "^0.4.0"
     word-wrap "^1.2.5"
+
+"otel-api-logs-v033@https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.33.0.tgz":
+  version "0.33.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.33.0.tgz#2f180853459227d91a17e3aee40e21d4431b1b5b"
+  dependencies:
+    "@opentelemetry/api" "^1.0.0"
+
+"otel-api-logs-v034@https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.34.0.tgz":
+  version "0.34.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.34.0.tgz#6c26cefa18137afe674e8a814a7ae99cfe61620d"
+  dependencies:
+    "@opentelemetry/api" "^1.0.0"
+
+"otel-api-v14@https://registry.npmjs.org/@opentelemetry/api/-/api-1.4.1.tgz":
+  version "1.4.1"
+  resolved "https://registry.npmjs.org/@opentelemetry/api/-/api-1.4.1.tgz#ff22eb2e5d476fbc2450a196e40dd243cc20c28f"
 
 outvariant@^1.4.0, outvariant@^1.4.3:
   version "1.4.3"

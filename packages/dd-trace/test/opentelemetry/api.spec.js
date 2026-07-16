@@ -2,15 +2,13 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const { createRequire } = require('node:module')
 const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const API_V14_REQUIRE = createRequire(require.resolve('dd-trace-otel-api-logs-v033-fixture/package.json'))
-const API_V14_ENTRY = API_V14_REQUIRE.resolve('@opentelemetry/api')
+const API_V14_ENTRY = require.resolve('otel-api-v14')
 const API_OWNER_VERSION = require('../../../../package.json').optionalDependencies['@opentelemetry/api']
 
 require('../setup/core')
