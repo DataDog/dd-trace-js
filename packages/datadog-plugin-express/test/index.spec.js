@@ -1495,8 +1495,9 @@ describe('Plugin', () => {
         withVersions('express', 'loopback', loopbackVersion => {
           let loopback
 
-          beforeEach(function () {
-            this.timeout(5000)
+          before(function () {
+            // The public entry synchronously initializes LoopBack's model, connector, and remoting stack.
+            this.timeout(10000)
 
             // Legacy loopback emits the deprecated `util._extend` at module
             // load; allow it so the harness deprecation guard does not throw.
