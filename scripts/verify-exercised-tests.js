@@ -263,7 +263,7 @@ function isPlainObject (v) {
 }
 
 /**
- * Parse `NAME=value` assignments in front of a command (e.g. `PLUGINS=foo SERVICES=bar yarn ...`).
+ * Parse `NAME=value` assignments in front of a command (e.g. `PLUGINS=foo SERVICES=bar npm run ...`).
  * @param {string} prefix
  * @returns {Record<string, string>}
  */
