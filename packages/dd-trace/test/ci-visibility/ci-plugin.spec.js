@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -91,6 +92,38 @@ describe('CiPlugin', () => {
     assert.strictEqual(plugin.shouldSkipGitMetadataExtraction, true)
     sinon.assert.calledOnce(getRepositoryRoot)
     sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
+  })
+
+  it('clears ITR state when library configuration fails', () => {
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, new Error('settings failed'))
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.libraryConfig = { isSuitesSkippingEnabled: true }
+    plugin.itrCorrelationId = 'correlation-id'
+    plugin.skippableSuitesCoverage = { 'suite.js': 'coverage' }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.strictEqual(plugin.libraryConfig, undefined)
+    assert.strictEqual(plugin.itrCorrelationId, undefined)
+    assert.strictEqual(plugin.skippableSuitesCoverage, undefined)
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
   })
 
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
