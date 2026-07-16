@@ -14,32 +14,34 @@ class NoopSpanProcessor {
 }
 
 class MultiSpanProcessor extends NoopSpanProcessor {
+  #processors
+
   constructor (spanProcessors) {
     super()
-    this._processors = spanProcessors
+    this.#processors = spanProcessors
   }
 
   forceFlush () {
     return Promise.all(
-      this._processors.map(p => p.forceFlush())
+      this.#processors.map(p => p.forceFlush())
     )
   }
 
   onStart (span, context) {
-    for (const processor of this._processors) {
+    for (const processor of this.#processors) {
       processor.onStart(span, context)
     }
   }
 
   onEnd (span) {
-    for (const processor of this._processors) {
+    for (const processor of this.#processors) {
       processor.onEnd(span)
     }
   }
 
   shutdown () {
     return Promise.all(
-      this._processors.map(p => p.shutdown())
+      this.#processors.map(p => p.shutdown())
     )
   }
 }

@@ -35,9 +35,10 @@ const {
   configWithOrigin,
   parseErrors,
   generateTelemetry,
+  warnInvalidValue,
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
-const { transformers } = require('./parsers')
+const { programmaticTypeCoercions, transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
 
@@ -55,6 +56,7 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
  * @typedef {import('./config-types').ConfigKey} ConfigKey
  * @typedef {import('./config-types').ConfigPath} ConfigPath
+ * @typedef {import('./config-types').ConfigurationOption} ConfigurationOption
  * @typedef {{
  *   value: import('./config-types').ConfigPathValue<ConfigPath>,
  *   source: TelemetrySource
@@ -121,6 +123,9 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
   if (value == null) {
     // TODO: This works as before while ignoring undefined programmatic options is not ideal.
     if (source !== 'default') {
+      if (rawValue !== value) {
+        generateTelemetry(rawValue, source, name)
+      }
       return
     }
   } else if (source === 'calculated' || source === 'remote_config') {
@@ -285,8 +290,13 @@ class Config extends ConfigBase {
           continue
         }
       }
-      // TODO: Coerce mismatched types to the expected type, if possible. E.g., strings <> numbers
-      const transformed = value !== undefined && entry.transformer ? entry.transformer(value, fullName, source) : value
+      const coerced = programmaticTypeCoercions[entry.type](value)
+      if (coerced === undefined && value !== undefined) {
+        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+      }
+      const transformed = coerced !== undefined && entry.transformer
+        ? entry.transformer(coerced, fullName, source)
+        : coerced
       setAndTrack(this, entry.property ?? name, transformed, value, source)
     }
   }

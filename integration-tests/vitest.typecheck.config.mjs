@@ -33,7 +33,7 @@ export default defineConfig({
   test: {
     include: [],
     typecheck: {
-      checker: 'tsc',
+      checker: process.platform === 'win32' ? 'node_modules/.bin/tsc.cmd' : 'node_modules/.bin/tsc',
       enabled: true,
       include: [typecheckFile],
       tsconfig,

@@ -581,6 +581,7 @@ describe('integrations', () => {
         const customClient = new OpenAI({
           apiKey: 'test',
           baseURL: 'http://localhost:8000',
+          maxRetries: 0, // the endpoint is dead on purpose; skip the multi-second retry backoff
         })
 
         try {

@@ -68,7 +68,7 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
       const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
-      onDone({ isModified })
+      onDone(isModified)
     })
 
     this.addSub('ci:playwright:session:finish', ({
