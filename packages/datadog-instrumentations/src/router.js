@@ -103,8 +103,8 @@ function createLayerDispatchWrappers (name) {
       // A handler that calls `next()` and then rejects (`next(); await bg()`)
       // makes the host call this continuation twice. Publish once so the second
       // pass cannot tag the already-finished span's parent with a late error.
-      if (calls === 0) {
-        calls = 1
+      calls++
+      if (calls === 1) {
 
         if (error && error !== 'route' && error !== 'router') {
           publishError({ req, error })
@@ -112,8 +112,7 @@ function createLayerDispatchWrappers (name) {
 
         nextChannel.publish({ req })
         finishChannel.publish({ req })
-      } else if (calls === 1) {
-        calls = 2
+      } else if (calls === 2) {
         // Surface the repeat as a diagnostic on the still-live request span. The
         // host cannot tell a legitimate `next(); await bg()` from a buggy double
         // `next()`, so this only records that it happened, not that it is wrong.
