@@ -7,9 +7,7 @@ const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
   recordTestManagementExecution,
-  getConfiguredEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../../dd-trace/src/plugins/util/test')
@@ -583,10 +581,7 @@ function getTestFinishInfo (test, status, config, error) {
   const testStatuses = testsStatuses.get(testName)
 
   const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
-  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? getConfiguredEfdRetryCount(
-    config.earlyFlakeDetectionSlowTestRetries,
-    config.earlyFlakeDetectionNumRetries
-  )
+  const efdRetryCount = efdRetryCountByTestFullName.get(testName) ?? config.earlyFlakeDetectionNumRetries
   const isLastEfdRetry = testStatuses.length === efdRetryCount + 1
   const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
 
@@ -1022,10 +1017,7 @@ function getRunTestsWrapper (runTests, config) {
               ) {
                 retryTest(
                   test,
-                  getConfiguredEfdRetryCount(
-                    config.earlyFlakeDetectionSlowTestRetries,
-                    config.earlyFlakeDetectionNumRetries
-                  ),
+                  config.earlyFlakeDetectionNumRetries,
                   ['_ddIsModified', '_ddIsEfdRetry'],
                   config.earlyFlakeDetectionSlowTestRetries
                 )
@@ -1049,10 +1041,7 @@ function getRunTestsWrapper (runTests, config) {
           ) {
             retryTest(
               test,
-              getConfiguredEfdRetryCount(
-                config.earlyFlakeDetectionSlowTestRetries,
-                config.earlyFlakeDetectionNumRetries
-              ),
+              config.earlyFlakeDetectionNumRetries,
               ['_ddIsNew', '_ddIsEfdRetry'],
               config.earlyFlakeDetectionSlowTestRetries
             )

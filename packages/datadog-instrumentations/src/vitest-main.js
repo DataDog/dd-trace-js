@@ -11,7 +11,6 @@ const {
   VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   VITEST_WORKER_TELEMETRY_PAYLOAD_CODE,
-  getConfiguredEfdRetryCount,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
@@ -750,8 +749,7 @@ async function runMainProcessSetup (
             setProvidedContext(ctx, {
               _ddIsKnownTestsEnabled: isKnownTestsEnabled,
               _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-              _ddEarlyFlakeDetectionNumRetries:
-                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+              _ddEarlyFlakeDetectionNumRetries: earlyFlakeDetectionNumRetries,
               _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
             }, 'Could not send known tests to workers so Early Flake Detection will not work.')
           }
@@ -835,7 +833,6 @@ async function runMainProcessSetup (
       testPropertiesByFilepath: testPropertiesByFilepath || {},
       testSessionConfiguration,
     }, {
-      getConfiguredEfdRetryCount,
       shouldReportTestModule: shouldInstallBrowserReporter ? isBrowserTestModule : undefined,
       state: getNoWorkerInitState(),
     })

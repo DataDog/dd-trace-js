@@ -3,6 +3,7 @@
 const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
+const { getEfdSchedulingRetryCount } = require('../efd-retry-policy')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -15,13 +16,14 @@ const { writeSettingsToCache } = require('../test-optimization-cache')
 const { MAX_RETRIES, validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
-const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = Object.freeze({
   '5s': 10,
   '10s': 5,
   '30s': 3,
   '5m': 2,
 })
+const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES =
+  getEfdSchedulingRetryCount(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 const EARLY_FLAKE_DETECTION_RETRY_BUCKETS = Object.keys(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 
@@ -103,7 +105,7 @@ function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
     const parsedSlowTestRetries = parseSlowTestRetries(value.slow_test_retries)
     if (parsedSlowTestRetries) {
       slowTestRetries = parsedSlowTestRetries
-      numRetries = parsedSlowTestRetries['5s'] ?? DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
+      numRetries = getEfdSchedulingRetryCount(parsedSlowTestRetries)
     } else {
       isValid = false
     }

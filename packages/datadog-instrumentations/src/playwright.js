@@ -15,9 +15,7 @@ const {
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
-  getMaxEfdRetryCount,
   recordTestManagementExecution,
-  getConfiguredEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
@@ -257,10 +255,7 @@ function getEfdRetryRepeatEachIndex (fileSuite, projectSuite, retryIndex, retryC
 }
 
 function getEfdRetryCountForTest (test) {
-  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? getConfiguredEfdRetryCount(
-    earlyFlakeDetectionSlowTestRetries,
-    earlyFlakeDetectionNumRetries
-  )
+  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? earlyFlakeDetectionNumRetries
 }
 
 function setEfdRetryCountForTest (test, retryCount) {
@@ -1773,7 +1768,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
       ],
-      getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+      earlyFlakeDetectionNumRetries,
       (copiedTest, originalTest, retryIndex) => {
         markEfdRetryTest(copiedTest, retryIndex, originalTest)
         markEfdManagedTest(copiedTest)
@@ -1814,7 +1809,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         fileSuitesWithNewTestsToProjects,
         isNewTest,
         ['_ddIsNew', '_ddIsEfdRetry'],
-        getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+        earlyFlakeDetectionNumRetries,
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
           markEfdManagedTest(copiedTest)

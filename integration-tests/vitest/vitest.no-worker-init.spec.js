@@ -39,7 +39,6 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -305,10 +304,13 @@ describe('vitest no-worker init instrumentation selection', () => {
         testManagementTestsBySuite: {},
         testSessionConfiguration: {},
       }, {
-        getConfiguredEfdRetryCount: () => 2,
         state: {
-          earlyFlakeDetectionNumRetries: 1,
-          earlyFlakeDetectionSlowTestRetries: { '5s': 2 },
+          earlyFlakeDetectionRetryPolicy: {
+            durationRetryCounts: [
+              { durationLimitMs: 5000, retryCount: 2 },
+            ],
+            schedulingRetryCount: 2,
+          },
           isEarlyFlakeDetectionEnabled: true,
           isEarlyFlakeDetectionFaulty: false,
           testManagementAttemptToFixRetries: 0,
@@ -348,7 +350,12 @@ describe('vitest no-worker init instrumentation selection', () => {
       configureNoWorkerReporter(ctx)
 
       const setupContext = ctx.getRootProject()._provided._ddVitestWorkerSetup
-      assert.deepStrictEqual(setupContext.earlyFlakeDetectionRetryThresholds, EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS)
+      assert.deepStrictEqual(setupContext.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 2,
+      })
       assert.strictEqual(setupContext.isRumCorrelationEnabled, true)
       assert.strictEqual(setupContext.rumTestExecutionIdCookieName, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
     })
