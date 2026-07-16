@@ -1,8 +1,7 @@
 import { setTimeout } from 'node:timers/promises'
-import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
-// eslint-disable-next-line import/order -- @actions ESM exports resolve differently across supported Node.js versions.
+import { Octokit } from 'octokit'
 import { downloadArtifacts } from './download-artifacts.mjs'
 
 /* eslint-disable no-console */
