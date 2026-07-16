@@ -70,6 +70,8 @@
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
 /index.electron.js @DataDog/apm-idm-js
+/next.d.ts @DataDog/apm-idm-js
+/next.js @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
@@ -81,9 +83,11 @@
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
 /packages/dd-trace/index.electron.js @DataDog/apm-idm-js
+/packages/dd-trace/src/next.js @DataDog/apm-idm-js
 /packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
+/packages/dd-trace/test/next.spec.js @DataDog/apm-idm-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js

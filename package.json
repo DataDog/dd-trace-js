@@ -153,6 +153,8 @@
     "LICENSE.Apache",
     "LICENSE.BSD3",
     "loader-hook.mjs",
+    "next.d.ts",
+    "next.js",
     "packages/*/index.js",
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",

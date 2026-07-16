@@ -93,6 +93,45 @@ Regardless of where you open the issue, someone at Datadog will try to help.
 
 If you would like to trace your bundled application then please read this page on [bundling and dd-trace](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling). It includes information on how to use our ESBuild plugin and includes caveats for other bundlers.
 
+### Next.js standalone output
+
+Next.js output tracing cannot see modules loaded only through `NODE_OPTIONS`. With Next.js 15 or newer, use the
+Next.js config helper to externalize `dd-trace` and copy its installed runtime dependency closure into standalone
+output:
+
+```js
+const withDatadogConfig = require('dd-trace/next')
+
+module.exports = withDatadogConfig({
+  output: 'standalone',
+}, {
+  projectRoot: __dirname,
+})
+```
+
+Keep `NODE_OPTIONS="--import dd-trace/initialize.mjs"` when starting the generated server so the tracer and its ESM
+loader run before Next.js. In a monorepo, also set `outputFileTracingRoot` to a common parent of the application and
+its dependencies. The helper includes the Datadog OpenFeature provider when `@openfeature/server-sdk` is installed.
+Next.js applies tracing includes only to Node.js server routes, so use the import-anchor setup below for a static-only
+application.
+
+As an alternative without the config helper, make the preload statically visible to Next.js in `instrumentation.ts`:
+
+```ts
+export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs' && !globalThis[Symbol.for('dd-trace')]) {
+    await import('dd-trace/initialize.mjs')
+  }
+}
+```
+
+Keep `serverExternalPackages: ['dd-trace']` in `next.config.js` when using this fallback. The import must remain a
+literal so Next.js can trace it. Continue using the same `NODE_OPTIONS` value for early initialization. The runtime
+guard prevents the instrumentation hook from initializing the ESM loader a second time. This approach can produce a
+larger standalone artifact because Next.js decides which optional dependencies to copy. When using this fallback with
+OpenFeature, import `@datadog/openfeature-node-server` from server-side application code so Next.js can trace that
+dynamically loaded package.
+
 
 ## Security Vulnerabilities
 
