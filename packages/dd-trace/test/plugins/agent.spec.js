@@ -19,6 +19,11 @@ describe('test agent helper', () => {
       assert.strictEqual(tracer, global._ddtrace)
     })
 
+    it('binds the mock agent on the IPv4 loopback address', async () => {
+      await agent.load([])
+      assert.strictEqual(agent.server.address().address, '127.0.0.1')
+    })
+
     it('reuses the cached tracer for repeat loads without close', async () => {
       const first = await agent.load([])
       const second = await agent.load([])
