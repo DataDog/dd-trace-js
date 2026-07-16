@@ -318,8 +318,11 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
       assert.match(plan, /Command-created outputs: `coverage` \(must not exist before validation; newly created /)
-      assert.match(fullPlan, /CI=true DD_API_KEY="<redacted>" bash --noprofile --norc -c "pnpm test"/)
-      assert.match(plan, /NODE_OPTIONS="-r dd-trace\/ci\/init" npm test/)
+      assert.match(
+        fullPlan,
+        /CI=true DD_API_KEY=(?:"<redacted>"|'<redacted>') bash --noprofile --norc -c (?:"pnpm test"|'pnpm test')/
+      )
+      assert.match(plan, /NODE_OPTIONS=(?:"-r dd-trace\/ci\/init"|'-r dd-trace\/ci\/init') npm test/)
       assert.match(ciOnlyPlan, /#### CI Test Execution/)
       assert.doesNotMatch(ciOnlyPlan, /#### Temporary Tests Created for Advanced Checks/)
       assert.match(plan, /#### Test Execution Without Datadog/)
@@ -347,7 +350,10 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(fullPlan, /- Bash shell: `/)
       assert.doesNotMatch(plan, /Technical Safeguard: Command Identity|\(SHA-256 `/)
       assert.doesNotMatch(plan, /- Approved executable:|- Executable SHA-256:/)
-      assert.strictEqual(countOccurrences(fullPlan, 'bash --noprofile --norc -c "pnpm test"'), 1)
+      const shellCommand = process.platform === 'win32'
+        ? 'bash --noprofile --norc -c "pnpm test"'
+        : "bash --noprofile --norc -c 'pnpm test'"
+      assert.strictEqual(countOccurrences(fullPlan, shellCommand), 1)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /local validator included with the installed `dd-trace` package/)
       assert.match(plan, /bounded filesystem cache fixtures/)
@@ -452,7 +458,9 @@ describe('test optimization validator-owned execution phases', () => {
         out: path.join(root, 'results'),
         requestedScenario: 'ci-wiring',
       })
-      const renderedCommand = 'node -e "console.log(\\"Tests: 1 passed, 1 total\\")"'
+      const renderedCommand = process.platform === 'win32'
+        ? 'node -e "console.log(\\"Tests: 1 passed, 1 total\\")"'
+        : String.raw`node -e 'console.log("Tests: 1 passed, 1 total")'`
 
       assert.strictEqual(countOccurrences(plan, renderedCommand), 3)
       assert.match(plan, /SAFE_MODE=direct/)
@@ -1226,7 +1234,10 @@ describe('test optimization validator-owned execution phases', () => {
       })
       const summary = fs.readFileSync(path.join(root, 'results', 'approval-summary.md'), 'utf8')
 
-      assert.match(summary, /NODE_OPTIONS="--import dd-trace\/register\.js -r dd-trace\/ci\/init"/)
+      assert.match(
+        summary,
+        /NODE_OPTIONS=(?:"--import dd-trace\/register\.js -r dd-trace\/ci\/init"|'--import dd-trace\/register\.js -r dd-trace\/ci\/init')/
+      )
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

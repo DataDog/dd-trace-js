@@ -1141,8 +1141,8 @@ function getEligibleFrameworks (frameworks) {
   const eligible = []
 
   for (const framework of frameworks) {
-    const version = getSupportedVersionDetection(framework)
     const command = getEligibleCommandMatch(framework)
+    const version = getSupportedVersionDetection(framework, command?.relativePath)
     const reasons = []
 
     if (!version) reasons.push(`No statically supported ${framework.name} version was found.`)
@@ -1171,10 +1171,17 @@ function getEligibleFrameworks (frameworks) {
  * Gets the first supported version detection for a framework.
  *
  * @param {object} framework detected framework
+ * @param {string} [relativePath] package manifest that owns the selected command
  * @returns {object|undefined} supported version detection
  */
-function getSupportedVersionDetection (framework) {
-  for (const detection of framework.versionDetections || []) {
+function getSupportedVersionDetection (framework, relativePath) {
+  const detections = framework.versionDetections || []
+  const localDetections = relativePath
+    ? detections.filter(detection => detection.relativePath === relativePath)
+    : []
+  const candidates = localDetections.length > 0 ? localDetections : detections
+
+  for (const detection of candidates) {
     if (detection.version && satisfies(detection.version, framework.supportedRange)) return detection
   }
 }
@@ -1320,29 +1327,30 @@ function findDependencyEntries (manifests, packageNames) {
  */
 function getVersionDetections (root, packageNames, dependencyEntries) {
   const detections = []
-  const installed = []
-
-  for (const packageName of packageNames) {
-    const version = getInstalledPackageVersion(root, packageName)
-    if (version) {
-      installed.push({
-        packageName,
-        rawVersion: version,
-        version,
-        source: 'installed',
-      })
-    }
-  }
-
-  if (installed.length) return installed
 
   for (const entry of dependencyEntries) {
+    const packageRoot = path.dirname(path.resolve(root, entry.relativePath))
+    const installedVersion = getInstalledPackageVersion(root, entry.packageName, packageRoot)
     detections.push({
       packageName: entry.packageName,
-      rawVersion: entry.rawVersion,
-      version: coerceVersion(entry.rawVersion),
+      rawVersion: installedVersion || entry.rawVersion,
+      version: installedVersion || coerceVersion(entry.rawVersion),
       relativePath: entry.relativePath,
-      source: 'manifest',
+      source: installedVersion ? 'installed' : 'manifest',
+    })
+  }
+
+  if (detections.length > 0) return uniqueVersionDetections(detections)
+
+  for (const packageName of packageNames) {
+    const version = getInstalledPackageVersion(root, packageName, root)
+    if (!version) continue
+
+    detections.push({
+      packageName,
+      rawVersion: version,
+      version,
+      source: 'installed',
     })
   }
 
@@ -1354,12 +1362,24 @@ function getVersionDetections (root, packageNames, dependencyEntries) {
  *
  * @param {string} root repository root
  * @param {string} packageName package name
+ * @param {string} packageRoot package directory where resolution begins
  * @returns {string|undefined} installed version
  */
-function getInstalledPackageVersion (root, packageName) {
-  const packageJsonPath = path.join(root, 'node_modules', ...packageName.split('/'), 'package.json')
-  const json = readJsonFile(packageJsonPath)
-  return typeof json?.version === 'string' ? json.version : undefined
+function getInstalledPackageVersion (root, packageName, packageRoot) {
+  const repositoryRoot = path.resolve(root)
+  let directory = path.resolve(packageRoot)
+  if (!isPathInside(repositoryRoot, directory)) return
+
+  while (isPathInside(repositoryRoot, directory)) {
+    const packageJsonPath = path.join(directory, 'node_modules', ...packageName.split('/'), 'package.json')
+    const json = readJsonFile(packageJsonPath)
+    if (typeof json?.version === 'string') return json.version
+    if (directory === repositoryRoot) return
+
+    const parent = path.dirname(directory)
+    if (parent === directory) return
+    directory = parent
+  }
 }
 
 /**

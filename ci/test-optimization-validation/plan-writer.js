@@ -945,8 +945,7 @@ function formatCommandArgument (argument, index, command, repositoryRoot) {
  * @returns {string} readable assignment value
  */
 function formatEnvironmentValue (value) {
-  const text = String(value)
-  return /^[A-Za-z0-9_./:@%+,=-]+$/.test(text) ? text : JSON.stringify(text)
+  return serializeApprovalCommand({ argv: [String(value)], usesShell: false })
 }
 
 /**

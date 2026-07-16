@@ -626,6 +626,89 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('resolves installed framework versions from each declaring package', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const packageRoot = path.join(root, 'packages', 'app')
+    const rootVitest = path.join(root, 'node_modules', 'vitest')
+    const packageVitest = path.join(packageRoot, 'node_modules', 'vitest')
+
+    fs.mkdirSync(rootVitest, { recursive: true })
+    fs.mkdirSync(packageVitest, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { vitest: '4.0.0' },
+    }))
+    fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({
+      devDependencies: { vitest: '0.34.6' },
+      scripts: { test: 'vitest run' },
+    }))
+    fs.writeFileSync(path.join(rootVitest, 'package.json'), JSON.stringify({ version: '4.0.0' }))
+    fs.writeFileSync(path.join(packageVitest, 'package.json'), JSON.stringify({ version: '0.34.6' }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const vitest = report.supportedFrameworks.find(framework => framework.id === 'vitest')
+
+      assert.deepStrictEqual(vitest.versionDetections.map(detection => ({
+        relativePath: detection.relativePath,
+        source: detection.source,
+        version: detection.version,
+      })), [
+        { relativePath: 'package.json', source: 'installed', version: '4.0.0' },
+        { relativePath: 'packages/app/package.json', source: 'installed', version: '0.34.6' },
+      ])
+      assert.deepStrictEqual(report.eligibleFrameworks, [])
+      assert.ok(report.results.some(result => {
+        return result.title === 'Vitest 0.34.6 is not supported' &&
+          result.locations?.includes('packages/app/package.json')
+      }))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('ties a hoisted installed framework version to the declaring package', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const packageRoot = path.join(root, 'packages', 'app')
+    const rootVitest = path.join(root, 'node_modules', 'vitest')
+
+    fs.mkdirSync(rootVitest, { recursive: true })
+    fs.mkdirSync(packageRoot, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { vitest: '4.0.0' },
+    }))
+    fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({
+      devDependencies: { vitest: '^4.0.0' },
+      scripts: { test: 'vitest run' },
+    }))
+    fs.writeFileSync(path.join(rootVitest, 'package.json'), JSON.stringify({ version: '4.0.0' }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.deepStrictEqual(report.eligibleFrameworks, [{
+        id: 'vitest',
+        name: 'Vitest',
+        command: 'vitest run',
+        commandLocation: 'packages/app/package.json',
+        supportedRange: '>=1.6.0',
+        version: '4.0.0',
+        versionLocation: 'packages/app/package.json',
+      }])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not block a root framework entry with an unsupported nested fixture version', () => {
     const diagnosis = getDiagnosisWithNestedMochaError()
     const framework = {

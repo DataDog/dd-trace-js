@@ -640,7 +640,9 @@ function serializeApprovalCommand (command) {
  */
 function formatApprovalArgument (value) {
   const argument = String(value)
-  return /^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument) ? argument : JSON.stringify(argument)
+  if (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument)) return argument
+  if (process.platform === 'win32') return JSON.stringify(argument)
+  return `'${argument.replaceAll('\'', String.raw`'"'"'`)}'`
 }
 
 function serializeDisplayCommand (command) {

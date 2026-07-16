@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -352,10 +353,52 @@ describe('test optimization validation command runner', () => {
   })
 
   it('renders the executable argv for approval without trusting displayCommand', () => {
+    const quotedCommand = process.platform === 'win32'
+      ? '"printf \\"actual command\\""'
+      : String.raw`'printf "actual command"'`
+
     assert.strictEqual(serializeApprovalCommand({
       argv: ['sh', '-c', 'printf "actual command"'],
       displayCommand: 'npm test',
-    }), 'sh -c "printf \\"actual command\\""')
+    }), `sh -c ${quotedCommand}`)
+  })
+
+  it('single-quotes POSIX approval arguments containing shell expansions', function () {
+    if (process.platform === 'win32') this.skip()
+
+    assert.strictEqual(serializeApprovalCommand({
+      argv: ['node', '-e', '$(touch /tmp/approval-marker)'],
+    }), "node -e '$(touch /tmp/approval-marker)'")
+    assert.strictEqual(serializeApprovalCommand({
+      argv: ['node', String.raw`it's $(still-literal)`],
+    }), String.raw`node 'it'"'"'s $(still-literal)'`)
+  })
+
+  it('keeps POSIX shell expansions literal when a rendered approval command is copied', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-approval-command-'))
+    const marker = path.join(root, 'unexpected-expansion')
+    const output = path.join(root, 'argument.txt')
+    const literalArgument = `$(touch ${marker})`
+    const command = serializeApprovalCommand({
+      argv: [
+        process.execPath,
+        '-e',
+        'require("node:fs").writeFileSync(process.argv[1], process.argv[2])',
+        output,
+        literalArgument,
+      ],
+    })
+
+    try {
+      execFileSync('/bin/sh', ['-c', command])
+
+      assert.strictEqual(fs.readFileSync(output, 'utf8'), literalArgument)
+      assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('returns a result for missing executable spawn failures', async () => {

@@ -30,7 +30,7 @@ async function runSetupCommands ({ framework, out, options }) {
     })
     const summary = summarizeSetupCommand(command, result, outDir)
     results.push(summary)
-    artifacts.push(result.artifacts.command, result.artifacts.stdout, result.artifacts.stderr)
+    artifacts.push(...Object.values(result.artifacts))
 
     if (command.required !== false && result.exitCode !== 0) {
       const failure = getSetupFailure(framework, command, result, results)

@@ -105,4 +105,33 @@ describe('test optimization validation setup runner', () => {
       fs.rmSync(out, { recursive: true, force: true })
     }
   })
+
+  it('omits missing artifacts when setup fails before command execution', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-setup-'))
+    const framework = {
+      id: 'jest:package',
+      setup: {
+        commands: [{
+          id: 'missing-runner',
+          cwd: out,
+          argv: ['definitely-missing-dd-validation-runner'],
+          required: true,
+        }],
+      },
+    }
+
+    try {
+      const setup = await runSetupCommands({
+        framework,
+        out,
+        options: { verbose: false },
+      })
+
+      assert.strictEqual(setup.ok, false)
+      assert.deepStrictEqual(setup.artifacts, [])
+      assert.deepStrictEqual(setup.failure.artifacts, [])
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
 })
