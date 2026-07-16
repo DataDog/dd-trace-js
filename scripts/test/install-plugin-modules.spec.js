@@ -183,6 +183,13 @@ externals.express.push(
     assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
   })
 
+  it('makes the sqlite build dependency direct in knex sandboxes', () => {
+    runInstall('knex')
+
+    const manifest = require(path.join(versionsDir, 'knex@1', 'package.json'))
+    assert.strictEqual(manifest.dependencies.tar, '7.5.4')
+  })
+
   it('pins the Claude Agent SDK to its compatible zod major', () => {
     runInstall('claude-agent-sdk')
 
