@@ -94,6 +94,7 @@ class Experiments {
         }
         records = recs
         recordIds = ids
+        lastError = ''
 
         return expectedRecordCount == null || recs.length >= expectedRecordCount
       } catch (err) {
@@ -102,11 +103,14 @@ class Experiments {
       }
     }, { maxTotalMs: maxWaitMs })
 
+    if (datasetId === null && lastError) {
+      throw new Error(`Failed to list datasets in project '${this.#projectName}': ${lastError}`)
+    }
     if (datasetId === null) {
-      if (lastError) {
-        throw new Error(`Failed to list datasets in project '${this.#projectName}': ${lastError}`)
-      }
       throw new Error(`Dataset '${name}' not found in project '${this.#projectName}' (after ${maxWaitMs}ms)`)
+    }
+    if (!succeeded && lastError) {
+      throw new Error(`Failed to fetch records for dataset '${name}' in project '${this.#projectName}': ${lastError}`)
     }
     if (!succeeded && expectedRecordCount != null) {
       throw new Error(

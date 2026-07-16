@@ -161,6 +161,24 @@ describe('LLMObs Experiments facade', () => {
       )
     })
 
+    it('throws the underlying error when fetching records fails, even without expectedRecordCount', async () => {
+      global.fetch.callsFake(async (url) => {
+        const u = new URL(url)
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
+        }
+        if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          const payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd' } }] }
+          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+        }
+        return { ok: false, status: 504, text: sinon.stub().resolves('gateway timeout') }
+      })
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('wanted', { maxWaitMs: 0 }),
+        /Failed to fetch records for dataset 'wanted'/
+      )
+    })
+
     it('follows the meta.after / page[cursor] pagination across multiple pages', async () => {
       const pages = {
         '': { data: [{ id: 'r1', attributes: { input: 'i1' } }], meta: { after: 'cursor1' } },
