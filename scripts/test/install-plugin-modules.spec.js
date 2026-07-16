@@ -70,14 +70,22 @@ describe('scripts/install_plugin_modules.js', function () {
     }
 
     assert.deepStrictEqual(resolvedVersions, expectedVersions)
+    assert.strictEqual(resolvedVersions['pino@4'], '4.17.6')
+    assert.strictEqual(resolvedVersions['pino@5'], '5.17.0')
+    assert.deepStrictEqual(readVersionsManifest().trustedDependencies, ['pino', 'pino-pretty'])
 
-    const pinoPrettyMetadataCalls = fs.readFileSync(traceFile, 'utf8')
+    const packageManagerCalls = fs.readFileSync(traceFile, 'utf8')
       .trim()
       .split('\n')
       .map(JSON.parse)
-      .filter(args => args[0] === 'npm' && args[1] === 'view' && args[2] === 'pino-pretty')
-    assert.deepStrictEqual(pinoPrettyMetadataCalls, [
-      ['npm', 'view', 'pino-pretty', 'time', 'versions', '--json', '--update-notifier=false'],
+    const registryPackages = packageManagerCalls
+      .filter(args => args[0] === 'npm')
+      .map(args => args[2])
+      .sort()
+    assert.deepStrictEqual(registryPackages, ['pino', 'pino-pretty'])
+    assert.deepStrictEqual(packageManagerCalls.filter(args => args[0] === 'bun'), [
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
     ])
   })
 
@@ -108,6 +116,24 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.strictEqual(result.status, 1)
     assert.match(result.stderr, /If a plugin declares a version range that spans a major version that was never/)
     assert.match(result.stderr, /Original error:/)
+  })
+
+  it('rejects conflicting declarative overrides', () => {
+    const preload = path.join(wrapperDirectory, 'conflicting-overrides.js')
+    fs.writeFileSync(preload, `
+const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+externals.express.push(
+  { name: 'axios', overrides: { axios: '1' } },
+  { name: 'axios', overrides: { axios: '2' } }
+)
+`)
+
+    const result = spawnInstall('express', {
+      NODE_OPTIONS: `--require=${preload}`,
+    })
+
+    assert.strictEqual(result.status, 1)
+    assert.match(result.stderr, /Conflicting overrides for 'axios': '1' and '2'/)
   })
 
   it('supports a plugin filter that generates no workspaces', () => {
@@ -147,7 +173,31 @@ describe('scripts/install_plugin_modules.js', function () {
     runInstall('google-cloud-vertexai')
 
     const manifest = require(path.join(versionsDir, '@google-cloud', 'vertexai', 'package.json'))
-    assert.match(manifest.dependencies['google-auth-library'], /^9\./)
+    assert.strictEqual(semver.subset(manifest.dependencies['google-auth-library'], '^9.0.0'), true)
+    const vertexAI = require(path.join(versionsDir, '@google-cloud', 'vertexai'))
+    const directAuthPath = fs.realpathSync(vertexAI.getPath('google-auth-library'))
+    const vertexAuthPath = fs.realpathSync(createRequire(vertexAI.getPath()).resolve('google-auth-library'))
+    assert.strictEqual(vertexAuthPath, directAuthPath)
+  })
+
+  it('pins pubsub to a compatible grpc module instance', () => {
+    runInstall('google-cloud-pubsub')
+
+    const manifest = require(path.join(versionsDir, '@google-cloud', 'pubsub@1.2.0', 'package.json'))
+    assert.strictEqual(semver.satisfies(manifest.dependencies['@grpc/grpc-js'], '~1.3.6'), true)
+    const pubsub = require(path.join(versionsDir, '@google-cloud', 'pubsub@1.2.0'))
+    const directGrpcPath = fs.realpathSync(pubsub.getPath('@grpc/grpc-js'))
+    const pubsubGrpcPath = fs.realpathSync(createRequire(pubsub.getPath()).resolve('@grpc/grpc-js'))
+    assert.strictEqual(pubsubGrpcPath, directGrpcPath)
+  })
+
+  it('makes the Bedrock HTTP handler reachable from its sandbox', () => {
+    runInstall('aws-sdk')
+
+    const bedrockFolder = path.join(versionsDir, '@aws-sdk', 'client-bedrock-runtime@3.422.0')
+    const manifest = require(path.join(bedrockFolder, 'package.json'))
+    assert.ok(semver.valid(manifest.dependencies['@smithy/node-http-handler']))
+    require(bedrockFolder).get('@smithy/node-http-handler')
   })
 
   it('injects a forced dependency missing from the package manifest', () => {
@@ -157,13 +207,64 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
   })
 
+  it('pins the Claude Agent SDK to its compatible zod major', () => {
+    runInstall('claude-agent-sdk')
+
+    const manifest = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk', 'package.json'))
+    assert.strictEqual(semver.satisfies(manifest.dependencies.zod, '^4.0.0'), true)
+  })
+
+  it('trusts the transitive native builder required by pg-native', () => {
+    runInstall('pg')
+
+    assert.ok(readVersionsManifest().trustedDependencies.includes('libpq'))
+  })
+
   it('normalizes unprefixed GitHub shorthand dependencies for Bun', () => {
     runInstall('limitd-client')
 
-    const manifest = require(path.join(versionsDir, 'package.json'))
+    const manifest = readVersionsManifest()
     assert.strictEqual(manifest.overrides.hashlru, 'github:jfromaniello/hashlru#return_value_on_set')
   })
+
+  it('scopes the q transitive override to q sandboxes', () => {
+    runInstall('q')
+
+    assert.deepStrictEqual(readVersionsManifest().overrides, {
+      collections: '^5.0.0',
+    })
+    require(path.join(versionsDir, 'q')).get()
+  })
+
+  it('scopes the ai dependency repairs to ai sandboxes', () => {
+    runInstall('ai')
+
+    assert.deepStrictEqual(readVersionsManifest().overrides, {
+      'zod-to-json-schema': '<3.25.0',
+    })
+    const manifest = require(path.join(versionsDir, 'ai', 'package.json'))
+    assert.strictEqual(semver.subset(manifest.dependencies.zod, '^3.0.0'), true)
+    require(path.join(versionsDir, 'ai@4.0.2')).get()
+  })
+
+  it('scopes the recorded OpenAI dependency graph to langchain sandboxes', () => {
+    runInstall('langchain')
+
+    assert.deepStrictEqual(readVersionsManifest().overrides, {
+      '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
+    })
+    const manifest = require(path.join(versionsDir, 'langchain', 'package.json'))
+    assert.strictEqual(manifest.dependencies['@langchain/openai'], '0.0.34')
+    const langchain = require(path.join(versionsDir, 'langchain'))
+    const requireFromOpenAI = createRequire(langchain.getPath('@langchain/openai'))
+    const coreVersion = requireFromOpenAI('@langchain/core/package.json').version
+    assert.strictEqual(semver.satisfies(coreVersion, '^0.2.0'), true)
+  })
 })
+
+function readVersionsManifest () {
+  return JSON.parse(fs.readFileSync(path.join(versionsDir, 'package.json'), 'utf8'))
+}
 
 /**
  * @param {string} plugin
