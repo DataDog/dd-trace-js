@@ -181,6 +181,9 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
+          this.libraryConfig = undefined
+          this.itrCorrelationId = undefined
+          this.skippableSuitesCoverage = undefined
           log.error('Library configuration could not be fetched. %s', err.message)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
