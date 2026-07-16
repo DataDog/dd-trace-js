@@ -3,6 +3,7 @@
 const assert = require('assert')
 
 const { exec } = require('child_process')
+const { once } = require('node:events')
 const {
   sandboxCwd,
   useSandbox,
@@ -93,5 +94,34 @@ describe('test-api-manual', () => {
     childProcess.on('exit', () => {
       done()
     })
+  })
+
+  it('restores the active context after nested manual tests finish', async () => {
+    childProcess = exec(
+      'node --require ./ci-visibility/test-api-manual/setup-fake-test-framework.js ' +
+      '--require ./ci-visibility/test-api-manual/context-restoration.fake.js ' +
+      './ci-visibility/test-api-manual/run-fake-test-framework.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url === '/api/v2/citestcycle',
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event => event.type === 'test')
+
+        assertObjectContains(testEvents.map(test => test.content.resource), [
+          'ci-visibility/test-api-manual/context-restoration.fake.js.nested manual test',
+          'ci-visibility/test-api-manual/context-restoration.fake.js.restores the previous active span',
+        ])
+      }
+    )
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+    assert.strictEqual(exitCode, 0)
   })
 })
