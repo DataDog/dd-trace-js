@@ -50,6 +50,7 @@ jobs:
       matrix:
         node-version: [oldest, latest]
         spec:
+          - base-inject-field
           - client
           - aws-sdk
           - bedrockruntime
