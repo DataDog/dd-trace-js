@@ -129,6 +129,80 @@ function runBeforeEachTask (test) {
   })
 }
 
+/**
+ * @param {unknown} error
+ * @returns {false}
+ */
+function handleRumCorrelationCookieError (error) {
+  Cypress.log({
+    name: 'dd-trace',
+    message: 'Could not set the RUM correlation cookie',
+    consoleProps: () => ({ Error: error }),
+  })
+  return false
+}
+
+/**
+ * @param {unknown} error
+ * @returns {false}
+ */
+function handleRumCorrelationCookieCleanupError (error) {
+  Cypress.log({
+    name: 'dd-trace',
+    message: 'Could not clear the previous RUM correlation cookie',
+    consoleProps: () => ({ Error: error }),
+  })
+  return false
+}
+
+/**
+ * @param {string} traceId
+ * @returns {Promise<boolean>}
+ */
+function setRumCorrelationCookie (traceId) {
+  if (typeof cy.now !== 'function') {
+    return Cypress.Promise.resolve(handleRumCorrelationCookieError(new Error('Cypress cy.now is not available')))
+  }
+
+  let clearCookiePromise = Cypress.Promise.resolve()
+  if (!isTestIsolationEnabled) {
+    clearCookiePromise = Cypress.Promise.try(() => {
+      return cy.now('clearCookie', DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, { log: false })
+    }).then(undefined, handleRumCorrelationCookieCleanupError)
+  }
+
+  return clearCookiePromise.then(() => {
+    return Cypress.Promise.try(() => {
+      return cy.now('setCookie', DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId, { log: false })
+    })
+  }).then(() => true, handleRumCorrelationCookieError)
+}
+
+/**
+ * @param {boolean} isCookieSet
+ * @returns {void}
+ */
+function restartRumSession (isCookieSet) {
+  if (!isCookieSet || isTestIsolationEnabled || !originalWindow) {
+    return
+  }
+
+  const rum = safeGetRum(originalWindow)
+  if (rum) {
+    try {
+      const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
+      // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
+      // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
+      // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
+      Object.defineProperty(evt, '__ddIsTrusted', { value: true })
+      originalWindow.dispatchEvent(evt)
+    } catch {}
+    if (rum.startView) {
+      rum.startView()
+    }
+  }
+}
+
 // Catch test failures for quarantined tests and suppress them
 // By not re-throwing the error, Cypress marks the test as passed
 // This allows quarantined tests to run but not affect the exit code
@@ -316,35 +390,15 @@ beforeEach(function () {
     if (shouldDiscard) {
       this.currentTest._ddShouldDiscard = true
     }
+    let rumCookiePromise
     if (traceId) {
-      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId).then(() => {
-        // When testIsolation:false, the page is not reset between tests, so the RUM session
-        // stopped in afterEach must be explicitly restarted so events in this test are
-        // associated with the new testExecutionId.
-        //
-        // After stopSession(), the RUM SDK creates a new session upon a user interaction
-        // (click, scroll, keydown, or touchstart). We dispatch a synthetic click on the window
-        // to trigger session renewal, then call startView() to establish a view boundary.
-        if (!isTestIsolationEnabled && originalWindow) {
-          const rum = safeGetRum(originalWindow)
-          if (rum) {
-            try {
-              const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
-              // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
-              // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
-              // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
-              Object.defineProperty(evt, '__ddIsTrusted', { value: true })
-              originalWindow.dispatchEvent(evt)
-            } catch {}
-            if (rum.startView) {
-              rum.startView()
-            }
-          }
-        }
-      })
+      rumCookiePromise = setRumCorrelationCookie(traceId)
     }
     if (shouldSkip) {
       this.skip()
+    }
+    if (rumCookiePromise) {
+      return rumCookiePromise.then(restartRumSession)
     }
   }).then(() => {
     // Clear any commands accumulated during DD-owned setup (e.g. setCookie, RUM restart)
