@@ -143,6 +143,11 @@ function uploadTestScreenshot (
       log.error('Error uploading test screenshot: %s', err.message)
       return callback(err)
     }
+    if (statusCode === undefined) {
+      const uploadError = new Error('Test screenshot upload request was dropped before it was sent')
+      log.error('Error uploading test screenshot: %s', uploadError.message)
+      return callback(uploadError)
+    }
     log.debug('Test screenshot uploaded successfully (status: %d)', statusCode)
     callback(null)
   })

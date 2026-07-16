@@ -95,6 +95,8 @@ const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const TEST_SOURCE_START = 'test.source.start'
+const TEST_FAILURE_SCREENSHOT_UPLOADED = 'test.failure_screenshot.uploaded'
+const TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR = 'test.failure_screenshot.upload_error'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
@@ -433,6 +435,8 @@ module.exports = {
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
   TEST_SOURCE_FILE,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -1450,7 +1454,7 @@ function parseAnnotations (annotations) {
  * Returns 0 when the test is too slow to retry (≥ 5 min).
  *
  * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
  * @returns {number}
  */
 function getEfdRetryCount (durationMs, slowTestRetries) {
@@ -1465,12 +1469,17 @@ function getEfdRetryCount (durationMs, slowTestRetries) {
 /**
  * Returns the maximum retry count configured by the backend for EFD.
  *
- * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
- * @returns {number}
+ * @param {Record<string, number> | undefined} slowTestRetries
+ * @returns {number | undefined}
  */
 function getMaxEfdRetryCount (slowTestRetries) {
+  if (slowTestRetries === undefined) return
+
+  const retryCounts = Object.values(slowTestRetries)
+  if (retryCounts.length === 0) return
+
   let maxRetries = 0
-  for (const retryCount of Object.values(slowTestRetries || {})) {
+  for (const retryCount of retryCounts) {
     if (retryCount > maxRetries) {
       maxRetries = retryCount
     }

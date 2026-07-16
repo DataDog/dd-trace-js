@@ -28,6 +28,7 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
+  informationalResponse,
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -219,6 +220,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(routerParam.hasSubscribers, false)
       assert.strictEqual(responseWriteHead.hasSubscribers, false)
       assert.strictEqual(responseSetHeader.hasSubscribers, false)
+      assert.strictEqual(informationalResponse.hasSubscribers, false)
 
       AppSec.enable(config)
 
@@ -234,6 +236,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(routerParam.hasSubscribers, true)
       assert.strictEqual(responseWriteHead.hasSubscribers, true)
       assert.strictEqual(responseSetHeader.hasSubscribers, true)
+      assert.strictEqual(informationalResponse.hasSubscribers, true)
     })
 
     it('should still subscribe to passportVerify if eventTracking is disabled', () => {
@@ -317,6 +320,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(routerParam.hasSubscribers, false)
       assert.strictEqual(responseWriteHead.hasSubscribers, false)
       assert.strictEqual(responseSetHeader.hasSubscribers, false)
+      assert.strictEqual(informationalResponse.hasSubscribers, false)
     })
 
     it('should call appsec telemetry disable', () => {
@@ -1474,7 +1478,7 @@ describe('AppSec Index', function () {
       })
     })
 
-    describe('onResponseSetHeader', () => {
+    describe('onResponseOperation', () => {
       it('should call abortController if response was already blocked', () => {
         // First block the request
         waf.run.returns(resultActions)
@@ -1493,10 +1497,17 @@ describe('AppSec Index', function () {
         responseSetHeader.publish({ res, abortController })
 
         sinon.assert.calledOnce(abortController.abort)
+
+        abortController.abort.reset()
+
+        informationalResponse.publish({ res, abortController })
+
+        sinon.assert.calledOnce(abortController.abort)
       })
 
       it('should not call abortController if response was not blocked', () => {
         responseSetHeader.publish({ res, abortController })
+        informationalResponse.publish({ res, abortController })
 
         sinon.assert.notCalled(abortController.abort)
       })

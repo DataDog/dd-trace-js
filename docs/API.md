@@ -28,6 +28,7 @@ tracer.use('pg', {
 <h5 id="ai"></h5>
 <h5 id="amqp10"></h5>
 <h5 id="anthropic"></h5>
+<h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
@@ -111,6 +112,7 @@ tracer.use('pg', {
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
 * [anthropic](./interfaces/export_.plugins.anthropic.html)
+* [claude-agent-sdk](./interfaces/export_.plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
@@ -507,6 +509,13 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 <h3 id="tracer-settings">Tracer settings</h3>
 
 Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
+
+<h3 id="test-optimization-settings">Test Optimization settings</h3>
+
+Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
+Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
+Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
+duration-based retry policy applies.
 
 <h3 id="custom-logging">Custom Logging</h3>
 

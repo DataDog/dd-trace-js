@@ -6522,23 +6522,27 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
     const assertAttemptToFixFailThenPass = (tests) => {
       assert.strictEqual(tests.length, 3)
-      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
-      assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-      assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
-      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
-      assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
 
-      const retriedTests = tests.slice(1)
-      retriedTests.forEach(test => {
+      const originalAttempts = tests.filter(test => !(TEST_IS_RETRY in test.meta))
+      assert.strictEqual(originalAttempts.length, 1)
+      assert.strictEqual(originalAttempts[0].meta[TEST_STATUS], 'fail')
+      assert.strictEqual(originalAttempts[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+      assert.strictEqual(originalAttempts[0].meta[TEST_IS_MODIFIED], 'true')
+      assert.ok(!(TEST_RETRY_REASON in originalAttempts[0].meta))
+
+      const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+      assert.strictEqual(retriedTests.length, 2)
+      for (const test of retriedTests) {
         assert.strictEqual(test.meta[TEST_STATUS], 'pass')
         assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
         assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
-        assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
         assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-      })
+      }
 
-      assert.strictEqual(tests[tests.length - 1].meta[TEST_FINAL_STATUS], 'fail')
-      assert.strictEqual(tests[tests.length - 1].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+      const finalStatusTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
+      assert.strictEqual(finalStatusTests.length, 1)
+      assert.strictEqual(finalStatusTests[0].meta[TEST_FINAL_STATUS], 'fail')
+      assert.strictEqual(finalStatusTests[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
     }
 
     context('test is not new', () => {
@@ -6809,18 +6813,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_management: { enabled: true, attempt_to_fix_retries: 2 },
         })
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            assertAttemptToFixFailThenPass(tests)
-          })
-
         childProcess = exec(
           runTestsCommand,
           {
@@ -6837,11 +6829,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         )
 
-        const [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
-        assert.strictEqual(exitCode, 1)
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assertAttemptToFixFailThenPass(tests)
+          },
+          { hardTimeout: 60_000 }
+        )
+        assert.strictEqual(childProcess.exitCode, 1)
       })
 
       onlyLatestIt('does not suppress attempt-to-fix failures for modified tests in parallel mode', async () => {

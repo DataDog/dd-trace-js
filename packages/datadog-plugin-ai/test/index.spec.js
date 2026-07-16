@@ -9,16 +9,31 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../version')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
-const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
+const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
 
-function getAiSdkOpenAiPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkOpenAiRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/openai'
+    return '^3.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/openai@2.0.0'
+    return '^2.0.0'
   } else {
-    return '@ai-sdk/openai@1.3.23'
+    return '^1.3.23'
   }
+}
+
+/**
+ * @param {string} versionRange
+ * @param {(version: string, realVersion: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (versionRange, callback) {
+  withVersions('ai', 'ai', versionRange, (version, _, realVersion) => {
+    withVersions('ai', '@ai-sdk/openai', getAiSdkOpenAiRange(realVersion), openaiVersion => {
+      callback(version, realVersion, openaiVersion)
+    })
+  })
 }
 
 // making a different reference from the default no-op tracer in the instrumentation
@@ -52,7 +67,7 @@ describe('Plugin', () => {
     OPENAI_API_KEY: '<not-a-real-key>',
   })
 
-  withVersions('ai', 'ai', range, (version, _, realVersion) => {
+  withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersion) => {
     let ai
     let openai
 
@@ -63,7 +78,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
+      const OpenAI = require(`../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict',
@@ -165,6 +180,47 @@ describe('Plugin', () => {
         assert.strictEqual(experimentalTelemetry.tracer, myTracer, 'Tracer should be set when `isEnabled` is true')
 
         await checkTraces
+      })
+
+      it('does not throw when the tracer uses spans with private class fields (OTel bridge regression)', async () => {
+        // Regression: Object.create(span) breaks private-field brand checks on BridgeSpanBase spans.
+        // Any span method reading a private field (e.g. setStatus → #statusCode) would throw
+        // "Cannot read private member from an object whose class did not declare it".
+        // The delegating wrapper must call through to the real span instance to avoid this.
+        class PrivateFieldSpan {
+          // eslint-disable-next-line no-unused-private-class-members
+          #statusCode = 0
+
+          spanContext () { return { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 } }
+          setAttribute () { return this }
+          setAttributes () { return this }
+          addEvent () { return this }
+          addLink () { return this }
+          addLinks () { return this }
+          setStatus (s) { this.#statusCode = s.code; return this }
+          updateName () { return this }
+          end () {}
+          isRecording () { return true }
+          recordException () {}
+        }
+
+        const privateFieldTracer = {
+          startActiveSpan (...args) {
+            const fn = args[args.length - 1]
+            return fn(new PrivateFieldSpan())
+          },
+        }
+
+        const result = await ai.generateText({
+          model: openai('gpt-4o-mini'),
+          system: 'You are a helpful assistant',
+          prompt: 'Hello, OpenAI!',
+          maxTokens: 100,
+          temperature: 0.5,
+          experimental_telemetry: { isEnabled: true, tracer: privateFieldTracer },
+        })
+
+        assert.ok(result.text, 'Expected result to be truthy')
       })
 
       it('should use the passed in `tracer`', async () => {

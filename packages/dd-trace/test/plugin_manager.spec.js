@@ -21,6 +21,7 @@ describe('Plugin Manager', () => {
   let Five
   let Six
   let Eight
+  let Graphql
   let pm
   let registeredDefaults
 
@@ -70,12 +71,17 @@ describe('Plugin Manager', () => {
         static experimental = true
         static id = 'eight'
       },
+      graphql: class Graphql extends FakePlugin {
+        static id = 'graphql'
+      },
     }
 
     Two = plugins.two
     Two.prototype.configure = sinon.spy()
     Four = plugins.four
     Four.prototype.configure = sinon.spy()
+    Graphql = plugins.graphql
+    Graphql.prototype.configure = sinon.spy()
 
     // disabled plugins
     Five = plugins.five
@@ -389,6 +395,31 @@ describe('Plugin Manager', () => {
         queryStringObfuscation: '.*',
         clientIpEnabled: true,
       })
+    })
+
+    it('forwards graphql global options to the graphql plugin under their plugin-facing names', () => {
+      pm.configure(makeTracerConfig({
+        DD_TRACE_GRAPHQL_COLLAPSE: false,
+        DD_TRACE_GRAPHQL_DEPTH: 2,
+        DD_TRACE_GRAPHQL_VARIABLES: ['foo'],
+        DD_TRACE_GRAPHQL_ERROR_EXTENSIONS: ['code'],
+      }))
+      loadChannel.publish({ name: 'graphql' })
+      sinon.assert.calledWithMatch(Graphql.prototype.configure, {
+        enabled: true,
+        collapse: false,
+        depth: 2,
+        variables: ['foo'],
+        errorExtensions: ['code'],
+      })
+    })
+
+    it('does not forward graphql options to other plugins', () => {
+      pm.configure(makeTracerConfig({ DD_TRACE_GRAPHQL_COLLAPSE: false }))
+      loadChannel.publish({ name: 'two' })
+      const config = Two.prototype.configure.lastCall.args[0]
+      assert.ok(!('collapse' in config))
+      assert.ok(!('errorExtensions' in config))
     })
   })
 
