@@ -208,37 +208,48 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 
     it('should compute peer service', async () => {
       const { expectSomeSpan } = require('../plugins/helpers')
-      const traceAssertion = expectSomeSpan(getAgent(), {
-        meta: {
-          'peer.service': typeof service === 'function' ? service() : service,
-          '_dd.peer.service.source': serviceSource,
-        },
-      })
-      const useCallback = spanGenerationFn.length === 1
-      const spanGenerationPromise = useCallback
-        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
-          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
-          // Some callback based methods are a mixture of callback and promise,
-          // depending on the module version. Await the promises as well.
-          if (util.types.isPromise(result)) {
-            result.then?.(resolve, reject)
-          }
-        })
-        : spanGenerationFn()
-
-      assert.strictEqual(
-        typeof spanGenerationPromise?.then, 'function',
-        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-          util.inspect(spanGenerationPromise, { depth: 1 }),
-      )
+      const currentTracer = global._ddtrace
+      const parentSpan = currentTracer.startSpan('peer-service.test')
+      let traceAssertion
 
       try {
+        traceAssertion = expectSomeSpan(getAgent(), {
+          parent_id: BigInt(parentSpan.context().toSpanId()),
+          meta: {
+            'peer.service': typeof service === 'function' ? service() : service,
+            '_dd.peer.service.source': serviceSource,
+          },
+        })
+        const useCallback = spanGenerationFn.length === 1
+        const spanGenerationPromise = currentTracer.scope().activate(parentSpan, () => {
+          return useCallback
+            ? new Promise(/** @type {() => void} */ (resolve, reject) => {
+              const result = spanGenerationFn((error) => error ? reject(error) : resolve())
+              // Some callback based methods are a mixture of callback and promise,
+              // depending on the module version. Await the promises as well.
+              if (util.types.isPromise(result)) {
+                result.then?.(resolve, reject)
+              }
+            })
+            : spanGenerationFn()
+        })
+
+        assert.strictEqual(
+          typeof spanGenerationPromise?.then, 'function',
+          'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+            util.inspect(spanGenerationPromise, { depth: 1 }),
+        )
+
         await Promise.all([
           traceAssertion,
-          spanGenerationPromise,
+          (async () => {
+            await spanGenerationPromise
+            parentSpan.finish()
+          })(),
         ])
       } finally {
-        traceAssertion.cancel()
+        parentSpan.finish()
+        traceAssertion?.cancel()
       }
     })
   })
