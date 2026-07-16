@@ -5,12 +5,23 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
+/**
+ * @param {(version: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (callback) {
+  withVersions('ai', 'ai', '>=7.0.0', version => {
+    withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
+      callback(version, openaiVersion)
+    })
+  })
+}
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
   })
 
-  withVersions('ai', 'ai', '>=7.0.0', (version) => {
+  withAiSdkOpenAiVersions((version, openaiVersion) => {
     let ai
     let openai
 
@@ -21,7 +32,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
 
-      const OpenAI = require('../../../versions/@ai-sdk/openai').get()
+      const OpenAI = require(`../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict',

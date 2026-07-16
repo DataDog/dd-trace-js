@@ -11,14 +11,29 @@ const { NODE_MAJOR } = require('../../../version')
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
 
-function getAiSdkOpenAiPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkOpenAiRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/openai'
+    return '^3.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/openai@2.0.0'
+    return '^2.0.0'
   } else {
-    return '@ai-sdk/openai@1.3.23'
+    return '^1.3.23'
   }
+}
+
+/**
+ * @param {string} versionRange
+ * @param {(version: string, realVersion: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (versionRange, callback) {
+  withVersions('ai', 'ai', versionRange, (version, _, realVersion) => {
+    withVersions('ai', '@ai-sdk/openai', getAiSdkOpenAiRange(realVersion), openaiVersion => {
+      callback(version, realVersion, openaiVersion)
+    })
+  })
 }
 
 // making a different reference from the default no-op tracer in the instrumentation
@@ -52,7 +67,7 @@ describe('Plugin', () => {
     OPENAI_API_KEY: '<not-a-real-key>',
   })
 
-  withVersions('ai', 'ai', range, (version, _, realVersion) => {
+  withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersion) => {
     let ai
     let openai
 
@@ -63,7 +78,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
+      const OpenAI = require(`../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict',
