@@ -5,7 +5,11 @@ const { join } = require('path')
 const { pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-const { configureGraphqlJitExecute, waitForAsyncEnd } = require('./transforms')
+const {
+  configureGraphqlJitCompileObject,
+  configureGraphqlJitExecute,
+  waitForAsyncEnd,
+} = require('./transforms')
 const instrumentations = require('./instrumentations')
 
 // `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
@@ -35,6 +39,7 @@ const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
 for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+  matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
 }
 

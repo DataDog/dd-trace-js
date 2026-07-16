@@ -16,9 +16,15 @@ const {
 /**
  * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
  * @typedef {import('graphql').GraphQLFieldResolver<unknown, unknown>} GraphQLFieldResolver
- * @typedef {Record<string, GraphQLFieldResolver>} GraphQLResolverMap
- * @typedef {{ arguments?: Array<{ resolvers?: GraphQLResolverMap }>, ddResolvers?: GraphQLResolverMap }}
- *   JitResolverContext
+ * @typedef {{
+ *   schema?: import('graphql').GraphQLSchema,
+ *   document?: import('graphql').DocumentNode,
+ *   rootValue?: unknown,
+ *   contextValue?: unknown,
+ *   variableValues?: Record<string, unknown>,
+ *   operationName?: string,
+ *   fieldResolver?: GraphQLFieldResolver
+ * }} ExecutionArguments
  */
 
 const legacyStorage = storage('legacy')
@@ -36,8 +42,6 @@ const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
 // the AbortError to the caller of graphql.execute.
 const startExecuteCh = dc.channel('apm:graphql:execute:start')
 
-const graphqlJitCompilePrefix = 'tracing:orchestrion:graphql-jit:apm:graphql:compile'
-
 const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
 
@@ -52,7 +56,6 @@ const originalResolvers = new WeakMap()
 // `patchedResolvers` keeps wrapping idempotent, so re-walking a shared type is
 // safe and this set only terminates cycles.
 const walkedTypes = new WeakMap()
-const patchedJitResolverMaps = new WeakSet()
 
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
@@ -82,7 +85,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
   // produces graphql.execute spans.
   static extraPrefixes = [
     'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute',
-    'tracing:orchestrion:graphql-jit:apm:graphql:execute',
   ]
 
   /**
@@ -95,7 +97,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
   addTraceSubs () {
     super.addTraceSubs()
-    this.addSub(`${graphqlJitCompilePrefix}:start`, wrapJitResolvers)
 
     for (const prefix of this.constructor.extraPrefixes) {
       const events = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
@@ -116,37 +117,84 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
   }
 
-  /** @param {object} ctx */
-  bindStart (ctx) {
+  /**
+   * @param {object} ctx
+   * @returns {ExecutionArguments | undefined}
+   */
+  readExecutionArgs (ctx) {
     const rawArgs = ctx.arguments
-    const isJit = ctx.ddGraphqlJit === true
-    const objectForm = !isJit && isObjectForm(rawArgs)
-    const args = isJit
-      ? {
-          schema: ctx.ddSchema,
-          document: ctx.ddDocument,
-          rootValue: rawArgs[0],
-          contextValue: rawArgs[1],
-          variableValues: rawArgs[2],
-          operationName: ctx.ddOperationName,
-        }
-      : readArgs(rawArgs, objectForm)
+    const args = readArgs(rawArgs, isObjectForm(rawArgs))
 
     // Re-entrant execute() short-circuit (yoga's normalizedExecutor calls
     // execute internally with the same arguments object — without this we'd
     // double-span). The contextValue check catches object contexts; the args
     // check also catches primitive contexts.
-    if (!isJit && instrumentedArgs.has(rawArgs?.[0])) {
+    if (instrumentedArgs.has(rawArgs?.[0])) {
       ctx.ddSkipped = true
-      return ctx.currentStore
+      return
     }
 
     const { contextValue } = args
-    if (!isJit && contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
+    if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
       ctx.ddSkipped = true
-      return ctx.currentStore
+      return
     }
 
+    return args
+  }
+
+  /**
+   * @param {object} ctx
+   * @param {ExecutionArguments} args
+   */
+  wrapExecutionResolvers (ctx, args) {
+    const rawArgs = ctx.arguments
+    ctx.ddArgs = setWrappedFieldResolver(rawArgs, args, isObjectForm(rawArgs), defaultFieldResolver)
+    if (ctx.ddArgs && typeof ctx.ddArgs === 'object') {
+      instrumentedArgs.add(ctx.ddArgs)
+      ctx.ddInstrumentedArgs = ctx.ddArgs
+    }
+
+    const { schema } = args
+    if (schema) {
+      wrapFields(schema._queryType, schema)
+      wrapFields(schema._mutationType, schema)
+      wrapFields(schema._subscriptionType, schema)
+    }
+  }
+
+  /**
+   * @param {object} ctx
+   */
+  abortExecution (ctx) {
+    // graphql.execute destructures its first argument before doing work.
+    ctx.arguments[0] = new Proxy({}, {
+      get () { throw new AbortError('Aborted') },
+      /* istanbul ignore next: retain the abort if graphql switches to an `in` check. */
+      has () { throw new AbortError('Aborted') },
+    })
+  }
+
+  /**
+   * @param {object} ctx
+   * @param {unknown} contextValue
+   * @param {object} rootCtx
+   */
+  storeRootContext (ctx, contextValue, rootCtx) {
+    if (isWeakMapKey(contextValue)) {
+      contexts.set(contextValue, rootCtx)
+      ctx.ddContextValue = contextValue
+    } else {
+      ctx.currentStore.graphqlRootCtx = rootCtx
+    }
+  }
+
+  /** @param {object} ctx */
+  bindStart (ctx) {
+    const args = this.readExecutionArgs(ctx)
+    if (!args) return ctx.currentStore
+
+    const { contextValue } = args
     const document = args.document
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
     const operation = getOperation(document, args.operationName)
@@ -206,35 +254,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
       startExecuteCh.publish({ abortController, args })
       if (abortController.signal.aborted) {
         ctx.ddAborted = true
-        // graphql.execute destructures its first argument before doing work.
-        if (!isJit) {
-          ctx.arguments[0] = new Proxy({}, {
-            get () { throw new AbortError('Aborted') },
-            /* istanbul ignore next: retain the abort if graphql switches to an `in` check. */
-            has () { throw new AbortError('Aborted') },
-          })
-        }
+        this.abortExecution(ctx)
         return ctx.currentStore
       }
     }
 
-    if (isJit) {
-      wrapJitResolvers(ctx)
-      ctx.ddArgs = args
-    } else {
-      ctx.ddArgs = setWrappedFieldResolver(rawArgs, args, objectForm, defaultFieldResolver)
-      if (ctx.ddArgs && typeof ctx.ddArgs === 'object') {
-        instrumentedArgs.add(ctx.ddArgs)
-        ctx.ddInstrumentedArgs = ctx.ddArgs
-      }
-
-      const schema = args.schema
-      if (schema) {
-        wrapFields(schema._queryType, schema)
-        wrapFields(schema._mutationType, schema)
-        wrapFields(schema._subscriptionType, schema)
-      }
-    }
+    this.wrapExecutionResolvers(ctx, args)
 
     const rootCtx = {
       source: docSource,
@@ -250,13 +275,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       filteredVariables: undefined,
     }
     ctx.ddRootCtx = rootCtx
-    if (isJit || !isWeakMapKey(contextValue)) {
-      // Concurrent JIT executions may share a context, so the execution store owns their state.
-      ctx.currentStore.graphqlRootCtx = rootCtx
-    } else {
-      contexts.set(contextValue, rootCtx)
-      ctx.ddContextValue = contextValue
-    }
+    this.storeRootContext(ctx, contextValue, rootCtx)
 
     return ctx.currentStore
   }
@@ -422,20 +441,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
 // --- resolver wrapping --------------------------------------------------------
 
 /**
- * @param {unknown} message
- */
-function wrapJitResolvers (message) {
-  const ctx = /** @type {JitResolverContext} */ (message)
-  const resolvers = ctx.ddResolvers ?? ctx.arguments?.[0]?.resolvers
-  if (!resolvers || patchedJitResolverMaps.has(resolvers)) return
-
-  patchedJitResolverMaps.add(resolvers)
-  for (const name of Object.keys(resolvers)) {
-    resolvers[name] = wrapResolve(resolvers[name], true)
-  }
-}
-
-/**
  * @param {GraphQLFieldResolver} resolve
  * @param {boolean} [isJit]
  */
@@ -584,6 +589,13 @@ function wrapResolve (resolve, isJit = false) {
   patched.add(resolveAsync)
   originalResolvers.set(resolveAsync, resolve)
   return resolveAsync
+}
+
+/**
+ * @param {GraphQLFieldResolver} resolve
+ */
+function wrapJitResolve (resolve) {
+  return wrapResolve(resolve, true)
 }
 
 function wrapFields (type, schema) {
@@ -866,3 +878,4 @@ function addVariableTags (config, span, variableValues) {
 }
 
 module.exports = GraphQLExecutePlugin
+module.exports.wrapJitResolve = wrapJitResolve

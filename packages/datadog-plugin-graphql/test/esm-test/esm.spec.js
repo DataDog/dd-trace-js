@@ -21,7 +21,7 @@ describe('Plugin (ESM)', () => {
     let proc
 
     withVersions('graphql', ['graphql'], (version, moduleName, resolvedVersion) => {
-      useSandbox([`'graphql@${resolvedVersion}'`, "'graphql-jit@0.8.8'", "'graphql-yoga@3.6.0'"], false, [
+      useSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
         './packages/datadog-plugin-graphql/test/esm-test/*'])
 
       beforeEach(async () => {
@@ -71,25 +71,6 @@ describe('Plugin (ESM)', () => {
       const cleanVersion = resolvedVersion.replace(/^[>=^~]+/, '')
       const coercedVersion = semver.coerce(cleanVersion)
       if (coercedVersion && semver.gte(coercedVersion, '15.0.0')) {
-        it('should instrument GraphQL JIT execution with ESM', async () => {
-          const res = agent.assertMessageReceived(({ headers, payload }) => {
-            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-            assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
-            assert.strictEqual(checkSpansForServiceName(payload, 'graphql.resolve'), true)
-          })
-
-          proc = await spawnPluginIntegrationTestProc(
-            sandboxCwd(),
-            'esm-graphql-jit-server.mjs',
-            agent.port,
-            { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
-          )
-
-          await axios.get(`${proc.url}/graphql`)
-          await res
-        }).timeout(50000)
-
         it('should instrument GraphQL Yoga execution with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -157,6 +138,84 @@ describe('Plugin (ESM)', () => {
           await res
         }).timeout(50000)
       }
+    })
+  })
+
+  describe('graphql-jit (ESM)', () => {
+    let agent
+    let proc
+
+    withVersions('graphql', 'graphql-jit', '0.8.5 || 0.8.8', (version, moduleName, resolvedVersion) => {
+      useSandbox([`'graphql-jit@${resolvedVersion}'`, "'graphql@16.14.0'"], false, [
+        './packages/datadog-plugin-graphql/test/esm-test/*'])
+
+      beforeEach(async () => {
+        agent = await new FakeAgent().start()
+      })
+
+      afterEach(async () => {
+        await stopProc(proc)
+        await agent.stop()
+      })
+
+      it('should instrument GraphQL JIT execution with ESM', async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+          const jitTrace = payload.find(trace => trace.some(span => /ESMJit/.test(span.resource)))
+          assert.ok(jitTrace, 'expected the JIT execution trace')
+          assert.strictEqual(checkSpansForServiceName([jitTrace], 'graphql.execute'), true)
+          assert.strictEqual(checkSpansForServiceName([jitTrace], 'graphql.resolve'), true)
+          assert.strictEqual(jitTrace.some(span => span.resource === 'name:String'), true)
+        })
+
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          'esm-graphql-jit-server.mjs',
+          agent.port,
+          { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+        )
+
+        const response = await axios.get(`${proc.url}/graphql`)
+        assert.deepStrictEqual(response.data, {
+          data: {
+            hello: 'world',
+            user: { name: 'Ada' },
+          },
+        })
+        assert.deepStrictEqual(JSON.parse(response.headers['x-resolver-calls']), {
+          hello: 1,
+          user: 1,
+          name: 1,
+        })
+        await res
+      }).timeout(50000)
+
+      it('should abort GraphQL JIT execution with ESM', async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+          assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+          assert.strictEqual(checkSpansForServiceName(payload, 'graphql.resolve'), false)
+        })
+
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          'esm-graphql-jit-server.mjs',
+          agent.port,
+          {
+            ABORT_GRAPHQL_JIT: '1',
+            NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs',
+          }
+        )
+
+        const response = await axios.get(`${proc.url}/graphql`, {
+          validateStatus: () => true,
+        })
+        assert.strictEqual(response.status, 503)
+        assert.deepStrictEqual(response.data, { error: 'AbortError' })
+        await res
+      }).timeout(50000)
     })
   })
 })

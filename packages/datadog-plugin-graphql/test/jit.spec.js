@@ -24,6 +24,17 @@ describe('Plugin', () => {
       return name || 'world'
     }
 
+    /**
+     * @param {unknown} _source
+     * @param {{ name?: string }} args
+     * @returns {AsyncGenerator<{ greeting: string }>}
+     * @yields {{ greeting: string }}
+     */
+    async function * subscribeGreetings (_source, { name }) {
+      yield { greeting: `${name} one` }
+      yield { greeting: `${name} two` }
+    }
+
     function buildSchema () {
       return new graphql.GraphQLSchema({
         query: new graphql.GraphQLObjectType({
@@ -42,12 +53,65 @@ describe('Plugin', () => {
             },
           },
         }),
+        mutation: new graphql.GraphQLObjectType({
+          name: 'Mutation',
+          fields: {
+            setHello: {
+              type: graphql.GraphQLString,
+              args: { name: { type: graphql.GraphQLString } },
+              resolve: resolveHello,
+            },
+          },
+        }),
+        subscription: new graphql.GraphQLObjectType({
+          name: 'Subscription',
+          fields: {
+            greeting: {
+              type: graphql.GraphQLString,
+              args: { name: { type: graphql.GraphQLString } },
+              subscribe: subscribeGreetings,
+              resolve: ({ greeting }) => greeting,
+            },
+          },
+        }),
+      })
+    }
+
+    /**
+     * @returns {import('graphql').GraphQLSchema}
+     */
+    function buildFalsySourceSchema () {
+      const FalsySource = new graphql.GraphQLObjectType({
+        name: 'FalsySource',
+        fields: {
+          value: { type: graphql.GraphQLString },
+        },
+      })
+
+      return new graphql.GraphQLSchema({
+        query: new graphql.GraphQLObjectType({
+          name: 'FalsySourceQuery',
+          fields: {
+            zero: {
+              type: FalsySource,
+              resolve: () => 0,
+            },
+            falseValue: {
+              type: FalsySource,
+              resolve: () => false,
+            },
+            emptyString: {
+              type: FalsySource,
+              resolve: () => '',
+            },
+          },
+        }),
       })
     }
 
     withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
       before(() => {
-        return agent.load('graphql', { variables: ['name'] })
+        return agent.load('graphql', { variables: ['id', 'name'] })
       })
 
       before(() => {
@@ -121,6 +185,158 @@ describe('Plugin', () => {
         assert.deepStrictEqual(result.data, { defaultHello: 'default world' })
       })
 
+      it('keeps compiler failures isolated from later compilations', async () => {
+        const document = graphql.parse('query KnownOperation { hello }')
+        const failed = compileQuery(schema, document, 'MissingOperation')
+        assert.strictEqual(Array.isArray(failed.errors), true)
+        assert.strictEqual(failed.errors.length, 1)
+
+        const { query } = compileQuery(schema, document)
+        const assertion = agent.assertSomeTraces(traces => {
+          assert.ok(traces[0].some(span => span.name === expectedSchema.server.opName))
+          assert.ok(traces[0].some(span => span.name === 'graphql.resolve'))
+        }, { spanResourceMatch: /KnownOperation/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, { hello: 'world' })
+      })
+
+      it('traces nested default field resolvers and publishes their security channels', async () => {
+        let queryTypeChecks = 0
+        let userTypeChecks = 0
+        const User = new graphql.GraphQLObjectType({
+          name: 'NestedDefaultUser',
+          isTypeOf: () => {
+            userTypeChecks++
+            return true
+          },
+          fields: {
+            name: { type: graphql.GraphQLString },
+          },
+        })
+        const nestedSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'NestedDefaultQuery',
+            isTypeOf: () => {
+              queryTypeChecks++
+              return false
+            },
+            fields: {
+              user: {
+                type: User,
+                resolve: () => ({ name: 'Ada' }),
+              },
+            },
+          }),
+        })
+        const { query } = compileQuery(
+          nestedSchema,
+          graphql.parse('query NestedDefault { user { name } }')
+        )
+        const iastChannel = dc.channel('apm:graphql:resolve:start')
+        const appsecChannel = dc.channel('datadog:graphql:resolver:start')
+        const iastFields = []
+        const appsecFields = []
+        /** @param {{ info: { fieldName: string } }} message */
+        const onIastResolve = ({ info }) => iastFields.push(info.fieldName)
+        /** @param {{ resolverInfo: Record<string, unknown> }} message */
+        const onAppsecResolve = ({ resolverInfo }) => appsecFields.push(...Object.keys(resolverInfo))
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const execute = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const user = traces[0].find(span =>
+            span.name === 'graphql.resolve' && span.resource === 'user:NestedDefaultUser')
+          const name = traces[0].find(span => span.name === 'graphql.resolve' && span.resource === 'name:String')
+          assert.ok(execute, 'expected a NestedDefault execute span')
+          assert.ok(user, 'expected an explicit user resolver span')
+          assert.ok(name, 'expected a nested default resolver span')
+          assert.strictEqual(user.parent_id.toString(), execute.span_id.toString())
+          assert.strictEqual(name.parent_id.toString(), user.span_id.toString())
+        }, { spanResourceMatch: /NestedDefault/ })
+
+        iastChannel.subscribe(onIastResolve)
+        appsecChannel.subscribe(onAppsecResolve)
+        try {
+          const [, result] = await Promise.all([
+            assertion,
+            (async () => query({}, {}, {}))(),
+          ])
+          assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
+        } finally {
+          iastChannel.unsubscribe(onIastResolve)
+          appsecChannel.unsubscribe(onAppsecResolve)
+        }
+
+        assert.deepStrictEqual(iastFields.sort(), ['name', 'user'])
+        assert.deepStrictEqual(appsecFields.sort(), ['name', 'user'])
+        assert.strictEqual(queryTypeChecks, 0)
+        assert.strictEqual(userTypeChecks, 1)
+      })
+
+      it('preserves nested isTypeOf rejection while deferring default resolvers', async () => {
+        const User = new graphql.GraphQLObjectType({
+          name: 'RejectedNestedUser',
+          isTypeOf: () => false,
+          fields: {
+            name: { type: graphql.GraphQLString },
+          },
+        })
+        const rejectedSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'RejectedNestedQuery',
+            fields: {
+              user: {
+                type: User,
+                resolve: () => ({ name: 'Ada' }),
+              },
+            },
+          }),
+        })
+        const { query } = compileQuery(
+          rejectedSchema,
+          graphql.parse('query NestedTypeFailure { user { name } }')
+        )
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const execute = traces[0].find(span => span.name === expectedSchema.server.opName)
+          assert.strictEqual(execute.error, 1)
+        }, { spanResourceMatch: /NestedTypeFailure/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, { user: null })
+        assert.strictEqual(result.errors.length, 1)
+        assert.match(result.errors[0].message, /Expected value of type "RejectedNestedUser"/)
+      })
+
+      it('preserves falsy nested sources while deferring default resolvers', async () => {
+        const { query } = compileQuery(
+          buildFalsySourceSchema(),
+          graphql.parse('query FalsySources { zero { value } falseValue { value } emptyString { value } }')
+        )
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const valueSpans = traces[0].filter(span =>
+            span.name === 'graphql.resolve' && span.resource === 'value:String')
+          assert.strictEqual(valueSpans.length, 3)
+        }, { spanResourceMatch: /FalsySources/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, {
+          zero: { value: null },
+          falseValue: { value: null },
+          emptyString: { value: null },
+        })
+      })
+
       it('traces every execution of a compiled query, not only the first', async () => {
         const { query } = compileQuery(schema, graphql.parse('query Repeat { hello }'))
 
@@ -153,6 +369,71 @@ describe('Plugin', () => {
           (async () => query({}, {}, {}))(),
         ])
         assert.deepStrictEqual(result.data, { slow: 'later' })
+      })
+
+      it('traces a mutation execution', async () => {
+        const document = graphql.parse('mutation SetHello($name: String!) { setHello(name: $name) }')
+        const { query } = compileQuery(schema, document)
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const execute = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const resolve = traces[0].find(span => span.name === 'graphql.resolve')
+
+          assertObjectContains(execute, {
+            error: 0,
+            meta: {
+              'graphql.operation.type': 'mutation',
+              'graphql.operation.name': 'SetHello',
+            },
+          })
+          assertObjectContains(resolve, {
+            resource: 'setHello:String',
+            meta: { 'graphql.field.path': 'setHello' },
+          })
+          assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
+        }, { spanResourceMatch: /SetHello/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, { name: 'changed' }))(),
+        ])
+        assert.deepStrictEqual(result.data, { setHello: 'changed' })
+      })
+
+      it('traces every subscription payload execution', async () => {
+        const document = graphql.parse(
+          'subscription Greetings($name: String!) { greeting(name: $name) }'
+        )
+        const { subscribe } = compileQuery(schema, document)
+        const stream = await subscribe({}, {}, { name: 'hello' })
+
+        for (const suffix of ['one', 'two']) {
+          const assertion = agent.assertSomeTraces(traces => {
+            const execute = traces[0].find(span => span.name === expectedSchema.server.opName)
+            const resolve = traces[0].find(span => span.name === 'graphql.resolve')
+
+            assertObjectContains(execute, {
+              error: 0,
+              meta: {
+                'graphql.operation.type': 'subscription',
+                'graphql.operation.name': 'Greetings',
+              },
+            })
+            assertObjectContains(resolve, {
+              resource: 'greeting:String',
+              meta: { 'graphql.field.path': 'greeting' },
+            })
+            assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
+          }, { spanResourceMatch: /Greetings/ })
+
+          const [, payload] = await Promise.all([assertion, stream.next()])
+          assert.deepStrictEqual(payload, {
+            value: { data: { greeting: `hello ${suffix}` } },
+            done: false,
+          })
+        }
+
+        assert.deepStrictEqual(await stream.next(), { value: undefined, done: true })
       })
 
       it('publishes resolver security channels once per JIT resolver', async () => {
@@ -191,7 +472,7 @@ describe('Plugin', () => {
         assert.deepStrictEqual(appsecFields.sort(), ['defaultHello', 'hello'])
       })
 
-      it('isolates overlapping executions that share a context value', async () => {
+      it('isolates overlapping calls to one compiled query sharing a context value', async () => {
         let releaseSlowResolver = () => {}
         const slowResolver = new Promise(resolve => {
           releaseSlowResolver = resolve
@@ -200,67 +481,53 @@ describe('Plugin', () => {
           query: new graphql.GraphQLObjectType({
             name: 'OverlappingQuery',
             fields: {
-              slow: {
+              value: {
                 type: graphql.GraphQLString,
-                resolve: () => slowResolver.then(() => 'slow'),
-              },
-              fast: {
-                type: graphql.GraphQLString,
-                resolve: () => 'fast',
+                args: { id: { type: new graphql.GraphQLNonNull(graphql.GraphQLString) } },
+                resolve: (_source, { id }) => id === 'slow' ? slowResolver.then(() => id) : id,
               },
             },
           }),
         })
-        const warmDocument = graphql.parse('query WarmSchemaWrapper { fast }')
-        const warmAssertion = agent.assertSomeTraces(() => {}, {
-          spanResourceMatch: /WarmSchemaWrapper/,
-        })
-        const [, warmResult] = await Promise.all([
-          warmAssertion,
-          graphql.execute({ schema: overlappingSchema, document: warmDocument }),
-        ])
-        assert.strictEqual(warmResult.data?.fast, 'fast')
-        assert.strictEqual(warmResult.errors, undefined)
-
-        const slowQuery = compileQuery(
-          overlappingSchema,
-          graphql.parse('query SlowOverlap { slow }')
-        ).query
-        const fastQuery = compileQuery(
-          overlappingSchema,
-          graphql.parse('query FastOverlap { fast }')
-        ).query
+        const document = graphql.parse(
+          'query SharedOverlap($id: String!) { value(id: $id) }'
+        )
+        const { query } = compileQuery(overlappingSchema, document)
         const contextValue = {}
         const resolverControllers = new Map()
+        const resolverCalls = new Map()
         const resolverChannel = dc.channel('datadog:graphql:resolver:start')
-        /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
+        /** @param {{ abortController: AbortController, resolverInfo: { value: { id: string } } }} message */
         const onResolver = ({ abortController, resolverInfo }) => {
-          resolverControllers.set(Object.keys(resolverInfo)[0], abortController)
+          const { id } = resolverInfo.value
+          resolverControllers.set(id, abortController)
+          resolverCalls.set(id, (resolverCalls.get(id) ?? 0) + 1)
         }
 
-        const slowAssertion = agent.assertSomeTraces(traces => {
-          const spans = traces.flat()
-          const execute = spans.find(span =>
-            span.name === expectedSchema.server.opName && /SlowOverlap/.test(span.resource))
-          const resolve = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'slow:String')
-          assert.ok(execute, 'expected a SlowOverlap execute span')
-          assert.ok(resolve, 'expected a slow resolver span')
+        /**
+         * @param {string} id
+         * @returns {Promise<void>}
+         */
+        const assertExecution = id => agent.assertSomeTraces(traces => {
+          const trace = traces.find(trace => trace.some(span =>
+            span.name === expectedSchema.server.opName && span.meta['graphql.variables.id'] === id))
+          const execute = trace?.find(span => span.name === expectedSchema.server.opName)
+          const resolve = trace?.find(span =>
+            span.name === 'graphql.resolve' && span.resource === 'value:String')
+          assert.ok(execute, `expected the ${id} execute span`)
+          assert.ok(resolve, `expected the ${id} resolver span`)
+          assert.strictEqual(trace.filter(span => span.name === expectedSchema.server.opName).length, 1)
+          assert.strictEqual(trace.filter(span => span.name === 'graphql.resolve').length, 1)
           assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
-        }, { timeoutMs: 3000 })
-        const fastAssertion = agent.assertSomeTraces(traces => {
-          const spans = traces.flat()
-          const execute = spans.find(span =>
-            span.name === expectedSchema.server.opName && /FastOverlap/.test(span.resource))
-          const resolve = spans.find(span => span.name === 'graphql.resolve' && span.resource === 'fast:String')
-          assert.ok(execute, 'expected a FastOverlap execute span')
-          assert.ok(resolve, 'expected a fast resolver span')
-          assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
-        }, { timeoutMs: 3000 })
+        }, { spanResourceMatch: /SharedOverlap/, timeoutMs: 3000 })
+
+        const slowAssertion = assertExecution('slow')
+        const fastAssertion = assertExecution('fast')
 
         resolverChannel.subscribe(onResolver)
         try {
-          const slowResult = slowQuery({}, contextValue, {})
-          const fastResult = fastQuery({}, contextValue, {})
+          const slowResult = query({}, contextValue, { id: 'slow' })
+          const fastResult = query({}, contextValue, { id: 'fast' })
           releaseSlowResolver()
 
           const [, , slow, fast] = await Promise.all([
@@ -269,12 +536,14 @@ describe('Plugin', () => {
             slowResult,
             fastResult,
           ])
-          assert.deepStrictEqual(slow.data, { slow: 'slow' })
-          assert.deepStrictEqual(fast.data, { fast: 'fast' })
+          assert.deepStrictEqual(slow.data, { value: 'slow' })
+          assert.deepStrictEqual(fast.data, { value: 'fast' })
         } finally {
           resolverChannel.unsubscribe(onResolver)
         }
 
+        assert.strictEqual(resolverCalls.get('slow'), 1)
+        assert.strictEqual(resolverCalls.get('fast'), 1)
         assert.notStrictEqual(
           resolverControllers.get('slow'),
           resolverControllers.get('fast'),
@@ -429,6 +698,110 @@ describe('Plugin', () => {
           assertion,
           (async () => query({}, {}, {}))(),
         ])
+      })
+
+      it('retains nested default resolver support across disable and re-enable', async () => {
+        const User = new graphql.GraphQLObjectType({
+          name: 'ReenabledCompilationUser',
+          fields: {
+            name: { type: graphql.GraphQLString },
+          },
+        })
+        const reenabledSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'ReenabledCompilationQuery',
+            fields: {
+              user: {
+                type: User,
+                resolve: () => ({ name: 'Ada' }),
+              },
+            },
+          }),
+        })
+        const { query } = compileQuery(
+          reenabledSchema,
+          graphql.parse('query ReenabledCompilation { user { name } }')
+        )
+
+        agent.reload('graphql', { enabled: false })
+        assert.deepStrictEqual((await query({}, {}, {})).data, { user: { name: 'Ada' } })
+        agent.reload('graphql', { enabled: true })
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const resources = traces[0]
+            .filter(span => span.name === 'graphql.resolve')
+            .map(span => span.resource)
+          assert.deepStrictEqual(resources, ['user:ReenabledCompilationUser', 'name:String'])
+        }, { spanResourceMatch: /ReenabledCompilation/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
+      })
+
+      it('does not alter nested default resolvers compiled while the plugin is disabled', async () => {
+        const User = new graphql.GraphQLObjectType({
+          name: 'DisabledCompilationUser',
+          fields: {
+            name: { type: graphql.GraphQLString },
+          },
+        })
+        const disabledCompilationSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'DisabledCompilationQuery',
+            fields: {
+              user: {
+                type: User,
+                resolve: () => ({ name: 'Ada' }),
+              },
+            },
+          }),
+        })
+
+        agent.reload('graphql', { enabled: false })
+        const { query } = compileQuery(
+          disabledCompilationSchema,
+          graphql.parse('query DisabledCompilation { user { name } }')
+        )
+        agent.reload('graphql', { enabled: true })
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const resolveSpans = traces[0].filter(span => span.name === 'graphql.resolve')
+          assert.deepStrictEqual(resolveSpans.map(span => span.resource), ['user:DisabledCompilationUser'])
+        }, { spanResourceMatch: /DisabledCompilation/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
+      })
+
+      it('preserves falsy nested sources when compiled while the plugin is disabled', async () => {
+        agent.reload('graphql', { enabled: false })
+        const { query } = compileQuery(
+          buildFalsySourceSchema(),
+          graphql.parse('query DisabledFalsySources { zero { value } falseValue { value } emptyString { value } }')
+        )
+        agent.reload('graphql', { enabled: true })
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const valueSpan = traces[0].find(span =>
+            span.name === 'graphql.resolve' && span.resource === 'value:String')
+          assert.strictEqual(valueSpan, undefined)
+        }, { spanResourceMatch: /DisabledFalsySources/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, {
+          zero: { value: null },
+          falseValue: { value: null },
+          emptyString: { value: null },
+        })
       })
     })
   })

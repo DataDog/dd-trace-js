@@ -14,7 +14,63 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
-module.exports = { configureGraphqlJitExecute, waitForAsyncEnd }
+module.exports = {
+  configureGraphqlJitCompileObject,
+  configureGraphqlJitExecute,
+  waitForAsyncEnd,
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitCompileObject (_state, node) {
+  const nestedTypeChecks = query(
+    node,
+    'IfStatement > LogicalExpression[operator="&&"] > UnaryExpression[operator="!"]' +
+      '[argument.name="alwaysDefer"]'
+  )
+  const defaultResolverAssignments = query(
+    node,
+    'IfStatement[test.operator="&&"]:has(UnaryExpression[operator="!"][argument.name="resolver"])' +
+      ':has(Identifier[name="alwaysDefer"]) AssignmentExpression[left.name="resolver"]'
+  )
+
+  assert.strictEqual(
+    nestedTypeChecks.length,
+    1,
+    'configureGraphqlJitCompileObject: nested type check not found'
+  )
+  assert.strictEqual(
+    defaultResolverAssignments.length,
+    1,
+    'configureGraphqlJitCompileObject: default resolver assignment not found'
+  )
+
+  const [nestedTypeCheck] = nestedTypeChecks
+  const left = nestedTypeCheck.argument
+  nestedTypeCheck.type = 'BinaryExpression'
+  nestedTypeCheck.operator = '!=='
+  nestedTypeCheck.left = left
+  nestedTypeCheck.right = { type: 'Literal', value: true, raw: 'true' }
+  delete nestedTypeCheck.prefix
+  delete nestedTypeCheck.argument
+
+  const [defaultResolverAssignment] = defaultResolverAssignments
+  defaultResolverAssignment.right = parse(`(
+    alwaysDefer === true
+      ? (parent) => parent && parent[fieldName]
+      : (parent) => parent?.[fieldName]
+  )`).body[0].expression
+
+  // `true` defers defaults but also suppresses isTypeOf. A separate truthy value,
+  // paired with the transformed `!== true` check, preserves both behaviors.
+  node.body.body.unshift(...parse(`
+    if (context.ddTraceDefaultResolvers && alwaysDefer === false) {
+      alwaysDefer = 'datadog'
+    }
+  `).body)
+}
 
 /**
  * @param {object} _state
@@ -30,10 +86,9 @@ function configureGraphqlJitExecute (_state, node) {
   assert(context && tracedBody, 'configureGraphqlJitExecute: incomplete orchestrion wrapper')
 
   const properties = parse(`({
-    ddGraphqlJit: true,
     ddDocument: document,
     ddOperationName: operationName,
-    ddResolvers: resolvers,
+    ddResolvers: compilationContext.resolvers,
     ddSchema: compilationContext.schema
   })`).body[0].expression.properties
 
@@ -41,9 +96,9 @@ function configureGraphqlJitExecute (_state, node) {
 
   tracedBody.body.unshift(...parse(`
     if (__apm$ctx.ddAborted) {
-      const error = new Error('Aborted')
-      error.name = 'AbortError'
-      throw error
+      const __apm$abortError = new Error('Aborted')
+      __apm$abortError.name = 'AbortError'
+      throw __apm$abortError
     }
   `).body)
 }
