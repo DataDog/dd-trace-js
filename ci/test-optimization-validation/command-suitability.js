@@ -110,14 +110,36 @@ function getRepositoryYarnError (command, repositoryRoot) {
     releases = fs.readdirSync(releaseDirectory)
       .filter(filename => /^yarn-[^/]+\.cjs$/.test(filename))
       .sort()
-  } catch {
-    return
+  } catch {}
+  if (releases?.length > 0) {
+    const release = path.posix.join('.yarn', 'releases', releases[releases.length - 1])
+    return `uses bare "yarn", but this repository pins ${release}. Use the structured command ` +
+      `argv [process.execPath, "${release}", ...] so validation does not depend on an ambient Yarn shim.`
   }
-  if (releases.length === 0) return
 
-  const release = path.posix.join('.yarn', 'releases', releases[releases.length - 1])
-  return `uses bare "yarn", but this repository pins ${release}. Use the structured command ` +
-    `argv [process.execPath, "${release}", ...] so validation does not depend on an ambient Yarn shim.`
+  const packageManager = getRepositoryPackageManager(repositoryRoot)
+  const match = /^yarn@(\d+)(?:\.|$)/.exec(packageManager || '')
+  if (match && Number(match[1]) > 1) {
+    return `uses bare "yarn", but package.json requires ${packageManager}. Use an explicit Corepack command ` +
+      '`argv ["corepack", "yarn", ...]` or the repository-configured `yarnPath` so validation cannot resolve an ' +
+      'incompatible ambient Yarn version.'
+  }
+}
+
+/**
+ * Reads the package-manager requirement declared by the repository root.
+ *
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} declared package-manager requirement
+ */
+function getRepositoryPackageManager (repositoryRoot) {
+  const packageJson = readRepositoryConfig(path.join(repositoryRoot, 'package.json'), repositoryRoot)
+  if (!packageJson) return
+
+  try {
+    const value = JSON.parse(packageJson).packageManager
+    return typeof value === 'string' ? value : undefined
+  } catch {}
 }
 
 function getVitestTypecheckError (command, generatedTest, repositoryRoot) {

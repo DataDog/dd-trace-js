@@ -5,6 +5,7 @@ const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
 const { buildCiRemediation } = require('../ci-remediation')
+const { getCommandBlocker } = require('../command-blocker')
 const { serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
@@ -27,6 +28,9 @@ const {
 } = require('./helpers')
 
 const INCONCLUSIVE_CI_WIRING_FAILURES = new Set([
+  'package-manager-filesystem-blocked',
+  'package-manager-version-mismatch',
+  'watchman-filesystem-blocked',
   'ci-wiring-command-failed-before-tests',
   'ci-wiring-command-timed-out',
   'ci-wiring-no-observed-tests',
@@ -157,7 +161,8 @@ function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command })
 }
 
 async function maybeRunInitializationProbe ({ command, framework, options, outDir, result, evidence }) {
-  if (result.timedOut === true) return {}
+  if (result.timedOut === true || evidence.commandFailure?.blockedByExecutionEnvironment ||
+    evidence.commandFailure?.toolchainBlocked) return {}
   if (!commandOutputShowsTestsRan(evidence.commandOutputSummary)) return {}
   if (evidence.nodeOptionsRemoval) {
     return {
@@ -430,6 +435,9 @@ function summarizeCiCommandFailure (result, evidence) {
       recommendation: 'Review CI wiring event failure evidence.',
     }
   }
+
+  const commandBlocker = getCommandBlocker(result)
+  if (commandBlocker) return { ...common, ...commandBlocker }
 
   const preloadFailure = detectDatadogPreloadResolutionFailure(output)
   if (preloadFailure) {

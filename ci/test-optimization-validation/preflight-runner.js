@@ -1,5 +1,6 @@
 'use strict'
 
+const { getCommandBlocker } = require('./command-blocker')
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
 const { getDatadogCleanCommand } = require('./local-command')
 const { getBasicReportingCommand, summarizeTestOutput } = require('./scenarios/basic-reporting')
@@ -50,7 +51,8 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     return { ok: true, preflight }
   }
 
-  const diagnosis = getPreflightFailureDiagnosis({
+  const commandFailure = getCommandBlocker(result)
+  const diagnosis = commandFailure?.summary || getPreflightFailureDiagnosis({
     maxTestCount,
     observedTestCount,
     result,
@@ -63,12 +65,13 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     failure: {
       frameworkId: framework.id,
       scenario: 'basic-reporting',
-      status: 'error',
+      status: commandFailure ? 'blocked' : 'error',
       diagnosis,
       evidence: {
         commandExitCode: result.exitCode,
         commandTimedOut: result.timedOut,
-        representativeScopeMismatch: !scopeMatched,
+        representativeScopeMismatch: !commandFailure && !scopeMatched,
+        ...(commandFailure ? { commandFailure } : {}),
         preflight,
       },
       artifacts: Object.values(result.artifacts),

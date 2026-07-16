@@ -131,6 +131,44 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('reports a package-manager filesystem denial as an execution-environment blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-package-manager-'))
+    const framework = {
+      id: 'vitest:root',
+      framework: 'vitest',
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          'console.error("ERROR EPERM: operation not permitted, mkdir ' +
+            '/home/user/.local/share/pnpm/.tools/pnpm"); ' +
+            'process.exit(1)',
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.representativeScopeMismatch, false)
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'package-manager-filesystem-blocked')
+      assert.match(outcome.failure.diagnosis, /package manager could not write to its tool or cache directory/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /writable package-manager home or cache/)
+      assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('verifies generated scenarios and removes retry state before advanced validation', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-'))
     const generatedDirectory = path.join(root, 'tests', 'dd-test-optimization-validation')
@@ -304,7 +342,7 @@ describe('test optimization validator-owned execution phases', () => {
         assert.doesNotMatch(approvalSummary, /shasum -a 256 -c/)
       } else {
         assert.match(approvalSummary, /shasum -a 256 .*approval\.json/)
-        assert.match(approvalSummary, /shasum -a 256 -c .*approval-files\.sha256/)
+        assert.match(approvalSummary, /shasum -a 256 --quiet -c .*approval-files\.sha256/)
       }
       assert.match(approvalSummary, /do not verify where the installed `dd-trace` package came from/)
       assert.doesNotMatch(approvalSummary, /plan-secret/)
@@ -871,6 +909,30 @@ describe('test optimization validator-owned execution phases', () => {
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
       }), /uses bare "yarn".*repository pins \.yarn\/releases\/yarn-4\.4\.1\.cjs/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects ambient Yarn when package.json requires modern Yarn', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-plan-'))
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.ciWiringCommand = { cwd: root, argv: ['yarn', 'test'] }
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'yarn@4.10.0' }))
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), /uses bare "yarn".*package\.json requires yarn@4\.10\.0.*explicit Corepack command/s)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

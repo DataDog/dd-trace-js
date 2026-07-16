@@ -902,6 +902,39 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
+  it('classifies Watchman filesystem denials as execution-environment blockers', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'jest:root',
+          framework: 'jest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [
+              process.execPath,
+              '-e',
+              'console.error("Watchman: fchmod(/home/user/.local/state/watchman/state): ' +
+                'Operation not permitted"); process.exit(1)',
+            ],
+          },
+        },
+        out,
+        options: validationOptions(out),
+      })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.validationIncomplete, true)
+      assert.strictEqual(result.evidence.commandFailure.kind, 'watchman-filesystem-blocked')
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'watchman-filesystem-blocked')
+      assert.match(result.diagnosis, /execution environment blocked Watchman state access before tests started/)
+      assert.match(result.evidence.commandFailure.recommendation, /Watchman can access its state directory/)
+      assert.doesNotMatch(result.diagnosis, /Test Optimization initialization/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('classifies an invented Vitest project filter as incomplete', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     try {

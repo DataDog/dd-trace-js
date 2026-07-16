@@ -33,10 +33,14 @@ Keep secret names only; executable values use `dd-validation-placeholder`.
 
 Select one small representative per distinct framework/cwd/setup/wrapper/CI-env shape and record
 duplicates as omissions. Include non-runnable runners with reasons; reporters are not runners.
-Prefer a focused CI-derived unit test and fallback. Avoid watch, benchmark/typecheck,
-snapshot-update, golden, generated-list, export-matrix, and broad commands. Confirm filters narrow.
+Use CI evidence to select a focused unit test and fallback, but do not copy the CI package-manager wrapper into
+`existingTestCommand` solely to resemble CI; keep the scaffold's direct installed runner when it preserves the
+selected test's required config and setup. Avoid watch, benchmark/typecheck, snapshot-update, golden,
+generated-list, export-matrix, and broad commands. Confirm filters narrow.
 Seek service-free tests before builds/Docker/databases/browsers. Respect pinned runtimes/managers and
-invoke pinned Yarn as `node .yarn/releases/yarn-*.cjs ...`. Record custom Jest runners; never use a
+invoke pinned Yarn as `node .yarn/releases/yarn-*.cjs ...`. When `package.json` requires Yarn 2 or newer
+without a checked-in `yarnPath`, use an explicit `corepack yarn ...` command instead of ambient bare
+`yarn`; the plan rejects an ambiguous ambient Yarn entrypoint. Record custom Jest runners; never use a
 test-runner repository's unpublished in-repository runner implementation as evidence for the corresponding
 published runner instrumentation. A project-owned wrapper around an installed supported runner is eligible
 when a focused test can run; preserve the wrapper-to-runner chain and use the wrapper for CI replay. Vitest
@@ -70,10 +74,14 @@ The scaffold is already schema-valid. Preserve its command boilerplate and edit 
 CI evidence, and omission fields needed for the selected representatives. Do not reconstruct the manifest from the
 JSON Schema. Run `--validate-manifest` after each edit and follow its field-specific errors.
 
-Use required focused `existingTestCommand` for the clean preflight and Basic Reporting; pending validator-owned
-`preflight`; exact `ciWiringCommand` for the CI-shaped wrapper with non-secret CI env; and isolated generated
-scenario commands. The local command and generated commands are Datadog-clean in the manifest and never use
-generated files outside their declared scenarios. Record
+Use required focused `existingTestCommand` for the clean preflight and Basic Reporting. Prefer the resolved local
+Jest, Vitest, or Mocha executable so package-manager bootstrap and home-directory cache writes cannot block the
+local capability check. Preserve a package script only when a custom wrapper or required runner configuration
+cannot be represented by the direct command. Use pending validator-owned `preflight`; exact `ciWiringCommand` for
+the CI-shaped package-manager/wrapper command with non-secret CI env; and isolated generated scenario commands.
+The local command and generated commands are Datadog-clean in the manifest and never use generated files outside
+their declared scenarios. A package-manager blocker in CI replay must not replace a successful direct Basic
+Reporting result. Record
 CI `NODE_OPTIONS`/Datadog variables exactly, replacing only secret values. Validator overlays are not
 CI evidence. Prefer structured `command.env`; if shell semantics are unsafe to represent, retain text
 as evidence and mark replay unavailable.
@@ -81,7 +89,10 @@ as evidence and mark replay unavailable.
 Set `preflight.maxTestCount` to the smallest defensible bound for the selected representative, normally `1` for
 a file-and-name-filtered test. The scaffold's `50` is only a conservative placeholder: inspect the command and
 lower it before approval when the selected filter is narrower. If the clean preflight cannot determine a test count
-or exceeds the approved bound, the validator stops without drawing a Test Optimization conclusion.
+or exceeds the approved bound, the validator stops without drawing a Test Optimization conclusion. If the package
+manager cannot write its tool/cache directory, resolves an incompatible Yarn version, or Watchman cannot access its
+state directory, report the concrete toolchain/execution-environment blocker. These failures happen before tests
+start and are not Test Optimization evidence.
 
 Set `ciWiring.replayability` explicitly. Use `replayable` only with a top-level `ciWiringCommand` that
 preserves the approved CI shape. Use `not_replayable` only with a concrete `replayBlocker` explaining

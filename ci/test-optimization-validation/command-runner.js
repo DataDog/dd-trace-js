@@ -189,10 +189,7 @@ function runCommand (command, options = {}) {
       signalChild(child, 'SIGTERM', useProcessGroup)
       killTimer = setTimeout(() => {
         signalChild(child, 'SIGKILL', useProcessGroup)
-        processGroupCleanupPending = false
-        finalizeTimer = setTimeout(() => {
-          finalize(pendingCloseResult?.code ?? null, pendingCloseResult?.signal || 'SIGKILL')
-        }, timeoutFinalizeGraceMs)
+        finishProcessGroupCleanup('SIGKILL')
       }, timeoutKillGraceMs)
     }, timeoutMs)
 
@@ -210,10 +207,7 @@ function runCommand (command, options = {}) {
         signalChild(child, 'SIGTERM', useProcessGroup)
         killTimer = setTimeout(() => {
           signalChild(child, 'SIGKILL', useProcessGroup)
-          processGroupCleanupPending = false
-          finalizeTimer = setTimeout(() => {
-            finalize(pendingCloseResult?.code ?? null, pendingCloseResult?.signal || 'SIGKILL')
-          }, timeoutFinalizeGraceMs)
+          finishProcessGroupCleanup('SIGKILL')
         }, EARLY_STOP_KILL_GRACE_MS)
       }, 25)
     }
@@ -239,6 +233,15 @@ function runCommand (command, options = {}) {
       }
       finalize(code, signal)
     })
+
+    function finishProcessGroupCleanup (fallbackSignal) {
+      processGroupCleanupPending = false
+      if (pendingCloseResult) {
+        finalize(pendingCloseResult.code, pendingCloseResult.signal || fallbackSignal)
+        return
+      }
+      finalizeTimer = setTimeout(() => finalize(null, fallbackSignal), timeoutFinalizeGraceMs)
+    }
 
     function finalize (code, signal) {
       if (finalized) return

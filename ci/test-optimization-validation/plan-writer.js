@@ -96,7 +96,7 @@ function formatExecutionPlan ({
         'Optional: verify every listed dd-trace package and command executable file against its recorded SHA-256:',
         '',
         codeBlock(sanitizeString(serializeApprovalCommand({
-          argv: ['shasum', '-a', '256', '-c', approvalArtifacts.coveredFilesPath],
+          argv: ['shasum', '-a', '256', '--quiet', '-c', approvalArtifacts.coveredFilesPath],
           cwd: manifest.repository.root,
           usesShell: false,
         }))),
@@ -245,7 +245,7 @@ function formatApprovalSummary ({
         'Optional: verify every covered manifest, validator, and executable file:',
         '',
         codeBlock(sanitizeString(serializeApprovalCommand({
-          argv: ['shasum', '-a', '256', '-c', approvalArtifacts.coveredFilesPath],
+          argv: ['shasum', '-a', '256', '--quiet', '-c', approvalArtifacts.coveredFilesPath],
           cwd: repositoryRoot,
           usesShell: false,
         }))),

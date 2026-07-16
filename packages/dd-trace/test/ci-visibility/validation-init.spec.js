@@ -165,4 +165,39 @@ describe('Test Optimization validation initialization', () => {
     assert.strictEqual(child.status, 0, child.stderr)
     assert.doesNotMatch(child.stderr, /validation worker attempted network/)
   })
+
+  it('disables ordinary application tracing initialization during offline validation', () => {
+    const initPath = path.resolve(__dirname, '../../../../init.js')
+    const script = [
+      "const fail = () => { process.exitCode = 97; throw new Error('ordinary tracer attempted network') }",
+      "for (const name of ['node:http', 'node:https']) {",
+      '  const client = require(name)',
+      '  client.get = fail',
+      '  client.request = fail',
+      '}',
+      "const net = require('node:net')",
+      'net.connect = fail',
+      'net.createConnection = fail',
+      'net.createServer = fail',
+      "require('node:tls').connect = fail",
+      "require('node:dgram').createSocket = fail",
+      `const tracer = require(${JSON.stringify(initPath)})`,
+      "if (tracer._tracingInitialized) throw new Error('ordinary tracer initialized during validation')",
+    ].join('\n')
+    const child = spawnSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+        NODE_OPTIONS: '',
+        [VALIDATION_MANIFEST_ENV]: path.join(process.cwd(), 'validation-manifest.txt'),
+        [VALIDATION_MODE_ENV]: '1',
+        [VALIDATION_OUTPUT_ENV]: path.join(process.cwd(), 'validation-output'),
+      },
+    })
+
+    assert.strictEqual(child.status, 0, child.stderr)
+    assert.match(child.stderr, /Ordinary dd-trace application tracing initialization is disabled/)
+    assert.doesNotMatch(child.stderr, /ordinary tracer attempted network/)
+  })
 })

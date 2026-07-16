@@ -23,6 +23,21 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
+const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
+const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const ORDINARY_TRACING_DISABLED_MESSAGE =
+  'Ordinary dd-trace application tracing initialization is disabled during offline Test Optimization validation. ' +
+  'The CI test process must initialize through dd-trace/ci/init.'
+const OFFLINE_VALIDATION_EXPORTERS = new Set([
+  'ci_validation',
+  'cucumber_worker',
+  'jest_worker',
+  'mocha_worker',
+  'playwright_worker',
+  'vitest_worker',
+])
+
 class LazyModule {
   constructor (provider) {
     this.provider = provider
@@ -104,6 +119,11 @@ class Tracer extends NoopProxy {
     if (this._initialized) return this
 
     this._initialized = true
+
+    if (isOfflineTestOptimizationValidation() && !isOfflineValidationExporter(options)) {
+      process.stderr.write(`${ORDINARY_TRACING_DISABLED_MESSAGE}\n`)
+      return this
+    }
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
@@ -396,7 +416,19 @@ class Tracer extends NoopProxy {
  * @returns {boolean} whether network-capable tracer side channels must stay disabled
  */
 function isOfflineTestOptimizationValidation () {
-  return isTrue(getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MODE'))
+  return isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV)) &&
+    Boolean(getEnvironmentVariable(VALIDATION_MANIFEST_ENV)) &&
+    Boolean(getEnvironmentVariable(VALIDATION_OUTPUT_ENV))
+}
+
+/**
+ * Checks whether initialization selected a filesystem-only Test Optimization exporter.
+ *
+ * @param {import('../../../index').TracerOptions} [options] tracer initialization options
+ * @returns {boolean} whether the selected exporter is safe for offline validation
+ */
+function isOfflineValidationExporter (options) {
+  return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)
 }
 
 module.exports = Tracer

@@ -560,6 +560,7 @@ describe('test optimization validation command runner', () => {
         cwd: outDir,
         argv: [process.execPath, '-e', parentScript],
         timeoutMs: 5000,
+        timeoutFinalizeGraceMs: 5000,
       }, {
         outDir,
         stopWhen: () => Date.now() - startedAt >= 150,
