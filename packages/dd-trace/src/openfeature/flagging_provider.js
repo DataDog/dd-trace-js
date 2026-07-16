@@ -1,25 +1,23 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const requireOptionalPeer = require('../../../datadog-instrumentations/src/helpers/require-optional-peer')
 const log = require('../log')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
+const { DatadogNodeServerProvider } = require('./require-provider')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
-
-const { DatadogNodeServerProvider } = requireOptionalPeer('@datadog/openfeature-node-server')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
-  /** @type {SpanEnrichmentHook?} */
+  /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
-   * @param {import('../config')} config - Tracer configuration object
+   * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
     // Call parent constructor with required options and timeout
@@ -31,10 +29,12 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._tracer = tracer
     this._config = config
 
+    // @ts-expect-error The upstream constructor always initializes its optional hooks property.
     this.hooks.push(new EvalMetricsHook(config))
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
+      // @ts-expect-error The upstream constructor always initializes its optional hooks property.
       this.hooks.push(this.#spanEnrichmentHook)
       log.info('%s span enrichment enabled', this.constructor.name)
     } else {

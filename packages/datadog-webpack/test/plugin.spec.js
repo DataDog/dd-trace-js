@@ -68,8 +68,8 @@ describe('DatadogWebpackPlugin', () => {
       return afterResolve
     }
 
-    it('applies the optional-peer loader to flagging_provider', () => {
-      const createData = { resource: require.resolve('../../dd-trace/src/openfeature/flagging_provider') }
+    it('applies the optional-peer loader to require-provider', () => {
+      const createData = { resource: require.resolve('../../dd-trace/src/openfeature/require-provider') }
 
       captureAfterResolve()({ createData })
 
