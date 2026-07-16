@@ -444,11 +444,16 @@ module.exports = {
     },
     {
       // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
-      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
-      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
-      // the whole Node CI matrix.
+      // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
+    },
+    {
+      // Bun runs @vscode/sqlite3's node-gyp script before its package-local tar dependency is available.
+      name: 'tar',
+      version: '7.5.4',
+      dep: true,
+      forced: true,
     },
     {
       name: 'pg',
