@@ -22,7 +22,6 @@ const versionsDir = path.join(repoRoot, 'versions')
 // would silently fail on whichever environment doesn't match. Honour `BUN_BIN` for
 // explicit overrides, fall back to a `which bun` lookup against the current PATH.
 const bunBinary = resolveBunBinary()
-const npmBinary = resolveBinary('npm')
 let wrapperDirectory
 
 describe('scripts/install_plugin_modules.js', function () {
@@ -72,18 +71,18 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.deepStrictEqual(resolvedVersions, expectedVersions)
     assert.strictEqual(resolvedVersions['pino@4'], '4.17.6')
     assert.strictEqual(resolvedVersions['pino@5'], '5.17.0')
+    assert.strictEqual(resolvedVersions['pino@>=5 <6.8.0'], '6.7.0')
     assert.deepStrictEqual(readVersionsManifest().trustedDependencies, ['pino', 'pino-pretty'])
 
     const packageManagerCalls = fs.readFileSync(traceFile, 'utf8')
       .trim()
       .split('\n')
       .map(JSON.parse)
-    const registryPackages = packageManagerCalls
-      .filter(args => args[0] === 'npm')
-      .map(args => args[2])
-      .sort()
-    assert.deepStrictEqual(registryPackages, ['pino', 'pino-pretty'])
-    assert.deepStrictEqual(packageManagerCalls.filter(args => args[0] === 'bun'), [
+    assert.deepStrictEqual(packageManagerCalls, [
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
+      ['bun', 'install', '--trust'],
       ['bun', 'install', '--trust'],
       ['bun', 'install', '--trust'],
     ])
@@ -100,17 +99,9 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.strictEqual(fs.existsSync(staleMarker), false)
   })
 
-  it('defers package ranges to Bun when registry metadata is unavailable', () => {
-    const traceFile = path.join(wrapperDirectory, 'failed-metadata-trace.ndjson')
-    const result = runInstall('express', wrapperDirectory, traceFile, 'express')
-
-    assert.match(result.stderr, /npm view failed for express:/)
-  })
-
   it('reports guidance when Bun cannot install the generated workspaces', () => {
     const result = spawnInstall('express', {
       DD_TEST_FAIL_BUN_INSTALL: 'true',
-      DD_TEST_FAIL_METADATA_PACKAGE: 'express',
     })
 
     assert.strictEqual(result.status, 1)
@@ -152,23 +143,6 @@ externals.express.push(
     runInstall('pino')
   })
 
-  it('skips a published package version inside the release-age window', () => {
-    const traceFile = path.join(wrapperDirectory, 'recent-metadata-trace.ndjson')
-    runInstall('pino', wrapperDirectory, traceFile, undefined, 'pino')
-
-    for (const folder of ['pino', 'pino@4']) {
-      const manifest = require(path.join(versionsDir, folder, 'package.json'))
-      assert.strictEqual(manifest.dependencies.pino, '4.17.5')
-    }
-  })
-
-  it('ignores unpublished versions left in registry time metadata', () => {
-    runInstall('mariadb')
-
-    const manifest = require(path.join(versionsDir, 'mariadb@2', 'package.json'))
-    assert.strictEqual(manifest.dependencies.mariadb, '2.5.6')
-  })
-
   it('does not require latest-version caps for forced transitive dependencies', () => {
     runInstall('google-cloud-vertexai')
 
@@ -184,8 +158,10 @@ externals.express.push(
     runInstall('google-cloud-pubsub')
 
     const manifest = require(path.join(versionsDir, '@google-cloud', 'pubsub@1.2.0', 'package.json'))
-    assert.strictEqual(semver.satisfies(manifest.dependencies['@grpc/grpc-js'], '~1.3.6'), true)
+    assert.strictEqual(semver.subset(manifest.dependencies['@grpc/grpc-js'], '~1.3.6'), true)
     const pubsub = require(path.join(versionsDir, '@google-cloud', 'pubsub@1.2.0'))
+    const grpcVersion = JSON.parse(fs.readFileSync(pubsub.pkgJsonPath('@grpc/grpc-js'), 'utf8')).version
+    assert.strictEqual(semver.satisfies(grpcVersion, '~1.3.6'), true)
     const directGrpcPath = fs.realpathSync(pubsub.getPath('@grpc/grpc-js'))
     const pubsubGrpcPath = fs.realpathSync(createRequire(pubsub.getPath()).resolve('@grpc/grpc-js'))
     assert.strictEqual(pubsubGrpcPath, directGrpcPath)
@@ -196,7 +172,7 @@ externals.express.push(
 
     const bedrockFolder = path.join(versionsDir, '@aws-sdk', 'client-bedrock-runtime@3.422.0')
     const manifest = require(path.join(bedrockFolder, 'package.json'))
-    assert.ok(semver.valid(manifest.dependencies['@smithy/node-http-handler']))
+    assert.ok(semver.validRange(manifest.dependencies['@smithy/node-http-handler']))
     require(bedrockFolder).get('@smithy/node-http-handler')
   })
 
@@ -211,7 +187,7 @@ externals.express.push(
     runInstall('claude-agent-sdk')
 
     const manifest = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk', 'package.json'))
-    assert.strictEqual(semver.satisfies(manifest.dependencies.zod, '^4.0.0'), true)
+    assert.strictEqual(semver.subset(manifest.dependencies.zod, '^4.0.0'), true)
   })
 
   it('trusts the transitive native builder required by pg-native', () => {
@@ -270,16 +246,12 @@ function readVersionsManifest () {
  * @param {string} plugin
  * @param {string} [binDirectory]
  * @param {string} [traceFile]
- * @param {string} [metadataFailurePackage]
- * @param {string} [recentMetadataPackage]
  * @returns {import('node:child_process').SpawnSyncReturns<string>}
  */
-function runInstall (plugin, binDirectory, traceFile, metadataFailurePackage, recentMetadataPackage) {
+function runInstall (plugin, binDirectory, traceFile) {
   const result = spawnInstall(plugin, {
     PATH: `${binDirectory ?? wrapperDirectory}:/usr/bin:/bin`,
     ...(traceFile && { DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile }),
-    ...(metadataFailurePackage && { DD_TEST_FAIL_METADATA_PACKAGE: metadataFailurePackage }),
-    ...(recentMetadataPackage && { DD_TEST_RECENT_METADATA_PACKAGE: recentMetadataPackage }),
   })
 
   assert.strictEqual(
@@ -343,20 +315,7 @@ const args = process.argv.slice(2)
 if (process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE) {
   appendFileSync(process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE, JSON.stringify(['npm', ...args]) + '\n')
 }
-if (args[0] === 'view' && args[1] === process.env.DD_TEST_FAIL_METADATA_PACKAGE) process.exit(1)
-if (args[0] === 'view' && args[1] === process.env.DD_TEST_RECENT_METADATA_PACKAGE) {
-  process.stdout.write(JSON.stringify({
-    versions: ['4.17.5', '4.17.6'],
-    time: {
-      '4.17.5': '2000-01-01T00:00:00.000Z',
-      '4.17.6': '2999-01-01T00:00:00.000Z',
-    },
-  }))
-  process.exit(0)
-}
-const result = spawnSync(process.execPath, [${JSON.stringify(npmBinary)}, ...args], { stdio: 'inherit' })
-if (result.error) throw result.error
-process.exit(result.status ?? 1)
+process.exit(1)
 `)
   fs.chmodSync(npmWrapper, 0o755)
   return directory
