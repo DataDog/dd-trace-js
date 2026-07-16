@@ -42,7 +42,7 @@ const earlyLoadFrameworks = new Map([
   ['next', {
     // dist/server/next-server.js (>=11.1), dist/next-server/server/next-server.js (older)
     file: 'next-server.js',
-    guidance: "add 'dd-trace' to `serverExternalPackages` (Next.js >=15) or " +
+    guidance: "wrap `next.config.js` with `require('dd-trace/next')` (Next.js >=15), or add 'dd-trace' to " +
       '`experimental.serverComponentsExternalPackages` (13-14) so it is not bundled',
   }],
 ])

@@ -1,0 +1,8 @@
+{
+  "name": "dd-trace-next-standalone-monorepo-test",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "next build apps/web"
+  }
+}

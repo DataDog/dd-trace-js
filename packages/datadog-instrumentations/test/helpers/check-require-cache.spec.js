@@ -54,7 +54,7 @@ describe('check-require-cache', () => {
         assert.match(stderr, /'next' was loaded before dd-trace/)
         assert.match(stderr, /--require dd-trace\/init/)
         assert.match(stderr, /--import dd-trace\/initialize\.mjs/)
-        assert.match(stderr, /serverExternalPackages/)
+        assert.match(stderr, /dd-trace\/next/)
         done()
       })
     })
