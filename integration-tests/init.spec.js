@@ -37,6 +37,9 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
   const isNode1800 = process.versions.node === '18.0.0'
   const tracerFile = arg === 'loader' && !isNode1800 ? 'init/trace.mjs' : 'init/trace.js'
   const instrFile = arg === 'loader' && !isNode1800 ? 'init/instrument.mjs' : 'init/instrument.js'
+  // When the loader path already uses the ESM fixture, a separate ESM test would be redundant
+  // and can flake on Node 22.0.0 when the same child process is spawned back-to-back.
+  const needsSeparateEsmInstrTest = instrFile !== 'init/instrument.mjs'
 
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
@@ -49,8 +52,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
           it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
 
-          it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-            testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+          if (needsSeparateEsmInstrTest) {
+            it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
+              testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+          }
         })
       }
 
@@ -61,7 +66,9 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
         it('should not initialize instrumentation', () => testFile(instrFile, 'false\n', [], ''))
 
-        it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
+        if (needsSeparateEsmInstrTest) {
+          it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
+        }
       })
     })
 
@@ -74,8 +81,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
         it('should initialize instrumentation', () => testFile(instrFile, 'true\n', [], 'manual'))
 
-        it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+        if (needsSeparateEsmInstrTest) {
+          it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
+            testFile('init/instrument.mjs', `${esmWorks}\n`, [], 'manual'))
+        }
       })
 
       context('with DD_INJECTION_ENABLED', () => {
@@ -85,8 +94,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
         it('should initialize instrumentation', () => testFile(instrFile, 'true\n', telemetryGood, 'ssi'))
 
-        it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
-          testFile('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi'))
+        if (needsSeparateEsmInstrTest) {
+          it(`should ${esmWorks ? '' : 'not '}initialize ESM instrumentation`, () =>
+            testFile('init/instrument.mjs', `${esmWorks}\n`, telemetryGood, 'ssi'))
+        }
       })
     })
   })
