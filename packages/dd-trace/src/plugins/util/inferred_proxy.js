@@ -157,7 +157,7 @@ function extractInferredProxyContext (headers) {
     apiId: headers[PROXY_HEADER_API_ID],
     awsUser: headers[PROXY_HEADER_AWS_USER],
   }
-}
+} 
 
 function finishInferredProxySpan (context) {
   const { req } = context
