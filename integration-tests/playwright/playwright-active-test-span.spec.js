@@ -190,7 +190,9 @@ versions.forEach((version) => {
             }
           )
 
-          await Promise.all([once(proc, 'exit'), testAssertionsPromise])
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), testAssertionsPromise])
+
+          assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
         } finally {
           proc?.kill()
         }
@@ -198,6 +200,20 @@ versions.forEach((version) => {
 
       it('can correlate tests and RUM sessions', async (receiver) => {
         await runRumTest(receiver, { isRedirecting: false })
+      })
+
+      for (const failure of ['throw', 'reject']) {
+        it(`does not fail when the RUM correlation cookie ${failure}s`, async (receiver) => {
+          await runRumTest(receiver, { isRedirecting: false }, {
+            RUM_COOKIE_FAILURE: failure,
+          })
+        })
+      }
+
+      it('expires only the RUM correlation cookie during cleanup', async (receiver) => {
+        await runRumTest(receiver, { isRedirecting: false }, {
+          VERIFY_RUM_COOKIE_CLEANUP: 'true',
+        })
       })
 
       it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver) => {

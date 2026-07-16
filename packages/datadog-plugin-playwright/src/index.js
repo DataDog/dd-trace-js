@@ -238,10 +238,8 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:playwright:test:page-goto', ({
-      isRumActive,
-      page,
-    }) => {
+    this.addSub('ci:playwright:test:page-goto', (ctx) => {
+      const { isRumActive, browserVersion } = ctx
       const store = storage('legacy').getStore()
       const span = store && store.span
       if (!span) {
@@ -252,22 +250,10 @@ class PlaywrightPlugin extends CiPlugin {
       if (isRumActive) {
         span.setTag(TEST_IS_RUM_ACTIVE, 'true')
 
-        if (page) {
-          const browserVersion = page.context().browser().version()
-
-          if (browserVersion) {
-            span.setTag(TEST_BROWSER_VERSION, browserVersion)
-          }
-
-          const url = page.url()
-          const domain = new URL(url).hostname
-          page.context().addCookies([{
-            name: 'datadog-ci-visibility-test-execution-id',
-            value: span.context().toTraceId(),
-            domain,
-            path: '/',
-          }])
+        if (browserVersion) {
+          span.setTag(TEST_BROWSER_VERSION, browserVersion)
         }
+        ctx.testExecutionId = span.context().toTraceId()
       }
     })
 
