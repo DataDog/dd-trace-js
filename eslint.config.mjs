@@ -338,6 +338,11 @@ export default [
             group: 'builtin',
             position: 'before',
           },
+          {
+            pattern: '@actions/**',
+            group: 'external',
+            position: 'before',
+          },
         ],
       }],
       'import/no-useless-path-segments': 'error',
