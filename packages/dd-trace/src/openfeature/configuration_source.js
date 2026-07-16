@@ -4,7 +4,6 @@ const log = require('../log')
 
 const CONFIGURATION_SOURCE_AGENTLESS = 'agentless'
 const CONFIGURATION_SOURCE_REMOTE_CONFIG = 'remote_config'
-const CONFIGURATION_SOURCE_OFFLINE = 'offline'
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
 const DEFAULT_POLL_INTERVAL_SECONDS = 30
@@ -21,7 +20,7 @@ function resolve (config) {
   const flaggingProvider = config.experimental.flaggingProvider
   const mode = String(flaggingProvider.configurationSource ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
 
-  if (mode === CONFIGURATION_SOURCE_REMOTE_CONFIG || mode === CONFIGURATION_SOURCE_OFFLINE) {
+  if (mode === CONFIGURATION_SOURCE_REMOTE_CONFIG) {
     return { mode }
   }
 
@@ -40,7 +39,6 @@ function resolve (config) {
   return {
     mode,
     endpoint: endpoint(config, configuredBaseUrl),
-    allowRawConfiguration: Boolean(configuredBaseUrl),
     pollIntervalMs: positiveMilliseconds(
       flaggingProvider.agentlessPollIntervalSeconds,
       DEFAULT_POLL_INTERVAL_SECONDS,
@@ -80,8 +78,6 @@ function enable (config, getOpenfeatureProxy) {
       getOpenfeatureProxy()._setConfiguration(ufc)
     })
     getOpenfeatureProxy()._setConfigurationSource(source)
-  } else if (sourceConfig.mode === CONFIGURATION_SOURCE_OFFLINE) {
-    log.debug('Feature Flagging offline configuration source selected; no configuration source started')
   }
 }
 
@@ -165,7 +161,6 @@ function positiveMilliseconds (value, fallbackSeconds, setting) {
 
 module.exports = {
   CONFIGURATION_SOURCE_AGENTLESS,
-  CONFIGURATION_SOURCE_OFFLINE,
   CONFIGURATION_SOURCE_REMOTE_CONFIG,
   DEFAULT_AGENTLESS_PATH,
   enable,

@@ -55,7 +55,6 @@ describe('OpenFeature configuration source', () => {
       'https://ufc-server.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/server?dd_env=my+env'
     )
     assert.strictEqual(resolved.apiKey, 'test-api-key')
-    assert.strictEqual(resolved.allowRawConfiguration, false)
     assert.strictEqual(resolved.pollIntervalMs, 30_000)
     assert.strictEqual(resolved.requestTimeoutMs, 2000)
   })
@@ -78,7 +77,6 @@ describe('OpenFeature configuration source', () => {
       resolved.endpoint.toString(),
       'http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'
     )
-    assert.strictEqual(resolved.allowRawConfiguration, true)
   })
 
   it('preserves an exact configured path and query', () => {
@@ -120,7 +118,6 @@ describe('OpenFeature configuration source', () => {
     const resolved = configurationSource.resolve(config)
 
     assert.strictEqual(resolved.endpoint.toString(), 'https://flags.example.test/custom/ufc?tenant=test')
-    assert.strictEqual(resolved.allowRawConfiguration, true)
     sinon.assert.notCalled(log.warn)
   })
 
@@ -141,19 +138,15 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(configurationSource.isRemoteConfig(config), true)
   })
 
-  it('reserves offline mode without starting a network source', () => {
-    config.experimental.flaggingProvider.configurationSource = 'offline'
+  for (const value of ['offline', 'other']) {
+    it(`fails closed for the unsupported ${value} source`, () => {
+      config.experimental.flaggingProvider.configurationSource = value
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'offline' })
-  })
-
-  it('fails closed for an unsupported source', () => {
-    config.experimental.flaggingProvider.configurationSource = 'other'
-
-    assert.throws(() => configurationSource.resolve(config), /Unsupported Feature Flagging configuration source/)
-    assert.strictEqual(configurationSource.isRemoteConfig(config), false)
-    sinon.assert.calledOnce(log.error)
-  })
+      assert.throws(() => configurationSource.resolve(config), /Unsupported Feature Flagging configuration source/)
+      assert.strictEqual(configurationSource.isRemoteConfig(config), false)
+      sinon.assert.calledOnce(log.error)
+    })
+  }
 
   it('falls back to positive timing defaults with warnings', () => {
     config.experimental.flaggingProvider.agentlessPollIntervalSeconds = 0

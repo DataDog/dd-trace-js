@@ -2,7 +2,10 @@
 
 const http = require('node:http')
 const https = require('node:https')
+const { storage } = require('../../../datadog-core')
 const log = require('../log')
+
+const legacyStorage = storage('legacy')
 
 const MAX_ATTEMPTS = 3
 const FIRST_RETRY_MIN_MS = 2000
@@ -152,27 +155,29 @@ class AgentlessConfigurationSource {
       callback(error, response)
     }
 
-    const request = transport.request(this._config.endpoint, { method: 'GET', headers }, response => {
-      const chunks = []
-      response.on('data', chunk => chunks.push(chunk))
-      response.on('error', error => finish(requestError(error)))
-      response.on('end', () => {
-        finish(null, {
-          statusCode: response.statusCode,
-          etag: response.headers.etag,
-          body: Buffer.concat(chunks).toString('utf8'),
+    legacyStorage.run({ noop: true }, () => {
+      const request = transport.request(this._config.endpoint, { method: 'GET', headers }, response => {
+        const chunks = []
+        response.on('data', chunk => chunks.push(chunk))
+        response.on('error', error => finish(requestError(error)))
+        response.on('end', () => {
+          finish(null, {
+            statusCode: response.statusCode,
+            etag: response.headers.etag,
+            body: Buffer.concat(chunks).toString('utf8'),
+          })
         })
       })
-    })
 
-    this._activeRequest = request
-    request.setTimeout(this._config.requestTimeoutMs, () => {
-      const error = new Error(`Feature Flagging agentless request timed out after ${this._config.requestTimeoutMs}ms`)
-      error.retryable = true
-      request.destroy(error)
+      this._activeRequest = request
+      request.setTimeout(this._config.requestTimeoutMs, () => {
+        const error = new Error(`Feature Flagging agentless request timed out after ${this._config.requestTimeoutMs}ms`)
+        error.retryable = true
+        request.destroy(error)
+      })
+      request.on('error', error => finish(requestError(error)))
+      request.end()
     })
-    request.on('error', error => finish(requestError(error)))
-    request.end()
   }
 
   /**
@@ -195,7 +200,7 @@ class AgentlessConfigurationSource {
 
     let configuration
     try {
-      configuration = parseConfiguration(response.body, this._config.allowRawConfiguration)
+      configuration = parseConfiguration(response.body)
     } catch (error) {
       log.debug('Feature Flagging agentless endpoint returned malformed UFC payload', error)
       return { rejected: true, malformed: true }
@@ -242,24 +247,17 @@ class AgentlessConfigurationSource {
  * before it can replace the last-known-good configuration.
  *
  * @param {string} body - HTTP response body.
- * @param {boolean} allowRawConfiguration - Allows legacy raw UFC from an explicit custom endpoint.
  * @returns {object} Parsed UFC configuration.
  */
-function parseConfiguration (body, allowRawConfiguration) {
+function parseConfiguration (body) {
   const parsed = JSON.parse(body)
-  let configuration
-
-  if (parsed && typeof parsed === 'object' && Object.hasOwn(parsed, 'data')) {
-    if (!parsed.data || typeof parsed.data !== 'object' ||
-        parsed.data.type !== 'universal-flag-configuration') {
-      throw new Error('Expected a JSON:API Universal Flag Configuration resource')
-    }
-    configuration = parsed.data.attributes
-  } else if (allowRawConfiguration) {
-    configuration = parsed
-  } else {
+  if (!parsed || typeof parsed !== 'object' || !parsed.data || typeof parsed.data !== 'object') {
     throw new Error('Expected a JSON:API Universal Flag Configuration response')
   }
+  if (parsed.data.type !== 'universal-flag-configuration') {
+    throw new Error('Expected a JSON:API Universal Flag Configuration resource')
+  }
+  const configuration = parsed.data.attributes
 
   if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration) ||
       typeof configuration.createdAt !== 'string' ||

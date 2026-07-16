@@ -14,6 +14,13 @@ const VALID_UFC = JSON.stringify({
   environment: { name: 'test' },
   flags: {},
 })
+const VALID_RESPONSE = JSON.stringify({
+  data: {
+    id: '1',
+    type: 'universal-flag-configuration',
+    attributes: JSON.parse(VALID_UFC),
+  },
+})
 
 describe('AgentlessConfigurationSource', () => {
   let AgentlessConfigurationSource
@@ -23,6 +30,7 @@ describe('AgentlessConfigurationSource', () => {
   let log
   let requests
   let responses
+  let runInNoopContext
   let transport
 
   beforeEach(() => {
@@ -30,7 +38,6 @@ describe('AgentlessConfigurationSource', () => {
     applyConfiguration = sinon.stub()
     config = {
       endpoint: new URL('http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'),
-      allowRawConfiguration: true,
       pollIntervalMs: 30_000,
       requestTimeoutMs: 2000,
       apiKey: 'test-api-key',
@@ -41,6 +48,7 @@ describe('AgentlessConfigurationSource', () => {
     }
     requests = []
     responses = []
+    runInNoopContext = sinon.spy((_store, callback) => callback())
     transport = {
       request: sinon.spy((url, options, onResponse) => {
         const request = new EventEmitter()
@@ -72,6 +80,9 @@ describe('AgentlessConfigurationSource', () => {
       }),
     }
     AgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
+      '../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
       'node:http': transport,
       '../log': log,
     })
@@ -95,7 +106,7 @@ describe('AgentlessConfigurationSource', () => {
 
   it('fetches, applies, and reuses the accepted ETag', () => {
     responses.push(
-      { statusCode: 200, headers: { etag: '"ufc-v1"' }, body: VALID_UFC },
+      { statusCode: 200, headers: { etag: '"ufc-v1"' }, body: VALID_RESPONSE },
       { statusCode: 304, headers: {}, body: '' }
     )
     const configurationSource = source()
@@ -114,6 +125,14 @@ describe('AgentlessConfigurationSource', () => {
     assert.strictEqual(requests[0].options.headers['If-None-Match'], undefined)
     assert.strictEqual(requests[1].options.headers['If-None-Match'], '"ufc-v1"')
     assert.strictEqual(requests[0].timeout, 2000)
+  })
+
+  it('suppresses tracing around agentless requests', () => {
+    responses.push({ statusCode: 200, body: VALID_RESPONSE })
+
+    source().pollOnce(() => {})
+
+    sinon.assert.calledOnceWithMatch(runInNoopContext, { noop: true }, sinon.match.func)
   })
 
   it('unwraps a JSON API Universal Flag Configuration response', () => {
@@ -136,7 +155,6 @@ describe('AgentlessConfigurationSource', () => {
   })
 
   it('accepts managed JSON API payloads larger than 500 KB', () => {
-    config.allowRawConfiguration = false
     const expected = JSON.parse(VALID_UFC)
     expected.flags.large = { description: 'x'.repeat(500 * 1024) }
     responses.push({
@@ -155,8 +173,7 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledOnceWithExactly(applyConfiguration, expected)
   })
 
-  it('requires JSON API at the first-party endpoint', () => {
-    config.allowRawConfiguration = false
+  it('requires JSON API at custom endpoints', () => {
     responses.push({ statusCode: 200, body: VALID_UFC })
 
     source().pollOnce(() => {})
@@ -187,7 +204,7 @@ describe('AgentlessConfigurationSource', () => {
 
   it('preserves last-known-good configuration and ETag after malformed JSON', () => {
     responses.push(
-      { statusCode: 200, headers: { etag: '"good"' }, body: VALID_UFC },
+      { statusCode: 200, headers: { etag: '"good"' }, body: VALID_RESPONSE },
       { statusCode: 200, headers: { etag: '"bad"' }, body: '{"flags":[' },
       { statusCode: 304, headers: {}, body: '' }
     )
@@ -207,9 +224,9 @@ describe('AgentlessConfigurationSource', () => {
 
   it('clears a stale ETag when an accepted response omits it', () => {
     responses.push(
-      { statusCode: 200, headers: { etag: '"first"' }, body: VALID_UFC },
-      { statusCode: 200, headers: {}, body: VALID_UFC },
-      { statusCode: 200, headers: {}, body: VALID_UFC }
+      { statusCode: 200, headers: { etag: '"first"' }, body: VALID_RESPONSE },
+      { statusCode: 200, headers: {}, body: VALID_RESPONSE },
+      { statusCode: 200, headers: {}, body: VALID_RESPONSE }
     )
     const configurationSource = source()
 
@@ -225,8 +242,8 @@ describe('AgentlessConfigurationSource', () => {
   it('does not advance the ETag and keeps scheduled polling after a listener failure', () => {
     applyConfiguration.onFirstCall().throws(new Error('listener failed'))
     responses.push(
-      { statusCode: 200, headers: { etag: '"failed"' }, body: VALID_UFC },
-      { statusCode: 200, headers: { etag: '"accepted"' }, body: VALID_UFC }
+      { statusCode: 200, headers: { etag: '"failed"' }, body: VALID_RESPONSE },
+      { statusCode: 200, headers: { etag: '"accepted"' }, body: VALID_RESPONSE }
     )
     const configurationSource = source()
 
@@ -243,7 +260,7 @@ describe('AgentlessConfigurationSource', () => {
     responses.push(
       { statusCode: 500, body: '' },
       { statusCode: 429, body: '' },
-      { statusCode: 200, body: VALID_UFC }
+      { statusCode: 200, body: VALID_RESPONSE }
     )
     const callback = sinon.spy()
 
@@ -270,7 +287,7 @@ describe('AgentlessConfigurationSource', () => {
   it('retries request timeout responses', () => {
     responses.push(
       { statusCode: 408, body: '' },
-      { statusCode: 200, body: VALID_UFC }
+      { statusCode: 200, body: VALID_RESPONSE }
     )
 
     source().pollOnce(() => {})
@@ -340,7 +357,7 @@ describe('AgentlessConfigurationSource', () => {
   })
 
   it('retries request timeouts without overlapping requests', () => {
-    responses.push({ pending: true }, { statusCode: 200, body: VALID_UFC })
+    responses.push({ pending: true }, { statusCode: 200, body: VALID_RESPONSE })
     const configurationSource = source()
     const first = sinon.spy()
     const overlapping = sinon.spy()
@@ -362,7 +379,7 @@ describe('AgentlessConfigurationSource', () => {
   it('uses fixed-delay polling and never schedules while a request is active', () => {
     responses.push(
       { pending: true },
-      { statusCode: 200, body: VALID_UFC }
+      { statusCode: 200, body: VALID_RESPONSE }
     )
     const configurationSource = source()
 

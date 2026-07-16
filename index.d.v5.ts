@@ -895,7 +895,7 @@ declare namespace tracer {
          * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
-        configurationSource?: 'agentless' | 'remote_config' | 'offline'
+        configurationSource?: 'agentless' | 'remote_config'
         /**
          * Optional agentless configuration endpoint or base URL. A base URL
          * receives the standard rules-based server path.
