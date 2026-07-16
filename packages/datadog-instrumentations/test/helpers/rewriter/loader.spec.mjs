@@ -50,17 +50,19 @@ describe('rewriter loader', () => {
   })
 
   it('deduplicates activation by package, version, and file', () => {
-    const url = createAiModuleUrl()
+    const url = createModuleUrl('ai', '4.0.1', 'dist/index.mjs')
     const loadChannel = channel('dd-trace:instrumentation:load')
     const messages = []
     const onLoad = message => messages.push(message)
     loadChannel.subscribe(onLoad)
 
     try {
-      const result = loadSync(url, { format: 'module' }, () => ({ format: 'module', source }))
+      const first = loadSync(url, { format: 'module' }, () => ({ format: 'module', source }))
+      const second = loadSync(url, { format: 'module' }, () => ({ format: 'module', source }))
 
-      assertRewritten(result.source)
-      assert.deepStrictEqual(messages, [])
+      assertRewritten(first.source)
+      assertRewritten(second.source)
+      assert.deepStrictEqual(messages, [{ name: 'ai', version: '4.0.1', file: 'dist/index.mjs' }])
     } finally {
       loadChannel.unsubscribe(onLoad)
     }
