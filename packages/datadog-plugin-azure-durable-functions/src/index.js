@@ -1,7 +1,8 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { USER_KEEP } = require('../../../ext/priority')
+const { AUTO_KEEP } = require('../../../ext/priority')
+const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
@@ -12,14 +13,17 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     // Continue the trace propagated by the Durable Functions host (W3C traceparent
-    // supplied on the invocation's traceContext) so orchestrator/activity/entity
-    // invocations join the same trace instead of each starting a new root.
+    // supplied on the invocation's traceContext) so activity/entity invocations join
+    // the same trace as the HTTP root instead of each starting a new root.
     let childOf
     if (ctx.traceparent) {
+      // extract() returns null when the carrier can't be parsed. Normalize to
+      // undefined so startSpan still falls back to any active in-process parent
+      // rather than being forced to start a brand new root span.
       childOf = this.tracer.extract('text_map', {
         traceparent: ctx.traceparent,
         tracestate: ctx.tracestate,
-      })
+      }) ?? undefined
     }
 
     const span = this.startSpan(this.operationName(), {
@@ -43,14 +47,22 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     }
 
     // The Durable Functions host re-propagates the trace with the W3C sampled flag
-    // cleared (traceparent `-00`) even when its tracestate still says keep (`s:1`),
-    // so the continued activity/entity chunk inherits sampling priority 0 and would be
-    // dropped independently of the kept HTTP root — leaving it out of the trace in
-    // Datadog. A `manual.keep` tag is ignored here because the priority is already
-    // locked by propagation, so override it directly to USER_KEEP to ensure every
-    // chunk of the durable trace is retained.
-    if (childOf) {
-      span._prioritySampler.setPriority(span, USER_KEEP)
+    // cleared (traceparent `-00`) even when the datadog tracestate decision still
+    // says keep (`s:1`). W3C reconciliation lets the cleared flag win, so extraction
+    // resolves the continued chunk to a drop and it would be dropped independently of
+    // the kept HTTP root. A `manual.keep` tag can't fix this because the priority is
+    // already locked by propagation (child contexts share the parent's `_sampling`),
+    // so re-apply the propagated decision directly.
+    //
+    // Continue with the exact priority the host propagated (tracestate `s`) so the
+    // durable chunk matches the rest of the trace instead of being upgraded to a
+    // stronger keep. Only intervene when `s` indicates keep; genuine upstream drops
+    // (no dd tracestate, or `s` <= 0) are left untouched so the customer's sampling
+    // configuration is still respected. The propagated decision maker (`_dd.p.dm`),
+    // already set on the shared trace during extraction, is left in place.
+    const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
+    if (childOf && sampledFlagCleared(ctx.traceparent) && propagatedPriority >= AUTO_KEEP) {
+      span._prioritySampler?.setPriority(span, propagatedPriority)
     }
 
     ctx.span = span
@@ -68,6 +80,27 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   asyncStart (ctx) {
     super.finish(ctx)
   }
+}
+
+// True when the W3C traceparent's sampled flag is cleared (flags & 0x01 === 0),
+// i.e. the carrier says "drop". Format: version-traceId-spanId-flags.
+function sampledFlagCleared (traceparent) {
+  if (typeof traceparent !== 'string') return false
+  const flags = traceparent.split('-')[3]
+  return flags !== undefined && (Number.parseInt(flags, 16) & 1) === 0
+}
+
+// Read the datadog-propagated sampling priority (`dd=...;s:<n>`) from a W3C
+// tracestate. Returns undefined when there is no datadog tracestate or no valid
+// `s` value, so callers can distinguish "no propagated decision" from a drop.
+function propagatedSamplingPriority (tracestate) {
+  if (typeof tracestate !== 'string' || !tracestate) return
+  let priority
+  TraceState.fromString(tracestate).forVendor('dd', state => {
+    const parsed = Number.parseInt(state.get('s'), 10)
+    if (Number.isInteger(parsed)) priority = parsed
+  })
+  return priority
 }
 
 module.exports = AzureDurableFunctionsPlugin
