@@ -653,10 +653,9 @@ function invokesCoverageCollector (command) {
 
 /**
  * @param {Record<string, string>} scripts
- * @param {Set<string>} knownScripts
  * @returns {Set<string>}
  */
-function findCoverageScripts (scripts, knownScripts) {
+function findCoverageScripts (scripts) {
   const coverageScripts = new Set()
   let foundCoverage
 
@@ -667,7 +666,7 @@ function findCoverageScripts (scripts, knownScripts) {
 
       if (
         invokesCoverageCollector(command) ||
-        extractScriptInvocations(command, knownScripts).some(invocation => coverageScripts.has(invocation.script))
+        extractScriptInvocations(command).some(invocation => coverageScripts.has(invocation.script))
       ) {
         coverageScripts.add(name)
         foundCoverage = true
@@ -680,14 +679,13 @@ function findCoverageScripts (scripts, knownScripts) {
 
 /**
  * @param {string} command
- * @param {Set<string>} knownScripts
  * @param {Set<string>} coverageScripts
  * @returns {boolean}
  */
-function commandProducesCoverage (command, knownScripts, coverageScripts) {
+function commandProducesCoverage (command, coverageScripts) {
   if (invokesCoverageCollector(command)) return true
 
-  return extractScriptInvocations(command, knownScripts)
+  return extractScriptInvocations(command)
     .some(invocation => coverageScripts.has(invocation.script))
 }
 
@@ -1142,9 +1140,9 @@ function main () {
   }
 
   const coverageProducerJobs = new Set()
-  const coverageScripts = findCoverageScripts(scripts, knownScripts)
+  const coverageScripts = findCoverageScripts(scripts)
   for (const run of workflowRuns) {
-    if (commandProducesCoverage(run.run, knownScripts, coverageScripts)) {
+    if (commandProducesCoverage(run.run, coverageScripts)) {
       coverageProducerJobs.add(`${run.workflowFile}#${run.jobId}`)
     }
   }
