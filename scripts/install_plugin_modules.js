@@ -35,7 +35,6 @@ const minimumReleaseTimestamp = Date.now() - Number(minimumReleaseAgeMatch[1]) *
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
 // descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
-// Each worker starts the versions and publication-time lookups together.
 const REGISTRY_CONCURRENCY = 4
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -43,6 +42,7 @@ const REGISTRY_CONCURRENCY = 4
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
+const workspaceOverrides = {}
 // Package metadata is independent of the requested range; fetch it once per process.
 const packageMetadataCache = new Map()
 // Cache resolved ranges across the script's two install passes.
@@ -53,18 +53,12 @@ const resolvedRangeCache = new Map()
 // `trustedDependencies`; native plugins (`aerospike`, `@confluentinc/kafka-javascript`,
 // `pg-native`, ...) need their `install`/`postinstall` to compile, otherwise
 // `node-gyp`'s `bindings` package fails to find the `.node` file at test time.
-// Bun's `trustedDependencies` does not transitively allow nested packages, so
-// transitively-required native modules (e.g. `pg-native` → `libpq`) need their
-// own entry here.
-const trustedDependencies = new Set([
-  // `pg-native` ships JS bindings only; the actual native build sits in `libpq`,
-  // whose `install` script invokes `node-gyp` to produce `addon.node`.
-  'libpq',
-])
+// Bun's `trustedDependencies` does not transitively allow nested packages; externals.js
+// declares any transitive native builders a sandbox needs.
+const trustedDependencies = new Set()
 
 for (const external of Object.keys(externals)) {
   for (const thing of externals[external]) {
-    trustedDependencies.add(thing.name)
     if (thing.dep) {
       const depsArr = externalDeps.get(external)
       if (depsArr) {
@@ -126,9 +120,35 @@ async function assertPrerequisites () {
   const packages = collectPackages(moduleNames)
 
   await prefetchPackageVersions(packages)
+  applyExternalConfiguration(moduleNames, packages)
   await mapWithConcurrency(packages, FS_CONCURRENCY, assertPackage)
 
   await assertWorkspaces()
+}
+
+/**
+ * @param {string[]} moduleNames
+ * @param {Array<{ name: string }>} packages
+ */
+function applyExternalConfiguration (moduleNames, packages) {
+  const activeNames = new Set(moduleNames)
+  for (const { name } of packages) activeNames.add(name)
+
+  for (const name of activeNames) {
+    for (const external of externals[name] ?? []) {
+      if (external.dep) trustedDependencies.add(external.name)
+      for (const trustedDependency of external.trustedDependencies ?? []) {
+        trustedDependencies.add(trustedDependency)
+      }
+      for (const [dependency, version] of Object.entries(external.overrides ?? {})) {
+        const configuredVersion = workspaceOverrides[dependency]
+        if (configuredVersion !== undefined && configuredVersion !== version) {
+          throw new Error(`Conflicting overrides for '${dependency}': '${configuredVersion}' and '${version}'`)
+        }
+        workspaceOverrides[dependency] = version
+      }
+    }
+  }
 }
 
 /**
@@ -219,7 +239,9 @@ async function prefetchPackageVersions (packages) {
   }
   for (const [externalName, dependencies] of externalDeps) {
     if (!generatedNames.has(externalName)) continue
-    for (const { name } of dependencies) names.add(name)
+    for (const { name, version } of dependencies) {
+      if (version === undefined || !semver.valid(version)) names.add(name)
+    }
   }
   await mapWithConcurrency([...names], REGISTRY_CONCURRENCY, fetchPackageVersions)
 }
@@ -357,6 +379,8 @@ async function patchPeerDependencies ({ folder, externalName }) {
       if (pkgJson[section]?.[name]) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
+        } else if (version) {
+          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, capKnownRange(name, version))
         } else {
           const declared = pkgJson[section][name]
           const range = declared.startsWith('workspace:')
@@ -481,56 +505,7 @@ async function assertWorkspaces () {
     workspaces: {
       packages: [...workspaces].sort(),
     },
-    // `@langchain/openai` is a transitive of `langchain` that the langchain
-    // plugin specs require directly from each `langchain@<version>` sandbox.
-    // The isolated linker does not hoist transitives to the workspace root,
-    // so pin it here. 0.0.34 is the version the recorded cassettes match
-    // (`OpenAI/JS 4.x` request shape); newer pins need their own cassettes.
-    dependencies: {
-      '@langchain/openai': '0.0.34',
-    },
-    // Workspace-wide overrides to repair packages whose published manifest
-    // declares a transitive that the package's own runtime code does not
-    // actually accept. The previous package manager's flat hoist masked
-    // this by always serving the highest workspace-installed version of
-    // the transitive; bun's isolated linker honours each package's
-    // declared range and lands the wrong major in the per-package store.
-    // - `q@2.0.0` declares `collections@^2.0.0`, but `q.js` does
-    //   `require('collections/shim')`; `shim.js` ships only in
-    //   `collections@>=5`, so without this override `q@2`'s spec crashes
-    //   with `Cannot find module 'collections/shim'`.
-    // - `@langchain/openai@0.0.34`'s manifest declares
-    //   `@langchain/core: >0.1.56 <0.3.0`. The recorded openai cassettes
-    //   (and the langchain regression specs that send a JSON-message input)
-    //   only succeed when bun lands a `0.2.x` core, which is the highest
-    //   version in that range. Bun's linker picks the lowest satisfying
-    //   version under some conditions (it lands `0.1.63` on the github
-    //   runner image but `0.2.36` on macOS), so pin the floor explicitly
-    //   for the langchain-openai pair without affecting the
-    //   `@langchain/openai@1.x.x` peer constraint resolved elsewhere in
-    //   the workspace.
-    // - `zod-to-json-schema@>=3.25.0` switched its zod imports to the
-    //   `zod/v3` subpath, which only exists in `zod@>=3.25.32` and
-    //   `zod@>=4`. `@ai-sdk/ui-utils` (the `ai@4.0.2` UI helper) declares
-    //   `zod-to-json-schema: ^3.0.0` and pulls in `zod@^3.0.0` itself, so
-    //   the isolated linker lands `zod-to-json-schema@3.25.2` next to a
-    //   `zod@3.23.x` that has no `/v3` subpath, crashing at load time
-    //   with `Package subpath './v3' is not defined`. The previous
-    //   package manager hid this because its flat hoist served the
-    //   workspace root's `zod@4` to every consumer. Pin the transitive
-    //   globally to the last 3.x release that still imports from `zod`
-    //   directly so the `ai@4.x` sandbox loads; the only other consumer
-    //   (`langchain`/`langgraph`) declares `zod-to-json-schema >=3.0.0`
-    //   and `<3.25.0` satisfies that range too. Bun does not support
-    //   nested override keys (oven-sh/bun#6608), so a flat key is
-    //   required here even though only the ai sandbox needs it.
-    overrides: {
-      collections: '^5.0.0',
-      '@langchain/openai@0.0.34/@langchain/core': '^0.2.0',
-      // limitd-protocol@2.1.1 uses an unprefixed GitHub shorthand that Bun cannot resolve.
-      hashlru: 'github:jfromaniello/hashlru#return_value_on_set',
-      'zod-to-json-schema': '<3.25.0',
-    },
+    overrides: workspaceOverrides,
     trustedDependencies: [...trustedDependencies].sort(),
   }, null, 2) + '\n')
 }
@@ -647,16 +622,9 @@ function capKnownRange (name, range) {
 /**
  * Resolve a semver range to the highest old-enough published version satisfying it.
  *
- * Bun can select the lowest matching version instead of the highest that the
- * previous package manager picked and every plugin regression test relied on.
- * Without taking the highest
- * we install ancient transitives that, for instance, ship `pino-pretty@1.0.1`
- * into `versions/pino@5.0.0/` (where pino's `prettyPrint: true` then
- * deadlocks the test process) and `@langchain/core@0.1.x` into the
- * langchain sandbox (where `coerceMessageLikeToMessage` rejects the
- * JSON-message regression test). Publication timestamps also have to be
- * filtered here: pinning the newest version before `bun install` would make
- * Bun reject the exact pin instead of selecting the newest old-enough release.
+ * Bun installs the lowest matching version for several range shapes. Resolve
+ * once per package to preserve the highest-compatible selection used by the
+ * plugin matrix while filtering young releases before exact pinning.
  *
  * @param {string} name
  * @param {string} range
