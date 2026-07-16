@@ -445,10 +445,17 @@ jobs:
       # this to 0 re-enables them for the duration of the job.
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: |
-          sudo apt-get update
-          # Xvfb provides a virtual X display so Electron (a GUI app) can start
-          # on the headless CI runner without a physical screen.
-          sudo apt-get install -y xvfb x11-utils
+          # apt's package mirrors occasionally return transient 5xx/invalid-data errors; retry with backoff so a
+          # blip doesn't fail the job. `until` keeps `set -e` from aborting on an intermediate failure.
+          # Xvfb provides a virtual X display so Electron (a GUI app) can start on the headless CI runner
+          # without a physical screen.
+          n=0
+          until sudo apt-get update && sudo apt-get install -y xvfb x11-utils; do
+            n=$((n + 1))
+            if [ "$n" -ge 3 ]; then echo "apt failed after $n attempts" >&2; exit 1; fi
+            echo "apt attempt $n failed; retrying in $((n * 10))s" >&2
+            sleep $((n * 10))
+          done
           # Launch the virtual display on screen :99 with a 24-bit 1024×768
           # framebuffer. Output is discarded; the & backgrounds it so the step
           # does not block.
