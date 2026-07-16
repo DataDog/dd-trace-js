@@ -1,13 +1,11 @@
 'use strict'
 
-const { execFile } = require('child_process')
 const { createHash } = require('crypto')
 const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
 const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
 const { join } = require('path')
-const { promisify } = require('util')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -22,20 +20,10 @@ const mapWithConcurrency = require('./helpers/concurrency')
 const retry = require('./helpers/retry')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
-const execFileAsync = promisify(execFile)
-
-const versionsBunConfig = readFileSync(join(__dirname, '..', 'versions', 'bunfig.toml'), 'utf8')
-const minimumReleaseAgeMatch = /^minimumReleaseAge = (\d+)$/m.exec(versionsBunConfig)
-// The tracked config is the policy source and is validated by the migration regression test.
-/* istanbul ignore if */
-/* c8 ignore next */
-if (!minimumReleaseAgeMatch) throw new Error('versions/bunfig.toml must define minimumReleaseAge')
-const minimumReleaseTimestamp = Date.now() - Number(minimumReleaseAgeMatch[1]) * 1000
 
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
 // descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
-const REGISTRY_CONCURRENCY = 4
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
@@ -43,10 +31,6 @@ const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'ora
 const workspaces = new Set()
 const externalDeps = new Map()
 const workspaceOverrides = {}
-// Package metadata is independent of the requested range; fetch it once per process.
-const packageMetadataCache = new Map()
-// Cache resolved ranges across the script's two install passes.
-const resolvedRangeCache = new Map()
 // Names of every package the synthesized workspaces install, both directly (via
 // `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
 // Bun runs lifecycle scripts only for packages listed in the workspace root's
@@ -74,12 +58,27 @@ run()
 
 async function run () {
   invalidateCacheOnNodeAbiChange()
-  await assertPrerequisites()
+  const deferredPackageStages = await assertPrerequisites()
   install()
+  await installPackageStages(deferredPackageStages)
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  // The second install only does something when peer-dependency patching actually changed a manifest. Targeted
+  // The peer-dependency install only does something when patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
   if (changed) install()
+}
+
+/**
+ * @param {Array<Array<{ name: string, version: string|null, range: string }>>} packageStages
+ * @param {number} [index]
+ * @returns {Promise<void>}
+ */
+async function installPackageStages (packageStages, index = 0) {
+  if (index >= packageStages.length) return
+
+  await mapWithConcurrency(packageStages[index], FS_CONCURRENCY, assertPackage)
+  await assertWorkspaces()
+  install()
+  return installPackageStages(packageStages, index + 1)
 }
 
 /**
@@ -119,11 +118,77 @@ async function assertPrerequisites () {
 
   const packages = collectPackages(moduleNames)
 
-  await prefetchPackageVersions(packages)
   applyExternalConfiguration(moduleNames, packages)
-  await mapWithConcurrency(packages, FS_CONCURRENCY, assertPackage)
+  const [initialPackages = [], ...deferredPackageStages] = buildInstallStages(packages)
+  await mapWithConcurrency(initialPackages, FS_CONCURRENCY, assertPackage)
 
   await assertWorkspaces()
+  return deferredPackageStages
+}
+
+/**
+ * @param {Array<{ name: string, version: string|null, range: string }>} packages
+ * @returns {Array<Array<{ name: string, version: string|null, range: string }>>}
+ */
+function buildInstallStages (packages) {
+  const packageStages = []
+  const rangeStages = []
+  const orderedPackages = packages.map(entry => {
+    const range = getCappedRange(entry.name, entry.range)
+    return { entry, range, maximum: getRangeMaximum(range) }
+  })
+  orderedPackages.sort((left, right) => semver.rcompare(left.maximum, right.maximum))
+
+  // Bun collapses overlapping workspace ranges to one version. Lock higher ranges before adding intersecting floors.
+  for (const { entry, range } of orderedPackages) {
+    let stageIndex = 0
+
+    for (let index = 0; index < rangeStages.length; index++) {
+      const stagedRanges = rangeStages[index].get(entry.name)
+      for (const stagedRange of stagedRanges ?? []) {
+        if (semver.intersects(range, stagedRange)) {
+          stageIndex = index + 1
+          break
+        }
+      }
+    }
+
+    if (stageIndex === packageStages.length) {
+      packageStages.push([])
+      rangeStages.push(new Map())
+    }
+    packageStages[stageIndex].push(entry)
+    const stagedRanges = rangeStages[stageIndex].get(entry.name)
+    if (stagedRanges) {
+      stagedRanges.push(range)
+    } else {
+      rangeStages[stageIndex].set(entry.name, [range])
+    }
+  }
+
+  return packageStages
+}
+
+/**
+ * @param {string} range
+ * @returns {import('semver').SemVer}
+ */
+function getRangeMaximum (range) {
+  let rangeMaximum
+  for (const comparatorSet of new semver.Range(range).set) {
+    let setMaximum
+    for (const comparator of comparatorSet) {
+      if (
+        comparator.value &&
+        (comparator.operator === '' || comparator.operator === '<' || comparator.operator === '<=') &&
+        (!setMaximum || semver.lt(comparator.semver, setMaximum))
+      ) {
+        setMaximum = comparator.semver
+      }
+    }
+    if (!rangeMaximum || semver.gt(setMaximum, rangeMaximum)) rangeMaximum = setMaximum
+  }
+  return rangeMaximum
 }
 
 /**
@@ -227,57 +292,6 @@ function collectPackages (moduleNames) {
 }
 
 /**
- * @param {Array<{ name: string, range: string }>} packages
- * @returns {Promise<void>}
- */
-async function prefetchPackageVersions (packages) {
-  const names = new Set()
-  const generatedNames = new Set()
-  for (const { name, range } of packages) {
-    generatedNames.add(name)
-    if (!semver.valid(getCappedRange(name, range))) names.add(name)
-  }
-  for (const [externalName, dependencies] of externalDeps) {
-    if (!generatedNames.has(externalName)) continue
-    for (const { name, version } of dependencies) {
-      if (version === undefined || !semver.valid(version)) names.add(name)
-    }
-  }
-  await mapWithConcurrency([...names], REGISTRY_CONCURRENCY, fetchPackageVersions)
-}
-
-/**
- * @param {string} name
- * @returns {Promise<void>}
- */
-async function fetchPackageVersions (name) {
-  const options = { encoding: 'utf8' }
-  let metadata
-  try {
-    const { stdout } = await execFileAsync(
-      'npm',
-      ['view', name, 'time', 'versions', '--json', '--update-notifier=false'],
-      options
-    )
-    metadata = JSON.parse(stdout.trim())
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(`npm view failed for ${name}: ${error.message}; deferring to install-time resolution`)
-    return
-  }
-  // npm registry package metadata always exposes the time map.
-  /* istanbul ignore if */
-  /* c8 ignore next 7 */
-  if (!Array.isArray(metadata?.versions) || !metadata.time || typeof metadata.time !== 'object') {
-    // eslint-disable-next-line no-console
-    console.warn(`npm view returned incomplete publication metadata for ${name}: ${JSON.stringify(metadata)}; ` +
-      'deferring to install-time resolution')
-    return
-  }
-  packageMetadataCache.set(name, metadata)
-}
-
-/**
  * @param {string|null} [name]
  * @param {string|null} [version]
  */
@@ -291,7 +305,7 @@ async function assertFolder (name, version) {
 async function assertPackage ({ name, version, range: dependencyVersionRange }) {
   trustedDependencies.add(name)
   const dependencies = {
-    [name]: resolveLatestSatisfying(name, getCappedRange(name, dependencyVersionRange)),
+    [name]: getCappedRange(name, dependencyVersionRange),
   }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(Boolean).join('-'),
@@ -380,7 +394,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
         } else if (version) {
-          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, capKnownRange(name, version))
+          versionPkgJson.dependencies[name] = capKnownRange(name, version)
         } else {
           const declared = pkgJson[section][name]
           const range = declared.startsWith('workspace:')
@@ -392,15 +406,14 @@ async function patchPeerDependencies ({ folder, externalName }) {
               ? declared.split('||')[0].trim()
               // Only one version available so use that.
               : declared
-          versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, capKnownRange(name, range))
+          versionPkgJson.dependencies[name] = capKnownRange(name, range)
         }
         break
       }
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
-      const range = capKnownRange(name, version || latests[name])
-      versionPkgJson.dependencies[name] = resolveLatestSatisfying(name, range)
+      versionPkgJson.dependencies[name] = capKnownRange(name, version || latests[name])
     }
   }
 
@@ -617,45 +630,6 @@ function collectInstalledMajors (dotBun) {
  */
 function capKnownRange (name, range) {
   return latests[name] === undefined ? range : getCappedRange(name, range)
-}
-
-/**
- * Resolve a semver range to the highest old-enough published version satisfying it.
- *
- * Bun installs the lowest matching version for several range shapes. Resolve
- * once per package to preserve the highest-compatible selection used by the
- * plugin matrix while filtering young releases before exact pinning.
- *
- * @param {string} name
- * @param {string} range
- * @returns {string}
- */
-function resolveLatestSatisfying (name, range) {
-  if (semver.valid(range)) return range
-  const cacheKey = `${name}@${range}`
-  const cached = resolvedRangeCache.get(cacheKey)
-  if (cached) return cached
-  const metadata = packageMetadataCache.get(name)
-  if (!metadata) return range
-  const versions = []
-  for (const version of metadata.versions) {
-    const publishedAt = metadata.time[version]
-    const publishedTimestamp = Date.parse(publishedAt)
-    if (!semver.valid(version) || !Number.isFinite(publishedTimestamp) ||
-      publishedTimestamp > minimumReleaseTimestamp) continue
-    versions.push(version)
-  }
-  const resolved = semver.maxSatisfying(versions, range, { includePrerelease: false })
-  // Whether a supported range has no old-enough release depends on live registry state.
-  /* istanbul ignore if */
-  /* c8 ignore next 5 */
-  if (!resolved) {
-    // eslint-disable-next-line no-console
-    console.warn(`no old-enough ${name} version satisfies ${range}; deferring to install-time resolution`)
-    return range
-  }
-  resolvedRangeCache.set(cacheKey, resolved)
-  return resolved
 }
 
 /**
