@@ -60,6 +60,16 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.requestTimeoutMs, 2000)
   })
 
+  it('derives the staging UFC CDN endpoint from DD_SITE', () => {
+    config.DD_SITE = 'datad0g.com'
+    config.env = 'staging'
+
+    assert.strictEqual(
+      configurationSource.resolve(config).endpoint.toString(),
+      'https://ufc-server.ff-cdn.datad0g.com/api/v2/feature-flagging/config/rules-based/server?dd_env=staging'
+    )
+  })
+
   it('appends the standard path to a configured origin', () => {
     config.experimental.flaggingProvider.agentlessBaseUrl = 'http://127.0.0.1:8080/'
 
