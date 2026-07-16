@@ -451,7 +451,7 @@ describe('TracerProxy', () => {
       it('should re-enable OpenFeature without replacing its provider when remote config re-enables tracing', () => {
         config.experimental.flaggingProvider.enabled = true
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
-        config.setRemoteConfig = remoteConfig => {
+        config.setRemoteConfigFromLibConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
         }
 
@@ -469,7 +469,7 @@ describe('TracerProxy', () => {
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
-        config.setRemoteConfig = remoteConfig => {
+        config.setRemoteConfigFromLibConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
         }
 
