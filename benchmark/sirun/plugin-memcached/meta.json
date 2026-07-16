@@ -1,0 +1,16 @@
+{
+  "name": "plugin-memcached",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "get": {
+      "env": { "VARIANT": "get", "OPERATIONS": "39500000" }
+    },
+    "hashring": {
+      "env": { "VARIANT": "hashring", "OPERATIONS": "38000000" }
+    }
+  }
+}

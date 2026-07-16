@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
 
 let warnInvalidValue
@@ -9,6 +10,7 @@ function setWarnInvalidValue (fn) {
   warnInvalidValue = fn
 }
 
+// `'b3 single header'` is the legacy spelling of `'b3'`; on v6 it is normalised below.
 const VALID_PROPAGATION_STYLES = new Set([
   'datadog', 'tracecontext', 'b3', 'b3 single header', 'b3multi', 'baggage', 'none',
 ])
@@ -98,6 +100,24 @@ const transformers = {
     }
     return configValue
   },
+  /**
+   * Parses DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ('on' | 'off' | 'gzip[-1..9]' | 'zstd[-1..22]')
+   * into the codec and level the profiler uploads with. The value's shape is already range-checked
+   * by the `allowed` pattern, so no validation is needed here.
+   *
+   * @param {string} value
+   * @returns {{ method: string, level: number | undefined }}
+   */
+  normalizeProfilingUploadCompression (value) {
+    let [method, level] = value.toLowerCase().split('-')
+    // Default "on" to zstd on Node.js 24+ and gzip earlier. zstd ships everywhere via a Rust
+    // compressor, but 24+ has a built-in that runs on libuv worker threads just as gzip does, so it
+    // is the least disruptive default.
+    if (method === 'on') {
+      method = NODE_MAJOR >= 24 ? 'zstd' : 'gzip'
+    }
+    return { method, level: level ? Number.parseInt(level, 10) : undefined }
+  },
   sampleRate (value, optionName, source) {
     const number = Number(value)
     if (Number.isNaN(number) || value === null) {
@@ -143,12 +163,24 @@ const transformers = {
     }
     return value.replaceAll(/\s*:\s*/g, ':')
   },
+  /**
+   * @param {string} value
+   */
+  toURL (value) {
+    try {
+      return new URL(value)
+    } catch {}
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
-    for (const propagator of value) {
+    for (let index = 0; index < value.length; index++) {
+      const propagator = value[index]
       if (!VALID_PROPAGATION_STYLES.has(propagator)) {
         warnInvalidValue(propagator, optionName, optionName, 'Invalid propagator')
         return
+      }
+      if (DD_MAJOR >= 6 && propagator === 'b3 single header') {
+        value[index] = 'b3'
       }
     }
     return value
@@ -265,8 +297,87 @@ const parsers = {
   },
 }
 
+const programmaticTypeCoercions = {
+  /**
+   * @param {unknown} value
+   */
+  BOOLEAN (value) {
+    if (typeof value === 'boolean') {
+      return value
+    }
+    if (typeof value === 'string') {
+      return parsers.BOOLEAN(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  INT (value) {
+    if (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') {
+      return parsers.INT(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  DECIMAL (value) {
+    if (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') {
+      return parsers.DECIMAL(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  STRING (value) {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)) {
+      return String(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  FUNCTION (value) {
+    if (typeof value === 'function') {
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  ARRAY (value) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
+          return
+        }
+      }
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  MAP (value) {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  JSON (value) {
+    if (typeof value === 'object' && value !== null) {
+      return value
+    }
+  },
+}
+
 module.exports = {
   parsers,
+  programmaticTypeCoercions,
   transformers,
   telemetryTransformers,
   setWarnInvalidValue,

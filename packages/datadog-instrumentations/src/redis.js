@@ -147,7 +147,6 @@ function getStartCtx (client, command, args, argsStartIndex) {
   }
 
   return {
-    db: client.selected_db,
     command,
     args,
     argsStartIndex,

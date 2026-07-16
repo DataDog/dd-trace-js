@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -20,7 +21,7 @@ describe('integrations', () => {
   let deepseekOpenai
 
   describe('openai', () => {
-    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai' })
 
     withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
@@ -580,6 +581,7 @@ describe('integrations', () => {
         const customClient = new OpenAI({
           apiKey: 'test',
           baseURL: 'http://localhost:8000',
+          maxRetries: 0, // the endpoint is dead on purpose; skip the multi-second retry backoff
         })
 
         try {
@@ -763,7 +765,7 @@ describe('integrations', () => {
         })
 
         for await (const part of stream) {
-          assert.ok(Object.hasOwn(part, 'type'))
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()

@@ -6,7 +6,8 @@ const { channel, addHook } = require('./helpers/instrument')
 const cookieParserReadCh = channel('datadog:cookie-parser:read:finish')
 
 function publishRequestCookieAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function cookieParserWrapper (...args) {
+  // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
+  return shimmer.wrapCallback(next, original => function next (_error) {
     if (cookieParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
 
@@ -17,7 +18,7 @@ function publishRequestCookieAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, args)
+    return original.apply(this, arguments)
   })
 }
 

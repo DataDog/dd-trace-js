@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
@@ -51,18 +52,27 @@ describe('RASP', () => {
 
   async function assertExploitDetected () {
     await agent.assertMessageReceived(({ headers, payload }) => {
-      assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+      )
       assert.match(payload[0][0].meta['_dd.appsec.json'], /"test-rule-id-2"/)
     })
   }
 
   async function assertBodyReported (expectedBody, truncated) {
     await agent.assertMessageReceived(({ headers, payload }) => {
-      assert.ok(Object.hasOwn(payload[0][0].meta_struct, 'http.request.body'))
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta_struct, 'http.request.body'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta_struct))}`
+      )
       assert.deepStrictEqual(msgpack.decode(payload[0][0].meta_struct['http.request.body']), expectedBody)
 
       if (truncated) {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.rasp.request_body_size.exceeded'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
       }
     })
   }

@@ -9,31 +9,35 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 class RouterPlugin extends WebPlugin {
   static id = 'router'
 
-  #storeStacks = new WeakMap()
   #contexts = new WeakMap()
 
   constructor (...args) {
     super(...args)
 
     this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
-      const childOf = this.#getActive(req) || this.#getStoreSpan()
-
+      // One ALS hop covers both the parent-span fallback (when no
+      // per-request context exists yet) and the `storeStack` push below.
+      // The previous shape paid an ALS read inside `#getStoreSpan` and a
+      // second one here for the saved-store push.
+      const store = storage('legacy').getStore()
+      let context = this.#contexts.get(req)
+      let childOf
+      if (context !== undefined) {
+        const middleware = context.middleware
+        childOf = middleware.length === 0 ? context.span : middleware[middleware.length - 1]
+      } else if (store) {
+        childOf = store.span
+      }
       if (!childOf) return
 
       const span = this.#getMiddlewareSpan(name, childOf)
-      const context = this.#createContext(req, route, childOf)
+      context = this.#updateContext(req, context, route, childOf)
 
       if (childOf !== span) {
         context.middleware.push(span)
       }
 
-      const store = storage('legacy').getStore()
-      let storeStack = this.#storeStacks.get(req)
-      if (!storeStack) {
-        storeStack = []
-        this.#storeStacks.set(req, storeStack)
-      }
-      storeStack.push(store)
+      context.storeStack.push(store)
       this.enter(span, store)
 
       web.patch(req)
@@ -57,11 +61,8 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
-      const storeStack = this.#storeStacks.get(req)
-      const savedStore = storeStack && storeStack.pop()
-      if (storeStack && storeStack.length === 0) {
-        this.#storeStacks.delete(req)
-      }
+      const context = this.#contexts.get(req)
+      const savedStore = context && context.storeStack.pop()
       const span = savedStore && savedStore.span
       this.enter(span, savedStore)
     })
@@ -71,8 +72,10 @@ class RouterPlugin extends WebPlugin {
 
       if (!this.config.middleware) return
 
-      const span = this.#getActive(req)
-
+      const context = this.#contexts.get(req)
+      if (!context) return
+      const middleware = context.middleware
+      const span = middleware.length === 0 ? context.span : middleware[middleware.length - 1]
       if (!span) return
 
       span.setTag('error', error)
@@ -89,21 +92,6 @@ class RouterPlugin extends WebPlugin {
         span.finish()
       }
     })
-  }
-
-  #getActive (req) {
-    const context = this.#contexts.get(req)
-
-    if (!context) return
-    if (context.middleware.length === 0) return context.span
-
-    return context.middleware.at(-1)
-  }
-
-  #getStoreSpan () {
-    const store = storage('legacy').getStore()
-
-    return store && store.span
   }
 
   #getMiddlewareSpan (name, childOf) {
@@ -125,9 +113,7 @@ class RouterPlugin extends WebPlugin {
     return span
   }
 
-  #createContext (req, route, span) {
-    let context = this.#contexts.get(req)
-
+  #updateContext (req, context, route, span) {
     if (!route || route === '/' || route === '*') {
       route = ''
     }
@@ -141,17 +127,20 @@ class RouterPlugin extends WebPlugin {
       if (isMoreSpecificThan(route, context.route)) {
         context.route = route
       }
-    } else {
-      context = {
-        span,
-        stack: [route],
-        route,
-        middleware: [],
-      }
-
-      this.#contexts.set(req, context)
+      return context
     }
 
+    // Five-property shape pinned at allocation so every request shares the
+    // same hidden class — no per-field transitions after construction.
+    context = {
+      span,
+      stack: [route],
+      route,
+      middleware: [],
+      storeStack: [],
+    }
+
+    this.#contexts.set(req, context)
     return context
   }
 }

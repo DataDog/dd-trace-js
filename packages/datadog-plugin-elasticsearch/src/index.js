@@ -5,23 +5,43 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class ElasticsearchPlugin extends DatabasePlugin {
   static id = 'elasticsearch'
 
+  #urlTag
+  #methodTag
+  #bodyTag
+  #paramsTag
+
+  constructor (...args) {
+    super(...args)
+
+    // Per-instance because `system` differs on the OpenSearchPlugin subclass.
+    const { system } = this
+    this.#urlTag = `${system}.url`
+    this.#methodTag = `${system}.method`
+    this.#bodyTag = `${system}.body`
+    this.#paramsTag = `${system}.params`
+  }
+
   bindStart (ctx) {
     const { params } = ctx
 
-    const body = getBody(params.body || params.bulkBody)
+    const meta = {
+      'db.type': this.system,
+      [this.#urlTag]: params.path,
+      [this.#methodTag]: params.method,
+      [this.#bodyTag]: getBody(params.body || params.bulkBody),
+    }
+
+    const queryString = params.querystring || params.query
+    if (queryString) {
+      meta[this.#paramsTag] = JSON.stringify(queryString)
+    }
 
     this.startSpan(this.operationName(), {
       service: this.serviceName({ pluginConfig: this.config }),
       resource: `${params.method} ${quantizePath(params.path)}`,
       type: 'elasticsearch',
       kind: 'client',
-      meta: {
-        'db.type': this.system,
-        [`${this.system}.url`]: params.path,
-        [`${this.system}.method`]: params.method,
-        [`${this.system}.body`]: body,
-        [`${this.system}.params`]: JSON.stringify(params.querystring || params.query),
-      },
+      meta,
     }, ctx)
 
     return ctx.currentStore

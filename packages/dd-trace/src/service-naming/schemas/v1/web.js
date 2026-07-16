@@ -1,6 +1,6 @@
 'use strict'
 
-const { identityService, httpPluginClientService, optionServiceSource } = require('../util')
+const { identityService, httpPluginClientService, optionServiceSource, awsServiceV1 } = require('../util')
 
 const web = {
   client: {
@@ -38,14 +38,20 @@ const web = {
     },
     aws: {
       opName: ({ awsService }) => `aws.${awsService}.request`,
-      serviceName: identityService,
+      serviceName: awsServiceV1,
+      serviceSource: optionServiceSource,
     },
     lambda: {
       opName: () => 'aws.lambda.invoke',
-      serviceName: identityService,
+      serviceName: awsServiceV1,
+      serviceSource: optionServiceSource,
     },
     undici: {
       opName: () => 'undici.request',
+      serviceName: httpPluginClientService,
+    },
+    'electron:net:request': {
+      opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
     },
   },

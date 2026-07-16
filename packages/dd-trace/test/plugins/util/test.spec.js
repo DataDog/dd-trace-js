@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -12,11 +13,18 @@ const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 require('../../setup/core')
 
 const {
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestParametersString,
+  getTestLevelsMetadataTags,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
   getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getLineCoverageBitmap,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
@@ -34,13 +42,134 @@ const {
   formatAttemptToFixSummary,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
 
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
+const {
+  CI_JOB_NAME,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+} = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('getTestOptimizationRequestResults', () => {
+  it('starts known tests, test management, and skippable requests together when enabled', async () => {
+    const startedRequests = []
+    let resolveKnownTests
+    let resolveTestManagementTests
+    let resolveSkippableSuites
+
+    const getKnownTests = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('known-tests')
+      resolveKnownTests = resolve
+    }))
+    const getTestManagementTests = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('test-management-tests')
+      resolveTestManagementTests = resolve
+    }))
+    const getSkippableSuites = sinon.stub().callsFake(() => new Promise(resolve => {
+      startedRequests.push('skippable-suites')
+      resolveSkippableSuites = resolve
+    }))
+
+    const requestResultsPromise = getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    assert.deepStrictEqual(startedRequests, ['known-tests', 'test-management-tests', 'skippable-suites'])
+    sinon.assert.calledOnce(getKnownTests)
+    sinon.assert.calledOnce(getTestManagementTests)
+    sinon.assert.calledOnce(getSkippableSuites)
+
+    resolveSkippableSuites({ skippableSuites: [] })
+    resolveTestManagementTests({ testManagementTests: { jest: {} } })
+    resolveKnownTests({ knownTests: { jest: {} } })
+
+    assert.deepStrictEqual(await requestResultsPromise, {
+      knownTestsResponse: { knownTests: { jest: {} } },
+      testManagementTestsResponse: { testManagementTests: { jest: {} } },
+      skippableSuitesResponse: { skippableSuites: [] },
+    })
+  })
+
+  it('starts each supported request only when its feature is enabled', async () => {
+    const getKnownTests = sinon.stub().resolves({ knownTests: { jest: {} } })
+    const getTestManagementTests = sinon.stub().resolves({ testManagementTests: { jest: {} } })
+    const getSkippableSuites = sinon.stub().resolves({ skippableSuites: [] })
+
+    const requestResults = await getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: false,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    assert.deepStrictEqual(requestResults, {
+      knownTestsResponse: { knownTests: { jest: {} } },
+      skippableSuitesResponse: { skippableSuites: [] },
+    })
+
+    sinon.assert.calledOnce(getKnownTests)
+    sinon.assert.notCalled(getTestManagementTests)
+    sinon.assert.calledOnce(getSkippableSuites)
+  })
+
+  it('does not start skippable requests for frameworks without a skippable request factory', async () => {
+    const getKnownTests = sinon.stub()
+    const getTestManagementTests = sinon.stub()
+
+    assert.deepStrictEqual(
+      await getTestOptimizationRequestResults({
+        isKnownTestsEnabled: false,
+        isTestManagementTestsEnabled: false,
+        isSuitesSkippingEnabled: true,
+        getKnownTests,
+        getTestManagementTests,
+      }),
+      {}
+    )
+
+    sinon.assert.notCalled(getKnownTests)
+    sinon.assert.notCalled(getTestManagementTests)
+  })
+
+  it('uses successful responses when another request rejects before the caller awaits results', async () => {
+    const rejection = new Error('test optimization request failed')
+    const getKnownTests = sinon.stub().returns(new Promise(resolve => {
+      setImmediate(() => resolve({ knownTests: { jest: {} } }))
+    }))
+    const getTestManagementTests = sinon.stub().rejects(rejection)
+    const getSkippableSuites = sinon.stub().throws(rejection)
+
+    const requestResultsPromise = getTestOptimizationRequestResults({
+      isKnownTestsEnabled: true,
+      isTestManagementTestsEnabled: true,
+      isSuitesSkippingEnabled: true,
+      getKnownTests,
+      getTestManagementTests,
+      getSkippableSuites,
+    })
+
+    await new Promise(resolve => setImmediate(resolve))
+
+    const requestResults = await requestResultsPromise
+    assert.deepStrictEqual(requestResults.knownTestsResponse, { knownTests: { jest: {} } })
+    assert.strictEqual(requestResults.testManagementTestsResponse.err, rejection)
+    assert.strictEqual(requestResults.skippableSuitesResponse.err, rejection)
+  })
+})
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
@@ -71,6 +200,29 @@ describe('getTestParametersString', () => {
     assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
+  })
+})
+
+describe('getTestLevelsMetadataTags', () => {
+  it('keeps only allowlisted CI and Git tags', () => {
+    const testLevelsMetadataTags = getTestLevelsMetadataTags({
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+      'ci.custom': 'custom-ci-value',
+      'git.custom': 'custom-git-value',
+      'test.command': 'npm test',
+    })
+
+    assert.deepStrictEqual(testLevelsMetadataTags, {
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+    })
   })
 })
 
@@ -182,9 +334,9 @@ describe('attempt to fix summary', () => {
 
     assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
     assert.match(summary, /suite\.js › fails/)
-    assert.ok(!summary.includes('Errors are suppressed because'))
-    assert.ok(!summary.includes('Error:'))
-    assert.ok(!summary.includes('execution 1:'))
+    assert.ok(!summary.includes('Errors are suppressed because'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('Error:'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('execution 1:'), `Got: ${inspect(summary)}`)
   })
 
   it('reports when quarantine and disabled were ignored for attempt to fix', () => {
@@ -286,9 +438,9 @@ describe('attempt to fix summary', () => {
 
     const summary = formatAttemptToFixSummary(executions)
     assert.match(summary, /worker-suite\.js › worker test/)
-    assert.ok(!summary.includes('worker failure'))
-    assert.ok(!summary.includes('worker-suite.js:10:5'))
-    assert.ok(!summary.includes('Errors are suppressed because'))
+    assert.ok(!summary.includes('worker failure'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('worker-suite.js:10:5'), `Got: ${inspect(summary)}`)
+    assert.ok(!summary.includes('Errors are suppressed because'), `Got: ${inspect(summary)}`)
     assert.match(summary, /Test was marked as quarantined but was not quarantined because it is attempt to fix\./)
   })
 
@@ -783,6 +935,144 @@ describe('coverage utils', () => {
     })
   })
 
+  describe('getCoveredFilesFromCoverage', () => {
+    const getPartialCoverage = (filename = 'file.js') => ({
+      [filename]: {
+        path: filename,
+        statementMap: {
+          0: { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } },
+          1: { start: { line: 2, column: 0 }, end: { line: 2, column: 1 } },
+          2: { start: { line: 3, column: 0 }, end: { line: 3, column: 1 } },
+          3: { start: { line: 4, column: 0 }, end: { line: 4, column: 1 } },
+        },
+        s: {
+          0: 1,
+          1: 0,
+          2: 0,
+          3: 0,
+        },
+        fnMap: {},
+        f: {},
+        branchMap: {},
+        b: {},
+      },
+    })
+
+    it('returns a bitmap for covered lines', () => {
+      const lineCoverage = {
+        30: 1,
+        32: 1,
+        45: 1,
+        46: 1,
+      }
+      const bitmap = getLineCoverageBitmap(lineCoverage, true)
+
+      assert.strictEqual(bitmap.toString('base64'), 'AAAAQAFg')
+    })
+
+    it('returns covered and executable files with bitmaps', () => {
+      const coveredFiles = getCoveredFilesFromCoverage(coverage)
+      const executableFiles = getExecutableFilesFromCoverage(coverage)
+
+      assert.deepStrictEqual(coveredFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
+      assert.deepStrictEqual(executableFiles.map(({ filename }) => filename), ['subtract.js', 'add.js'])
+      assert.ok(coveredFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)), inspect(coveredFiles))
+      assert.ok(executableFiles.every(({ bitmap }) => Buffer.isBuffer(bitmap)), inspect(executableFiles))
+    })
+
+    it('returns exact covered and executable line bitmaps', () => {
+      const partialCoverage = getPartialCoverage()
+      const [coveredFile] = getCoveredFilesFromCoverage(partialCoverage)
+      const [executableFile] = getExecutableFilesFromCoverage(partialCoverage)
+
+      assert.deepStrictEqual(coveredFile, {
+        filename: 'file.js',
+        bitmap: Buffer.from('Ag==', 'base64'),
+      })
+      assert.deepStrictEqual(executableFile, {
+        filename: 'file.js',
+        bitmap: Buffer.from('Hg==', 'base64'),
+      })
+    })
+
+    it('calculates total coverage using skipped-suite coverage bitmaps', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
+    })
+
+    it('uses rootDir to match skipped coverage to absolute coverage paths', () => {
+      const rootDir = path.join(path.sep, 'repo')
+      const coverage = getPartialCoverage(path.join(rootDir, 'file.js'))
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(coverage, skippedCoverage, rootDir), 75)
+    })
+
+    it('ignores skipped coverage for files outside the executable coverage map', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'other-file.js': getLineCoverageBitmap({
+          1: 1,
+          2: 1,
+          3: 1,
+          4: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 25)
+    })
+
+    it('applies skipped-suite coverage to an Istanbul coverage map', () => {
+      const partialCoverage = getPartialCoverage()
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
+    })
+
+    it('reports skipped-suite coverage as applied when covered lines overlap', () => {
+      const partialCoverage = getPartialCoverage()
+      partialCoverage['file.js'].s[1] = 1
+      partialCoverage['file.js'].s[2] = 1
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, skippedCoverage), true)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 75)
+    })
+
+    it('does not alter coverage when skipped coverage is missing', () => {
+      const partialCoverage = getPartialCoverage()
+      const coverageMap = istanbul.createCoverageMap(partialCoverage)
+
+      assert.strictEqual(applySkippedCoverageToCoverage(coverageMap, {}), false)
+      assert.strictEqual(getTestCoverageLinesPercentage(coverageMap), 25)
+    })
+  })
+
   describe('resetCoverage', () => {
     it('resets the code coverage', () => {
       resetCoverage(coverage)
@@ -963,6 +1253,15 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
 describe('getEfdRetryCount', () => {
   const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
 
+  it('exports the retry thresholds used to select slow test retry buckets', () => {
+    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS, [
+      { limitMs: 5_000, key: '5s' },
+      { limitMs: 10_000, key: '10s' },
+      { limitMs: 30_000, key: '30s' },
+      { limitMs: 300_000, key: '5m' },
+    ])
+  })
+
   it('returns retries for the matching duration bucket', () => {
     assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
     assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
@@ -985,13 +1284,14 @@ describe('getMaxEfdRetryCount', () => {
     assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
   })
 
-  it('preserves an explicit all-zero configuration', () => {
+  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
     assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
   })
 
-  it('returns 0 when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), 0)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), 0)
+  it('returns undefined when no slow test retry buckets are configured', () => {
+    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
+    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
   })
 })
 

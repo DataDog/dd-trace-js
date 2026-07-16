@@ -6,7 +6,16 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+/**
+ * @param {string} symbol
+ * @param {(original: Function) => Function} wrapper
+ * @param {Function} pino
+ */
 function wrapPino (symbol, wrapper, pino) {
+  /**
+   * @param {unknown[]} args
+   * @returns {unknown}
+   */
   return function pinoWithTrace (...args) {
     const instance = pino.apply(this, args)
 
@@ -22,15 +31,18 @@ function wrapPino (symbol, wrapper, pino) {
 }
 
 function wrapAsJson (asJson) {
-  const ch = channel('apm:pino:log')
+  const jsonCh = channel('apm:pino:log:json')
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
 
-    const payload = { message: obj }
-    ch.publish(payload)
-    arguments[0] = payload.message
+    // Caller-provided `dd` wins -- skip the splice so a bespoke `dd` survives.
+    if (!jsonCh.hasSubscribers || Object.hasOwn(obj, 'dd')) {
+      return asJson.apply(this, arguments)
+    }
 
-    return asJson.apply(this, arguments)
+    const payload = { line: asJson.apply(this, arguments) }
+    jsonCh.publish(payload)
+    return payload.line
   }
 }
 

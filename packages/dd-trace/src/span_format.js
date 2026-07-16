@@ -30,14 +30,6 @@ const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 const { IGNORE_OTEL_ERROR } = constants
 
-// TODO(BridgeAR)[31.03.2025]: Should these land in the constants file?
-const map = {
-  'operation.name': 'name',
-  'service.name': 'service',
-  'span.type': 'type',
-  'resource.name': 'resource',
-}
-
 /**
  * @typedef {object} FormattedSpan
  * @property {import('./id').Identifier} trace_id
@@ -45,6 +37,8 @@ const map = {
  * @property {import('./id').Identifier} parent_id
  * @property {string} name
  * @property {string} resource
+ * @property {string | undefined} service
+ * @property {string | undefined} type
  * @property {number} error
  * @property {Record<string, string>} meta
  * @property {Record<string, number>} metrics
@@ -52,7 +46,13 @@ const map = {
  * @property {number} start
  * @property {number} duration
  * @property {Array} links
- * @property {Array<{ name: string, time_unix_nano: number, attributes?: Record<string, string> }>} [span_events]
+ * @property {Array<SpanEvent> | undefined} span_events
+ *
+ * @typedef {object} SpanEvent Raw span event as stored on the span; the encoder
+ *   layer derives `time_unix_nano` from `startTime` via `eventTimeNano`.
+ * @property {string} name
+ * @property {number} startTime Milliseconds with sub-millisecond precision.
+ * @property {Record<string, string>} [attributes]
  */
 
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
@@ -61,7 +61,9 @@ function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = fals
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
-  extractChunkTags(formatted, span, isFirstSpanInChunk, tagForFirstSpanInChunk)
+  if (isFirstSpanInChunk) {
+    extractChunkTags(formatted, span, tagForFirstSpanInChunk)
+  }
   extractTags(formatted, span)
 
   return formatted
@@ -69,28 +71,40 @@ function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = fals
 
 function formatSpan (span) {
   const spanContext = span.context()
-
+  // Pre-initialise the `service`, `type`, and `span_events` slots so every
+  // formatted span shares one V8 hidden class regardless of which optional
+  // tags fire later. Downstream encoders gate on truthy values for each,
+  // so `undefined` stays byte-identical on the msgpack wire.
   return {
     trace_id: spanContext._traceId,
     span_id: spanContext._spanId,
     parent_id: spanContext._parentId || id('0'),
     name: String(spanContext._name),
     resource: String(spanContext._name),
+    service: undefined,
+    type: undefined,
     error: 0,
     meta: {},
     meta_struct: span.meta_struct,
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
-    links: [],
+    span_events: undefined,
   }
 }
 
-function setSingleSpanIngestionTags (span, options) {
+function setSingleSpanIngestionTags (formattedSpan, options) {
   if (!options) return
-  addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
-  addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
-  addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
+  const metrics = formattedSpan.metrics
+  metrics[SPAN_SAMPLING_MECHANISM] = SAMPLING_MECHANISM_SPAN
+  const sampleRate = options.sampleRate
+  if (typeof sampleRate === 'number') {
+    metrics[SPAN_SAMPLING_RULE_RATE] = sampleRate
+  }
+  const maxPerSecond = options.maxPerSecond
+  if (typeof maxPerSecond === 'number') {
+    metrics[SPAN_SAMPLING_MAX_PER_SECOND] = maxPerSecond
+  }
 }
 
 /**
@@ -98,24 +112,32 @@ function setSingleSpanIngestionTags (span, options) {
  * @param {import('./opentracing/span')} span
  */
 function extractSpanLinks (formattedSpan, span) {
-  if (!span._links?.length) {
+  const links = span._links
+  if (!links?.length) {
     return
   }
-  const links = span._links.map(({ context, attributes }) => {
-    const formattedLink = {
-      trace_id: context.toTraceId(true),
-      span_id: context.toSpanId(true),
+  // Build the `_dd.span_links` JSON directly. The trace / span ids are decimal
+  // strings (no escaping); attributes are pre-sanitized to a string map and
+  // `undefined` when empty, so they only need a presence check. Avoids the
+  // throwaway array of formatted-link objects the previous `map` allocated and
+  // the second walk `JSON.stringify` does over them.
+  let serialized = '['
+  for (let i = 0; i < links.length; i++) {
+    if (i > 0) serialized += ','
+    const { context, attributes } = links[i]
+    serialized += `{"trace_id":"${context.toTraceId(true)}","span_id":"${context.toSpanId(true)}"`
+    if (attributes !== undefined) {
+      serialized += `,"attributes":${JSON.stringify(attributes)}`
     }
-
-    if (attributes && Object.keys(attributes).length > 0) {
-      formattedLink.attributes = attributes
+    if (context?._sampling?.priority >= 0) {
+      serialized += `,"flags":${context._sampling.priority > 0 ? 1 : 0}`
     }
-    if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
-    if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-
-    return formattedLink
-  })
-  let serialized = JSON.stringify(links)
+    if (context?._tracestate) {
+      serialized += `,"tracestate":${JSON.stringify(context._tracestate.toString())}`
+    }
+    serialized += '}'
+  }
+  serialized += ']'
   if (serialized.length > MAX_META_VALUE_LENGTH) {
     serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
   }
@@ -123,6 +145,12 @@ function extractSpanLinks (formattedSpan, span) {
 }
 
 /**
+ * Hand the raw `_events` array to the encoder layer instead of copying it into
+ * reshaped `{ name, time_unix_nano, attributes }` objects. Each encoder derives
+ * `time_unix_nano` from `event.startTime` via `eventTimeNano` and drops empty
+ * attribute objects itself, so the per-event allocation here is pure waste on
+ * every event-bearing span.
+ *
  * @param {FormattedSpan} formattedSpan
  * @param {import('./opentracing/span')} span
  */
@@ -130,13 +158,7 @@ function extractSpanEvents (formattedSpan, span) {
   if (!span._events?.length) {
     return
   }
-  formattedSpan.span_events = span._events.map(event => {
-    return {
-      name: event.name,
-      time_unix_nano: Math.round(event.startTime * 1e6),
-      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
-    }
-  })
+  formattedSpan.span_events = span._events
 }
 
 function extractTags (formattedSpan, span) {
@@ -144,42 +166,69 @@ function extractTags (formattedSpan, span) {
   const origin = context._trace.origin
   // TODO(BridgeAR)[31.03.2025]: Look into changing the way we store tags. Using
   // a map is likely faster short term.
-  const tags = context._tags
+  const tags = context.getTags()
   const hostname = context._hostname
   const priority = context._sampling.priority
+  const meta = formattedSpan.meta
+  const metrics = formattedSpan.metrics
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
-    addTag({}, formattedSpan.metrics, MEASURED, 1)
+    metrics[MEASURED] = 1
   }
 
-  const tracerService = span.tracer()._service.toLowerCase()
+  const tracer = span.tracer()
+  const tracerService = tracer.serviceLower
   if (tags['service.name']?.toLowerCase() !== tracerService) {
     span.setTag(BASE_SERVICE, tracerService)
 
     registerExtraService(tags['service.name'])
   }
 
-  for (const [tag, value] of Object.entries(tags)) {
-    // TODO(BridgeAR)[31.03.2025]: Check how many tags are defined in average.
-    // In case there are more than 2 tags in average, check for all special
-    // cases up front and loop over the tags afterwards, skipping the already
-    // visited property names by checking a map with these keys.
+  for (const tag of Object.keys(tags)) {
+    const value = tags[tag]
+    // The typed-helper bodies are inlined per case: V8 was not inlining
+    // `addStringTag` / `addNumberTag` / `addMixedTag` here at the call rate
+    // this loop runs in HTTP-server traces (10+ tags × 1M spans/sec), so each
+    // one paid an extra call frame the helper body was small enough to
+    // expand inline.
     switch (tag) {
       case 'service.name':
+        if (typeof value === 'string') {
+          formattedSpan.service = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        }
+        break
       case 'span.type':
+        if (typeof value === 'string') {
+          formattedSpan.type = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        }
+        break
       case 'resource.name':
-        addTag(formattedSpan, {}, map[tag], value)
+        if (typeof value === 'string') {
+          formattedSpan.resource = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        }
         break
       // HACK: remove when Datadog supports numeric status code
-      case 'http.status_code':
-        addTag(formattedSpan.meta, {}, tag, value && String(value))
+      case 'http.status_code': {
+        const stringValue = value && String(value)
+        if (typeof stringValue === 'string') {
+          meta[tag] = stringValue.length > MAX_META_VALUE_LENGTH
+            ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : stringValue
+        }
         break
+      }
       case 'analytics.event':
-        addTag({}, formattedSpan.metrics, ANALYTICS, value === undefined || value ? 1 : 0)
+        metrics[ANALYTICS] = value === undefined || value ? 1 : 0
         break
       case HOSTNAME_KEY:
       case MEASURED:
-        addTag({}, formattedSpan.metrics, tag, value === undefined || value ? 1 : 0)
+        metrics[tag] = value === undefined || value ? 1 : 0
         break
       // TODO(BridgeAR)[31.03.2025]: How come we use two different ways to pass
       // through errors? Can we just unify the behavior to always use one way?
@@ -190,52 +239,115 @@ function extractTags (formattedSpan, span) {
         break
       case ERROR_TYPE:
       case ERROR_MESSAGE:
-      case ERROR_STACK:
+      case ERROR_STACK: {
         // HACK: remove when implemented in the backend
-        if (context._name === 'fs.operation') {
-          break
-        }
+        if (context._name === 'fs.operation') break
         // otel.recordException should not influence trace.error
         if (!tags[IGNORE_OTEL_ERROR]) {
           formattedSpan.error = 1
         }
-      default: // eslint-disable-line no-fallthrough
-        addTag(formattedSpan.meta, formattedSpan.metrics, tag, value)
+        if (value != null) writeErrorMeta(meta, tag, value)
+        break
+      }
+      default: {
+        const valueType = typeof value
+        if (valueType === 'string') {
+          let writeKey = tag
+          if (writeKey.length > MAX_META_KEY_LENGTH) {
+            writeKey = `${writeKey.slice(0, MAX_META_KEY_LENGTH)}...`
+          }
+          meta[writeKey] = value.length > MAX_META_VALUE_LENGTH
+            ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+            : value
+        } else if (valueType === 'number') {
+          if (!Number.isNaN(value)) {
+            let writeKey = tag
+            if (writeKey.length > MAX_METRIC_KEY_LENGTH) {
+              writeKey = `${writeKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+            }
+            metrics[writeKey] = value
+          }
+        } else if (valueType === 'boolean') {
+          let writeKey = tag
+          if (writeKey.length > MAX_METRIC_KEY_LENGTH) {
+            writeKey = `${writeKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+          }
+          metrics[writeKey] = value ? 1 : 0
+        } else {
+          addMixedTag(meta, metrics, tag, value)
+        }
+      }
     }
   }
   setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
-  addTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
-  addTag(formattedSpan.meta, formattedSpan.metrics, PROCESS_ID, process.pid)
-  addTag(formattedSpan.meta, formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
-  addTag(formattedSpan.meta, formattedSpan.metrics, ORIGIN_KEY, origin)
-  addTag(formattedSpan.meta, formattedSpan.metrics, HOSTNAME_KEY, hostname)
+  meta.language = 'javascript'
+  metrics[PROCESS_ID] = process.pid
+  if (typeof priority === 'number') {
+    metrics[SAMPLING_PRIORITY_KEY] = priority
+  }
+  if (typeof origin === 'string') {
+    meta[ORIGIN_KEY] = origin.length > MAX_META_VALUE_LENGTH
+      ? `${origin.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : origin
+  }
+  if (typeof hostname === 'string') {
+    meta[HOSTNAME_KEY] = hostname.length > MAX_META_VALUE_LENGTH
+      ? `${hostname.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : hostname
+  }
 }
 
 function extractRootTags (formattedSpan, span) {
   const context = span.context()
-  const isLocalRoot = span === context._trace.started[0]
   const parentId = context._parentId
 
-  if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
+  if (span !== context._trace.started[0] || (parentId && parentId.toString(10) !== '0')) return
 
-  addTag({}, formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
-  addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
+  const trace = context._trace
+  const metrics = formattedSpan.metrics
+  const ruleDecision = trace[SAMPLING_RULE_DECISION]
+  if (typeof ruleDecision === 'number') {
+    metrics[SAMPLING_RULE_DECISION] = ruleDecision
+  }
+  const limitDecision = trace[SAMPLING_LIMIT_DECISION]
+  if (typeof limitDecision === 'number') {
+    metrics[SAMPLING_LIMIT_DECISION] = limitDecision
+  }
+  const agentDecision = trace[SAMPLING_AGENT_DECISION]
+  if (typeof agentDecision === 'number') {
+    metrics[SAMPLING_AGENT_DECISION] = agentDecision
+  }
+  metrics[TOP_LEVEL_KEY] = 1
 }
 
-function extractChunkTags (formattedSpan, span, isFirstSpanInChunk, tagForFirstSpanInChunk) {
-  const context = span.context()
-
-  if (!isFirstSpanInChunk) return
-
-  if (tagForFirstSpanInChunk) {
-    addTag(formattedSpan.meta, formattedSpan.metrics, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
+function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {
+  const meta = formattedSpan.meta
+  if (typeof tagForFirstSpanInChunk === 'string') {
+    meta[TRACING_FIELD_NAME] = tagForFirstSpanInChunk.length > MAX_META_VALUE_LENGTH
+      ? `${tagForFirstSpanInChunk.slice(0, MAX_META_VALUE_LENGTH)}...`
+      : tagForFirstSpanInChunk
   }
 
-  for (const [key, value] of Object.entries(context._trace.tags)) {
-    addTag(formattedSpan.meta, formattedSpan.metrics, key, value)
+  // Chunk tags are always strings in production (`_dd.p.dm`, `_dd.p.tid`,
+  // `_dd.p.ts`, `baggage.*`). Inline only the string branch; non-string
+  // values fall through to `addMixedTag` so we don't carry duplicate
+  // truncation logic for branches no real chunk tag ever takes.
+  const metrics = formattedSpan.metrics
+  const traceTags = span.context()._trace.tags
+  for (const key of Object.keys(traceTags)) {
+    const value = traceTags[key]
+    if (typeof value === 'string') {
+      let writeKey = key
+      if (writeKey.length > MAX_META_KEY_LENGTH) {
+        writeKey = `${writeKey.slice(0, MAX_META_KEY_LENGTH)}...`
+      }
+      meta[writeKey] = value.length > MAX_META_VALUE_LENGTH
+        ? `${value.slice(0, MAX_META_VALUE_LENGTH)}...`
+        : value
+    } else {
+      addMixedTag(meta, metrics, key, value)
+    }
   }
 }
 
@@ -248,13 +360,42 @@ function extractError (formattedSpan, error) {
     // AggregateError only has a code and no message.
     // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
     // the code just generally be added, if available?
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
+    const meta = formattedSpan.meta
+    const message = error.message || error.code
+    if (message != null) writeErrorMeta(meta, ERROR_MESSAGE, message)
+    if (error.name != null) writeErrorMeta(meta, ERROR_TYPE, error.name)
+    if (error.stack != null) writeErrorMeta(meta, ERROR_STACK, error.stack)
   }
 }
 
-function addTag (meta, metrics, key, value, nested) {
+/**
+ * Coerces `value` to string and truncates at `MAX_META_VALUE_LENGTH` before
+ * writing it to one of the three error meta fields.
+ *
+ * @param {Record<string, string>} meta
+ * @param {string} key
+ * @param {unknown} value
+ */
+function writeErrorMeta (meta, key, value) {
+  const stringValue = typeof value === 'string' ? value : String(value)
+  meta[key] = stringValue.length > MAX_META_VALUE_LENGTH
+    ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+    : stringValue
+}
+
+/**
+ * Mixed-type dispatch retained for `extractError` and the slow-path fallback
+ * inside the inlined per-tag loops in `extractTags` / `extractChunkTags`.
+ * The scalar branches are kept here so a single `addMixedTag` call covers
+ * recursion (nested object values) without re-entering the inlined paths.
+ *
+ * @param {Record<string, string>} meta
+ * @param {Record<string, number>} metrics
+ * @param {string} key
+ * @param {unknown} value
+ * @param {boolean} [nested]
+ */
+function addMixedTag (meta, metrics, key, value, nested) {
   switch (typeof value) {
     case 'string':
       if (key.length > MAX_META_KEY_LENGTH) {
@@ -290,7 +431,7 @@ function addTag (meta, metrics, key, value, nested) {
         metrics[key] = value.toString()
       } else if (!Array.isArray(value) && !nested) {
         for (const [prop, val] of Object.entries(value)) {
-          addTag(meta, metrics, `${key}.${prop}`, val, true)
+          addMixedTag(meta, metrics, `${key}.${prop}`, val, true)
         }
       }
   }

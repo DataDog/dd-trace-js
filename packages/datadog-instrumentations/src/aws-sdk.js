@@ -150,6 +150,7 @@ function wrapDeserialize (deserialize, headersCh, responseIndex = 0) {
 function wrapSmithySend (send) {
   return function (command, ...args) {
     const cb = args.at(-1)
+    const cbExists = typeof cb === 'function'
     const serviceIdentifier = this.config.serviceId.toLowerCase()
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const channels = getChannelBag(channelSuffix)
@@ -188,6 +189,7 @@ function wrapSmithySend (send) {
       operation,
       awsService: clientName,
       request,
+      cbExists,
     }
 
     return channels.start.runStores(ctx, () => {
@@ -197,8 +199,8 @@ function wrapSmithySend (send) {
         channels.region.publish(ctx)
       })
 
-      if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
+      if (cbExists) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
           handleCompletion(result, ctx, channels)
@@ -233,13 +235,14 @@ function wrapSmithySend (send) {
 }
 
 function handleCompletion (result, ctx, channels) {
-  const iterator = result?.body?.[Symbol.asyncIterator]
+  const streamable = result?.body ?? result?.stream
+  const iterator = streamable?.[Symbol.asyncIterator]
   if (!iterator) {
     channels.complete.publish(ctx)
     return
   }
 
-  shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
+  shimmer.wrap(streamable, Symbol.asyncIterator, function (asyncIterator) {
     return function (...args) {
       const iterator = asyncIterator.apply(this, args)
       shimmer.wrap(iterator, 'next', function (next) {
@@ -270,7 +273,7 @@ function handleCompletion (result, ctx, channels) {
 
 function wrapCb (cb, channels, ctx) {
   // eslint-disable-next-line n/handle-callback-err
-  return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
+  return shimmer.wrapCallback(cb, cb => function wrappedCb (err, response) {
     ctx = { request: ctx.request, response }
     return channels.responseStart.runStores(ctx, () => {
       try {
@@ -322,6 +325,19 @@ addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
 addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
   shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
   return smithy
+})
+
+// `@aws-sdk/client-*` >= 3.1046.0 dropped `@smithy/smithy-client` and now
+// extends from `@smithy/core/client` directly. The `Client.send` contract is
+// unchanged, but the host module moved -- patch the new home so the v3 hooks
+// keep firing.
+addHook({
+  name: '@smithy/core',
+  file: 'dist-cjs/submodules/client/index.js',
+  versions: ['>=3.24.0'],
+}, smithyCoreClient => {
+  shimmer.wrap(smithyCoreClient.Client.prototype, 'send', wrapSmithySend)
+  return smithyCoreClient
 })
 
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {

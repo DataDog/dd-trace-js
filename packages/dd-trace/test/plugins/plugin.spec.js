@@ -96,4 +96,32 @@ describe('Plugin', () => {
       })
     })
   })
+
+  it('should suppress subscribers when publishing inside a noop scope', () => {
+    const handler = sinon.spy()
+
+    class NoopAwarePlugin extends Plugin {
+      static id = 'noopAware'
+
+      constructor () {
+        super()
+        this.addSub('apm:noopAware:start', handler)
+      }
+    }
+
+    plugin = new NoopAwarePlugin()
+    plugin.configure({ enabled: true })
+
+    channel('apm:noopAware:start').publish({ outside: true })
+    sinon.assert.calledOnce(handler)
+    handler.resetHistory()
+
+    storage('legacy').run({ noop: true }, () => {
+      channel('apm:noopAware:start').publish({ inside: true })
+    })
+    sinon.assert.notCalled(handler)
+
+    channel('apm:noopAware:start').publish({ outside: 'again' })
+    sinon.assert.calledOnce(handler)
+  })
 })

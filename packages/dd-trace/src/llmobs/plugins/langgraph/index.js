@@ -14,7 +14,7 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const name = ctx.self.name || 'LangGraph'
 
-    const enabled = this._tracerConfig.llmobs.enabled
+    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
     const span = ctx.currentStore?.span
@@ -35,7 +35,7 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
 
 class NextStreamLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_langgraph_next_stream'
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream_next'
+  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream:next'
 
   start () {} // no-op: span was already registered by PregelStreamLLMObsPlugin
 

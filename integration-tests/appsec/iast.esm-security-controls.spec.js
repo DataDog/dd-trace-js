@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('ESM Security controls', () => {
@@ -51,7 +52,7 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
             assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
@@ -64,7 +65,10 @@ describe('ESM Security controls', () => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
             assert.ok(!('_dd.iast.json' in span.meta))
-            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
+            assert.ok(
+              Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'),
+              `Available keys: ${inspect(Object.keys(span.metrics))}`
+            )
           })
         }, null, 1, true)
       })
@@ -76,7 +80,10 @@ describe('ESM Security controls', () => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
             assert.ok(!('_dd.iast.json' in span.meta))
-            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
+            assert.ok(
+              Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'),
+              `Available keys: ${inspect(Object.keys(span.metrics))}`
+            )
           })
         }, null, 1, true)
       })
@@ -87,7 +94,7 @@ describe('ESM Security controls', () => {
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
-            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'), `Available keys: ${inspect(Object.keys(span.meta))}`)
             assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
@@ -100,7 +107,10 @@ describe('ESM Security controls', () => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
             assert.ok(!('_dd.iast.json' in span.meta))
-            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
+            assert.ok(
+              Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'),
+              `Available keys: ${inspect(Object.keys(span.metrics))}`
+            )
           })
         }, null, 1, true)
       })
@@ -112,7 +122,10 @@ describe('ESM Security controls', () => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
           spans.forEach(span => {
             assert.ok(!('_dd.iast.json' in span.meta))
-            assert.ok(Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'))
+            assert.ok(
+              Object.hasOwn(span.metrics, '_dd.iast.telemetry.suppressed.vulnerabilities.command_injection'),
+              `Available keys: ${inspect(Object.keys(span.metrics))}`
+            )
           })
         }, null, 1, true)
       })

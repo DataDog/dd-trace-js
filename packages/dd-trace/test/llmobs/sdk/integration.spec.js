@@ -5,7 +5,6 @@ const assert = require('node:assert')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const agent = require('../../plugins/agent')
 const { useLlmObs, assertLlmObsSpanEvent, assertLlmObsEvaluationMetric } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -16,10 +15,13 @@ describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
 
-  const { getEvents, getEvaluationMetrics } = useLlmObs()
+  const { getEvents, assertNoLlmObsSpans, getEvaluationMetrics } = useLlmObs()
 
   before(() => {
-    tracer = require('../../../../dd-trace')
+    // `useLlmObs()` ran `agent.load` in a `before` registered above
+    // this one, so by the time we get here `global._ddtrace` is the
+    // live `TracerProxy`.
+    tracer = global._ddtrace
     llmobs = tracer.llmobs
   })
 
@@ -341,19 +343,12 @@ describe('end to end sdk integration tests', () => {
 
       beforeEach(() => {
         llmobs.registerProcessor(processor)
-        agent.reset() // make sure llmobs requests are cleared
       })
 
       it('does not submit the span', async () => {
         llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
 
-        // Race between getEvents() and a timeout - timeout should win since no spans are expected
-        // because the testagent server is running in the same process, this operation should be very low latency
-        // meaning there should be no flakiness here
-        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ llmobsSpans: [] }), 100))
-
-        const { llmobsSpans } = await Promise.race([getEvents(), timeoutPromise])
-        assert.equal(llmobsSpans.length, 0)
+        await assertNoLlmObsSpans()
       })
     })
 

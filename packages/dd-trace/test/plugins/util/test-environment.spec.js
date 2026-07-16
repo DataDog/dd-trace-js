@@ -13,24 +13,36 @@ require('../../setup/core')
 
 const cachedExecStub = sinon.stub().returns('')
 
-const { getCIMetadata, expandGlobPattern, getJobIDFromDiagFile } = require('../../../src/plugins/util/ci')
+const { expandGlobPattern, getJobIDFromDiagFile } = require('../../../src/plugins/util/ci')
 const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
   GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
   GIT_COMMIT_HEAD_SHA,
+  PR_NUMBER,
 } = require('../../../src/plugins/util/tags')
+
+const freshConfig = () => proxyquire.noPreserveCache()('../../../src/config', {})()
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
   './git-cache': {
     cachedExec: cachedExecStub,
   },
 })
+const ciModule = proxyquire('../../../src/plugins/util/ci', {
+  '../../config': freshConfig,
+})
+const { getCIMetadata } = ciModule
+const userProvidedGit = proxyquire('../../../src/plugins/util/user-provided-git', {
+  '../../config': freshConfig,
+})
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+  './ci': ciModule,
   './git': {
     getGitMetadata,
   },
+  './user-provided-git': userProvidedGit,
 })
 
 describe('test environment data', () => {
@@ -110,6 +122,27 @@ describe('test environment data', () => {
         }
       })
     })
+  })
+
+  it('does not set pr.number on Buildkite when BUILDKITE_PULL_REQUEST is the literal string false', () => {
+    process.env = {
+      BUILDKITE: 'true',
+      BUILDKITE_BUILD_ID: 'buildkite-pipeline-id',
+      BUILDKITE_JOB_ID: 'buildkite-job-id',
+      BUILDKITE_PIPELINE_SLUG: 'buildkite-pipeline-name',
+      BUILDKITE_BUILD_NUMBER: 'buildkite-pipeline-number',
+      BUILDKITE_BUILD_URL: 'https://buildkite-build-url.com',
+      BUILDKITE_BRANCH: 'gh-readonly-queue/main/pr-1234-abcdef0123456789abcdef0123456789abcdef01',
+      BUILDKITE_COMMIT: 'b9f0fb3fdbb94c9d24b2c75b49663122a529e123',
+      BUILDKITE_REPO: 'http://hostname.com/repo.git',
+      BUILDKITE_PULL_REQUEST: 'false',
+      BUILDKITE_PULL_REQUEST_BASE_BRANCH: 'main',
+    }
+
+    const tags = getCIMetadata()
+
+    assert.strictEqual(tags[PR_NUMBER], undefined)
+    assert.strictEqual(tags[GIT_PULL_REQUEST_BASE_BRANCH], undefined)
   })
 })
 

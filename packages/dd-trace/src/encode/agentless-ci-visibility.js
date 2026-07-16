@@ -1,17 +1,23 @@
 'use strict'
 const { version: ddTraceVersion } = require('../../../../package.json')
-const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const { ITR_CORRELATION_ID, TEST_LEVELS_METADATA } = require('../../src/plugins/util/test')
 const id = require('../../src/id')
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
+const { MsgpackChunk, MAX_SIZE, OverflowError } = require('../msgpack')
 const { AgentEncoder } = require('./0.4')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const {
+  truncateSpanTestOpt,
+  normalizeSpan,
+  MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION,
+} = require('./tags-processors')
 
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
+const ALLOWED_METADATA_TARGETS = new Set([...ALLOWED_CONTENT_TYPES, TEST_LEVELS_METADATA])
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
@@ -19,6 +25,9 @@ const TEST_SESSION_KEYS_LENGTH = 10
 const TEST_AND_SPAN_KEYS_LENGTH = 11
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
+
+// Prefix is ~1 KB in practice; `MsgpackChunk` resizes on overflow.
+const PREFIX_CHUNK_INITIAL_SIZE = 2048
 
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
@@ -28,8 +37,35 @@ function formatSpan (span) {
   return {
     type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
-    content: normalizeSpan(truncateSpan(span)),
+    content: normalizeSpan(truncateSpanTestOpt(span)),
   }
+}
+
+function isAllowedMetadataTarget (target) {
+  return ALLOWED_METADATA_TARGETS.has(target)
+}
+
+function isEncodableMetadataValue (value) {
+  return typeof value === 'string' || typeof value === 'number'
+}
+
+function truncateTestLevelMetadataValue (value) {
+  if (typeof value !== 'string' || value.length <= MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION) {
+    return value
+  }
+  return `${value.slice(0, MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION)}...`
+}
+
+function truncateTestLevelMetadataTags (tags) {
+  const truncatedTags = {}
+  let hasTags = false
+  for (const key of Object.keys(tags)) {
+    const value = truncateTestLevelMetadataValue(tags[key])
+    if (!isEncodableMetadataValue(value)) continue
+    truncatedTags[key] = value
+    hasTags = true
+  }
+  return hasTags ? truncatedTags : undefined
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
@@ -44,17 +80,52 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._eventCount = 0
 
     this.metadataTags = {}
+    this.wildcardMetadataTags = {}
+    this.testLevelsMetadataKeys = []
 
     this.reset()
   }
 
   addMetadataTags (tags) {
-    for (const type of ALLOWED_CONTENT_TYPES) {
-      if (tags[type]) {
-        this.metadataTags[type] = {
-          ...this.metadataTags[type],
-          ...tags[type],
-        }
+    if (tags['*']) {
+      this.wildcardMetadataTags = {
+        ...this.wildcardMetadataTags,
+        ...tags['*'],
+      }
+    }
+
+    for (const target of Object.keys(tags)) {
+      if (target === '*' || !tags[target] || !isAllowedMetadataTarget(target)) continue
+
+      const targetTags = target === TEST_LEVELS_METADATA
+        ? truncateTestLevelMetadataTags(tags[target])
+        : tags[target]
+      if (!targetTags) continue
+
+      this.metadataTags[target] = {
+        ...this.metadataTags[target],
+        ...targetTags,
+      }
+
+      if (target === TEST_LEVELS_METADATA) {
+        this.testLevelsMetadataKeys = Object.keys(this.metadataTags[target])
+      }
+    }
+  }
+
+  _removeDuplicateTestLevelsMetadata (event) {
+    if (!ALLOWED_CONTENT_TYPES.has(event.type)) return
+
+    const meta = event.content.meta
+    if (!meta) return
+
+    const testLevelsMetadataTags = this.metadataTags[TEST_LEVELS_METADATA]
+    const testLevelsMetadataKeys = this.testLevelsMetadataKeys
+
+    for (let i = 0; i < testLevelsMetadataKeys.length; i++) {
+      const key = testLevelsMetadataKeys[i]
+      if (meta[key] === testLevelsMetadataTags[key]) {
+        delete meta[key]
       }
     }
   }
@@ -66,7 +137,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       keysLength++
     }
 
-    this._encodeMapPrefix(bytes, keysLength)
+    bytes.writeMapPrefix(keysLength)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -86,7 +157,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     }
 
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'name')
     this._encodeString(bytes, content.name)
     this._encodeString(bytes, 'service')
@@ -94,9 +165,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'resource')
     this._encodeString(bytes, content.resource)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -104,7 +175,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestModule (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_MODULE_KEYS_LENGTH)
+    bytes.writeMapPrefix(TEST_MODULE_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -115,7 +186,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeId(bytes, content.span_id)
 
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'name')
     this._encodeString(bytes, content.name)
     this._encodeString(bytes, 'service')
@@ -123,9 +194,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'resource')
     this._encodeString(bytes, content.resource)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -133,7 +204,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSession (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_SESSION_KEYS_LENGTH)
+    bytes.writeMapPrefix(TEST_SESSION_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -141,7 +212,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeId(bytes, content.trace_id)
 
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'name')
     this._encodeString(bytes, content.name)
     this._encodeString(bytes, 'service')
@@ -149,9 +220,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'resource')
     this._encodeString(bytes, content.resource)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -176,7 +247,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     if (content.type) {
       totalKeysLength += 1
     }
-    this._encodeMapPrefix(bytes, totalKeysLength)
+    bytes.writeMapPrefix(totalKeysLength)
     if (content.type) {
       this._encodeString(bytes, 'type')
       this._encodeString(bytes, content.type)
@@ -194,11 +265,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'service')
     this._encodeString(bytes, content.service)
     this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
+    bytes.writeNumber(content.error)
     this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
+    bytes.writeNumber(content.start)
     this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
+    bytes.writeNumber(content.duration)
     /**
      * We include `test_session_id` and `test_suite_id`
      * in the root of the event by passing them via the `meta` dict.
@@ -239,12 +310,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEvent (bytes, event) {
-    this._encodeMapPrefix(bytes, Object.keys(event).length)
+    bytes.writeMapPrefix(Object.keys(event).length)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, event.type)
 
     this._encodeString(bytes, 'version')
-    this._encodeNumber(bytes, event.version)
+    bytes.writeNumber(event.version)
 
     this._encodeString(bytes, 'content')
     if (event.type === 'span' || event.type === 'test') {
@@ -259,17 +330,17 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    if (this._isReset) {
-      this._encodePayloadStart(bytes)
-      this._isReset = false
-    }
     const startTime = Date.now()
 
     const events = trace.map(formatSpan)
 
     this._eventCount += events.length
 
+    const hasTestLevelsMetadata = this.testLevelsMetadataKeys.length !== 0
     for (const event of events) {
+      if (hasTestLevelsMetadata) {
+        this._removeDuplicateTestLevelsMetadata(event)
+      }
       this._encodeEvent(bytes, event)
     }
     distributionMetric(
@@ -281,20 +352,38 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   makePayload () {
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this._eventCount)
-    const bytes = this._traceBytes
+
+    // Encode the payload prefix (version + metadata + events-array header) at flush time,
+    // not on the first `_encode`. The CI Visibility flow adds metadata across multiple
+    // diagnostic channels (`session:start` adds `test_session.name`, the async
+    // `library-configuration` callback adds capability tags). Any span finished between
+    // those calls would otherwise freeze the prefix with stale metadata.
+    const prefixBytes = new MsgpackChunk(PREFIX_CHUNK_INITIAL_SIZE)
+    this._encodePayloadStart(prefixBytes)
+
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount
+    prefixBytes.buffer[eventsOffset] = 0xDD
+    prefixBytes.buffer[eventsOffset + 1] = eventsCount >> 24
+    prefixBytes.buffer[eventsOffset + 2] = eventsCount >> 16
+    prefixBytes.buffer[eventsOffset + 3] = eventsCount >> 8
+    prefixBytes.buffer[eventsOffset + 4] = eventsCount
 
-    bytes.buffer[eventsOffset] = 0xDD
-    bytes.buffer[eventsOffset + 1] = eventsCount >> 24
-    bytes.buffer[eventsOffset + 2] = eventsCount >> 16
-    bytes.buffer[eventsOffset + 3] = eventsCount >> 8
-    bytes.buffer[eventsOffset + 4] = eventsCount
+    const eventsBytes = this._traceBytes
+    const totalSize = prefixBytes.length + eventsBytes.length
 
-    const traceSize = bytes.length
-    const buffer = Buffer.allocUnsafe(traceSize)
+    // The metadata prefix (built here, not during `encode`) and the events are
+    // capped independently, so both can stay under the cap while the assembled
+    // payload crosses it. An oversized metadata tag also overflows the prefix
+    // chunk itself inside `_encodePayloadStart` above; either way the tagged
+    // error propagates to the writer's flush-time catch to drop the payload.
+    if (totalSize > MAX_SIZE) {
+      throw new OverflowError(totalSize)
+    }
 
-    bytes.buffer.copy(buffer, 0, 0, traceSize)
+    const buffer = Buffer.allocUnsafe(totalSize)
+    prefixBytes.buffer.copy(buffer, 0, 0, prefixBytes.length)
+    eventsBytes.buffer.copy(buffer, prefixBytes.length, 0, eventsBytes.length)
 
     this.reset()
 
@@ -302,13 +391,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodePayloadStart (bytes) {
-    // encodes the payload up to `events`. `events` will be encoded via _encode
+    // Encodes the payload up to (and including) the `events` array prefix. The 5 reserved
+    // bytes for the array length are patched in `makePayload`.
     const payload = {
       version: ENCODING_VERSION,
       metadata: {
         '*': {
           language: 'javascript',
           library_version: ddTraceVersion,
+          ...this.wildcardMetadataTags,
         },
         ...this.metadataTags,
       },
@@ -322,31 +413,17 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       payload.metadata['*']['runtime-id'] = this.runtimeId
     }
 
-    this._encodeMapPrefix(bytes, Object.keys(payload).length)
+    bytes.writeMapPrefix(Object.keys(payload).length)
     this._encodeString(bytes, 'version')
-    this._encodeNumber(bytes, payload.version)
+    bytes.writeNumber(payload.version)
     this._encodeString(bytes, 'metadata')
-    this._encodeMapPrefix(bytes, Object.keys(payload.metadata).length)
-    this._encodeString(bytes, '*')
-    this._encodeMap(bytes, payload.metadata['*'])
-    if (payload.metadata.test) {
-      this._encodeString(bytes, 'test')
-      this._encodeMap(bytes, payload.metadata.test)
-    }
-    if (payload.metadata.test_suite_end) {
-      this._encodeString(bytes, 'test_suite_end')
-      this._encodeMap(bytes, payload.metadata.test_suite_end)
-    }
-    if (payload.metadata.test_module_end) {
-      this._encodeString(bytes, 'test_module_end')
-      this._encodeMap(bytes, payload.metadata.test_module_end)
-    }
-    if (payload.metadata.test_session_end) {
-      this._encodeString(bytes, 'test_session_end')
-      this._encodeMap(bytes, payload.metadata.test_session_end)
+    const metadataKeys = Object.keys(payload.metadata)
+    bytes.writeMapPrefix(metadataKeys.length)
+    for (const metadataKey of metadataKeys) {
+      this._encodeString(bytes, metadataKey)
+      this._encodeMap(bytes, payload.metadata[metadataKey])
     }
     this._encodeString(bytes, 'events')
-    // Get offset of the events list to update the length of the array when calling `makePayload`
     this._eventsOffset = bytes.length
     bytes.reserve(5)
   }
@@ -354,7 +431,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   reset () {
     this._reset()
     this._eventCount = 0
-    this._isReset = true
   }
 }
 

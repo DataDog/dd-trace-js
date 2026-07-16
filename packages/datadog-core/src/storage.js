@@ -3,37 +3,26 @@
 const { AsyncLocalStorage } = require('async_hooks')
 
 /**
- * This is exactly the same as AsyncLocalStorage, with the exception that it
- * uses a WeakMap to store the store object. This is because ALS stores the
- * store object as a property of the resource object, which causes all sorts
- * of problems with logging and memory. We substitute the `store` object with
- * a "handle" object, which is used as a key in a WeakMap, where the values
- * are the real store objects.
+ * `AsyncLocalStorage` with a `getHandle()` escape hatch: a span stashes the
+ * active handle at creation (see opentracing/span.js) so a later context can
+ * recover its store without holding the store itself.
+ *
+ * Under AsyncContextFrame — Node's default ALS backend on every release that
+ * ships it — the active value lives in the context frame and is never written
+ * to the async resource, so the store is held directly and the handle is the
+ * store. Pre-ACF `async_hooks` instead pinned the value onto the resource
+ * object, where it was visible to logging and retained with the resource
+ * graph; the `!isACFActive` block below restores the original WeakMap-handle
+ * indirection that kept the real store off the resource on those runtimes.
  *
  * @template T
  * @typedef {Record<string, T>} Store
  */
 class DatadogStorage extends AsyncLocalStorage {
   /**
-   * @param {Store<unknown>} [store]
-   * @override
-   */
-  enterWith (store) {
-    const handle = {}
-    stores.set(handle, store)
-    super.enterWith(handle)
-  }
-
-  /**
-   * This is method is a passthrough to the real `getStore()`, so that, when we
-   * need it, we can use the handle rather than our mapped store.
-   *
-   * It's only here because stores are currently used for a bunch of things,
-   * and we don't want to hold on to all of them in spans
-   * (see opentracing/span.js). Using a namespaced storage for spans would
-   * solve this.
-   *
-   * TODO: Refactor the Scope class to use a span-only store and remove this.
+   * Passthrough to the real `getStore()`. A span stashes this handle and feeds
+   * it back to `getStore(handle)` later. Identical in both modes: under ACF the
+   * handle is the store; without ACF it is the WeakMap key.
    *
    * @returns {Store<unknown>}
    */
@@ -42,22 +31,13 @@ class DatadogStorage extends AsyncLocalStorage {
   }
 
   /**
-   * Here, we replicate the behavior of the original `getStore()` method by
-   * passing in the handle, which we retrieve by calling it on super. Handles
-   * retrieved through `getHandle()` can also be passed in to be used as the
-   * key. This is useful if you've stashed a handle somewhere and want to
-   * retrieve the store with it.
-   * @param {object} [handle]
+   * @param {Store<unknown>} [handle] A handle from `getHandle()`; defaults to
+   * the active one. Under ACF the handle is the store, so it is returned as-is.
    * @returns {Store<unknown> | undefined}
    * @override
    */
   getStore (handle) {
-    if (!handle) {
-      handle = super.getStore()
-    }
-    if (handle) {
-      return stores.get(handle)
-    }
+    return handle ?? super.getStore()
   }
 }
 
@@ -77,12 +57,37 @@ if (!isACFActive) {
   const superGetStore = AsyncLocalStorage.prototype.getStore
   const superEnterWith = AsyncLocalStorage.prototype.enterWith
 
+  // Without ACF, ALS writes the entered value onto the async resource. Keep the
+  // real store off the resource by entering a small handle and mapping it to
+  // the store through a WeakMap, then reversing the lookup on read.
+  const stores = new WeakMap()
+
   /**
-   * Override the `run` method to manually call `enterWith` and `getStore`
-   * when not using AsyncContextFrame.
-   *
-   * Without ACF, super.run() won't call this.enterWith(), so the WeakMap handle
-   * is never created and getStore() would fail.
+   * @param {Store<unknown>} [store]
+   */
+  DatadogStorage.prototype.enterWith = function enterWith (store) {
+    const handle = { noop: store?.noop }
+    stores.set(handle, store)
+    superEnterWith.call(this, handle)
+  }
+
+  /**
+   * @param {object} [handle]
+   * @returns {Store<unknown> | undefined}
+   */
+  DatadogStorage.prototype.getStore = function getStore (handle) {
+    if (!handle) {
+      handle = superGetStore.call(this)
+    }
+    if (handle) {
+      return stores.get(handle)
+    }
+  }
+
+  /**
+   * Without ACF, `super.run()` does not delegate to `enterWith()`, so the
+   * WeakMap handle is never created and `getStore()` would miss. Drive the
+   * handle path manually and restore the prior handle on the way out.
    *
    * @template R
    * @template {unknown[]} TArgs
@@ -102,12 +107,6 @@ if (!isACFActive) {
     }
   }
 }
-
-/**
- * This is the map from handles to real stores, used in the class above.
- * @type {WeakMap<WeakKey, Store<unknown>|undefined>}
- */
-const stores = new WeakMap()
 
 /**
  * For convenience, we use the `storage` function as a registry of namespaces

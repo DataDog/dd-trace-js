@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 
@@ -56,7 +57,7 @@ describe('integrations', () => {
             chunks.push(chunk)
           }
 
-          assert.ok(chunks.length > 0)
+          assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -100,7 +101,7 @@ describe('integrations', () => {
             chunks.push(chunk)
           }
 
-          assert.ok(chunks.length > 0)
+          assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -141,7 +142,7 @@ describe('integrations', () => {
             if (chunk.add2?.text) finalOutput += chunk.add2.text
           }
 
-          assert.ok(finalOutput.length > 0)
+          assert.ok(finalOutput.length > 0, `Expected ${finalOutput.length} > 0`)
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -185,7 +186,7 @@ describe('integrations', () => {
             chunks.push(chunk)
           }
 
-          assert.ok(chunks.length > 0)
+          assert.ok(chunks.length > 0, `Expected ${chunks.length} > 0`)
 
           const { llmobsSpans } = await getEvents()
 
@@ -198,7 +199,7 @@ describe('integrations', () => {
           )
 
           const parsedOutput = JSON.parse(workflowSpan.meta.output.value)
-          assert.ok(Array.isArray(parsedOutput.messages))
+          assert.ok(Array.isArray(parsedOutput.messages), `Expected array, got ${inspect(parsedOutput.messages)}`)
           const lastMessage = parsedOutput.messages[parsedOutput.messages.length - 1]
           assert.deepStrictEqual(lastMessage, { content: 'Pong', role: 'assistant' })
         })

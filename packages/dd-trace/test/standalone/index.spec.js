@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -24,7 +25,6 @@ const TraceState = require('../../src/opentracing/propagation/tracestate')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
 
 const startCh = channel('dd-trace:span:start')
-const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
 describe('Disabled APM Tracing or Standalone', () => {
@@ -36,7 +36,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       apmTracingEnabled: false,
 
       tracePropagationStyle: {
-        inject: ['datadog', 'tracecontext', 'b3'],
+        inject: ['datadog', 'tracecontext', 'b3multi'],
         extract: ['datadog'],
       },
     }
@@ -51,16 +51,12 @@ describe('Disabled APM Tracing or Standalone', () => {
   describe('configure', () => {
     let startChSubscribe
     let startChUnsubscribe
-    let injectChSubscribe
-    let injectChUnsubscribe
     let extractChSubscribe
     let extractChUnsubscribe
 
     beforeEach(() => {
       startChSubscribe = sinon.stub(startCh, 'subscribe')
       startChUnsubscribe = sinon.stub(startCh, 'unsubscribe')
-      injectChSubscribe = sinon.stub(injectCh, 'subscribe')
-      injectChUnsubscribe = sinon.stub(injectCh, 'unsubscribe')
       extractChSubscribe = sinon.stub(extractCh, 'subscribe')
       extractChUnsubscribe = sinon.stub(extractCh, 'unsubscribe')
     })
@@ -69,7 +65,6 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       sinon.assert.calledOnce(startChSubscribe)
-      sinon.assert.calledOnce(injectChSubscribe)
       sinon.assert.calledOnce(extractChSubscribe)
     })
 
@@ -79,10 +74,8 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
 
       sinon.assert.notCalled(startChSubscribe)
-      sinon.assert.notCalled(injectChSubscribe)
       sinon.assert.notCalled(extractChSubscribe)
       sinon.assert.notCalled(startChUnsubscribe)
-      sinon.assert.notCalled(injectChUnsubscribe)
       sinon.assert.notCalled(extractChUnsubscribe)
     })
 
@@ -107,6 +100,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       standalone.configure(config)
       standalone.configure(config)
 
+      assert.strictEqual(channels['dd-trace:span:inject'], undefined)
       Object.values(channels).forEach(channel => {
         sinon.assert.calledThrice(channel.unsubscribe)
         sinon.assert.calledThrice(channel.subscribe)
@@ -135,7 +129,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation',
       })
 
-      assert.ok(!(APM_TRACING_ENABLED_KEY in span.context()._tags))
+      assert.ok(!span.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
@@ -145,7 +139,10 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation',
       })
 
-      assert.ok(Object.hasOwn(span.context()._tags, APM_TRACING_ENABLED_KEY))
+      assert.ok(
+        span.context().hasTag(APM_TRACING_ENABLED_KEY),
+        `Available keys: ${inspect(Object.keys(span.context().getTags()))}`
+      )
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -155,14 +152,14 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation',
       })
 
-      assert.strictEqual(parent.context()._tags[APM_TRACING_ENABLED_KEY], 0)
+      assert.strictEqual(parent.context().getTag(APM_TRACING_ENABLED_KEY), 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
         parent,
       })
 
-      assert.ok(!(APM_TRACING_ENABLED_KEY in child.context()._tags))
+      assert.ok(!child.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -179,7 +176,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         parent,
       })
 
-      assert.strictEqual(child.context()._tags[APM_TRACING_ENABLED_KEY], 0)
+      assert.strictEqual(child.context().getTag(APM_TRACING_ENABLED_KEY), 0)
     })
   })
 
@@ -265,10 +262,8 @@ describe('Disabled APM Tracing or Standalone', () => {
     })
   })
 
-  describe('onSpanInject', () => {
-    it('should reset priority if apm tracing is disabled and there is no appsec event', () => {
-      standalone.configure(config)
-
+  describe('inject', () => {
+    it('should not create a carrier when apm tracing is disabled and there is no appsec event', () => {
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
       })
@@ -278,21 +273,12 @@ describe('Disabled APM Tracing or Standalone', () => {
         mechanism: SAMPLING_MECHANISM_APPSEC,
       }
 
-      const carrier = {}
       const propagator = new TextMapPropagator(config)
-      propagator.inject(span._spanContext, carrier)
 
-      assert.ok(!('x-datadog-trace-id' in carrier))
-      assert.ok(!('x-datadog-parent-id' in carrier))
-      assert.ok(!('x-datadog-sampling-priority' in carrier))
-
-      assert.ok(!('x-b3-traceid' in carrier))
-      assert.ok(!('x-b3-spanid' in carrier))
+      assert.strictEqual(propagator.inject(span._spanContext), undefined)
     })
 
-    it('should keep priority if apm tracing is disabled and there is an appsec event', () => {
-      standalone.configure(config)
-
+    it('should inject trace context when apm tracing is disabled and there is an appsec event', () => {
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
       })
@@ -304,19 +290,21 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       span._spanContext._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
 
-      const carrier = {}
       const propagator = new TextMapPropagator(config)
-      propagator.inject(span._spanContext, carrier)
+      const carrier = propagator.inject(span._spanContext)
 
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-sampling-priority'))
+      assert.ok(carrier)
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(
+        Object.hasOwn(carrier, 'x-datadog-sampling-priority'),
+        `Available keys: ${inspect(Object.keys(carrier))}`
+      )
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.ts=02')
     })
 
-    it('should not reset priority if standalone disabled', () => {
+    it('should inject trace context when standalone is disabled', () => {
       config.apmTracingEnabled = true
-      standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
@@ -327,21 +315,22 @@ describe('Disabled APM Tracing or Standalone', () => {
         mechanism: SAMPLING_MECHANISM_APPSEC,
       }
 
-      const carrier = {}
       const propagator = new TextMapPropagator(config)
-      propagator.inject(span._spanContext, carrier)
+      const carrier = propagator.inject(span._spanContext)
 
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-sampling-priority'))
+      assert.ok(carrier)
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(
+        Object.hasOwn(carrier, 'x-datadog-sampling-priority'),
+        `Available keys: ${inspect(Object.keys(carrier))}`
+      )
 
-      assert.ok(Object.hasOwn(carrier, 'x-b3-traceid'))
-      assert.ok(Object.hasOwn(carrier, 'x-b3-spanid'))
+      assert.ok(Object.hasOwn(carrier, 'x-b3-traceid'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(Object.hasOwn(carrier, 'x-b3-spanid'), `Available keys: ${inspect(Object.keys(carrier))}`)
     })
 
-    it('should clear tracestate datadog info', () => {
-      standalone.configure(config)
-
+    it('should preserve non-Datadog tracestate without injecting traceparent', () => {
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
       })
@@ -356,12 +345,24 @@ describe('Disabled APM Tracing or Standalone', () => {
       tracestate.set('other', 'id:0xC0FFEE')
       span._spanContext._tracestate = tracestate
 
-      const carrier = {}
       const propagator = new TextMapPropagator(config)
-      propagator.inject(span._spanContext, carrier)
+      const carrier = propagator.inject(span._spanContext)
 
+      assert.ok(carrier)
       assert.strictEqual(carrier.tracestate, 'other=id:0xC0FFEE')
       assert.ok(!('traceparent' in carrier))
+    })
+
+    it('should return a carrier when baggage remains after trace context is suppressed', () => {
+      config.legacyBaggageEnabled = true
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+      })
+      span._spanContext._baggageItems.foo = 'bar'
+
+      const carrier = new TextMapPropagator(config).inject(span._spanContext)
+
+      assert.deepStrictEqual(carrier, { 'ot-baggage-foo': 'bar' })
     })
   })
 })

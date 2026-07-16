@@ -11,10 +11,12 @@ const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
 } = require('../../../plugins/util/test')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../../config/helper')
+const getConfig = require('../../../config')
+const { getEnvironmentVariable } = require('../../../config/helper')
 const Writer = require('./writer')
 
 function getInterprocessTraceCode () {
+  const { DD_PLAYWRIGHT_WORKER, DD_VITEST_WORKER } = getConfig()
   if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_TRACE_PAYLOAD_CODE
   }
@@ -24,13 +26,13 @@ function getInterprocessTraceCode () {
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) {
     return MOCHA_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
+  if (DD_PLAYWRIGHT_WORKER) {
     return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
+  if (DD_VITEST_WORKER) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
@@ -51,7 +53,7 @@ function getInterprocessLogsCode () {
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
-  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
+  if (getConfig().DD_VITEST_WORKER) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
   return null
@@ -100,14 +102,30 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testEnvironmentMetadata, logMessage })
   }
 
-  // TODO: add to other writers
+  /**
+   * @param {() => void} [onDone]
+   */
   flush (onDone) {
-    this._writer.flush(onDone)
-    this._coverageWriter.flush()
-    this._logsWriter.flush()
-    if (this._telemetryWriter) {
-      this._telemetryWriter.flush()
+    if (!onDone) {
+      this._writer.flush()
+      this._coverageWriter.flush()
+      this._logsWriter.flush()
+      if (this._telemetryWriter) {
+        this._telemetryWriter.flush()
+      }
+      return
     }
+
+    let pendingWriters = this._telemetryWriter ? 4 : 3
+    const onWriterFlushed = () => {
+      pendingWriters--
+      if (pendingWriters === 0) onDone()
+    }
+
+    this._writer.flush(onWriterFlushed)
+    this._coverageWriter.flush(onWriterFlushed)
+    this._logsWriter.flush(onWriterFlushed)
+    this._telemetryWriter?.flush(onWriterFlushed)
   }
 }
 

@@ -20,7 +20,7 @@ module.exports = (name, factory, versionRange) => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

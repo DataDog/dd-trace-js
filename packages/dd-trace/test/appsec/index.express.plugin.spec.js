@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -29,7 +30,7 @@ withVersions('express', 'express', version => {
     let paramCallbackSpy /** @type {SinonSpy} */
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'http'], { client: false }, { appsec: { enabled: true } })
     })
 
     before((done) => {
@@ -69,7 +70,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -197,7 +198,7 @@ withVersions('express', 'express', version => {
     let server, requestBody, axios
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'http'], { client: false }, { appsec: { enabled: true } })
     })
 
     before((done) => {
@@ -219,7 +220,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -262,7 +263,7 @@ withVersions('express', 'express', version => {
     let config, server, axios
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false })
+      return agent.load(['express', 'http'], { client: false }, { appsec: { enabled: true } })
     })
 
     before((done) => {
@@ -297,7 +298,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -318,7 +319,7 @@ withVersions('express', 'express', version => {
 
     describe('with sample delay 10', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity.sampleDelay = 10
+        config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 10
         appsec.enable(config)
       })
 
@@ -333,7 +334,10 @@ withVersions('express', 'express', version => {
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+          assert.ok(
+            Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+            `Available keys: ${inspect(Object.keys(span.meta))}`
+          )
           assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
@@ -383,16 +387,16 @@ withVersions('express', 'express', version => {
     })
 
     it('should not get the schema', async () => {
-      config.appsec.apiSecurity.enabled = false
-      config.appsec.apiSecurity.sampleDelay = 10
+      config.appsec.DD_API_SECURITY_ENABLED = false
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 10
       appsec.enable(config)
 
       const res = await axios.post('/', { key: 'value' })
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'), `Available keys: ${inspect(Object.keys(span.meta))}`)
       })
 
       assert.equal(res.status, 200)

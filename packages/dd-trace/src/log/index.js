@@ -2,18 +2,15 @@
 
 const { inspect } = require('util')
 
-const { defaults } = require('../config/defaults')
-const { isTrue } = require('../util')
 const { getValueFromEnvSources } = require('../config/helper')
+// Eager require restores the original startup module-load order: pulling `config/defaults` here
+// also installs the instrumented `dns` it transitively loads before the tracer/agent connects.
+// `config/defaults` defers its own `dns` require until after it exports, so this no longer hits
+// the `config/defaults` <-> log parse cycle that motivated the lazy require below.
+const { defaults } = require('../config/defaults')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
-
-const config = {
-  enabled: defaults.DD_TRACE_DEBUG,
-  logger: undefined,
-  logLevel: defaults.logLevel,
-}
 
 // In most places where we know we want to mute a log we use log.error() directly
 const NO_TRANSMIT = new LogConfig(false)
@@ -77,19 +74,17 @@ const log = {
   },
 
   configure (options) {
-    config.logger = options.logger
-    config.logLevel = options.logLevel ??
-        getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
-        config.logLevel
-    config.enabled = isTrue(
-      getValueFromEnvSources('DD_TRACE_DEBUG') ??
+    const logger = options.logger
+    const logLevel = options.logLevel ??
+        getValueFromEnvSources('DD_TRACE_LOG_LEVEL', true) ??
+        defaults?.logLevel
+    const enabled = getValueFromEnvSources('DD_TRACE_DEBUG', true) ??
       // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
       // eslint-disable-next-line eslint-rules/eslint-process-env
-      (process.env.OTEL_LOG_LEVEL === 'debug' || config.enabled)
-    )
-    logWriter.configure(config.enabled, config.logLevel, options.logger)
+      (process.env.OTEL_LOG_LEVEL === 'debug' || defaults?.DD_TRACE_DEBUG)
+    logWriter.configure(enabled, logLevel, logger)
 
-    return config.enabled
+    return enabled
   },
 }
 
@@ -107,12 +102,15 @@ function publishFormatted (ch, formatter, ...args) {
 
 function getErrorLog (err) {
   if (typeof err?.delegate === 'function') {
-    const result = err.delegate()
+    const result = err.delegate(...err.args)
     return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
   }
   return err
 }
 
-log.configure({})
-
+// Assign before the bootstrap configure() call: an invalid DD_TRACE_LOG_LEVEL
+// makes config/defaults re-require this module to warn, which must observe the
+// fully built log object rather than a half-initialized one.
 module.exports = log
+
+log.configure({})

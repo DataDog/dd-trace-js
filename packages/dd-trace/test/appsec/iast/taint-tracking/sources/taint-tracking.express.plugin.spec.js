@@ -34,7 +34,7 @@ describe('URI sourcing with express', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -109,7 +109,7 @@ describe('Path params sourcing with express', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

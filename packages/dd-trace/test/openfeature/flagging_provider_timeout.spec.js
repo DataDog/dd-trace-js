@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { ProviderEvents } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -307,8 +308,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
       assert.strictEqual(setErrorSpy.calledOnce, true)
       const errorArg = setErrorSpy.firstCall.args[0]
       assert.ok(errorArg instanceof Error)
-      assert.ok(errorArg.message.includes('Initialization timeout'))
-      assert.ok(errorArg.message.includes('6000ms'))
+      assert.ok(errorArg.message.includes('Initialization timeout'), `Got: ${inspect(errorArg.message)}`)
+      assert.ok(errorArg.message.includes('6000ms'), `Got: ${inspect(errorArg.message)}`)
     })
 
     it('should use config object value over environment variables', async () => {

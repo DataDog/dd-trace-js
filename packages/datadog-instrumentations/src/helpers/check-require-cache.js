@@ -1,8 +1,9 @@
 'use strict'
 
-// This code runs before the tracer is configured and before a logger is ready
-// For that reason we queue up the messages now and decide what to do with them later
-const warnings = []
+// Queued before the logger is ready; flushed once the tracer knows its config.
+const warnings = [] // conflicts; flushed under DD_TRACE_DEBUG
+const loadOrderWarnings = [] // "loaded before dd-trace"; flushed under startupLogs
+const frameworkWarnings = [] // curated (e.g. Next.js); flushed unconditionally
 
 /**
  * Here we maintain a list of packages that an application
@@ -29,6 +30,24 @@ const potentialConflicts = new Set([
 const extractPackageAndModulePath = require('./extract-package-and-module-path')
 
 /**
+ * Frameworks that load their own server code before any user code (and thus
+ * before a late `tracer.init()`) can run. When their server module is already
+ * in `require.cache` at init time, dd-trace was loaded too late to instrument
+ * them and the integration silently no-ops. Unlike the broad scan below, this
+ * set is high-signal enough to warn on by default. `file` is the module whose
+ * presence proves the server is already loaded; `guidance` is the bundler note
+ * appended to the warning.
+ */
+const earlyLoadFrameworks = new Map([
+  ['next', {
+    // dist/server/next-server.js (>=11.1), dist/next-server/server/next-server.js (older)
+    file: 'next-server.js',
+    guidance: "add 'dd-trace' to `serverExternalPackages` (Next.js >=15) or " +
+      '`experimental.serverComponentsExternalPackages` (13-14) so it is not bundled',
+  }],
+])
+
+/**
  * The lowest hanging fruit to debug an app that isn't tracing
  * properly is to check that it is loaded before any modules
  * that need to be instrumented. This function checks the
@@ -43,25 +62,53 @@ const extractPackageAndModulePath = require('./extract-package-and-module-path')
  * app loads a package we instrument but outside of an
  * unsupported version then a warning would still be displayed.
  * This is OK as the tracer should be loaded earlier anyway.
+ *
+ * Curated frameworks (see `earlyLoadFrameworks`) surface unconditionally; the
+ * broad list of packages loaded before dd-trace is queued for the startupLogs-
+ * gated flush (`flushLoadOrderWarnings`).
  */
 module.exports.checkForRequiredModules = function () {
   const packages = require('./hooks')
   const naughties = new Set()
+  const frameworksSeen = new Set()
   let didWarn = false
 
   for (const pathToModule of Object.keys(require.cache)) {
-    const { pkg } = extractPackageAndModulePath(pathToModule)
+    // require.cache keys use the platform separator; normalize so the
+    // `node_modules/<pkg>` parsing works on Windows (backslash paths).
+    const { pkg, path } = extractPackageAndModulePath(pathToModule.replaceAll('\\', '/'))
 
-    if (naughties.has(pkg)) continue
-    if (!(pkg in packages)) continue
+    if (pkg === null) continue
 
-    warnings.push(() => `Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
+    // A curated framework loads its own server before user code, so its server
+    // module being cached means dd-trace was too late to instrument it. These
+    // surface unconditionally (see flushFrameworkWarnings) with an actionable
+    // message, so they never fall through to the broad load-order list below.
+    const framework = earlyLoadFrameworks.get(pkg)
+    if (framework !== undefined) {
+      if (!frameworksSeen.has(pkg) && path?.endsWith(framework.file)) {
+        frameworksSeen.add(pkg)
+        frameworkWarnings.push(
+          `'${pkg}' was loaded before dd-trace, so the ${pkg} integration will not be applied. ` +
+          'Initialize dd-trace before your application starts — ' +
+          "NODE_OPTIONS='--require dd-trace/init' (CommonJS) or '--import dd-trace/initialize.mjs' (ESM) — " +
+          `and ${framework.guidance}.`
+        )
+      }
+      continue
+    }
+
+    if (naughties.has(pkg) || !(pkg in packages)) continue
+
+    loadOrderWarnings.push(
+      () => `Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`
+    )
 
     naughties.add(pkg)
     didWarn = true
   }
 
-  if (didWarn) warnings.push('Warning: Please ensure dd-trace is loaded before other modules.')
+  if (didWarn) loadOrderWarnings.push('Warning: Please ensure dd-trace is loaded before other modules.')
 }
 
 /**
@@ -102,5 +149,31 @@ module.exports.flushStartupLogs = function (log) {
   while (warnings.length) {
     const entry = warnings.shift()
     log.warn(typeof entry === 'function' ? entry() : entry)
+  }
+}
+
+/**
+ * Drains the broad "loaded before dd-trace" warnings collected by
+ * `checkForRequiredModules`. The tracer gates this on startupLogs (these are
+ * startup diagnostics), unlike the unconditional `flushFrameworkWarnings`.
+ * @param {(message: string) => void} warn
+ */
+module.exports.flushLoadOrderWarnings = function (warn) {
+  while (loadOrderWarnings.length) {
+    const entry = loadOrderWarnings.shift()
+    warn(typeof entry === 'function' ? entry() : entry)
+  }
+}
+
+/**
+ * Drains the framework warnings collected by `checkForRequiredModules`. The
+ * tracer surfaces these unconditionally (not gated on startupLogs or
+ * DD_TRACE_DEBUG), unlike the DD_TRACE_DEBUG-only `flushStartupLogs` queue,
+ * because the affected users run with neither enabled (#5430 / #5432).
+ * @param {(message: string) => void} warn
+ */
+module.exports.flushFrameworkWarnings = function (warn) {
+  while (frameworkWarnings.length) {
+    warn(frameworkWarnings.shift())
   }
 }

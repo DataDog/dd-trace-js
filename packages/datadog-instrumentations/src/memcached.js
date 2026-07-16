@@ -23,7 +23,8 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
 
       const ctx = { client, server, query }
       startCh.runStores(ctx, () => {
-        query.callback = shimmer.wrapFunction(query.callback, callback => function (err) {
+        if (typeof query.callback !== 'function') return
+        query.callback = shimmer.wrapCallback(query.callback, callback => function (err) {
           if (err) {
             ctx.error = err
             errorCh.publish(ctx)

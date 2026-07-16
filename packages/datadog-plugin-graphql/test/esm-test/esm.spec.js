@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const semver = require('semver')
@@ -35,7 +36,7 @@ describe('Plugin (ESM)', () => {
       it('should instrument GraphQL execution with ESM', async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
         })
 
@@ -73,7 +74,7 @@ describe('Plugin (ESM)', () => {
         it('should instrument GraphQL Yoga execution with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
           })
 
@@ -94,6 +95,41 @@ describe('Plugin (ESM)', () => {
           try {
             await axios.post(`${proc.url}/graphql`, {
               query,
+            })
+          } catch (error) {
+            // Server might not respond correctly, but we care about tracing
+          }
+
+          await res
+        }).timeout(50000)
+
+        it('should instrument GraphQL Yoga subscriptions with ESM', async () => {
+          const res = agent.assertMessageReceived(({ headers, payload }) => {
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+            assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+          })
+
+          proc = await spawnPluginIntegrationTestProc(
+            sandboxCwd(),
+            'esm-graphql-yoga-server.mjs',
+            agent.port,
+            { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+          )
+
+          const query = `
+            subscription CountSubscription {
+              count
+            }
+          `
+
+          try {
+            await axios.post(`${proc.url}/graphql`, {
+              query,
+            }, {
+              headers: {
+                accept: 'text/event-stream',
+              },
             })
           } catch (error) {
             // Server might not respond correctly, but we care about tracing

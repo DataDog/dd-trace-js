@@ -235,9 +235,13 @@ class DataStreamsProcessor {
     this._schemaSamplers = {}
     this._checkpointRegistry = new CheckpointRegistry()
 
-    if (this.enabled) {
+    // `flushInterval === 0` is the "flush on write" sentinel the trace exporter already honors
+    // (agent exporter `export()`); a background timer of `0` would instead fire on every event-loop
+    // tick, decoupled from when checkpoints are recorded, and a single tick landing while the agent
+    // is unreachable drops the bucket for good (it is cleared on serialize). Push on record instead.
+    if (this.enabled && flushInterval !== 0) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
-      this.timer.unref()
+      this.timer.unref?.()
     }
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
@@ -282,6 +286,7 @@ class DataStreamsProcessor {
       // StatsPoint already converted the 8-byte Buffer hash to a uint64 BigInt.
       span.setTag(PATHWAY_HASH, statsPoint.hash.toString())
     }
+    if (this.flushInterval === 0) this.onInterval()
   }
 
   setCheckpoint (edgeTags, span, ctx, payloadSize = 0) {
@@ -356,8 +361,9 @@ class DataStreamsProcessor {
 
   recordOffset ({ timestamp, ...backlogData }) {
     if (!this.enabled) return
-    return this.bucketFromTimestamp(timestamp)
-      .forBacklog(backlogData)
+    const backlog = this.bucketFromTimestamp(timestamp).forBacklog(backlogData)
+    if (this.flushInterval === 0) this.onInterval()
+    return backlog
   }
 
   setOffset (offsetObj) {
@@ -377,7 +383,7 @@ class DataStreamsProcessor {
    *
    * @param {string} transactionId - Truncated to 255 UTF-8 bytes.
    * @param {string} checkpointName - Mapped to a stable 1-byte ID; silently dropped if registry full.
-   * @param {import('../opentelemetry/span').Span|null} [span=null] - Active span to tag with DSM transaction metadata.
+   * @param {import('../opentelemetry/span').Span|null} [span] - Active span to tag with DSM transaction metadata.
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.enabled) {
@@ -400,6 +406,8 @@ class DataStreamsProcessor {
 
     // Number() cast is safe here: 10s bucket granularity tolerates ~0.5ns precision loss
     this.bucketFromTimestamp(Number(timestampNs)).addTransaction(entry)
+
+    if (this.flushInterval === 0) this.onInterval()
 
     if (span) {
       span.setTag(DSM_TRANSACTION_ID, transactionId)

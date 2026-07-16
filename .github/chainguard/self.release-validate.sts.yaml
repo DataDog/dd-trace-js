@@ -1,12 +1,12 @@
 issuer: https://token.actions.githubusercontent.com
 
-subject: repo:DataDog/dd-trace-js:pull_request
+subject_pattern: repo:DataDog/dd-trace-js:ref:refs/heads/v[0-9]+\.[0-9]+\.[0-9]+-proposal
 
 claim_pattern:
-  event_name: pull_request
-  ref: refs/pull/[0-9]+/merge
+  event_name: push
+  ref: refs/heads/v[0-9]+\.[0-9]+\.[0-9]+-proposal
   repository: DataDog/dd-trace-js
-  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/release-validate\.yml@refs/pull/[0-9]+/merge
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/release-validate\.yml@refs/heads/v[0-9]+\.[0-9]+\.[0-9]+-proposal
 
 permissions:
   contents: read

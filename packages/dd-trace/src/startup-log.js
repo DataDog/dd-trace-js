@@ -3,7 +3,6 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { getAgentUrl } = require('./agent/url')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -76,7 +75,8 @@ function logGenericError (message) {
  * @returns {Record<string, unknown>}
  */
 function configInfo () {
-  const url = getAgentUrl(config)
+  const url = config.url
+  const profilingEnabled = config.profiling.DD_PROFILING_ENABLED
 
   return {
     [inspect.custom] () {
@@ -105,7 +105,7 @@ function configInfo () {
     ...(config.tags && config.tags.version && { dd_version: config.tags.version }),
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
-    profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',
+    profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
     appsec_enabled: config.appsec.enabled,
     data_streams_enabled: !!config.dsmEnabled,
   }

@@ -62,7 +62,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         const contexts = spanContexts.get(eventData)
         if (contexts) {
           for (const spanContext of contexts) {
-            span.addLink(spanContext)
+            span.addLink({ context: spanContext })
           }
         }
       }

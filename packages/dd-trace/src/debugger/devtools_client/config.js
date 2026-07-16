@@ -1,7 +1,6 @@
 'use strict'
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
-const { getAgentUrl } = require('../../agent/url')
 const processTags = require('../../process-tags')
 const log = require('./log')
 
@@ -21,6 +20,8 @@ configPort.on('messageerror', (err) =>
 )
 
 function updateConfig (updates) {
-  config.url = getAgentUrl(updates)
+  // The worker receives a serialized config (see ../config.js) where `url` is a string, so it is
+  // reconstructed into a URL here rather than read directly off a Config instance.
+  config.url = new URL(updates.url)
   config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
 }

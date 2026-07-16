@@ -114,7 +114,7 @@ function extractMetrics (response) {
   }
 
   const totalTokens = tokenUsage.totalTokenCount ||
-                     (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
+                    (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
   if (totalTokens) {
     metrics.totalTokens = totalTokens
   }
@@ -153,6 +153,50 @@ function extractMetadata (config) {
   }
 
   return metadata
+}
+
+/**
+ * Extract tool definitions from config
+ * @param {object} config
+ * @returns {Array}
+ */
+function extractToolDefinitions (config) {
+  const toolDefinitions = []
+
+  if (!Array.isArray(config?.tools)) {
+    return toolDefinitions
+  }
+
+  for (const tool of config.tools) {
+    // Only extract tools with valid function declarations
+    if (!Array.isArray(tool?.functionDeclarations)) {
+      continue
+    }
+
+    for (const currDeclaration of tool.functionDeclarations) {
+      // A valid declaration must have a name
+      if (!currDeclaration?.name) {
+        continue
+      }
+
+      const toolDef = { name: currDeclaration.name }
+
+      if (currDeclaration.description !== undefined) {
+        toolDef.description = currDeclaration.description
+      }
+
+      // Parameters can be in two different fields depending on user input
+      if (currDeclaration.parameters !== undefined) {
+        toolDef.schema = currDeclaration.parameters
+      } else if (currDeclaration.parametersJsonSchema !== undefined) {
+        toolDef.schema = currDeclaration.parametersJsonSchema
+      }
+
+      toolDefinitions.push(toolDef)
+    }
+  }
+
+  return toolDefinitions
 }
 
 /**
@@ -414,8 +458,8 @@ function formatStreamingOutput (response) {
 
     // Skip special cases in streaming (handle them as non-streaming)
     if (content.parts.some(part => part.functionCall ||
-                                   part.executableCode ||
-                                   part.codeExecutionResult)) {
+                                  part.executableCode ||
+                                  part.codeExecutionResult)) {
       messages.push(...formatNonStreamingCandidate(candidate))
       continue
     }
@@ -498,6 +542,7 @@ module.exports = {
   getOperation,
   extractMetrics,
   extractMetadata,
+  extractToolDefinitions,
   aggregateStreamingChunks,
   formatInputMessages,
   formatEmbeddingInput,

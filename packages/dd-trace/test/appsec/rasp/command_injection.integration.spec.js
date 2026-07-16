@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
@@ -62,7 +63,10 @@ describe('RASP - command_injection - integration', () => {
       let appsecTelemetryReceived = false
 
       const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.ok(
+          Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'),
+          `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+        )
         assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
       }, 4_000)
 
@@ -78,13 +82,13 @@ describe('RASP - command_injection - integration', () => {
             const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
 
             assert.ok(evalSerie)
-            assert.ok(evalSerie.tags.includes('rule_type:command_injection'))
-            assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`))
+            assert.ok(evalSerie.tags.includes('rule_type:command_injection'), `Got: ${inspect(evalSerie.tags)}`)
+            assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`), `Got: ${inspect(evalSerie.tags)}`)
             assert.strictEqual(evalSerie.type, 'count')
 
             assert.ok(matchSerie)
-            assert.ok(matchSerie.tags.includes('rule_type:command_injection'))
-            assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`))
+            assert.ok(matchSerie.tags.includes('rule_type:command_injection'), `Got: ${inspect(matchSerie.tags)}`)
+            assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`), `Got: ${inspect(matchSerie.tags)}`)
             assert.strictEqual(matchSerie.type, 'count')
           } else {
             assert.fail('namespace should be appsec')

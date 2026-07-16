@@ -7,6 +7,8 @@ const os = require('node:os')
 const path = require('node:path')
 const util = require('node:util')
 
+const { Hook } = require('mocha')
+
 const execFileAsync = util.promisify(execFile)
 const mochaBin = path.join(__dirname, '../../../node_modules/mocha/bin/mocha.js')
 const coreSetupPath = path.join(__dirname, 'setup/core.js')
@@ -259,6 +261,88 @@ describe('mocha hooks setup', () => {
     `)
 
     assert.deepStrictEqual(getFailureMessages(result), ['test failed'])
+  })
+
+  it('reports before all errors after async before all hooks with allow uncaught enabled', async () => {
+    const result = await runFixture(`
+      describe('suite', () => {
+        before(async () => {})
+
+        before(() => {
+          throw new Error('setup failed')
+        })
+
+        it('does something', () => {})
+      })
+    `, ['--allow-uncaught'])
+
+    assert.deepStrictEqual(getFailureMessages(result), ['setup failed'])
+  })
+
+  it('suppresses after all errors with allow uncaught enabled', async () => {
+    const result = await runFixture(`
+      describe('suite', () => {
+        before(() => {
+          throw new Error('setup failed')
+        })
+
+        after(() => {
+          throw new Error('cleanup failed')
+        })
+
+        it('does something', () => {})
+      })
+    `, ['--allow-uncaught'])
+
+    assert.deepStrictEqual(getFailureMessages(result), ['setup failed'])
+  })
+
+  it('clears the timeout when a callback hook throws with allow uncaught enabled', () => {
+    const failure = new Error('setup failed')
+    const hook = new Hook('before all', (done) => {
+      assert.strictEqual(typeof done, 'function')
+      throw failure
+    })
+    const clearTimeout = hook.clearTimeout
+    let clearTimeoutCalls = 0
+    let hookError
+
+    hook.allowUncaught = true
+    hook.clearTimeout = function () {
+      clearTimeoutCalls++
+      return clearTimeout.call(this)
+    }
+
+    try {
+      hook.run((err) => {
+        hookError = err
+      })
+    } finally {
+      clearTimeout.call(hook)
+    }
+
+    assert.strictEqual(hookError, failure)
+    assert.strictEqual(clearTimeoutCalls, 2)
+  })
+
+  it('reports falsy callback hook errors with allow uncaught enabled', () => {
+    const hook = new Hook('before all', (done) => {
+      assert.strictEqual(typeof done, 'function')
+      // eslint-disable-next-line no-throw-literal
+      throw undefined
+    })
+    let hookError
+
+    hook.allowUncaught = true
+    hook.run((err) => {
+      hookError = err
+    })
+
+    assert.ok(hookError instanceof Error)
+    assert.strictEqual(
+      hookError.message,
+      'Runnable failed with falsy or undefined exception. Please throw an Error instead.'
+    )
   })
 
   it('does not let a suppressed after each error change bail behavior', async () => {

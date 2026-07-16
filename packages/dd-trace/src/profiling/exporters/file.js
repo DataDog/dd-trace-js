@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const { promisify } = require('util')
+const { pathToFileURL } = require('url')
 const { threadId } = require('worker_threads')
 const writeFile = promisify(fs.writeFile)
 const { EventSerializer } = require('./event_serializer')
@@ -10,14 +11,24 @@ const pad = (n) => String(n).padStart(2, '0')
 
 function formatDateTime (t) {
   return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}` +
-         `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
+    `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
 }
 
 class FileExporter extends EventSerializer {
-  constructor (config = {}) {
+  #pprofPrefix
+
+  /**
+   * @param {import('./event_serializer').TracerConfig} config
+   * @param {string} [pprofPrefix] - File path prefix. Defaults to the config value, but the OOM
+   *   export subprocess passes a path derived from a `file:` URL, which is not a config value.
+   */
+  constructor (config, pprofPrefix = config.DD_PROFILING_PPROF_PREFIX) {
     super(config)
-    const { pprofPrefix } = config
-    this._pprofPrefix = pprofPrefix || ''
+    this.#pprofPrefix = pprofPrefix
+  }
+
+  getExportUrl () {
+    return pathToFileURL(this.#pprofPrefix)
   }
 
   export (exportSpec) {
@@ -25,7 +36,7 @@ class FileExporter extends EventSerializer {
     const types = Object.keys(profiles)
     const dateStr = formatDateTime(end)
     const tasks = types.map(type => {
-      return writeFile(`${this._pprofPrefix}${type}_worker_${threadId}_${dateStr}.pprof`, profiles[type])
+      return writeFile(`${this.#pprofPrefix}${type}_worker_${threadId}_${dateStr}.pprof`, profiles[type])
     })
     tasks.push(writeFile(`event_worker_${threadId}_${dateStr}.json`, this.getEventJSON(exportSpec)))
     return Promise.all(tasks)

@@ -15,6 +15,13 @@ const errorCh = channel('apm:pg:query:error')
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
+const poolConnectStartCh = channel('apm:pg:pool:connect:start')
+const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
+
+// Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
+// the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
+const originalTextCache = new WeakMap()
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -26,6 +33,22 @@ addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/client.js' }, Client => 
 })
 
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
+  // pg defers a busy pool's connect callback and runs it in the releasing query's async context;
+  // capture the caller's context and restore it around the callback so spans attach to the caller.
+  shimmer.wrap(pg.Pool.prototype, 'connect', connect => function (cb) {
+    if (typeof cb !== 'function' || !poolConnectStartCh.hasSubscribers) {
+      return connect.apply(this, arguments)
+    }
+
+    const ctx = {}
+    arguments[0] = function (...args) {
+      return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
+    }
+
+    poolConnectStartCh.publish(ctx)
+
+    return connect.apply(this, arguments)
+  })
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
   return pg
 })
@@ -44,7 +67,12 @@ function wrapQuery (query) {
 
     const textPropObj = pgQuery.cursor ?? pgQuery
     const stream = typeof textPropObj.read === 'function'
-    const originalText = textPropObj.text
+
+    let originalText = originalTextCache.get(textPropObj)
+    if (originalText === undefined) {
+      originalText = textPropObj.text
+      originalTextCache.set(textPropObj, originalText)
+    }
 
     const abortController = new AbortController()
     const ctx = {
@@ -184,7 +212,7 @@ function wrapPoolQuery (query) {
       }
 
       if (typeof cb === 'function') {
-        args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (...args) {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
           finish(ctx)
           return cb.apply(this, args)
         })

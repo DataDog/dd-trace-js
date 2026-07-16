@@ -13,6 +13,7 @@ const triggerMap = {
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
   eventHub: 'EventHubs',
+  cosmosDB: 'CosmosDB',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -53,7 +54,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       )
 
       span._integrationName = 'azure-functions'
-      span.context()._tags.component = 'azure-functions'
+      span.context().setTag('component', 'azure-functions')
       span.addTags(meta)
       webContext.span = span
       webContext.azureFunctionCtx = ctx
@@ -64,6 +65,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
         service: this.serviceName(),
         type: 'serverless',
         meta,
+        childOf: null,
       }, ctx)
 
       if (isMessagingService) {
@@ -127,6 +129,8 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `EventHubs ${functionName}`,
       'span.kind': 'consumer',
     }
+  } else if (triggerMap[methodName] === 'CosmosDB') {
+    meta['resource.name'] = `CosmosDB ${functionName}`
   }
 
   return meta
@@ -139,7 +143,7 @@ function mapTriggerTag (methodName) {
 // message & messages & batch with cardinality of 1 == applicationProperties
 // messages with cardinality of many == applicationPropertiesArray
 function setSpanLinks (triggerType, tracer, span, ctx) {
-  const cardinality = ctx.invocationContext.options.trigger.cardinality
+  const cardinality = ctx.invocationContext.options.trigger.cardinality ?? 'one'
   const triggerMetadata = ctx.invocationContext.triggerMetadata
   const isServiceBus = triggerType === 'ServiceBus'
 
@@ -155,7 +159,7 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
     if (!props || Object.keys(props).length === 0) return
     const spanContext = tracer.extract('text_map', props)
     if (spanContext) {
-      span.addLink(spanContext)
+      span.addLink({ context: spanContext })
     }
   }
 

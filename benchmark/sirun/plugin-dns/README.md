@@ -1,2 +1,4 @@
-Runs `dns.lookup('localhost', cb)` many times. In the `with-tracer` variant,
-tracing is enabled. Iteration count is set to 10.
+Drives the per-lookup work the dns instrumentation's callback instrumentor adds
+(argument capture, context build, start/finish channel dispatch, callback wrap)
+over a no-op underlying lookup, so the measurement isolates the tracer's cost
+from the libuv `getaddrinfo` syscall.

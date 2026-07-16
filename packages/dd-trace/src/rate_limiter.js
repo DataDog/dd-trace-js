@@ -5,7 +5,7 @@ const limiter = require('../../../vendor/dist/limiter')
 class RateLimiter {
   /**
    * @param {number} rateLimit - Allowed units per interval. Negative means unlimited, 0 disables.
-   * @param {'second'|'minute'|'hour'|'day'} [interval='second'] - Time window for the limiter.
+   * @param {'second'|'minute'|'hour'|'day'} [interval] - Time window for the limiter.
    */
   constructor (rateLimit, interval = 'second') {
     // TODO: Change rateLimit to integers. Right now these are sometimes strings, sometimes numbers.

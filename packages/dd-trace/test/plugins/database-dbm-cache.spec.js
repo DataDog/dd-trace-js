@@ -11,7 +11,13 @@ const DatabasePlugin = require('../../src/plugins/database')
 
 function makeSpan (tags = {}) {
   return {
-    context: () => ({ _tags: tags }),
+    context: () => ({
+      _tags: tags,
+      getTag: (key) => tags[key],
+      getTags: () => tags,
+      setTag: (key, value) => { tags[key] = value },
+      hasTag: (key) => Object.hasOwn(tags, key),
+    }),
     setTag () {},
     _spanContext: { toTraceparent: () => '00-aaa-bbb-01' },
     _processor: { sample () {} },

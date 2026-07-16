@@ -3,6 +3,7 @@
 require('../../../setup/mocha')
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 
 const { getLocalStateForCallFrame, evaluateCaptureExpressions, DEFAULT_CAPTURE_LIMITS, session } = require('./utils')
@@ -112,7 +113,10 @@ describe('debugger -> devtools client -> snapshot', function () {
 
         // Should have one fatal error
         assert.strictEqual(result.fatalErrors.length, 1)
-        assert.ok(result.fatalErrors[0].message.includes('secondExpr'))
+        assert.ok(
+          result.fatalErrors[0].message.includes('secondExpr'),
+          `Got: ${inspect(result.fatalErrors[0].message)}`
+        )
 
         const captured = result.processCaptureExpressions()
 

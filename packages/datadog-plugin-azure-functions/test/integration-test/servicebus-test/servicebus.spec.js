@@ -147,6 +147,24 @@ describe('esm', () => {
         }
       }).timeout(60000)
 
+      it('propagates a single message through a queue with unset cardinality', async () => {
+        const groups = await agent.collectGroups({
+          trigger: () => curl('http://127.0.0.1:7071/api/send-message-3'),
+          predicate: azureInvokeGroup('ServiceBus queueTest3'),
+        })
+        assertObjectContains(groups[0][0], {
+          name: 'azure.functions.invoke',
+          resource: 'ServiceBus queueTest3',
+          meta: {
+            'messaging.operation': 'receive',
+            'messaging.system': 'servicebus',
+            'messaging.destination.name': 'queue.3',
+            'span.kind': 'consumer',
+          },
+        })
+        assert.strictEqual(parseLinks(groups[0][0]).length, 1)
+      }).timeout(60000)
+
       it('propagates a single message through a queue with cardinality of many', async () => {
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/send-message-2'),
@@ -263,7 +281,7 @@ describe('esm', () => {
         })
         const sbGroups = groups.filter(azureInvokeGroup('ServiceBus queueTest2'))
         const createGroups = groups.filter(azureCreateGroup)
-        assert.ok(sbGroups.length >= 1)
+        assert.ok(sbGroups.length >= 1, `Expected ${sbGroups.length} >= 1`)
         assert.strictEqual(createGroups.length, 0)
         assert.ok(!('_dd.span_links' in sbGroups[0][0].meta))
       }).timeout(60000)
@@ -275,7 +293,7 @@ describe('esm', () => {
         })
         const sbGroups = groups.filter(azureInvokeGroup('ServiceBus queueTest2'))
         const createGroups = groups.filter(azureCreateGroup)
-        assert.ok(sbGroups.length >= 1)
+        assert.ok(sbGroups.length >= 1, `Expected ${sbGroups.length} >= 1`)
         assert.strictEqual(createGroups.length, 0)
         assert.ok(!('_dd.span_links' in sbGroups[0][0].meta))
       }).timeout(60000)

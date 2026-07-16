@@ -57,7 +57,7 @@ withVersions('express-session', 'express-session', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not do anything when there are no subscribers', async () => {

@@ -33,7 +33,7 @@ class DataStreamsCheckpointer {
    *                       Examples include kafka, kinesis, sns etc.
    * @param {string} source - The source of data. This can be a topic, exchange or stream name.
    * @param {object} carrier - The carrier object to extract context from.
-   * @param {boolean} [manualCheckpoint=true] - Whether this checkpoint was manually set. Keep true if manually
+   * @param {boolean} [manualCheckpoint] - Whether this checkpoint was manually set. Keep true if manually
    *                                           instrumenting. Manual instrumentation always overrides automatic
    *                                           instrumentation in the case a call is both manually and automatically
    *                                           instrumented.
@@ -60,7 +60,7 @@ class DataStreamsCheckpointer {
    * Tags the active span (or the provided span) with the transaction ID and checkpoint name.
    * @param {string} transactionId - The transaction identifier to track.
    * @param {string} checkpointName - The logical checkpoint name.
-   * @param {object|null} [span=null] - Span to tag. Defaults to the currently active span.
+   * @param {object|null} [span] - Span to tag. Defaults to the currently active span.
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.config.dsmEnabled) return

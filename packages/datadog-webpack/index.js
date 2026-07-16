@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { matchesOptionalPeerFile } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
@@ -130,11 +131,26 @@ class DatadogWebpackPlugin {
       nmf.hooks.afterResolve.tap(PLUGIN_NAME, (resolveData) => {
         const { createData } = resolveData
         const resource = createData?.resource
-        if (!resource || !resource.includes('node_modules')) {
+        if (!resource) {
           return
         }
 
         const normalizedResource = resource.replaceAll('\\', '/')
+
+        // Rewrite optional-peer loads so installed peers get bundled and survive relocation
+        // (#8980); absent peers stay opaque, so a build that does not opt into the feature does
+        // not follow their dependency chain (#8635).
+        if (matchesOptionalPeerFile(normalizedResource)) {
+          createData.loaders = createData.loaders || []
+          createData.loaders.push({ loader: require.resolve('./src/optional-peer-loader') })
+          log.debug('INLINE: optional-peer loader applied to %s', normalizedResource)
+          return
+        }
+
+        if (!resource.includes('node_modules')) {
+          return
+        }
+
         const { pkg, path: modulePath, pkgJson } = extractPackageAndModulePath(normalizedResource)
         if (!pkg) {
           return

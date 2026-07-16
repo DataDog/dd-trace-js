@@ -4,9 +4,11 @@ const id = require('../id')
 const { storage } = require('../../../datadog-core') // TODO: noop storage?
 const NoopSpanContext = require('./span_context')
 
+const legacyStorage = storage('legacy')
+
 class NoopSpan {
   constructor (tracer, parent) {
-    this._store = storage('legacy').getHandle()
+    this._store = legacyStorage.getHandle()
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent)
   }

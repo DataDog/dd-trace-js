@@ -10,9 +10,10 @@ module.exports = [
     functionQuery: {
       methodName: 'stream',
       className: 'Pregel',
+      kind: 'Async',
+      returnKind: 'AsyncIterator',
     },
     channelName: 'Pregel_stream',
-    transform: 'traceAsyncIterator',
   },
   {
     module: {
@@ -23,8 +24,9 @@ module.exports = [
     functionQuery: {
       methodName: 'stream',
       className: 'Pregel',
+      kind: 'Async',
+      returnKind: 'AsyncIterator',
     },
     channelName: 'Pregel_stream',
-    transform: 'traceAsyncIterator',
   },
 ]

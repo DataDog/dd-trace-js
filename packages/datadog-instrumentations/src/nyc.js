@@ -2,7 +2,12 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const { setupSettingsCachePath } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
+const {
+  readCoverageBackfillFromCache,
+  readCoverageBackfillRootDirFromCache,
+  setupSettingsCachePath,
+} = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
+const { applySkippedCoverageToCoverage } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
 const codeCoverageWrapCh = channel('ci:nyc:wrap')
@@ -15,6 +20,38 @@ addHook({
   // Set up the cache file path early (when nyc is required) so it's available
   // when dd-trace fetches library configuration
   setupSettingsCachePath()
+
+  if (nycPackage.prototype.getCoverageMapFromAllCoverageFiles) {
+    // Some test frameworks receive skipped-suite coverage in the test process, but nyc merges reports later in the nyc
+    // process. Reuse the settings cache path as the process handoff so nyc can backfill skipped files before reporting.
+    shimmer.wrap(
+      nycPackage.prototype,
+      'getCoverageMapFromAllCoverageFiles',
+      getCoverageMapFromAllCoverageFiles => function (...args) {
+        const coverageMap = getCoverageMapFromAllCoverageFiles.apply(this, args)
+        const applyCoverageBackfill = (resolvedCoverageMap) => {
+          try {
+            if (!resolvedCoverageMap) {
+              return resolvedCoverageMap
+            }
+            applySkippedCoverageToCoverage(
+              resolvedCoverageMap,
+              readCoverageBackfillFromCache(),
+              readCoverageBackfillRootDirFromCache() || this.cwd
+            )
+          } catch {
+            // Do not break nyc's report generation if the cached backfill is stale or malformed.
+          }
+          return resolvedCoverageMap
+        }
+
+        if (coverageMap && typeof coverageMap.then === 'function') {
+          return coverageMap.then(applyCoverageBackfill)
+        }
+        return applyCoverageBackfill(coverageMap)
+      }
+    )
+  }
 
   // `wrap` is an async function
   shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function (...args) {

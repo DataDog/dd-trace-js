@@ -57,6 +57,86 @@ describe('shimmer', () => {
       assert.strictEqual(called, 1)
     })
 
+    it('should wrap a lazy getter/setter pair while preserving the accessor shape', () => {
+      // Mirrors Node 20's `fs.opendir`: a lazy accessor that resolves the real
+      // function on first read and self-replaces with a data property on write.
+      // The wrap must keep it an accessor pair so the descriptor shape stays
+      // observationally identical for downstream consumers on that Node version.
+      const target = () => 'original'
+      const obj = {}
+      Object.defineProperty(obj, 'method', {
+        configurable: true,
+        enumerable: true,
+        get () { return target },
+        set (value) {
+          Object.defineProperty(obj, 'method', { configurable: true, enumerable: true, writable: true, value })
+        },
+      })
+
+      let called = 0
+      shimmer.wrap(obj, 'method', method => (...args) => {
+        called++
+        return method(...args)
+      }, { replaceGetter: true })
+
+      // Still an accessor pair, with the original configurable/enumerable flags.
+      const descriptor = Object.getOwnPropertyDescriptor(obj, 'method')
+      assert.strictEqual(typeof descriptor.get, 'function')
+      assert.strictEqual(typeof descriptor.set, 'function')
+      assert.strictEqual(descriptor.configurable, true)
+      assert.strictEqual(descriptor.enumerable, true)
+
+      // Reading returns the wrapped method.
+      assert.strictEqual(obj.method.name, target.name)
+      assert.strictEqual(obj.method(), 'original')
+      assert.strictEqual(called, 1)
+
+      // Assignment mirrors the native lazy contract: it materializes the property
+      // as a writable data property holding exactly what was set (unwrapped).
+      const replacement = () => 'replacement'
+      obj.method = replacement
+      const afterSet = Object.getOwnPropertyDescriptor(obj, 'method')
+      assert.strictEqual(afterSet.get, undefined)
+      assert.strictEqual(afterSet.set, undefined)
+      assert.strictEqual(afterSet.writable, true)
+      assert.strictEqual(obj.method, replacement)
+      assert.strictEqual(obj.method(), 'replacement')
+      assert.strictEqual(called, 1, 'a caller-supplied replacement is not wrapped')
+    })
+
+    it('should wrap a getter/setter pair in place without the replaceGetter option', () => {
+      // Mirrors `url.js` wrapping the `URL.prototype` `host`/`hostname` getters,
+      // which are getter+setter accessor pairs. Each read must run the wrapper,
+      // and the original setter is left untouched.
+      let setValue
+      const obj = {}
+      Object.defineProperty(obj, 'method', {
+        configurable: true,
+        enumerable: true,
+        get () { return 'original' },
+        set (value) { setValue = value },
+      })
+
+      let called = 0
+      shimmer.wrap(obj, 'method', getter => function () {
+        called++
+        return getter.call(this)
+      })
+
+      const descriptor = Object.getOwnPropertyDescriptor(obj, 'method')
+      assert.strictEqual(typeof descriptor.get, 'function')
+      assert.strictEqual(typeof descriptor.set, 'function')
+
+      assert.strictEqual(obj.method, 'original')
+      assert.strictEqual(called, 1)
+      assert.strictEqual(obj.method, 'original')
+      assert.strictEqual(called, 2)
+
+      obj.method = 42
+      assert.strictEqual(setValue, 42)
+      assert.strictEqual(typeof Object.getOwnPropertyDescriptor(obj, 'method').set, 'function')
+    })
+
     it('should not wrap setter only method', () => {
       // eslint-disable-next-line accessor-pairs
       const obj = { set setter (_method_) {} }
@@ -291,6 +371,18 @@ describe('shimmer', () => {
         writable: true,
         configurable: false,
       })
+    })
+
+    it('should wrap writable non-configurable module namespace exports', async () => {
+      const namespace = await import('data:text/javascript,export function count() { return 1 }')
+
+      /** @param {Function} count */
+      const increment = count => () => count() + 1
+      const wrapped = shimmer.wrap(namespace, 'count', increment)
+
+      assert.strictEqual(namespace.count(), 1)
+      assert.strictEqual(wrapped.count(), 2)
+      assert.notStrictEqual(wrapped, namespace)
     })
 
     it('should skip non-configurable/writable string keyed methods', () => {
@@ -529,6 +621,101 @@ describe('shimmer', () => {
 
     it('should validate that the function wrapper is a function', () => {
       assert.throws(() => shimmer.wrap(() => {}, 'a'))
+    })
+  })
+
+  describe('wrapCallback', () => {
+    it('preserves the empty name of an anonymous arrow even when the wrapper closure has a name', () => {
+      // Inline arrow has no V8-lifted assignment-target name, so `original.name === ''`.
+      // The wrapper closure is named to force the `wrapped.name !== original.name` branch.
+      const wrapped = shimmer.wrapCallback((a, b) => a + b, () => function wrappedNamed () {})
+      assert.strictEqual(wrapped.name, '')
+    })
+
+    it('preserves the name of a named function expression', () => {
+      const original = function namedOriginal (a, b) { return a + b }
+      const wrapped = shimmer.wrapCallback(original, () => (a, b) => a + b)
+      assert.strictEqual(wrapped.name, 'namedOriginal')
+    })
+
+    it('preserves the name of a function declaration', () => {
+      function declaredOriginal (a, b) { return a + b }
+      const wrapped = shimmer.wrapCallback(declaredOriginal, () => (a, b) => a + b)
+      assert.strictEqual(wrapped.name, 'declaredOriginal')
+    })
+
+    it('preserves the name of a .bind() result', () => {
+      function declaredOriginal (a, b) { return a + b }
+      const bound = declaredOriginal.bind(null)
+      const wrapped = shimmer.wrapCallback(bound, () => (a, b) => a + b)
+      assert.strictEqual(bound.name, 'bound declaredOriginal')
+      assert.strictEqual(wrapped.name, 'bound declaredOriginal')
+    })
+
+    it('preserves length 0, 1, 2, 3 on the wrapper', () => {
+      const wrapped0 = shimmer.wrapCallback(() => {}, () => (a, b) => a + b)
+      const wrapped1 = shimmer.wrapCallback((a) => a, () => (a, b) => a + b)
+      const wrapped2 = shimmer.wrapCallback((a, b) => a + b, () => () => {})
+      const wrapped3 = shimmer.wrapCallback((a, b, c) => a + b + c, () => () => {})
+
+      assert.strictEqual(wrapped0.length, 0)
+      assert.strictEqual(wrapped1.length, 1)
+      assert.strictEqual(wrapped2.length, 2)
+      assert.strictEqual(wrapped3.length, 3)
+    })
+
+    it('forwards `this` via .apply()', () => {
+      let observed
+      const original = function (a) { observed = this }
+      const wrapped = shimmer.wrapCallback(original, original => function (a) {
+        return original.apply(this, arguments)
+      })
+
+      const target = { name: 'target' }
+      wrapped.apply(target, [1])
+
+      assert.strictEqual(observed, target)
+    })
+
+    it('forwards arguments unchanged to the original', () => {
+      let observed
+      const original = function (...args) { observed = args }
+      const wrapped = shimmer.wrapCallback(original, original => function () {
+        return original.apply(this, arguments)
+      })
+
+      wrapped(1, 'two', { three: 3 }, [4])
+
+      assert.deepStrictEqual(observed, [1, 'two', { three: 3 }, [4]])
+    })
+
+    it('does not copy custom own properties from the original', () => {
+      const original = function () {}
+      original.foo = 1
+      original[Symbol.for('shimmer.wrapCallback.test')] = 'sym'
+
+      const wrapped = shimmer.wrapCallback(original, () => () => {})
+
+      assert.strictEqual(wrapped.foo, undefined)
+      assert.strictEqual(wrapped[Symbol.for('shimmer.wrapCallback.test')], undefined)
+    })
+
+    it('propagates the wrapper return value', () => {
+      const wrapped = shimmer.wrapCallback(() => 1, () => () => 42)
+
+      assert.strictEqual(wrapped(), 42)
+    })
+
+    it('skips defineProperty when name and length already match', () => {
+      // Sanity: wrapper closure built with the same shape pays no overhead.
+      // defineProperty would make name / length configurable: true; the
+      // autogenerated descriptors remain configurable: true either way, so
+      // the user-visible value-check is what we assert here.
+      function original (a, b) { return a + b }
+      const wrapped = shimmer.wrapCallback(original, () => function original (a, b) {})
+
+      assert.strictEqual(wrapped.name, 'original')
+      assert.strictEqual(wrapped.length, 2)
     })
   })
 })

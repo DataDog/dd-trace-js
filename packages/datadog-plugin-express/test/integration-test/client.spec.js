@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -46,9 +47,9 @@ describe('esm', () => {
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(payload.length, 1)
-            assert.ok(Array.isArray(payload[0]))
+            assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
             assert.strictEqual(payload[0].length, numberOfSpans)
             assert.strictEqual(payload[0][0].name, 'express.request')
             assert.strictEqual(payload[0][1].name, `${whichMiddleware}.middleware`)
@@ -71,9 +72,9 @@ describe('esm', () => {
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(payload.length, 1)
-            assert.ok(Array.isArray(payload[0]))
+            assert.ok(Array.isArray(payload[0]), `Expected array, got ${inspect(payload[0])}`)
             assert.strictEqual(payload[0].length, numberOfSpans)
             assert.strictEqual(payload[0][0].name, 'express.request')
           })

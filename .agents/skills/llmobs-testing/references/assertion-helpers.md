@@ -99,34 +99,34 @@ assertLlmObsSpanEvent(events[0], {
 ## Best Practices
 
 1. **Use MOCK_* for non-deterministic values:**
-   - Output text: `MOCK_STRING` (real responses vary)
-   - Token counts: `MOCK_NOT_NULLISH` (counts vary but should exist)
-   - Error objects: `MOCK_OBJECT` (error details vary)
+    - Output text: `MOCK_STRING` (real responses vary)
+    - Token counts: `MOCK_NOT_NULLISH` (counts vary but should exist)
+    - Error objects: `MOCK_OBJECT` (error details vary)
 
 2. **Use exact values for inputs:**
-   - Input messages: You control these in tests
-   - Model parameters: You set these (temperature, max_tokens)
-   - Model name: You specify this
+    - Input messages: You control these in tests
+    - Model parameters: You set these (temperature, max_tokens)
+    - Model name: You specify this
 
 3. **Always validate core fields:**
-   - `spanKind` (required for every span)
-   - `name` (operation identifier)
-   - `modelName` and `modelProvider` (for LLM spans)
+    - `spanKind` (required for every span)
+    - `name` (operation identifier)
+    - `modelName` and `modelProvider` (for LLM spans)
 
 4. **Validate message format:**
-   - Ensure `{content: string, role: string}` structure
-   - Check role values: `'user'`, `'assistant'`, `'system'`, `'tool'`
+    - Ensure `{content: string, role: string}` structure
+    - Check role values: `'user'`, `'assistant'`, `'system'`, `'tool'`
 
 5. **Test error paths:**
-   - Verify empty `outputMessages: [{content: '', role: ''}]` on errors
-   - Assert `error` field exists with `MOCK_OBJECT`
+    - Verify empty `outputMessages: [{content: '', role: ''}]` on errors
+    - Assert `error` field exists with `MOCK_OBJECT`
 
 6. **Match span kind to operation:**
-   - Chat/completions → `spanKind: 'llm'`
-   - Workflow execution → `spanKind: 'workflow'`
-   - Agent runs → `spanKind: 'agent'`
-   - Tool calls → `spanKind: 'tool'`
-   - Embeddings → `spanKind: 'embedding'`
+    - Chat/completions → `spanKind: 'llm'`
+    - Workflow execution → `spanKind: 'workflow'`
+    - Agent runs → `spanKind: 'agent'`
+    - Tool calls → `spanKind: 'tool'`
+    - Embeddings → `spanKind: 'embedding'`
 
 ## Reference Test Implementation
 

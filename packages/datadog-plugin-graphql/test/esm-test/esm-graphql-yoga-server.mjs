@@ -6,12 +6,22 @@ const typeDefs = /* GraphQL */ `
   type Query {
     hello(name: String): String
   }
+  type Subscription {
+    count: Int
+  }
 `
 
 const resolvers = {
   Query: {
     hello: (_, { name }) => {
       return `Hello, ${name || 'world'}!`
+    },
+  },
+  Subscription: {
+    count: {
+      subscribe: async function * () {
+        yield { count: 1 }
+      },
     },
   },
 }

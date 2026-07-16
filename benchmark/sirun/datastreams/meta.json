@@ -3,13 +3,13 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 30,
+  "iterations": 20,
   "instructions": true,
   "variants": {
-    "produce": { "env": { "VARIANT": "produce" } },
-    "consume": { "env": { "VARIANT": "consume" } },
-    "produce-with-message-size": { "baseline": "produce", "env": { "VARIANT": "produce-with-message-size" } },
-    "produce-manual-checkpoint": { "baseline": "produce", "env": { "VARIANT": "produce-manual-checkpoint" } },
-    "produce-high-cardinality": { "baseline": "produce", "env": { "VARIANT": "produce-high-cardinality" } }
+    "produce": { "env": { "VARIANT": "produce", "OPERATIONS": "1200000" } },
+    "consume": { "env": { "VARIANT": "consume", "OPERATIONS": "1200000" } },
+    "produce-with-message-size": { "env": { "VARIANT": "produce-with-message-size", "OPERATIONS": "1200000" } },
+    "produce-manual-checkpoint": { "env": { "VARIANT": "produce-manual-checkpoint", "OPERATIONS": "1200000" } },
+    "produce-high-cardinality": { "env": { "VARIANT": "produce-high-cardinality", "OPERATIONS": "1200000" } }
   }
 }

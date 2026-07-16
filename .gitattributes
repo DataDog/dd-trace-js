@@ -1,0 +1,7 @@
+# The license workflow appends .github/vendored-dependencies.csv to
+# LICENSE-3rdparty.csv with `cat >>`. Both files are committed as CRLF so the
+# append is byte-stable and the release tooling stops re-committing line endings.
+# `-text` keeps git from normalizing them, so no contributor's core.autocrlf can
+# flip the stored bytes back to LF.
+LICENSE-3rdparty.csv -text
+.github/vendored-dependencies.csv -text

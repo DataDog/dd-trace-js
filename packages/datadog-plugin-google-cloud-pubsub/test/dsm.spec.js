@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -31,7 +32,7 @@ describe('Plugin', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
@@ -46,10 +47,7 @@ describe('Plugin', () => {
         let consume
 
         before(async () => {
-          tracer = require('../../dd-trace')
-          await agent.load('google-cloud-pubsub', {
-            dsmEnabled: true,
-          })
+          tracer = await agent.load('google-cloud-pubsub', { dsmEnabled: true })
           tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -91,9 +89,7 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           it('on produce', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
-
-            agent.expectPipelineStats(dsmStats => {
+            const statsPromise = agent.expectPipelineStats(dsmStats => {
               let statsPointsReceived = 0
               // we should have 1 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
@@ -103,28 +99,32 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(statsPointsReceived >= 1)
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64LE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
+
+            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
+            await statsPromise
           })
 
           it('on consume', async () => {
+            const statsPromise = agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 2 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64LE(0).toString()), true)
+            }, { timeoutMs: TIMEOUT })
+
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
-            await consume(async () => {
-              agent.expectPipelineStats(dsmStats => {
-                let statsPointsReceived = 0
-                // we should have 2 dsm stats points
-                dsmStats.forEach((timeStatsBucket) => {
-                  if (timeStatsBucket && timeStatsBucket.Stats) {
-                    timeStatsBucket.Stats.forEach((statsBuckets) => {
-                      statsPointsReceived += statsBuckets.Stats.length
-                    })
-                  }
-                })
-                assert.ok(statsPointsReceived >= 2)
-                assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
-              }, { timeoutMs: TIMEOUT })
-            })
+            consume(() => {})
+            await statsPromise
           })
         })
 
@@ -141,14 +141,20 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(
+              recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(
+                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+              )
             })
           })
         })

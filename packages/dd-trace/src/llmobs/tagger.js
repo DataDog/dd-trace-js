@@ -1,10 +1,13 @@
 'use strict'
 
 const log = require('../log')
+const Sampler = require('../sampler')
+const { formatKnuthRate } = require('../util')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
   SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
   INPUT_VALUE,
@@ -33,6 +36,7 @@ const {
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
+  PROPAGATED_SESSION_ID_KEY,
   DEFAULT_PROMPT_NAME,
   INTERNAL_CONTEXT_VARIABLE_KEYS,
   INTERNAL_QUERY_VARIABLE_KEYS,
@@ -41,9 +45,15 @@ const {
   ROUTING_SITE,
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   INSTRUMENTATION_METHOD_ANNOTATED,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  SAMPLING_DECISION_SAMPLED,
+  SAMPLING_DECISION_DROPPED,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { validateCostTags } = require('./util')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -53,10 +63,29 @@ class LLMObsTagger {
   /** @type {import('../config/config-base')} */
   #config
 
+  /** @type {import('../sampler') | null} */
+  #sampler = null
+
   constructor (config, softFail = false) {
     this.#config = config
 
     this.softFail = softFail
+  }
+
+  /**
+   * The sampler reads its rate from `config.llmobs.sampleRate`, which can change
+   * at runtime (e.g. via remote config). Rebuild the sampler whenever the rate
+   * changes so decisions reflect the current config, while reusing the existing
+   * sampler when it hasn't.
+   *
+   * @returns {import('../sampler')}
+   */
+  #getSampler () {
+    const rate = this.#config.llmobs?.sampleRate ?? 1
+    if (this.#sampler === null || rate !== this.#sampler.rate()) {
+      this.#sampler = new Sampler(rate)
+    }
+    return this.#sampler
   }
 
   static get tagMap () {
@@ -78,7 +107,7 @@ class LLMObsTagger {
     integration,
     _decorator,
   } = {}) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
     const spanMlApp =
@@ -97,6 +126,13 @@ class LLMObsTagger {
 
     this._register(span)
 
+    // When the registering span sits below an OTel `gen_ai.*` ancestor, use
+    // that ancestor as the parent_id fallback and suppress the bridge
+    // parent_id tag so the indexer doesn't invert the trace.
+    const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
+
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null })
+
     this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
@@ -105,7 +141,11 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
+    const traceTags = span.context()._trace.tags
+    sessionId = sessionId ||
+      registry.get(parent)?.[SESSION_ID] ||
+      traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||
+      traceTags[PROPAGATED_SESSION_ID_KEY]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
@@ -113,8 +153,11 @@ class LLMObsTagger {
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
+
+    this.#tagSamplingDecision(span, parent)
 
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
@@ -145,6 +188,32 @@ class LLMObsTagger {
     }
   }
 
+  #tagSamplingDecision (span, parent) {
+    const traceTags = span.context()._trace.tags
+    const parentTags = registry.get(parent)
+
+    let sampleRate, samplingDecision
+    if (parentTags) {
+      // Local LLMObs parent: inherit its decision.
+      sampleRate = parentTags[SAMPLE_RATE]
+      samplingDecision = parentTags[SAMPLING_DECISION]
+    } else if (traceTags[PROPAGATED_PARENT_ID_KEY]) {
+      // Distributed LLMObs parent: inherit whatever was propagated. This may be
+      // absent if the upstream service predates sampling propagation, in which
+      // case we make no decision here rather than starting a divergent one.
+      sampleRate = traceTags[PROPAGATED_SAMPLE_RATE_KEY]
+      samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+    } else {
+      // Root span: make the trace's one sampling decision.
+      const sampler = this.#getSampler()
+      sampleRate = formatKnuthRate(sampler.rate())
+      samplingDecision = sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
+    }
+
+    if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)
+    if (samplingDecision != null) this._setTag(span, SAMPLING_DECISION, samplingDecision)
+  }
+
   // TODO: similarly for the following `tag` methods,
   // how can we transition from a span weakmap to core API functionality
   tagLLMIO (span, inputData, outputData) {
@@ -168,8 +237,10 @@ class LLMObsTagger {
   }
 
   tagToolDefinitions (span, toolDefinitions) {
-    if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
-      this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    const validatedToolDefinitions = validateToolDefinitions(toolDefinitions)
+
+    if (validatedToolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, validatedToolDefinitions)
     } else {
       this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
     }
@@ -669,7 +740,7 @@ class LLMObsTagger {
   }
 
   _register (span) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (registry.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
@@ -679,7 +750,7 @@ class LLMObsTagger {
   }
 
   _setTag (span, key, value) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!registry.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
@@ -687,6 +758,18 @@ class LLMObsTagger {
 
     const tagsCarrier = registry.get(span)
     tagsCarrier[key] = value
+
+    // The first session set in a trace becomes the trace-level default, stored on the trace-shared
+    // tags so later spans (incl. those under a session-less parent) inherit it in-process.
+    // Established here, the single choke point for session writes, so sessions post-populated by
+    // integrations after span start also seed it. First-writer wins, so an explicit session still
+    // overrides locally. Cross-service injection is handled centrally in `handleLLMObsInjection`.
+    if (key === SESSION_ID && value) {
+      const traceTags = span.context()._trace.tags
+      if (traceTags[SESSION_ID_TRACE_DEFAULT_KEY] === undefined) {
+        traceTags[SESSION_ID_TRACE_DEFAULT_KEY] = value
+      }
+    }
   }
 }
 

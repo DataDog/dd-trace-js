@@ -1,16 +1,28 @@
 'use strict'
-const { MsgpackChunk } = require('../msgpack')
+const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
+const log = require('../log')
 const FormData = require('../exporters/common/form-data')
 const { AgentEncoder } = require('./0.4')
 
 const COVERAGE_PAYLOAD_VERSION = 2
 const COVERAGE_KEYS_LENGTH = 2
+
+function getBitmapBuffer (bitmap) {
+  if (!bitmap) return
+  if (Buffer.isBuffer(bitmap)) return bitmap
+  if (ArrayBuffer.isView(bitmap)) {
+    return Buffer.from(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength)
+  }
+  if (bitmap.type === 'Buffer' && Array.isArray(bitmap.data)) {
+    return Buffer.from(bitmap.data)
+  }
+}
 
 class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
@@ -29,7 +41,24 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     const startTime = Date.now()
 
     this._coveragesCount++
-    this.encodeCodeCoverage(this._coverageBytes, coverage)
+    try {
+      this.encodeCodeCoverage(this._coverageBytes, coverage)
+    } catch (error) {
+      if (error.code !== 'ERR_MSGPACK_CHUNK_OVERFLOW') throw error
+      // The coverage payload hit the chunk cap. `_coverageBytes` may
+      // hold a partial entry and a stale `coverages` array prefix. Drop
+      // the whole queued payload so the next encode starts from a clean
+      // state; the parent `AgentEncoder` does the equivalent for its own
+      // bytes / string cache via the inherited `_reset()`.
+      const dropped = this._coveragesCount
+      this.reset()
+      log.error(
+        'Coverage encoder reset after exceeding the %d byte chunk cap; dropped %d coverage(s)',
+        MAX_CHUNK_SIZE,
+        dropped
+      )
+      return
+    }
 
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
@@ -39,32 +68,40 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   encodeCodeCoverage (bytes, coverage) {
-    if (coverage.testId) {
-      this._encodeMapPrefix(bytes, 4)
-    } else {
-      this._encodeMapPrefix(bytes, 3)
-    }
+    let keysLength = 2
+    if (coverage.suiteId) keysLength++
+    if (coverage.testId) keysLength++
+
+    bytes.writeMapPrefix(keysLength)
     this._encodeString(bytes, 'test_session_id')
     this._encodeId(bytes, coverage.sessionId)
-    this._encodeString(bytes, 'test_suite_id')
-    this._encodeId(bytes, coverage.suiteId)
+    if (coverage.suiteId) {
+      this._encodeString(bytes, 'test_suite_id')
+      this._encodeId(bytes, coverage.suiteId)
+    }
     if (coverage.testId) {
       this._encodeString(bytes, 'span_id')
       this._encodeId(bytes, coverage.testId)
     }
     this._encodeString(bytes, 'files')
-    this._encodeArrayPrefix(bytes, coverage.files)
-    for (const filename of coverage.files) {
-      this._encodeMapPrefix(bytes, 1)
+    bytes.writeArrayPrefix(coverage.files)
+    for (const file of coverage.files) {
+      const filename = typeof file === 'string' ? file : file.filename
+      const bitmap = getBitmapBuffer(file.bitmap)
+      bytes.writeMapPrefix(bitmap ? 2 : 1)
       this._encodeString(bytes, 'filename')
       this._encodeString(bytes, filename)
+      if (bitmap) {
+        this._encodeString(bytes, 'bitmap')
+        bytes.writeBin(bitmap)
+      }
     }
   }
 
   reset () {
     this._reset()
     if (this._coverageBytes) {
-      this._coverageBytes.length = 0
+      this._coverageBytes.reset()
     }
     this._coveragesCount = 0
     this._encodePayloadStart(this._coverageBytes)
@@ -75,9 +112,9 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       version: COVERAGE_PAYLOAD_VERSION,
       coverages: [],
     }
-    this._encodeMapPrefix(bytes, COVERAGE_KEYS_LENGTH)
+    bytes.writeMapPrefix(COVERAGE_KEYS_LENGTH)
     this._encodeString(bytes, 'version')
-    this._encodeInteger(bytes, payload.version)
+    bytes.writeInteger(payload.version)
     this._encodeString(bytes, 'coverages')
     // Get offset of the coverages list to update the length of the array when calling `makePayload`
     this._coveragesOffset = bytes.length

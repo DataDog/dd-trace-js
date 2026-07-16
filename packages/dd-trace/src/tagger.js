@@ -9,8 +9,6 @@ function addNonEmpty (carrier, key, value) {
 }
 
 function add (carrier, keyValuePairs, valueSeparator = ':') {
-  if (!carrier) return
-
   if (typeof keyValuePairs === 'string') {
     let valueStart = 0
     let keyStart = 0

@@ -4,6 +4,7 @@
 process.env.DD_DATA_STREAMS_ENABLED = 'true'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
@@ -169,7 +170,10 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
       it('should set a message payload size when producing a message', async () => {
         await testSetup.queueAdd()
         assert.strictEqual(recordCheckpointSpy.called, true)
-        assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+        assert.ok(
+          Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+          `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+        )
       })
     })
   })

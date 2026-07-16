@@ -1,9 +1,10 @@
 'use strict'
 
-const { spawn } = require('child_process')
+const { execFileSync } = require('child_process')
 const fs = require('fs')
 const assert = require('node:assert/strict')
 const Path = require('path')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const sinon = require('sinon')
@@ -36,9 +37,8 @@ describe('Plugin', () => {
     withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
-      before(() => {
-        tracer = require(tracerRequirePath)
-        return agent.load('openai')
+      before(async () => {
+        tracer = await agent.load('openai')
       })
 
       after(() => {
@@ -46,7 +46,7 @@ describe('Plugin', () => {
           global.File = globalFile // eslint-disable-line n/no-unsupported-features/node-builtins
         }
 
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       beforeEach(() => {
@@ -100,8 +100,8 @@ describe('Plugin', () => {
       })
 
       describe('without initialization', () => {
-        it('should not error', (done) => {
-          spawn('node', ['no-init'], {
+        it('should not error', () => {
+          execFileSync(process.execPath, ['no-init.js'], {
             cwd: __dirname,
             stdio: 'inherit',
             env: {
@@ -109,18 +109,11 @@ describe('Plugin', () => {
               PATH_TO_DDTRACE: tracerRequirePath,
               PATH_TO_OPENAI: moduleRequirePath,
             },
-          }).on('exit', done) // non-zero exit status fails test
+          })
         })
       })
 
       it('should attach an error to the span', async () => {
-        const checkTraces = agent.assertFirstTraceSpan({
-          error: 1,
-          meta: {
-            'error.type': 'Error',
-          },
-        })
-
         const params = {
           model: 'gpt-3.5-turbo', // incorrect model
           prompt: 'Hello, OpenAI!',
@@ -130,17 +123,26 @@ describe('Plugin', () => {
           stream: false,
         }
 
+        let errorType = 'Error'
+
         try {
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             await openai.completions.create(params)
           } else {
             await openai.createCompletion(params)
           }
-        } catch {
-          // ignore, we expect an error
+        } catch (e) {
+          if (e.type) { // version 3 of openai does not return an error type
+            errorType = e.type
+          }
         }
 
-        await checkTraces
+        await agent.assertFirstTraceSpan({
+          error: 1,
+          meta: {
+            'error.type': errorType,
+          },
+        })
 
         clock.tick(10 * 1000)
 
@@ -210,8 +212,11 @@ describe('Plugin', () => {
             })
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'delta'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             tracer.trace('child of outer', innerSpan => {
@@ -243,7 +248,10 @@ describe('Plugin', () => {
                   'openai.request.model': 'gpt-3.5-turbo-instruct',
                 },
               })
-              assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+              assert.ok(
+                Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+                `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+              )
             })
 
           const params = {
@@ -308,7 +316,10 @@ describe('Plugin', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+                assert.ok(
+                  Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+                  `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+                )
               })
 
             const params = {
@@ -323,8 +334,11 @@ describe('Plugin', () => {
             const stream = await openai.completions.create(params)
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'text'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'text'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -333,7 +347,10 @@ describe('Plugin', () => {
           it('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+                assert.ok(
+                  Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+                  `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+                )
               })
 
             const params = {
@@ -351,9 +368,12 @@ describe('Plugin', () => {
             const stream = await openai.completions.create(params)
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
               if (part.choices.length) { // last usage chunk will have no choices
-                assert.ok(Object.hasOwn(part.choices[0], 'text'))
+                assert.ok(
+                  Object.hasOwn(part.choices[0], 'text'),
+                  `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+                )
               }
             }
 
@@ -379,8 +399,11 @@ describe('Plugin', () => {
             const stream = await openai.completions.create(params)
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'text'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'text'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -406,7 +429,10 @@ describe('Plugin', () => {
                 'openai.request.model': 'text-embedding-ada-002',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
           })
 
         const params = {
@@ -446,7 +472,10 @@ describe('Plugin', () => {
               },
             })
 
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.count'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -553,7 +582,10 @@ describe('Plugin', () => {
                 'openai.request.method': 'GET',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.count'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -596,10 +628,19 @@ describe('Plugin', () => {
                 'openai.response.filename': 'fine-tune.jsonl',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'openai.response.status'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
             assert.match(traces[0][0].meta['openai.response.id'], /^file-/)
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -639,9 +680,18 @@ describe('Plugin', () => {
                 'openai.response.purpose': 'fine-tune',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'openai.response.status'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -714,7 +764,10 @@ describe('Plugin', () => {
                 'openai.response.id': 'file-RpTpuvRVtnKpdKZb7DDGto',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.deleted'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.deleted'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -757,7 +810,10 @@ describe('Plugin', () => {
               },
             })
             assert.match(traces[0][0].meta['openai.response.id'], /^ftjob-/)
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         const params = {
@@ -793,8 +849,14 @@ describe('Plugin', () => {
                 'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         const result = await openai.fineTuning.jobs.retrieve('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
@@ -826,7 +888,10 @@ describe('Plugin', () => {
                 'openai.response.id': 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf',
               },
             })
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         const result = await openai.fineTuning.jobs.cancel('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
@@ -858,7 +923,10 @@ describe('Plugin', () => {
               },
             })
 
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.count'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         const result = await openai.fineTuning.jobs.listEvents('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
@@ -890,7 +958,10 @@ describe('Plugin', () => {
               },
             })
 
-            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].metrics, 'openai.response.count'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+            )
           })
 
         const result = await openai.fineTuning.jobs.list()
@@ -922,7 +993,10 @@ describe('Plugin', () => {
             })
 
             assert.match(traces[0][0].meta['openai.response.id'], /^modr-/)
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1225,7 +1299,10 @@ describe('Plugin', () => {
                   'openai.request.model': 'gpt-3.5-turbo',
                 },
               })
-              assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+              assert.ok(
+                Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+                `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+              )
             })
 
           const params = {
@@ -1249,7 +1326,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+            assert.ok(
+              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+            )
 
             const result = await prom
 
@@ -1277,7 +1357,10 @@ describe('Plugin', () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].name, 'openai.request')
-              assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+              assert.ok(
+                Object.hasOwn(traces[0][0].meta, 'openai.response.model'),
+                `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+              )
             })
 
           const params = {
@@ -1301,7 +1384,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+            assert.ok(
+              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+            )
 
             const result = await prom
             assert.strictEqual(result.choices.length, 3)
@@ -1428,12 +1514,18 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+            assert.ok(
+              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+            )
             const stream = await prom
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'delta'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -1465,12 +1557,18 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+            assert.ok(
+              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+            )
             const stream = await prom
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'delta'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -1505,13 +1603,19 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+            assert.ok(
+              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+            )
             const stream = await prom
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
               if (part.choices.length) { // last usage chunk will have no choices
-                assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+                assert.ok(
+                  Object.hasOwn(part.choices[0], 'delta'),
+                  `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+                )
               }
             }
 
@@ -1544,12 +1648,18 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+            assert.ok(
+              !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+              `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+            )
             const stream = await prom
 
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'delta'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -1585,8 +1695,11 @@ describe('Plugin', () => {
 
             const stream = await openai.chat.completions.create(params)
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'delta'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -1624,8 +1737,11 @@ describe('Plugin', () => {
 
             const stream = await openai.chat.completions.create(params)
             for await (const part of stream) {
-              assert.ok(Object.hasOwn(part, 'choices'))
-              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
+              assert.ok(Object.hasOwn(part, 'choices'), `Available keys: ${inspect(Object.keys(part))}`)
+              assert.ok(
+                Object.hasOwn(part.choices[0], 'delta'),
+                `Available keys: ${inspect(Object.keys(part.choices[0]))}`
+              )
             }
 
             await checkTraces
@@ -1661,7 +1777,10 @@ describe('Plugin', () => {
           user: 'dd-trace-test',
         })
 
-        assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
+        assert.ok(
+          !Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom),
+          `Expected 'withResponse' to be a non-own inherited property, got prom: ${inspect(prom)}`
+        )
         const response = await prom
         assert.ok(response.choices[0].message.content)
 

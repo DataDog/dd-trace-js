@@ -1,11 +1,9 @@
 'use strict'
 
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
-const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const getConfig = require('../../dd-trace/src/config')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
@@ -110,11 +108,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
-        service: this.serviceName(),
+        service: this.serviceName(request),
         integrationName: 'aws-sdk',
       }, ctx)
-
-      analyticsSampler.sample(span, this.config.measured)
 
       storage('legacy').run(ctx.currentStore, () => {
         this.requestInject(span, request)
@@ -176,18 +172,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => {
-      const { response, cbExists = false, currentStore } = ctx
+      const { response, currentStore } = ctx
       if (!currentStore) return
       const { span } = currentStore
       if (!span) return
 
       storage('legacy').run(currentStore, () => {
-        // try to extract DSM context from response if no callback exists as extraction normally happens in CB
-        if (!cbExists && this.serviceIdentifier === 'sqs') {
-          const params = response.request.params
-          const operation = response.request.operation
-          this.responseExtractDSMContext(operation, params, response.data ?? response, span)
-        }
         this.addResponseTags(span, response)
 
         if (this._tracerConfig?.DD_TRACE_AWS_ADD_SPAN_POINTERS) {
@@ -226,14 +216,18 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
   }
 
-  serviceName () {
-    return this.config.service ||
-      super.serviceName({
-        id: 'aws',
-        type: 'web',
-        kind: 'client',
-        awsService: this.serviceIdentifier,
-      })
+  /**
+   * @param {{ params?: object }} request
+   */
+  serviceName (request) {
+    return super.serviceName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: this.serviceIdentifier,
+      pluginConfig: this.config,
+      params: request.params,
+    })
   }
 
   isEnabled (request) {
@@ -313,29 +307,25 @@ function normalizeConfig (config, serviceIdentifier) {
   const hooks = getHooks(config)
 
   let specificConfig = config[serviceIdentifier]
-  switch (typeof specificConfig) {
-    case 'undefined':
-      specificConfig = {}
-      break
-    case 'boolean':
-      specificConfig = { enabled: specificConfig }
-      break
+  if (typeof specificConfig === 'boolean') {
+    specificConfig = { enabled: specificConfig }
   }
 
-  // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
+  // Check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
+  const tracerConfig = getConfig()
   const serviceId = serviceIdentifier.toUpperCase()
-  const batchPropagationEnabled = isTrue(
-    specificConfig.batchPropagationEnabled ??
-    getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
-    config.batchPropagationEnabled ??
-    getValueFromEnvSources('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
+  const serviceBatchKey = /** @type {import('../../dd-trace/src/config/config-types').ConfigPath} */(
+    `DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`
   )
+  const batchPropagationEnabled = tracerConfig.getOrigin(serviceBatchKey) === 'default'
+    ? tracerConfig.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED
+    : tracerConfig[serviceBatchKey]
 
   // Merge the specific config back into the main config
   return {
+    batchPropagationEnabled,
     ...config,
     ...specificConfig,
-    batchPropagationEnabled,
     hooks,
   }
 }

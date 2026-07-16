@@ -15,7 +15,13 @@ function wrapParse (originalParse) {
   }
 }
 
+/** @param {typeof import('cookie')} cookie */
 addHook({ name: 'cookie', versions: ['>=0.4'] }, cookie => {
-  shimmer.wrap(cookie, 'parse', wrapParse)
+  for (const name of ['parse', 'parseCookie']) {
+    if (typeof cookie[name] === 'function') {
+      // shimmer returns a mutable replacement when an ESM namespace export is non-configurable.
+      cookie = shimmer.wrap(cookie, name, wrapParse)
+    }
+  }
   return cookie
 })

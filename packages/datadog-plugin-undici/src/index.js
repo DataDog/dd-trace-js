@@ -6,6 +6,7 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const log = require('../../dd-trace/src/log')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 const {
@@ -27,6 +28,7 @@ class UndiciPlugin extends HttpClientPlugin {
     // Subscribe to native undici diagnostic channels for undici >= 4.7.0
     // These channels fire for ALL undici requests (fetch, request, stream, etc.)
     this.addSub('undici:request:create', this.#onNativeRequestCreate.bind(this))
+    this.addSub('undici:request:bodySent', this.#onNativeRequestBodySent.bind(this))
     this.addSub('undici:request:headers', this.#onNativeRequestHeaders.bind(this))
     this.addSub('undici:request:trailers', this.#onNativeRequestTrailers.bind(this))
     this.addSub('undici:request:error', this.#onNativeRequestError.bind(this))
@@ -59,10 +61,12 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     const host = port ? `${hostname}:${port}` : hostname
+    const base = `${protocol}//${host}`
     const pathname = path.split(/[?#]/)[0]
-    const uri = `${protocol}//${host}${pathname}`
+    const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const childOf = store && allowed ? store.span : null
 
     const span = this.startSpan(this.operationName(), {
@@ -70,7 +74,7 @@ class UndiciPlugin extends HttpClientPlugin {
       meta: {
         'span.kind': 'client',
         'http.method': method,
-        'http.url': uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
         'out.host': hostname,
       },
       metrics: {
@@ -109,10 +113,28 @@ class UndiciPlugin extends HttpClientPlugin {
       span,
       store,
       uri,
+      method,
     })
 
     // Enter the span context
     storage('legacy').enterWith({ ...store, span })
+  }
+
+  #onNativeRequestBodySent ({ request }) {
+    const ctx = requestContexts.get(request)
+    if (!ctx || ctx.method !== 'CONNECT') return
+
+    const { span, store } = ctx
+
+    this.config.hooks.request(span, null, null)
+
+    span.finish()
+
+    requestContexts.delete(request)
+
+    if (store) {
+      storage('legacy').enterWith(store)
+    }
   }
 
   #onNativeRequestHeaders ({ request, response }) {

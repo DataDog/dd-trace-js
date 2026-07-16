@@ -1,14 +1,14 @@
 'use strict'
 
 /* eslint-disable no-console */
-const tracer = require('../packages/dd-trace')
-const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
+const { isTrue } = require('../packages/dd-trace/src/util')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
+const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const EXPORTER_MAP = {
   jest: 'jest_worker',
   cucumber: 'cucumber_worker',
@@ -43,8 +43,10 @@ const baseOptions = {
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL,
 }
 
-let shouldInit = !isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))
-const isAgentlessEnabled = isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
+// skipDefault: CI visibility stays on unless DD_CIVISIBILITY_ENABLED is explicitly false; the
+// registered default (false) would otherwise turn it off whenever the variable is unset.
+let shouldInit = getValueFromEnvSources('DD_CIVISIBILITY_ENABLED', true) !== false
+const isAgentlessEnabled = getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
 
 if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
@@ -77,10 +79,28 @@ if (isTestWorker) {
   }
 }
 
-if (shouldInit) {
+const skipVitestWorkerInit = shouldSkipVitestWorkerInit()
+const tracer = skipVitestWorkerInit
+  ? {
+      init () {},
+      use () {},
+    }
+  : require('../packages/dd-trace')
+
+if (shouldInit && !skipVitestWorkerInit) {
   tracer.init(baseOptions)
   tracer.use('fs', false)
   tracer.use('child_process', false)
 }
 
 module.exports = tracer
+
+function shouldSkipVitestWorkerInit () {
+  return getValueFromEnvSources('DD_VITEST_WORKER') &&
+    isVitestNoWorkerInitActive()
+}
+
+function isVitestNoWorkerInitActive () {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  return isTrue(process.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV])
+}

@@ -22,7 +22,7 @@ function finish (ctx) {
 
 addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
-    return function wrappedExecute (dbQuery, ...args) {
+    return function wrappedExecute (dbQuery) {
       if (!startChannel.hasSubscribers) {
         return execute.apply(this, arguments)
       }
@@ -72,6 +72,11 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       }
 
       return startChannel.runStores(ctx, () => {
+        // bindStart is skipped when tracing is suppressed (legacy store is `noop`),
+        // leaving ctx.injected unset — do not overwrite the caller's SQL argument.
+        if (ctx.injected !== undefined) {
+          arguments[0] = ctx.injected
+        }
         try {
           let result = execute.apply(this, arguments)
 

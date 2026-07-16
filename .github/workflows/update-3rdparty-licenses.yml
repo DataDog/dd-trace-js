@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
     outputs:
       needs_update: ${{ steps.check.outputs.needs_update }}
       is_bot_same_repo: ${{ steps.check.outputs.is_bot_same_repo }}
@@ -20,23 +19,16 @@ jobs:
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
-      - name: Get GitHub Token via dd-octo-sts
-        id: generate-token
-        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
-        with:
-          scope: DataDog/dd-trace-js
-          policy: self.check-licenses
-
       - name: Check out PR branch
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.14"
 
       - name: Check out dd-license-attribution
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: watson/dd-license-attribution
           ref: 8ea483b9f735bf8da632c89796789cc2a050a9a6
@@ -66,7 +58,7 @@ jobs:
 
       - name: Regenerate LICENSE-3rdparty.csv
         env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           dd-license-attribution generate-sbom-csv \
             --use-mirrors=mirrors.json \

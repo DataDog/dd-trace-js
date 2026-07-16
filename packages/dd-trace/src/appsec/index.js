@@ -16,6 +16,8 @@ const {
   fastifyCookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  lambdaStartInvocation,
+  lambdaEndInvocation,
   passportVerify,
   passportUser,
   expressSession,
@@ -27,6 +29,7 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
+  informationalResponse,
   routerParam,
   fastifyResponseChannel,
   fastifyPathParams,
@@ -38,11 +41,12 @@ const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
-const apiSecuritySampler = require('./api_security_sampler')
+const apiSecurity = require('./api_security')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
+const lambda = require('./lambda')
 const rasp = require('./rasp')
 
 const responseAnalyzedSet = new WeakSet()
@@ -71,7 +75,7 @@ function enable (_config) {
 
     Reporter.init(_config.appsec, _config.inferredProxyServicesEnabled)
 
-    apiSecuritySampler.configure(_config)
+    apiSecurity.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
@@ -95,15 +99,20 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
-    responseSetHeader.subscribe(onResponseSetHeader)
+    responseSetHeader.subscribe(onResponseOperation)
+    informationalResponse.subscribe(onResponseOperation)
     stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
     stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
     stripeConstructEvent.subscribe(onStripeConstructEvent)
+    lambdaStartInvocation.subscribe(lambda.onLambdaStartInvocation)
+    lambdaEndInvocation.subscribe(lambda.onLambdaEndInvocation)
 
     isEnabled = true
     config = _config
   } catch (err) {
-    if (!IS_SERVERLESS) {
+    if (IS_SERVERLESS) {
+      log.debug('[ASM] Serverless mode: suppressing error log, calling disable()')
+    } else {
       log.error('[ASM] Unable to start AppSec', err)
     }
 
@@ -233,13 +242,17 @@ function incomingHttpEndTranslator ({ req, res }) {
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
 
-  if (apiSecuritySampler.sampleRequest(req, res, true)) {
+  const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
+  if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
+  let wafResult
   if (!isEmpty(persistent)) {
-    waf.run({ persistent }, req)
+    wafResult = waf.run({ persistent }, req)
   }
+
+  apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
 
   waf.disposeContext(req)
 
@@ -289,7 +302,7 @@ function onExpressSession ({ req, res, sessionId, abortController }) {
     return
   }
 
-  const isSdkCalled = rootSpan.context()._tags['usr.session_id']
+  const isSdkCalled = rootSpan.context().getTag('usr.session_id')
   if (isSdkCalled) return
 
   const results = waf.run({
@@ -339,7 +352,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
 
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.sampleRequest(req, res)) return
+  if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({
@@ -350,8 +363,15 @@ function onResponseBody ({ req, res, body }) {
 }
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
-  if (!isEmpty(responseHeaders)) {
-    storedResponseHeaders.set(req, responseHeaders)
+  // Normalize header names to lowercase so downstream consumers see the same shape
+  // regardless of how the caller wrote them.
+  const normalizedResponseHeaders = {}
+  for (const [key, value] of Object.entries(responseHeaders)) {
+    normalizedResponseHeaders[key.toLowerCase()] = value
+  }
+
+  if (!isEmpty(normalizedResponseHeaders)) {
+    storedResponseHeaders.set(req, normalizedResponseHeaders)
   }
 
   // TODO: do not call waf if inside block()
@@ -376,7 +396,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   const results = waf.run({
     persistent: {
       [addresses.HTTP_INCOMING_RESPONSE_CODE]: String(statusCode),
-      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(responseHeaders, 'set-cookie'),
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: copyHeadersOmitting(normalizedResponseHeaders, 'set-cookie'),
     },
   }, req)
 
@@ -385,7 +405,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
-function onResponseSetHeader ({ res, abortController }) {
+function onResponseOperation ({ res, abortController }) {
   if (isBlocked(res)) {
     abortController?.abort()
   }
@@ -506,7 +526,7 @@ function disable () {
 
   appsecRemoteConfig.disableWafUpdate()
 
-  apiSecuritySampler.disable()
+  apiSecurity.disable()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
@@ -529,10 +549,13 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
-  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseOperation)
+  if (informationalResponse.hasSubscribers) informationalResponse.unsubscribe(onResponseOperation)
   if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
   if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
+  if (lambdaStartInvocation.hasSubscribers) lambdaStartInvocation.unsubscribe(lambda.onLambdaStartInvocation)
+  if (lambdaEndInvocation.hasSubscribers) lambdaEndInvocation.unsubscribe(lambda.onLambdaEndInvocation)
 }
 
 /**

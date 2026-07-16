@@ -2,15 +2,25 @@
 
 const { readFileSync } = require('fs')
 const { join } = require('path')
+const { pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-const { traceAsyncIterator, traceIterator } = require('./transforms')
+const { waitForAsyncEnd } = require('./transforms')
 const instrumentations = require('./instrumentations')
 
-let dcPolyfill
+// `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
+// (ESM) statements that the transformer splices into the rewritten module.
+// `require()` accepts an absolute filesystem path; the ESM resolver rejects it
+// with `ERR_INVALID_MODULE_SPECIFIER` and needs a `file://` URL instead. We
+// pre-compute both forms here so each matcher hands the transformer a
+// specifier that is valid for the module type it is rewriting.
+let dcPolyfillCjs
+let dcPolyfillEsm
 
 try {
-  dcPolyfill = require.resolve('dc-polyfill').replaceAll('\\', '/')
+  const resolved = require.resolve('dc-polyfill')
+  dcPolyfillCjs = resolved.replaceAll('\\', '/')
+  dcPolyfillEsm = pathToFileURL(resolved).href
 } catch {
   // The `dc-polyfill` module is unavailable for some reason (like bundling).
   // Let's just keep the default of using `diagnostics-channel` as a fallback
@@ -20,10 +30,16 @@ try {
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
 const disabled = new Set()
-const matcher = create(instrumentations, dcPolyfill)
+const matcherCjs = create(instrumentations, dcPolyfillCjs)
+const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
-matcher.addTransform('traceIterator', traceIterator)
-matcher.addTransform('traceAsyncIterator', traceAsyncIterator)
+for (const matcher of [matcherCjs, matcherEsm]) {
+  matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+}
+
+// Keep the marker split: source-map scanners can read a contiguous token in
+// string literals as this file's own inline map.
+const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 function rewrite (content, filename, format) {
   if (!content) return content
@@ -41,6 +57,7 @@ function rewrite (content, filename, format) {
 
   if (disabled.has(moduleName)) return content
 
+  const matcher = moduleType === 'esm' ? matcherEsm : matcherCjs
   const transformer = matcher.getTransformer(moduleName, version, filePath)
 
   if (!transformer) return content
@@ -53,7 +70,7 @@ function rewrite (content, filename, format) {
 
     const inlineMap = Buffer.from(map).toString('base64')
 
-    return code + '\n' + `//# sourceMappingURL=data:application/json;base64,${inlineMap}`
+    return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
   } catch (e) {
     log.error(e)
   }

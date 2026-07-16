@@ -1,0 +1,17 @@
+{
+  "stopReason": "end_turn",
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [{ "type": "text", "text": "Datadog LLM Observability provides end-to-end visibility." }]
+    }
+  },
+  "usage": {
+    "inputTokens": 23,
+    "outputTokens": 44,
+    "totalTokens": 4492,
+    "cacheReadInputTokens": 4425,
+    "cacheWriteInputTokens": 0
+  },
+  "metrics": { "latencyMs": 1000 }
+}

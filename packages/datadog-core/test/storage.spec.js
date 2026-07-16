@@ -62,4 +62,30 @@ describe('storage', () => {
       }
     }
   })
+
+  it('should recover a stashed store via its handle from another context', () => {
+    const store = { span: 'first' }
+
+    testStorage.enterWith(store)
+    const handle = testStorage.getHandle()
+    testStorage.enterWith({ span: 'second' })
+
+    assert.strictEqual(testStorage.getStore(handle), store)
+    assert.deepStrictEqual(testStorage.getStore(), { span: 'second' })
+  })
+
+  it('should expose the entered store noop flag through the handle', () => {
+    testStorage.enterWith({ noop: true })
+    assert.strictEqual(testStorage.getHandle()?.noop, true)
+
+    testStorage.enterWith({ span: 'x' })
+    assert.strictEqual(testStorage.getHandle()?.noop, undefined)
+  })
+
+  it('should report no store once entered with undefined', () => {
+    testStorage.enterWith({ span: 'x' })
+    testStorage.enterWith(undefined)
+
+    assert.strictEqual(testStorage.getStore(), undefined)
+  })
 })

@@ -6,7 +6,6 @@ const axios = require('axios')
 const { after, before, describe, it } = require('mocha')
 
 const { USER_KEEP } = require('../../../../../ext/priority')
-const tracer = require('../../../../../index')
 const agent = require('../../plugins/agent')
 
 describe('track_event - Integration with the tracer', () => {
@@ -14,6 +13,7 @@ describe('track_event - Integration with the tracer', () => {
   let controller
   let appListener
   let port
+  let tracer
 
   function listener (req, res) {
     if (controller) {
@@ -22,7 +22,7 @@ describe('track_event - Integration with the tracer', () => {
   }
 
   before(async () => {
-    await agent.load('http')
+    tracer = await agent.load('http')
     http = require('http')
   })
 
@@ -37,7 +37,7 @@ describe('track_event - Integration with the tracer', () => {
 
   after(() => {
     appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('trackUserLoginSuccessEvent', () => {
@@ -63,10 +63,7 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(
-          !('appsec.events.users.login.success.track' in traces[0][0].meta) ||
-          traces[0][0].meta['appsec.events.users.login.success.track'] !== 'true'
-        )
+        assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.success.track'], 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -76,10 +73,7 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(
-          !('appsec.events.users.login.success.track' in traces[0][0].meta) ||
-          traces[0][0].meta['appsec.events.users.login.success.track'] !== 'true'
-        )
+        assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.success.track'], 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -122,10 +116,7 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(
-          !('appsec.events.users.login.failure.track' in traces[0][0].meta) ||
-          traces[0][0].meta['appsec.events.users.login.failure.track'] !== 'true'
-        )
+        assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.failure.track'], 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -135,10 +126,7 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(
-          !('appsec.events.users.login.failure.track' in traces[0][0].meta) ||
-          traces[0][0].meta['appsec.events.users.login.failure.track'] !== 'true'
-        )
+        assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.failure.track'], 'true')
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -165,10 +153,7 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(
-          !('_sampling_priority_v1' in traces[0][0].metrics) ||
-          traces[0][0].metrics._sampling_priority_v1 !== USER_KEEP
-        )
+        assert.notStrictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })

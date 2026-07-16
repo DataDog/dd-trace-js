@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -50,7 +51,7 @@ describe('IAST metric namespaces', () => {
     sinon.assert.called(rootSpan.addTags)
 
     const tag = rootSpan.addTags.getCalls()[0].args[0]
-    assert.ok(`${TAG_PREFIX}.${REQUEST_TAINTED}` in tag)
+    assert.ok(`${TAG_PREFIX}.${REQUEST_TAINTED}` in tag, `Got: ${inspect(tag)}`)
     assert.strictEqual(tag[`${TAG_PREFIX}.${REQUEST_TAINTED}`], 10)
 
     assert.strictEqual(context[DD_IAST_METRICS_NAMESPACE], undefined)
@@ -67,11 +68,11 @@ describe('IAST metric namespaces', () => {
 
     const calls = rootSpan.addTags.getCalls()
     const reqTaintedTag = calls[0].args[0]
-    assert.ok(`${TAG_PREFIX}.${REQUEST_TAINTED}` in reqTaintedTag)
+    assert.ok(`${TAG_PREFIX}.${REQUEST_TAINTED}` in reqTaintedTag, `Got: ${inspect(reqTaintedTag)}`)
     assert.strictEqual(reqTaintedTag[`${TAG_PREFIX}.${REQUEST_TAINTED}`], 15)
 
     const execSinkTag = calls[1].args[0]
-    assert.ok(`${TAG_PREFIX}.${EXECUTED_SINK}` in execSinkTag)
+    assert.ok(`${TAG_PREFIX}.${EXECUTED_SINK}` in execSinkTag, `Got: ${inspect(execSinkTag)}`)
     assert.strictEqual(execSinkTag[`${TAG_PREFIX}.${EXECUTED_SINK}`], 1)
   })
 

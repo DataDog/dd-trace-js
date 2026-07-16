@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -33,12 +34,17 @@ describe('SpanProcessor', () => {
       finished: [],
     }
 
+    let tags = {}
     const span = {
       tracer: sinon.stub().returns(tracer),
       context: sinon.stub().returns({
         _trace: trace,
         _sampling: {},
-        _tags: {},
+        getTags: () => tags,
+        getTag: (key) => tags[key],
+        setTag: (key, value) => { tags[key] = value },
+        hasTag: (key) => key in tags,
+        clearTags: () => { tags = Object.create(null) },
       }),
     }
 
@@ -54,8 +60,9 @@ describe('SpanProcessor', () => {
     config = {
       flushMinSpans: 3,
       stats: {
-        enabled: false,
+        DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
+      appsec: {},
     }
     spanFormat = sinon.stub().returns({ formatted: true })
 
@@ -93,8 +100,9 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.started, [])
     assert.ok('finished' in trace)
     assert.deepStrictEqual(trace.finished, [])
-    assert.ok('_tags' in finishedSpan.context())
-    assert.deepStrictEqual(finishedSpan.context()._tags, {})
+    // _erase leaves per-span tag storage intact so callers that retain a
+    // span ref after finish can still read tags.
+    assert.deepStrictEqual(finishedSpan.context().getTags(), {})
   })
 
   it('should not flush a partial trace below the flushMinSpans threshold', () => {
@@ -135,7 +143,8 @@ describe('SpanProcessor', () => {
 
   it('should configure span sampler correctly', () => {
     const config = {
-      stats: { enabled: false },
+      stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+      appsec: {},
       sampler: {
         sampleRate: 0,
         spanSamplingRules: [
@@ -157,10 +166,11 @@ describe('SpanProcessor', () => {
 
   it('should erase the trace and stop execution when tracing=false', () => {
     const config = {
-      tracing: false,
+      DD_TRACE_ENABLED: false,
       stats: {
-        enabled: false,
+        DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
+      appsec: {},
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -173,8 +183,7 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.started, [])
     assert.ok('finished' in trace)
     assert.deepStrictEqual(trace.finished, [])
-    assert.ok('_tags' in finishedSpan.context())
-    assert.deepStrictEqual(finishedSpan.context()._tags, {})
+    assert.deepStrictEqual(finishedSpan.context().getTags(), {})
     sinon.assert.notCalled(exporter.export)
   })
 
@@ -207,7 +216,12 @@ describe('SpanProcessor', () => {
       tags.split(',').forEach(tag => {
         const [key, value] = tag.split(':')
         if (key !== 'entrypoint.basedir') return
-        assert.strictEqual(value, 'test')
+        // The exact basedir varies depending on the test runner location
+        // (e.g. "test" in source tree vs "bin" when run via node_modules/.bin/mocha).
+        assert.ok(
+          typeof value === 'string' && value.length > 0,
+          `entrypoint.basedir value: ${inspect(value)}`
+        )
         foundATag = true
       })
       assert.ok(foundATag)
@@ -217,5 +231,65 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+  })
+
+  describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
+    function formattedHttpSpan () {
+      return {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'http://localhost:8080/u',
+          'http.status_code': '200',
+          'http.endpoint': '/u',
+        },
+        metrics: {},
+      }
+    }
+
+    it('applies the OTel HTTP rename to the exported span', () => {
+      spanFormat.returns(formattedHttpSpan())
+      const otelConfig = {
+        flushMinSpans: 3,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+        appsec: {},
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
+      const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+
+      processor.process(finishedSpan)
+
+      const exported = exporter.export.firstCall.args[0][0]
+      assert.strictEqual(exported.meta['http.request.method'], 'GET')
+      assert.strictEqual(exported.metrics['http.response.status_code'], 200)
+      assert.ok(!('http.method' in exported.meta))
+    })
+
+    it('records span stats from the Datadog tag names, before the export-only rename', () => {
+      spanFormat.returns(formattedHttpSpan())
+      const otelConfig = {
+        flushMinSpans: 3,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+        appsec: {},
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
+      const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
+      const statsView = {}
+      processor._stats = {
+        onSpanFinished: sinon.spy(span => {
+          statsView.method = span.meta['http.method']
+          statsView.statusCode = span.meta['http.status_code']
+          statsView.endpoint = span.meta['http.endpoint']
+        }),
+      }
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+
+      processor.process(finishedSpan)
+
+      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
+    })
   })
 })

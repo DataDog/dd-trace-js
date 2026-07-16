@@ -1,12 +1,12 @@
 'use strict'
 
 const log = require('../log')
-const { incomingHttpRequestStart, aiguardChannel } = require('./channels')
+const { incomingHttpRequestStart } = require('./channels')
+const integrations = require('./integrations')
 const AIGuard = require('./sdk')
 
 let isEnabled = false
 let aiguard
-let block
 
 function onIncomingHttpRequestStart () {
   // No-op: subscribing ensures the HTTP plugin spreads req onto the store
@@ -17,52 +17,30 @@ function enable (tracer, config) {
 
   try {
     aiguard = new AIGuard(tracer, config)
-    block = config.experimental?.aiguard?.block !== false
+    const block = config.experimental?.aiguard?.block !== false
 
     incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-    aiguardChannel.subscribe(onEvaluate)
+    integrations.enable(aiguard, block)
 
     isEnabled = true
   } catch (err) {
     log.error('AIGuard: unexpected error during initialization: %s', err.message)
-    disable()
+    reset()
   }
 }
 
 function disable () {
   if (!isEnabled) return
 
+  reset()
+}
+
+function reset () {
   incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
-  aiguardChannel.unsubscribe(onEvaluate)
+  integrations.disable()
 
   aiguard = undefined
   isEnabled = false
-  block = false
-}
-
-/**
- * Handles channel messages with pre-converted messages.
- *
- * @param {{messages: Array<object>, resolve: Function, reject: Function}} ctx
- */
-function onEvaluate (ctx) {
-  if (!ctx.messages?.length) {
-    ctx.resolve()
-    return
-  }
-
-  aiguard.evaluate(ctx.messages, { block })
-    .then(() => {
-      ctx.resolve()
-    })
-    .catch(err => {
-      if (err.name === 'AIGuardAbortError') {
-        ctx.reject(err)
-      } else {
-        log.error('AIGuard: unexpected error during evaluation: %s', err.message)
-        ctx.resolve()
-      }
-    })
 }
 
 module.exports = { enable, disable }

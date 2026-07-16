@@ -16,8 +16,7 @@ const configWithStartupLogs = {
   enabled: true,
   scope: 'async_hooks',
   service: 'test',
-  hostname: 'example.com',
-  port: 4321,
+  url: new URL('http://example.com:4321/'),
   debug: true,
   sampler: {
     sampleRate: 1,
@@ -27,6 +26,7 @@ const configWithStartupLogs = {
   runtimeMetrics: true,
   startupLogs: true,
   appsec: { enabled: true },
+  profiling: { DD_PROFILING_ENABLED: false },
   dsmEnabled: true,
 }
 

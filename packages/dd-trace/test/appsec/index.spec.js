@@ -28,6 +28,7 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
+  informationalResponse,
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -64,7 +65,7 @@ describe('AppSec Index', function () {
   let log
   let appsecTelemetry
   let graphql
-  let apiSecuritySampler
+  let apiSecurity
   let rasp
   let serverless
 
@@ -85,10 +86,8 @@ describe('AppSec Index', function () {
         eventTracking: {
           mode: 'anon',
         },
-        apiSecurity: {
-          enabled: false,
-          sampleDelay: 10,
-        },
+        DD_API_SECURITY_ENABLED: false,
+        DD_API_SECURITY_SAMPLE_DELAY: 10,
         rasp: {
           enabled: true,
           bodyCollection: true,
@@ -136,10 +135,16 @@ describe('AppSec Index', function () {
       disable: sinon.stub(),
     }
 
-    apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web,
+    const apiSecuritySampler = proxyquire('../../src/appsec/api_security/sampler', {
+      '../../plugins/util/web': web,
     })
-    sinon.spy(apiSecuritySampler, 'sampleRequest')
+    apiSecurity = proxyquire('../../src/appsec/api_security', {
+      './sampler': apiSecuritySampler,
+      '../../plugins/util/web': web,
+      '../blocking': blocking,
+      '../telemetry': appsecTelemetry,
+    })
+    sinon.spy(apiSecurity, 'sampleRequest')
 
     rasp = {
       enable: sinon.stub(),
@@ -157,7 +162,7 @@ describe('AppSec Index', function () {
       './user_tracking': UserTracking,
       './telemetry': appsecTelemetry,
       './graphql': graphql,
-      './api_security_sampler': apiSecuritySampler,
+      './api_security': apiSecurity,
       './rasp': rasp,
       '../serverless': serverless,
     })
@@ -215,6 +220,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(routerParam.hasSubscribers, false)
       assert.strictEqual(responseWriteHead.hasSubscribers, false)
       assert.strictEqual(responseSetHeader.hasSubscribers, false)
+      assert.strictEqual(informationalResponse.hasSubscribers, false)
 
       AppSec.enable(config)
 
@@ -230,6 +236,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(routerParam.hasSubscribers, true)
       assert.strictEqual(responseWriteHead.hasSubscribers, true)
       assert.strictEqual(responseSetHeader.hasSubscribers, true)
+      assert.strictEqual(informationalResponse.hasSubscribers, true)
     })
 
     it('should still subscribe to passportVerify if eventTracking is disabled', () => {
@@ -243,8 +250,8 @@ describe('AppSec Index', function () {
 
     it('should call appsec telemetry enable', () => {
       config.telemetry = {
-        enabled: true,
-        metrics: true,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_METRICS_ENABLED: true,
       }
       AppSec.enable(config)
 
@@ -313,6 +320,7 @@ describe('AppSec Index', function () {
       assert.strictEqual(routerParam.hasSubscribers, false)
       assert.strictEqual(responseWriteHead.hasSubscribers, false)
       assert.strictEqual(responseSetHeader.hasSubscribers, false)
+      assert.strictEqual(informationalResponse.hasSubscribers, false)
     })
 
     it('should call appsec telemetry disable', () => {
@@ -729,6 +737,47 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
+
+    it('should normalize response header names to lowercase before storing', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+        },
+        method: 'GET',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+      }
+      const res = { getHeaders: () => ({}), statusCode: 200 }
+
+      const mixedCaseHeaders = {
+        'Content-Type': 'application/json',
+        'Content-Length': 137,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: mixedCaseHeaders,
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {
+        'content-type': 'application/json',
+        'content-length': 137,
+      }, undefined)
+    })
   })
 
   describe('Api Security', () => {
@@ -744,10 +793,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not trigger schema extraction with feature disabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: false,
-        sampleDelay: 1,
-      }
+      config.appsec.DD_API_SECURITY_ENABLED = false
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
       AppSec.enable(config)
 
@@ -795,10 +842,8 @@ describe('AppSec Index', function () {
     })
 
     it('should trigger schema extraction with sampling enabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: true,
-        sampleDelay: 1,
-      }
+      config.appsec.DD_API_SECURITY_ENABLED = true
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
       AppSec.enable(config)
 
@@ -850,10 +895,8 @@ describe('AppSec Index', function () {
 
     describe('onResponseBody', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity = {
-          enabled: true,
-          sampleDelay: 1,
-        }
+        config.appsec.DD_API_SECURITY_ENABLED = true
+        config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
         AppSec.enable(config)
       })
@@ -866,30 +909,30 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
-        sinon.assert.notCalled(apiSecuritySampler.sampleRequest)
+        sinon.assert.notCalled(apiSecurity.sampleRequest)
         sinon.assert.notCalled(waf.run)
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
-        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
+        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => apiSecurity.SamplingDecision.SKIP)
         const req = {}
         const res = {}
 
         responseBody.publish({ req, res, body: {} })
 
-        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithMatch(apiSecurity.sampleRequest, req, res)
         sinon.assert.notCalled(waf.run)
       })
 
       it('should call to the waf if it is a sampled request', () => {
-        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
+        apiSecurity.sampleRequest = apiSecurity.sampleRequest.instantiateFake(() => apiSecurity.SamplingDecision.SAMPLE)
         const req = {}
         const res = {}
         const body = {}
 
         responseBody.publish({ req, res, body })
 
-        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithMatch(apiSecurity.sampleRequest, req, res)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
@@ -905,10 +948,17 @@ describe('AppSec Index', function () {
     beforeEach(() => {
       sinon.stub(waf, 'run')
 
+      const rootSpanTags = {}
       rootSpan = {
         setTag: sinon.stub(),
-        _tags: {},
-        context: () => ({ _tags: rootSpan._tags }),
+        _tags: rootSpanTags,
+        context: () => ({
+          _tags: rootSpanTags,
+          getTags () { return rootSpanTags },
+          getTag (key) { return rootSpanTags[key] },
+          setTag (key, value) { rootSpanTags[key] = value },
+          hasTag (key) { return key in rootSpanTags },
+        }),
       }
       web.root.returns(rootSpan)
 
@@ -1428,7 +1478,7 @@ describe('AppSec Index', function () {
       })
     })
 
-    describe('onResponseSetHeader', () => {
+    describe('onResponseOperation', () => {
       it('should call abortController if response was already blocked', () => {
         // First block the request
         waf.run.returns(resultActions)
@@ -1447,10 +1497,17 @@ describe('AppSec Index', function () {
         responseSetHeader.publish({ res, abortController })
 
         sinon.assert.calledOnce(abortController.abort)
+
+        abortController.abort.reset()
+
+        informationalResponse.publish({ res, abortController })
+
+        sinon.assert.calledOnce(abortController.abort)
       })
 
       it('should not call abortController if response was not blocked', () => {
         responseSetHeader.publish({ res, abortController })
+        informationalResponse.publish({ res, abortController })
 
         sinon.assert.notCalled(abortController.abort)
       })
@@ -1482,8 +1539,8 @@ describe('AppSec Index', function () {
     })
 
     it('should increment waf.init metric', () => {
-      config.telemetry.enabled = true
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsec.enable(config)
 
@@ -1494,8 +1551,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
-      config.telemetry.enabled = true
-      config.telemetry.metrics = false
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
 
       appsec.enable(config)
 
@@ -1505,8 +1562,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not increment waf.init metric if telemetry is not enabled', () => {
-      config.telemetry.enabled = false
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsec.enable(config)
 
@@ -1549,7 +1606,7 @@ describe('AppSec Index (Serverless)', () => {
       './user_tracking': {},
       './telemetry': {},
       './graphql': {},
-      './api_security_sampler': {},
+      './api_security': {},
       './rasp': {},
       '../serverless': { IS_SERVERLESS: true },
       './rule_manager': RuleManager,
@@ -1658,7 +1715,7 @@ describe('IP blocking', function () {
 
   after(() => {
     appListener && appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('do not block the request', () => {

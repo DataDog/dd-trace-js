@@ -51,9 +51,9 @@ function createWrapSelect () {
   const connectCh = channel('apm:elasticsearch:query:connect')
   return function wrapRequest (request) {
     return function (...args) {
-      if (args.length === 1) {
-        const cb = args[0]
-        args[0] = shimmer.wrapFunction(cb, cb => function (err, connection) {
+      const cb = args[0]
+      if (args.length === 1 && typeof cb === 'function') {
+        args[0] = shimmer.wrapCallback(cb, cb => function (err, connection) {
           if (connectCh.hasSubscribers && connection && connection.host) {
             connectCh.publish({ hostname: connection.host.host, port: connection.host.port })
           }
@@ -85,7 +85,7 @@ function createWrapRequest (name) {
           cb = arguments[lastIndex]
 
           if (typeof cb === 'function') {
-            arguments[lastIndex] = shimmer.wrapFunction(cb, cb => function (error) {
+            arguments[lastIndex] = shimmer.wrapCallback(cb, cb => function (error) {
               if (error) {
                 ctx.error = error
                 errorCh.publish(ctx)

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -19,21 +20,18 @@ describe('Plugin', () => {
   let tracer
   let api
   let gatewayPort
-  let proxyPort
-  let apiPort
 
   const startGateway = (cb) => {
-    const api = http.createServer((req, res) => res.end('OK'))
+    api = http.createServer((req, res) => res.end('OK'))
 
-    api.listen(apiPort, function () {
-      const apiPort = api.address().port
+    api.listen(function () {
+      const apiPort = (/** @type {import('net').AddressInfo} */ (api.address())).port
 
-      proxy.listen(proxyPort, function () {
-        const proxyPort = proxy.address().port
+      proxy.listen(function () {
+        const proxyPort = (/** @type {import('net').AddressInfo} */ (proxy.address())).port
 
         gateway = Gateway({
           edgemicro: {
-            port: gatewayPort,
             logging: { level: 'info', dir: os.tmpdir() },
             proxy: 'http://localhost:' + proxyPort,
           },
@@ -63,19 +61,17 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
-          tracer = require('../../dd-trace')
-
-          return agent.load(['microgateway-core', 'http'], [{}, { client: false }])
+        before(async () => {
+          tracer = await agent.load(['microgateway-core', 'http'], [{}, { client: false }])
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(done => {
           Gateway = require(`../../../versions/microgateway-core@${version}`).get()
-          startGateway(() => done())
+          startGateway(done)
         })
 
         it('should do automatic instrumentation', done => {
@@ -182,7 +178,10 @@ describe('Plugin', () => {
 
         if (semver.intersects(version, '>=2.3.3')) {
           it('should re-expose any exports', () => {
-            assert.ok(typeof Gateway.Logging === 'object' && Gateway.Logging !== null)
+            assert.ok(
+              typeof Gateway.Logging === 'object' && Gateway.Logging !== null,
+              `Expected non-null object, got ${inspect(Gateway.Logging)}`
+            )
           })
         }
       })

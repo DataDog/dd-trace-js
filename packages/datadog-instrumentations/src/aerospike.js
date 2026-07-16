@@ -41,7 +41,7 @@ function wrapProcess (process) {
 addHook({
   name: 'aerospike',
   file: 'lib/commands/command.js',
-  versions: ['4', '5', '6'],
+  versions: ['>=4'],
 },
 commandFactory => {
   return shimmer.wrapFunction(commandFactory, f => wrapCreateCommand(f))

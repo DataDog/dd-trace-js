@@ -6,13 +6,10 @@
   "instructions": true,
   "iterations": 24,
   "variants": {
-    "no-hooks": { "env": { "ASYNC_HOOKS": "" } },
     "init-only": {
-      "baseline": "no-hooks",
       "env": { "ASYNC_HOOKS": "init" }
     },
     "all-hooks": {
-      "baseline": "no-hooks",
       "env": { "ASYNC_HOOKS": "init,before,after,destroy,promiseResolve" }
     }
   }

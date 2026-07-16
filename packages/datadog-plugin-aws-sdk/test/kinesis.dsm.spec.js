@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -12,18 +14,25 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
+
+const KINESIS_DEFAULT_MAX_RECORD_BYTES = 1_048_576
+
+/** @typedef {{ resource: string, meta: Record<string, string> }} EncodedSpan */
+/** @typedef {EncodedSpan[][]} EncodedTraces */
 
 describe('Kinesis', function () {
   this.timeout(10000)
   setup()
 
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions((version, moduleName, resolvedVersion) => {
     let AWS
     let kinesis
     let tracer
 
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
+    // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
+    const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
 
     function createResources (streamName, cb) {
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
@@ -128,6 +137,50 @@ describe('Kinesis', function () {
         })
       })
 
+      if (promisesSupported) {
+        // Two Limit:1 polls: the first consumer span gets its topic from the stored iterator,
+        // the second from the re-keyed NextShardIterator. A broken re-key drops below two.
+        it('injects DSM pathway hash on consumer spans across promise-based getRecords polls', async () => {
+          const consumerSpanIds = new Set()
+          const tracePromise = agent.assertSomeTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.response' && span.meta['pathway.hash'] === expectedConsumerHash) {
+                  consumerSpanIds.add(span.span_id.toString())
+                }
+              }
+            }
+
+            assert.ok(consumerSpanIds.size >= 2, `Expected >= 2 consumer spans, got ${consumerSpanIds.size}`)
+          }, { timeoutMs: 10000 })
+
+          const actions = (async () => {
+            const first = await callViaPromise(kinesis, 'putRecord', {
+              PartitionKey: id().toString(),
+              Data: helpers.dataBuffer,
+              StreamName: streamNameDSM,
+            })
+            await callViaPromise(kinesis, 'putRecord', {
+              PartitionKey: id().toString(),
+              Data: helpers.dataBuffer,
+              StreamName: streamNameDSM,
+            })
+
+            const { ShardIterator } = await callViaPromise(kinesis, 'getShardIterator', {
+              ShardId: first.ShardId,
+              ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+              StartingSequenceNumber: first.SequenceNumber,
+              StreamName: streamNameDSM,
+            })
+
+            const firstPoll = await callViaPromise(kinesis, 'getRecords', { ShardIterator, Limit: 1 })
+            await callViaPromise(kinesis, 'getRecords', { ShardIterator: firstPoll.NextShardIterator, Limit: 1 })
+          })()
+
+          await Promise.all([tracePromise, actions])
+        })
+      }
+
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
         let putRecordSpanMeta = {}
         agent.assertSomeTraces(traces => {
@@ -145,6 +198,28 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
       })
 
+      it('records no DSM checkpoint when context plus the partition key would exceed the default cap', async () => {
+        const partitionKey = 'p'.repeat(256)
+        const data = Buffer.from(JSON.stringify({
+          myData: 'a'.repeat(KINESIS_DEFAULT_MAX_RECORD_BYTES - 500),
+        }))
+        /**
+         * @param {unknown} traces
+         */
+        const assertNoPathwayHash = traces => {
+          const span = /** @type {EncodedTraces} */ (traces)[0][0]
+          assert.match(span.resource, /^putRecord/)
+          assert.strictEqual(span.meta['pathway.hash'], undefined)
+        }
+        const tracePromise = agent.assertSomeTraces(assertNoPathwayHash, { spanResourceMatch: /^putRecord/ })
+        const params = { Data: data, PartitionKey: partitionKey, StreamName: streamNameDSM }
+        const requestPromise = promisesSupported
+          ? callViaPromise(kinesis, 'putRecord', params)
+          : promisify(kinesis.putRecord.bind(kinesis))(params)
+
+        await Promise.all([tracePromise, requestPromise])
+      })
+
       it('emits DSM stats to the agent during Kinesis putRecord', done => {
         agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
@@ -156,7 +231,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 1)
+          assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -174,7 +249,7 @@ describe('Kinesis', function () {
               })
             }
           }, { timeoutMs: 10000 })
-          assert.ok(statsPointsReceived >= 2)
+          assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
@@ -232,7 +307,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          assert.ok(statsPointsReceived >= 3)
+          assert.ok(statsPointsReceived >= 3, `Expected ${statsPointsReceived} >= 3`)
           assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 

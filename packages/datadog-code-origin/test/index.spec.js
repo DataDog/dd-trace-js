@@ -23,9 +23,15 @@ describe('code origin', () => {
       assert.strictEqual(tags['_dd.code_origin.type'], 'entry')
       assert.strictEqual(tags['_dd.code_origin.frames.0.file'], testedFile)
       assert.strictEqual(typeof tags['_dd.code_origin.frames.0.line'], 'string')
-      assert(Number(tags['_dd.code_origin.frames.0.line']) > 0)
+      assert(
+        Number(tags['_dd.code_origin.frames.0.line']) > 0,
+        `Expected ${Number(tags['_dd.code_origin.frames.0.line'])} > 0`
+      )
       assert.strictEqual(typeof tags['_dd.code_origin.frames.0.column'], 'string')
-      assert(Number(tags['_dd.code_origin.frames.0.column']) > 0)
+      assert(
+        Number(tags['_dd.code_origin.frames.0.column']) > 0,
+        `Expected ${Number(tags['_dd.code_origin.frames.0.column'])} > 0`
+      )
       assert.strictEqual(tags['_dd.code_origin.frames.0.method'], 'tag')
       assert.strictEqual('_dd.code_origin.frames.0.type' in tags, false)
     })
@@ -68,14 +74,16 @@ describe('code origin', () => {
         const { file, line, column, method, type } = frames[i]
         assert.strictEqual(tags[`_dd.code_origin.frames.${i}.file`], file)
         if (line === undefined) {
-          assert.strictEqual(typeof tags[`_dd.code_origin.frames.${i}.line`], 'string')
-          assert(Number(tags[`_dd.code_origin.frames.${i}.line`]) > 0)
+          const lineTag = tags[`_dd.code_origin.frames.${i}.line`]
+          assert.strictEqual(typeof lineTag, 'string')
+          assert(Number(lineTag) > 0, `Expected ${lineTag} to parse to a positive number`)
         } else {
           assert.strictEqual(tags[`_dd.code_origin.frames.${i}.line`], String(line))
         }
         if (column === undefined) {
-          assert.strictEqual(typeof tags[`_dd.code_origin.frames.${i}.column`], 'string')
-          assert(Number(tags[`_dd.code_origin.frames.${i}.column`]) > 0)
+          const columnTag = tags[`_dd.code_origin.frames.${i}.column`]
+          assert.strictEqual(typeof columnTag, 'string')
+          assert(Number(columnTag) > 0, `Expected ${columnTag} to parse to a positive number`)
         } else {
           assert.strictEqual(tags[`_dd.code_origin.frames.${i}.column`], String(column))
         }

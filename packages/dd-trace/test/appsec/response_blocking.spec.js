@@ -82,7 +82,7 @@ describe('HTTP Response Blocking', () => {
   after(() => {
     appsec.disable()
     server?.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   it('should block with implicit statusCode + setHeader() + end()', async () => {

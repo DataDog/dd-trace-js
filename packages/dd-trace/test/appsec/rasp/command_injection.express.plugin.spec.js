@@ -93,7 +93,7 @@ describe('RASP - command_injection', () => {
     after(() => {
       appsec.disable()
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     describe('exec', () => {

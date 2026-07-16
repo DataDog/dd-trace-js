@@ -8,6 +8,10 @@ async function runCypress () {
   const results = await cypress.run({
     config: {
       defaultCommandTimeout: 1000,
+      retries: {
+        runMode: Number(process.env.CYPRESS_RETRIES || 0),
+        openMode: 0,
+      },
       e2e: {
         testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false',
         setupNodeEvents (on, config) {
@@ -19,13 +23,19 @@ async function runCypress () {
         },
         specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
       },
+      // Mirror the env-driven gating in cypress.config.js: off by default so most
+      // specs do not capture screenshots; the failure-screenshot upload tests set
+      // CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
+      // The 'esm' module type runs Cypress through this programmatic config rather
+      // than cypress.config.js, so the same gating has to live here too.
       video: false,
-      screenshotOnRunFailure: false,
+      screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
     },
   })
 
-  if (results.totalFailed !== 0) {
-    process.exit(1)
+  const failures = results.totalFailed ?? results.failures ?? 0
+  if (failures !== 0) {
+    process.exit(failures)
   }
 }
 

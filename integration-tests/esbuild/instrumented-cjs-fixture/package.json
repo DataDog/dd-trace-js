@@ -1,0 +1,6 @@
+{
+  "name": "dd-esbuild-cjs-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js"
+}

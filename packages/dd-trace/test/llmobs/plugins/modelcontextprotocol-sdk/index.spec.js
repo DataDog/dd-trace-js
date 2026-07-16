@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, it, before, after } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 
@@ -172,7 +173,10 @@ describe('integrations', () => {
           // In MCP SDK 1.27+, tool errors are returned as isError:true results, not thrown exceptions
           const result = await client.callTool({ name: 'error-tool', arguments: {} })
           assert.ok(result.isError, 'callTool result should have isError: true')
-          assert.ok(result.content?.[0]?.text?.includes('Intentional test error'))
+          assert.ok(
+            result.content?.[0]?.text?.includes('Intentional test error'),
+            `Got: ${inspect(result.content?.[0]?.text)}`
+          )
 
           const { apmSpans, llmobsSpans } = await getEvents()
 

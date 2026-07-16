@@ -37,9 +37,7 @@ function makeRequest (data, url, cb) {
       'Datadog-Meta-Tracer-Version': pkg.version,
       'Content-Type': 'application/msgpack',
     },
-    protocol: url.protocol,
-    hostname: url.hostname,
-    port: url.port,
+    url,
   }
 
   log.debug('Request to the intake: %j', options)

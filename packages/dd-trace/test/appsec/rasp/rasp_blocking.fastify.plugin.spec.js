@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -15,8 +16,25 @@ const { blockedTemplateJson: blockedJson, setTestBlockingTemplates } = require('
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
+  // The WAF is driven by a static rasp_rules.json here, so Remote Configuration is not under test.
+  // Disable it so the tracer's RC client never polls `/v0.7/config` (which can otherwise land on this app).
+  let originalRemoteConfigEnabled
+
+  before(() => {
+    originalRemoteConfigEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
+    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+  })
+
+  after(() => {
+    if (originalRemoteConfigEnabled === undefined) {
+      delete process.env.DD_REMOTE_CONFIGURATION_ENABLED
+    } else {
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED = originalRemoteConfigEnabled
+    }
+  })
+
   withVersions('fastify', 'fastify', '>=2', (version) => {
-    let app, hooks, axios
+    let app, hooks, axios, pool
 
     before(async () => {
       await agent.load(['http', 'fastify'], { client: false })
@@ -47,7 +65,7 @@ describe('RASP - fastify blocking', () => {
       const childProcess = require('child_process')
       const fs = require('fs')
       const pg = require('../../../../../versions/pg@8.7.3').get()
-      const pool = new pg.Pool({
+      pool = new pg.Pool({
         host: '127.0.0.1',
         user: 'postgres',
         password: 'postgres',
@@ -84,10 +102,10 @@ describe('RASP - fastify blocking', () => {
         })
       })
 
-      await app.listen()
+      await app.listen({ host: '127.0.0.1', port: 0 })
 
       axios = Axios.create({
-        baseURL: `http://localhost:${app.server.address().port}`,
+        baseURL: `http://127.0.0.1:${app.server.address().port}`,
         validateStatus: () => true,
         responseType: 'text',
       })
@@ -98,9 +116,12 @@ describe('RASP - fastify blocking', () => {
     })
 
     after(async () => {
-      await app.server.close()
+      // The pg.Pool keeps connections and a reaper timer alive; leaking one per fastify version starves the
+      // event loop until later `before` hooks (server startup) time out.
+      await app.close()
+      await pool?.end()
       appsec.disable()
-      await agent.close({ ritmReset: false })
+      await agent.close()
     })
 
     it('should not block on user error', async () => {
@@ -111,7 +132,7 @@ describe('RASP - fastify blocking', () => {
       sinon.assert.calledOnce(hooks.onError)
       assert.strictEqual(res.status, 500)
       assert.notStrictEqual(res.data, blockedJson)
-      assert(res.data.includes('loul'))
+      assert(res.data.includes('loul'), `Got: ${inspect(res.data)}`)
       await checkRaspExecutedAndNotThreat(agent, false)
     })
 

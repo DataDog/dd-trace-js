@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -40,7 +41,7 @@ describe('esm', () => {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.add'), true)
           })
 
@@ -60,7 +61,7 @@ describe('esm', () => {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.addBulk'), true)
           })
 
@@ -80,7 +81,7 @@ describe('esm', () => {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.add'), true)
           })
 
@@ -104,7 +105,7 @@ describe('esm', () => {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-            assert.ok(Array.isArray(payload))
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
             assert.strictEqual(checkSpansForServiceName(payload, 'bullmq.processJob'), true)
           })
 

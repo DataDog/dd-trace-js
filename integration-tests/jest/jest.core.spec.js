@@ -4,7 +4,9 @@ const assert = require('node:assert/strict')
 
 const { once } = require('node:events')
 const { fork, exec } = require('child_process')
+const fs = require('node:fs')
 const path = require('path')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -30,7 +32,6 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
@@ -88,7 +89,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     'office-addin-mock',
     'winston',
     'jest-image-snapshot',
-    '@fast-check/jest',
   ].filter(Boolean), true)
 
   before(function () {
@@ -99,6 +99,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   beforeEach(async function () {
     receiver = await new FakeCiVisIntake().start()
   })
+
+  // Simulate pnpm-style resolution where Jest loads an environment from an
+  // absolute build file under a different node_modules tree. The file is still
+  // recognizable as jest-environment-node/build/index.js, but resolving the
+  // package root from the test project points somewhere else, so the require
+  // hook must match the build-file instrumentation entry.
+  function copyPackageToIsolatedNodeModules (packageName) {
+    const packagePath = path.join(cwd, 'node_modules', packageName)
+    const isolatedPackagePath = path.join(cwd, 'isolated-store', 'node_modules', packageName)
+
+    fs.rmSync(isolatedPackagePath, { force: true, recursive: true })
+    fs.mkdirSync(path.dirname(isolatedPackagePath), { recursive: true })
+    fs.cpSync(packagePath, isolatedPackagePath, { dereference: true, recursive: true })
+
+    return isolatedPackagePath
+  }
 
   afterEach(async () => {
     childProcess.kill()
@@ -430,9 +446,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -545,6 +559,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+            metadataDicts.forEach(metadata => {
+              assert.ok(metadata.test_levels[TEST_COMMAND])
+            })
+
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             const testModuleEvent = events.find(event => event.type === 'test_module_end').content
@@ -554,21 +573,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.ok(testSessionEvent)
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testSessionEvent[TEST_SESSION_ID])
-            assert.ok(testSessionEvent.meta[TEST_COMMAND])
-            assert.ok(testSessionEvent[TEST_SUITE_ID] == null)
-            assert.ok(testSessionEvent[TEST_MODULE_ID] == null)
+            assert.ok(testSessionEvent[TEST_SUITE_ID] == null, `Expected ${testSessionEvent[TEST_SUITE_ID]} == null`)
+            assert.ok(testSessionEvent[TEST_MODULE_ID] == null, `Expected ${testSessionEvent[TEST_MODULE_ID]} == null`)
 
             assert.ok(testModuleEvent)
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testModuleEvent[TEST_SESSION_ID])
             assert.ok(testModuleEvent[TEST_MODULE_ID])
-            assert.ok(testModuleEvent.meta[TEST_COMMAND])
-            assert.ok(testModuleEvent[TEST_SUITE_ID] == null)
+            assert.ok(testModuleEvent[TEST_SUITE_ID] == null, `Expected ${testModuleEvent[TEST_SUITE_ID]} == null`)
 
             assert.ok(testSuiteEvent)
             assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testSuiteEvent.meta[TEST_COMMAND])
             assert.ok(testSuiteEvent.meta[TEST_MODULE])
             assert.ok(testSuiteEvent[TEST_SUITE_ID])
             assert.ok(testSuiteEvent[TEST_SESSION_ID])
@@ -578,7 +594,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
             assert.strictEqual(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testEvent.meta[TEST_COMMAND])
             assert.ok(testEvent.meta[TEST_MODULE])
             assert.ok(testEvent[TEST_SUITE_ID])
             assert.ok(testEvent[TEST_SESSION_ID])
@@ -601,7 +616,377 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           eventsPromise,
         ])
       })
+
+      const assertCustomEnvironmentReportsTests = async (customTestEnvironment) => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const resourceNames = tests.map(test => test.resource)
+
+            assertObjectContains(resourceNames, [
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+            ])
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CUSTOM_TEST_ENVIRONMENT: customTestEnvironment,
+              TESTS_TO_RUN: 'test/ci-visibility-test.js',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+      }
+
+      it('reports test events when a custom environment does not call super.handleTestEvent', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuper.js')
+      })
+
+      it('reports test events when a custom environment defines handleTestEvent as an instance field', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperInstanceField.js')
+      })
+
+      it('reports test events when a custom environment assigns handleTestEvent after setup', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperAfterSetup.js')
+      })
+
+      it('reports test events when a custom environment has an instance field and setup without super', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperSetupAndInstanceField.js')
+      })
     })
+  })
+
+  onlyLatestIt('reports test events when Jest loads the node environment from an isolated build file', async () => {
+    const isolatedPackagePath = copyPackageToIsolatedNodeModules('jest-environment-node')
+    const customTestEnvironment = path.join(isolatedPackagePath, 'build/index.js')
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const resourceNames = tests.map(test => test.resource)
+
+        assertObjectContains(resourceNames, [
+          'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+        ])
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          CUSTOM_TEST_ENVIRONMENT: customTestEnvironment,
+          TESTS_TO_RUN: 'test/ci-visibility-test.js',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
+  onlyLatestIt('propagates test span context to HTTP requests and hooks during test.concurrent execution', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+
+        const expectedHttpSpanCountByTestName = new Map([
+          ['jest-test-concurrent-hook-http first concurrent body http is linked to first test span', 1],
+          ['jest-test-concurrent-hook-http second concurrent body http is linked to second test span', 1],
+          ['jest-test-concurrent-each-http first each row http is linked to its test span', 1],
+          ['jest-test-concurrent-each-http second each row http is linked to its test span', 1],
+          ['jest-mixed-concurrent-hook-http serial hook http is linked to serial test span', 3],
+          ['jest-mixed-concurrent-hook-http first mixed concurrent body http is linked to first test span', 1],
+          ['jest-mixed-concurrent-hook-http second mixed concurrent body http is linked to second test span', 1],
+        ])
+        const expectedParametersByTestName = new Map([
+          [
+            'jest-test-concurrent-each-http first each row http is linked to its test span',
+            JSON.stringify({ arguments: ['first each row', 30], metadata: {} }),
+          ],
+          [
+            'jest-test-concurrent-each-http second each row http is linked to its test span',
+            JSON.stringify({ arguments: ['second each row', 10], metadata: {} }),
+          ],
+        ])
+        for (const [testName, expectedHttpSpanCount] of expectedHttpSpanCountByTestName) {
+          const concurrentHookTestSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+          assert.ok(concurrentHookTestSpan, `should have concurrent hook test span for ${testName}`)
+          assert.strictEqual(concurrentHookTestSpan.meta[TEST_STATUS], 'pass')
+          const expectedParameters = expectedParametersByTestName.get(testName)
+          if (expectedParameters) {
+            assert.strictEqual(concurrentHookTestSpan.meta[TEST_PARAMETERS], expectedParameters)
+          }
+
+          const concurrentHookHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === concurrentHookTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === concurrentHookTestSpan.span_id.toString()
+          )
+          assert.strictEqual(
+            concurrentHookHttpSpans.length,
+            expectedHttpSpanCount,
+            `should have the expected HTTP spans as children of ${testName}`
+          )
+        }
+
+        const concurrentParameterizedTests = tests.filter(test =>
+          test.meta[TEST_NAME] === 'jest-test-concurrent-each-http parameterized metadata is reported'
+        )
+        assert.strictEqual(concurrentParameterizedTests.length, 2)
+        assert.deepStrictEqual(
+          concurrentParameterizedTests.map(test => test.meta[TEST_PARAMETERS]).sort(),
+          [
+            JSON.stringify({ arguments: [1, 2, 3], metadata: {} }),
+            JSON.stringify({ arguments: [2, 3, 5], metadata: {} }),
+          ].sort()
+        )
+
+        const duplicateTestName = 'jest-duplicate-concurrent-http ' +
+          'duplicate concurrent body http is linked to its test span'
+        const duplicateTestSpans = tests.filter(test => test.meta[TEST_NAME] === duplicateTestName)
+        assert.strictEqual(duplicateTestSpans.length, 2)
+
+        const duplicateTraceIds = new Set()
+        for (const duplicateTestSpan of duplicateTestSpans) {
+          duplicateTraceIds.add(duplicateTestSpan.trace_id.toString())
+          const duplicateHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === duplicateTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === duplicateTestSpan.span_id.toString()
+          )
+          assert.strictEqual(
+            duplicateHttpSpans.length,
+            1,
+            `should have an HTTP span as child of duplicate test span ${duplicateTestSpan.span_id}`
+          )
+        }
+        assert.strictEqual(duplicateTraceIds.size, 2)
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-http',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
+  onlyLatestIt('propagates test span context when test.concurrent is imported from @jest/globals', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+        const expectedTestNames = [
+          'jest-imported-globals-concurrent-http imported concurrent body http is linked to test span',
+          'jest-imported-globals-concurrent-http imported each row http is linked to test span',
+        ]
+
+        for (const testName of expectedTestNames) {
+          const testSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+          assert.ok(testSpan, `should have imported globals concurrent test span for ${testName}`)
+          assert.strictEqual(testSpan.meta[TEST_STATUS], 'pass')
+          if (testName === 'jest-imported-globals-concurrent-http imported each row http is linked to test span') {
+            assert.strictEqual(
+              testSpan.meta[TEST_PARAMETERS],
+              JSON.stringify({ arguments: ['imported each row'], metadata: {} })
+            )
+          }
+
+          const httpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === testSpan.trace_id.toString() &&
+            span.parent_id.toString() === testSpan.span_id.toString()
+          )
+          assert.strictEqual(httpSpans.length, 1, `should have an HTTP span as child of ${testName}`)
+        }
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-imported-globals-http',
+          DO_NOT_INJECT_GLOBALS: 'true',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
+  onlyLatestIt('propagates test span context for test.concurrent.only.failing', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+        const testName = 'jest-concurrent-only-failing-http only failing concurrent body http is linked to test span'
+        const testSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+
+        assert.ok(testSpan, `should have concurrent.only.failing test span for ${testName}`)
+        assert.strictEqual(testSpan.meta[TEST_STATUS], 'pass')
+
+        const httpSpans = spans.filter(span =>
+          span.name === 'http.request' &&
+          span.trace_id.toString() === testSpan.trace_id.toString() &&
+          span.parent_id.toString() === testSpan.span_id.toString()
+        )
+        assert.strictEqual(httpSpans.length, 1, `should have an HTTP span as child of ${testName}`)
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-only-failing-http',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
+  onlyLatestIt('rebinds test.concurrent retry bodies to the current test span', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+        const retryTestName = 'jest-test-concurrent-retry-http retry body http is linked to current attempt span'
+        const retryTestSpans = tests.filter(test => test.meta[TEST_NAME] === retryTestName)
+        const duplicateRetryTestName = 'jest-duplicate-concurrent-retry-http ' +
+          'duplicate retry body http is linked to current attempt span'
+        const duplicateRetryTestSpans = tests.filter(test => test.meta[TEST_NAME] === duplicateRetryTestName)
+        const httpSpans = spans.filter(span => span.name === 'http.request')
+        const getHttpChildSpans = testSpan => httpSpans.filter(span =>
+          span.trace_id.toString() === testSpan.trace_id.toString() &&
+          span.parent_id.toString() === testSpan.span_id.toString()
+        )
+        const getRetryDebug = testSpans => testSpans.map(test => ({
+          spanId: test.span_id.toString(),
+          traceId: test.trace_id.toString(),
+          status: test.meta[TEST_STATUS],
+          childCount: getHttpChildSpans(test).length,
+        }))
+        const assertRetryHttpChildren = (testName, testSpans) => {
+          for (const testSpan of testSpans) {
+            assert.strictEqual(
+              getHttpChildSpans(testSpan).length,
+              1,
+              inspect({
+                testName,
+                retryDebug: getRetryDebug(testSpans),
+                httpSpans: httpSpans.map(span => ({
+                  spanId: span.span_id.toString(),
+                  parentId: span.parent_id.toString(),
+                  traceId: span.trace_id.toString(),
+                })),
+              })
+            )
+          }
+        }
+        const assertExternalRetryMetadata = (testSpans, expectedRetryCount) => {
+          const retrySpans = testSpans.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retrySpans.length, expectedRetryCount)
+          for (const retrySpan of retrySpans) {
+            assert.strictEqual(retrySpan.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+          }
+
+          const originalSpans = testSpans.filter(test => test.meta[TEST_IS_RETRY] !== 'true')
+          assert.strictEqual(originalSpans.length, testSpans.length - expectedRetryCount)
+          for (const originalSpan of originalSpans) {
+            assert.ok(!(TEST_IS_RETRY in originalSpan.meta))
+            assert.ok(!(TEST_RETRY_REASON in originalSpan.meta))
+          }
+        }
+
+        assert.strictEqual(retryTestSpans.length, 2)
+        assert.deepStrictEqual(
+          retryTestSpans.map(test => test.meta[TEST_STATUS]).sort(),
+          ['fail', 'pass'],
+          inspect(retryTestSpans.map(test => test.meta))
+        )
+        assertRetryHttpChildren(retryTestName, retryTestSpans)
+        assertExternalRetryMetadata(retryTestSpans, 1)
+
+        assert.strictEqual(duplicateRetryTestSpans.length, 4)
+        assert.deepStrictEqual(
+          duplicateRetryTestSpans.map(test => test.meta[TEST_STATUS]).sort(),
+          ['fail', 'fail', 'pass', 'pass'],
+          inspect(duplicateRetryTestSpans.map(test => test.meta))
+        )
+        assert.strictEqual(new Set(duplicateRetryTestSpans.map(test => test.span_id.toString())).size, 4)
+        assertRetryHttpChildren(duplicateRetryTestName, duplicateRetryTestSpans)
+        assertExternalRetryMetadata(duplicateRetryTestSpans, 2)
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-retry-http',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
   })
 
   const envVarSettings = ['DD_TRACE_ENABLED']
@@ -697,6 +1082,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   // --shard was added in jest@28
   onlyLatestIt('works when sharding', (done) => {
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: false,
+      tests_skipping: true,
+    })
     receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
       const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.strictEqual(testSuiteEvents.length, 3)
@@ -761,8 +1151,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
         done()
-      })
-    })
+      }).catch(done)
+    }).catch(done)
     childProcess = exec(
       runTestsCommand,
       {
@@ -838,7 +1228,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSpans.length, 2)
         const spanTypes = testSpans.map(span => span.type)
         assertObjectContains(spanTypes, ['test'])
-        assert.ok(!spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)))
+        assert.ok(
+          !spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)),
+          `Got: ${inspect(spanTypes)}`
+        )
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
         done()
       }).catch(done)
@@ -860,9 +1253,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         // it propagates test session name to the test and test suite events in parallel mode
         metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
+          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
         })
 
         const events = eventsRequests.map(({ payload }) => payload)
@@ -938,7 +1329,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             ddsource: 'dd_debugger',
             level: 'error',
           })
+          assert.ok(diLog.ddtags.includes('git.repository_url:'), `Got: ${inspect(diLog.ddtags)}`)
+          assert.ok(diLog.ddtags.includes('git.commit.sha:'), `Got: ${inspect(diLog.ddtags)}`)
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
+          const locals = diLog.debugger.snapshot.captures.lines['6'].locals
+          assert.strictEqual(locals.emptyObject.type, 'Object')
+          assert.strictEqual('fields' in locals.emptyObject, false)
+          assert.strictEqual(locals.emptyArray.type, 'Array')
+          assert.strictEqual('elements' in locals.emptyArray, false)
+          assert.strictEqual(locals.emptyMap.type, 'Map')
+          assert.strictEqual('entries' in locals.emptyMap, false)
+          assert.doesNotMatch(JSON.stringify(diLog.debugger.snapshot.captures), /"(fields|elements|entries)":(?:\{\}|\[\]|null)/)
           spanIdByLog = diLog.dd.span_id
           traceIdByLog = diLog.dd.trace_id
           snapshotIdByLog = diLog.debugger.snapshot.id
@@ -949,7 +1350,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-(hit-breakpoint|not-hit-breakpoint)\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: 'true',
           },
@@ -964,6 +1365,59 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('does not run Failed Test Replay for files with concurrent tests', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.strictEqual(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+          assert.strictEqual(
+            retriedTest.meta[TEST_NAME],
+            'dynamic instrumentation with concurrent tests serial retry does not use Failed Test Replay'
+          )
+
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property =>
+              property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+            )
+          assert.strictEqual(hasDebugTags, false)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/concurrent-ftr-disabled',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            RUN_IN_PARALLEL: 'true',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        logsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
@@ -1052,7 +1506,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        assert.ok(tests.length >= 2)
+        assert.ok(tests.length >= 2, `Expected ${tests.length} >= 2`)
         tests.forEach(testEvent => {
           assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
         })
@@ -1193,7 +1647,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           assert.strictEqual(failedTestSuite.content.meta[TEST_STATUS], 'fail')
           assert.ok(
-            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code')
+            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code'),
+            `Got: ${inspect(failedTestSuite.content.meta[ERROR_MESSAGE])}`
           )
           assert.strictEqual(failedTestSuite.content.meta[ERROR_TYPE], 'Error')
 
@@ -1235,13 +1690,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           // jest still reports the test suite as passing
           assert.strictEqual(badImportTestSuite.content.meta[TEST_STATUS], 'pass')
+          const errorMessage = badImportTestSuite.content.meta[ERROR_MESSAGE]
           assert.ok(
-            badImportTestSuite.content.meta[ERROR_MESSAGE]
-              .includes('a file after the Jest environment has been torn down')
+            errorMessage.includes('a file after the Jest environment has been torn down'),
+            `Got: ${inspect(errorMessage)}`
           )
           assert.ok(
-            badImportTestSuite.content.meta[ERROR_MESSAGE]
-              .includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js')
+            errorMessage.includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'),
+            `Got: ${inspect(errorMessage)}`
           )
           // This is the error message that jest should show. We check that we don't mess it up.
           assert.match(badImportTestSuite.content.meta[ERROR_MESSAGE], /off-timing-import/)
@@ -1270,16 +1726,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('does not report total code coverage % if user has not configured coverage manually', (done) => {
+  it('reports total code coverage % when TIA forces coverage collection', (done) => {
     receiver.setSettings({
       itr_enabled: true,
       code_coverage: true,
+      coverage_report_upload_enabled: true,
       tests_skipping: false,
     })
 
     receiver.assertPayloadReceived(({ payload }) => {
       const testSession = payload.events.find(event => event.type === 'test_session_end').content
-      assert.ok(!(TEST_CODE_COVERAGE_LINES_PCT in testSession.metrics))
+      assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
@@ -1351,6 +1808,105 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
+  })
+
+  it('flushes test data before Jest bails', async () => {
+    receiver.setSettings({
+      itr_enabled: false,
+      code_coverage: false,
+      tests_skipping: false,
+    })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_BAIL: '1',
+          TESTS_TO_RUN: 'test/fail-test.js',
+          ENABLE_CODE_COVERAGE: '1',
+        },
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    await receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end')
+        const testModule = events.find(event => event.type === 'test_module_end')
+        const testSuite = events.find(event => event.type === 'test_suite_end')
+        const test = events.find(event => event.type === 'test')
+
+        assert.ok(testSession)
+        assert.ok(testModule)
+        assert.ok(testSuite)
+        assert.ok(test)
+        assert.notStrictEqual(testSession.content.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+        assert.strictEqual(test.content.meta[TEST_SUITE], 'ci-visibility/test/fail-test.js')
+        assert.strictEqual(test.content.meta[TEST_NAME], 'fail can report failed tests')
+        assert.strictEqual(test.content.meta[TEST_STATUS], 'fail')
+      }
+    )
+    assert.strictEqual(childProcess.exitCode, 1)
+  })
+
+  it('flushes suite-level failures when bail is enabled', async () => {
+    receiver.setSettings({
+      itr_enabled: false,
+      code_coverage: false,
+      tests_skipping: false,
+    })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_BAIL: '1',
+          SHOULD_CHECK_RESULTS: '1',
+          TESTS_TO_RUN: 'test-parsing-error/parsing-error.js',
+        },
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    await receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end')
+        const testModule = events.find(event => event.type === 'test_module_end')
+        const testSuite = events.find(event => event.type === 'test_suite_end')
+        const tests = events.filter(event => event.type === 'test')
+
+        assert.ok(testSession)
+        assert.ok(testModule)
+        assert.ok(testSuite)
+        assert.strictEqual(tests.length, 0)
+        assert.strictEqual(testSuite.content.meta[TEST_SUITE], 'ci-visibility/test-parsing-error/parsing-error.js')
+        assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'fail')
+        assert.match(testSuite.content.meta[ERROR_MESSAGE], /chao/)
+      }
+    )
+    assert.strictEqual(childProcess.exitCode, 1)
   })
 
   it('does not hang if server is not available and logs an error', (done) => {
@@ -1515,7 +2071,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
 
-        assert.ok(testEvents.length > 0)
+        assert.ok(testEvents.length > 0, `Expected ${testEvents.length} > 0`)
       })
 
     childProcess = exec(

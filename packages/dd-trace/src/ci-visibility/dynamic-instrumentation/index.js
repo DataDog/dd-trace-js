@@ -9,6 +9,7 @@ const getDebuggerConfig = require('../../debugger/config')
 
 const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
+const drainRequestIdToResolveBreakpointHit = new Map()
 
 class TestVisDynamicInstrumentation {
   /**
@@ -55,6 +56,21 @@ class TestVisDynamicInstrumentation {
         probeIdToResolveBreakpointSet.set(probeId, resolve)
       }),
     ]
+  }
+
+  /**
+   * Waits until all breakpoint hits already being handled by the DI worker have been posted back.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForInFlightBreakpointHits () {
+    if (!this.worker) return Promise.resolve()
+
+    const requestId = randomUUID()
+    return new Promise(resolve => {
+      drainRequestIdToResolveBreakpointHit.set(requestId, resolve)
+      this.breakpointHitChannel.port2.postMessage({ drainRequestId: requestId })
+    })
   }
 
   isReady () {
@@ -120,7 +136,7 @@ class TestVisDynamicInstrumentation {
     })
 
     // Allow the parent to exit even if the worker is still running
-    this.worker.unref()
+    this.worker.unref?.()
 
     this.breakpointSetChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointSet.get(probeId)
@@ -128,9 +144,18 @@ class TestVisDynamicInstrumentation {
         resolve()
         probeIdToResolveBreakpointSet.delete(probeId)
       }
-    }).unref()
+    }).unref?.()
 
-    this.breakpointHitChannel.port2.on('message', ({ snapshot }) => {
+    this.breakpointHitChannel.port2.on('message', ({ snapshot, drainRequestId }) => {
+      if (drainRequestId) {
+        const resolve = drainRequestIdToResolveBreakpointHit.get(drainRequestId)
+        if (resolve) {
+          resolve()
+          drainRequestIdToResolveBreakpointHit.delete(drainRequestId)
+        }
+        return
+      }
+
       const { probe: { id: probeId } } = snapshot
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
       if (onHit) {
@@ -138,7 +163,7 @@ class TestVisDynamicInstrumentation {
       } else {
         log.warn('Received a breakpoint hit for an unknown probe')
       }
-    }).unref()
+    }).unref?.()
 
     this.breakpointRemoveChannel.port2.on('message', (probeId) => {
       const resolve = probeIdToResolveBreakpointRemove.get(probeId)
@@ -146,7 +171,7 @@ class TestVisDynamicInstrumentation {
         resolve()
         probeIdToResolveBreakpointRemove.delete(probeId)
       }
-    }).unref()
+    }).unref?.()
   }
 }
 

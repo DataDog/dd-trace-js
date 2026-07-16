@@ -32,6 +32,8 @@ const span = {
     _tags: tags,
     _sampling: {},
     _name: 'operation',
+    getTag: (key) => tags[key],
+    getTags: () => tags,
   }),
   _startTime: 1500000000000.123,
   _duration: 100,

@@ -77,7 +77,7 @@ describe('External Logger', () => {
         assert.strictEqual(request[0].level, 'info')
         assert.strictEqual(request[0]['dd.trace_id'], '000001000')
         assert.strictEqual(request[0]['dd.span_id'], '9999991999')
-        assert.ok(request[0].timestamp >= currentTime)
+        assert.ok(request[0].timestamp >= currentTime, `Expected ${request[0].timestamp} >= ${currentTime}`)
         assert.strictEqual(request[0].ddsource, 'logging_from_space')
         assert.strictEqual(request[0].ddtags, 'env:external_logger,version:1.2.3,service:external')
       } catch (e) {

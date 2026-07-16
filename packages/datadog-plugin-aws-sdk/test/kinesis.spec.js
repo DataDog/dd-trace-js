@@ -1,14 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
@@ -16,11 +18,13 @@ describe('Kinesis', function () {
   this.timeout(10000)
   setup()
 
-  withAwsSdkVersions((version, moduleName) => {
+  withAwsSdkVersions((version, moduleName, resolvedVersion) => {
     let AWS
     let kinesis
 
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
+    // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
+    const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
 
     function createResources (streamName, cb) {
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
@@ -92,8 +96,11 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            assert.ok(Object.hasOwn(data, '_datadog'))
-            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
+            assert.ok(Object.hasOwn(data, '_datadog'), `Available keys: ${inspect(Object.keys(data))}`)
+            assert.ok(
+              Object.hasOwn(data._datadog, 'x-datadog-trace-id'),
+              `Available keys: ${inspect(Object.keys(data._datadog))}`
+            )
 
             done()
           })
@@ -109,8 +116,11 @@ describe('Kinesis', function () {
 
             for (const record in data.Records) {
               const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
-              assert.ok(Object.hasOwn(recordData, '_datadog'))
-              assert.ok(Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'))
+              assert.ok(Object.hasOwn(recordData, '_datadog'), `Available keys: ${inspect(Object.keys(recordData))}`)
+              assert.ok(
+                Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'),
+                `Available keys: ${inspect(Object.keys(recordData._datadog))}`
+              )
             }
 
             done()
@@ -125,8 +135,11 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            assert.ok(Object.hasOwn(data, '_datadog'))
-            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
+            assert.ok(Object.hasOwn(data, '_datadog'), `Available keys: ${inspect(Object.keys(data))}`)
+            assert.ok(
+              Object.hasOwn(data._datadog, 'x-datadog-trace-id'),
+              `Available keys: ${inspect(Object.keys(data._datadog))}`
+            )
 
             done()
           })
@@ -167,13 +180,56 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, () => {})
       })
 
+      if (promisesSupported) {
+        it('should propagate the tracing context from the producer to the consumer with promises', async () => {
+          let parentId
+          let traceId
+
+          const parentPromise = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            assert.strictEqual(span.resource.startsWith('putRecord'), true)
+
+            parentId = span.span_id.toString()
+            traceId = span.trace_id.toString()
+          }, { timeoutMs: 10000 })
+
+          const consumerPromise = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+
+            assert.strictEqual(span.name, 'aws.response')
+            assert.strictEqual(typeof parentId, 'string')
+            assert.strictEqual(span.parent_id.toString(), parentId)
+            assert.strictEqual(span.trace_id.toString(), traceId)
+          }, { timeoutMs: 10000 })
+
+          const actions = (async () => {
+            const putData = await callViaPromise(kinesis, 'putRecord', {
+              PartitionKey: id().toString(),
+              Data: helpers.dataBuffer,
+              StreamName: streamName,
+            })
+
+            const { ShardIterator } = await callViaPromise(kinesis, 'getShardIterator', {
+              ShardId: putData.ShardId,
+              ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+              StartingSequenceNumber: putData.SequenceNumber,
+              StreamName: streamName,
+            })
+
+            await callViaPromise(kinesis, 'getRecords', { ShardIterator })
+          })()
+
+          await Promise.all([parentPromise, consumerPromise, actions])
+        })
+      }
+
       describe('Disabled', () => {
         let savedKinesisEnv
 
         before(() => {
           savedKinesisEnv = process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
           process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
-          agent.wipe()
         })
 
         after(() => {
@@ -182,7 +238,6 @@ describe('Kinesis', function () {
           } else {
             process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = savedKinesisEnv
           }
-          agent.wipe()
         })
 
         it('skip injects trace context to Kinesis putRecord when disabled', done => {

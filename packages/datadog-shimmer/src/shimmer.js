@@ -1,5 +1,7 @@
 'use strict'
 
+const { isModuleNamespaceObject } = require('node:util').types
+
 /**
  * @type {Set<string | symbol>}
  */
@@ -13,11 +15,16 @@ const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
+// Reused descriptor scratch space for the `name` and `length` slots that
+// `copyProperties` and `wrapCallback` rewrite per wrap. `Object.defineProperty`
+// reads the descriptor's slots synchronously and does not retain the object,
+// so mutating `value` between calls is safe.
+const lengthDescriptor = { value: 0, configurable: true }
+const nameDescriptor = { value: '', configurable: true }
+
 /**
- * Copies properties from the original function to the wrapped function.
- *
- * @param {Function} original - The original function.
- * @param {Function} wrapped - The wrapped function.
+ * @param {Function} original
+ * @param {Function} wrapped
  */
 function copyProperties (original, wrapped) {
   if (original.constructor !== wrapped.constructor) {
@@ -26,11 +33,15 @@ function copyProperties (original, wrapped) {
   }
 
   const ownKeys = Reflect.ownKeys(original)
-  if (original.length !== wrapped.length) {
-    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+  const originalLength = original.length
+  if (originalLength !== wrapped.length) {
+    lengthDescriptor.value = originalLength
+    Object.defineProperty(wrapped, 'length', lengthDescriptor)
   }
-  if (original.name !== wrapped.name) {
-    Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
+  const originalName = original.name
+  if (originalName !== wrapped.name) {
+    nameDescriptor.value = originalName
+    Object.defineProperty(wrapped, 'name', nameDescriptor)
   }
   if (ownKeys.length !== 2) {
     for (const key of ownKeys) {
@@ -46,11 +57,9 @@ function copyProperties (original, wrapped) {
 }
 
 /**
- * Copies properties from the original object to the wrapped object, skipping a specific key.
- *
- * @param {Record<string | symbol, unknown>} original - The original object.
- * @param {Record<string | symbol, unknown>} wrapped - The wrapped object.
- * @param {string | symbol} skipKey - The key to skip during copying.
+ * @param {Record<string | symbol, unknown>} original
+ * @param {Record<string | symbol, unknown>} wrapped
+ * @param {string | symbol} skipKey
  */
 function copyObjectProperties (original, wrapped, skipKey) {
   const ownKeys = Reflect.ownKeys(original)
@@ -66,11 +75,8 @@ function copyObjectProperties (original, wrapped, skipKey) {
 }
 
 /**
- * Wraps a function with a wrapper function.
- *
- * @param {Function} original - The original function to wrap.
- * @param {(original: Function) => Function} wrapper - The wrapper function.
- * @returns {Function} The wrapped function.
+ * @param {Function} original
+ * @param {(original: Function) => Function} wrapper
  */
 function wrapFunction (original, wrapper) {
   if (typeof original !== 'function') return original
@@ -83,17 +89,46 @@ function wrapFunction (original, wrapper) {
 }
 
 /**
+ * Lean variant of `wrapFunction` for tracer-owned closures wrapping a
+ * user-supplied callback. Preserves `name` and `length` only; skips the
+ * prototype copy, `assertNotClass`, and the `Reflect.ownKeys` descriptor
+ * walk. Use `wrapFunction` instead when the wrapped value needs its
+ * prototype, has own properties the caller may read, or is `new`-ed.
+ *
+ * @param {Function} original
+ * @param {(original: Function) => Function} wrapper
+ */
+function wrapCallback (original, wrapper) {
+  if (typeof original !== 'function') {
+    return original
+  }
+  const wrapped = wrapper(original)
+  if (wrapped.name !== original.name) {
+    nameDescriptor.value = original.name
+    Object.defineProperty(wrapped, 'name', nameDescriptor)
+  }
+  if (wrapped.length !== original.length) {
+    lengthDescriptor.value = original.length
+    Object.defineProperty(wrapped, 'length', lengthDescriptor)
+  }
+  return wrapped
+}
+
+/**
  * Wraps a method of an object with a wrapper function.
  *
  * @param {Record<string | symbol, unknown> | Function | undefined} target - The target
  * object.
  * @param {string | symbol} name - The property key of the method to wrap.
  * @param {(original: Function) => (...args: unknown[]) => unknown} wrapper - The wrapper function.
- * @param {{ replaceGetter?: boolean }} [options] - If `replaceGetter` is set to
- * true, the getter is accessed and the getter is replaced with one that just
- * returns the earlier retrieved value. Use with care! This may only be done in
- * case the getter absolutely has no side effect and no setter is defined for the
- * property.
+ * @param {{ replaceGetter?: boolean }} [options] - By default the getter is
+ * wrapped in place, so each property access runs the wrapper. A getter+setter
+ * pair keeps its setter; a setter-only property throws. If `replaceGetter` is
+ * true, the getter is instead accessed once and replaced with one returning the
+ * resolved wrapped value — for a lazy getter+setter pair (e.g. Node 20's
+ * `fs.opendir`) the setter is rebuilt to materialize a writable data property on
+ * assignment, keeping the descriptor observationally identical for downstream
+ * consumers. Use with care! This may only be done when the getter has no side effect.
  * @returns {Record<string | symbol, unknown> | Function | undefined} The target object with
  * the wrapped method.
  */
@@ -121,17 +156,13 @@ function wrap (target, name, wrapper, options) {
     enumerable: false,
   }
 
-  if (descriptor.set && (!descriptor.get || options?.replaceGetter)) {
-    // It is possible to support these cases by instrumenting both the getter
-    // and setter (or only the setter, in case that is a use case).
-    // For now, this is not supported due to the complexity and the fact that
-    // this is not a common use case.
-    throw new Error(options?.replaceGetter
-      ? 'Replacing a getter/setter pair is not supported. Implement if required.'
-      : 'Replacing setters is not supported. Implement if required.')
+  // A setter-only property has nothing to wrap. Instrumenting the setter is not
+  // implemented; a getter+setter pair is handled below.
+  if (descriptor.set && !descriptor.get) {
+    throw new Error('Replacing setters is not supported. Implement if required.')
   }
 
-  const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
+  const original = (descriptor.value ?? options?.replaceGetter) ? target[name] : descriptor.get
 
   assertMethod(target, name, original)
 
@@ -139,16 +170,42 @@ function wrap (target, name, wrapper, options) {
 
   copyProperties(original, wrapped)
 
-  if (descriptor.writable) {
-    // Fast path for assigned properties.
+  const immutableModuleNamespace = descriptor.configurable === false &&
+    descriptor.writable && isModuleNamespaceObject(target)
+
+  if (descriptor.writable && !immutableModuleNamespace) {
     if (descriptor.configurable && descriptor.enumerable) {
       target[name] = wrapped
       return target
     }
     descriptor.value = wrapped
   } else {
-    if (descriptor.get) {
-      // `replaceGetter` may only be used when the getter has no side effect.
+    if (immutableModuleNamespace) {
+      descriptor.value = wrapped
+    } else if (descriptor.set && options?.replaceGetter) {
+      // A lazy accessor pair (e.g. Node 20's `fs.opendir`). `original` already
+      // resolved the value through the getter. Keep the property an accessor pair
+      // so the shape stays observationally identical — a downstream consumer may
+      // read the descriptor or assign to it on a specific Node.js version. The
+      // getter returns the wrapped value; the setter mirrors the native lazy
+      // contract (assignment self-replaces the property with a writable data
+      // property holding the assigned value), so a caller that overwrites the
+      // method gets exactly what they set, unwrapped, as before. The descriptor
+      // is the original accessor descriptor (no `value`/`writable` slots), so
+      // reassigning `get`/`set` keeps it a valid accessor descriptor.
+      descriptor.get = () => wrapped
+      descriptor.set = function (value) {
+        Object.defineProperty(this, name, {
+          configurable: descriptor.configurable,
+          enumerable: descriptor.enumerable,
+          writable: true,
+          value,
+        })
+      }
+    } else if (descriptor.get) {
+      // Wrap the getter in place; for a getter+setter pair the original setter
+      // stays untouched. `replaceGetter` (no side effect on read) instead returns
+      // the value resolved once into `wrapped`.
       descriptor.get = options?.replaceGetter ? () => wrapped : wrapped
     } else {
       descriptor.value = wrapped
@@ -175,8 +232,6 @@ function wrap (target, name, wrapper, options) {
       // with this code. That way it would be possible to directly pass through
       // the entries.
 
-      // In case more than a single property is not configurable and writable,
-      // Just reuse the already created object.
       let moduleExports = nonConfigurableModuleExports.get(target)
       if (!moduleExports) {
         if (typeof target === 'function') {
@@ -280,6 +335,7 @@ function assertNotClass (target) {
 
 module.exports = {
   wrap,
+  wrapCallback,
   wrapFunction,
   massWrap,
 }

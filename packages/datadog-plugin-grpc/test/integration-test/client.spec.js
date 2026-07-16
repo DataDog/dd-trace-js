@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -19,7 +20,7 @@ describe('esm', () => {
   let proc
   let variants
 
-  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 && '>=1.3.0', version => {
+  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 ? '>=1.3.0' : '*', version => {
     useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
       './packages/datadog-plugin-grpc/test/integration-test/*',
       './packages/datadog-plugin-grpc/test/*'])
@@ -42,7 +43,7 @@ describe('esm', () => {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
         })
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)

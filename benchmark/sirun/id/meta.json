@@ -1,0 +1,19 @@
+{
+  "name": "id",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "generate": {
+      "env": { "VARIANT": "generate", "OPERATIONS": "80000000" }
+    },
+    "parse-64bit": {
+      "env": { "VARIANT": "parse-64bit", "OPERATIONS": "6000000" }
+    },
+    "parse-128bit": {
+      "env": { "VARIANT": "parse-128bit", "OPERATIONS": "3000000" }
+    }
+  }
+}

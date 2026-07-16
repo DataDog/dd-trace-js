@@ -17,6 +17,11 @@ const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyz
 
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
+// Upper bound on the evidence-string length the redaction analyzers will scan. Oversized
+// values bypass the analyzer entirely and are emitted as a fully-redacted placeholder.
+// Counted in JS string characters (UTF-16 code units), not bytes.
+const MAX_EVIDENCE_LENGTH = 32_768
+
 class SensitiveHandler {
   constructor () {
     this._namePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionNamePattern']), 'gmi')
@@ -53,11 +58,31 @@ class SensitiveHandler {
 
   scrubEvidence (vulnerabilityType, evidence, sourcesIndexes, sources) {
     const sensitiveAnalyzer = this._sensitiveAnalyzers.get(vulnerabilityType)
-    if (sensitiveAnalyzer) {
-      const sensitiveRanges = sensitiveAnalyzer(evidence)
-      if (evidence.ranges || sensitiveRanges?.length) {
-        return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
+    if (!sensitiveAnalyzer) {
+      return null
+    }
+
+    // Oversized evidence: skip the analyzer and emit a fully-redacted placeholder. Mark
+    // every source backing this vulnerability as redacted so the formatter strips their
+    // raw `value` before they leave the process.
+    if (typeof evidence.value === 'string' && evidence.value.length > MAX_EVIDENCE_LENGTH) {
+      const redactedSources = []
+      for (const sourceIndex of sourcesIndexes) {
+        const source = sources[sourceIndex]
+        if (source && !source.redacted) {
+          source.pattern = ''.padEnd(source.value.length, REDACTED_SOURCE_BUFFER)
+          source.redacted = true
+        }
+        if (!redactedSources.includes(sourceIndex)) {
+          redactedSources.push(sourceIndex)
+        }
       }
+      return { redactedValueParts: [{ redacted: true }], redactedSources }
+    }
+
+    const sensitiveRanges = sensitiveAnalyzer(evidence)
+    if (evidence.ranges || sensitiveRanges?.length) {
+      return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
     }
     return null
   }

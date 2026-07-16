@@ -16,14 +16,30 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
 const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
 
+// A pool created inside an active span must not attach its connection-setup
+// `tcp.connect` span to that trace. Accumulate span names across every payload
+// and assert once the root `test` span flushed: a single trace from one payload
+// lets a late partial flush (a lone `mariadb.query`) pass while the leaked
+// `tcp.connect` rode an earlier payload — the source of this test's flakiness.
+function assertNoConnectionSpanLeak () {
+  const names = new Set()
+
+  return agent.assertSomeTraces(traces => {
+    for (const trace of traces) {
+      for (const span of trace) {
+        names.add(span.name)
+      }
+    }
+
+    assert.ok(names.has('test'), 'root span has not flushed yet')
+    assert.strictEqual(names.has('tcp.connect'), false, 'tcp.connect leaked into the request trace')
+  })
+}
+
 describe('Plugin', () => {
   describe('mariadb', () => {
     withVersions('mariadb', 'mariadb', range, version => {
       let tracer
-
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
 
       describe('without configuration - callbacks', () => {
         let mariadb
@@ -31,12 +47,12 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb')
+          tracer = await agent.load('mariadb')
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
@@ -217,11 +233,11 @@ describe('Plugin', () => {
 
           afterEach(async () => {
             await connection.end()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb')
+            tracer = await agent.load('mariadb')
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             connection = await mariadb.createConnection({
@@ -370,11 +386,11 @@ describe('Plugin', () => {
 
           afterEach(async () => {
             await connection.end()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb')
+            tracer = await agent.load('mariadb')
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
             connection = await mariadb.createConnection({
               host: 'localhost',
@@ -411,12 +427,12 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb', { service: 'custom' })
+          tracer = await agent.load('mariadb', { service: 'custom' })
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
@@ -469,11 +485,11 @@ describe('Plugin', () => {
 
           afterEach(async () => {
             await connection.end()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb', { service: 'custom' })
+            tracer = await agent.load('mariadb', { service: 'custom' })
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             connection = await mariadb.createConnection({
@@ -513,12 +529,12 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb', { service: serviceSpy })
+          tracer = await agent.load('mariadb', { service: serviceSpy })
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
@@ -575,11 +591,11 @@ describe('Plugin', () => {
 
           afterEach(async () => {
             await connection.end()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb', { service: serviceSpy })
+            tracer = await agent.load('mariadb', { service: serviceSpy })
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             connection = await mariadb.createConnection({
@@ -625,12 +641,12 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load('mariadb')
+          tracer = await agent.load('mariadb')
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           pool = mariadb.createPool({
@@ -684,6 +700,40 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('runs a queued pool query callback in its own caller context', done => {
+          const span1 = tracer.startSpan('test1')
+          const span2 = tracer.startSpan('test2')
+          let pending = 2
+
+          const check = expected => error => {
+            if (error) {
+              done(error)
+              return
+            }
+            try {
+              assert.strictEqual(tracer.scope().active(), expected)
+            } catch (assertionError) {
+              done(assertionError)
+              return
+            }
+            if (--pending === 0) {
+              done()
+            }
+          }
+
+          // Both queries are dispatched in the same tick with `connectionLimit: 1`, so the second
+          // waits in the pool's connection queue and its callback fires from the first query's
+          // release flow — the async context that drops without the getConnection wrap.
+          tracer.trace('test', () => {
+            tracer.scope().activate(span1, () => {
+              pool.query('SELECT 1 AS one', check(span1))
+            })
+            tracer.scope().activate(span2, () => {
+              pool.query('SELECT 2 AS two', check(span2))
+            })
+          })
+        })
       })
 
       if (semver.intersects(version, '>=3')) {
@@ -693,11 +743,11 @@ describe('Plugin', () => {
 
           afterEach(async () => {
             await pool.end()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(async () => {
-            await agent.load('mariadb')
+            tracer = await agent.load('mariadb')
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
 
             pool = mariadb.createPool({
@@ -757,20 +807,17 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
         beforeEach(async () => {
-          await agent.load(['mariadb', 'net'])
+          tracer = await agent.load(['mariadb', 'net'])
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
         })
 
         it('should not instrument connections to avoid leaks from internal queue', done => {
-          agent.assertSomeTraces((traces) => {
-            assert.strictEqual(traces.length, 1)
-            assert.strictEqual(traces[0].find(span => span.name === 'tcp.connect'), undefined)
-          }).then(done, done)
+          assertNoConnectionSpanLeak().then(done, done)
 
           const span = tracer.startSpan('test')
 
@@ -803,21 +850,18 @@ describe('Plugin', () => {
 
           afterEach(async () => {
             await pool.end()
-            await agent.close({ ritmReset: false })
+            await agent.close()
           })
 
           beforeEach(async () => {
-            await agent.load(['mariadb', 'net'])
+            tracer = await agent.load(['mariadb', 'net'])
             mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
           })
 
           it('should not instrument connections to avoid leaks from internal queue', async () => {
             const span = tracer.startSpan('test')
 
-            const assertion = agent.assertSomeTraces((traces) => {
-              assert.strictEqual(traces.length, 1)
-              assert.strictEqual(traces[0].find(s => s.name === 'tcp.connect'), undefined)
-            })
+            const assertion = assertNoConnectionSpanLeak()
 
             await tracer.scope().activate(span, async () => {
               pool = pool || mariadb.createPool({

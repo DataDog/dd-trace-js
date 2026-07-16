@@ -8,6 +8,18 @@ const AWS_SDK_V3_RANGE = NODE_MAJOR === 18 ? '3.0.0' : '>3.0.0'
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 /**
+ * @param {object} client AWS client (v2 service instance or v3 aggregated client).
+ * @param {string} method Operation name, e.g. `getRecords` or `sendMessage`.
+ * @param {object} params Operation parameters.
+ * @returns {Promise<object>} Resolves with the operation result.
+ */
+function callViaPromise (client, method, params) {
+  const result = client[method](params)
+  // v2 returns an AWS.Request exposing `.promise()`; v3's aggregated client returns a Promise directly.
+  return typeof result.promise === 'function' ? result.promise() : result
+}
+
+/**
  * @callback AwsSdkVersionCallback
  * @param {string} version
  * @param {string} moduleName
@@ -23,7 +35,7 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 function withAwsSdkV2Versions (range, cb) {
   if (typeof range === 'function') {
     cb = range
-    range = undefined
+    range = '*'
   }
 
   withVersions('aws-sdk', ['aws-sdk'], range, cb)
@@ -37,7 +49,7 @@ function withAwsSdkV2Versions (range, cb) {
 function withAwsSdkV3Versions (range, cb) {
   if (typeof range === 'function') {
     cb = range
-    range = undefined
+    range = '*'
   }
 
   withVersions('aws-sdk', ['@aws-sdk/smithy-client'], getAwsSdkV3Range(range), cb)
@@ -51,7 +63,7 @@ function withAwsSdkV3Versions (range, cb) {
 function withAwsSdkVersions (range, cb) {
   if (typeof range === 'function') {
     cb = range
-    range = undefined
+    range = '*'
   }
 
   withAwsSdkV2Versions(range, cb)
@@ -59,14 +71,15 @@ function withAwsSdkVersions (range, cb) {
 }
 
 /**
- * @param {string|undefined} range
+ * @param {string} range
  * @returns {string}
  */
 function getAwsSdkV3Range (range) {
-  return range === undefined ? AWS_SDK_V3_RANGE : `${range} ${AWS_SDK_V3_RANGE}`
+  return range === '*' ? AWS_SDK_V3_RANGE : `${range} ${AWS_SDK_V3_RANGE}`
 }
 
 const helpers = {
+  callViaPromise,
   sort,
   withAwsSdkV2Versions,
   withAwsSdkV3Versions,

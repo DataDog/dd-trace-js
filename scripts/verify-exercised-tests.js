@@ -21,6 +21,15 @@ const globCache = new Map()
 let globCacheHits = 0
 let globCacheMisses = 0
 
+const COVERAGE_ACTIONS = new Set([
+  './.github/actions/coverage',
+  './.github/actions/upload-coverage-artifact',
+])
+const COVERAGE_COLLECTORS = new Set([
+  'integration-tests/coverage/run-suite.js',
+  'scripts/c8-ci.js',
+])
+
 /**
  * @param {string} pattern
  * @param {{cwd: string, nodir: boolean, windowsPathsNoEscape: boolean, ignore?: string[]}} opts
@@ -153,7 +162,15 @@ function normalizeScriptGlob (raw, opts = {}) {
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
   // we need to preserve them so they can be expanded with the provided env.
-  if (!preserveEnv) {
+  if (preserveEnv) {
+    // Unwrap extglob constructs that wrap a single env var so the env-aware expansion
+    // below still sees the variable. Without this, every glob of the form
+    // `@(${PLUGINS}).spec.js` would degrade to `*.spec.js` and a single-plugin CI job
+    // (e.g. `PLUGINS=bluebird`) would falsely appear to exercise every spec in the
+    // same directory.
+    p = p.replaceAll(/@\((\$\{[^}]+\})\)/g, '$1')
+    p = p.replaceAll(/@\((\$[A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
+  } else {
     // Replace shell variable expansion with a wildcard for our analysis.
     // Examples:
     // - ${PLUGINS} -> *
@@ -163,8 +180,8 @@ function normalizeScriptGlob (raw, opts = {}) {
     p = p.replaceAll(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*')
   }
 
-  // Replace bash extglob constructs with a conservative wildcard to avoid parsing issues.
-  // Examples: @(...), +(...), ?(...), !(...)
+  // Replace remaining bash extglob constructs with a conservative wildcard to avoid
+  // parsing issues. Examples: @(...), +(...), ?(...), !(...).
   p = p.replaceAll(/[@+?!]\([^)]*\)/g, '*')
 
   // Normalize leading './' which appears sometimes in scripts.
@@ -339,10 +356,10 @@ function parseExportAssignments (run) {
 function findTestFiles (repoRoot) {
   const commonGlobOpts = { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore: DEFAULT_IGNORE_GLOBS }
 
-  const files = [
-    ...globSyncCached('**/*.spec.js', commonGlobOpts),
-    ...globSyncCached('**/*.test.mjs', commonGlobOpts),
-  ]
+  // Collect every test-file naming convention used in the repo so an unrun spec
+  // can never slip through untracked. Kept deliberately wide (js/mjs/cjs) even
+  // where no file currently uses an extension, so a future one is caught.
+  const files = globSyncCached('**/*.@(spec|test).@(js|mjs|cjs)', commonGlobOpts)
 
   files.sort((a, b) => a.localeCompare(b, 'en'))
   return files
@@ -427,6 +444,16 @@ function extractScriptInvocations (run, knownScripts) {
     }
 
     if (t === 'npm' && tokens[i + 1] === 'run') {
+      const script = tokens[i + 2]
+      if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
+        out.push({ tool: 'npm', script, explicit: true })
+      }
+    }
+
+    // `node scripts/c8-ci.js <script>` runs an in-process suite under V8 coverage; its first
+    // argument names the package script whose glob actually selects the specs. Treat it like
+    // `npm run <script>` so the chain from a `:ci` script to its underlying glob stays traceable.
+    if (t === 'node' && /(^|\/)scripts\/c8-ci\.js$/.test(String(tokens[i + 1] ?? ''))) {
       const script = tokens[i + 2]
       if (script && /^[A-Za-z0-9:_-]+$/.test(script)) {
         out.push({ tool: 'npm', script, explicit: true })
@@ -641,6 +668,87 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 }
 
 /**
+ * @param {string} command
+ * @returns {boolean}
+ */
+function invokesCoverageCollector (command) {
+  const tokens = shellSplit(command)
+  for (const token of tokens) {
+    const normalized = token.startsWith('./') ? token.slice(2) : token
+    if (COVERAGE_COLLECTORS.has(normalized)) return true
+  }
+  return false
+}
+
+/**
+ * @param {Record<string, string>} scripts
+ * @param {Set<string>} knownScripts
+ * @returns {Set<string>}
+ */
+function findCoverageScripts (scripts, knownScripts) {
+  const coverageScripts = new Set()
+  let foundCoverage
+
+  do {
+    foundCoverage = false
+    for (const [name, command] of Object.entries(scripts)) {
+      if (coverageScripts.has(name)) continue
+
+      if (
+        invokesCoverageCollector(command) ||
+        extractScriptInvocations(command, knownScripts).some(invocation => coverageScripts.has(invocation.script))
+      ) {
+        coverageScripts.add(name)
+        foundCoverage = true
+      }
+    }
+  } while (foundCoverage)
+
+  return coverageScripts
+}
+
+/**
+ * @param {string} command
+ * @param {Set<string>} knownScripts
+ * @param {Set<string>} coverageScripts
+ * @returns {boolean}
+ */
+function commandProducesCoverage (command, knownScripts, coverageScripts) {
+  if (invokesCoverageCollector(command)) return true
+
+  return extractScriptInvocations(command, knownScripts)
+    .some(invocation => coverageScripts.has(invocation.script))
+}
+
+/**
+ * @param {string} repoRoot
+ * @param {string} uses
+ * @param {Set<string>} visiting
+ * @returns {boolean}
+ */
+function localActionUploadsCoverage (repoRoot, uses, visiting) {
+  if (COVERAGE_ACTIONS.has(uses)) return true
+
+  const actionFile = resolveLocalActionFile(repoRoot, uses)
+  if (!actionFile || visiting.has(actionFile)) return false
+  visiting.add(actionFile)
+
+  const doc = parseYamlFile(repoRoot, actionFile)
+  const steps = doc.runs.steps
+  let uploadsCoverage = false
+
+  for (const step of steps) {
+    if (isUsesStep(step) && localActionUploadsCoverage(repoRoot, step.uses, visiting)) {
+      uploadsCoverage = true
+      break
+    }
+  }
+
+  visiting.delete(actionFile)
+  return uploadsCoverage
+}
+
+/**
  * Returns all combinations of matrix scalar/array values (ignores include/exclude).
  * @param {Record<string, unknown>} matrix
  * @returns {Record<string, string>[]}
@@ -679,11 +787,15 @@ function expandMatrixExpressions (s, matrixValues) {
 
 /**
  * @param {string} repoRoot
- * @returns {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]}
+ * @returns {{
+ *   runs: { workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[],
+ *   coverageUploadJobs: Set<string>
+ * }}
  */
 function collectWorkflowRuns (repoRoot) {
   /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
   const out = []
+  const coverageUploadJobs = new Set()
 
   const files = findWorkflowFiles(repoRoot)
   for (const wf of files) {
@@ -705,6 +817,12 @@ function collectWorkflowRuns (repoRoot) {
 
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
+        if (
+          typeof step.uses === 'string' &&
+          localActionUploadsCoverage(repoRoot, step.uses, new Set())
+        ) {
+          coverageUploadJobs.add(`${wf}#${jobId}`)
+        }
 
         // Merge env. Values can be strings or non-strings; we only keep string-ish.
         /** @type {Record<string, string|undefined>} */
@@ -749,11 +867,33 @@ function collectWorkflowRuns (repoRoot) {
             out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
           }
         }
+
+        // Third-party retry wrappers run their `with.command` like an inline `run:`.
+        // Without unwrapping it, the joint check below cannot see that `instrumentation-http`
+        // exercises `test:instrumentations:ci` with `PLUGINS=http`.
+        if (typeof step.uses === 'string' && /^nick-fields\/retry@/.test(step.uses)) {
+          const command = isPlainObject(step.with) && typeof step.with.command === 'string'
+            ? step.with.command
+            : null
+          if (command) {
+            const stepEnv = { ...env }
+            const exports = parseExportAssignments(command)
+            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
+            const idxYarn = command.indexOf('yarn ')
+            const idxNpm = command.indexOf('npm ')
+            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+            if (idx > 0) {
+              const assigns = parseInlineAssignments(command.slice(0, idx))
+              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
+            }
+            out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
+          }
+        }
       }
     }
   }
 
-  return out
+  return { runs: out, coverageUploadJobs }
 }
 
 /**
@@ -853,7 +993,7 @@ function getTraceCoreCategoriesFromScripts (scripts) {
  * @returns {Set<string>}
  */
 function findDdTraceTestCategories (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/*/**/*.spec.js', {
+  const files = globSyncCached('packages/dd-trace/test/*/**/*.@(spec|test).@(js|mjs|cjs)', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -882,7 +1022,7 @@ function findDdTraceTestCategories (repoRoot) {
  * @returns {string[]}
  */
 function listDdTraceCategorySpecFiles (repoRoot, category) {
-  const files = globSyncCached(`packages/dd-trace/test/${category}/**/*.spec.js`, {
+  const files = globSyncCached(`packages/dd-trace/test/${category}/**/*.@(spec|test).@(js|mjs|cjs)`, {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -923,7 +1063,7 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
  * @returns {Set<string>}
  */
 function buildAppsecPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/appsec/**/*.plugin.spec.js', {
+  const files = globSyncCached('packages/dd-trace/test/appsec/**/*.plugin.@(spec|test).@(js|mjs|cjs)', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -935,7 +1075,7 @@ function buildAppsecPluginTestSet (repoRoot) {
   for (const f of files) {
     const base = path.basename(f)
     // e.g. graphql.apollo-server-express.plugin.spec.js -> apollo-server-express
-    const m = base.match(/\.([^.]+)\.plugin\.spec\.js$/)
+    const m = base.match(/\.([^.]+)\.plugin\.(?:spec|test)\.[mc]?js$/)
     if (m && m[1]) out.add(m[1])
   }
   return out
@@ -946,7 +1086,7 @@ function buildAppsecPluginTestSet (repoRoot) {
  * @returns {Set<string>}
  */
 function buildLlmobsPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/llmobs/plugins/*/*.spec.js', {
+  const files = globSyncCached('packages/dd-trace/test/llmobs/plugins/*/*.@(spec|test).@(js|mjs|cjs)', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -1024,7 +1164,7 @@ function main () {
     process.exit(1)
   }
 
-  const workflowRuns = collectWorkflowRuns(repoRoot)
+  const { runs: workflowRuns, coverageUploadJobs } = collectWorkflowRuns(repoRoot)
 
   /** @type {{ workflowFile: string, jobId: string, script: string, env: Record<string, string|undefined> }[]} */
   const invoked = []
@@ -1040,7 +1180,37 @@ function main () {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
+  const coverageProducerJobs = new Set()
+  const coverageScripts = findCoverageScripts(scripts, knownScripts)
+  for (const run of workflowRuns) {
+    if (commandProducesCoverage(run.run, knownScripts, coverageScripts)) {
+      coverageProducerJobs.add(`${run.workflowFile}#${run.jobId}`)
+    }
+  }
+  for (const job of coverageProducerJobs) {
+    if (!coverageUploadJobs.has(job)) {
+      pushError(`${job}: generates coverage but does not upload it`)
+    }
+  }
+
+  // Transitive closure: a script counts as "invoked" when CI either runs it directly or runs
+  // another script that calls it via `npm run X` / `yarn X`. Without this, chaining a `:ci`
+  // script into the body of a parent script (e.g. `lint` -> `npm run lint:codeowners:ci`)
+  // looks orphaned to the coverage check below even though the parent's CI step exercises it.
   const invokedScripts = new Set(invoked.map(i => i.script))
+  const closureQueue = [...invokedScripts]
+  while (closureQueue.length) {
+    const name = closureQueue.shift()
+    if (name === undefined) continue
+    const cmd = scripts[name]
+    if (typeof cmd !== 'string') continue
+    for (const inv of extractScriptInvocations(cmd, knownScripts)) {
+      if (!invokedScripts.has(inv.script)) {
+        invokedScripts.add(inv.script)
+        closureQueue.push(inv.script)
+      }
+    }
+  }
 
   /**
    * A script counts as "invoked" when either itself or its `:coverage` sibling (or base, if the
@@ -1099,6 +1269,13 @@ function main () {
 
   // Detect CI steps that will match no tests due to env/script mismatches.
   const testFileSet = new Set(testFiles)
+  // Spec files reached by at least one CI invocation. Paired with the per-step
+  // `matchedTestCount` check below to flag the inverse failure: a spec that is matched
+  // by some script glob but no workflow ever sets the env (typically PLUGINS) that
+  // would expand the glob to reach it. Without this, a new `<name>.spec.js` under
+  // `packages/datadog-instrumentations/test/` looks covered by `test:instrumentations`'
+  // glob and slips into the tree with no CI job actually running it.
+  const ciExercisedFiles = new Set()
   for (const i of invoked) {
     if (!i.script.startsWith('test:')) continue
 
@@ -1116,7 +1293,10 @@ function main () {
     if (invokedGlobs.length) {
       let matchedTestCount = 0
       for (const f of files) {
-        if (testFileSet.has(f)) matchedTestCount++
+        if (testFileSet.has(f)) {
+          matchedTestCount++
+          ciExercisedFiles.add(f)
+        }
       }
 
       if (matchedTestCount === 0) {
@@ -1204,6 +1384,21 @@ function main () {
             `which is single-plugin; use "${i.script}:multi" instead`
         )
       }
+    }
+  }
+
+  // Spec files that pass the "matched by some script glob" check but no CI invocation
+  // actually expands to reach them. Common cause: a `<name>.spec.js` added under
+  // `packages/datadog-instrumentations/test/` (or any other PLUGINS-templated location)
+  // without a matching `PLUGINS=<name>` job in the corresponding workflow.
+  /** @type {string[]} */
+  const ciOrphans = []
+  for (const file of testFiles) {
+    if (!ciExercisedFiles.has(file)) ciOrphans.push(file)
+  }
+  if (ciOrphans.length) {
+    for (const file of ciOrphans) {
+      pushError(`No CI workflow invocation expands a glob to exercise ${file}`)
     }
   }
 

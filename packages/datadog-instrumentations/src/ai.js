@@ -3,34 +3,46 @@
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
-const { convertVercelPromptToMessages, buildOutputMessages } = require('./helpers/ai-messages')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
-const aiguardChannel = channel('dd-trace:ai:aiguard')
+const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
+const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
+const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
+const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes already-converted AI guard style messages to the AIGuard channel.
+ * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
  *
- * @param {Array<object>} messages - AI guard style messages to evaluate
+ * Subscribers push async work into `pending` synchronously during publication and
+ * abort `abortController` with an error before the pushed promise resolves to block.
+ *
+ * @param {object} lifecycleChannel
+ * @param {object} payload
  * @returns {Promise<void>}
  */
-function publishToAIGuard (messages) {
-  return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, resolve, reject })
+function publishLifecycle (lifecycleChannel, payload) {
+  const abortController = new AbortController()
+  const ctx = { ...payload, abortController, pending: [] }
+
+  lifecycleChannel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
   })
 }
 
 /**
- * Wraps a Vercel AI language model's doGenerate and doStream methods to evaluate
- * messages with AIGuard.
+ * Wraps a Vercel AI language model's doGenerate and doStream lifecycle methods.
  *
  * @param {object} model - A Vercel AI language model instance
  */
-function wrapModelWithAIGuard (model) {
+function wrapModelWithLifecycle (model) {
   if (!model || wrappedModels.has(model)) return
   wrappedModels.add(model)
 
@@ -39,19 +51,18 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!doGenerateBeforeChannel.hasSubscribers && !doGenerateAfterChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
-        const inputMessages = convertVercelPromptToMessages(options.prompt)
-        if (!inputMessages.length) return originalResult
+        const beforeEvaluation = doGenerateBeforeChannel.hasSubscribers
+          ? publishLifecycle(doGenerateBeforeChannel, { prompt: options.prompt, options })
+          : Promise.resolve()
 
-        // Run AI Guard input evaluation and LLM call in parallel.
-        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([beforeEvaluation, originalResult])
           .then(([, result]) => {
-            if (!result.content?.length) return result
-            return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
-              .then(() => result)
+            if (!doGenerateAfterChannel.hasSubscribers || !result.content?.length) return result
+            const payload = { prompt: options.prompt, options, result }
+            return publishLifecycle(doGenerateAfterChannel, payload).then(() => result)
           })
       }
     })
@@ -62,16 +73,17 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!doStreamBeforeChannel.hasSubscribers && !doStreamAfterChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
-        const inputMessages = convertVercelPromptToMessages(options.prompt)
-        if (!inputMessages.length) return originalResult
+        const beforeEvaluation = doStreamBeforeChannel.hasSubscribers
+          ? publishLifecycle(doStreamBeforeChannel, { prompt: options.prompt, options })
+          : Promise.resolve()
 
-        // Run AI Guard input evaluation and LLM call in parallel.
-        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([beforeEvaluation, originalResult])
           .then(([, result]) => {
+            if (!doStreamAfterChannel.hasSubscribers) return result
+
             const chunks = []
             const reader = result.stream.getReader()
 
@@ -84,26 +96,19 @@ function wrapModelWithAIGuard (model) {
             }
 
             return readAll().then(() => {
-              const toolCalls = chunks.filter(c => c?.type === 'tool-call')
-              const text = chunks.filter(c => c?.type === 'text-delta').map(c => c.textDelta).join('')
-              const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
-
-              const evaluate = content.length
-                ? publishToAIGuard(buildOutputMessages(inputMessages, content))
-                : Promise.resolve()
-
-              return evaluate.then(() => {
-                // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                const stream = new ReadableStream({
-                  start (controller) {
-                    for (const chunk of chunks) {
-                      controller.enqueue(chunk)
-                    }
-                    controller.close()
-                  },
+              return publishLifecycle(doStreamAfterChannel, { prompt: options.prompt, options, chunks })
+                .then(() => {
+                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                  const stream = new ReadableStream({
+                    start (controller) {
+                      for (const chunk of chunks) {
+                        controller.enqueue(chunk)
+                      }
+                      controller.close()
+                    },
+                  })
+                  return { ...result, stream }
                 })
-                return { ...result, stream }
-              })
             })
           })
       }
@@ -131,33 +136,38 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // the below is necessary in the case that the span is vercel ai's noopSpan.
-          // while we don't want to patch the noopSpan more than once, we do want to treat each as a
-          // fresh instance. However, this is really not necessary for non-noop spans, but not sure
-          // how to differentiate.
-          const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
-
-          shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function (...args) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, args)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'setAttributes', function (setAttributes) {
-            return function (attributes) {
+          // A plain delegating wrapper is used instead of Object.create(span) because
+          // Object.create (and Proxy) cannot cross private-field brand checks — any span
+          // method that reads a private field (e.g. BridgeSpanBase#statusCode) would throw
+          // "Cannot read private member" on a prototype clone. Every method here calls
+          // through to the real span instance so private fields always resolve correctly.
+          const freshSpan = {
+            spanContext () { return span.spanContext() },
+            setAttribute (key, value) { span.setAttribute(key, value); return freshSpan },
+            setAttributes (attributes) {
               vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              return setAttributes.apply(this, arguments)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'recordException', function (recordException) {
-            return function (exception) {
+              span.setAttributes(attributes)
+              return freshSpan
+            },
+            addEvent (name, attributesOrStartTime, startTime) {
+              span.addEvent(name, attributesOrStartTime, startTime)
+              return freshSpan
+            },
+            addLink (link, attrs) { span.addLink(link, attrs); return freshSpan },
+            addLinks (links) { span.addLinks(links); return freshSpan },
+            setStatus (status) { span.setStatus(status); return freshSpan },
+            updateName (spanName) { span.updateName(spanName); return freshSpan },
+            isRecording () { return span.isRecording() },
+            recordException (exception, timeInput) {
               ctx.error = exception
               vercelAiTracingChannel.error.publish(ctx)
-              return recordException.apply(this, arguments)
-            }
-          })
+              span.recordException(exception, timeInput)
+            },
+            end (...endArgs) {
+              vercelAiTracingChannel.asyncEnd.publish(ctx)
+              span.end(...endArgs)
+            },
+          }
 
           return originalCb.call(this, freshSpan)
         }
@@ -220,7 +230,7 @@ for (const hook of getHooks('ai')) {
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
-        wrapModelWithAIGuard(ctx.result)
+        wrapModelWithLifecycle(ctx.result)
       },
     })
 
@@ -228,4 +238,49 @@ for (const hook of getHooks('ai')) {
   })
 }
 
-module.exports = { wrapModelWithAIGuard }
+const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
+const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
+
+// for testing, and possibly actual instrumentation use, we want to
+// guard against double-subscribing to the asyncEnd channel of the
+// vercel ai-provided tracingChannel
+let subscribed = false
+
+// as of the v7 release, the ai sdk does not automatically aggregate streamed responses
+// we will handle emitting the chunks directly for products to handle
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  if (subscribed) return exports
+  subscribed = true
+
+  // ai sdk v7 only supported on node.js 22+
+  // inlining this import here so we only import in those cases
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { TransformStream } = require('node:stream/web')
+
+  aiSdkTelemetryChannel.subscribe({
+    asyncEnd (ctx) {
+      // guard against this event being re-emitted.
+      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+
+      const transform = new TransformStream({
+        transform (chunk, controller) {
+          const done = chunk.type === 'finish'
+
+          aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
+
+          if (done) {
+            aiSdkTelemetryChannel.asyncEnd.publish(ctx)
+          }
+
+          controller.enqueue(chunk) // pass through value
+        },
+      })
+
+      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+    },
+  })
+
+  return exports
+})
+
+module.exports = { wrapModelWithLifecycle }

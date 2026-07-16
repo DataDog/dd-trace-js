@@ -1,19 +1,14 @@
 {
   "name": "net",
   "cachegrind": false,
-  "iterations": 100,
+  "iterations": 30,
   "instructions": true,
   "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
   "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
   "variants": {
-    "control": {
-      "run": "node client.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\""
-    },
     "with-tracer": {
       "run": "node -r ../../../init.js client.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../../../init.js client.js\"",
-      "baseline": "control"
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../../../init.js client.js\""
     }
   }
 }

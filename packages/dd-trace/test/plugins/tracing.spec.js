@@ -9,6 +9,12 @@ const { channel } = require('dc-polyfill')
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
 const { SVC_SRC_KEY } = require('../../src/constants')
+const DatadogSpanContext = require('../../src/opentracing/span_context')
+const {
+  INTEGRATION_SERVICE,
+  MANUAL,
+  resolveServiceSource,
+} = require('../../src/service-naming/source-resolver')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
@@ -18,10 +24,13 @@ describe('TracingPlugin', () => {
     let plugin
 
     beforeEach(() => {
-      startSpanSpy = sinon.spy()
+      startSpanSpy = sinon.stub().callsFake((_name, opts) => ({
+        _spanContext: new DatadogSpanContext({ tags: { ...opts.tags } }),
+      }))
       plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
+          _service: 'tracer-default',
         },
       })
       plugin.configure({})
@@ -71,13 +80,98 @@ describe('TracingPlugin', () => {
       const callArgs = startSpanSpy.firstCall.args[1]
       assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
     })
+
+    it('records the integration claim so a user override is detected at finish', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+
+      span._spanContext.setTag('service.name', 'user-svc')
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), MANUAL)
+    })
+
+    it('records the integration claim when service is supplied via meta.service', () => {
+      // Regression: inferred-proxy spans (packages/dd-trace/src/plugins/util/inferred_proxy.js)
+      // pass the service through `meta.service`, leaving the top-level `service` undefined.
+      // Without recording the claim, a later override would be indistinguishable from a manual write.
+      const span = plugin.startSpan('Test span', { meta: { service: 'inferred-proxy-svc' } })
+
+      span._spanContext.setTag('service.name', 'user-svc')
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), MANUAL)
+    })
+
+    it('keeps the integration source when the user does not override service.name', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), 'kafka')
+    })
+
+    it('clears SVC_SRC_KEY when the user overrides service.name back to the tracer default', () => {
+      const span = plugin.startSpan('Test span', { service: { name: 'kafka-broker', source: 'kafka' } })
+
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), 'kafka')
+
+      span._spanContext.setTag('service.name', 'tracer-default')
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), undefined)
+    })
+  })
+
+  describe('stampIntegrationService method', () => {
+    let plugin
+
+    beforeEach(() => {
+      plugin = new TracingPlugin({ _tracer: { _service: 'tracer-default' } })
+      plugin.configure({})
+    })
+
+    it('records the integration claim using the tracer service', () => {
+      const span = { _spanContext: new DatadogSpanContext() }
+
+      plugin.stampIntegrationService(span, 'kafka-broker')
+
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'kafka-broker')
+    })
+  })
+
+  describe('setServiceName method', () => {
+    let plugin
+
+    beforeEach(() => {
+      plugin = new TracingPlugin({ _tracer: { _service: 'tracer-default' } })
+      plugin.configure({})
+    })
+
+    it('sets service.name and stamps the integration claim', () => {
+      const span = { _spanContext: new DatadogSpanContext() }
+
+      plugin.setServiceName(span, 'express-app')
+
+      assert.deepStrictEqual(span._spanContext.getTags(), { 'service.name': 'express-app' })
+      assert.strictEqual(span[INTEGRATION_SERVICE], 'express-app')
+    })
+
+    it('detects user override at finish when service.name is later mutated', () => {
+      const span = { _spanContext: new DatadogSpanContext({ tags: { [SVC_SRC_KEY]: 'opt.plugin' } }) }
+      plugin.setServiceName(span, 'express-app')
+
+      span._spanContext.setTag('service.name', 'user-svc')
+      resolveServiceSource(span, 'tracer-default')
+
+      assert.strictEqual(span._spanContext.getTag(SVC_SRC_KEY), MANUAL)
+    })
   })
 })
 
 describe('common Plugin behaviour', () => {
   before(() => agent.load())
 
-  after(() => agent.close({ ritmReset: false }))
+  after(() => agent.close())
   class CommonPlugin extends TracingPlugin {
     static id = 'commonPlugin'
     static operation = 'dothings'
@@ -158,7 +252,7 @@ describe('common Plugin behaviour', () => {
         done, 'commonPlugin', {},
         span => {
           assert.strictEqual(span.service, 'test')
-          assert.ok(!('_dd.base_service' in span.meta) || span.meta['_dd.base_service'] !== 'test')
+          assert.notStrictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })

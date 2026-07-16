@@ -42,5 +42,13 @@ describe('Extra services', () => {
 
       assert.strictEqual(getExtraServices().length, 64)
     })
+
+    it('should register again after clear()', () => {
+      registerExtraService('service-test')
+      clear()
+      registerExtraService('service-test')
+
+      assert.deepStrictEqual(getExtraServices(), ['service-test'])
+    })
   })
 })

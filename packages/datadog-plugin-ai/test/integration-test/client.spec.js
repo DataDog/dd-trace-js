@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const semifies = require('semifies')
 const {
@@ -13,14 +14,20 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-function getOpenaiVersion (realVersion) {
+/**
+ * @param {string} realVersion
+ */
+function getOpenaiRange (realVersion) {
+  if (semifies(realVersion, '>=7.0.0')) {
+    return '^4.0.0'
+  }
   if (semifies(realVersion, '>=6.0.0')) {
-    return '3.0.0'
+    return '^3.0.0'
   }
   if (semifies(realVersion, '>=5.0.0')) {
-    return '2.0.0'
+    return '^2.0.0'
   }
-  return '1.3.23'
+  return '^1.3.23'
 }
 
 describe('esm', () => {
@@ -31,8 +38,8 @@ describe('esm', () => {
   withVersions('ai', 'ai', (version, _, realVersion) => {
     useSandbox([
       `ai@${version}`,
-      `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
-      'zod@3.25.75',
+      `@ai-sdk/openai@${getOpenaiRange(realVersion)}`,
+      'zod@^3.25.76',
     ], false, [
       './packages/datadog-plugin-ai/test/integration-test/*',
     ])
@@ -54,12 +61,12 @@ describe('esm', () => {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
           // special check for ai spans
           for (const spans of payload) {
             for (const span of spans) {
-              if (span.name.startsWith('ai')) {
+              if (span.name.includes('generateText')) {
                 return
               }
             }

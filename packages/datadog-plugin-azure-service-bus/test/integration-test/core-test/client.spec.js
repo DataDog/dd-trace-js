@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -13,7 +14,10 @@ const {
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+const spawnEnv = {
+  DD_TRACE_FLUSH_INTERVAL: '2000',
+  NODE_OPTIONS: '--experimental-global-webcrypto',
+}
 
 describe('esm', () => {
   let agent
@@ -42,7 +46,7 @@ describe('esm', () => {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, spawnEnv)

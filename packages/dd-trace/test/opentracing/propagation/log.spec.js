@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 
@@ -32,16 +33,16 @@ describe('LogPropagator', () => {
   })
 
   describe('inject', () => {
-    it('should inject the span context into the carrier', () => {
-      const carrier = {}
+    it('should inject the span context into a lazily created carrier', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 10),
         spanId: id('456', 10),
       })
 
-      propagator.inject(spanContext, carrier)
+      const carrier = propagator.inject(spanContext)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(carrier)
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -76,7 +77,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '87654321876543211234567812345678')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -96,7 +97,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '4e2a9c1573d240b1a3b7e3c1d4c2f9a7')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -116,7 +117,7 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
     })
@@ -136,9 +137,19 @@ describe('LogPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'dd'))
+      assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
+    })
+
+    it('should not assign dd when no span, service, env, or version is set', () => {
+      propagator = new LogPropagator({})
+
+      assert.strictEqual(propagator.inject(null), undefined)
+    })
+
+    it('should return undefined for a null carrier', () => {
+      assert.strictEqual(propagator.inject(null, null), undefined)
     })
   })
 

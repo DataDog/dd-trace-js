@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { hostname } = require('node:os')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -414,7 +415,7 @@ describe('CheckpointRegistry', () => {
 
   it('encodedKeys returns empty Buffer when empty', () => {
     const encoded = registry.encodedKeys
-    assert.ok(Buffer.isBuffer(encoded))
+    assert.ok(Buffer.isBuffer(encoded), `Expected Buffer, got ${inspect(encoded)}`)
     assert.strictEqual(encoded.length, 0)
   })
 
@@ -471,7 +472,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     processor.trackTransaction('tx-001', 'ingested')
     assert.strictEqual(processor.buckets.size, 1)
     const bucket = processor.buckets.values().next().value
-    assert.ok(bucket.transactions !== null)
+    assert.notStrictEqual(bucket.transactions, null)
   })
 
   it('encodes correct binary wire format', () => {
@@ -564,9 +565,12 @@ describe('_serializeBuckets with transactions', () => {
     processor.trackTransaction('tx-001', 'ingested')
     const { Stats } = processor._serializeBuckets()
     assert.strictEqual(Stats.length, 1)
-    assert.ok(Buffer.isBuffer(Stats[0].Transactions))
-    assert.ok(Buffer.isBuffer(Stats[0].TransactionCheckpointIds))
-    assert.ok(Stats[0].TransactionCheckpointIds.length > 0)
+    assert.ok(Buffer.isBuffer(Stats[0].Transactions), `Expected Buffer, got ${inspect(Stats[0].Transactions)}`)
+    assert.ok(
+      Buffer.isBuffer(Stats[0].TransactionCheckpointIds),
+      `Expected Buffer, got ${inspect(Stats[0].TransactionCheckpointIds)}`
+    )
+    assert.ok(Stats[0].TransactionCheckpointIds.length > 0, `Expected ${Stats[0].TransactionCheckpointIds.length} > 0`)
   })
 
   it('omits Transactions and TransactionCheckpointIds when no transactions in bucket', () => {

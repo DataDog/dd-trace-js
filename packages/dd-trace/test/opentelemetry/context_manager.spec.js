@@ -234,9 +234,9 @@ describe('OTel Context Manager', () => {
         assert.strictEqual(ddSpan._links.length, 1)
         assert.deepStrictEqual({
           tags: {
-            'my.otel.attr': ddSpan.context()._tags['my.otel.attr'],
-            'my.otel.attrs': ddSpan.context()._tags['my.otel.attrs'],
-            'error.message': ddSpan.context()._tags['error.message'],
+            'my.otel.attr': ddSpan.context().getTag('my.otel.attr'),
+            'my.otel.attrs': ddSpan.context().getTag('my.otel.attrs'),
+            'error.message': ddSpan.context().getTag('error.message'),
           },
           link: {
             traceId: ddSpan._links[0].context.toTraceId(true),
@@ -257,7 +257,7 @@ describe('OTel Context Manager', () => {
         })
 
         active.recordException(new Error('boom'))
-        assert.strictEqual(ddSpan.context()._tags['error.message'], 'boom')
+        assert.strictEqual(ddSpan.context().getTag('error.message'), 'boom')
       })
     })
 
@@ -382,7 +382,7 @@ describe('OTel Context Manager', () => {
 
         const ddContext = ddSpan.context()
         assert.strictEqual(ddContext._name, 'dd-active')
-        assert.strictEqual(ddContext._tags['resource.name'], 'renamed')
+        assert.strictEqual(ddContext.getTag('resource.name'), 'renamed')
       })
     })
 
@@ -394,7 +394,7 @@ describe('OTel Context Manager', () => {
           active.setStatus({ code: 2, message: 'late error' })
           active.setStatus({ code: 0, message: 'late unset' })
 
-          assert.ok(!('error.message' in ddSpan.context()._tags))
+          assert.ok(!ddSpan.context().hasTag('error.message'))
         })
       })
 
@@ -404,7 +404,7 @@ describe('OTel Context Manager', () => {
           active.setStatus({ code: 2, message: 'first error' })
           active.setStatus({ code: 2, message: 'second error' })
 
-          assert.strictEqual(ddSpan.context()._tags['error.message'], 'second error')
+          assert.strictEqual(ddSpan.context().getTag('error.message'), 'second error')
         })
       })
     })
@@ -425,7 +425,7 @@ describe('OTel Context Manager', () => {
         active.setStatus({ code: 2, message: 'after end' })
         active.updateName('after end')
 
-        const tags = ddSpan.context()._tags
+        const tags = ddSpan.context().getTags()
         assert.ok(!('after.end' in tags))
         assert.ok(!('after.end.batch' in tags))
         assert.ok(!('error.message' in tags))

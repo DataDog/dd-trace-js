@@ -3,6 +3,10 @@
 const assert = require('node:assert/strict')
 
 const { execSync } = require('child_process')
+const { inspect } = require('node:util')
+
+const { satisfies } = require('semver')
+
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -26,7 +30,11 @@ describe('esm', () => {
   let variants
 
   // These next versions have a dependency which uses a deprecated node buffer and match versions tested with unit tests
-  withVersions('next', 'next', `${min} <15.4.1`, version => {
+  withVersions('next', 'next', min, (version, _, realVersion) => {
+    // next <12 needs OpenSSL's legacy provider for webpack's MD4 hashing on Node >=17; newer next does
+    // not, and from 16 the flag is rejected in a build worker's NODE_OPTIONS.
+    const legacyOpenssl = satisfies(realVersion, '<12') ? ' --openssl-legacy-provider' : ''
+
     useSandbox([`'next@${version}'`, 'react@^18.2.0', 'react-dom@^18.2.0'],
       false, ['./packages/datadog-plugin-next/test/integration-test/*'])
 
@@ -37,7 +45,7 @@ describe('esm', () => {
         cwd: sandboxCwd(),
         env: {
           ...process.env,
-          NODE_OPTIONS: '--openssl-legacy-provider',
+          NODE_OPTIONS: legacyOpenssl.trim(),
         },
       })
       variants = varySandbox('server.mjs', 'next')
@@ -55,11 +63,11 @@ describe('esm', () => {
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`,
+          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init${legacyOpenssl}`,
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         }, undefined, undefined, true)
       }).timeout(300 * 1000)

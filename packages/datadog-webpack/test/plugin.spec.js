@@ -5,6 +5,7 @@ const { describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
+const optionalPeerLoader = require('../src/optional-peer-loader')
 
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
@@ -49,6 +50,51 @@ describe('DatadogWebpackPlugin', () => {
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
     })
   })
+
+  describe('optional peer bundling', () => {
+    function captureAfterResolve () {
+      const plugin = new DatadogWebpackPlugin()
+      let afterResolve
+      plugin.apply({
+        options: { optimization: {} },
+        hooks: {
+          environment: { tap: () => {} },
+          thisCompilation: { tap: () => {} },
+          normalModuleFactory: {
+            tap: (name, fn) => fn({ hooks: { afterResolve: { tap: (n, f) => { afterResolve = f } } } }),
+          },
+        },
+      })
+      return afterResolve
+    }
+
+    it('applies the optional-peer loader to flagging_provider', () => {
+      const createData = { resource: require.resolve('../../dd-trace/src/openfeature/flagging_provider') }
+
+      captureAfterResolve()({ createData })
+
+      assert.ok(
+        createData.loaders?.some((entry) => entry.loader.includes('optional-peer-loader')),
+        'the optional-peer loader should be applied'
+      )
+    })
+
+    it('does not apply the optional-peer loader to unrelated modules', () => {
+      const createData = { resource: '/app/packages/dd-trace/src/openfeature/index.js' }
+
+      captureAfterResolve()({ createData })
+
+      assert.strictEqual(createData.loaders, undefined)
+    })
+
+    it('ignores modules without a resolved resource', () => {
+      const createData = {}
+
+      captureAfterResolve()({ createData })
+
+      assert.strictEqual(createData.loaders, undefined)
+    })
+  })
 })
 
 describe('loader', () => {
@@ -63,6 +109,10 @@ describe('loader', () => {
 
     const result = loader.call(context, source)
 
+    // Switch to `assert.match(result, new RegExp(`^${RegExp.escape(source)}`), ...)` once the minimum supported
+    // Node.js version is 24. Until then, `RegExp.escape` is unavailable and hand-escaping every regex metacharacter
+    // in `source` would be more error-prone than this `startsWith` check.
+    // eslint-disable-next-line eslint-rules/eslint-prefer-assert-match
     assert.ok(result.startsWith(source), 'result should start with original source')
     assert.ok(result.includes("require('dc-polyfill')"), 'result should require dc-polyfill')
     assert.ok(result.includes("'dd-trace:bundler:load'"), 'result should use the bundler channel')
@@ -86,5 +136,16 @@ describe('loader', () => {
     assert.ok(result.includes('__dd_ch'), 'should use __dd_ch variable')
     assert.ok(result.includes('__dd_mod'), 'should use __dd_mod variable')
     assert.ok(result.includes('__dd_payload'), 'should use __dd_payload variable')
+  })
+})
+
+describe('optionalPeerLoader', () => {
+  it('rewrites an installed optional-peer load into a literal require', () => {
+    const source = "const { DatadogNodeServerProvider } = requireOptionalPeer('@datadog/openfeature-node-server')"
+
+    const result = optionalPeerLoader.call({ cacheable: () => {}, context: __dirname }, source)
+
+    assert.ok(result.includes("require('@datadog/openfeature-node-server')"), 'should use a literal require')
+    assert.ok(!result.includes('requireOptionalPeer('), 'should drop the opaque call')
   })
 })

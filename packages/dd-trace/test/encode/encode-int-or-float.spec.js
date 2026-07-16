@@ -35,7 +35,7 @@ const cases = [
     prefix: 0xCF,
     expected: BigInt(Number.MAX_SAFE_INTEGER),
   },
-  // `MsgpackEncoder.encodeNumber` would coerce NaN to fixint 0 — `_encodeIntOrFloat`
+  // `MsgpackChunk.writeNumber` would coerce NaN to fixint 0 — `writeIntOrFloat`
   // keeps it as float64 so the agent sees what the application produced.
   { label: 'NaN as float64 (not coerced to fixint 0)', value: Number.NaN, prefix: 0xCB, expectedNaN: true },
   { label: 'Infinity as float64', value: Number.POSITIVE_INFINITY, prefix: 0xCB, expected: Number.POSITIVE_INFINITY },
@@ -46,7 +46,7 @@ const cases = [
   { label: '-0 collapses to positive fixint zero', value: -0, prefix: 0x00, expected: 0 },
 ]
 
-describe('encode 0.4 _encodeIntOrFloat', () => {
+describe('MsgpackChunk#writeIntOrFloat (via 0.4 encoder)', () => {
   let encoder
 
   beforeEach(() => {

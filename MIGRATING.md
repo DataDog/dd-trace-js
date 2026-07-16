@@ -4,7 +4,56 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
-## 5.0 to 6.0 (unreleased)
+## 5.0 to 6.0
+
+### Node 18 and 20 are no longer supported
+
+Node.js 18 reached EOL in April 2025 and Node.js 20 reached EOL in April 2026;
+neither is supported in v6. We highly recommend always keeping Node.js up to
+date regardless of our support policy.
+
+### Minimum versions bumped for test framework integrations
+
+Make sure to update any of the below frameworks to a v6 supported minimum version.
+
+| Framework  | v5 minimum | v6 minimum |
+| :---:      | :---:      | :---:      |
+| Jest       | 24.8.0     | 28.0.0     |
+| Mocha      | 5.2.0      | 8.0.0      |
+| Cypress    | 6.7.0      | 12.0.0     |
+| Playwright | 1.18.0     | 1.38.0     |
+
+### Nx service name default value
+
+The `NX_TASK_TARGET_PROJECT` environment variable set automatically by `nx`
+is now used as the default test service name `test.service` unless
+`DD_SERVICE` is explicitly set. On v5 this behavior required
+`DD_ENABLE_NX_SERVICE_NAME` to opt in. Remove the opt-in variable if you had
+it set; the behavior is now unconditional.
+
+### Lage test session name default value
+
+The `LAGE_PACKAGE_NAME` environment variable set automatically by `lage` is
+now used as the default test session name `test_session.name` unless
+`DD_TEST_SESSION_NAME` is explicitly set. On v5 this behavior required
+`DD_ENABLE_LAGE_PACKAGE_NAME=true` to opt in. Remove the opt-in variable if
+you had it set; the behavior is now unconditional.
+
+### CI test session `test_session.name` is now the trimmed command
+
+The `test_session.name` tag on test session spans now defaults to only the
+framework invocation (e.g. `jest`, `mocha`, `playwright test`, `cucumber-js`)
+rather than the full command line, when no explicit name is otherwise
+configured. The `test.command` tag is unaffected and still
+contains the full command. Update any monitors or dashboards that matched on
+`test_session.name` with the full command string.
+
+### OpenAI span resource name is now the normalized method name
+
+The `resource.name` on `openai.request` spans now uses a normalized,
+SDK-version-independent name (e.g. `createChatCompletion`) instead of the raw
+SDK method name (e.g. `chat.completions.create`). Update any monitors or
+dashboards that matched on the dotted v4 SDK method names.
 
 ### IAST security controls is env-only
 
@@ -18,6 +67,38 @@ The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`
 `iovalkey`, and `redis` plugin interfaces are no longer part of the v6 TypeScript
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
 names for several majors.
+
+### `Span.addTags` only accepts plain objects
+
+`Span.addTags` historically dispatched on a `'key:val,key:val'` string
+or an array (of strings, arrays, or objects, recursively) on top of the
+documented `{ [key]: value }` form. Neither shape ever appeared in the
+public TypeScript surface and no v6 caller passes one. v6 drops both
+paths: `addTags` is now a thin `Object.assign` onto the span's tag map.
+Convert string or array inputs to plain objects at the call site before
+calling `addTags`.
+
+```js
+// Before (still works on v5)
+span.addTags('env:prod,version:1.2.3')
+
+// After
+span.addTags({ env: 'prod', version: '1.2.3' })
+```
+
+### `Span.addLink(spanContext, attributes)` legacy overload removed
+
+`Span.addLink` (both the OpenTracing-style API and the OpenTelemetry bridge)
+no longer accepts a positional `(spanContext, attributes)` form. Pass the
+single-argument shape instead: `addLink({ context, attributes })`.
+
+```js
+// Before (still works on v5)
+span.addLink(otherSpan.context(), { foo: 'bar' })
+
+// After
+span.addLink({ context: otherSpan.context(), attributes: { foo: 'bar' } })
+```
 
 ### `DD_TRACE_STARTUP_LOGS` defaults to `true`
 
@@ -41,6 +122,58 @@ The matching `DD_APPSEC_COLLECT_ALL_HEADERS`,
 `DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED`,
 `DD_APPSEC_MAX_COLLECTED_HEADERS`, and `DD_APPSEC_RASP_COLLECT_REQUEST_BODY`
 environment variables are deprecated in v6 and will follow in a future major.
+
+### `experimental.b3` removed
+
+The `experimental.b3` programmatic flag and `DD_TRACE_EXPERIMENTAL_B3_ENABLED`
+env var are gone. Configure b3 propagation via `DD_TRACE_PROPAGATION_STYLE`
+directly (see the renamed-style note below).
+
+### Profiling experimental aliases removed
+
+`DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED`,
+`DD_PROFILING_EXPERIMENTAL_CPU_ENABLED`,
+`DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED`, and
+`DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED` are gone. Use the canonical names
+without the `_EXPERIMENTAL_` segment.
+
+### `DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED` removed
+
+Use `DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED` instead.
+
+### `"b3 single header"` propagation style renamed to `"b3"`
+
+The historical `'b3'` value used to mean multi-header; per the OTel `b3`
+propagator spec, `'b3'` now means single-header. Multi-header propagation is
+the existing `'b3multi'` value. The legacy `'b3 single header'` spelling is
+still accepted on `DD_TRACE_PROPAGATION_STYLE` and the programmatic option as
+a quiet alias for `'b3'`; prefer the canonical `'b3'` going forward.
+
+### `experimental.appsec` configuration removed
+
+The `experimental.appsec.*` programmatic aliases (and
+`experimental.appsec.standalone.enabled`) have been removed. Use the canonical
+top-level `appsec.*` fields, and `apmTracingEnabled` (or
+`DD_APM_TRACING_ENABLED`) to control standalone ASM mode.
+
+### `ingestion` option removed
+
+The `ingestion: { sampleRate, rateLimit }` wrapper has been removed. Set
+`sampleRate` and `rateLimit` directly on the top-level `TracerOptions` object,
+or use `DD_TRACE_SAMPLE_RATE` / `DD_TRACE_RATE_LIMIT`.
+
+### GraphQL resolver `depth` no longer counts list indices
+
+The `graphql` plugin's `depth` option counted a resolver's full execution path,
+including the numeric list indices that `collapse` folds away. The same query
+therefore reached a different depth depending on whether `collapse` was enabled:
+a field one list-hop below the limit was instrumented with `collapse: false` and
+dropped with the default `collapse: true`.
+
+v6 counts only selection-set nesting (named fields) toward `depth`, so the limit
+tracks query structure rather than execution artifacts and is independent of
+`collapse`. At a given `depth`, a resolver nested under a list is now reached one
+level sooner than on v5's default. Lower `depth` to restore the previous cutoff.
 
 ## 4.0 to 5.0
 

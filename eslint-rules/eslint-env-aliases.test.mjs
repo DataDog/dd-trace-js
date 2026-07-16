@@ -21,7 +21,7 @@ ruleTester.run('eslint-env-aliases', rule, {
       output: "const env = 'DD_PROFILING_CPU_ENABLED'",
       errors: [{
         message: "Use canonical environment variable name 'DD_PROFILING_CPU_ENABLED' " +
-                 "instead of alias 'DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'",
+          "instead of alias 'DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'",
       }],
     },
     {
@@ -29,7 +29,7 @@ ruleTester.run('eslint-env-aliases', rule, {
       output: "const env = 'DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED'",
       errors: [{
         message: "Use canonical environment variable name 'DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED' " +
-                 "instead of alias 'DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'",
+          "instead of alias 'DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'",
       }],
     },
   ],

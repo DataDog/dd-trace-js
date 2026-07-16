@@ -58,6 +58,10 @@ class BullmqTestSetup {
     ])
   }
 
+  async queueAddBulkEmpty () {
+    return this.queue.addBulk([])
+  }
+
   async queueAddBulkError () {
     await this.queue.addBulk([
       { name: 'valid-job', data: { ok: true } },

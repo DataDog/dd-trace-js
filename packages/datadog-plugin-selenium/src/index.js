@@ -14,7 +14,7 @@ const {
 const { SPAN_TYPE } = require('../../../ext/tags')
 
 function isTestSpan (span) {
-  return span.context()._tags[SPAN_TYPE] === 'test'
+  return span.context().getTag(SPAN_TYPE) === 'test'
 }
 
 function getTestSpanFromTrace (trace) {

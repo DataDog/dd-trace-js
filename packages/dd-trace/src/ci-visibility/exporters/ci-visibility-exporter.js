@@ -1,17 +1,24 @@
 'use strict'
 
+const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
+const { version: tracerVersion } = require('../../../../../package.json')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
+const { writeSettingsToCache } = require('../test-optimization-cache')
+const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
+const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+
+const hostname = getHostname()
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -35,6 +42,34 @@ function getIsTestSessionTrace (trace) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
+function appendLogTag (tags, key, value) {
+  if (value !== undefined) {
+    tags.push(`${key}:${value}`)
+  }
+}
+
+function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSha) {
+  const tags = []
+  if (Array.isArray(logMessage.ddtags)) {
+    for (const tag of logMessage.ddtags) {
+      tags.push(tag)
+    }
+  } else if (logMessage.ddtags) {
+    for (const tag of logMessage.ddtags.split(',')) {
+      tags.push(tag)
+    }
+  }
+
+  appendLogTag(tags, 'env', env)
+  appendLogTag(tags, 'version', version)
+  appendLogTag(tags, 'debugger_version', tracerVersion)
+  appendLogTag(tags, 'host_name', hostname)
+  appendLogTag(tags, GIT_COMMIT_SHA, gitCommitSha)
+  appendLogTag(tags, GIT_REPOSITORY_URL, gitRepositoryUrl)
+
+  return tags.join(',')
+}
+
 class CiVisibilityExporter extends BufferingExporter {
   constructor (config) {
     super(config)
@@ -42,17 +77,23 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
+    this._testOptimizationHttpCache = new TestOptimizationHttpCache()
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
 
+    this._isTestFailureScreenshotsEnabled =
+      Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
+
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
-    }, GIT_UPLOAD_TIMEOUT).unref()
+    }, GIT_UPLOAD_TIMEOUT)
+    gitUploadTimeoutId.unref?.()
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
-    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
+    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT)
+    canUseCiVisProtocolTimeoutId.unref?.()
 
     this._gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {
@@ -84,7 +125,7 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   shouldRequestSkippableSuites () {
-    return !!(this._config.isIntelligentTestRunnerEnabled &&
+    return !!(this._config.testOptimization.DD_CIVISIBILITY_ITR_ENABLED &&
       this._canUseCiVisProtocol &&
       this._libraryConfig?.isSuitesSkippingEnabled)
   }
@@ -99,7 +140,7 @@ class CiVisibilityExporter extends BufferingExporter {
   shouldRequestTestManagementTests () {
     return !!(
       this._canUseCiVisProtocol &&
-      this._config.isTestManagementEnabled &&
+      this._config.testOptimization.DD_TEST_MANAGEMENT_ENABLED &&
       this._libraryConfig?.isTestManagementEnabled
     )
   }
@@ -131,11 +172,21 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this.shouldRequestSkippableSuites()) {
       return callback(null, [])
     }
+    const requestConfiguration = this.getRequestConfiguration(testConfiguration)
+    const cachedSkippableSuites = this._testOptimizationHttpCache.readSkippableSuites({
+      testLevel: requestConfiguration.testLevel,
+      isCoverageReportUploadEnabled: requestConfiguration.isCoverageReportUploadEnabled,
+    })
+    if (cachedSkippableSuites !== CACHE_MISS) {
+      const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
+      return callback(null, skippableSuites, correlationId, coverage)
+    }
+
     this._gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
         return callback(gitUploadError, [])
       }
-      getSkippableSuitesRequest(this.getRequestConfiguration(testConfiguration), callback)
+      getSkippableSuitesRequest(requestConfiguration, callback)
     })
   }
 
@@ -143,12 +194,20 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this.shouldRequestKnownTests()) {
       return callback(null)
     }
+    const cachedKnownTests = this._testOptimizationHttpCache.readKnownTests()
+    if (cachedKnownTests !== CACHE_MISS) {
+      return callback(null, cachedKnownTests)
+    }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   getTestManagementTests (testConfiguration, callback) {
     if (!this.shouldRequestTestManagementTests()) {
       return callback(null)
+    }
+    const cachedTestManagementTests = this._testOptimizationHttpCache.readTestManagementTests()
+    if (cachedTestManagementTests !== CACHE_MISS) {
+      return callback(null, cachedTestManagementTests)
     }
     getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
@@ -159,13 +218,30 @@ class CiVisibilityExporter extends BufferingExporter {
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
-    this.sendGitMetadata(repositoryUrl)
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
       }
       const configuration = this.getRequestConfiguration(testConfiguration)
+      const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
+      if (cachedLibraryConfig !== CACHE_MISS) {
+        log.debug('Test Optimization HTTP cache settings found, skipping settings request')
+        writeSettingsToCache(cachedLibraryConfig)
+        this._libraryConfig = this.filterConfiguration(cachedLibraryConfig)
+        const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
+          this._testOptimizationHttpCache.hasValidSkippableSuites({
+            testLevel: configuration.testLevel,
+            isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
+          })
+        if (this._libraryConfig.requireGit && !canUseCachedSkippableSuites) {
+          this.sendGitMetadata(repositoryUrl)
+        } else {
+          this._resolveGit()
+        }
+        return callback(null, this._libraryConfig)
+      }
 
+      this.sendGitMetadata(repositoryUrl)
       getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
          * **Important**: this._libraryConfig remains empty in testing frameworks
@@ -216,30 +292,44 @@ class CiVisibilityExporter extends BufferingExporter {
       isImpactedTestsEnabled,
       isCoverageReportUploadEnabled,
     } = remoteConfiguration
+    const { testOptimization } = this._config
+    const earlyFlakeDetectionRetryCount =
+      testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
+    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
     return {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
       isItrEnabled,
       requireGit,
-      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
-      earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries,
+      isEarlyFlakeDetectionEnabled:
+        isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
+      earlyFlakeDetectionNumRetries:
+        hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries: hasEarlyFlakeDetectionRetryCount
+        ? {
+            '5s': earlyFlakeDetectionRetryCount,
+            '10s': earlyFlakeDetectionRetryCount,
+            '30s': earlyFlakeDetectionRetryCount,
+            '5m': earlyFlakeDetectionRetryCount,
+          }
+        : earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
-      flakyTestRetriesCount: this._config.flakyTestRetriesCount,
-      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
+      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
+      flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
+      isDiEnabled: isDiEnabled && testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       isKnownTestsEnabled,
-      isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
+      isTestManagementEnabled: isTestManagementEnabled && testOptimization.DD_TEST_MANAGEMENT_ENABLED,
       testManagementAttemptToFixRetries:
-        testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
+        testManagementAttemptToFixRetries ?? testOptimization.DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
+      isImpactedTestsEnabled:
+        isImpactedTestsEnabled && testOptimization.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED,
       isCoverageReportUploadEnabled,
-      DD_TEST_TIA_KEEP_COV_CONFIG: this._config.DD_TEST_TIA_KEEP_COV_CONFIG,
     }
   }
 
   sendGitMetadata (repositoryUrl) {
-    if (!this._config.isGitUploadEnabled) {
+    if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
+      this._resolveGit()
       return
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
@@ -296,28 +386,26 @@ class CiVisibilityExporter extends BufferingExporter {
     const { service, env, version } = this._config
 
     return {
-      ddtags: [
-        ...(logMessage.ddtags || []),
-        `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
-        `${GIT_COMMIT_SHA}:${gitCommitSha}`,
-      ].join(','),
+      ...logMessage,
+      ddtags: getLogTags(logMessage, { env, version }, gitRepositoryUrl, gitCommitSha),
       level: 'error',
       service,
+      hostname,
       dd: {
-        ...(logMessage.dd || []),
+        ...logMessage.dd,
         service,
         env,
         version,
       },
       ddsource: 'dd_debugger',
-      ...logMessage,
     }
   }
 
   // DI logs
   exportDiLogs (testEnvironmentMetadata, logMessage) {
     // TODO: could we lose logs if it's not initialized?
-    if (!this._config.isTestDynamicInstrumentationEnabled || !this._isInitialized || !this._canForwardLogs) {
+    if (!this._config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED ||
+      !this._isInitialized || !this._canForwardLogs) {
       return
     }
 
@@ -411,6 +499,41 @@ class CiVisibilityExporter extends BufferingExporter {
       format,
       testEnvironmentMetadata,
       url: this._codeCoverageReportUrl,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      evpProxyPrefix: this.evpProxyPrefix,
+    }, callback)
+  }
+
+  /**
+   * Returns whether the exporter can upload test failure screenshots.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestScreenshots () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
+  }
+
+  /**
+   * Uploads a single test screenshot to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the screenshot file
+   * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs }, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test screenshot upload URL not configured'))
+    }
+
+    uploadTestScreenshotRequest({
+      filePath,
+      traceId,
+      idempotencyKey,
+      capturedAtMs,
+      url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
     }, callback)

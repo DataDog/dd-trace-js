@@ -15,7 +15,8 @@ const kinds = require('../../../../ext/kinds')
 const id = require('../id')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
-const { setOtelOperationName } = require('./span-helpers')
+const spanEndingHook = require('./span-ending-hook')
+const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -118,6 +119,8 @@ function spanNameMapper (spanName, kind, attributes) {
  * surface; the underlying DD span carries the lifecycle.
  */
 class Span extends BridgeSpanBase {
+  #otelName
+
   /**
    * @param {import('./tracer')} parentTracer
    * @param {import('@opentelemetry/api').Context} context
@@ -150,6 +153,11 @@ class Span extends BridgeSpanBase {
       hostname: _tracer._hostname,
       integrationName: parentTracer?._isOtelLibrary ? 'otel.library' : 'otel',
       tags: {
+        // Apply global/resource tags (DD_TAGS, OTEL_RESOURCE_ATTRIBUTES) as
+        // defaults, mirroring the native path in opentracing/tracer.js. The
+        // explicit service/resource/span.kind below take precedence, and any
+        // user-set OTel attributes applied via setAttributes() still win.
+        ..._tracer._config.tags,
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName,
         [SPAN_KIND]: spanKindNames[kind],
@@ -159,12 +167,15 @@ class Span extends BridgeSpanBase {
 
     super(ddSpan)
 
+    this._otelTraceSemanticsEnabled = _tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+
     if (attributes) {
       this.setAttributes(attributes)
     }
 
     this._parentTracer = parentTracer
     this._context = context
+    this.#otelName = spanName || this._ddSpan.context()._name
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -192,7 +203,7 @@ class Span extends BridgeSpanBase {
   }
 
   get name () {
-    return this._ddSpan.context()._name
+    return this.#otelName
   }
 
   spanContext () {
@@ -216,14 +227,20 @@ class Span extends BridgeSpanBase {
       'ptr.hash': ptrHash,
       'link.kind': 'span-pointer',
     }
-    return this.addLink(zeroContext, attributes)
+    return this.addLink({ context: zeroContext, attributes })
   }
 
   /**
    * @param {string} name
    */
   updateName (name) {
-    setOtelOperationName(this._ddSpan, name)
+    if (this.ended) return this
+    this.#otelName = name
+    if (this._otelTraceSemanticsEnabled) {
+      setOtelResource(this._ddSpan, name)
+    } else {
+      setOtelOperationName(this._ddSpan, name)
+    }
     return this
   }
 
@@ -239,6 +256,10 @@ class Span extends BridgeSpanBase {
     const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
+    // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
+    if (spanEndingHook.hook !== undefined) {
+      spanEndingHook.hook(this._ddSpan)
+    }
     this._ddSpan.finish(endTime)
     this._spanProcessor.onEnd(this)
   }

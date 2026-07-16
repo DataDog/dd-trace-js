@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
 describe('WAF Metrics', () => {
@@ -66,13 +67,13 @@ describe('WAF Metrics', () => {
 
             assert.ok(wafRequests)
             assert.strictEqual(wafRequests.type, 'count')
-            assert.ok(wafRequests.tags.includes('waf_error:true'))
-            assert.ok(wafRequests.tags.includes('rate_limited:false'))
+            assert.ok(wafRequests.tags.includes('waf_error:true'), `Got: ${inspect(wafRequests.tags)}`)
+            assert.ok(wafRequests.tags.includes('rate_limited:false'), `Got: ${inspect(wafRequests.tags)}`)
 
             const wafError = series.find(s => s.metric === 'waf.error')
             assert.ok(wafError)
             assert.strictEqual(wafError.type, 'count')
-            assert.ok(wafError.tags.includes('waf_error:-127'))
+            assert.ok(wafError.tags.includes('waf_error:-127'), `Got: ${inspect(wafError.tags)}`)
           }
         },
         requestType: 'generate-metrics',
@@ -129,7 +130,7 @@ describe('WAF Metrics', () => {
 
             assert.ok(wafRequests)
             assert.strictEqual(wafRequests.type, 'count')
-            assert.ok(wafRequests.tags.includes('waf_timeout:true'))
+            assert.ok(wafRequests.tags.includes('waf_timeout:true'), `Got: ${inspect(wafRequests.tags)}`)
           }
         },
         requestType: 'generate-metrics',
@@ -187,11 +188,11 @@ describe('WAF Metrics', () => {
 
             assert.ok(inputTruncated)
             assert.strictEqual(inputTruncated.type, 'count')
-            assert.ok(inputTruncated.tags.includes('truncation_reason:7'))
+            assert.ok(inputTruncated.tags.includes('truncation_reason:7'), `Got: ${inspect(inputTruncated.tags)}`)
 
             const wafRequests = series.find(s => s.metric === 'waf.requests')
             assert.ok(wafRequests)
-            assert.ok(wafRequests.tags.includes('input_truncated:true'))
+            assert.ok(wafRequests.tags.includes('input_truncated:true'), `Got: ${inspect(wafRequests.tags)}`)
           }
         },
         requestType: 'generate-metrics',

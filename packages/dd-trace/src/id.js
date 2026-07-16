@@ -13,6 +13,12 @@ let batch = 0
 class Identifier {
   /** @type {number[] | Uint8Array} */
   #buffer
+  /** @type {bigint | undefined} */
+  #bigInt
+  /** @type {string | undefined} */
+  #stringHex
+  /** @type {string | undefined} */
+  #stringDecimal
 
   /**
    * @param {string} value
@@ -29,16 +35,23 @@ class Identifier {
    * @returns {string}
    */
   toString (radix = 16) {
-    return radix === 16
-      ? Buffer.from(this.#buffer).toString('hex')
-      : toNumberString(this.#buffer, radix)
+    if (radix === 16) {
+      this.#stringHex ??= Buffer.from(this.#buffer).toString('hex')
+      return this.#stringHex
+    }
+    if (radix === 10) {
+      this.#stringDecimal ??= toNumberString(this.#buffer, 10)
+      return this.#stringDecimal
+    }
+    return toNumberString(this.#buffer, radix)
   }
 
   /**
    * @returns {bigint}
    */
   toBigInt () {
-    return Buffer.from(this.#buffer).readBigUInt64BE(0)
+    this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(0)
+    return this.#bigInt
   }
 
   /**
@@ -63,6 +76,21 @@ class Identifier {
    */
   toJSON () {
     return this.toString()
+  }
+
+  /**
+   * Returns the full hex trace ID. When this is a 64-bit identifier and `traceIdHigh`
+   * is provided, prepends it to form the 128-bit trace ID. Otherwise returns
+   * only this identifier's hex representation.
+   *
+   * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits, or undefined
+   * @returns {string}
+   */
+  toTraceIdHex (traceIdHigh) {
+    if (traceIdHigh && this.#buffer.length <= 8) {
+      return traceIdHigh + this.toString(16)
+    }
+    return this.toString(16)
   }
 
   /**

@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 
+const guard = require('../startup-guard')
+
 globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 // Stub the HTTP request module before the writer captures it. Flush still runs
@@ -23,7 +25,7 @@ const {
   VARIANT,
 } = process.env
 
-const ITERATIONS = 30_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const writer = new LLMObsSpanWriter({
   apiKey: 'placeholder-api-key',
@@ -232,9 +234,11 @@ assert.equal(writer._buffer.events.length, 1)
 writer.flush()
 assert.equal(writer._buffer.events.length, 0)
 
-for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+guard.loopStart()
+for (let iteration = 0; iteration < OPERATIONS; iteration++) {
   for (const event of EVENTS) {
     writer.append(event)
   }
   writer.flush()
 }
+guard.done()

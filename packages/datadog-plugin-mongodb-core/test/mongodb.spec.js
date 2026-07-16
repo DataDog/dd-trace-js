@@ -7,7 +7,7 @@ const ddpv = require('mocha/package.json').version
 const semver = require('semver')
 const sinon = require('sinon')
 
-const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/query')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
@@ -68,7 +68,6 @@ describe('Plugin', () => {
   let collection
   let db
   let BSON
-  let startSpy
   let injectCommentSpy
   let usesDelete
 
@@ -93,7 +92,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -109,6 +108,17 @@ describe('Plugin', () => {
             (done) => collection.insertOne({ a: 1 }, {}, done),
             'test',
             'peer.service'
+          )
+
+          // The bulkWrite span is opened with `db.name` set, so it flows through the same
+          // collection-stripping `getPeerService` override as the per-command spans.
+          withPeerService(
+            () => tracer,
+            'mongodb-core',
+            () => collection.bulkWrite([{ insertOne: { document: { a: 1 } } }]),
+            'test',
+            'peer.service',
+            { desc: 'with bulkWrite' }
           )
 
           it('should do automatic instrumentation', done => {
@@ -178,6 +188,104 @@ describe('Plugin', () => {
             })
           })
 
+          it('should open a parent bulkWrite span wrapping the per-type write commands', async () => {
+            collection.bulkWrite([
+              { insertOne: { document: { a: 1 } } },
+              { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
+              { deleteOne: { filter: { a: 2 } } },
+            ])
+
+            return agent.assertSomeTraces(traces => {
+              const parent = traces[0].find(span => span.resource === `bulkWrite test.${collectionName}`)
+              assert.ok(parent, 'expected a bulkWrite span')
+              assert.strictEqual(parent.name, expectedSchema.outbound.opName)
+              assert.strictEqual(parent.service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(parent.type, 'mongodb')
+              assert.strictEqual(parent.meta['span.kind'], 'client')
+              assert.strictEqual(parent.meta['db.name'], `test.${collectionName}`)
+              assert.strictEqual(parent.meta.component, 'mongodb')
+
+              const children = traces[0].filter(span => span.parent_id.toString() === parent.span_id.toString())
+              const writeResources = children
+                .map(span => span.resource)
+                .filter(resource => !resource.startsWith('ismaster') && !resource.startsWith('hello'))
+                .sort()
+              assert.deepStrictEqual(writeResources, [
+                (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+                `insert test.${collectionName}`,
+                `update test.${collectionName}`,
+              ].sort())
+            }, { spanResourceMatch: /^bulkWrite test\./ })
+          })
+
+          it('should tag the bulkWrite span when the operation fails', async () => {
+            await collection.insertOne({ _id: 1 })
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                error: 1,
+              }, { spanResourceMatch: /^bulkWrite test\./ }),
+              assert.rejects(collection.bulkWrite([{ insertOne: { document: { _id: 1 } } }])),
+            ])
+          })
+
+          it('should finish the bulkWrite span when a trailing callback is passed', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.name': `test.${collectionName}`,
+                },
+              }, { spanResourceMatch: /^bulkWrite test\./ }),
+              // Pre-v5 returns undefined and invokes the callback; v5+ ignores it and returns a promise.
+              Promise.resolve(collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {})),
+            ])
+          })
+
+          // Pre-v5 reports failures through the callback rather than a rejected promise, and
+          // validates arguments synchronously rather than returning a rejected promise.
+          if (version && semver.intersects(version, '<5')) {
+            it('should tag the bulkWrite span when the legacy callback form fails', done => {
+              collection.insertOne({ _id: 1 }, {}, () => {
+                agent.assertFirstTraceSpan({
+                  error: 1,
+                }, { spanResourceMatch: /^bulkWrite test\./ }).then(done, done)
+
+                collection.bulkWrite([{ insertOne: { document: { _id: 1 } } }], {}, () => {})
+              })
+            })
+
+            it('should finish and tag the bulkWrite span when arguments throw synchronously', () => {
+              assert.throws(() => collection.bulkWrite('not-an-array'))
+
+              return agent.assertFirstTraceSpan({
+                error: 1,
+              }, { spanResourceMatch: /^bulkWrite test\./ })
+            })
+
+            it('should restore the parent context for spans started in the legacy callback', done => {
+              const parentSpan = tracer.startSpan('test.parent')
+
+              const assertion = agent.assertSomeTraces(traces => {
+                const bulkWrite = traces[0].find(span => span.resource === `bulkWrite test.${collectionName}`)
+                const child = traces[0].find(span => span.name === 'test.child')
+                assert.ok(bulkWrite, 'expected a bulkWrite span')
+                assert.ok(child, 'expected a span started in the callback')
+                // The bulkWrite span has finished by the time the callback runs, so a span
+                // started there must nest under the original parent, not the bulkWrite span.
+                assert.strictEqual(child.parent_id.toString(), parentSpan.context().toSpanId())
+              }, { spanResourceMatch: /^bulkWrite test\./ })
+
+              tracer.scope().activate(parentSpan, () => {
+                collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {
+                  tracer.trace('test.child', () => {})
+                  parentSpan.finish()
+                })
+              })
+
+              assertion.then(done, done)
+            })
+          }
+
           it('should have the statement tag when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
@@ -189,7 +297,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"a":1},{"b":2}]',
               },
-            })
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should have the statement tag when doing a multi statement delete', async () => {
@@ -200,7 +308,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"a":1},{"b":2}]',
               },
-            })
+            }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
           it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
@@ -214,7 +322,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
               },
-            })
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should sanitize BigInts when doing a single delete operation', async () => {
@@ -250,7 +358,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
               },
-            })
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should sanitize BigInts when doing a multi delete operation', async () => {
@@ -264,7 +372,7 @@ describe('Plugin', () => {
               meta: {
                 'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
               },
-            })
+            }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
           it('should use the correct resource name for arbitrary commands', done => {
@@ -501,7 +609,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -549,7 +657,7 @@ describe('Plugin', () => {
             meta: {
               'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
             },
-          })
+          }, { spanResourceMatch: /^update test\./ })
         })
 
         withNamingSchema(
@@ -567,10 +675,11 @@ describe('Plugin', () => {
         )
       })
 
-      describe('with dbmPropagationMode service', () => {
+      describe('with obfuscateQuery: "types"', () => {
         before(() => {
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'service',
+            obfuscateQuery: 'types',
+            queryInResourceName: true,
           })
         })
 
@@ -582,12 +691,91 @@ describe('Plugin', () => {
           client = await createClient()
           db = client.db('test')
           collection = db.collection(collectionName)
+        })
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        it('should report scalar value types in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"string","age":"number"}`,
+            meta: {
+              'mongodb.query': '{"user":"string","age":"number"}',
+            },
+          }, { spanResourceMatch: /^find test\./ })
+        })
+
+        it('should preserve operator keys while reporting value types', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
+            },
+          }, { spanResourceMatch: /^find test\./ })
+        })
+      })
+
+      describe('with obfuscateQuery: "redact"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'redact',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should redact scalar values in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"?","age":"?"}`,
+            meta: {
+              'mongodb.query': '{"user":"?","age":"?"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while redacting their values', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"?","$lte":"?"}}',
+            },
+          })
+        })
+      })
+
+      describe('with dbmPropagationMode service', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            dbmPropagationMode: 'service',
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject service mode as comment', done => {
@@ -595,8 +783,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -617,13 +805,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
-          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 1 })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -631,12 +818,10 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
           injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
           injectCommentSpy?.restore()
         })
 
@@ -646,9 +831,7 @@ describe('Plugin', () => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(startSpy.called, true)
               assert.strictEqual(injectCommentSpy.called, true)
-
               const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
@@ -671,18 +854,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
-        before(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full',
-          })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 0 })
         })
 
-        after(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -690,11 +867,11 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it(
@@ -706,8 +883,8 @@ describe('Plugin', () => {
                 const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
                 const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(startSpy.called, true)
-                const { comment } = startSpy.getCall(0).args[0].ops
+                assert.strictEqual(injectCommentSpy.called, true)
+                const comment = injectCommentSpy.getCall(0).returnValue
                 assert.match(
                   comment,
                   new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
@@ -731,7 +908,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -772,7 +949,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -785,7 +962,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
@@ -818,7 +995,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -828,7 +1004,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -867,7 +1043,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -877,7 +1052,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -890,7 +1065,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')

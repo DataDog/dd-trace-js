@@ -5,7 +5,36 @@ const path = require('node:path')
 
 const { describe, it } = require('mocha')
 
-const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
+const {
+  getFormattedJestTestParameters,
+  getJestSuitesToRun,
+  removeSeedSuffixFromTestName,
+} = require('../src/util')
+
+describe('removeSeedSuffixFromTestName', () => {
+  it('removes seed suffixes', () => {
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property passes (with seed=1234)'),
+      'property passes'
+    )
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property passes (with seed=-1234)'),
+      'property passes'
+    )
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property passes (with seed=1234) '),
+      'property passes'
+    )
+  })
+
+  it('only removes the seed suffix at the end of the name', () => {
+    assert.strictEqual(
+      removeSeedSuffixFromTestName('property (with seed=1234) keeps running'),
+      'property (with seed=1234) keeps running'
+    )
+  })
+})
+
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])
@@ -63,6 +92,76 @@ describe('getJestSuitesToRun', () => {
     assert.deepStrictEqual(suitesToRun, [
       { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}e2e.spec.js` },
     ])
+  })
+
+  it('normalizes legacy Windows separators in skippable suites', () => {
+    const skippableSuites = [
+      'src\\unit.spec.js',
+      'src\\integration.spec.js',
+    ]
+    const rootDir = path.join(path.sep, 'workspace', 'dd-trace-js')
+    const tests = [
+      { path: path.join(rootDir, 'src', 'unit.spec.js') },
+      { path: path.join(rootDir, 'src', 'integration.spec.js') },
+      { path: path.join(rootDir, 'src', 'e2e.spec.js') },
+    ]
+
+    const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    assert.deepStrictEqual(suitesToRun, [{ path: path.join(rootDir, 'src', 'e2e.spec.js') }])
+  })
+
+  it('preserves repository-relative matches and falls back to project-relative matches', () => {
+    const repositoryRoot = path.join(path.sep, 'workspace', 'dd-trace-js')
+    const projectRoot = path.join(repositoryRoot, 'packages', 'project')
+    const skippableSuites = [
+      'packages/project/unit.spec.js',
+      'integration.spec.js',
+    ]
+    const tests = [
+      { path: path.join(projectRoot, 'unit.spec.js') },
+      { path: path.join(projectRoot, 'integration.spec.js') },
+      { path: path.join(projectRoot, 'e2e.spec.js') },
+    ]
+
+    const { skippedSuites, suitesToRun } = getJestSuitesToRun(
+      skippableSuites,
+      tests,
+      repositoryRoot,
+      projectRoot
+    )
+
+    assert.deepStrictEqual(skippedSuites, [
+      'packages/project/unit.spec.js',
+      'integration.spec.js',
+    ])
+    assert.deepStrictEqual(suitesToRun, [{ path: path.join(projectRoot, 'e2e.spec.js') }])
+  })
+
+  it('uses each test project root for fallback matches', () => {
+    const repositoryRoot = path.join(path.sep, 'workspace', 'dd-trace-js')
+    const firstProjectRoot = path.join(repositoryRoot, 'packages', 'first')
+    const secondProjectRoot = path.join(repositoryRoot, 'packages', 'second')
+    const skippableSuites = ['test/unit.spec.js']
+    const tests = [
+      {
+        path: path.join(firstProjectRoot, 'test', 'unit.spec.js'),
+        context: { config: { rootDir: firstProjectRoot } },
+      },
+      {
+        path: path.join(secondProjectRoot, 'test', 'unit.spec.js'),
+        context: { config: { rootDir: secondProjectRoot } },
+      },
+    ]
+
+    const { skippedSuites, suitesToRun } = getJestSuitesToRun(
+      skippableSuites,
+      tests,
+      repositoryRoot,
+      firstProjectRoot
+    )
+
+    assert.deepStrictEqual(skippedSuites, ['test/unit.spec.js', 'test/unit.spec.js'])
+    assert.deepStrictEqual(suitesToRun, [])
   })
 
   it('returns filtered suites when paths are relative', () => {
@@ -186,5 +285,24 @@ describe('getJestSuitesToRun', () => {
       globalConfig.testEnvironmentOptions._ddForcedToRun,
       JSON.stringify({ 'fixtures/test-unskippable.js': true })
     )
+  })
+
+  it('adds repository and project relative metadata for fallback matches', () => {
+    const skippableSuites = ['fixtures/test-unskippable.js']
+    const config = { testEnvironmentOptions: {} }
+    const test = {
+      path: path.join(__dirname, './fixtures/test-unskippable.js'),
+      context: { config },
+    }
+    const repositoryRoot = path.dirname(__dirname)
+
+    getJestSuitesToRun(skippableSuites, [test], repositoryRoot, __dirname)
+
+    const expectedMetadata = JSON.stringify({
+      'test/fixtures/test-unskippable.js': true,
+      'fixtures/test-unskippable.js': true,
+    })
+    assert.strictEqual(config.testEnvironmentOptions._ddUnskippable, expectedMetadata)
+    assert.strictEqual(config.testEnvironmentOptions._ddForcedToRun, expectedMetadata)
   })
 })

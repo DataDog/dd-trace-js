@@ -1,5 +1,6 @@
-This benchmark runs the with runtime metrics and an accelerated flush. While
-this can catch code regressions, it's mostly meant to catch things like memory
-leaks where metrics would start piling up. This can be hard to catch in tests,
-but it would cause the app to become slower and slower over time which would
-be visible in the benchmark.
+Measures the startup cost of enabling runtime metrics: `init()` wires up the
+native-metrics collector, the GC PerformanceObserver, the event-loop monitor, the
+dogstatsd client and the flush interval. The control vs with-metrics delta is that
+wiring cost. (The old idle-window shape timed a 1s flush window rather than real
+work and read as ~16% jitter; the per-collection cost is sub-millisecond and would
+need the collector's private capture path exposed to measure directly.)

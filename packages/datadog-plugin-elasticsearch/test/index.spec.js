@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -32,10 +33,13 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
+          // The legacy `elasticsearch` package emits the deprecated `util._extend` at module load and `util.isArray`
+          // at client construction; allow each before its triggering call so the deprecation guard does not throw.
+          temporaryWarningExceptions.add('The `util._extend` API is deprecated. Please use Object.assign() instead.')
           elasticsearch = metaModule.get()
 
           temporaryWarningExceptions.add('The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.')
@@ -200,7 +204,10 @@ describe('Plugin', () => {
             it('should propagate context', done => {
               agent
                 .assertSomeTraces(traces => {
-                  assert.ok(Object.hasOwn(traces[0][0], 'parent_id'))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0], 'parent_id'),
+                    `Available keys: ${inspect(Object.keys(traces[0][0]))}`
+                  )
                   assert.notStrictEqual(traces[0][0].parent_id, null)
                 })
                 .then(done)
@@ -264,7 +271,10 @@ describe('Plugin', () => {
           it('should propagate context', done => {
             agent
               .assertSomeTraces(traces => {
-                assert.ok(Object.hasOwn(traces[0][0], 'parent_id'))
+                assert.ok(
+                  Object.hasOwn(traces[0][0], 'parent_id'),
+                  `Available keys: ${inspect(Object.keys(traces[0][0]))}`
+                )
                 assert.notStrictEqual(traces[0][0].parent_id, null)
               })
               .then(done)
@@ -353,7 +363,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

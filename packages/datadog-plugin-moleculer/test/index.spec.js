@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -63,7 +64,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should do automatic instrumentation', done => {
             agent.assertSomeTraces(traces => {
@@ -76,7 +77,10 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].meta['span.kind'], 'server')
               assert.strictEqual(spans[0].meta['moleculer.context.action'], 'math.add')
               assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
-              assert.ok(Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'))
+              assert.ok(
+                Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'),
+                `Available keys: ${inspect(Object.keys(spans[0].meta))}`
+              )
               assert.strictEqual(spans[0].meta['moleculer.context.service'], 'math')
               assert.strictEqual(spans[0].meta['moleculer.namespace'], 'multi')
               assert.strictEqual(spans[0].meta['moleculer.node_id'], `server-${process.pid}`)
@@ -90,7 +94,10 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].meta['span.kind'], 'server')
               assert.strictEqual(spans[1].meta['moleculer.context.action'], 'math.numerify')
               assert.strictEqual(spans[1].meta['moleculer.context.node_id'], `server-${process.pid}`)
-              assert.ok(Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'))
+              assert.ok(
+                Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'),
+                `Available keys: ${inspect(Object.keys(spans[1].meta))}`
+              )
               assert.strictEqual(spans[1].meta['moleculer.context.service'], 'math')
               assert.strictEqual(spans[1].meta['moleculer.namespace'], 'multi')
               assert.strictEqual(spans[1].meta['moleculer.node_id'], `server-${process.pid}`)
@@ -117,7 +124,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -159,7 +166,7 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          afterEach(() => agent.close({ ritmReset: false }))
+          afterEach(() => agent.close())
 
           withPeerService(
             () => tracer,
@@ -244,7 +251,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -277,7 +284,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate context', async () => {
           let spanId
@@ -345,7 +352,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate context', async () => {
           let spanId
@@ -411,7 +418,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate meta from child to parent', async () => {
           const result = await broker.call('test.first')

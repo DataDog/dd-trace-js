@@ -6,9 +6,9 @@ const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
-const { getAgentUrl } = require('../agent/url')
 const getDebuggerConfig = require('./config')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
+const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -66,6 +66,8 @@ function start (config, rcInstance) {
 
   globalThis[Symbol.for('dd-trace')].utilTypes = types
 
+  const probeSamplerBuffer = installProbeSampler()
+
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
     for (const probe of probes) {
@@ -111,6 +113,7 @@ function start (config, rcInstance) {
           probePort: probeChannel.port1,
           logPort: logChannel.port1,
           configPort: configChannel.port1,
+          probeSamplerBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -132,13 +135,13 @@ function start (config, rcInstance) {
       cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     })
 
-    worker.unref()
-    probeChannel.port1.unref()
-    probeChannel.port2.unref()
-    logChannel.port1.unref()
-    logChannel.port2.unref()
-    configChannel.port1.unref()
-    configChannel.port2.unref()
+    worker.unref?.()
+    probeChannel.port1.unref?.()
+    probeChannel.port2.unref?.()
+    logChannel.port1.unref?.()
+    logChannel.port2.unref?.()
+    configChannel.port1.unref?.()
+    configChannel.port2.unref?.()
   })
 }
 
@@ -188,6 +191,7 @@ function cleanup (error) {
     worker.removeAllListeners()
     worker = null
   }
+  uninstallProbeSampler()
   configChannel = null
   inputPath = null
 
@@ -211,7 +215,7 @@ function cleanup (error) {
 function detectDebuggerEndpoint (config, cb) {
   log.debug('[debugger] Detecting available debugger endpoints...')
 
-  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
+  fetchAgentInfo(config.url, (err, agentInfo) => {
     if (err) {
       log.warn('[debugger] Failed to query agent %s endpoint, falling back to %s',
         DEBUGGER_INPUT_V2,

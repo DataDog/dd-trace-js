@@ -20,7 +20,7 @@ class PregelStreamPlugin extends TracingPlugin {
 }
 class NextStreamPlugin extends TracingPlugin {
   static id = 'langgraph_stream_next'
-  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream_next'
+  static prefix = 'tracing:orchestrion:@langchain/langgraph:Pregel_stream:next'
 
   bindStart (ctx) {
     return ctx.currentStore

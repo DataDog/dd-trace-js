@@ -16,7 +16,6 @@
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ../../../init.js server-without-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
-      "baseline": "no-vulnerability-control",
       "env": {
         "DD_IAST_ENABLED": "1"
       }
@@ -25,7 +24,6 @@
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ../../../init.js server-without-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
-      "baseline": "no-vulnerability-control",
       "env": {
         "DD_IAST_ENABLED": "1",
         "DD_IAST_REQUEST_SAMPLING": "100",
@@ -45,7 +43,6 @@
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ../../../init.js server-with-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
-      "baseline": "with-vulnerability-control",
       "env": {
         "DD_IAST_ENABLED": "1"
       }
@@ -54,7 +51,6 @@
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ../../../init.js server-with-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
-      "baseline": "with-vulnerability-control",
       "env": {
         "DD_IAST_ENABLED": "1",
         "DD_IAST_REQUEST_SAMPLING": "100",
@@ -72,7 +68,6 @@
     "startup-time-iast-enabled": {
       "run": "node --require ../../../init.js insecure-bank.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
-      "baseline": "startup-time-control",
       "env": {
         "DD_IAST_ENABLED": "1"
       }

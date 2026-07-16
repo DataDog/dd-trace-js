@@ -2,19 +2,32 @@
 
 const assert = require('assert')
 const http = require('http')
-const path = require('path')
 const util = require('util')
 const { setTimeout: wait } = require('timers/promises')
 
 const bodyParser = require('body-parser')
 const express = require('express')
 const msgpack = require('@msgpack/msgpack')
-const proxyquire = require('proxyquire')
 const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
-const ritm = require('../../src/ritm')
+
+// Modules that close over the previous `Config` / `TracerProxy` singletons.
+// Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
+// `datadog-instrumentations/*` and `plugin_manager.js` stay cached so RITM
+// hooks live for the whole process — see `agent.spec.js` for the regression
+// that pins the single-evaluation invariant.
+const RELOAD_EVICTION_IDS = [
+  '../../../..', // root index.js → `module.exports = require('./packages/dd-trace')`
+  '../..',
+  '../../src',
+  '../../src/bootstrap',
+  '../../src/proxy',
+  '../../src/config',
+  '../../src/config/defaults',
+  '../../src/serverless',
+]
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -30,6 +43,107 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let loaded = false
+
+// Non-prefix env vars `dd-trace` reads at module load or in instrumentation
+// hot paths. Every non-`DD_*` / non-`OTEL_*` / non-`_DD_*` env read via
+// `getEnvironmentVariable`, `getValueFromEnvSources`, or a destructured
+// `getEnvironmentVariables(...)` in `src/` is registered here so the gate
+// below rebuilds the tracer when a spec mocks the value between two
+// `agent.load()` calls. The `eslint-non-prefix-env-names` rule extracts
+// this Set at lint time and reports new reads that bypass it.
+const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
+  // serverless / IS_SERVERLESS detection
+  'AWS_LAMBDA_FUNCTION_NAME',
+  'FUNCTION_NAME',
+  'FUNCTION_TARGET',
+  'FUNCTIONS_EXTENSION_VERSION',
+  'FUNCTIONS_WORKER_RUNTIME',
+  'GCP_PROJECT',
+  'K_SERVICE',
+  'WEBSITE_SKU',
+  // lambda RITM target path (computed once at module load)
+  'LAMBDA_TASK_ROOT',
+  // serverless service-name fallbacks (Config singleton)
+  'WEBSITE_SITE_NAME',
+  // azure metadata payload (cached at first build)
+  'COMPUTERNAME',
+  'FUNCTIONS_WORKER_RUNTIME_VERSION',
+  'WEBSITE_INSTANCE_ID',
+  'WEBSITE_OWNER_NAME',
+  'WEBSITE_OS',
+  'WEBSITE_RESOURCE_GROUP',
+  // CI-visibility runner detection (test plugins, ci-visibility exporters)
+  'CUCUMBER_WORKER_ID',
+  'JEST_WORKER_ID',
+  'MOCHA_WORKER_ID',
+  'TINYPOOL_WORKER_ID',
+  'npm_config_user_agent',
+  'npm_lifecycle_script',
+  // GitHub Actions CI plugin metadata
+  'GITHUB_EVENT_PATH',
+  'RUNNER_TEMP',
+  // misc CI provider / build tooling reads
+  'HOME',
+  'LAGE_PACKAGE_NAME',
+  'NX_TASK_TARGET_PROJECT',
+  'NYC_CONFIG',
+  // instrumentation reads at module load / hot path
+  'DATABASE_URL',
+  'NODE_OPTIONS',
+  'UV_THREADPOOL_SIZE',
+])
+
+/**
+ * @param {string} key
+ */
+function isTrackedEnvKey (key) {
+  return key.startsWith('DD_') ||
+    key.startsWith('OTEL_') ||
+    key.startsWith('_DD_') ||
+    TRACKED_NON_PREFIX_ENV_NAMES.has(key)
+}
+
+/**
+ * @returns {Record<string, string | undefined>}
+ */
+function captureEnvSnapshot () {
+  const snapshot = Object.create(null)
+  for (const [key, value] of Object.entries(process.env)) {
+    if (isTrackedEnvKey(key)) {
+      snapshot[key] = value
+    }
+  }
+  return snapshot
+}
+
+/**
+ * @param {Record<string, string | undefined>} snapshot
+ */
+function envChangedSince (snapshot) {
+  const seen = new Set()
+  for (const [key, value] of Object.entries(process.env)) {
+    if (isTrackedEnvKey(key)) {
+      if (snapshot[key] !== value) return true
+      seen.add(key)
+    }
+  }
+  for (const key of Object.keys(snapshot)) {
+    if (!seen.has(key)) return true
+  }
+  return false
+}
+
+// Captured at agent.js evaluation, before any `before` hook runs.
+let envSnapshot = captureEnvSnapshot()
+// Stored as a JSON snapshot rather than a reference: a spec that keeps the
+// same `tracerConfig` object alive and mutates it between two `agent.load`
+// calls would otherwise hand the gate `same === same` and skip the rebuild
+// even though the values changed.
+let lastTracerConfigJson = '{}'
+
+/** @type {Map<string, Record<string, unknown> | undefined>} */
+const loadedPlugins = new Map()
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -38,15 +152,39 @@ function isMatchingTrace (spans, spanResourceMatch) {
   return !!spans.find(span => spanResourceMatch.test(span.resource))
 }
 
+/**
+ * Pick the span an `assertFirstTraceSpan` assertion runs against. With a
+ * `spanResourceMatch` the first span whose resource matches wins, so callers can
+ * target a nested child (e.g. a per-command write under a `bulkWrite` parent)
+ * without it having to be `traces[0][0]`. Without a matcher the first span of the
+ * first trace is used.
+ *
+ * @param {import('../../src/opentracing/span')[][]} traces
+ * @param {RegExp} [spanResourceMatch]
+ * @returns {import('../../src/opentracing/span')}
+ */
+function findFirstTraceSpan (traces, spanResourceMatch) {
+  if (spanResourceMatch) {
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (spanResourceMatch.test(span.resource)) {
+          return span
+        }
+      }
+    }
+  }
+  return traces[0][0]
+}
+
 function ciVisRequestHandler (request, response) {
   response.status(200).send('OK')
-  traceHandlers.forEach(({ handler, spanResourceMatch }) => {
+  for (const { handler, spanResourceMatch } of traceHandlers) {
     const { events } = request.body
     const spans = events.map(event => event.content)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(request.body, request)
     }
-  })
+  }
 }
 
 /**
@@ -136,13 +274,13 @@ function unformatSpanEvents (span) {
  */
 function handleTraceRequest (req, res) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-  traceHandlers.forEach(({ handler, spanResourceMatch }) => {
+  for (const { handler, spanResourceMatch } of traceHandlers) {
     const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
     }
-  })
+  }
 }
 
 function getDsmStats () {
@@ -211,6 +349,10 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @typedef {TracesCallback | AgentlessCallback} RunCallbackAgainstTracesCallback
  */
 /**
+ * @template T
+ * @typedef {Promise<T> & { cancel: () => void }} CancelablePromise
+ */
+/**
  * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
  * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
  * then the agent will wait for additional payloads up until the timeout
@@ -227,30 +369,40 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   const errors = []
   let resolve
   let reject
-  const promise = new Promise((_resolve, _reject) => {
+  const promise = /** @type {CancelablePromise<unknown>} */ (new Promise((_resolve, _reject) => {
     resolve = _resolve
     reject = _reject
-  })
+  }))
 
+  const timeoutMs = options.timeoutMs || 1000
   const rejectionTimeout = setTimeout(() => {
-    if (errors.length) {
-      let error = errors[0]
-      if (errors.length > 1) {
-        error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
-        // Mark errors enumerable for older Node.js versions to be visible.
-        Object.defineProperty(error, 'errors', {
-          enumerable: true,
-        })
-      }
-      // Hack for the information to be fully visible.
-      error.message = util.inspect(error, { depth: null })
-      reject(error)
+    // The promise settles here, so drop the handler from the set. Otherwise reset()'s leak guard
+    // would flag this already-rejected expectation as still armed at teardown.
+    handlers.delete(handlerPayload)
+    if (errors.length === 0) {
+      reject(new Error(`No matching trace received within ${timeoutMs}ms.`))
+      return
     }
-  }, options.timeoutMs || 1000)
+    let error = errors[0]
+    if (errors.length > 1) {
+      error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+      // Mark errors enumerable for older Node.js versions to be visible.
+      Object.defineProperty(error, 'errors', {
+        enumerable: true,
+      })
+    }
+    // Hack for the information to be fully visible.
+    error.message = util.inspect(error, { depth: null })
+    reject(error)
+  }, timeoutMs)
 
   const handlerPayload = {
     handler,
     spanResourceMatch: options.spanResourceMatch,
+    cancel () {
+      handlers.delete(handlerPayload)
+      clearTimeout(rejectionTimeout)
+    },
   }
 
   /**
@@ -268,6 +420,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
       resolve(result)
     } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
+        handlers.delete(handlerPayload)
         clearTimeout(rejectionTimeout)
         reject(error)
       } else {
@@ -276,30 +429,121 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     }
   }
 
-  handler.promise = promise
   handlers.add(handlerPayload)
+
+  promise.cancel = handlerPayload.cancel
 
   return promise
 }
 
+/**
+ * The options for the runCallbackAgainstNoTraces function.
+ *
+ * @typedef {object} RunCallbackAgainstNoTracesOptions
+ * @property {number} [timeoutMs=1000] - How long to wait for a forbidden payload before resolving.
+ * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
+ */
+/**
+ * Register a callback that runs against every payload but expects none to match. The callback
+ * inspects each payload and throws when a forbidden trace arrives; the returned promise then
+ * rejects with that error. If no payload makes the callback throw within the timeout
+ * (default 1000 ms), the promise resolves — the absence of a matching trace is the success case.
+ *
+ * The mirror of {@link runCallbackAgainstTraces}: there a throw defers and a clean payload
+ * resolves; here a clean payload keeps waiting and a throw rejects.
+ *
+ * @param {RunCallbackAgainstTracesCallback} callback - Inspects a payload; throws on a forbidden trace.
+ * @param {RunCallbackAgainstNoTracesOptions} [options] - An options object.
+ * @param {Set} handlers - Set of handlers to add the callback to.
+ * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
+ */
+function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
+  let resolve
+  let reject
+  const promise = /** @type {CancelablePromise<void>} */ (new Promise((_resolve, _reject) => {
+    resolve = _resolve
+    reject = _reject
+  }))
+
+  const resolveTimeout = setTimeout(() => {
+    handlers.delete(handlerPayload)
+    resolve()
+  }, options.timeoutMs || 1000)
+
+  const handlerPayload = {
+    handler,
+    spanResourceMatch: options.spanResourceMatch,
+    cancel () {
+      handlers.delete(handlerPayload)
+      clearTimeout(resolveTimeout)
+    },
+  }
+
+  /**
+   * @type {TracesCallback | AgentlessCallback}
+   */
+  function handler (...args) {
+    // we assert integration name being tagged on all spans (when running integration tests)
+    assertIntegrationName(args[0])
+
+    try {
+      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
+      callback(...args)
+    } catch (error) {
+      handlers.delete(handlerPayload)
+      clearTimeout(resolveTimeout)
+      reject(error)
+    }
+  }
+
+  handlers.add(handlerPayload)
+
+  promise.cancel = handlerPayload.cancel
+
+  return promise
+}
+
+/**
+ * Cancel every still-pending timer-bearing expectation in a handler set and clear the set.
+ * Returns how many carried a timer, so the caller can treat a non-zero count as a leak. Bare
+ * `subscribe` handlers have no timer and no promise, so they are cleared but never counted.
+ *
+ * @param {Set<{ cancel?: () => void }>} handlers
+ * @returns {number}
+ */
+function disarmHandlers (handlers) {
+  let armed = 0
+  for (const handlerPayload of handlers) {
+    if (handlerPayload.cancel !== undefined) {
+      handlerPayload.cancel()
+      armed++
+    }
+  }
+  handlers.clear()
+  return armed
+}
+
 module.exports = {
   /**
-   * Load the plugin on the tracer with an optional config and start a mock agent.
+   * Load the plugin on the tracer with an optional config and start a
+   * mock agent. The returned promise resolves with the live
+   * `TracerProxy`; specs should bind `tracer` from this return value
+   * rather than capturing `require('../../dd-trace')` themselves, since
+   * the gate-fired rebuild path evicts `dd-trace` from `require.cache`
+   * and rebinds `global._ddtrace`.
    *
    * @overload
-   * @param {string | string[]} pluginNames - Name or list of names of plugins to load
+   * @param {string | string[]} pluginNames
    * @param {Record<string, unknown>} [config]
-   * @param {Record<string, unknown>} [tracerConfig={}]
-   * @returns Promise<void>
+   * @param {Record<string, unknown>} [tracerConfig]
+   * @returns {Promise<import('../../..').default>}
    */
   /**
-   * Load the plugin on the tracer with an optional config and start a mock agent.
-   *
    * @overload
-   * @param {string[]} pluginNames - Name or list of names of plugins to load
+   * @param {string[]} pluginNames
    * @param {Record<string, unknown>[]} config
-   * @param {Record<string, unknown>} [tracerConfig={}]
-   * @returns Promise<void>
+   * @param {Record<string, unknown>} [tracerConfig]
+   * @returns {Promise<import('../../..').default>}
    */
   async load (pluginNames, config, tracerConfig = {}) {
     if (!Array.isArray(pluginNames)) {
@@ -312,21 +556,46 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': defaults,
-    })
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
+    const tracerConfigJson = JSON.stringify(tracerConfig)
+    if (
+      !loaded ||
+      global._ddtrace === undefined ||
+      envChangedSince(envSnapshot) ||
+      lastTracerConfigJson !== tracerConfigJson
+    ) {
+      if (global._ddtrace !== undefined) {
+        global._ddtrace._pluginManager.destroy()
+      }
+      // Filter `mainBeforeExit` by name rather than calling
+      // `process.removeAllListeners`: nyc registers a coverage-flush
+      // listener on the same events, and dropping it leaves coverage
+      // unwritten and, after enough rebuilds, hangs the next test.
+      const ddTraceSymbol = Symbol.for('dd-trace')
+      globalThis[ddTraceSymbol]?.beforeExitHandlers?.clear()
+      for (const event of ['exit', 'beforeExit']) {
+        for (const listener of process.listeners(event)) {
+          if (listener.name === 'mainBeforeExit') {
+            process.removeListener(event, listener)
+          }
+        }
+      }
+      delete global._ddtrace
+
+      for (const id of RELOAD_EVICTION_IDS) {
+        delete require.cache[require.resolve(id)]
+      }
+
+      tracer = require('../..')
+      envSnapshot = captureEnvSnapshot()
+      lastTracerConfigJson = tracerConfigJson
+      loaded = true
+    } else {
+      tracer = require('../..')
+    }
+
+    for (let i = 0; i < pluginNames.length; i++) {
+      loadedPlugins.set(pluginNames[i], config[i])
+    }
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -361,32 +630,25 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', handleTraceRequest)
-
-    // CI Visibility Agentless intake
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
-
-    // EVP proxy endpoint
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
-    // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
       llmobsSpanEventsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
-    // LLM Observability evaluation metrics endpoint
     agent.post('/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric', (req, res) => {
       llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
-    // DSM Checkpoint endpoint
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler }) => {
+      for (const { handler } of statsHandlers) {
         handler(dsmStats)
-      })
+      }
       res.status(200).send()
     })
 
@@ -401,9 +663,9 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
-    const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
-      listener = server.listen(0, () => {
-        const port = listener.address().port
+    const promise = /** @type {Promise<import('../../..').default>} */ (new Promise((resolve, _reject) => {
+      listener = server.listen(0, '127.0.0.1', () => {
+        const port = this.port = listener.address().port
 
         tracer.init({
           service: 'test',
@@ -416,11 +678,11 @@ module.exports = {
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
-        for (let i = 0, l = pluginNames.length; i < l; i++) {
-          tracer.use(pluginNames[i], config[i])
+        for (const [name, pluginConfig] of loadedPlugins) {
+          tracer.use(name, pluginConfig)
         }
 
-        resolve()
+        resolve(tracer)
       })
     }))
 
@@ -487,7 +749,25 @@ module.exports = {
   },
 
   /**
-   * Same as assertSomeTraces() but only provides the first span (traces[0][0])
+   * Assert that no payload makes the callback throw before the timeout. Use for "should not be
+   * traced" cases: the callback throws on a forbidden trace (rejecting the promise), and the
+   * promise resolves once the timeout passes without one. Await or return the promise directly
+   * instead of pairing a bare `assertSomeTraces` with a separate `setTimeout(done, …)`.
+   *
+   * @param {RunCallbackAgainstTracesCallback} callback - Inspects a payload; throws on a forbidden trace.
+   * @param {RunCallbackAgainstNoTracesOptions} [options] - An options object.
+   * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
+   */
+  assertNoTraces (callback, options) {
+    return runCallbackAgainstNoTraces(callback, options, traceHandlers)
+  },
+
+  /**
+   * Same as assertSomeTraces() but only provides a single span. By default that
+   * is the first span of the first trace (traces[0][0]); pass a
+   * `spanResourceMatch` in the options to target the first span whose resource
+   * matches it instead, which lets a nested child span (e.g. a per-command write
+   * under a `bulkWrite` parent) be asserted without being traces[0][0].
    * This callback gets executed once for every payload received by the agent.
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
@@ -496,9 +776,10 @@ module.exports = {
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
+      const span = findFirstTraceSpan(traces, options?.spanResourceMatch)
       if (typeof callbackOrExpected !== 'function') {
         try {
-          assertObjectContains(traces[0][0], callbackOrExpected)
+          assertObjectContains(span, callbackOrExpected)
         } catch (error) {
           // Enrich error with actual and expected traces for Node.js < 22.17.0
           if (semifies(process.version, '<22.17.0')) {
@@ -508,7 +789,7 @@ module.exports = {
           throw error
         }
       } else {
-        return callbackOrExpected(traces[0][0])
+        return callbackOrExpected(span)
       }
     }, options, traceHandlers)
   },
@@ -553,60 +834,67 @@ module.exports = {
   },
 
   /**
-   * Unregister any outstanding expectation callbacks.
+   * Framework-only — called from `packages/dd-trace/test/setup/mocha.js`'s
+   * global `afterEach` to drop every test's outstanding expectation
+   * callbacks before the next test runs. Tests should never call this:
+   * `agent.close` already covers per-suite teardown, and per-test
+   * expectations are scoped to whichever assertion helper added them.
+   *
+   * This is the framework leak boundary: reset first disarms timers, then fails the test
+   * that left an expectation armed.
    */
   reset () {
-    traceHandlers.clear()
-    statsHandlers.clear()
+    const leaked = disarmHandlers(traceHandlers) + disarmHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
+    if (leaked !== 0) {
+      throw new Error(
+        `${leaked} trace expectation(s) were still armed at test teardown. Await or cancel ` +
+        'every assertSomeTraces/assertNoTraces promise before the test ends.'
+      )
+    }
   },
 
   /**
-   * Stop the mock agent, reset all expectations and wipe the require cache.
-   *
-   * Defaults:
-   * - ritmReset: true
-   * - wipe: false
-   *
-   * @param {object} [options]
-   * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
-   * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
-   *     need this.
-   * @returns
+   * Tear down the mock agent and reset every per-test expectation. Idempotent.
+   * The next `agent.load` decides for itself whether to reuse the cached
+   * tracer or rebuild it; tests do not pass options here.
    */
-  close ({ ritmReset = true, wipe = false } = {}) {
-    // Allow close to be called idempotent
+  close () {
     if (listener === null) {
       return Promise.resolve()
     }
 
     listener.close()
     listener = null
-    sockets.forEach(socket => socket.end())
+    for (const socket of sockets) {
+      socket.end()
+    }
     sockets = []
     agent = null
-    traceHandlers.clear()
-    statsHandlers.clear()
+    disarmHandlers(traceHandlers)
+    disarmHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-    if (ritmReset !== false) {
-      ritm.reset()
-    }
-    if (wipe) {
-      this.wipe()
-    }
+    loadedPlugins.clear()
+    // Force the next `agent.load` through the gate-fired rebuild path
+    // so cross-file leaks (`code_origin` tags sticking across files,
+    // `router`'s path-stack accumulating, …) cannot silently inherit
+    // the previous file's `Config` when both load with default
+    // `tracerConfig: {}`.
+    loaded = false
     this.setAvailableEndpoints(DEFAULT_AVAILABLE_ENDPOINTS)
     currentIntegrationName = null
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    return /** @type {Promise<void>} */ (new Promise(resolve => {
       this.server.on('close', () => {
         this.server = null
+        this.port = null
 
         resolve()
       })
@@ -615,31 +903,6 @@ module.exports = {
 
   setAvailableEndpoints (newEndpoints) {
     availableEndpoints = newEndpoints
-  },
-
-  // Wipe the require cache.
-  wipe () {
-    require('../..')._pluginManager.destroy()
-
-    delete require.cache[require.resolve('../..')]
-    delete global._ddtrace
-
-    // Tracer initializations across `agent.load()` cycles leave behind
-    // `exit` / `beforeExit` listeners from dogstatsd, telemetry, heap
-    // snapshots, etc. Without sweeping them here they accumulate and
-    // either leak memory (aws-sdk OOM) or fire against a torn-down tracer.
-    process.removeAllListeners('exit')
-    process.removeAllListeners('beforeExit')
-
-    const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
-    const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
-      .map(exception => new RegExp(exception))
-
-    Object.keys(require.cache)
-      .filter(name => name.includes(basedir) && !exceptions.some(exception => exception.test(name)))
-      .forEach(name => {
-        delete require.cache[name]
-      })
   },
 
   tracer,

@@ -50,24 +50,113 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        tracer = require('../../dd-trace')
         appListener = null
       })
 
-      afterEach(() => {
+      afterEach(async () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close({ ritmReset: false })
+        await agent.close()
+      })
+
+      describe('with OTel semantics enabled', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              // OpenTelemetry attribute names are present...
+              assertObjectContains(span, {
+                type: 'http',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'client',
+                  'http.request.method': 'GET',
+                  'url.full': `${protocol}://localhost:${port}/user`,
+                  'server.address': 'localhost',
+                },
+                metrics: {
+                  'http.response.status_code': 200,
+                  'server.port': port,
+                },
+              })
+              // ...and the Datadog ones are absent.
+              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+              assert.ok(!Object.hasOwn(span.meta, 'out.host'))
+              assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('sets error.type to the status code on a 4xx client response', done => {
+          const app = express()
+          app.get('/bad', (req, res) => {
+            res.status(400).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'error.type': '400' },
+                metrics: { 'http.response.status_code': 400 },
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('includes the query string in url.full (obfuscation preserved)', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'url.full': `${protocol}://localhost:${port}/user?foo=bar` },
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('http', { server: false })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
+        beforeEach(async () => {
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
         })
 
         const spanProducerFn = (done) => {
@@ -223,9 +312,9 @@ describe('Plugin', () => {
 
             appListener.on('upgrade', (req, socket, head) => {
               socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
-                             'Upgrade: WebSocket\r\n' +
-                             'Connection: Upgrade\r\n' +
-                             '\r\n')
+                            'Upgrade: WebSocket\r\n' +
+                            'Connection: Upgrade\r\n' +
+                            '\r\n')
               socket.pipe(socket)
             })
 
@@ -728,7 +817,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 0)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -756,7 +845,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -788,7 +877,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -942,13 +1031,11 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('Noop request was traced.'))
-              })
+              .assertNoTraces(() => {
+                throw new Error('Noop request was traced.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             appListener = server(app, port => {
               const store = storage('legacy').getStore()
@@ -1400,14 +1487,11 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Blocklisted requests should not be recorded.'))
-            })
-            .catch(done)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted requests should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
@@ -1443,12 +1527,11 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            const timer = setTimeout(done, 100)
-
-            agent.assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Filtered requests should not be recorded.'))
-            })
+            agent
+              .assertNoTraces(() => {
+                throw new Error('Filtered requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             appListener = server(app, port => {
               const req = http.request(`${protocol}://localhost:${port}/health`, res => {

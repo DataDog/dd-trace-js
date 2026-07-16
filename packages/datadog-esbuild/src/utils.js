@@ -6,6 +6,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 
+const LOAD_OPERATION = 0
+const RESOLVE_OPERATION = 1
+
 const getExportsImporting = (url) => import(url).then(Object.keys)
 let getExportsModulePromise
 
@@ -19,7 +22,11 @@ const loadGetExportsModule = () => {
 const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
   ? async (srcUrl, context, getSource) => {
     const mod = await loadGetExportsModule()
-    return mod.getExports(srcUrl, context, getSource)
+    const exportNames = mod.getExports(srcUrl, context, getSource)
+    if (exportNames?.next) {
+      return driveGetExportsGenerator(exportNames, getSource)
+    }
+    return exportNames
   }
   : getExportsImporting
 
@@ -79,13 +86,49 @@ function getSource (url, { format }) {
 }
 
 /**
+ * Drives the generator returned by import-in-the-middle >=3.1.0 export discovery.
+ *
+ * @param {Generator<Array, Set<string>>} exportsGenerator Generator returned by getExports
+ * @param {(url: URL, context: object) => { source: string, format: string }} getSource
+ * Function that loads module source
+ * @returns {Set<string>}
+ */
+function driveGetExportsGenerator (exportsGenerator, getSource) {
+  let next = exportsGenerator.next()
+  while (next.done === false) {
+    let result
+    let error
+    let threw = false
+
+    try {
+      const operation = next.value
+      const operationType = operation[0]
+
+      if (operationType === LOAD_OPERATION) {
+        result = getSource(operation[1], operation[2])
+      } else if (operationType === RESOLVE_OPERATION) {
+        result = resolve(operation[1], operation[2])
+      } else {
+        throw new Error(`Unsupported import-in-the-middle getExports operation: ${operationType}`)
+      }
+    } catch (err) {
+      threw = true
+      error = err
+    }
+
+    next = threw ? exportsGenerator.throw(error) : exportsGenerator.next(result)
+  }
+  return next.value
+}
+
+/**
  * Generates the pieces of code for the proxy module before the path
  *
  * @param {object} moduleData
  * @param {string} moduleData.path
- * @param {boolean} [moduleData.internal = false]
+ * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
- * @param {boolean} [moduleData.excludeDefault = false]
+ * @param {boolean} [moduleData.excludeDefault]
  * @returns {Promise<Map>}
  */
 async function processModule ({ path, internal = false, context, excludeDefault = false }) {

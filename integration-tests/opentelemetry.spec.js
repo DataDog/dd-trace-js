@@ -380,6 +380,7 @@ describe('opentelemetry', function () {
         DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
       },
     })
     await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
@@ -390,7 +391,7 @@ describe('opentelemetry', function () {
       const trace = payload.flat()
       assert.strictEqual(trace.length, 9)
 
-      // Should have expected span names and ordering
+      // Should have expected span resource names and ordering
       assert.ok(eachEqual(trace, [
         'GET /second-endpoint',
         'middleware - query',
@@ -402,7 +403,7 @@ describe('opentelemetry', function () {
         'request handler - /first-endpoint',
         'GET',
       ],
-      (span) => span.name))
+      (span) => span.resource))
 
       assert.ok(allEqual(trace, (span) => {
         span.trace_id.toString()
@@ -422,6 +423,23 @@ describe('opentelemetry', function () {
 
   it('should auto-instrument @opentelemetry/sdk-node', async () => {
     proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent?.port,
+      },
+    })
+    await check(agent, proc, timeout, ({ payload }) => {
+      const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+      assert.ok(trace)
+    })
+  })
+
+  it('should deliver spans to a user span processor configured on @opentelemetry/sdk-node', async () => {
+    // Regression guard: sdk-node 0.220+ passes span processors through the
+    // provider constructor. The fixture exits non-zero if its own processor
+    // never saw the span, so the tracer producing the DD span while dropping
+    // the user's processor fails here rather than passing silently.
+    proc = fork(join(cwd, 'opentelemetry/sdk-node-span-processor.js'), {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent?.port,

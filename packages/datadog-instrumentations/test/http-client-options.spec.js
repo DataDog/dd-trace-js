@@ -20,7 +20,9 @@ describe('http client option ownership', () => {
     // `request`/`get` on the module instance the test uses.
     http = require('node:http')
 
-    server = http.createServer((req, res) => res.end()).listen(0, '127.0.0.1')
+    // Bind to all interfaces so requests via `localhost` reach the server
+    // regardless of whether Node DNS resolves IPv4 or IPv6 first.
+    server = http.createServer((req, res) => res.end()).listen(0)
     await new Promise(resolve => server.once('listening', resolve))
     port = server.address().port
   })

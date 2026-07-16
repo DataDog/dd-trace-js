@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { inspect } = require('node:util')
 const {
   FakeAgent,
   sandboxCwd,
@@ -10,7 +11,10 @@ const {
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
-const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+const spawnEnv = {
+  DD_TRACE_FLUSH_INTERVAL: '2000',
+  NODE_OPTIONS: '--experimental-global-webcrypto',
+}
 
 describe('esm', () => {
   let agent
@@ -32,7 +36,7 @@ describe('esm', () => {
 
     it('tryAddMessage returns a boolean, not a Promise', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.ok(Array.isArray(payload))
+        assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
         assert.strictEqual(payload.length, 3)
         // Verify we got the expected spans from the test
         assert.strictEqual(payload[0][0].name, 'azure.servicebus.create')

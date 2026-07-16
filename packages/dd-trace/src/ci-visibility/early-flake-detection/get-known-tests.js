@@ -17,6 +17,7 @@ const {
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateKnownTestsResponse } = require('../test-optimization-http-cache-schema')
 
 const MAX_KNOWN_TESTS_PAGES = 10_000
 
@@ -50,6 +51,19 @@ function mergeKnownTests (aggregate, page) {
   }
 
   return aggregate
+}
+
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseKnownTestsResponse (rawJson, options = {}) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateKnownTestsResponse(parsedResponse)
+  }
+  const { data: { attributes: { tests } } } = parsedResponse
+  return tests
 }
 
 function getKnownTests ({
@@ -151,12 +165,12 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/ci/libraries/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const { apiKey } = getConfig()
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       return done(new Error('Known tests were not fetched because Datadog API key is not defined.'))
     }
 
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const configurations = {
@@ -211,8 +225,9 @@ function fetchFromApi ({
       try {
         totalResponseBytes += res.length
 
-        const { data: { attributes } } = JSON.parse(res)
-        const { tests: pageTests, page_info: responsePageInfo } = attributes
+        const parsedResponse = parseJsonResponse(res)
+        const pageTests = parseKnownTestsResponse(parsedResponse)
+        const { page_info: responsePageInfo } = parsedResponse.data.attributes
 
         aggregateTests = mergeKnownTests(aggregateTests, pageTests)
 
@@ -251,4 +266,4 @@ function fetchFromApi ({
   fetchPage(null)
 }
 
-module.exports = { getKnownTests }
+module.exports = { getKnownTests, parseKnownTestsResponse }

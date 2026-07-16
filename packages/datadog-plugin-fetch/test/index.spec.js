@@ -38,7 +38,47 @@ describe('Plugin', function () {
       if (appListener) {
         appListener.close()
       }
-      return agent.close({ ritmReset: false })
+      return agent.close()
+    })
+
+    describe('with OTel semantics enabled', () => {
+      beforeEach(() => {
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        return agent.load('fetch')
+          .then(() => {
+            express = require('express')
+            fetch = globalThis.fetch
+          })
+      })
+
+      afterEach(() => {
+        delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      })
+
+      // fetch passes a URL object, whose query lives in `search` (not `path`);
+      // url.full must still retain the (obfuscated) query under OTel semantics.
+      it('retains the query string in url.full', done => {
+        const app = express()
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+        appListener = server(app, port => {
+          agent.assertFirstTraceSpan({
+            meta: {
+              'span.kind': 'client',
+              'http.request.method': 'GET',
+              'url.full': `http://localhost:${port}/user?foo=bar`,
+            },
+            metrics: {
+              'http.response.status_code': 200,
+            },
+          })
+            .then(done)
+            .catch(done)
+
+          fetch(`http://localhost:${port}/user?foo=bar`)
+        })
+      })
     })
 
     describe('without configuration', () => {
@@ -341,13 +381,11 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Noop request was traced.'))
-            })
+            .assertNoTraces(() => {
+              throw new Error('Noop request was traced.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           const store = storage('legacy').getStore()
 
@@ -517,6 +555,7 @@ describe('Plugin', function () {
           hooks: {
             request: (span, req, res) => {
               span.setTag('foo', '/foo')
+              span.setTag('service.name', 'override')
             },
           },
         }
@@ -539,6 +578,25 @@ describe('Plugin', function () {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].meta.foo, '/foo')
+            })
+            .then(done)
+            .catch(done)
+
+          fetch(`http://localhost:${port}/user`).catch(() => {})
+        })
+      })
+
+      it('should have manual stamp when doing an override through config hook', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+
+        appListener = server(app, port => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'm')
             })
             .then(done)
             .catch(done)
@@ -608,14 +666,11 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Blocklisted requests should not be recorded.'))
-            })
-            .catch(done)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted requests should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           fetch(`http://localhost:${port}/users`).catch(() => {})
         })

@@ -8,13 +8,14 @@
   "variants": {
     "encode-unicode-ascii": {
       "env": {
-        "VARIANT": "encode-unicode-ascii"
+        "VARIANT": "encode-unicode-ascii",
+        "OPERATIONS": "24000"
       }
     },
     "encode-unicode-mixed": {
-      "baseline": "encode-unicode-ascii",
       "env": {
-        "VARIANT": "encode-unicode-mixed"
+        "VARIANT": "encode-unicode-mixed",
+        "OPERATIONS": "24000"
       }
     }
   }

@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-3-haiku-20240307-v1:0/converse",
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "515",
+      "User-Agent": "aws-sdk-js/3.971.0 ua/2.1 os/darwin#25.3.0 lang/js md/nodejs#22.22.0 api/bedrock-runtime#3.971.0 m/N,E,g",
+      "Connection": "keep-alive"
+    },
+    "body": "{\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Explain the concept of distributed tracing in a simple way\"}]}],\"system\":[{\"text\":\"You are an expert swe that is to use the tool fetch_concept\"}],\"inferenceConfig\":{\"maxTokens\":512,\"temperature\":0.5},\"toolConfig\":{\"tools\":[{\"toolSpec\":{\"name\":\"fetch_concept\",\"inputSchema\":{\"json\":{\"type\":\"object\",\"properties\":{\"concept\":{\"type\":\"string\",\"description\":\"The concept to explain\"}},\"required\":[\"concept\"]}},\"description\":\"Fetch an expert explanation for a concept\"}}]}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Thu, 23 Apr 2026 09:17:49 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "316",
+      "Connection": "keep-alive",
+      "x-amzn-RequestId": "a2af9991-6a54-4e92-97b7-6dffff3fc043"
+    },
+    "body": "{\"metrics\":{\"latencyMs\":626},\"output\":{\"message\":{\"content\":[{\"toolUse\":{\"input\":{\"concept\":\"distributed tracing\"},\"name\":\"fetch_concept\",\"toolUseId\":\"tooluse_tSctLSwr2R3wz1rR2PA0Cs\"}}],\"role\":\"assistant\"}},\"stopReason\":\"tool_use\",\"usage\":{\"inputTokens\":364,\"outputTokens\":55,\"serverToolUsage\":{},\"totalTokens\":419}}"
+  }
+}

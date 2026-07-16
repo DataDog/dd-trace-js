@@ -11,7 +11,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const express4Dir = join(__dirname, '..', '..', '..', 'versions', 'express@4')
-const express5Dir = join(__dirname, '..', '..', '..', 'versions', 'express@>=5.0.0')
+const express5Dir = join(__dirname, '..', '..', '..', 'versions', 'express@5')
 
 const describeOrSkip = existsSync(express4Dir) && existsSync(express5Dir)
   ? describe
@@ -44,7 +44,7 @@ describeOrSkip('express path-to-regexp dialect across versions', () => {
   after(() => {
     dc.channel('apm:express:middleware:enter').unsubscribe(captureExpress)
     dc.channel('apm:router:middleware:enter').unsubscribe(captureRouter)
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   beforeEach(() => {

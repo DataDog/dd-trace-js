@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -10,8 +11,11 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+// hapi 19.x and 20.x are EOL and hang CI: on error and 404 replies they crash inside their own
+// `Request._finalize` (null `response.statusCode`) and never finish the request, stalling the
+// worker until the job is cancelled. 21.x fixed it, so the matrix covers 16.x and 21+.
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
-  ? '<17 || >18'
+  ? '<17 || >=21'
   : ''
 
 describe('Plugin', () => {
@@ -39,7 +43,7 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       before(() => {
@@ -105,12 +109,16 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
             assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
             assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'http.status_code'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
             assert.strictEqual(traces[0][0].meta.component, 'hapi')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')
+            const statusCode = Number(traces[0][0].meta['http.status_code'])
             assert.ok(
-              Number(traces[0][0].meta['http.status_code']) >= 200 &&
-              Number(traces[0][0].meta['http.status_code']) <= 299
+              statusCode >= 200 && statusCode <= 299,
+              `Expected 2xx status code, got ${statusCode}`
             )
           })
           .then(done)

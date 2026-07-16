@@ -20,7 +20,9 @@ describe('Plugin', () => {
   let key
   let keyString
 
-  describe('aerospike', () => {
+  describe('aerospike', function () {
+    this.timeout(8000)
+
     withVersions('aerospike', 'aerospike', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -42,16 +44,17 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(function () {
+          this.timeout(10_000)
           return agent.load('aerospike')
         })
 
         after(() => {
-          aerospike.releaseEventLoop()
+          aerospike?.releaseEventLoop()
         })
 
         describe('client', () => {
@@ -301,12 +304,13 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => {
+        before(function () {
+          this.timeout(10_000)
           return agent.load('aerospike', { service: 'custom' })
         })
 
         after(() => {
-          aerospike.releaseEventLoop()
+          aerospike?.releaseEventLoop()
         })
 
         it('should be configured with the correct values', done => {

@@ -12,23 +12,9 @@ const {
   isRetriableNetworkError,
   singleJitteredDelay,
 } = require('../../exporters/common/retry')
-const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
+const { parseUrl } = require('../../exporters/common/url')
 
-function parseUrl (urlObjOrString) {
-  if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
-    return urlToHttpOptions(urlObjOrString)
-  }
-
-  const url = urlToHttpOptions(new URL(urlObjOrString))
-
-  if (url.protocol === 'unix:' && url.hostname === '.') {
-    const udsPath = urlObjOrString.slice(5)
-    url.path = udsPath
-    url.pathname = udsPath
-  }
-
-  return url
-}
+const legacyStorage = storage('legacy')
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
@@ -75,7 +61,7 @@ function request (data, options, callback) {
   let firstStatusCode = null
 
   const makeRequest = () => {
-    storage('legacy').run({ noop: true }, () => {
+    legacyStorage.run({ noop: true }, () => {
       const req = client.request(opts, (res) => {
         // Capture non-2xx status code as soon as we see it so telemetry preserves it if the retry
         // fails with a network error (no HTTP response) before 'end' fires

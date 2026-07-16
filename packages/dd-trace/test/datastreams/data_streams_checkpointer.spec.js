@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
@@ -22,8 +23,7 @@ describe('data streams checkpointer manual api', () => {
 
   before(async () => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
-    tracer = require('../..').init()
-    await agent.load(null, { dsmEnabled: true })
+    tracer = await agent.load(null, { dsmEnabled: true })
 
     // Compute expected hashes using the actual service/env/propagationHash that the processor will use
     const proc = tracer._tracer._dataStreamsProcessor
@@ -54,8 +54,8 @@ describe('data streams checkpointer manual api', () => {
     expectedConsumerHash = consumerHash.readBigUInt64LE(0).toString()
   })
 
-  after(() => {
-    return agent.close({ ritmReset: false })
+  after(async () => {
+    await agent.close()
   })
 
   it('should set a checkpoint when calling setProduceCheckpoint', function (done) {
@@ -128,7 +128,7 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers, false)
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
-    assert.ok(!calledTags.includes('manual_checkpoint:true'))
+    assert.ok(!calledTags.includes('manual_checkpoint:true'), `Got: ${inspect(calledTags)}`)
   })
 
   it('should call trackTransaction on the processor with correct args', function () {

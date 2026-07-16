@@ -27,10 +27,10 @@ const ADVANCED_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_advanced_user_schema.json'), 'utf8')
 )
 
-const BASIC_USER_SCHEMA_ID = '1605040621379664412'
+const BASIC_USER_SCHEMA_ID = '15683462889181473629'
 const ADVANCED_USER_SCHEMA_ID = '919692610494986520'
 function compareJson (expected, span) {
-  const actual = JSON.parse(span.context()._tags[SCHEMA_DEFINITION])
+  const actual = JSON.parse(span.context().getTag(SCHEMA_DEFINITION))
   return JSON.stringify(actual) === JSON.stringify(expected)
 }
 
@@ -53,7 +53,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(async () => {
           dateNowStub = sinon.stub(Date, 'now').callsFake(() => {
             const returnValue = mockTime
             mockTime += 50000 // Increment by 50000 ms to ensure each DSM schema is sampled
@@ -61,15 +61,14 @@ describe('Plugin', () => {
           })
           const cache = SchemaBuilder.getCache()
           cache.clear()
-          return agent.load('avsc').then(() => {
-            temporaryWarningExceptions.add('SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()')
-            avro = require(`../../../versions/avsc@${version}`).get()
-          })
+          await agent.load('avsc')
+          temporaryWarningExceptions.add('SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()')
+          avro = require(`../../../versions/avsc@${version}`).get()
         })
 
         after(() => {
           dateNowStub.restore()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should serialize basic schema correctly', async () => {
@@ -84,11 +83,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'user.serialize')
 
             assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.User')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.User')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -115,11 +114,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'advanced_user.serialize')
 
             assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.AdvancedUser')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.AdvancedUser')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -136,11 +135,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'user.deserialize')
 
             assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.User')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.User')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], BASIC_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -168,11 +167,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'advanced_user.deserialize')
 
             assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.avro.AdvancedUser')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'avro')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.avro.AdvancedUser')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], ADVANCED_USER_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
       })

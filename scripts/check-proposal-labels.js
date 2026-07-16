@@ -6,19 +6,16 @@ const childProcess = require('child_process')
 const ORIGIN = 'origin/'
 
 let releaseBranch = process.env.GITHUB_BASE_REF // 'origin/v3.x'
-let releaseVersion = releaseBranch
-if (releaseBranch.startsWith(ORIGIN)) {
-  releaseVersion = releaseBranch.slice(ORIGIN.length)
-} else {
+if (!releaseBranch.startsWith(ORIGIN)) {
   releaseBranch = ORIGIN + releaseBranch
 }
-let currentBranch = process.env.GITHUB_HEAD_REF // 'ugaitz/workflow-to-verify-dont-land-on-v3.x'
+let currentBranch = process.env.GITHUB_HEAD_REF
 if (!currentBranch.startsWith(ORIGIN)) {
   currentBranch = ORIGIN + currentBranch
 }
 
-const getHashesCommandWithExclusions = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major' +
-  ` --exclude-label=dont-land-on-${releaseVersion} ${releaseBranch} ${currentBranch}`
+const getHashesCommandWithExclusions =
+  `branch-diff --user DataDog --repo dd-trace-js --exclude-label=only-land-on-next ${releaseBranch} ${currentBranch}`
 const getHashesCommandWithoutExclusions =
   `branch-diff --user DataDog --repo dd-trace-js ${releaseBranch} ${currentBranch}`
 

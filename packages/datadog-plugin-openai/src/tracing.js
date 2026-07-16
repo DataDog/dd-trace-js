@@ -8,6 +8,7 @@ const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
 const { DD_MAJOR } = require('../../../version')
+const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
@@ -157,7 +158,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const span = store?.span
     if (!span) return
 
-    const error = !!span.context()._tags.error
+    const error = !!span.context().getTag('error')
 
     let headers, body, method, path
     if (!error) {
@@ -171,7 +172,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       headers = Object.fromEntries(headers)
     }
 
-    const resource = span._spanContext._tags['resource.name']
+    const resource = span.context().getTag('resource.name')
     const normalizedMethodName = store.normalizedMethodName
 
     body = coerceResponseBody(body, normalizedMethodName)
@@ -209,6 +210,18 @@ class OpenAiTracingPlugin extends TracingPlugin {
     span.finish()
     this.sendLog(resource, span, tags, openaiStore, error)
     this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
+  }
+
+  error (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    super.error(ctx) // add normal error tag
+
+    const errorType = ctx.error?.type
+    if (errorType) {
+      span.setTag(ERROR_TYPE, errorType)
+    }
   }
 
   sendMetrics (headers, body, endpoint, duration, error, spanTags) {

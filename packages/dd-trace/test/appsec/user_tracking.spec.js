@@ -28,7 +28,13 @@ describe('User Tracking', () => {
     currentTags = {}
 
     rootSpan = {
-      context: () => ({ _tags: currentTags }),
+      context: () => ({
+        _tags: currentTags,
+        getTag: (key) => currentTags[key],
+        getTags: () => currentTags,
+        setTag: (key, value) => { currentTags[key] = value },
+        hasTag: (key) => key in currentTags,
+      }),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
     }

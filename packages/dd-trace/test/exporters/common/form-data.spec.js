@@ -19,7 +19,7 @@ describe('exporters/form-data', () => {
   it('should have a valid boundary', () => {
     const form = new FormData()
 
-    assert.ok(typeof form._boundary === 'string')
+    assert.strictEqual(typeof form._boundary, 'string')
     assert.notStrictEqual(form._boundary, '')
   })
 

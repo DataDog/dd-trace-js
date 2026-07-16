@@ -39,7 +39,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should not abort the request by default', async () => {

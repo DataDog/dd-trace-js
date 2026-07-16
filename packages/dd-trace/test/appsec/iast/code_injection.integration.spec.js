@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
 
@@ -53,7 +54,10 @@ describe('IAST - code_injection - integration', () => {
 
     const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-      assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
+      assert.ok(
+        Object.hasOwn(payload[0][0].meta, '_dd.iast.json'),
+        `Available keys: ${inspect(Object.keys(payload[0][0].meta))}`
+      )
       const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
       assert.notStrictEqual(vulnerabilitiesTrace, null)
       const vulnerabilities = new Set()

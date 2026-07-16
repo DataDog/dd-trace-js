@@ -1,9 +1,12 @@
 'use strict'
 
-const { readFileSync } = require('node:fs')
+const { mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
 const assert = require('node:assert')
+const { pathToFileURL } = require('node:url')
+const vm = require('node:vm')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -107,7 +110,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Async',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_iterator_async',
         },
@@ -119,7 +123,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Async',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_iterator_async_super',
         },
@@ -156,7 +161,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Iterator',
+            kind: 'Sync',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_generator',
         },
@@ -168,7 +174,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Iterator',
+            kind: 'Sync',
+            returnKind: 'Iterator',
           },
           channelName: 'trace_generator_super',
         },
@@ -180,7 +187,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             methodName: 'test',
-            kind: 'Iterator',
+            kind: 'Sync',
+            returnKind: 'Iterator',
             className: 'B',
           },
           channelName: 'trace_generator_super_bound',
@@ -193,7 +201,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
           },
           channelName: 'trace_generator_async',
         },
@@ -205,7 +214,8 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'AsyncIterator',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
           },
           channelName: 'trace_generator_async_super',
         },
@@ -260,6 +270,42 @@ describe('check-require-cache', () => {
             kind: 'Sync',
           },
           channelName: 'trace_class_private_method',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'Async',
+          },
+          channelName: 'trace_promise_async_end',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end.js',
+          },
+          astQuery: 'ReturnStatement > CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+          channelName: 'trace_promise_async_end',
+          transform: 'waitForAsyncEnd',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'pregel-class.js',
+          },
+          functionQuery: {
+            methodName: 'stream',
+            className: 'Pregel',
+            kind: 'Sync',
+            returnKind: 'AsyncIterator',
+          },
+          channelName: 'pregel_stream',
         },
       ],
     })
@@ -516,14 +562,109 @@ describe('check-require-cache', () => {
     assert.ok(subs.start.called)
   })
 
+  it('should wait for an asyncEnd promise when configured', async () => {
+    const { test } = compileFile('trace-promise-async-end')
+    const steps = []
+
+    subs = {
+      asyncEnd (ctx) {
+        steps.push('asyncEnd')
+        ctx.asyncEndPromise = new Promise(resolve => {
+          setImmediate(() => {
+            steps.push('asyncEndPromise')
+            resolve()
+          })
+        })
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end')
+    ch.subscribe(subs)
+
+    const resultPromise = test().then(result => {
+      steps.push('resolved')
+      return result
+    })
+
+    await Promise.resolve()
+
+    assert.deepStrictEqual(steps, ['asyncEnd'])
+
+    const result = await resultPromise
+
+    assert.equal(result, 'result')
+    assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndPromise', 'resolved'])
+  })
+
   it('should use import when rewriting esm modules', () => {
-    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-generator-async.js')
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
 
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, 'module')
 
-    assert.match(content, /\bimport\s+.+\s+from\s+"/)
+    assert.match(content, /\bimport\s+.+\s+from\s+"file:\/\//)
     assert.match(content, /tr_ch_apm_tracingChannel/)
     assert.doesNotMatch(content, /require\("/)
+  })
+
+  it('should rewrite ESM modules with returnKind: AsyncIterator without injecting require()', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
+    const source = readFileSync(filename, 'utf8')
+
+    const rewritten = rewriter.rewrite(source, filename, 'module')
+
+    assert.match(rewritten, /^import\s/m, 'expected an ESM import in the rewritten output')
+    assert.doesNotMatch(rewritten, /\brequire\s*\(/, 'CJS require() must not appear in ESM output')
+    assert.match(rewritten, /from\s+"file:\/\/[^"]+"/, 'dc-polyfill specifier must be a file:// URL for ESM')
+
+    // End-to-end: write the rewritten module to disk and dynamic-import it.
+    // This is what fails at runtime today when the local transform emits
+    // `require()` (no `require` in ESM scope) or a bare absolute path (Node
+    // rejects with ERR_INVALID_MODULE_SPECIFIER).
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter-esm-'))
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}')
+    const outFile = join(dir, 'pregel-class.mjs')
+    writeFileSync(outFile, rewritten)
+
+    ch = tracingChannel('orchestrion:test-esm:pregel_stream')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const mod = await import(pathToFileURL(outFile).href)
+    const iter = new mod.Pregel().stream()
+    await iter.next()
+
+    assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
+  })
+})
+
+describe('rewriter source-map trailer', () => {
+  const rewriterPath = require.resolve('../../../src/helpers/rewriter')
+
+  it('does not embed a sourceMappingURL comment token in its own source', () => {
+    const source = readFileSync(rewriterPath, 'utf8')
+
+    assert.doesNotMatch(source, /\/\/[#@]\s*sourceMappingURL=/)
+  })
+
+  it('does not crash source-map-support when formatting a frame in its own file', () => {
+    const sourceMapSupport = require('source-map-support')
+    const originalPrepareStackTrace = Error.prepareStackTrace
+    sourceMapSupport.install({ environment: 'node', handleUncaughtExceptions: false })
+
+    try {
+      const boom = vm.runInThisContext(
+        '(function boom () { return new Error("boom") })',
+        { filename: rewriterPath }
+      )
+
+      const { stack } = boom()
+
+      assert.match(stack, /rewriter[/\\]index\.js/)
+    } finally {
+      Error.prepareStackTrace = originalPrepareStackTrace
+      sourceMapSupport.resetRetrieveHandlers()
+      delete require.cache[require.resolve('source-map-support')]
+    }
   })
 })

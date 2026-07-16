@@ -32,6 +32,14 @@ const messaging = {
       serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`,
       serviceSource: integrationSource('azure-service-bus'),
     },
+    'electron:ipc:main:send': {
+      opName: () => 'electron.main.send',
+      serviceName: identityService,
+    },
+    'electron:ipc:renderer:send': {
+      opName: () => 'electron.renderer.send',
+      serviceName: identityService,
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
@@ -46,6 +54,11 @@ const messaging = {
       opName: () => 'kafka.produce',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`,
       serviceSource: integrationSource('kafka'),
+    },
+    nats: {
+      opName: () => 'nats.publish',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`,
+      serviceSource: integrationSource('nats'),
     },
     rhea: {
       opName: () => 'amqp.send',
@@ -79,6 +92,18 @@ const messaging = {
       serviceName: amqpServiceName,
       serviceSource: integrationSource('amqp'),
     },
+    'electron:ipc:main:receive': {
+      opName: () => 'electron.main.receive',
+      serviceName: identityService,
+    },
+    'electron:ipc:main:handle': {
+      opName: () => 'electron.main.handle',
+      serviceName: identityService,
+    },
+    'electron:ipc:renderer:receive': {
+      opName: () => 'electron.renderer.receive',
+      serviceName: identityService,
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.receive',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
@@ -98,6 +123,11 @@ const messaging = {
       opName: () => 'kafka.consume',
       serviceName: ({ tracerService }) => `${tracerService}-kafka`,
       serviceSource: integrationSource('kafka'),
+    },
+    nats: {
+      opName: () => 'nats.consume',
+      serviceName: ({ tracerService }) => `${tracerService}-nats`,
+      serviceSource: integrationSource('nats'),
     },
     rhea: {
       opName: () => 'amqp.receive',

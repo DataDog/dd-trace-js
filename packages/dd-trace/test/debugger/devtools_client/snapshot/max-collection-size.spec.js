@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -103,9 +104,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           for (const entry of state.wmap.entries) {
             assert.strictEqual(entry.length, 2)
             assert.strictEqual(entry[0].type, 'Object')
-            assert.ok(Object.hasOwn(entry[0].fields, 'i'))
+            assert.ok(Object.hasOwn(entry[0].fields, 'i'), `Available keys: ${inspect(Object.keys(entry[0].fields))}`)
             assert.strictEqual(entry[0].fields.i.type, 'number')
-            assert.ok(Object.hasOwn(entry[0].fields.i, 'value'))
+            assert.ok(
+              Object.hasOwn(entry[0].fields.i, 'value'),
+              `Available keys: ${inspect(Object.keys(entry[0].fields.i))}`
+            )
             assert.match(entry[0].fields.i.value, /^\d+$/)
             assert.strictEqual(entry[1].type, 'number')
             assert.strictEqual(entry[1].value, entry[0].fields.i.value)
@@ -124,9 +128,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           // The order of the elements is not guaranteed, so we don't know which were removed
           for (const element of state.wset.elements) {
             assert.strictEqual(element.type, 'Object')
-            assert.ok(Object.hasOwn(element.fields, 'i'))
+            assert.ok(Object.hasOwn(element.fields, 'i'), `Available keys: ${inspect(Object.keys(element.fields))}`)
             assert.strictEqual(element.fields.i.type, 'number')
-            assert.ok(Object.hasOwn(element.fields.i, 'value'))
+            assert.ok(
+              Object.hasOwn(element.fields.i, 'value'),
+              `Available keys: ${inspect(Object.keys(element.fields.i))}`
+            )
             assert.match(element.fields.i.value, /^\d+$/)
           }
         })

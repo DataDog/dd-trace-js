@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
@@ -9,6 +10,7 @@ const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const LogPlugin = require('../../src/plugins/log_plugin')
+const { buildLogHolder, messageProxy } = require('../../src/plugins/log_injection')
 const Tracer = require('../../src/tracer')
 const getConfig = require('../../src/config')
 
@@ -16,6 +18,15 @@ const testLogChannel = channel('apm:test:log')
 
 class TestLog extends LogPlugin {
   static id = 'test'
+
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:test:log', (arg) => {
+      const logHolder = buildLogHolder(this.tracer)
+      if (!logHolder) return
+      arg.message = messageProxy(arg.message, logHolder)
+    })
+  }
 }
 
 const config = {
@@ -83,7 +94,7 @@ describe('LogPlugin', () => {
     assert.deepStrictEqual(JSON.parse(JSON.stringify(data.message)), {
       dd: override,
     })
-    assert.ok(Object.hasOwn(data.message, 'dd'))
+    assert.ok(Object.hasOwn(data.message, 'dd'), `Available keys: ${inspect(Object.keys(data.message))}`)
   })
 
   it('should allow defining dd after injection', () => {
@@ -103,6 +114,6 @@ describe('LogPlugin', () => {
     })
 
     assert.strictEqual(data.message.dd, override)
-    assert.ok(Object.hasOwn(data.message, 'dd'))
+    assert.ok(Object.hasOwn(data.message, 'dd'), `Available keys: ${inspect(Object.keys(data.message))}`)
   })
 })

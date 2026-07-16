@@ -8,29 +8,20 @@
   "variants": {
     "extract": {
       "env": {
-        "VARIANT": "extract"
+        "VARIANT": "extract",
+        "OPERATIONS": "300000"
       }
     },
     "inject": {
       "env": {
-        "VARIANT": "inject"
-      }
-    },
-    "extract-inject": {
-      "env": {
-        "VARIANT": "extract-inject"
-      }
-    },
-    "extract-baggage-ascii": {
-      "baseline": "extract",
-      "env": {
-        "VARIANT": "extract-baggage-ascii"
+        "VARIANT": "inject",
+        "OPERATIONS": "300000"
       }
     },
     "extract-baggage-percent": {
-      "baseline": "extract",
       "env": {
-        "VARIANT": "extract-baggage-percent"
+        "VARIANT": "extract-baggage-percent",
+        "OPERATIONS": "300000"
       }
     }
   }
