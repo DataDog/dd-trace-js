@@ -105,7 +105,6 @@ function createLayerDispatchWrappers (name) {
       // pass cannot tag the already-finished span's parent with a late error.
       calls++
       if (calls === 1) {
-
         if (error && error !== 'route' && error !== 'router') {
           publishError({ req, error })
         }
