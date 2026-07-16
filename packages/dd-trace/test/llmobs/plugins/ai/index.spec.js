@@ -22,45 +22,55 @@ const {
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
 
-function getAiSdkOpenAiPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkOpenAiRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/openai'
+    return '^3.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/openai@2.0.0'
+    return '^2.0.0'
   } else {
-    return '@ai-sdk/openai@1.3.23'
+    return '^1.3.23'
   }
 }
 
-function getAiSdkBedrockPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkBedrockRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/amazon-bedrock'
+    return '^4.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/amazon-bedrock@3.0.0'
+    return '^3.0.0'
   }
   return null
 }
 
-function getAiSdkAnthropicPackage (vercelAiVersion) {
+/**
+ * @param {string} vercelAiVersion
+ */
+function getAiSdkAnthropicOrGoogleRange (vercelAiVersion) {
   if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/anthropic'
+    return '^3.0.0'
   } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/anthropic@2.0.0'
+    return '^2.0.0'
   } else if (semifies(vercelAiVersion, '>=4.0.0')) {
-    return '@ai-sdk/anthropic@1.0.0'
+    return '^1.0.0'
   }
   return null
 }
 
-function getAiSdkGooglePackage (vercelAiVersion) {
-  if (semifies(vercelAiVersion, '>=6.0.0')) {
-    return '@ai-sdk/google'
-  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
-    return '@ai-sdk/google@2.0.0'
-  } else if (semifies(vercelAiVersion, '>=4.0.0')) {
-    return '@ai-sdk/google@1.0.0'
-  }
-  return null
+/**
+ * @param {string} versionRange
+ * @param {(version: string, realVersion: string, openaiVersion: string) => void} callback
+ */
+function withAiSdkOpenAiVersions (versionRange, callback) {
+  withVersions('ai', 'ai', versionRange, (version, _, realVersion) => {
+    withVersions('ai', '@ai-sdk/openai', getAiSdkOpenAiRange(realVersion), openaiVersion => {
+      callback(version, realVersion, openaiVersion)
+    })
+  })
 }
 
 const MOCK_TELEMETRY_METADATA = {
@@ -89,7 +99,7 @@ describe('Plugin', () => {
     iastFilter.isDdTrace = isDdTrace
   })
 
-  withVersions('ai', 'ai', range, (version, _, realVersion) => {
+  withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersionKey) => {
     let ai
     let openai
     let openaiVersion
@@ -97,7 +107,7 @@ describe('Plugin', () => {
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       openaiVersion = OpenAIModule.version()
       const OpenAI = OpenAIModule.get()
       openai = OpenAI.createOpenAI({
@@ -708,13 +718,16 @@ describe('Plugin', () => {
         span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         /**
-         * Before ai@4.0.2, the stream implementation did not finish the initial llm spans
-         * first to associate the tool call id with the tool itself (by matching descriptions).
+         * Before `ai@4.0.2` with `@ai-sdk/openai@1.3.23`, the stream implementation did not finish the initial llm
+         * spans first to associate the tool call id with the tool itself (by matching descriptions).
          *
          * Usually, this would mean the tool call name is 'toolCall'. This is a limitation with the older library
-         * versions. In v5+, this is resolved as the tool name is not its index in the tools array, but its actual name.
+         * versions. Later AI or provider versions use the actual tool name instead of its index in the tools array.
          */
-        name: semifies(realVersion, NODE_MAJOR < 22 ? '<=4.0.2' : '<4.0.2') ? 'toolCall' : 'weather',
+        name: semifies(realVersion, NODE_MAJOR < 22 ? '<=4.0.2' : '<4.0.2') &&
+            semifies(openaiVersion, '<1.3.24')
+          ? 'toolCall'
+          : 'weather',
         spanKind: 'tool',
         inputValue: JSON.stringify({ location: 'Tokyo' }),
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
@@ -1118,15 +1131,32 @@ describe('Plugin', () => {
     }
 
     /**
+     * @param {{scenario: string, isV6: boolean, cacheReadOnDoGenerate: boolean, packageVersion: string}} options
+     */
+    function getBedrockExpectedMetrics (options) {
+      if (
+        options.scenario === 'cache-read' &&
+        options.isV6 &&
+        !options.cacheReadOnDoGenerate &&
+        semifies(options.packageVersion, '<4.0.13')
+      ) {
+        return {
+          ...defaultExpectedMetrics(options),
+          input_tokens: 23,
+        }
+      }
+      return defaultExpectedMetrics(options)
+    }
+
+    /**
      * Generic helper that runs prompt-cache capture tests for a given AI SDK
      * provider. New providers can be added by passing a single config object —
      * no test-orchestration code duplication required.
      *
      * @param {object} config
      * @param {string} config.providerName - Display name (e.g., 'Bedrock', 'Anthropic')
-     * @param {(realVersion: string) => string | null} config.getPackage -
-     *   Returns the versioned package path for the given ai version, or null
-     *   to skip that ai version (no compatible provider package)
+     * @param {string} config.packageName
+     * @param {(realVersion: string) => string | null} config.getPackageRange
      * @param {(PackageModule: object, scenario: string) => object} config.buildModel -
      *   Constructs the provider's language model with mock fetch wired in
      * @param {object} [config.env] - Env vars required during tests (e.g. AWS creds)
@@ -1141,7 +1171,8 @@ describe('Plugin', () => {
      */
     function describeProviderCacheTests ({
       providerName,
-      getPackage,
+      packageName,
+      getPackageRange,
       buildModel,
       env,
       scenarios = ['cache-read', 'cache-write'],
@@ -1151,64 +1182,77 @@ describe('Plugin', () => {
         if (env) useEnv(env)
 
         withVersions('ai', 'ai', '>=5.0.0 <7.0.0', (version, _, realVersion) => {
-          const pkg = getPackage(realVersion)
-          if (!pkg) return
+          const packageRange = getPackageRange(realVersion)
+          if (!packageRange) return
 
-          let ai
-          let PackageModule
+          withVersions('ai', packageName, packageRange, packageVersion => {
+            let ai
+            let PackageModule
 
-          beforeEach(() => {
-            ai = require(`../../../../../../versions/ai@${version}`).get()
-            PackageModule = require(`../../../../../../versions/${pkg}`)
+            beforeEach(() => {
+              ai = require(`../../../../../../versions/ai@${version}`).get()
+              PackageModule = require(`../../../../../../versions/${packageName}@${packageVersion}`)
+            })
+
+            // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
+            // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
+            // count through unchanged. Fixtures use the raw provider shape (inputTokens = fresh only).
+            const isV6 = semifies(realVersion, '>=6.0.0')
+
+            // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
+            // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
+            // For those older versions our fix correctly no-ops at the doGenerate scope
+            // because the SDK never exposes the attribute there.
+            const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
+
+            if (scenarios.includes('cache-read')) {
+              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-read')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+                const expected = getExpectedMetrics({
+                  scenario: 'cache-read',
+                  isV6,
+                  cacheReadOnDoGenerate,
+                  packageVersion: PackageModule.version(),
+                })
+                assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+              })
+            }
+
+            if (scenarios.includes('cache-write')) {
+              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+                const model = buildModel(PackageModule, 'cache-write')
+                await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
+
+                const { llmobsSpans } = await getEvents()
+                const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
+
+                const expected = getExpectedMetrics({
+                  scenario: 'cache-write',
+                  isV6,
+                  cacheReadOnDoGenerate,
+                  packageVersion: PackageModule.version(),
+                })
+                assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
+                assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
+              })
+            }
           })
-
-          // AI SDK v6+ aggregates inputTokens + cacheReadInputTokens + cacheWriteInputTokens
-          // into `ai.usage.inputTokens` (the total processed). v5 passes the raw fresh
-          // count through unchanged. Fixtures use the raw provider shape (inputTokens = fresh only).
-          const isV6 = semifies(realVersion, '>=6.0.0')
-
-          // `ai.usage.cachedInputTokens` is only set on the `doGenerate` span starting
-          // in ai@6.0.184 (older v6 and all v5 versions set it on the parent span only).
-          // For those older versions our fix correctly no-ops at the doGenerate scope
-          // because the SDK never exposes the attribute there.
-          const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
-
-          if (scenarios.includes('cache-read')) {
-            it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-read')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-read', isV6, cacheReadOnDoGenerate })
-              assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-            })
-          }
-
-          if (scenarios.includes('cache-write')) {
-            it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
-              const model = buildModel(PackageModule, 'cache-write')
-              await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
-
-              const { llmobsSpans } = await getEvents()
-              const doGenerateSpan = llmobsSpans.find(s => s.name === 'doGenerate')
-
-              const expected = getExpectedMetrics({ scenario: 'cache-write', isV6, cacheReadOnDoGenerate })
-              assert.equal(doGenerateSpan.metrics.input_tokens, expected.input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
-              assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
-            })
-          }
         })
       })
     }
 
     describeProviderCacheTests({
       providerName: 'Bedrock',
-      getPackage: getAiSdkBedrockPackage,
+      packageName: '@ai-sdk/amazon-bedrock',
+      getPackageRange: getAiSdkBedrockRange,
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
         return createAmazonBedrock({
@@ -1221,11 +1265,13 @@ describe('Plugin', () => {
         AWS_SECRET_ACCESS_KEY: 'test-secret-key',
         AWS_REGION: 'us-east-1',
       },
+      getExpectedMetrics: getBedrockExpectedMetrics,
     })
 
     describeProviderCacheTests({
       providerName: 'Anthropic',
-      getPackage: getAiSdkAnthropicPackage,
+      packageName: '@ai-sdk/anthropic',
+      getPackageRange: getAiSdkAnthropicOrGoogleRange,
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
         return createAnthropic({
@@ -1253,7 +1299,8 @@ describe('Plugin', () => {
 
     describeProviderCacheTests({
       providerName: 'OpenAI (Chat Completions)',
-      getPackage: getAiSdkOpenAiPackage,
+      packageName: '@ai-sdk/openai',
+      getPackageRange: getAiSdkOpenAiRange,
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         // Use `.chat()` to force the Chat Completions endpoint. Cache field path
@@ -1270,7 +1317,8 @@ describe('Plugin', () => {
 
     describeProviderCacheTests({
       providerName: 'OpenAI (Responses API)',
-      getPackage: getAiSdkOpenAiPackage,
+      packageName: '@ai-sdk/openai',
+      getPackageRange: getAiSdkOpenAiRange,
       buildModel: (OpenAiModule, scenario) => {
         const { createOpenAI } = OpenAiModule.get()
         // Default `openai(modelId)` routes to the Responses API on
@@ -1289,7 +1337,8 @@ describe('Plugin', () => {
 
     describeProviderCacheTests({
       providerName: 'Google Gemini',
-      getPackage: getAiSdkGooglePackage,
+      packageName: '@ai-sdk/google',
+      getPackageRange: getAiSdkAnthropicOrGoogleRange,
       buildModel: (GoogleModule, scenario) => {
         const { createGoogleGenerativeAI } = GoogleModule.get()
         // Google's response has a genuinely different shape from OpenAI:
