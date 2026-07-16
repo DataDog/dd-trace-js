@@ -666,18 +666,27 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           assert(totalDiff <= 0.02, `Total CPU percentage sanity check failed: ${totalDiff} > 0.02`)
 
           // The collector reads its counters between the outer and inner samples on each side.
-          const minimumCpuUsage = innerEndCpuUsage.user - innerStartCpuUsage.user +
-            innerEndCpuUsage.system - innerStartCpuUsage.system
-          const maximumCpuUsage = outerEndCpuUsage.user - outerStartCpuUsage.user +
-            outerEndCpuUsage.system - outerStartCpuUsage.system
           const minimumElapsedTime = innerEndTime - innerStartTime
           const maximumElapsedTime = outerEndTime - outerStartTime
-          const minimumPercent = minimumCpuUsage / (maximumElapsedTime * 10)
-          const maximumPercent = maximumCpuUsage / (minimumElapsedTime * 10)
+          const minimumUserPercent = (innerEndCpuUsage.user - innerStartCpuUsage.user) / (maximumElapsedTime * 10)
+          const maximumUserPercent = (outerEndCpuUsage.user - outerStartCpuUsage.user) / (minimumElapsedTime * 10)
+          const minimumSystemPercent = (innerEndCpuUsage.system - innerStartCpuUsage.system) / (maximumElapsedTime * 10)
+          const maximumSystemPercent = (outerEndCpuUsage.system - outerStartCpuUsage.system) / (minimumElapsedTime * 10)
+          const minimumTotalPercent = minimumUserPercent + minimumSystemPercent
+          const maximumTotalPercent = maximumUserPercent + maximumSystemPercent
 
           assert(
-            totalPercent >= minimumPercent - 0.01 && totalPercent <= maximumPercent + 0.01,
-            `Expected real CPU percentage ${minimumPercent} <= ${totalPercent} <= ${maximumPercent}`
+            userPercent >= minimumUserPercent - 0.01 && userPercent <= maximumUserPercent + 0.01,
+            `Expected real user CPU percentage ${minimumUserPercent} <= ${userPercent} <= ${maximumUserPercent}`
+          )
+          assert(
+            systemPercent >= minimumSystemPercent - 0.01 && systemPercent <= maximumSystemPercent + 0.01,
+            `Expected real system CPU percentage ${minimumSystemPercent} <= ${systemPercent} <= ${maximumSystemPercent}`
+          )
+
+          assert(
+            totalPercent >= minimumTotalPercent - 0.01 && totalPercent <= maximumTotalPercent + 0.01,
+            `Expected real total CPU percentage ${minimumTotalPercent} <= ${totalPercent} <= ${maximumTotalPercent}`
           )
         })
       })
