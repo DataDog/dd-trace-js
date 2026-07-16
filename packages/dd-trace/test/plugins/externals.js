@@ -23,19 +23,19 @@ module.exports = {
     },
     {
       name: '@ai-sdk/openai',
-      versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.3.23', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: '@ai-sdk/amazon-bedrock',
-      versions: ['^3.0.0', '>=4.0.0'],
+      versions: ['^3.0.0', '^4.0.0', '>=5.0.0'],
     },
     {
       name: '@ai-sdk/anthropic',
-      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.0.0', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: '@ai-sdk/google',
-      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.0.0', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: 'zod',

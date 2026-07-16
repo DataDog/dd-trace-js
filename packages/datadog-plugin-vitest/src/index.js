@@ -264,8 +264,10 @@ class VitestPlugin extends CiPlugin {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       const finish = () => {
-        if (duration) {
-          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        if (Number.isFinite(duration) && duration >= 0) {
+          span.finish(
+            span._startTime + Math.max(duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION, 0)
+          ) // milliseconds
         } else {
           span.finish() // `duration` is empty for retries, so we'll use clock time
         }
