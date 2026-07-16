@@ -87,8 +87,8 @@ runs on the matched files. Without this file the rewriter is never triggered.
     expressionName?: string,       // named FunctionExpression / arrow / assignment
     objectName?: string,           // `obj.prop = fn` — MUST pair with propertyName
     propertyName?: string,         //   ('this' is allowed as objectName)
-    callbackIndex?: number,        // Callback only: which arg is the callback (-1 = last)
-    index?: number,                // which match to wrap when several match (0 = first, null = all)
+    callbackIndex?: number,        // Callback/Auto: which arg is the callback (-1 = last)
+    index?: number | null,         // which match to wrap when several match (0 = first, null = all)
     returnKind?: 'Iterator' | 'AsyncIterator',  // also patch the returned iterator
     isExportAlias?: boolean,       // resolve ESM `export { local as exported }` to local
   },
@@ -132,7 +132,7 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 
 ## kind → operator
 
-| kind | operator | behaviour |
+| kind | operator | behavior |
 | --- | --- | --- |
 | `Sync` (default) | `traceSync` | sync return/throw; `ctx.result` on success |
 | `Async` | `tracePromise` | sync **or** promise return; chains `asyncStart`/`asyncEnd`; side-chains Promise subclasses/thenables so subclass methods survive |
@@ -211,9 +211,10 @@ in a `CompositePlugin` (see langchain).
 Multiple module prefixes are manual today. `TracingPlugin.addTraceSub()` and
 `addTraceBind()` read only `this.constructor.prefix`; a `static extraPrefixes`
 field does nothing unless the plugin overrides `addTraceSubs()`, calls `super`,
-then repeats the handler/binding registration for the five generated events.
-Use this for forks or re-exporting packages that should create the same logical
-span. See the `addTraceSubs()` loop in
+then repeats the handler/binding registration for each event. The GraphQL
+reference mirrors `TracingPlugin`'s six-event list; its `finish` subscription
+stays idle because Orchestrion emits only the other five. Use this for forks or
+re-exporting packages that should create the same logical span. See the loop in
 `packages/datadog-plugin-graphql/src/execute.js`.
 
 ## Custom Transforms

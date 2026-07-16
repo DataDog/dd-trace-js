@@ -26,6 +26,9 @@ dd-trace-js provides automatic tracing for 100+ third-party libraries. Each inte
 └──────────────────────────┘                              └─────────────────────────┘
 ```
 
+`finish` above is the legacy manual-channel completion event. `tracingChannel`
+and Orchestrion use `end` / `asyncEnd`, as described below.
+
 **Instrumentation** (`packages/datadog-instrumentations/src/`):
 Hooks into a library's internals and publishes events with context data to named diagnostic channels. Has zero knowledge of tracing — only emits events.
 
@@ -181,7 +184,7 @@ Follow these steps when creating or modifying an integration:
 ## Reference Files
 
 - **[New Integration Guide](references/new-integration-guide.md)** — Step-by-step guide and checklist for creating a new integration end-to-end
-- **[Orchestrion Reference](references/orchestrion.md)** — JSON config format, channel naming, function kinds, plugin subscription
+- **[Orchestrion Reference](references/orchestrion.md)** — JavaScript config format, channel naming, function kinds, plugin subscription
 - **[Plugin Patterns](references/plugin-patterns.md)** — `startSpan()` API, `ctx` object details, `CompositePlugin`, channel subscriptions, code style
 - **[Testing](references/testing.md)** — Unit test and ESM integration test templates
 - **[Reference Plugins](references/reference-plugins.md)** — All plugins organized by base class
