@@ -664,7 +664,7 @@ module.exports = {
     server.on('connection', socket => sockets.push(socket))
 
     const promise = /** @type {Promise<import('../../..').default>} */ (new Promise((resolve, _reject) => {
-      listener = server.listen(0, () => {
+      listener = server.listen(0, '127.0.0.1', () => {
         const port = this.port = listener.address().port
 
         tracer.init({
