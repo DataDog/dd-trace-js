@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const ddpv = require('mocha/package.json').version
+const { storage } = require('../../datadog-core')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -20,15 +21,60 @@ describe('Plugin', () => {
   let tracer
 
   describe('mysql orchestrion plugin', () => {
+    const legacyStorage = storage('legacy')
+
+    afterEach(() => {
+      legacyStorage.enterWith(undefined)
+    })
+
+    it('normalizes the Orchestrion context into the semantic query lifecycle', () => {
+      const MysqlOrchestrionPlugin = require('../src/orchestrion')
+      const { connectionQuery: ConnectionQueryPlugin } = MysqlOrchestrionPlugin.plugins
+      const plugin = new ConnectionQueryPlugin({}, {})
+      const channel = dc.channel('tracing:datadog:db:query:start')
+      const expectedStore = { span: {} }
+      const ctx = {
+        arguments: ['SELECT 1'],
+        self: { config: { database: 'test' } },
+      }
+      let received
+
+      channel.bindStore(legacyStorage, event => {
+        received = event
+        event.data.statement = '/* injected */ SELECT 1'
+        return expectedStore
+      })
+
+      try {
+        const store = plugin.bindStart(ctx)
+
+        assert.strictEqual(received, ctx)
+        assert.strictEqual(store, expectedStore)
+        assert.strictEqual(ctx.kind, 'database')
+        assert.strictEqual(ctx.operation, 'query')
+        assert.deepStrictEqual(ctx.source, { integration: 'mysql', system: 'mysql' })
+        assert.strictEqual(ctx.data.connection, ctx.self.config)
+        assert.strictEqual(ctx.arguments[0], '/* injected */ SELECT 1')
+      } finally {
+        channel.unbindStore(legacyStorage)
+      }
+    })
+
     it('ignores connection query end without a query result or active span', () => {
       const MysqlOrchestrionPlugin = require('../src/orchestrion')
       const { connectionQuery: ConnectionQueryPlugin } = MysqlOrchestrionPlugin.plugins
       const plugin = new ConnectionQueryPlugin({}, {})
-      const finish = sinon.stub(plugin, 'finish')
+      const onFinish = sinon.stub()
+      const channel = dc.channel('tracing:datadog:db:query:finish')
 
-      plugin.end({})
+      channel.subscribe(onFinish)
+      try {
+        plugin.end({})
 
-      sinon.assert.notCalled(finish)
+        sinon.assert.notCalled(onFinish)
+      } finally {
+        channel.unsubscribe(onFinish)
+      }
     })
 
     it('publishes pool query finish when a thenable pool result settles', () => {

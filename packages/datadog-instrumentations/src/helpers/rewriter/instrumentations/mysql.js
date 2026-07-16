@@ -17,8 +17,8 @@ module.exports = [
     astQuery: "AssignmentExpression[left.object.object.name='Connection']" +
       "[left.object.property.name='prototype'][left.property.name='query'] > FunctionExpression",
     functionQuery: {
+      expressionName: 'query',
       kind: 'Sync',
-      propertyName: 'query',
     },
     channelName: 'Connection_query',
   },
@@ -31,8 +31,8 @@ module.exports = [
     astQuery: "AssignmentExpression[left.object.object.name='Pool']" +
       "[left.object.property.name='prototype'][left.property.name='query'] > FunctionExpression",
     functionQuery: {
+      expressionName: 'query',
       kind: 'Sync',
-      propertyName: 'query',
     },
     channelName: 'Pool_query',
   },
@@ -47,7 +47,7 @@ module.exports = [
     functionQuery: {
       kind: 'Callback',
       callbackIndex: 0,
-      propertyName: 'getConnection',
+      expressionName: 'getConnection',
     },
     channelName: 'Pool_getConnection',
   },
