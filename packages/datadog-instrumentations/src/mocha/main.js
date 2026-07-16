@@ -3,7 +3,11 @@
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../../version')
-const { publishWithCompletion } = require('../helpers/channel')
+const {
+  getRunStoresPromise,
+  publishWithCompletion,
+  runStoresWithCompletion,
+} = require('../helpers/channel')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
@@ -287,6 +291,11 @@ function getOnStartHandler (frameworkVersion) {
   }
 }
 
+/**
+ * @param {boolean} isParallel
+ * @param {() => void} onDone
+ * @returns {() => void}
+ */
 function getOnEndHandler (isParallel, onDone) {
   return function () {
     let status = 'pass'
@@ -393,12 +402,6 @@ function getOnEndHandler (isParallel, onDone) {
   }
 }
 
-function getRunStoresPromise (channelToPublishTo, ctx) {
-  return new Promise(resolve => {
-    channelToPublishTo.runStores({ ...ctx, onDone: resolve }, () => {})
-  })
-}
-
 function applyKnownTestsResponse ({ err, knownTests }) {
   if (err) {
     config.knownTests = []
@@ -431,13 +434,14 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   let skippableSuitesResponse
   resetSuiteSkippingRunState()
 
-  const onReceivedSkippableSuites = ({
-    err,
-    skippableSuites,
-    itrCorrelationId: responseItrCorrelationId,
-    skippableSuitesCoverage: responseSkippableSuitesCoverage,
-  }) => {
-    if (err) {
+  const onReceivedSkippableSuites = (response) => {
+    const {
+      err,
+      skippableSuites,
+      itrCorrelationId: responseItrCorrelationId,
+      skippableSuitesCoverage: responseSkippableSuitesCoverage,
+    } = response || {}
+    if (!response || err) {
       suitesToSkip = []
       skippableSuitesCoverage = {}
     } else {
@@ -479,12 +483,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       return
     }
 
-    ctx.onDone = onReceivedSkippableSuites
-    skippableSuitesCh.runStores(ctx, () => {})
+    runStoresWithCompletion(skippableSuitesCh, ctx, onReceivedSkippableSuites)
   }
 
-  const onReceivedImpactedTests = ({ err, modifiedFiles: receivedModifiedFiles }) => {
-    if (err) {
+  const onReceivedImpactedTests = (response) => {
+    const { err, modifiedFiles: receivedModifiedFiles } = response || {}
+    if (!response || err) {
       config.modifiedFiles = []
       config.isImpactedTestsEnabled = false
     } else {
@@ -501,8 +505,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
   const continueAfterTestRequests = () => {
     if (config.isImpactedTestsEnabled) {
-      ctx.onDone = onReceivedImpactedTests
-      modifiedFilesCh.runStores(ctx, () => {})
+      runStoresWithCompletion(modifiedFilesCh, ctx, onReceivedImpactedTests)
     } else if (config.isSuitesSkippingEnabled) {
       requestSkippableSuites()
     } else {
@@ -512,8 +515,14 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedConfiguration = ({ err, isTestDynamicInstrumentationEnabled, libraryConfig, repositoryRoot }) => {
-    if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
+  const onReceivedConfiguration = (response) => {
+    const {
+      err,
+      isTestDynamicInstrumentationEnabled,
+      libraryConfig,
+      repositoryRoot,
+    } = response || {}
+    if (!response || err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
       })
@@ -562,9 +571,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     })
   }
 
-  ctx.onDone = onReceivedConfiguration
-
-  libraryConfigurationCh.runStores(ctx, () => {})
+  runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
 }
 
 // In this hook we delay the execution with options.delay to grab library configuration,
