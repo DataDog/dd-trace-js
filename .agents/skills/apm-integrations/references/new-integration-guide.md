@@ -12,9 +12,9 @@ Step-by-step checklist for creating a new dd-trace-js integration from scratch.
 
 ### Orchestrion (Default)
 
-Orchestrion requires three files:
+Orchestrion requires four files:
 
-**1. JSON config** — `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`:
+**1. JavaScript config** — `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`:
 
 ```javascript
 module.exports = [{
@@ -26,7 +26,7 @@ module.exports = [{
   functionQuery: {
     methodName: 'query',
     className: 'Client',
-    kind: 'Async'  // Async | Callback | Sync
+    kind: 'Async'  // Async | Auto | Callback | Sync
   },
   channelName: 'Client_query'
 }]
@@ -48,7 +48,14 @@ for (const hook of getHooks('<npm-package>')) {
 
 `getHooks` reads the orchestrion config and generates `addHook` entries automatically. This file is needed so the module hooks are registered for the rewriter to process.
 
-**3. hooks.js entry** — (see Register in hooks.js below)
+**3. Config registry entry** —
+`packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js`:
+
+```javascript
+...require('./<name>'),
+```
+
+**4. hooks.js entry** — (see Register in hooks.js below)
 
 See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery support, and channel naming.
 
@@ -284,7 +291,8 @@ PLUGINS="<name>" npm run test:plugins:ci
 
 ## Checklist
 
-- [ ] Instrumentation created (orchestrion JSON config + hooks file, or shimmer with justification comment)
+- [ ] Instrumentation created (orchestrion JavaScript config + hooks file, or shimmer with justification comment)
+- [ ] Orchestrion config registered in `rewriter/instrumentations/index.js` (orchestrion only)
 - [ ] Registered in hooks.js (required for both orchestrion and shimmer paths)
 - [ ] Plugin created with correct base class
 - [ ] Plugin registered in `packages/dd-trace/src/plugins/index.js`
