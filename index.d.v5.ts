@@ -870,7 +870,6 @@ declare namespace tracer {
       flaggingProvider?: {
         /**
          * Whether to enable the feature flagging provider.
-         * Requires Remote Config to be properly configured.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
          *
          * @default false
@@ -888,6 +887,39 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Where Universal Flag Configuration is loaded from. Agentless delivery
+         * fetches from the Datadog UFC CDN endpoint and evaluates locally.
+         *
+         * @default 'agentless'
+         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        configurationSource?: 'agentless' | 'remote_config' | 'offline'
+        /**
+         * Optional agentless configuration endpoint or base URL. A base URL
+         * receives the standard rules-based server path.
+         *
+         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        agentlessBaseUrl?: string
+        /**
+         * Agentless configuration polling interval in seconds.
+         *
+         * @default 30
+         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        agentlessPollIntervalSeconds?: number
+        /**
+         * Agentless configuration request timeout in seconds.
+         *
+         * @default 2
+         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        agentlessRequestTimeoutSeconds?: number
         /**
          * Configuration for span enrichment with feature flag evaluation data.
          */

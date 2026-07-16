@@ -8,14 +8,17 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
  * @param {object} rc - RemoteConfig instance
  * @param {object} config - Tracer config
  * @param {Function} getOpenfeatureProxy - Function that returns the OpenFeature proxy from tracer
+ * @param {boolean} [subscribe] - Whether Agent Remote Config owns UFC delivery
  */
-function enable (rc, config, getOpenfeatureProxy) {
+function enable (rc, config, getOpenfeatureProxy, subscribe = true) {
   // Always enable capability for feature flag configuration
   // This indicates the library supports this capability via remote config
   rc.updateCapabilities(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
 
-  // Only register product handler if the experimental feature is enabled
-  if (!config.experimental.flaggingProvider.enabled) return
+  // Only register the product handler when the provider is enabled and Agent
+  // Remote Config is the selected UFC source. The capability stays enabled
+  // because it describes library support, not the active delivery mode.
+  if (!config.experimental.flaggingProvider.enabled || !subscribe) return
 
   // Set product handler for FFE_FLAGS
   rc.setProductHandler('FFE_FLAGS', (action, conf) => {

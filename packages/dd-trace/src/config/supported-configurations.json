@@ -827,6 +827,46 @@
         "default": "false"
       }
     ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "experimental.flaggingProvider.configurationSource"
+        ],
+        "default": "agentless"
+      }
+    ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "experimental.flaggingProvider.agentlessBaseUrl"
+        ],
+        "default": null
+      }
+    ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "experimental.flaggingProvider.agentlessPollIntervalSeconds"
+        ],
+        "default": "30"
+      }
+    ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "experimental.flaggingProvider.agentlessRequestTimeoutSeconds"
+        ],
+        "default": "2"
+      }
+    ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
       {
         "implementation": "B",
