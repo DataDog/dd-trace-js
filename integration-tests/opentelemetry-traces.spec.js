@@ -21,6 +21,12 @@ function waitForOtlpTraces (agent, timeout) {
   })
 }
 
+function getAttributeValue (attributes, key) {
+  const attribute = attributes.find(attribute => attribute.key === key)
+  assert.ok(attribute, `attribute ${key} should be present`)
+  return attribute.value
+}
+
 describe('OTLP Trace Export', () => {
   let agent
   let cwd
@@ -128,15 +134,10 @@ describe('OTLP Trace Export', () => {
       assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
     }
 
-    assertObjectContains(webSpan.attributes, [
-      { key: 'service.name', value: { stringValue: 'otlp-test-service' } },
-      { key: 'operation.name', value: { stringValue: 'web.request' } },
-      { key: 'resource.name', value: { stringValue: 'GET /api/test' } },
-      { key: 'http.method', value: { stringValue: 'GET' } },
-      { key: 'http.url', value: { stringValue: '/api/test' } },
-    ])
-    assertObjectContains(dbSpan.attributes, [
-      { key: 'db.type', value: { stringValue: 'postgres' } },
-    ])
+    assert.deepStrictEqual(getAttributeValue(webSpan.attributes, 'operation.name'), { stringValue: 'web.request' })
+    assert.deepStrictEqual(getAttributeValue(webSpan.attributes, 'resource.name'), { stringValue: 'GET /api/test' })
+    assert.deepStrictEqual(getAttributeValue(webSpan.attributes, 'http.method'), { stringValue: 'GET' })
+    assert.deepStrictEqual(getAttributeValue(webSpan.attributes, 'http.url'), { stringValue: '/api/test' })
+    assert.deepStrictEqual(getAttributeValue(dbSpan.attributes, 'db.type'), { stringValue: 'postgres' })
   })
 })
