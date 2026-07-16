@@ -56,12 +56,14 @@ describe('Tracing Remote Config', () => {
         RemoteConfigCapabilities.SDK_CONFIGURATION, true)
     })
 
-    it('should register APM_TRACING and SDK_CONFIGURATION batch handler', () => {
+    it('should register a single APM_TRACING batch handler', () => {
       enable(rc, config, onConfigUpdated)
 
-      sinon.assert.calledWithExactly(rc.subscribeProducts, 'APM_TRACING')
-      sinon.assert.calledWithExactly(rc.subscribeProducts, 'SDK_CONFIGURATION')
-      sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING', 'SDK_CONFIGURATION'], sinon.match.func)
+      // SDK_CONFIGURATION has no RC product of its own - it's a distinct config object (a flat
+      // `sdk_config` map) delivered under the same APM_TRACING product as the legacy `lib_config`
+      // object, so there's exactly one subscription and one batch handler.
+      sinon.assert.calledOnceWithExactly(rc.subscribeProducts, 'APM_TRACING')
+      sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING'], sinon.match.func)
     })
 
     describe('APM_TRACING handler', () => {
@@ -97,7 +99,7 @@ describe('Tracing Remote Config', () => {
 
         // Then unapply it
         transaction = createTransaction([], [], [
-          { id: 'config-1', file: {} },
+          { id: 'config-1', file: { lib_config: { service: 'test' } } },
         ])
         handler(transaction)
 
@@ -134,7 +136,7 @@ describe('Tracing Remote Config', () => {
         const sdkConfig = { DD_TRACE_SAMPLE_RATE: '0.5' }
 
         const transaction = createTransaction([
-          { id: 'config-1', product: 'SDK_CONFIGURATION', file: { lib_config: sdkConfig } },
+          { id: 'config-1', file: { sdk_config: sdkConfig } },
         ])
 
         handler(transaction)
@@ -151,16 +153,16 @@ describe('Tracing Remote Config', () => {
 
         // First apply a config
         let transaction = createTransaction([
-          { id: 'config-1', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_TRACE_ENABLED: 'true' } } },
+          { id: 'config-1', file: { sdk_config: { DD_TRACE_ENABLED: 'true' } } },
         ])
         handler(transaction)
 
         config.setRemoteConfigFromSdkConfig.resetHistory()
         onConfigUpdated.resetHistory()
 
-        // Then unapply it
+        // Then unapply it (routing on unapply also keys off the shape of the previously-applied file)
         transaction = createTransaction([], [], [
-          { id: 'config-1', product: 'SDK_CONFIGURATION', file: {} },
+          { id: 'config-1', file: { sdk_config: { DD_TRACE_ENABLED: 'true' } } },
         ])
         handler(transaction)
 
@@ -178,9 +180,9 @@ describe('Tracing Remote Config', () => {
 
         // Apply multiple configs in a single batch
         const transaction = createTransaction([
-          { id: 'config-1', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_TRACE_SAMPLE_RATE: '0.5' } } },
-          { id: 'config-2', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_LOGS_INJECTION: 'true' } } },
-          { id: 'config-3', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_TRACE_ENABLED: 'true' } } },
+          { id: 'config-1', file: { sdk_config: { DD_TRACE_SAMPLE_RATE: '0.5' } } },
+          { id: 'config-2', file: { sdk_config: { DD_LOGS_INJECTION: 'true' } } },
+          { id: 'config-3', file: { sdk_config: { DD_TRACE_ENABLED: 'true' } } },
         ])
 
         handler(transaction)
@@ -201,18 +203,16 @@ describe('Tracing Remote Config', () => {
       const transaction = createTransaction([
         {
           id: 'config-org',
-          product: 'SDK_CONFIGURATION',
           file: {
             service_target: { service: '*', env: '*' },
-            lib_config: { DD_TRACE_SAMPLE_RATE: '0.5' },
+            sdk_config: { DD_TRACE_SAMPLE_RATE: '0.5' },
           },
         },
         {
           id: 'config-service',
-          product: 'SDK_CONFIGURATION',
           file: {
             service_target: { service: 'test-service', env: '*' },
-            lib_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
+            sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
           },
         },
       ])
@@ -230,17 +230,15 @@ describe('Tracing Remote Config', () => {
       // Add two configs
       let transaction = createTransaction([{
         id: 'config-1',
-        product: 'SDK_CONFIGURATION',
         file: {
           service_target: { service: '*', env: '*' },
-          lib_config: { DD_TRACE_SAMPLE_RATE: '0.5' },
+          sdk_config: { DD_TRACE_SAMPLE_RATE: '0.5' },
         },
       }, {
         id: 'config-2',
-        product: 'SDK_CONFIGURATION',
         file: {
           service_target: { service: 'test-service', env: '*' },
-          lib_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
+          sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
         },
       }])
       handler(transaction)
@@ -249,7 +247,13 @@ describe('Tracing Remote Config', () => {
 
       // Remove higher priority config
       transaction = createTransaction([], [], [
-        { id: 'config-2', product: 'SDK_CONFIGURATION', file: {} },
+        {
+          id: 'config-2',
+          file: {
+            service_target: { service: 'test-service', env: '*' },
+            sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' },
+          },
+        },
       ])
       handler(transaction)
 
@@ -264,10 +268,9 @@ describe('Tracing Remote Config', () => {
       // Apply config for different service
       const transaction = createTransaction([{
         id: 'config-other',
-        product: 'SDK_CONFIGURATION',
         file: {
           service_target: { service: 'other-service', env: '*' },
-          lib_config: { DD_TRACE_SAMPLE_RATE: '0.9' },
+          sdk_config: { DD_TRACE_SAMPLE_RATE: '0.9' },
         },
       }])
 
@@ -279,22 +282,24 @@ describe('Tracing Remote Config', () => {
       sinon.assert.calledWith(config.setRemoteConfigFromLibConfig, null)
     })
 
-    it('should return null when configs have no lib_config field', () => {
+    it('should return null when configs have no sdk_config field', () => {
       enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
-      // Apply a config that has lib_config set to null
+      // Apply a config that has sdk_config set to null
       const transaction = createTransaction([
         {
           id: 'config-1',
-          product: 'SDK_CONFIGURATION',
-          file: { service_target: { service: 'test-service', env: '*' }, lib_config: null },
+          file: {
+            service_target: { service: 'test-service', env: '*' },
+            sdk_config: null,
+          },
         },
       ])
 
       handler(transaction)
 
-      // Should fall back to the legacy path because no SDK_CONFIGURATION lib_config was found
+      // Should fall back to the legacy path because no SDK_CONFIGURATION config was found
       sinon.assert.notCalled(config.setRemoteConfigFromSdkConfig)
       sinon.assert.calledWithExactly(config.setRemoteConfigFromLibConfig, null)
       sinon.assert.calledOnce(onConfigUpdated)
@@ -308,7 +313,7 @@ describe('Tracing Remote Config', () => {
 
       const transaction = createTransaction([
         { id: 'apm-config', file: { lib_config: { tracing_sampling_rate: 0.5 } } },
-        { id: 'sdk-config', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
+        { id: 'sdk-config', file: { sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
       ])
 
       handler(transaction)
@@ -335,10 +340,10 @@ describe('Tracing Remote Config', () => {
       enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
 
-      // Both products active: SDK_CONFIGURATION wins
+      // Both active: SDK_CONFIGURATION wins
       let transaction = createTransaction([
         { id: 'apm-config', file: { lib_config: { tracing_sampling_rate: 0.5 } } },
-        { id: 'sdk-config', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
+        { id: 'sdk-config', file: { sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
       ])
       handler(transaction)
 
@@ -347,7 +352,7 @@ describe('Tracing Remote Config', () => {
 
       // SDK_CONFIGURATION removed, APM_TRACING still active
       transaction = createTransaction([], [], [
-        { id: 'sdk-config', product: 'SDK_CONFIGURATION', file: {} },
+        { id: 'sdk-config', file: { sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
       ])
       handler(transaction)
 
@@ -361,7 +366,7 @@ describe('Tracing Remote Config', () => {
 
       const transaction = createTransaction([
         { id: 'apm-config', file: { lib_config: { tracing_sampling_rate: 0.5 } } },
-        { id: 'sdk-config', product: 'SDK_CONFIGURATION', file: { lib_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
+        { id: 'sdk-config', file: { sdk_config: { DD_TRACE_SAMPLE_RATE: '0.8' } } },
       ])
 
       handler(transaction)
@@ -424,7 +429,13 @@ describe('Tracing Remote Config', () => {
 
       // Remove higher priority config
       transaction = createTransaction([], [], [
-        { id: 'config-2', file: {} },
+        {
+          id: 'config-2',
+          file: {
+            service_target: { service: 'test-service', env: '*' },
+            lib_config: { tracing_sampling_rate: 0.8 },
+          },
+        },
       ])
       handler(transaction)
 
@@ -505,14 +516,11 @@ describe('Tracing Remote Config', () => {
 })
 
 function createTransaction (toApply = [], toModify = [], toUnapply = []) {
-  const addDefaults = (item) => {
-    const product = item.product ?? 'APM_TRACING'
-    return {
-      product,
-      path: `datadog/1/${product}/${item.id}`,
-      ...item,
-    }
-  }
+  const addDefaults = (item) => ({
+    product: 'APM_TRACING',
+    path: `datadog/1/APM_TRACING/${item.id}`,
+    ...item,
+  })
 
   return {
     toApply: toApply.map(addDefaults),

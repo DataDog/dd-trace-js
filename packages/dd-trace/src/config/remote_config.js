@@ -31,11 +31,16 @@ class RCConfigMerger {
   /**
    * @param {string} currentService - Current service name
    * @param {string} currentEnv - Current environment name
+   * @param {(conf: object) => (RemoteConfigOptions|undefined)} getPayload - Extracts the settings
+   *   map from a raw RC config object. APM_TRACING delivers two distinct config object shapes under
+   *   the same product (`lib_config` for the legacy per-setting object, `sdk_config` for the flat
+   *   env-var-keyed map) — this is how a single merger class serves either.
    */
-  constructor (currentService, currentEnv) {
+  constructor (currentService, currentEnv, getPayload) {
     this.configs = new Map() // config_id -> { conf, priority }
     this.currentService = currentService
     this.currentEnv = currentEnv
+    this.getPayload = getPayload
   }
 
   /**
@@ -139,8 +144,9 @@ class RCConfigMerger {
     const merged = [...this.configs.values()]
       .sort((a, b) => a.priority - b.priority)
       .reduce((merged, { conf }) => {
-        if (conf.lib_config != null) hasConfig = true
-        return Object.assign(merged, conf.lib_config)
+        const payload = this.getPayload(conf)
+        if (payload != null) hasConfig = true
+        return Object.assign(merged, payload)
       }, {})
 
     return hasConfig ? merged : null
@@ -178,26 +184,27 @@ function enable (rc, config, onConfigUpdated) {
   // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
   rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
 
-  const libConfigManager = new RCConfigMerger(config.service, config.env)
-  const sdkConfigManager = new RCConfigMerger(config.service, config.env)
+  const libConfigManager = new RCConfigMerger(config.service, config.env, (conf) => conf.lib_config)
+  const sdkConfigManager = new RCConfigMerger(config.service, config.env, (conf) => conf.sdk_config)
 
-  // Subscribe to both products (setBatchHandler used below doesn't automatically subscribe)
+  // Subscribe (setBatchHandler used below doesn't automatically subscribe)
   rc.subscribeProducts('APM_TRACING')
-  rc.subscribeProducts('SDK_CONFIGURATION')
 
-  // Use a single batch handler across both products so a transaction touching both is resolved
-  // deterministically instead of racing two independent handlers.
-  rc.setBatchHandler(['APM_TRACING', 'SDK_CONFIGURATION'], (transaction) => {
+  // SDK_CONFIGURATION has no RC product of its own — the backend delivers it as a distinct config
+  // object (a flat `sdk_config` map) under the same APM_TRACING product as the legacy `lib_config`
+  // object, so a single product subscription/handler must route each item by payload shape, not by
+  // product name.
+  rc.setBatchHandler(['APM_TRACING'], (transaction) => {
     const { toUnapply, toApply, toModify } = transaction
 
     for (const item of toUnapply) {
-      const manager = item.product === 'SDK_CONFIGURATION' ? sdkConfigManager : libConfigManager
+      const manager = item.file?.sdk_config ? sdkConfigManager : libConfigManager
       manager.removeConfig(item.id)
       transaction.ack(item.path)
     }
 
     for (const item of [...toApply, ...toModify]) {
-      const manager = item.product === 'SDK_CONFIGURATION' ? sdkConfigManager : libConfigManager
+      const manager = item.file?.sdk_config ? sdkConfigManager : libConfigManager
       manager.addConfig(item.id, item.file)
       transaction.ack(item.path)
     }
