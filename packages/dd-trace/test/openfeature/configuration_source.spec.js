@@ -11,6 +11,7 @@ describe('OpenFeature configuration source', () => {
   let config
   let configurationSource
   let log
+  let AgentlessConfigurationSource
 
   beforeEach(() => {
     config = {
@@ -31,8 +32,10 @@ describe('OpenFeature configuration source', () => {
       error: sinon.spy(),
       warn: sinon.spy(),
     }
+    AgentlessConfigurationSource = sinon.stub()
     configurationSource = proxyquire('../../src/openfeature/configuration_source', {
       '../log': log,
+      './agentless_configuration_source': AgentlessConfigurationSource,
     })
   })
 
@@ -86,16 +89,21 @@ describe('OpenFeature configuration source', () => {
     )
   })
 
-  it('derives the managed GovCloud endpoint without hard-coding availability', () => {
+  it('derives and starts the managed GovCloud endpoint without hard-coding availability', () => {
     config.site = 'DDOG-GOV.COM'
     config.env = 'prod'
+    const provider = { _setConfigurationSource: sinon.spy() }
 
     const resolved = configurationSource.resolve(config)
+    configurationSource.enable(config, () => provider)
 
     assert.strictEqual(
       resolved.endpoint.toString(),
       'https://ufc-server.ff-cdn.ddog-gov.com/api/v2/feature-flagging/config/rules-based/server?dd_env=prod'
     )
+    sinon.assert.calledOnce(AgentlessConfigurationSource)
+    sinon.assert.calledWithNew(AgentlessConfigurationSource)
+    sinon.assert.calledOnce(provider._setConfigurationSource)
     sinon.assert.notCalled(log.warn)
   })
 

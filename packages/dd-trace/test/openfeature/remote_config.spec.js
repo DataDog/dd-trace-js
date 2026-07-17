@@ -118,5 +118,16 @@ describe('OpenFeature Remote Config', () => {
         true
       )
     })
+
+    it('should advertise capability without registering a handler in agentless mode', () => {
+      enable(rc, config, getOpenfeatureProxy, false)
+
+      sinon.assert.calledOnceWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES,
+        true
+      )
+      sinon.assert.notCalled(rc.setProductHandler)
+    })
   })
 })

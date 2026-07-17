@@ -25,8 +25,14 @@ registerFeature({
    * @param {import('../proxy')} proxy
    */
   remoteConfig (rc, config, proxy) {
+    const configurationSource = require('./configuration_source')
     const openfeatureRemoteConfig = require('./remote_config')
-    openfeatureRemoteConfig.enable(rc, config, () => proxy.openfeature)
+    openfeatureRemoteConfig.enable(
+      rc,
+      config,
+      () => proxy.openfeature,
+      configurationSource.isRemoteConfig(config)
+    )
   },
 
   /**
@@ -41,6 +47,8 @@ registerFeature({
       if (!hasFlaggingProvider(proxy)) {
         lazyProxy(proxy, 'openfeature', () => require('./flagging_provider'), tracer, config)
       }
+      const configurationSource = require('./configuration_source')
+      configurationSource.enable(config, () => proxy.openfeature)
     }
   },
 })

@@ -17,6 +17,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {SpanEnrichmentHook?} */
   #spanEnrichmentHook
 
+  /** @type {{ start: Function, stop: Function }?} */
+  #configurationSource
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config')} config - Tracer configuration object
@@ -50,7 +53,25 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
+    this.#configurationSource?.stop()
+    this.#configurationSource = null
     this.#spanEnrichmentHook?.destroy()
+  }
+
+  /**
+   * Attaches and starts the provider's first-party configuration source.
+   * Repeated calls preserve the original source and dispose of the duplicate.
+   *
+   * @internal
+   * @param {{ start: Function, stop: Function }} source - Configuration source lifecycle.
+   */
+  _setConfigurationSource (source) {
+    if (this.#configurationSource) {
+      source.stop()
+      return
+    }
+    this.#configurationSource = source
+    source.start()
   }
 
   /**

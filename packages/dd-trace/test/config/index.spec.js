@@ -4938,6 +4938,42 @@ rules:
     })
   })
 
+  context('Feature Flagging configuration source', () => {
+    it('defaults to agentless delivery with cross-SDK timings', () => {
+      const config = getConfig()
+
+      assertObjectContains(config.experimental.flaggingProvider, {
+        configurationSource: 'agentless',
+        agentlessBaseUrl: undefined,
+        agentlessPollIntervalSeconds: 30,
+        agentlessRequestTimeoutSeconds: 2,
+      })
+    })
+
+    it('reads the configuration source environment variable', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.experimental.flaggingProvider.configurationSource, 'remote_config')
+    })
+
+    it('reads the canonical agentless environment variables', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'https://example.com/ufc'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = '20'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = '5'
+
+      const config = getConfig()
+
+      assertObjectContains(config.experimental.flaggingProvider, {
+        configurationSource: 'agentless',
+        agentlessBaseUrl: 'https://example.com/ufc',
+        agentlessPollIntervalSeconds: 20,
+        agentlessRequestTimeoutSeconds: 5,
+      })
+    })
+  })
+
   describe('should detect when service name is inferred', () => {
     it('should set isServiceNameInferred to false when DD_SERVICE is defined ', () => {
       process.env.DD_SERVICE = 'test-service'

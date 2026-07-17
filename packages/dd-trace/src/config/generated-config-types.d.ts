@@ -424,6 +424,10 @@ export interface GeneratedConfig {
     enableGetRumData: boolean;
     exporter: string;
     flaggingProvider: {
+      agentlessBaseUrl: string | undefined;
+      agentlessPollIntervalSeconds: number;
+      agentlessRequestTimeoutSeconds: number;
+      configurationSource: string;
       enabled: boolean;
       initializationTimeoutMs: number;
       spanEnrichment: {
@@ -688,6 +692,10 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: string;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;

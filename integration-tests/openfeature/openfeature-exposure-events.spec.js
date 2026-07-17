@@ -61,6 +61,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
             DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+            // Preserve the existing RC exposure path until agentless emission is supported.
+            DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
           },
         })
       })
@@ -160,6 +162,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
             DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+            DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
           },
         })
       })
@@ -243,6 +246,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
           DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config',
         },
       })
     })

@@ -43,6 +43,34 @@ function resolve (config) {
 }
 
 /**
+ * Starts the selected first-party configuration source.
+ *
+ * Remote Config is installed separately because its lifecycle is owned by the
+ * tracer Remote Config client.
+ *
+ * @param {import('../config/config-base')} config - Tracer configuration.
+ * @param {Function} getOpenfeatureProxy - Returns the active provider.
+ * @returns {void}
+ */
+function enable (config, getOpenfeatureProxy) {
+  let sourceConfig
+  try {
+    sourceConfig = resolve(config)
+  } catch (error) {
+    log.error('Unable to configure Feature Flagging configuration source', error)
+    return
+  }
+
+  if (sourceConfig.mode === CONFIGURATION_SOURCE_AGENTLESS) {
+    const AgentlessConfigurationSource = require('./agentless_configuration_source')
+    const source = new AgentlessConfigurationSource(sourceConfig, ufc => {
+      getOpenfeatureProxy()._setConfiguration(ufc)
+    })
+    getOpenfeatureProxy()._setConfigurationSource(source)
+  }
+}
+
+/**
  * Reports whether the explicit Remote Config source is selected.
  *
  * Invalid source values fail closed and do not enable Remote Config delivery.
@@ -148,6 +176,7 @@ function positiveMilliseconds (value, fallbackSeconds, setting, maximumSeconds) 
 }
 
 module.exports = {
+  enable,
   isRemoteConfig,
   resolve,
 }
