@@ -8,7 +8,6 @@ const path = require('node:path')
 const {
   collectAliasMap,
   listBunLockDependencies,
-  listNpmLockDependencies,
   readVendoredDependencyNames,
 } = require('../third-party-dependencies')
 
@@ -58,7 +57,7 @@ describe('third-party dependency locks', () => {
     ])
   })
 
-  it('reads production npm dependencies, aliases, and vendored names', () => {
+  it('reads aliases and vendored names', () => {
     const rootPackagePath = writeFixture('package.json', JSON.stringify({
       dependencies: {
         alias: 'npm:upstream@1.0.0',
@@ -67,13 +66,6 @@ describe('third-party dependency locks', () => {
     const vendorPackagePath = writeFixture('vendor-package.json', JSON.stringify({
       optionalDependencies: {
         '@scope/alias': 'npm:@scope/upstream@2.0.0',
-      },
-    }))
-    const lockPath = writeFixture('package-lock.json', JSON.stringify({
-      packages: {
-        '': {},
-        'node_modules/alias': { name: 'upstream', version: '1.0.0' },
-        'node_modules/dev-only': { dev: true, version: '2.0.0' },
       },
     }))
     const vendoredPath = writeFixture('vendored.csv', [
@@ -86,9 +78,6 @@ describe('third-party dependency locks', () => {
       ['alias', 'upstream'],
       ['@scope/alias', '@scope/upstream'],
     ]))
-    assert.deepStrictEqual(listNpmLockDependencies(lockPath), [
-      { name: 'upstream', version: '1.0.0' },
-    ])
     assert.deepStrictEqual(readVendoredDependencyNames(vendoredPath), ['vendored-one', 'vendored-two'])
   })
 
@@ -142,15 +131,6 @@ describe('third-party dependency locks', () => {
         optional: ['optional@1.0.0', '', {}],
       },
     }))
-    const emptyNpmLockPath = writeFixture('empty-package-lock.json', '{}')
-    const npmLockPath = writeFixture('edge-package-lock.json', JSON.stringify({
-      packages: {
-        '': {},
-        'node_modules/a': { version: '1.0.0' },
-        'node_modules/a/node_modules/a': { name: 'a' },
-      },
-    }))
-
     assert.deepStrictEqual(collectAliasMap([missingPath, packagePath]), new Map([
       ['unversionedAlias', 'upstream'],
     ]))
@@ -163,11 +143,6 @@ describe('third-party dependency locks', () => {
     assert.deepStrictEqual(listBunLockDependencies(optionalOnlyLockPath), [
       { name: 'optional', version: '1.0.0' },
     ])
-    assert.deepStrictEqual(listNpmLockDependencies(npmLockPath), [
-      { name: 'a', version: '' },
-      { name: 'a', version: '1.0.0' },
-    ])
-    assert.deepStrictEqual(listNpmLockDependencies(emptyNpmLockPath), [])
     assert.deepStrictEqual(readVendoredDependencyNames(missingPath), [])
   })
 

@@ -53,10 +53,13 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       },
     }`)
     fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'package.json'), '{}')
-    fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'package-lock.json'), JSON.stringify({
-      packages: {
-        '': {},
+    fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'bun.lock'), JSON.stringify({
+      workspaces: {
+        '': {
+          dependencies: {},
+        },
       },
+      packages: {},
     }))
     fs.writeFileSync(
       path.join(fixtureDirectory, '.github', 'vendored-dependencies.csv'),
