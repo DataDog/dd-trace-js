@@ -1,31 +1,134 @@
 name: Plugin Tests
-description: Run plugin tests
+description: Run plugin test suites
 inputs:
+  suite:
+    description: 'Suite to run: plugins, upstream, plugins-and-upstream, llmobs, or plugins-and-llmobs.'
+    required: false
+    default: plugins
+  node-set:
+    description: "'standard' runs the configured floor and latest, 'all' runs every Node alias, any other value runs once."
+    required: false
+    default: standard
   node-floor:
     description: 'Lower Node alias: oldest-maintenance-lts or newest-maintenance-lts.'
     required: false
     default: oldest-maintenance-lts
+  ignore-engines:
+    description: 'Set yarn ignore-engines=true before installing dependencies.'
+    required: false
+    default: 'false'
+  flags:
+    description: 'Coverage flag identifier. Defaults to plugins-<job>.'
+    required: false
+    default: ''
   suffix:
     description: 'Unique suffix for artifact naming — required when called from a matrix job.'
     required: false
     default: ''
+  artifact-id:
+    description: 'Exact JUnit artifact identifier. Overrides the default job-based identifier.'
+    required: false
+    default: ''
+  upload-junit:
+    description: 'Upload JUnit artifacts after the test suite.'
+    required: false
+    default: 'true'
+  testagent:
+    description: 'Test agent handling: none, start, or start-and-logs.'
+    required: false
+    default: none
+  log-suffix:
+    description: 'Suffix for test agent logs. Defaults to plugins-<job>.'
+    required: false
+    default: ''
+  log-order:
+    description: 'Test agent log placement: before-coverage or after-coverage.'
+    required: false
+    default: after-coverage
 runs:
   using: composite
   steps:
-    - if: ${{ inputs.node-floor == 'oldest-maintenance-lts' }}
+    - name: Validate inputs
+      env:
+        NODE_FLOOR: ${{ inputs.node-floor }}
+        NODE_SET: ${{ inputs.node-set }}
+        LOG_ORDER: ${{ inputs.log-order }}
+        SUITE: ${{ inputs.suite }}
+        TESTAGENT: ${{ inputs.testagent }}
+      run: |
+        case "$SUITE" in
+          plugins|upstream|plugins-and-upstream|llmobs|plugins-and-llmobs) ;;
+          *) echo "Unsupported plugin test suite: $SUITE" >&2; exit 1 ;;
+        esac
+        if [ -z "$NODE_SET" ]; then
+          echo "node-set must not be empty" >&2
+          exit 1
+        fi
+        case "$TESTAGENT" in
+          none|start|start-and-logs) ;;
+          *) echo "Unsupported test agent handling: $TESTAGENT" >&2; exit 1 ;;
+        esac
+        case "$LOG_ORDER" in
+          before-coverage|after-coverage) ;;
+          *) echo "Unsupported test agent log order: $LOG_ORDER" >&2; exit 1 ;;
+        esac
+        if [ "$NODE_SET" = standard ] &&
+           [ "$NODE_FLOOR" != oldest-maintenance-lts ] &&
+           [ "$NODE_FLOOR" != newest-maintenance-lts ]; then
+          echo "Unsupported Node floor: $NODE_FLOOR" >&2
+          exit 1
+        fi
+      shell: bash
+    - if: ${{ inputs.testagent != 'none' }}
+      uses: ./.github/actions/testagent/start
+    - if: ${{ inputs.node-set == 'standard' && inputs.node-floor == 'oldest-maintenance-lts' }}
       uses: ./.github/actions/node/oldest-maintenance-lts
-    - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
+    - if: ${{ inputs.node-set == 'standard' && inputs.node-floor == 'newest-maintenance-lts' }}
       uses: ./.github/actions/node/newest-maintenance-lts
+    - if: ${{ inputs.node-set == 'all' }}
+      uses: ./.github/actions/node/oldest-maintenance-lts
+    - if: ${{ inputs.node-set != 'standard' && inputs.node-set != 'all' }}
+      uses: ./.github/actions/node
+      with:
+        version: ${{ inputs.node-set }}
+    - if: ${{ inputs.ignore-engines == 'true' }}
+      run: yarn config set ignore-engines true
+      shell: bash
     - uses: ./.github/actions/install
-    - run: yarn test:plugins:ci
-      shell: bash
-    - uses: ./.github/actions/node/latest
-    - run: yarn test:plugins:ci
-      shell: bash
-    - uses: ./.github/actions/coverage
+    - uses: ./.github/actions/plugins/run-suite
       with:
-        flags: plugins-${{ github.job }}
-    - uses: ./.github/actions/upload-junit-artifacts
-      if: "!cancelled()"
+        suite: ${{ inputs.suite }}
+    - if: ${{ inputs.node-set == 'all' }}
+      uses: ./.github/actions/node/newest-maintenance-lts
+    - if: ${{ inputs.node-set == 'all' }}
+      uses: ./.github/actions/plugins/run-suite
       with:
-        id: ${{ github.job }}-test${{ inputs.suffix != '' && format('-{0}', inputs.suffix) || '' }}
+        suite: ${{ inputs.suite }}
+    - if: ${{ inputs.node-set == 'all' }}
+      uses: ./.github/actions/node/active-lts
+    - if: ${{ inputs.node-set == 'all' }}
+      uses: ./.github/actions/plugins/run-suite
+      with:
+        suite: ${{ inputs.suite }}
+    - if: ${{ inputs.node-set == 'standard' || inputs.node-set == 'all' }}
+      uses: ./.github/actions/node/latest
+    - if: ${{ inputs.node-set == 'standard' || inputs.node-set == 'all' }}
+      uses: ./.github/actions/plugins/run-suite
+      with:
+        suite: ${{ inputs.suite }}
+    - if: ${{ always() && inputs.testagent == 'start-and-logs' && inputs.log-order == 'before-coverage' }}
+      uses: ./.github/actions/testagent/logs
+      with:
+        suffix: ${{ inputs.log-suffix != '' && inputs.log-suffix || format('plugins-{0}', github.job) }}
+    - if: ${{ inputs.suite != 'upstream' }}
+      uses: ./.github/actions/coverage
+      with:
+        flags: ${{ inputs.flags != '' && inputs.flags || inputs.suite == 'plugins-and-upstream' && format('plugins-test-and-upstream-{0}', github.job) || format('plugins-{0}', github.job) }}
+    - if: ${{ always() && inputs.testagent == 'start-and-logs' && inputs.log-order == 'after-coverage' }}
+      uses: ./.github/actions/testagent/logs
+      with:
+        suffix: ${{ inputs.log-suffix != '' && inputs.log-suffix || format('plugins-{0}', github.job) }}
+    - if: ${{ !cancelled() && inputs.upload-junit == 'true' }}
+      uses: ./.github/actions/upload-junit-artifacts
+      with:
+        id: ${{ inputs.artifact-id != '' && inputs.artifact-id || format('{0}-{1}{2}', github.job, inputs.suite == 'plugins-and-upstream' && 'test-and-upstream' || inputs.suite == 'upstream' && 'upstream' || 'test', inputs.suffix != '' && format('-{0}', inputs.suffix) || '') }}

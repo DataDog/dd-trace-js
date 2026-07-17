@@ -601,13 +601,64 @@ function isUsesStep (step) {
 }
 
 /**
+ * @param {string} value
+ * @param {Record<string, string|undefined>} inputs
+ * @returns {string}
+ */
+function expandInputExpressions (value, inputs) {
+  return value.replaceAll(
+    /\$\{\{\s*inputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}/g,
+    (match, name) => inputs[name] ?? match
+  )
+}
+
+/**
+ * @param {unknown} condition
+ * @param {Record<string, string|undefined>} inputs
+ * @returns {boolean}
+ */
+function inputConditionMatches (condition, inputs) {
+  if (typeof condition !== 'string') return true
+
+  const match = condition.trim().match(
+    /^\$\{\{\s*inputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*(==|!=)\s*(['"])(.*?)\3\s*\}\}$/
+  )
+  if (!match) return true
+
+  const matches = inputs[match[1]] === match[4]
+  return match[2] === '==' ? matches : !matches
+}
+
+/**
+ * @param {Record<string, unknown>} doc
+ * @param {Record<string, string|undefined>} providedInputs
+ * @returns {Record<string, string|undefined>}
+ */
+function resolveActionInputs (doc, providedInputs) {
+  /** @type {Record<string, string|undefined>} */
+  const inputs = {}
+  const definitions = isPlainObject(doc.inputs) ? doc.inputs : {}
+
+  for (const [name, definition] of Object.entries(definitions)) {
+    if (!isPlainObject(definition) || definition.default === undefined) continue
+    inputs[name] = typeof definition.default === 'string'
+      ? definition.default
+      : String(definition.default)
+  }
+  for (const [name, value] of Object.entries(providedInputs)) inputs[name] = value
+
+  return inputs
+}
+
+/**
  * @param {string} repoRoot
  * @param {string} uses
  * @param {Record<string, string|undefined>} env
+ * @param {Record<string, string|undefined>} providedInputs
  * @param {Set<string>} visiting
  * @returns {{ run: string, env: Record<string, string|undefined> }[]}
  */
-function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
+function expandLocalCompositeActionRuns (repoRoot, uses, env, providedInputs, visiting) {
   const actionFile = resolveLocalActionFile(repoRoot, uses)
   if (!actionFile) return []
   if (visiting.has(actionFile)) return []
@@ -616,6 +667,7 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
   const doc = parseYamlFile(repoRoot, actionFile)
   if (!isPlainObject(doc)) return []
 
+  const inputs = resolveActionInputs(doc, providedInputs)
   const runs = doc.runs
   if (!isPlainObject(runs) || runs.using !== 'composite') return []
   const steps = Array.isArray(runs.steps) ? runs.steps : []
@@ -624,30 +676,35 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
   const out = []
 
   for (const s of steps) {
+    if (!isPlainObject(s) || !inputConditionMatches(s.if, inputs)) continue
+
     if (isRunStep(s)) {
       /** @type {Record<string, string|undefined>} */
       const stepEnv = { ...env }
       if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) stepEnv[k] = typeof v === 'string' ? v : String(v)
+        for (const [k, v] of Object.entries(s.env)) {
+          stepEnv[k] = expandInputExpressions(typeof v === 'string' ? v : String(v), inputs)
+        }
       }
 
       // Inline env in composite run: export and prefix assignments.
-      const exports = parseExportAssignments(s.run)
+      const run = expandInputExpressions(s.run, inputs)
+      const exports = parseExportAssignments(run)
       for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
 
-      const idxYarn = s.run.indexOf('yarn ')
-      const idxNpm = s.run.indexOf('npm ')
+      const idxYarn = run.indexOf('yarn ')
+      const idxNpm = run.indexOf('npm ')
       let idx = idxNpm
       if (idxYarn !== -1) {
         idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
       }
       if (idx > 0) {
-        const prefix = s.run.slice(0, idx)
+        const prefix = run.slice(0, idx)
         const assigns = parseInlineAssignments(prefix)
         for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
       }
 
-      out.push({ run: s.run, env: stepEnv })
+      out.push({ run, env: stepEnv })
       continue
     }
 
@@ -656,9 +713,18 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
       /** @type {Record<string, string|undefined>} */
       const nextEnv = { ...env }
       if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) nextEnv[k] = typeof v === 'string' ? v : String(v)
+        for (const [k, v] of Object.entries(s.env)) {
+          nextEnv[k] = expandInputExpressions(typeof v === 'string' ? v : String(v), inputs)
+        }
       }
-      const nested = expandLocalCompositeActionRuns(repoRoot, s.uses, nextEnv, visiting)
+      /** @type {Record<string, string|undefined>} */
+      const nextInputs = {}
+      if (isPlainObject(s.with)) {
+        for (const [k, v] of Object.entries(s.with)) {
+          nextInputs[k] = expandInputExpressions(typeof v === 'string' ? v : String(v), inputs)
+        }
+      }
+      const nested = expandLocalCompositeActionRuns(repoRoot, s.uses, nextEnv, nextInputs, visiting)
       for (const n of nested) out.push(n)
     }
   }
@@ -862,7 +928,14 @@ function collectWorkflowRuns (repoRoot) {
         }
 
         if (typeof step.uses === 'string' && step.uses.startsWith('./')) {
-          const expanded = expandLocalCompositeActionRuns(repoRoot, step.uses, env, new Set())
+          /** @type {Record<string, string|undefined>} */
+          const actionInputs = {}
+          if (isPlainObject(step.with)) {
+            for (const [k, v] of Object.entries(step.with)) {
+              actionInputs[k] = typeof v === 'string' ? v : String(v)
+            }
+          }
+          const expanded = expandLocalCompositeActionRuns(repoRoot, step.uses, env, actionInputs, new Set())
           for (const e of expanded) {
             out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
           }
@@ -1105,10 +1178,12 @@ function buildLlmobsPluginTestSet (repoRoot) {
   return out
 }
 
-function main () {
+/**
+ * @param {string} repoRoot
+ */
+function main (repoRoot) {
   const startNs = process.hrtime.bigint()
 
-  const repoRoot = path.resolve(__dirname, '..')
   const packageJsonPath = path.join(repoRoot, 'package.json')
   const pluginsVar = '$' + '{PLUGINS}'
   const bracePluginsVar = '{' + pluginsVar + '}'
@@ -1477,4 +1552,4 @@ function main () {
   process.exit(hasCategoryWarnings ? 1 : 0)
 }
 
-main()
+main(process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(__dirname, '..'))
