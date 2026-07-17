@@ -9,7 +9,6 @@ const { name: rootPackageName } = require('../package.json')
 const {
   collectAliasMap,
   listBunLockDependencies,
-  listNpmLockDependencies,
   readVendoredDependencyNames,
 } = require('./third-party-dependencies')
 
@@ -53,7 +52,7 @@ function getProdDeps () {
   for (const { name } of listBunLockDependencies(join(__dirname, '..', 'bun.lock'))) {
     deps.add(normalizeDepName(name))
   }
-  for (const { name } of listNpmLockDependencies(join(__dirname, '..', 'vendor', 'package-lock.json'))) {
+  for (const { name } of listBunLockDependencies(join(__dirname, '..', 'vendor', 'bun.lock'))) {
     deps.add(normalizeDepName(name))
   }
   for (const name of readVendoredDependencyNames(join(__dirname, '..', '.github', 'vendored-dependencies.csv'))) {

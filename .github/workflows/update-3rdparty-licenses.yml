@@ -4,7 +4,7 @@ name: Update 3rd-party licenses
 # `bun.lock` at the root, so the upstream auto-update tool drops every root
 # runtime/optional dep on each run. `scripts/generate-3rdparty-licenses.js`
 # regenerates `LICENSE-3rdparty.csv` from `bun.lock`,
-# `vendor/package-lock.json`, `.github/vendored-dependencies.csv`, and the npm
+# `vendor/bun.lock`, `.github/vendored-dependencies.csv`, and the npm
 # registry instead. `scripts/check_licenses.js` (run via `npm run lint`)
 # enforces row-level completeness on every PR; this workflow auto-commits the
 # regenerated file for bot PRs and surfaces a clear error otherwise.
@@ -13,8 +13,8 @@ on:
   pull_request:
     paths:
       - ".github/vendored-dependencies.csv"
-      - "vendor/package-lock.json"
       - "bun.lock"
+      - "vendor/bun.lock"
 
 jobs:
   check-licenses:

@@ -111,24 +111,6 @@ function resolveBunLockKey (lock, parentKey, childName) {
 }
 
 /**
- * @param {string} lockPath
- * @returns {LockedDependency[]}
- */
-function listNpmLockDependencies (lockPath) {
-  const lock = JSON.parse(readFileSync(lockPath, 'utf8'))
-  const dependencies = []
-  for (const [packagePath, entry] of Object.entries(lock.packages ?? {})) {
-    if (!packagePath || entry.dev) continue
-
-    dependencies.push({
-      name: entry.name ?? packagePath.split('node_modules/').at(-1),
-      version: entry.version ?? '',
-    })
-  }
-  return dependencies.sort(compareDependencies)
-}
-
-/**
  * @param {LockedDependency} left
  * @param {LockedDependency} right
  */
@@ -155,6 +137,5 @@ function readVendoredDependencyNames (csvPath) {
 module.exports = {
   collectAliasMap,
   listBunLockDependencies,
-  listNpmLockDependencies,
   readVendoredDependencyNames,
 }

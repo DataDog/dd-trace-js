@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "datadog-ci",
+      "dependencies": {
+        "@datadog/datadog-ci": "5.17.0",
+      },
+    },
+  },
+  "packages": {
+    "@datadog/datadog-ci": ["@datadog/datadog-ci@5.17.0", "", { "bin": { "datadog-ci": "dist/bundle.js" } }, "sha512-Orwju9h/kLQnuNr7VoHW/JABbKsK8/Lhh8zDacjR1CqwJBmgwejgmcL3ut9/Vbi6hC5KYlgXybeeMpsdJEWvQQ=="],
+  }
+}
