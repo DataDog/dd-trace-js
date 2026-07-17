@@ -38,7 +38,7 @@ if (!disabledInstrumentations.has('process')) {
 }
 
 const debugEnabled = DD_TRACE_DEBUG
-checkRequireCache.checkForRequiredModules(debugEnabled)
+checkRequireCache.checkForRequiredModules()
 if (debugEnabled) {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }

@@ -13,7 +13,9 @@ const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
 require('../../setup/core')
 
 const {
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestParametersString,
+  getTestLevelsMetadataTags,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
@@ -43,7 +45,13 @@ const {
   getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
 
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
+const {
+  CI_JOB_NAME,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+} = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
@@ -192,6 +200,29 @@ describe('getTestParametersString', () => {
     assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
+  })
+})
+
+describe('getTestLevelsMetadataTags', () => {
+  it('keeps only allowlisted CI and Git tags', () => {
+    const testLevelsMetadataTags = getTestLevelsMetadataTags({
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+      'ci.custom': 'custom-ci-value',
+      'git.custom': 'custom-git-value',
+      'test.command': 'npm test',
+    })
+
+    assert.deepStrictEqual(testLevelsMetadataTags, {
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+    })
   })
 })
 
@@ -1222,6 +1253,15 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
 describe('getEfdRetryCount', () => {
   const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
 
+  it('exports the retry thresholds used to select slow test retry buckets', () => {
+    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS, [
+      { limitMs: 5_000, key: '5s' },
+      { limitMs: 10_000, key: '10s' },
+      { limitMs: 30_000, key: '30s' },
+      { limitMs: 300_000, key: '5m' },
+    ])
+  })
+
   it('returns retries for the matching duration bucket', () => {
     assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
     assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
@@ -1244,13 +1284,14 @@ describe('getMaxEfdRetryCount', () => {
     assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
   })
 
-  it('preserves an explicit all-zero configuration', () => {
+  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
     assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
   })
 
-  it('returns 0 when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), 0)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), 0)
+  it('returns undefined when no slow test retry buckets are configured', () => {
+    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
+    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
   })
 })
 

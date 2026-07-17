@@ -16,6 +16,10 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
+  finishDeferredHookEnd,
+  wrapFailedTestReplayHookUpCallback,
+} = require('../../packages/datadog-instrumentations/src/mocha/utils')
+const {
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
@@ -114,6 +118,81 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+
+describe('mocha failed test replay helpers', () => {
+  describe('finishDeferredHookEnd', () => {
+    it('finishes synchronously when there is no DI wait promise', () => {
+      let finishCount = 0
+      let onFinishCount = 0
+      const test = {
+        _ddDeferredHookEnd: {
+          publishTestFinish () {
+            finishCount++
+          },
+          onFinish () {
+            onFinishCount++
+          },
+        },
+      }
+
+      finishDeferredHookEnd(test)
+
+      assert.strictEqual(finishCount, 1)
+      assert.strictEqual(onFinishCount, 1)
+      assert.strictEqual(test._ddDeferredHookEnd, undefined)
+    })
+  })
+
+  describe('wrapFailedTestReplayHookUpCallback', () => {
+    it('waits for DI setup before continuing afterEach hookUp', async () => {
+      let resolveSetProbe
+      const setProbePromise = new Promise(resolve => {
+        resolveSetProbe = resolve
+      })
+      const err = new Error('test')
+      const suite = {}
+      let receivedArgs
+      function next (err, suite) {
+        receivedArgs = [err, suite]
+      }
+      const wrapped = wrapFailedTestReplayHookUpCallback(next, {}, setProbePromise)
+
+      assert.strictEqual(wrapped.name, 'next')
+      assert.strictEqual(wrapped.length, 2)
+      wrapped(err, suite)
+
+      assert.strictEqual(receivedArgs, undefined)
+
+      resolveSetProbe()
+      await setProbePromise
+      await Promise.resolve()
+
+      assert.deepStrictEqual(receivedArgs, [err, suite])
+    })
+
+    it('runs deferred hook-end finish before continuing afterEach hookUp', async () => {
+      const calls = []
+      const test = {
+        _ddDeferredHookEnd: {
+          waitForHitProbePromise: Promise.resolve(),
+          publishTestFinish () {
+            calls.push('finish')
+          },
+        },
+      }
+      function next () {
+        calls.push('next')
+      }
+
+      const wrapped = wrapFailedTestReplayHookUpCallback(next, test)
+
+      assert.strictEqual(wrapped.length, 0)
+      await wrapped()
+
+      assert.deepStrictEqual(calls, ['finish', 'next'])
+    })
+  })
+})
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
@@ -253,7 +332,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1607,8 +1686,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
         metadataDicts.forEach(metadata => {
-          assert.ok(metadata['*'][TEST_COMMAND])
-          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+          assert.ok(metadata.test_levels[TEST_COMMAND])
+          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
         })
 
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4462,7 +4541,83 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
-    onlyLatestIt('reports a passing suite for top-level tests retried with dynamic instrumentation', (done) => {
+    onlyLatestIt('drains in-flight dynamic instrumentation hits before the next retry', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const retrySpanIdsWithDebugInfo = new Set()
+      const diLogSpanIds = []
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(retriedTests.length, 3)
+          for (const retriedTest of retriedTests) {
+            if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+              retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
+            }
+          }
+          assert.ok(retrySpanIdsWithDebugInfo.size >= 1)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+          assert.ok(diLogs.length >= 1)
+          for (const diLog of diLogs) {
+            diLogSpanIds.push(diLog.dd.span_id)
+          }
+        }, 5000)
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-hit-breakpoint-multiple-retries',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'warn',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        logsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
+      for (const diLogSpanId of diLogSpanIds) {
+        assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+      }
+    })
+
+    onlyLatestIt('reports a passing suite for root afterEach tests retried with dynamic instrumentation', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true,
@@ -4507,6 +4662,61 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('finishes parallel afterEach retries with dynamic instrumentation', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_IS_RETRY] === 'true' &&
+              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(retriedTests.length, 1)
+          assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'pass')
+          assert.strictEqual(retriedTests[0].meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/mocha-parallel-test-hit-breakpoint-after-each',
+              './dynamic-instrumentation/parallel-test-hit-breakpoint-2',
+            ]),
+            RUN_IN_PARALLEL: '1',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
     })
 
     onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
@@ -5953,7 +6163,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
           // capabilities logic does not overwrite test session name
-          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
         })
       })
 
@@ -6312,23 +6522,27 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
     const assertAttemptToFixFailThenPass = (tests) => {
       assert.strictEqual(tests.length, 3)
-      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
-      assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-      assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
-      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
-      assert.ok(!(TEST_RETRY_REASON in tests[0].meta))
 
-      const retriedTests = tests.slice(1)
-      retriedTests.forEach(test => {
+      const originalAttempts = tests.filter(test => !(TEST_IS_RETRY in test.meta))
+      assert.strictEqual(originalAttempts.length, 1)
+      assert.strictEqual(originalAttempts[0].meta[TEST_STATUS], 'fail')
+      assert.strictEqual(originalAttempts[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+      assert.strictEqual(originalAttempts[0].meta[TEST_IS_MODIFIED], 'true')
+      assert.ok(!(TEST_RETRY_REASON in originalAttempts[0].meta))
+
+      const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+      assert.strictEqual(retriedTests.length, 2)
+      for (const test of retriedTests) {
         assert.strictEqual(test.meta[TEST_STATUS], 'pass')
         assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
         assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
-        assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
         assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-      })
+      }
 
-      assert.strictEqual(tests[tests.length - 1].meta[TEST_FINAL_STATUS], 'fail')
-      assert.strictEqual(tests[tests.length - 1].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+      const finalStatusTests = tests.filter(test => TEST_FINAL_STATUS in test.meta)
+      assert.strictEqual(finalStatusTests.length, 1)
+      assert.strictEqual(finalStatusTests[0].meta[TEST_FINAL_STATUS], 'fail')
+      assert.strictEqual(finalStatusTests[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
     }
 
     context('test is not new', () => {
@@ -6599,18 +6813,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_management: { enabled: true, attempt_to_fix_retries: 2 },
         })
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
-              .filter(event => event.type === 'test')
-              .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-            assertAttemptToFixFailThenPass(tests)
-          })
-
         childProcess = exec(
           runTestsCommand,
           {
@@ -6627,11 +6829,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         )
 
-        const [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
-        assert.strictEqual(exitCode, 1)
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === manualRetryTestName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assertAttemptToFixFailThenPass(tests)
+          },
+          { hardTimeout: 60_000 }
+        )
+        assert.strictEqual(childProcess.exitCode, 1)
       })
 
       onlyLatestIt('does not suppress attempt-to-fix failures for modified tests in parallel mode', async () => {

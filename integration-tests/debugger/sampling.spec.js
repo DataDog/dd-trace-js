@@ -28,10 +28,10 @@ describe('Dynamic Instrumentation', function () {
             const duration = timestamp - prev
             clearTimeout(timer)
 
-            // The sampling check inside the worker uses `process.hrtime.bigint()` (monotonic), but the snapshot
-            // `timestamp` is captured via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock
-            // to drift slightly relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms
-            // tolerance on both sides of the expected 1000ms gap.
+            // The sampling check uses `process.hrtime.bigint()` (monotonic), but the snapshot `timestamp` is captured
+            // via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock to drift slightly
+            // relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms tolerance on both
+            // sides of the expected 1000ms gap.
             assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
             assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
 
@@ -84,10 +84,10 @@ describe('Dynamic Instrumentation', function () {
             const duration = timestamp - _state.prev
             clearTimeout(_state.timer)
 
-            // The sampling check inside the worker uses `process.hrtime.bigint()` (monotonic), but the snapshot
-            // `timestamp` is captured via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock
-            // to drift slightly relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms
-            // tolerance on both sides of the expected 1000ms gap.
+            // The sampling check uses `process.hrtime.bigint()` (monotonic), but the snapshot `timestamp` is captured
+            // via `Date.now()` (wall clock). NTP slewing on CI runners can cause the wall clock to drift slightly
+            // relative to the monotonic clock during the >=1s sampling window, so we allow a 75ms tolerance on both
+            // sides of the expected 1000ms gap.
             assert.ok(duration >= 925, `duration (${duration}) should be >= 925`)
             assert.ok(duration < 1075, `duration (${duration}) should be < 1075`)
 

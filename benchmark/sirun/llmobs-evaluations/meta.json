@@ -7,13 +7,13 @@
   "instructions": true,
   "variants": {
     "categorical": {
-      "env": { "VARIANT": "categorical", "ITERATIONS": "160000" }
+      "env": { "VARIANT": "categorical", "OPERATIONS": "160000" }
     },
     "score": {
-      "env": { "VARIANT": "score", "ITERATIONS": "150000" }
+      "env": { "VARIANT": "score", "OPERATIONS": "150000" }
     },
     "reasoned-mixed": {
-      "env": { "VARIANT": "reasoned-mixed", "ITERATIONS": "30000" }
+      "env": { "VARIANT": "reasoned-mixed", "OPERATIONS": "30000" }
     }
   }
 }

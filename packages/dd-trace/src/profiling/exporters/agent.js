@@ -3,12 +3,12 @@
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
 const perf = require('perf_hooks').performance
-const { urlToHttpOptions } = require('url')
 
 const retry = require('../../../../../vendor/dist/retry')
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
+const { parseUrl } = require('../../exporters/common/url')
 const log = require('../../log')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
@@ -42,6 +42,19 @@ function sendRequest (options, form, callback) {
   storage('legacy').run({ noop: true }, () => {
     requestCounter.inc()
     const start = perf.now()
+
+    // Ensure the callback runs at most once per request. The 'timeout' handler
+    // below can fire after a response was already received (e.g. on a lingering
+    // keep-alive socket, once it goes idle); without this guard that would
+    // invoke the callback a second time and corrupt the retry accounting in
+    // AgentExporter.export.
+    let settled = false
+    const done = (err, res) => {
+      if (settled) return
+      settled = true
+      callback(err, res)
+    }
+
     const req = request(options, res => {
       durationDistribution.track(perf.now() - start)
       countStatusCode(res.statusCode)
@@ -49,16 +62,28 @@ function sendRequest (options, form, callback) {
         statusCodeErrorCounter.inc()
         const error = new Error(`HTTP Error ${res.statusCode}`)
         error.status = res.statusCode
-        callback(error)
+        done(error)
       } else {
-        callback(null, res)
+        done(null, res)
       }
     })
 
     req.on('error', (err) => {
       networkErrorCounter.inc()
-      callback(err)
+      done(err)
     })
+
+    // `options.timeout` sets the socket's idle timeout, which only emits a
+    // 'timeout' event — per the Node docs it does NOT abort the request. Without
+    // destroying the socket here, a stalled upload hangs indefinitely: no
+    // 'error' fires, so the retry/backoff in AgentExporter.export never runs and
+    // the export promise never settles. Destroying the request makes the
+    // 'error' handler above run, which drives the retry (see the trace exporter
+    // in ../common/request.js, which likewise aborts the request on timeout).
+    req.on('timeout', () => {
+      req.destroy(new Error(`Profiling agent export timed out after ${options.timeout}ms`))
+    })
+
     if (form) {
       sizeDistribution.track(form.size())
       form.pipe(req)
@@ -88,15 +113,22 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter extends EventSerializer {
-  constructor (config = {}) {
+  #backoffTime
+  #backoffTries
+
+  /** @param {import('./event_serializer').TracerConfig} config */
+  constructor (config) {
     super(config)
-    const { url, uploadTimeout } = config
-    this._url = url
+    this._url = config.url
 
-    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+    const [backoffTries, backoffTime] = computeRetries(config.DD_PROFILING_UPLOAD_TIMEOUT)
 
-    this._backoffTime = backoffTime
-    this._backoffTries = backoffTries
+    this.#backoffTime = backoffTime
+    this.#backoffTries = backoffTries
+  }
+
+  getExportUrl () {
+    return this._url
   }
 
   export (exportSpec) {
@@ -128,8 +160,8 @@ class AgentExporter extends EventSerializer {
     return new Promise((resolve, reject) => {
       const operation = retry.operation({
         randomize: true,
-        minTimeout: this._backoffTime,
-        retries: this._backoffTries,
+        minTimeout: this.#backoffTime,
+        retries: this.#backoffTries,
         unref: true,
       })
 
@@ -148,18 +180,18 @@ class AgentExporter extends EventSerializer {
             'DD-EVP-ORIGIN-VERSION': version,
             ...form.getHeaders(),
           },
-          timeout: this._backoffTime * 2 ** attempt,
+          timeout: this.#backoffTime * 2 ** attempt,
         }
 
         docker.inject(options.headers)
 
-        if (this._url.protocol === 'unix:') {
-          options.socketPath = this._url.pathname
+        const url = parseUrl(this._url)
+        if (url.protocol === 'unix:') {
+          options.socketPath = url.pathname
         } else {
-          const httpOptions = urlToHttpOptions(this._url)
-          options.protocol = httpOptions.protocol
-          options.hostname = httpOptions.hostname
-          options.port = httpOptions.port
+          options.protocol = url.protocol
+          options.hostname = url.hostname
+          options.port = url.port
         }
 
         // eslint-disable-next-line eslint-rules/eslint-log-printf-style

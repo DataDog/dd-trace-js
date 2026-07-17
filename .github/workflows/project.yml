@@ -19,7 +19,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - name: actionlint
         id: actionlint
-        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
         with:
           matcher: true
           fail-on-error: true
@@ -48,9 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: npm run lint:editorconfig
+      - run: docker build -q -t ec .github/editorconfig-checker && docker run --rm --volume=$PWD:/check ec
 
   release-scripts:
     runs-on: ubuntu-latest
@@ -59,6 +57,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run test:release
+      - run: npm run test:scripts
 
   generated-config-types:
     runs-on: ubuntu-latest

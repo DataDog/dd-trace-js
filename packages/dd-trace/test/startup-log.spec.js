@@ -26,6 +26,7 @@ const configWithStartupLogs = {
   runtimeMetrics: true,
   startupLogs: true,
   appsec: { enabled: true },
+  profiling: { DD_PROFILING_ENABLED: false },
   dsmEnabled: true,
 }
 
@@ -223,67 +224,6 @@ describe('startup log guards', () => {
     const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
     assert.strictEqual(warnStub.callCount, 0)
     warnStub.restore()
-  })
-})
-
-describe('logLateLoadedFrameworks', () => {
-  const Module = require('node:module')
-  const path = require('node:path')
-  const {
-    checkForRequiredModules,
-    flushFrameworkWarnings,
-  } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
-  const nextServer = path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
-
-  // Reproduce the detection step: cache next's server module, then run the scan
-  // that collects the warning logLateLoadedFrameworks later surfaces.
-  function collectNextWarning () {
-    const fakeModule = new Module(nextServer)
-    fakeModule.exports = {}
-    fakeModule.loaded = true
-    require.cache[nextServer] = fakeModule
-    checkForRequiredModules(false)
-  }
-
-  afterEach(() => {
-    sinon.restore()
-    delete require.cache[nextServer]
-    flushFrameworkWarnings(() => {})
-  })
-
-  it('warns when a curated framework was loaded before the tracer', () => {
-    const warnStub = sinon.stub(console, 'warn')
-    delete require.cache[require.resolve('../src/startup-log')]
-    const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
-    collectNextWarning()
-    setStartupLogConfig({ startupLogs: true })
-    logLateLoadedFrameworks()
-    const message = warnStub.firstCall.args[0]
-    assert.match(message, /'next' was loaded before dd-trace/)
-    assert.match(message, /--require dd-trace\/init/)
-    assert.match(message, /--import dd-trace\/initialize\.mjs/)
-    assert.match(message, /serverExternalPackages/)
-  })
-
-  it('does not warn when startupLogs is false', () => {
-    const warnStub = sinon.stub(console, 'warn')
-    delete require.cache[require.resolve('../src/startup-log')]
-    const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
-    collectNextWarning()
-    setStartupLogConfig({ startupLogs: false })
-    logLateLoadedFrameworks()
-    assert.strictEqual(warnStub.callCount, 0)
-  })
-
-  it('drains so a second call does not repeat the warning', () => {
-    const warnStub = sinon.stub(console, 'warn')
-    delete require.cache[require.resolve('../src/startup-log')]
-    const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
-    collectNextWarning()
-    setStartupLogConfig({ startupLogs: true })
-    logLateLoadedFrameworks()
-    logLateLoadedFrameworks()
-    assert.strictEqual(warnStub.callCount, 1)
   })
 })
 

@@ -9,6 +9,8 @@ const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const LLMObsTagger = require('../../src/llmobs/tagger')
+const { SAMPLE_RATE, SAMPLING_DECISION, SESSION_ID } = require('../../src/llmobs/constants/tags')
 const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
@@ -110,6 +112,83 @@ describe('module', () => {
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
+    it('injects the sampling rate and decision from the parent LLMObs span', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SAMPLE_RATE]: '0.5',
+        [SAMPLING_DECISION]: '0',
+      })
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sr=0.5,_dd.p.llmobs_sd=0'
+      )
+    })
+
+    it('injects the session_id from the parent LLMObs span', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SESSION_ID]: 'my-session',
+      })
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sid=my-session'
+      )
+    })
+
+    it('injects the session_id from the trace-level default when the active span carries none', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+            _trace: { tags: { '_ml_obs.trace_session_id': 'trace-session' } },
+          }
+        },
+      }
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sid=trace-session'
+      )
+    })
+
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
       llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
@@ -201,7 +280,7 @@ describe('module', () => {
           llmobs: {
             agentlessEnabled: true,
           },
-          apiKey: 'test',
+          DD_API_KEY: 'test',
           site: 'datadoghq.com',
         })
 
@@ -256,7 +335,7 @@ describe('module', () => {
         it('configures the agentless writers', () => {
           llmobsModule.enable({
             llmobs: {},
-            apiKey: 'test',
+            DD_API_KEY: 'test',
             site: 'datadoghq.com',
           })
 
@@ -298,7 +377,7 @@ describe('module', () => {
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          llmobsModule.enable({ llmobs: {}, apiKey: 'test', startupLogs: true })
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', startupLogs: true })
 
           sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
@@ -306,7 +385,7 @@ describe('module', () => {
 
       describe('when an API key is provided', () => {
         it('configures the agentless writers', () => {
-          llmobsModule.enable({ llmobs: {}, apiKey: 'test', site: 'datadoghq.com' })
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)

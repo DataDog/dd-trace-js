@@ -8,7 +8,7 @@ const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/s
 const id = require('../../../packages/dd-trace/src/id')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 3_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every trace runs PrioritySampler.sample() once at the root: it derives a
 // priority from manual tags, sampling rules (glob match + deterministic Knuth
@@ -85,7 +85,7 @@ assert.ok(sampled !== undefined, 'sample() did not assign a sampling priority')
 
 guard.loopStart()
 let sink = 0
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   sink += sampleOnce(spans[i % CORPUS_SIZE])
 }
 guard.done()

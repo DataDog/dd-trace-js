@@ -1,12 +1,13 @@
 'use strict'
 
-// WARNING: the breakpoint target below is referenced by line number from
+// WARNING: the breakpoint targets below are referenced by line number from
 // meta.json (BREAKPOINT_LINE). Update the BREAKPOINT_LINE values there if you
-// move the `data.n = n` line.
+// move the `data.n = n` line or the unreachable `return n` line.
 
 const guard = require('../startup-guard')
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 5000
+const OPERATIONS = Number(process.env.OPERATIONS)
+const STARTUP_GUARD_MAX_SHARE = Number(process.env.STARTUP_GUARD_MAX_SHARE)
 
 if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
   // The devtools worker and its ports are unref'd, so nothing holds the event
@@ -16,9 +17,7 @@ if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
   const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
   require('./start-devtools-client')(() => {
     clearInterval(keepAlive)
-    // The not-hit variant only measures the passive cost of installing a probe,
-    // so it exits here instead of running the guarded work loop.
-    if (process.env.INSTALL_ONLY !== 'true') runWork()
+    runWork()
   })
 } else {
   runWork()
@@ -26,15 +25,18 @@ if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
 
 function runWork () {
   guard.loopStart()
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     doSomeWork(i)
   }
-  guard.done(0.35)
+  guard.done(STARTUP_GUARD_MAX_SHARE)
 }
 
 function doSomeWork (n) {
   const data = getSomeData()
-  data.n = n
+  data.n = n // BREAKPOINT HERE!
+  if (n < 0) {
+    return n // BREAKPOINT HERE!
+  }
   return data.n
 }
 

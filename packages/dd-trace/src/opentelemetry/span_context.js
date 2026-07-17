@@ -32,6 +32,7 @@ class SpanContext {
   }
 
   get traceFlags () {
+    this._ddContext._ensureSamplingPriority()
     return this._ddContext._sampling.priority >= AUTO_KEEP ? 1 : 0
   }
 

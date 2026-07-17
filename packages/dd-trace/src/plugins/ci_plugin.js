@@ -1,5 +1,11 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+const realClearTimeout = clearTimeout
+
+const { threadId } = require('node:worker_threads')
+
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -12,6 +18,7 @@ const {
 } = require('../ci-visibility/telemetry')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
+const { version: tracerVersion } = require('../../../../package.json')
 const id = require('../id')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const {
@@ -31,6 +38,7 @@ const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
 const {
   getTestEnvironmentMetadata,
+  getTestLevelsMetadataTags,
   getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
@@ -44,6 +52,7 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
+  TEST_LEVELS_METADATA,
   TEST_MODULE,
   TEST_SESSION_NAME,
   getTestSuiteCommonTags,
@@ -59,7 +68,7 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags,
+  getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
@@ -82,6 +91,9 @@ const {
 } = require('./util/test')
 
 const legacyStorage = storage('legacy')
+const DI_OPERATION_TIMEOUT_MS = 2000
+const DI_LOGGER_THREAD_ID = threadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${threadId}`
+const DI_LOGGER_THREAD_NAME = threadId === 0 ? 'MainThread' : `WorkerThread:${threadId}`
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -106,8 +118,20 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'cucumber',
 ])
 
+function withTimeout (promise, timeoutMs) {
+  return new Promise(resolve => {
+    const timeoutId = realSetTimeout(resolve, timeoutMs)
+
+    const done = () => {
+      realClearTimeout(timeoutId)
+      resolve()
+    }
+    promise.then(done, done)
+  })
+}
+
 function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
-  const libraryCapabilitiesTags = getLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
+  const libraryCapabilitiesTags = getDefaultLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
 
   if (!libraryCapabilitiesTags[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] ||
     !plugin.libraryConfig ||
@@ -141,6 +165,8 @@ module.exports = class CiPlugin extends Plugin {
     super(...args)
 
     this.fileLineToProbeId = new Map()
+    this.diBreakpointHitPromise = undefined
+    this.diBreakpointHitResolvers = []
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
     this._pendingWorkerTracesByTestSuite = new Map()
@@ -155,6 +181,9 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
+          this.libraryConfig = undefined
+          this.itrCorrelationId = undefined
+          this.skippableSuitesCoverage = undefined
           log.error('Library configuration could not be fetched. %s', err.message)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
@@ -162,18 +191,20 @@ module.exports = class CiPlugin extends Plugin {
           setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
-        const requestErrorTags = this.testSessionSpan
-          ? getSessionRequestErrorTags(this.testSessionSpan)
-          : Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
-
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
+        const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, ctx)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags,
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, repositoryRoot: this.repositoryRoot, requestErrorTags })
+        onDone({
+          err,
+          isTestDynamicInstrumentationEnabled: this.config.isTestDynamicInstrumentationEnabled,
+          libraryConfig,
+          repositoryRoot: this.repositoryRoot,
+          requestErrorTags: this._getCurrentRequestErrorTags(),
+        })
       })
     })
 
@@ -219,7 +250,13 @@ module.exports = class CiPlugin extends Plugin {
         this.testEnvironmentMetadata
       )
 
-      const metadataTags = { '*': { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName } }
+      const metadataTags = {
+        [TEST_LEVELS_METADATA]: {
+          [TEST_COMMAND]: command,
+          [TEST_SESSION_NAME]: testSessionName,
+          ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+        },
+      }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {
         this.tracer._exporter.addMetadataTags(metadataTags)
@@ -299,7 +336,7 @@ module.exports = class CiPlugin extends Plugin {
             this.libraryConfig.isKnownTestsEnabled = false
           }
         }
-        onDone({ err, knownTests })
+        onDone({ err, knownTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -319,7 +356,7 @@ module.exports = class CiPlugin extends Plugin {
             this.libraryConfig.isTestManagementEnabled = false
           }
         }
-        onDone({ err, testManagementTests })
+        onDone({ err, testManagementTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -424,6 +461,15 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Returns library capability metadata tags for this test framework.
+   * @param {string} frameworkVersion - The test framework version.
+   * @returns {Record<string, string|undefined>}
+   */
+  getLibraryCapabilitiesTags (frameworkVersion) {
+    return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
+  }
+
+  /**
    * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
    * If the session span does not exist yet (e.g. library-configuration failed before session:start),
    * the tag is queued and applied when the span is created.
@@ -440,6 +486,18 @@ module.exports = class CiPlugin extends Plugin {
     } else {
       this._pendingRequestErrorTags.push({ tag, value })
     }
+  }
+
+  /**
+   * Returns the current request error tags, including tags queued before session creation.
+   *
+   * @returns {Record<string, string>}
+   */
+  _getCurrentRequestErrorTags () {
+    if (this.testSessionSpan) {
+      return getSessionRequestErrorTags(this.testSessionSpan)
+    }
+    return Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
   }
 
   /**
@@ -759,6 +817,11 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   onDiBreakpointHit ({ snapshot }) {
+    for (const resolve of this.diBreakpointHitResolvers) {
+      resolve()
+    }
+    this.diBreakpointHitResolvers.length = 0
+
     if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
       // This is unexpected and is caused by a race condition.
       log.warn('Breakpoint snapshot could not be attached to the active test span')
@@ -782,14 +845,111 @@ module.exports = class CiPlugin extends Plugin {
     )
 
     const activeTestSpanContext = this.activeTestSpan.context()
+    const topStackFrame = snapshot.stack?.[0]
 
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      message: '',
+      logger: {
+        name: snapshot.probe.location.file,
+        method: topStackFrame?.function || '',
+        version: tracerVersion,
+        thread_id: DI_LOGGER_THREAD_ID,
+        thread_name: DI_LOGGER_THREAD_NAME,
+      },
       debugger: { snapshot },
       dd: {
         trace_id: activeTestSpanContext.toTraceId(),
         span_id: activeTestSpanContext.toSpanId(),
       },
     })
+  }
+
+  /**
+   * Wait for a Dynamic Instrumentation operation without blocking test framework progress forever.
+   *
+   * @param {Promise<void>} promise - Dynamic Instrumentation operation promise.
+   * @returns {Promise<void>}
+   */
+  waitForDiOperation (promise) {
+    return withTimeout(promise, DI_OPERATION_TIMEOUT_MS)
+  }
+
+  /**
+   * Resolve any prepared breakpoint-hit wait when no caller still needs it.
+   */
+  cancelDiBreakpointHitWait () {
+    for (const resolve of this.diBreakpointHitResolvers) {
+      resolve()
+    }
+    this.diBreakpointHitResolvers.length = 0
+  }
+
+  /**
+   * Wait for a prepared breakpoint hit before resolving any unused waiters.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForPreparedDiBreakpointHit () {
+    if (!this.diBreakpointHitPromise) {
+      this.cancelDiBreakpointHitWait()
+      return Promise.resolve()
+    }
+
+    return this.waitForDiOperation(this.diBreakpointHitPromise).then(
+      () => this.cancelDiBreakpointHitWait(),
+      () => this.cancelDiBreakpointHitWait()
+    )
+  }
+
+  /**
+   * Prepare a wait for the next breakpoint hit before the retried test starts.
+   *
+   * @returns {Promise<void>}
+   */
+  prepareDiBreakpointHitWait () {
+    if (!this.di) return Promise.resolve()
+
+    let resolveHit
+    const hitPromise = new Promise(resolve => {
+      resolveHit = resolve
+      this.diBreakpointHitResolvers.push(resolve)
+    })
+
+    const preparedPromise = hitPromise.finally(() => {
+      const resolverIndex = this.diBreakpointHitResolvers.indexOf(resolveHit)
+      if (resolverIndex !== -1) {
+        this.diBreakpointHitResolvers.splice(resolverIndex, 1)
+      }
+      if (this.diBreakpointHitPromise === preparedPromise) {
+        this.diBreakpointHitPromise = undefined
+      }
+    })
+
+    this.diBreakpointHitPromise = preparedPromise
+    return this.diBreakpointHitPromise
+  }
+
+  /**
+   * Wait until the DI worker has posted any breakpoint hits it was already processing.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForDiBreakpointHits () {
+    if (!this.di) return Promise.resolve()
+    if (this.diBreakpointHitPromise) return this.waitForDiOperation(this.diBreakpointHitPromise)
+
+    return this.waitForInFlightDiBreakpointHits()
+  }
+
+  /**
+   * Wait until the DI worker has posted breakpoint hits it was already processing.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForInFlightDiBreakpointHits () {
+    if (!this.di) return Promise.resolve()
+
+    return this.waitForDiOperation(this.di.waitForInFlightBreakpointHits())
   }
 
   removeAllDiProbes () {

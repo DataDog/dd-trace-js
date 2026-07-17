@@ -12,7 +12,16 @@ const sinon = require('sinon')
 const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const { DogStatsDClient } = require('../src/dogstatsd')
+
+// On Node versions that support `monitorEventLoopDelay({ samplePerIteration })`
+// (landed in v26.5.0) the runtime metrics module unconditionally skips the
+// @datadog/native-metrics path, so the "with native metrics" variant is unreachable.
+const SAMPLE_PER_ITERATION_AVAILABLE = NODE_MAJOR > 26 || (NODE_MAJOR === 26 && NODE_MINOR >= 5)
+const NATIVE_METRICS_VARIANTS = SAMPLE_PER_ITERATION_AVAILABLE ? [false] : [true, false]
+// Only runs on a real runtime that actually supports the per-iteration sampler.
+const describeSamplePerIteration = SAMPLE_PER_ITERATION_AVAILABLE ? describe : describe.skip
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const MeterProvider = require('../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../src/opentelemetry/metrics/periodic_metric_reader')
@@ -35,7 +44,7 @@ function createGarbage (count = 50) {
   return util.inspect(obj, { depth: Infinity })
 }
 
-[true, false].forEach((nativeMetrics) => {
+NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
     describe('runtimeMetrics (proxy)', () => {
       let runtimeMetrics
@@ -326,7 +335,12 @@ function createGarbage (count = 50) {
             return value > 0 && Number.isInteger(value)
           })
           const isGC95Percentile = sinon.match((value) => {
-            return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
+            // Nanoseconds, 1µs to 100ms. These bounds guard the unit conversion, not the timing:
+            // a sub-microsecond value means the ms→ns conversion (`entry.duration * 1e6`) was
+            // dropped, and a value over 100ms means it was left in milliseconds or seconds. The
+            // floor used to be 0.1ms, which flaked on fast/idle runners where a single scavenge
+            // pause is the only sample for a gc_type and its p95 sits below that.
+            return value >= 1e3 && value < 1e8
           })
           const isHeapSpace = sinon.match((metricName) => {
             return /^heap_space:[a-z_]+$/.test(metricName)
@@ -528,6 +542,54 @@ function createGarbage (count = 50) {
 
           localRuntimeMetrics.stop()
         })
+
+        it('should not require native metrics when samplePerIteration is available, even if native is true', () => {
+          // Stop the default runtimeMetrics instance started in beforeEach
+          runtimeMetrics.stop()
+
+          const localClient = {
+            gauge: sinon.spy(),
+            increment: sinon.spy(),
+            histogram: sinon.spy(),
+            flush: sinon.spy(),
+          }
+
+          const LocalClient = sinon.spy(function () {
+            return {
+              gauge: localClient.gauge,
+              increment: localClient.increment,
+              histogram: localClient.histogram,
+              flush: localClient.flush,
+            }
+          })
+          LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            './client': proxyquire('../src/runtime_metrics/client', {
+              '../dogstatsd': { DogStatsDClient: LocalClient },
+            }),
+            '../../../../version': { NODE_MAJOR: 26, NODE_MINOR: 5 },
+            '@datadog/native-metrics': {
+              start () {
+                throw new Error('Native metrics should not even be required')
+              },
+            },
+          })
+
+          const configNativeEnabled = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: true },
+          }
+
+          localRuntimeMetrics.start(configNativeEnabled)
+
+          // Should still collect metrics via the JS fallback path
+          clock.tick(10000)
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
+
+          localRuntimeMetrics.stop()
+        })
       })
 
       describe('Event Loop Utilization', () => {
@@ -563,81 +625,69 @@ function createGarbage (count = 50) {
       })
 
       describe('CPU Usage Calculations', () => {
-        it('should report CPU percentages within valid ranges', () => {
-          const startCpuUsage = process.cpuUsage()
-          const startTime = Date.now()
-          const startPerformanceNow = performance.now()
+        it('should report CPU percentages matching real process usage', () => {
+          const outerStartCpuUsage = process.cpuUsage()
+          const outerStartTime = performance.now()
+          clock.tick(10000)
+          client.gauge.resetHistory()
+          const innerStartTime = performance.now()
+          const innerStartCpuUsage = process.cpuUsage()
+
           let iterations = 0
-          let ticks = 0
-          while (Date.now() - startTime < 100) {
-            iterations++
-            if (iterations % 1000000 === 0) {
-              clock.tick(1)
-              ticks++
+          let userCpuUsage = 0
+          while (userCpuUsage < 100_000) {
+            if (++iterations % 1_000_000 === 0) {
+              userCpuUsage = process.cpuUsage(innerStartCpuUsage).user
             }
           }
-          const cpuUsage = process.cpuUsage()
-          const cpuUsageStub = sinon.stub(process, 'cpuUsage').returns(cpuUsage)
-          const performanceNowStub = sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
-          clock.tick(10000 - ticks)
-          performanceNowStub.restore()
-          cpuUsageStub.restore()
 
-          const timeDivisor = 100_000 // Microseconds * 100 for percent
+          const innerEndCpuUsage = process.cpuUsage()
+          const innerEndTime = performance.now()
+          clock.tick(10000)
+          const outerEndTime = performance.now()
+          const outerEndCpuUsage = process.cpuUsage()
 
-          const cpuMetrics = new Map([[
-            'runtime.node.cpu.user',
-            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2)),
-          ], [
+          const cpuCalls = client.gauge.getCalls().filter(call => call.args[0].startsWith('runtime.node.cpu.'))
+          const cpuMetrics = new Map(cpuCalls.map(call => [call.args[0], call.args[1]]))
+          assert.deepStrictEqual([...cpuMetrics.keys()].sort(), [
             'runtime.node.cpu.system',
-            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2)),
-          ], [
             'runtime.node.cpu.total',
-            Number((
-              ((cpuUsage.user - startCpuUsage.user) + (cpuUsage.system - startCpuUsage.system)) / timeDivisor
-            ).toFixed(2)),
-          ]])
-
-          let userPercent = 0
-          let systemPercent = 0
-          let totalPercent = 0
-
-          for (const call of client.gauge.getCalls()) {
-            const metric = call.args[0]
-            const expected = cpuMetrics.get(metric)
-            cpuMetrics.delete(metric)
-            if (expected !== undefined) {
-              const stringValue = call.args[1]
-              assert.match(stringValue, /^\d+(\.\d{1,2})?$/)
-              const number = Number(stringValue)
-              if (metric === 'runtime.node.cpu.user') {
-                assert(
-                  number >= 1,
-                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number}`
-                )
-                userPercent = number
-              }
-              if (metric === 'runtime.node.cpu.system') {
-                assert(number >= 0 && number <= 5, `${metric} sanity check failed: ${number}`)
-                systemPercent = number
-              }
-              if (metric === 'runtime.node.cpu.total') {
-                assert(
-                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
-                  number >= expected - 0.1 && number <= expected + 1,
-                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
-                )
-                totalPercent = number
-              }
-              const epsilon = os.platform() === 'win32' ? 1.5 : 0.5
-              assert(number - expected < epsilon, `${metric} sanity check failed: ${number} ${expected}`)
-            }
+            'runtime.node.cpu.user',
+          ])
+          assert.strictEqual(cpuCalls.length, cpuMetrics.size, 'CPU metrics should be reported exactly once')
+          for (const value of cpuMetrics.values()) {
+            assert.match(value, /^\d+\.\d{2}$/)
           }
 
-          assert.strictEqual(cpuMetrics.size, 0, `All CPU metrics should be matched, missing ${[...cpuMetrics.keys()]}`)
-
+          const userPercent = Number(cpuMetrics.get('runtime.node.cpu.user'))
+          const systemPercent = Number(cpuMetrics.get('runtime.node.cpu.system'))
+          const totalPercent = Number(cpuMetrics.get('runtime.node.cpu.total'))
           const totalDiff = Math.abs(totalPercent - userPercent - systemPercent)
-          assert(totalDiff <= 0.03, `Total CPU percentage sanity check failed: ${totalDiff} > 0.03`)
+          assert(totalDiff <= 0.02, `Total CPU percentage sanity check failed: ${totalDiff} > 0.02`)
+
+          // The collector reads its counters between the outer and inner samples on each side.
+          const minimumElapsedTime = innerEndTime - innerStartTime
+          const maximumElapsedTime = outerEndTime - outerStartTime
+          const minimumUserPercent = (innerEndCpuUsage.user - innerStartCpuUsage.user) / (maximumElapsedTime * 10)
+          const maximumUserPercent = (outerEndCpuUsage.user - outerStartCpuUsage.user) / (minimumElapsedTime * 10)
+          const minimumSystemPercent = (innerEndCpuUsage.system - innerStartCpuUsage.system) / (maximumElapsedTime * 10)
+          const maximumSystemPercent = (outerEndCpuUsage.system - outerStartCpuUsage.system) / (minimumElapsedTime * 10)
+          const minimumTotalPercent = minimumUserPercent + minimumSystemPercent
+          const maximumTotalPercent = maximumUserPercent + maximumSystemPercent
+
+          assert(
+            userPercent >= minimumUserPercent - 0.01 && userPercent <= maximumUserPercent + 0.01,
+            `Expected real user CPU percentage ${minimumUserPercent} <= ${userPercent} <= ${maximumUserPercent}`
+          )
+          assert(
+            systemPercent >= minimumSystemPercent - 0.01 && systemPercent <= maximumSystemPercent + 0.01,
+            `Expected real system CPU percentage ${minimumSystemPercent} <= ${systemPercent} <= ${maximumSystemPercent}`
+          )
+
+          assert(
+            totalPercent >= minimumTotalPercent - 0.01 && totalPercent <= maximumTotalPercent + 0.01,
+            `Expected real total CPU percentage ${minimumTotalPercent} <= ${totalPercent} <= ${maximumTotalPercent}`
+          )
         })
       })
 
@@ -890,6 +940,87 @@ function createGarbage (count = 50) {
         })
       })
     })
+  })
+})
+
+describeSamplePerIteration('runtimeMetrics event loop delay via samplePerIteration (Node >= 26.5.0)', () => {
+  let clock
+  let localClient
+  let nativeMetricsStart
+  let localRuntimeMetrics
+  let config
+
+  beforeEach(() => {
+    localClient = {
+      gauge: sinon.spy(),
+      increment: sinon.spy(),
+      histogram: sinon.spy(),
+      flush: sinon.spy(),
+    }
+
+    const LocalClient = sinon.spy(function () {
+      return {
+        gauge: localClient.gauge,
+        increment: localClient.increment,
+        histogram: localClient.histogram,
+        flush: localClient.flush,
+      }
+    })
+    LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+    // If the native addon is ever started on a runtime that has the per-iteration
+    // sampler, this throws and fails the test loudly.
+    nativeMetricsStart = sinon.spy(() => {
+      throw new Error('Native metrics must not be started when samplePerIteration is available')
+    })
+
+    localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+      './client': proxyquire('../src/runtime_metrics/client', {
+        '../dogstatsd': { DogStatsDClient: LocalClient },
+      }),
+      '@datadog/native-metrics': { start: nativeMetricsStart, stop () {} },
+    })
+
+    config = {
+      url: new URL('http://localhost:8126'),
+      dogstatsd: { hostname: 'localhost', port: 8125 },
+      // native is explicitly true to prove the real version gate wins over it.
+      runtimeMetrics: { enabled: true, eventLoop: true, gc: true, native: true },
+      tags: {},
+      DD_RUNTIME_METRICS_FLUSH_INTERVAL: 10000,
+      getOrigin: () => 'default',
+    }
+
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    })
+  })
+
+  afterEach(() => {
+    clock.restore()
+    localRuntimeMetrics.stop()
+  })
+
+  it('collects event loop delay metrics without loading @datadog/native-metrics', async () => {
+    localRuntimeMetrics.start(config)
+
+    // monitorEventLoopDelay is backed by libuv, so fake timers don't advance it.
+    // Turn the real event loop so the per-iteration sampler records samples.
+    for (let i = 0; i < 20; i++) {
+      await setImmediate()
+    }
+
+    clock.tick(10000)
+
+    sinon.assert.notCalled(nativeMetricsStart)
+
+    const isNonNegativeNumber = sinon.match((value) => value >= 0 && Number.isFinite(value))
+    sinon.assert.calledWith(localClient.gauge, 'runtime.node.event_loop.delay.max', isNonNegativeNumber)
+    sinon.assert.calledWith(localClient.gauge, 'runtime.node.event_loop.delay.min', isNonNegativeNumber)
+    sinon.assert.calledWith(localClient.gauge, 'runtime.node.event_loop.delay.avg', isNonNegativeNumber)
+    sinon.assert.calledWith(localClient.increment, 'runtime.node.event_loop.delay.count', isNonNegativeNumber)
+    // The Node.js histogram never reports a median, unlike the native addon.
+    sinon.assert.neverCalledWith(localClient.gauge, 'runtime.node.event_loop.delay.median')
   })
 })
 

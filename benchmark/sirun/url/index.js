@@ -5,7 +5,7 @@ const guard = require('../startup-guard')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('../../../packages/dd-trace/src/plugins/util/url')
 const configManifest = require('../../../packages/dd-trace/src/config/supported-configurations.json')
 
-const COUNT = Number(process.env.COUNT)
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // The per-request server path in addRequestTags runs extractURL (rebuild the URL
 // from the request), obfuscateQs (redact secrets from the query string) and
@@ -58,7 +58,7 @@ const reqs = [
 
 guard.loopStart()
 let sink = 0
-for (let i = 0; i < COUNT; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   const req = reqs[i & 3]
   const url = extractURL(req)
   sink += obfuscateQs(config, url).length

@@ -7,7 +7,7 @@ const dc = require('dc-polyfill')
 const guard = require('../startup-guard')
 const TracingPlugin = require('../../../packages/dd-trace/src/plugins/tracing')
 
-const ITERATIONS = Number(process.env.ITERATIONS)
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every instrumented operation, regardless of integration, is dispatched into the
 // plugin through the diagnostic channels the Plugin base binds/subscribes to: the
@@ -50,10 +50,10 @@ finishChannel.publish(ctx)
 assert.ok(started > 0 && finished > 0, 'tracing-channel dispatch did not reach the plugin handlers')
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   startChannel.runStores(ctx, NOOP)
   finishChannel.publish(ctx)
 }
 
-assert.ok(started > ITERATIONS && finished > ITERATIONS, 'tracing-channel dispatch produced no handler calls')
+assert.ok(started > OPERATIONS && finished > OPERATIONS, 'tracing-channel dispatch produced no handler calls')
 guard.done()

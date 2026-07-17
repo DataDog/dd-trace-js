@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const MemcachedPlugin = require('../../../packages/datadog-plugin-memcached/src/index')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 6_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced memcached command walks `bindStart`: resolve the server address
 // (directly, or via the client HashRing when the server is not pinned), build
@@ -76,7 +76,7 @@ plugin.bindStart(ctxs[0])
 assert.ok(lastMeta && typeof lastMeta['out.host'] === 'string', 'bindStart did not resolve the server address')
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   plugin.bindStart(ctxs[i % len])
 }
 guard.done()

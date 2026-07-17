@@ -3,15 +3,16 @@
 const assert = require('assert')
 
 const { By, Builder } = require('selenium-webdriver')
-const chrome = require('selenium-webdriver/chrome')
-const options = new chrome.Options()
-options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage')
+const { cleanChromeOptions, createChromeOptions } = require('../selenium-options')
 
 describe('selenium', function () {
   let driver
+  let userDataDir
 
   beforeEach(async function () {
-    const build = new Builder().forBrowser('chrome').setChromeOptions(options)
+    const chromeOptions = createChromeOptions()
+    userDataDir = chromeOptions.userDataDir
+    const build = new Builder().forBrowser('chrome').setChromeOptions(chromeOptions.options)
     driver = await build.build()
   })
 
@@ -30,5 +31,15 @@ describe('selenium', function () {
     assert.strictEqual(value, 'Hello World')
   })
 
-  afterEach(async () => await driver.quit())
+  afterEach(async () => {
+    try {
+      if (driver !== undefined) {
+        await driver.quit()
+      }
+    } finally {
+      cleanChromeOptions(userDataDir)
+      driver = undefined
+      userDataDir = undefined
+    }
+  })
 })

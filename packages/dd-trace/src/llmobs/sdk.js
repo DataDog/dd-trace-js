@@ -49,7 +49,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   get enabled () {
-    return this._config.llmobs.enabled ?? false
+    return this._config.llmobs.DD_LLMOBS_ENABLED ?? false
   }
 
   enable (options = {}) {
@@ -75,7 +75,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     // TODO: These configs should be passed through directly at construction time instead.
-    this._config.llmobs.enabled = true
+    this._config.llmobs.DD_LLMOBS_ENABLED = true
     this._config.llmobs.mlApp = options.mlApp
     this._config.llmobs.agentlessEnabled = options.agentlessEnabled
 
@@ -96,7 +96,7 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Disabling LLMObs')
 
-    this._config.llmobs.enabled = false
+    this._config.llmobs.DD_LLMOBS_ENABLED = false
 
     // disable writers and channel subscribers
     this._llmobsModule.disable()

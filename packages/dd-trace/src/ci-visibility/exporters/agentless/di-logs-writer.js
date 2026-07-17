@@ -26,7 +26,7 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
       path: '/api/v2/logs',
       method: 'POST',
       headers: {
-        'dd-api-key': getConfig().apiKey,
+        'dd-api-key': getConfig().DD_API_KEY,
         'Content-Type': 'application/json',
       },
       timeout: this.timeout,

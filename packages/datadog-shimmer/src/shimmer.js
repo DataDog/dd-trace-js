@@ -1,5 +1,7 @@
 'use strict'
 
+const { isModuleNamespaceObject } = require('node:util').types
+
 /**
  * @type {Set<string | symbol>}
  */
@@ -119,11 +121,14 @@ function wrapCallback (original, wrapper) {
  * object.
  * @param {string | symbol} name - The property key of the method to wrap.
  * @param {(original: Function) => (...args: unknown[]) => unknown} wrapper - The wrapper function.
- * @param {{ replaceGetter?: boolean }} [options] - If `replaceGetter` is set to
- * true, the getter is accessed and the getter is replaced with one that just
- * returns the earlier retrieved value. Use with care! This may only be done in
- * case the getter absolutely has no side effect and no setter is defined for the
- * property.
+ * @param {{ replaceGetter?: boolean }} [options] - By default the getter is
+ * wrapped in place, so each property access runs the wrapper. A getter+setter
+ * pair keeps its setter; a setter-only property throws. If `replaceGetter` is
+ * true, the getter is instead accessed once and replaced with one returning the
+ * resolved wrapped value — for a lazy getter+setter pair (e.g. Node 20's
+ * `fs.opendir`) the setter is rebuilt to materialize a writable data property on
+ * assignment, keeping the descriptor observationally identical for downstream
+ * consumers. Use with care! This may only be done when the getter has no side effect.
  * @returns {Record<string | symbol, unknown> | Function | undefined} The target object with
  * the wrapped method.
  */
@@ -151,17 +156,13 @@ function wrap (target, name, wrapper, options) {
     enumerable: false,
   }
 
-  if (descriptor.set && (!descriptor.get || options?.replaceGetter)) {
-    // It is possible to support these cases by instrumenting both the getter
-    // and setter (or only the setter, in case that is a use case).
-    // For now, this is not supported due to the complexity and the fact that
-    // this is not a common use case.
-    throw new Error(options?.replaceGetter
-      ? 'Replacing a getter/setter pair is not supported. Implement if required.'
-      : 'Replacing setters is not supported. Implement if required.')
+  // A setter-only property has nothing to wrap. Instrumenting the setter is not
+  // implemented; a getter+setter pair is handled below.
+  if (descriptor.set && !descriptor.get) {
+    throw new Error('Replacing setters is not supported. Implement if required.')
   }
 
-  const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
+  const original = (descriptor.value ?? options?.replaceGetter) ? target[name] : descriptor.get
 
   assertMethod(target, name, original)
 
@@ -169,15 +170,42 @@ function wrap (target, name, wrapper, options) {
 
   copyProperties(original, wrapped)
 
-  if (descriptor.writable) {
+  const immutableModuleNamespace = descriptor.configurable === false &&
+    descriptor.writable && isModuleNamespaceObject(target)
+
+  if (descriptor.writable && !immutableModuleNamespace) {
     if (descriptor.configurable && descriptor.enumerable) {
       target[name] = wrapped
       return target
     }
     descriptor.value = wrapped
   } else {
-    if (descriptor.get) {
-      // `replaceGetter` may only be used when the getter has no side effect.
+    if (immutableModuleNamespace) {
+      descriptor.value = wrapped
+    } else if (descriptor.set && options?.replaceGetter) {
+      // A lazy accessor pair (e.g. Node 20's `fs.opendir`). `original` already
+      // resolved the value through the getter. Keep the property an accessor pair
+      // so the shape stays observationally identical — a downstream consumer may
+      // read the descriptor or assign to it on a specific Node.js version. The
+      // getter returns the wrapped value; the setter mirrors the native lazy
+      // contract (assignment self-replaces the property with a writable data
+      // property holding the assigned value), so a caller that overwrites the
+      // method gets exactly what they set, unwrapped, as before. The descriptor
+      // is the original accessor descriptor (no `value`/`writable` slots), so
+      // reassigning `get`/`set` keeps it a valid accessor descriptor.
+      descriptor.get = () => wrapped
+      descriptor.set = function (value) {
+        Object.defineProperty(this, name, {
+          configurable: descriptor.configurable,
+          enumerable: descriptor.enumerable,
+          writable: true,
+          value,
+        })
+      }
+    } else if (descriptor.get) {
+      // Wrap the getter in place; for a getter+setter pair the original setter
+      // stays untouched. `replaceGetter` (no side effect on read) instead returns
+      // the value resolved once into `wrapped`.
       descriptor.get = options?.replaceGetter ? () => wrapped : wrapped
     } else {
       descriptor.value = wrapped

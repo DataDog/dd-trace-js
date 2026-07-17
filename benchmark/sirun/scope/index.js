@@ -6,10 +6,10 @@ const guard = require('../startup-guard')
 const {
   SCOPE_ENABLED,
   MODE,
-  COUNT,
+  OPERATIONS,
 } = process.env
 
-const count = Number(COUNT)
+const count = Number(OPERATIONS)
 
 // Build a span whose `_store` is a real legacy-storage handle, exactly as a span
 // created under an active parent captures one. activate() resolves the parent

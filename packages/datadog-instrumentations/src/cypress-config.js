@@ -113,9 +113,10 @@ function injectSupportFile (config) {
  * @param {object} config Cypress resolved config object
  * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
  * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
+ * @param {Function[]} userAfterScreenshotHandlers user's after:screenshot handlers collected from wrappedOn
  * @returns {object} the config object (possibly modified)
  */
-function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers) {
+function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers, userAfterScreenshotHandlers) {
   const wrapperFile = injectSupportFile(config)
 
   const cleanupWrapper = () => {
@@ -136,6 +137,7 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
 
   const registerNoopHandlers = () => {
     for (const h of userAfterSpecHandlers) on('after:spec', h)
+    for (const h of userAfterScreenshotHandlers) on('after:screenshot', h)
     registerAfterRunWithCleanup()
     on('task', noopTask)
   }
@@ -153,6 +155,7 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     config,
     userAfterSpecHandlers,
     userAfterRunHandlers,
+    userAfterScreenshotHandlers,
     cleanupWrapper,
     registered: false,
     configPromise: undefined,
@@ -176,12 +179,15 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
   return function ddSetupNodeEvents (on, config) {
     const userAfterSpecHandlers = []
     const userAfterRunHandlers = []
+    const userAfterScreenshotHandlers = []
 
     const wrappedOn = (event, handler) => {
       if (event === 'after:spec') {
         userAfterSpecHandlers.push(handler)
       } else if (event === 'after:run') {
         userAfterRunHandlers.push(handler)
+      } else if (event === 'after:screenshot') {
+        userAfterScreenshotHandlers.push(handler)
       } else {
         on(event, handler)
       }
@@ -197,7 +203,8 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
           on,
           mergeReturnedConfig(config, result),
           userAfterSpecHandlers,
-          userAfterRunHandlers
+          userAfterRunHandlers,
+          userAfterScreenshotHandlers
         )
       })
     }
@@ -206,7 +213,8 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       on,
       mergeReturnedConfig(config, maybePromise),
       userAfterSpecHandlers,
-      userAfterRunHandlers
+      userAfterRunHandlers,
+      userAfterScreenshotHandlers
     )
   }
 }

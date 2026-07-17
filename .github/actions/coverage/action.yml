@@ -1,9 +1,13 @@
 name: coverage
-description: Verify coverage output and upload it to Codecov and Datadog.
+description: >-
+  Verify a job's coverage output and stash it as an artifact. All Green collects every
+  `coverage-*` artifact, merges them per integration, and uploads the groups to Codecov and
+  Datadog — so a commit sends ~100 grouped reports instead of one per matrix cell, which kept
+  Codecov from silently dropping uploads past its per-commit ceiling.
 
 inputs:
   flags:
-    description: "Codecov flags value"
+    description: "Coverage flags — the grouping key All Green folds matrix cells by"
     required: false
   report-dir:
     description: "Coverage report directory (defaults to 'coverage')"
@@ -12,19 +16,13 @@ inputs:
 runs:
   using: composite
   steps:
-    # Retry once on failure to work around transient issues (e.g. flaky
-    # Codecov upload network calls).
-    - id: attempt
-      uses: ./.github/actions/coverage/upload
-      continue-on-error: true
-      with:
-        flags: ${{ inputs.flags }}
-        report-dir: ${{ inputs.report-dir }}
-    - if: steps.attempt.outcome == 'failure'
+    - name: Verify coverage output
       shell: bash
-      run: sleep 60
-    - if: steps.attempt.outcome == 'failure'
-      uses: ./.github/actions/coverage/upload
+      run: node scripts/verify-coverage.js --flags "${{ inputs.flags }}"
+
+    - name: Upload coverage artifact
+      if: always()
+      uses: ./.github/actions/upload-coverage-artifact
       with:
         flags: ${{ inputs.flags }}
         report-dir: ${{ inputs.report-dir }}

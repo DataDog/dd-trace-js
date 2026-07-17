@@ -228,7 +228,7 @@ const optionLookupTable = {
   code_origin_enabled: 'codeOriginForSpans.enabled',
   tracing_sampling_rate: 'sampleRate',
   log_injection_enabled: 'logInjection',
-  tracing_enabled: 'tracing',
+  tracing_enabled: 'DD_TRACE_ENABLED',
   tracing_sampling_rules: 'samplingRules',
   tracing_header_tags: 'headerTags',
   tracing_tags: 'tags',

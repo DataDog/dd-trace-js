@@ -165,7 +165,7 @@ versionRange.forEach(version => {
       )
 
       childProcess.on('exit', (code) => {
-        assert.strictEqual(code, 0)
+        assert.strictEqual(code, 0, `Process exited with code ${code}.\n${testOutput}`)
         assert.doesNotMatch(testOutput, /InvalidArgumentError/)
         done()
       })

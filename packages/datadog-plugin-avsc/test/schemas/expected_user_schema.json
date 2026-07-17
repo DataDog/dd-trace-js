@@ -6,7 +6,8 @@
               "type": "object",
               "properties": {
                   "name": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "The user name"
                   },
                   "favorite_number": {
                       "type": "union[integer,null]"

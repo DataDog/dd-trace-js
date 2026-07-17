@@ -7,16 +7,16 @@
   "instructions": true,
   "variants": {
     "agent": {
-      "env": { "VARIANT": "agent", "ITERATIONS": "12000000" }
+      "env": { "VARIANT": "agent", "OPERATIONS": "12000000" }
     },
     "rule-match": {
-      "env": { "VARIANT": "rule-match", "ITERATIONS": "3000000" }
+      "env": { "VARIANT": "rule-match", "OPERATIONS": "3000000" }
     },
     "rule-miss": {
-      "env": { "VARIANT": "rule-miss", "ITERATIONS": "3000000" }
+      "env": { "VARIANT": "rule-miss", "OPERATIONS": "3000000" }
     },
     "rate-limited": {
-      "env": { "VARIANT": "rate-limited", "ITERATIONS": "3000000" }
+      "env": { "VARIANT": "rate-limited", "OPERATIONS": "3000000" }
     }
   }
 }

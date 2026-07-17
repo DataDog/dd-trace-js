@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
-const sinon = require('sinon')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
+const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -56,6 +57,12 @@ describe('Plugin', () => {
       let v1
       let gax
 
+      // pubsub 2.x bundles its own @grpc/grpc-js, so the internal v1 client rejects credentials minted by the
+      // test-pinned google-gax ("Channel credentials must be a ChannelCredentials object"). 1.x and 3.x+
+      // stay compatible, so gate only the low-level v1 tests on 2.x; the public-API tests still cover that major.
+      const pkgVersion = require(`../../../versions/@google-cloud/pubsub@${version}`).version()
+      const itInternalApi = semver.satisfies(pkgVersion, '2.x') ? it.skip : it
+
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
@@ -63,7 +70,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          gax = require('../../../versions/google-gax@3.5.7').get()
+          gax = require('../../../versions/google-gax@5.0.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
@@ -92,7 +99,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should be instrumented when using the internal API', async () => {
+          itInternalApi('should be instrumented when using the internal API', async () => {
             const publisher = new v1.PublisherClient({
               grpc: gax.grpc,
               projectId: project,
@@ -117,7 +124,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should be instrumented w/ error', async () => {
+          itInternalApi('should be instrumented w/ error', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.controlPlane.opName,
               service: expectedSchema.controlPlane.serviceName,
@@ -472,9 +479,7 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           it('on produce', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
-
-            agent.expectPipelineStats(dsmStats => {
+            const statsPromise = agent.expectPipelineStats(dsmStats => {
               let statsPointsReceived = 0
               // we should have 1 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
@@ -485,26 +490,30 @@ describe('Plugin', () => {
                 }
               })
               assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64LE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
+
+            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
+            await statsPromise
           })
 
           it('on consume', async () => {
+            const statsPromise = agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64LE(0).toString()), true)
+            }, { timeoutMs: TIMEOUT })
+
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
-            await consume(async () => {
-              agent.expectPipelineStats(dsmStats => {
-                let statsPointsReceived = 0
-                dsmStats.forEach((timeStatsBucket) => {
-                  if (timeStatsBucket && timeStatsBucket.Stats) {
-                    timeStatsBucket.Stats.forEach((statsBuckets) => {
-                      statsPointsReceived += statsBuckets.Stats.length
-                    })
-                  }
-                })
-                assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
-                assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
-              }, { timeoutMs: TIMEOUT })
-            })
+            consume(() => {})
+            await statsPromise
           })
         })
 

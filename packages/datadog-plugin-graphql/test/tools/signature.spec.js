@@ -224,7 +224,7 @@ describe('graphql signature fallback', () => {
     }
 
     extractErrorIntoSpanEvent({
-      DD_TRACE_GRAPHQL_ERROR_EXTENSIONS: ['code', 'retryable', 'detail', 'missing'],
+      errorExtensions: ['code', 'retryable', 'detail', 'missing'],
     }, span, error)
 
     const [name, attributes] = span.addEvent.firstCall.args

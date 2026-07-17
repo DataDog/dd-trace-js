@@ -10,13 +10,21 @@ const nock = require('nock')
 
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
-const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
+const AgentProxyCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agent-proxy')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
+
+// The real tracer Config always carries a `testOptimization` namespace object.
+// Default it here so the partial config stand-ins below mirror that guarantee.
+class AgentProxyCiVisibilityExporter extends AgentProxyCiVisibilityExporterBase {
+  constructor (config) {
+    super({ testOptimization: {}, ...config })
+  }
+}
 
 describe('AgentProxyCiVisibilityExporter', () => {
   beforeEach(() => {
@@ -140,7 +148,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
           url,
           tags,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
         assert.ok(agentProxyCiVisibilityExporter._logsWriter instanceof DynamicInstrumentationLogsWriter)
@@ -154,7 +162,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
           url,
           tags,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
         agentProxyCiVisibilityExporter._logsWriter = mockWriter
@@ -223,7 +231,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
           url,
           tags,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
         assert.strictEqual(agentProxyCiVisibilityExporter._logsWriter, undefined)
@@ -237,7 +245,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
           url,
           tags,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
         agentProxyCiVisibilityExporter._logsWriter = mockWriter

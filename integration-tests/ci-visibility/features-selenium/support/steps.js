@@ -4,21 +4,29 @@ const assert = require('assert')
 
 const { When, Then, Before, After } = require('@cucumber/cucumber')
 const { By, Builder } = require('selenium-webdriver')
-const chrome = require('selenium-webdriver/chrome')
+const { cleanChromeOptions, createChromeOptions } = require('../../selenium-options')
 let driver
+let userDataDir
 let title
 let helloWorldText
 
-const options = new chrome.Options()
-options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage')
-
 Before(async function () {
-  const build = new Builder().forBrowser('chrome').setChromeOptions(options)
+  const chromeOptions = createChromeOptions()
+  userDataDir = chromeOptions.userDataDir
+  const build = new Builder().forBrowser('chrome').setChromeOptions(chromeOptions.options)
   driver = await build.build()
 })
 
 After(async function () {
-  await driver.quit()
+  try {
+    if (driver !== undefined) {
+      await driver.quit()
+    }
+  } finally {
+    cleanChromeOptions(userDataDir)
+    driver = undefined
+    userDataDir = undefined
+  }
 })
 
 Then('I should have run selenium', async function () {

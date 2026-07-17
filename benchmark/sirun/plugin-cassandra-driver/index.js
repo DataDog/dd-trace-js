@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const CassandraDriverPlugin = require('../../../packages/datadog-plugin-cassandra-driver/src/index')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 3_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced cassandra query walks `bindStart`: combine a batch of statements
 // into one resource string (or trim a single long one), then assemble the meta
@@ -74,7 +74,7 @@ if (VARIANT === 'long-query') {
 }
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   plugin.bindStart(ctxs[i % len])
 }
 guard.done()

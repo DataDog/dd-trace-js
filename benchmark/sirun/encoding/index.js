@@ -10,7 +10,7 @@ const {
 } = process.env
 
 const WIDE_TAGS = Number(process.env.WIDE_TAGS) || 0
-const ENCODE_COUNT = Number(process.env.ENCODE_COUNT) || 5000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const { AgentEncoder } = require(`../../../packages/dd-trace/src/encode/${ENCODER_VERSION}`)
 const { buildTrace, tickTrace, attachFreshEvents } = require('./trace-fixture')
@@ -43,12 +43,12 @@ encoder._reset()
 
 guard.loopStart()
 if (WITH_SPAN_EVENTS === 'none') {
-  for (let iteration = 0; iteration < ENCODE_COUNT; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     tickTrace(trace, iteration)
     encoder.encode(trace)
   }
 } else {
-  for (let iteration = 0; iteration < ENCODE_COUNT; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     tickTrace(trace, iteration)
     attachFreshEvents(trace, iteration)
     encoder.encode(trace)

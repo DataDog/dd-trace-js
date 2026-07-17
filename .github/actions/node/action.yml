@@ -18,7 +18,8 @@ runs:
     - if: steps.attempt.outcome == 'failure'
       shell: bash
       run: sleep 60
-    - if: steps.attempt.outcome == 'failure'
+    - id: retry
+      if: steps.attempt.outcome == 'failure'
       uses: ./.github/actions/node/setup
       with:
         version: ${{ inputs.version }}

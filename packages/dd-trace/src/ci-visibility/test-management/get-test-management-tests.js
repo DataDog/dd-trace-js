@@ -16,6 +16,7 @@ const {
 } = require('../telemetry')
 
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateTestManagementTestsResponse } = require('../test-optimization-http-cache-schema')
 
 // Calculate the number of tests from the test management tests response, which has a shape like:
 // { module: { suites: { suite: { tests: { testName: { properties: {...} } } } } } }
@@ -37,6 +38,19 @@ function getNumFromTestManagementTests (testManagementTests) {
   }
 
   return totalNumTests
+}
+
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseTestManagementTestsResponse (rawJson, options = {}) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateTestManagementTestsResponse(parsedResponse)
+  }
+  const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
+  return testManagementTests
 }
 
 function getTestManagementTests ({
@@ -121,12 +135,12 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const { apiKey } = getConfig()
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }
 
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const data = JSON.stringify({
@@ -155,7 +169,7 @@ function fetchFromApi ({
       done(err)
     } else {
       try {
-        const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
+        const testManagementTests = parseTestManagementTestsResponse(res)
 
         const numTests = getNumFromTestManagementTests(testManagementTests)
 
@@ -174,4 +188,8 @@ function fetchFromApi ({
   })
 }
 
-module.exports = { getTestManagementTests }
+module.exports = {
+  getNumFromTestManagementTests, // Exported for later use in the cache
+  getTestManagementTests,
+  parseTestManagementTestsResponse,
+}

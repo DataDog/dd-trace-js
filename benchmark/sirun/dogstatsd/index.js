@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const { DogStatsDClient, MetricsAggregationClient } = require('../../../packages/dd-trace/src/dogstatsd')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 5_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every metric the tracer emits (runtime metrics, custom metrics) runs through
 // DogStatsDClient._add: build the `stat:value|type` line, splice the global and
@@ -48,7 +48,7 @@ if (VARIANT === 'aggregated') {
   // The runtime-metrics path: accumulate into the tag tree, then flush walks the
   // tree and formats every node through the client. Stubbed socket on flush.
   const agg = new MetricsAggregationClient(client)
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     agg.count(NAME, 1, FEW_TAGS)
     agg.gauge('runtime.node.mem.heap_used', i, FEW_TAGS)
     if ((i & 0x3FF) === 0) agg.flush()
@@ -57,7 +57,7 @@ if (VARIANT === 'aggregated') {
 } else {
   const tags = VARIANT === 'no-tags' ? undefined : (VARIANT === 'many-tags' ? MANY_TAGS : FEW_TAGS)
   const type = VARIANT === 'no-tags' ? 'c' : 'g'
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     client._add(NAME, i, type, tags)
     // Drain the datagram queue without sending so memory stays flat.
     if ((i & 0x7FF) === 0) client._queue.length = 0

@@ -35,7 +35,7 @@ function callViaPromise (client, method, params) {
 function withAwsSdkV2Versions (range, cb) {
   if (typeof range === 'function') {
     cb = range
-    range = undefined
+    range = '*'
   }
 
   withVersions('aws-sdk', ['aws-sdk'], range, cb)
@@ -49,7 +49,7 @@ function withAwsSdkV2Versions (range, cb) {
 function withAwsSdkV3Versions (range, cb) {
   if (typeof range === 'function') {
     cb = range
-    range = undefined
+    range = '*'
   }
 
   withVersions('aws-sdk', ['@aws-sdk/smithy-client'], getAwsSdkV3Range(range), cb)
@@ -63,7 +63,7 @@ function withAwsSdkV3Versions (range, cb) {
 function withAwsSdkVersions (range, cb) {
   if (typeof range === 'function') {
     cb = range
-    range = undefined
+    range = '*'
   }
 
   withAwsSdkV2Versions(range, cb)
@@ -71,11 +71,11 @@ function withAwsSdkVersions (range, cb) {
 }
 
 /**
- * @param {string|undefined} range
+ * @param {string} range
  * @returns {string}
  */
 function getAwsSdkV3Range (range) {
-  return range === undefined ? AWS_SDK_V3_RANGE : `${range} ${AWS_SDK_V3_RANGE}`
+  return range === '*' ? AWS_SDK_V3_RANGE : `${range} ${AWS_SDK_V3_RANGE}`
 }
 
 const helpers = {

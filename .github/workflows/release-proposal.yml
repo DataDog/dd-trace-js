@@ -10,11 +10,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      RELEASE_LINES: 5 6
+    outputs:
+      release-lines: ${{ steps.check.outputs.release-lines }}
+    steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal
+      - id: check
+        run: |
+          lines=()
+          for line in $RELEASE_LINES; do
+            if git ls-remote --heads \
+              "https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/DataDog/dd-trace-js.git" \
+              "refs/heads/v${line}.x" | grep -q .; then
+              lines+=("\"${line}\"")
+            fi
+          done
+          echo "release-lines=[$(IFS=,; echo "${lines[*]}")]" >> "$GITHUB_OUTPUT"
+
   create-proposal:
+    needs: check-branches
+    if: needs.check-branches.outputs.release-lines != '[]'
     strategy:
       fail-fast: false
       matrix:
-        release-line: ["5"]
+        release-line: ${{ fromJSON(needs.check-branches.outputs.release-lines) }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -38,7 +66,7 @@ jobs:
         run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
@@ -61,7 +89,7 @@ jobs:
                     GitHub's rebase limit is 100 — once reached, commits that don't fit
                     will be deferred to a subsequent release.
                     Consider cutting this release soon.
-      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&

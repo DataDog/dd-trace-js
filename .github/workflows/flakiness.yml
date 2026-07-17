@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       days:
-        description: 'Number of days to look back'
-        default: '1'
+        description: "Number of days to look back"
+        default: "1"
         type: string
       branch:
-        description: 'Branch to filter (leave empty for all branches)'
+        description: "Branch to filter (leave empty for all branches)"
         type: string
       occurrences:
-        description: 'Minimum number of occurrences to consider a test flaky'
-        default: '1'
+        description: "Minimum number of occurrences to consider a test flaky"
+        default: "1"
         type: string
   schedule:
     - cron: "0 6 * * 1"
@@ -22,12 +22,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      id-token: write
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH: ${{ inputs.branch }}
       DAYS: ${{ inputs.days || '7' }}
       OCCURRENCES: ${{ inputs.occurrences || '2' }}
     steps:
+      - name: Get GitHub Token via dd-octo-sts
+        id: generate-token
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        with:
+          scope: DataDog/dd-trace-js
+          policy: self.flakiness
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           sparse-checkout-cone-mode: false
@@ -41,10 +47,12 @@ jobs:
           version: active
       - run: yarn install --frozen-lockfile --ignore-scripts
       - run: node scripts/flakiness.mjs
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
       - run: cat flakiness.md >> $GITHUB_STEP_SUMMARY
       - id: slack
         run: echo "report=$(cat flakiness.txt)" >> $GITHUB_OUTPUT
-      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
         if: github.event_name == 'schedule'
         with:
           method: chat.postMessage

@@ -7,6 +7,8 @@ const sinon = require('sinon')
 
 require('../setup/core')
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
+const v0 = require('../../src/service-naming/schemas/v0')
+const v1 = require('../../src/service-naming/schemas/v1')
 
 describe('Service naming', () => {
   let singleton
@@ -91,6 +93,66 @@ describe('Service naming', () => {
         sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.serviceName, opts)
         sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.serviceSource, opts)
         assert.deepStrictEqual(result, { name: 'kafka-service', source: 'kafka' })
+      })
+    })
+  })
+
+  describe('AWS service resolution', () => {
+    const awsName = (schema, pluginConfig, params) =>
+      schema.getServiceName('web', 'client', 'aws', {
+        tracerService: 'test',
+        awsService: 's3',
+        pluginConfig,
+        params,
+      })
+
+    describe('v0', () => {
+      it('appends the aws service to the default name', () => {
+        assert.deepStrictEqual(awsName(v0, {}, {}), { name: 'test-aws-s3', source: 's3' })
+      })
+
+      it('lets a string service override every span', () => {
+        assert.deepStrictEqual(awsName(v0, { service: 'custom' }, {}), { name: 'custom', source: 'opt.plugin' })
+      })
+
+      it('derives the name from a function service', () => {
+        const service = params => (params.Bucket ? `s3-${params.Bucket}` : undefined)
+        assert.deepStrictEqual(
+          awsName(v0, { service }, { Bucket: 'b' }),
+          { name: 's3-b', source: 'opt.plugin' }
+        )
+      })
+
+      it('falls back to the default name on a nullish or non-string function result', () => {
+        const nullish = awsName(v0, { service: () => undefined }, {})
+        const nonString = awsName(v0, { service: () => 42 }, {})
+        assert.strictEqual(nullish.name, 'test-aws-s3')
+        assert.strictEqual(nonString.name, 'test-aws-s3')
+      })
+    })
+
+    describe('v1', () => {
+      it('uses the tracer service as the default name', () => {
+        assert.deepStrictEqual(awsName(v1, {}, {}), { name: 'test', source: undefined })
+      })
+
+      it('lets a string service override every span', () => {
+        assert.deepStrictEqual(awsName(v1, { service: 'custom' }, {}), { name: 'custom', source: 'opt.plugin' })
+      })
+
+      it('derives the name from a function service', () => {
+        const service = params => (params.Bucket ? `s3-${params.Bucket}` : undefined)
+        assert.deepStrictEqual(
+          awsName(v1, { service }, { Bucket: 'b' }),
+          { name: 's3-b', source: 'opt.plugin' }
+        )
+      })
+
+      it('falls back to the tracer service on a nullish or non-string function result', () => {
+        const nullish = awsName(v1, { service: () => undefined }, {})
+        const nonString = awsName(v1, { service: () => 42 }, {})
+        assert.strictEqual(nullish.name, 'test')
+        assert.strictEqual(nonString.name, 'test')
       })
     })
   })

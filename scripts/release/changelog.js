@@ -13,7 +13,22 @@ const CONVENTIONAL_PATTERN = new RegExp(
     String.raw`(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(?:\(([^)]+)\))?(!)?: (.+)$`
 )
 const PULL_REQUEST_PATTERN = /\s+\(#([0-9]+)\)$/
-const INTERNAL_TYPES = new Set(['bench', 'build', 'chore', 'ci', 'refactor', 'style', 'test'])
+const REFERENCE_PATTERN = /#([0-9]+)/g
+const GITHUB_URL = 'https://github.com'
+const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
+const UNCATEGORIZED_PRODUCT = 'Other'
+const DEPENDENCY_PRODUCT = 'Dependencies'
+// Dependabot tags the commit scope `deps-dev` for development dependencies and
+// `deps` for production ones, but the `deps` manifests under test/benchmark/docs
+// directories are not shipped. The shipped manifests are the repo root and the
+// bundled `/vendor` tree; only those (and the matching production groups from
+// `.github/dependabot.yml`) reach customers. Keep this set in sync with the
+// `dependency-type: "production"` groups there.
+const PRODUCTION_DEPENDENCY_GROUPS = new Set([
+  'runtime-minor-and-patch-dependencies',
+  'vendor-minor-and-patch-dependencies',
+  'security-production',
+])
 
 const CATEGORY_BY_TYPE = {
   docs: 'Documentation',
@@ -120,25 +135,39 @@ for (const [product, scopes] of PRODUCTS) {
  * @property {string} category
  * @property {string} product
  * @property {string} subject
- * @property {string} pr
- * @property {boolean} internal
+ * @property {string} pr Bare pull request number, e.g. `8012`, or `''` when absent.
  * @property {boolean} revert
+ * @property {boolean} [drop] Set when the entry is intentionally omitted from the changelog.
  * @property {string} [warning]
  */
 
 /**
  * @param {CommitEntry[]} entries
+ * @param {CommitEntry[]} [breakingEntries]
  * @returns {ReleaseChangelog}
  */
-function createReleaseChangelog (entries) {
+function createReleaseChangelog (entries, breakingEntries = []) {
   const sections = new Map()
+  const breakingChanges = []
+  const breakingPullRequests = new Set()
   const contributors = new Set()
   const warnings = []
   let isMinor = false
 
+  for (const entry of breakingEntries) {
+    const change = parseChange(entry, { dropOtherDependencies: false })
+
+    if (change.warning) warnings.push(change.warning)
+    if (entry.author) contributors.add(entry.author)
+    if (change.pr) breakingPullRequests.add(change.pr)
+    breakingChanges.push(change)
+  }
+
   for (const entry of entries) {
     const change = parseChange(entry)
 
+    if (change.drop) continue
+    if (change.pr && breakingPullRequests.has(change.pr)) continue
     if (change.warning) warnings.push(change.warning)
     if (change.category === 'Features' && !change.revert) isMinor = true
     if (entry.author) contributors.add(entry.author)
@@ -152,7 +181,7 @@ function createReleaseChangelog (entries) {
   }
 
   return {
-    markdown: renderMarkdown(sections, contributors),
+    markdown: renderMarkdown(sections, contributors, breakingChanges),
     isMinor,
     warnings,
   }
@@ -160,36 +189,59 @@ function createReleaseChangelog (entries) {
 
 /**
  * @param {CommitEntry} entry
+ * @param {{ dropOtherDependencies?: boolean }} [options]
  * @returns {Change}
  */
-function parseChange (entry) {
+function parseChange (entry, options = {}) {
   const subjectWithPullRequest = parsePullRequest(entry.subject)
   const parsed = parseConventionalSubject(subjectWithPullRequest.subject)
 
   if (!parsed) {
     return {
       category: INTERNAL_CATEGORY,
-      product: 'Other',
+      product: UNCATEGORIZED_PRODUCT,
       subject: subjectWithPullRequest.subject,
       pr: subjectWithPullRequest.pr,
-      internal: true,
       revert: false,
       warning: `Non-conventional release-note subject for ${entry.sha}: ${entry.subject}`,
     }
   }
 
-  const category = CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY
-  const internal = INTERNAL_TYPES.has(parsed.type)
-  const product = selectProduct(parsed.scopes)
+  const dependency = classifyDependencyBump(parsed.scopes, parsed.subject)
+  if (dependency === 'other' && options.dropOtherDependencies !== false) {
+    return { drop: true }
+  }
 
   return {
-    category,
-    product,
+    category: CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY,
+    product: dependency ? DEPENDENCY_PRODUCT : selectProduct(parsed.scopes),
     subject: parsed.subject,
     pr: subjectWithPullRequest.pr,
-    internal,
     revert: parsed.isRevert,
   }
+}
+
+/**
+ * Classify a Dependabot dependency bump as shipped (`production`) or not
+ * (`other`, dropped from the changelog), or `undefined` when the commit is not
+ * a dependency bump at all. Development dependencies and the instrumented-library
+ * support ranges under test/benchmark/docs directories never reach customers.
+ *
+ * @param {string[]} scopes
+ * @param {string} subject
+ * @returns {'production'|'other'|undefined}
+ */
+function classifyDependencyBump (scopes, subject) {
+  if (!scopes.includes('deps') && !scopes.includes('deps-dev')) return
+  if (scopes.includes('deps-dev')) return 'other'
+
+  const directory = subject.match(/\bin (\/\S+)/)
+  if (directory && directory[1] !== '/vendor') return 'other'
+
+  const group = subject.match(/\bthe (\S+) group\b/)
+  if (group && !PRODUCTION_DEPENDENCY_GROUPS.has(group[1])) return 'other'
+
+  return 'production'
 }
 
 /**
@@ -203,7 +255,7 @@ function parsePullRequest (subject) {
 
   return {
     subject: subject.slice(0, match.index),
-    pr: `#${match[1]}`,
+    pr: match[1],
   }
 }
 
@@ -283,9 +335,18 @@ function sentenceCase (subject) {
 /**
  * @param {Map<string, Change[]>} sections
  * @param {Set<string>} contributors
+ * @param {Change[]} breakingChanges
  */
-function renderMarkdown (sections, contributors) {
+function renderMarkdown (sections, contributors, breakingChanges) {
   const lines = []
+
+  if (breakingChanges.length > 0) {
+    lines.push('### Breaking Changes')
+    for (const change of breakingChanges.sort(compareChanges)) {
+      lines.push(renderChange(change))
+    }
+    lines.push('')
+  }
 
   for (const category of CATEGORY_ORDER) {
     const changes = sections.get(category)
@@ -299,11 +360,8 @@ function renderMarkdown (sections, contributors) {
   }
 
   if (contributors.size > 0) {
-    lines.push('<b>Contributors</b>')
-    for (const contributor of [...contributors].sort(compareContributors)) {
-      lines.push(`- ${contributor}`)
-    }
-    lines.push('')
+    const badges = [...contributors].sort(compareContributors).map(renderContributor)
+    lines.push('### Contributors', '', badges.join(' '), '')
   }
 
   return lines.join('\n')
@@ -314,24 +372,21 @@ function renderMarkdown (sections, contributors) {
  */
 function renderHeading (category) {
   if (category === INTERNAL_CATEGORY) {
-    return `<b>${category}</b> (CI, Testing, Benchmarking)`
+    return `### ${category} (CI, Testing, Benchmarking)`
   }
 
-  return `<b>${category}</b>`
+  return `### ${category}`
 }
 
 /**
- * Groups same-product entries together; the internal section carries no product,
- * so it falls through to a plain subject sort.
+ * Groups same-product entries together, then orders by subject within a product.
  *
  * @param {Change} a
  * @param {Change} b
  */
 function compareChanges (a, b) {
-  if (!a.internal) {
-    const byProduct = a.product.toLowerCase().localeCompare(b.product.toLowerCase())
-    if (byProduct !== 0) return byProduct
-  }
+  const byProduct = a.product.toLowerCase().localeCompare(b.product.toLowerCase())
+  if (byProduct !== 0) return byProduct
 
   return a.subject.toLowerCase().localeCompare(b.subject.toLowerCase())
 }
@@ -345,15 +400,48 @@ function compareContributors (a, b) {
 }
 
 /**
+ * Renders a GitHub avatar that links to the contributor's profile. Display
+ * strings that are not a `@handle` (a plain git author name) have no profile to
+ * link, so they render verbatim.
+ *
+ * @param {string} contributor
+ */
+function renderContributor (contributor) {
+  if (!contributor.startsWith('@')) return contributor
+
+  const login = contributor.slice(1)
+  return `[<img src="${GITHUB_URL}/${login}.png?size=48" width="24" height="24" ` +
+    `alt="${contributor}" title="${contributor}" />](${GITHUB_URL}/${login})`
+}
+
+/**
  * @param {Change} change
  */
 function renderChange (change) {
-  const suffix = change.pr ? ` ${change.pr}` : ''
-  if (change.internal) {
-    return `- ${change.subject}${suffix}`
+  const subject = linkifyReferences(change.subject)
+  const suffix = change.pr ? ` ${renderPullRequest(change.pr)}` : ''
+  if (change.product === UNCATEGORIZED_PRODUCT) {
+    return `- ${subject}${suffix}`
   }
 
-  return `- <b>${change.product}</b> ${change.subject}${suffix}`
+  return `- **${change.product}:** ${subject}${suffix}`
+}
+
+/**
+ * Wraps inline `#1234` references in an explicit link so GitHub renders them as
+ * plain links instead of expanding each one into a pull request preview.
+ *
+ * @param {string} text
+ */
+function linkifyReferences (text) {
+  return text.replaceAll(REFERENCE_PATTERN, (_, number) => renderPullRequest(number))
+}
+
+/**
+ * @param {string} number Bare pull request number.
+ */
+function renderPullRequest (number) {
+  return `[#${number}](${REPO_URL}/pull/${number})`
 }
 
 module.exports = {

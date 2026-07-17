@@ -28,18 +28,82 @@ const {
   getStackFromCallFrames,
 } = require('../../../debugger/devtools_client/state')
 const log = require('../../../log')
-const processTags = require('../../../process-tags')
+
+let processTags
+if (config.propagateProcessTags?.enabled) {
+  processTags = require('../../../process-tags')
+  processTags.initialize()
+}
 
 let sessionStarted = false
+let inFlightBreakpointHits = 0
+let isBreakpointHitDrainScheduled = false
 
 const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
+const breakpointHitDrainRequests = []
 
 const limits = {
   maxReferenceDepth: DEFAULT_MAX_REFERENCE_DEPTH,
   maxCollectionSize: DEFAULT_MAX_COLLECTION_SIZE,
   maxFieldCount: DEFAULT_MAX_FIELD_COUNT,
   maxLength: DEFAULT_MAX_LENGTH,
+}
+
+/**
+ * @param {object} value - Snapshot object or sub-object.
+ * @returns {boolean}
+ */
+function isCapturedValue (value) {
+  return typeof value.type === 'string'
+}
+
+/**
+ * Remove empty capture containers before sending snapshots through the Test Optimization logs path.
+ *
+ * @param {object} value - Snapshot object or sub-object.
+ * @returns {void}
+ */
+function removeEmptyCaptureProperties (value) {
+  const stack = [value]
+
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (item && typeof item === 'object') {
+          stack.push(item)
+        }
+      }
+      continue
+    }
+
+    if (isCapturedValue(current)) {
+      if (current.elements === null || (Array.isArray(current.elements) && current.elements.length === 0)) {
+        delete current.elements
+      }
+
+      if (current.entries === null || (Array.isArray(current.entries) && current.entries.length === 0)) {
+        delete current.entries
+      }
+
+      if (current.fields === null || (
+        current.fields &&
+        typeof current.fields === 'object' &&
+        Object.keys(current.fields).length === 0
+      )) {
+        delete current.fields
+      }
+    }
+
+    for (const child of Object.values(current)) {
+      if (child && typeof child === 'object') {
+        stack.push(child)
+      }
+    }
+  }
 }
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
@@ -49,32 +113,47 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = await getStackFromCallFrames(callFrames)
+  inFlightBreakpointHits++
+  try {
+    const stack = await getStackFromCallFrames(callFrames)
 
-  const { processLocalState } = await getLocalStateForCallFrame(callFrames[0], limits)
+    const { processLocalState } = await getLocalStateForCallFrame(callFrames[0], limits)
 
-  await session.post('Debugger.resume')
+    await session.post('Debugger.resume')
 
-  const snapshot = {
-    id: randomUUID(),
-    timestamp: Date.now(),
-    probe: {
-      id: probe.id,
-      version: '0',
-      location: probe.location,
-    },
-    captures: {
-      lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
-    },
-    stack,
-    language: 'javascript',
+    const snapshot = {
+      id: randomUUID(),
+      timestamp: Date.now(),
+      probe: {
+        id: probe.id,
+        version: 0,
+        location: probe.location,
+      },
+      captures: {
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
+      },
+      stack,
+      language: 'javascript',
+    }
+
+    removeEmptyCaptureProperties(snapshot.captures)
+
+    if (processTags) {
+      snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
+    }
+
+    breakpointHitChannel.postMessage({ snapshot })
+  } finally {
+    inFlightBreakpointHits--
+    scheduleBreakpointHitDrain()
   }
+})
 
-  if (config.propagateProcessTags?.enabled) {
-    snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
-  }
+breakpointHitChannel.on('message', ({ drainRequestId }) => {
+  if (!drainRequestId) return
 
-  breakpointHitChannel.postMessage({ snapshot })
+  breakpointHitDrainRequests.push(drainRequestId)
+  scheduleBreakpointHitDrain()
 })
 
 breakpointRemoveChannel.on('message', async (probeId) => {
@@ -153,4 +232,23 @@ async function addBreakpoint (probe) {
 function start () {
   sessionStarted = true
   return session.post('Debugger.enable') // return instead of await to reduce number of promises created
+}
+
+function drainBreakpointHitRequests () {
+  if (inFlightBreakpointHits !== 0) return
+
+  for (const drainRequestId of breakpointHitDrainRequests) {
+    breakpointHitChannel.postMessage({ drainRequestId })
+  }
+  breakpointHitDrainRequests.length = 0
+}
+
+function scheduleBreakpointHitDrain () {
+  if (isBreakpointHitDrainScheduled) return
+
+  isBreakpointHitDrainScheduled = true
+  setImmediate(() => {
+    isBreakpointHitDrainScheduled = false
+    drainBreakpointHitRequests()
+  })
 }
