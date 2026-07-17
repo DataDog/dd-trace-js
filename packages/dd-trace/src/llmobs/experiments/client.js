@@ -1,11 +1,7 @@
 'use strict'
 
-// Spike: control-plane HTTP client for LLM Obs Experiments.
-//
-// Uses the global `fetch` (same approach as src/aiguard/client.js) so the
-// experiments module adds no new dependency to dd-trace. Credentials and site
-// come from the tracer config (DD_API_KEY / DD_APP_KEY / site), so customers
-// configure nothing beyond what the tracer already needs.
+// Control-plane HTTP client for LLM Obs Experiments. Uses the global `fetch`,
+// so this module adds no new dependency; credentials and site come from config.
 
 const API_BASE_PATH = '/api/v2/llm-obs/v1'
 

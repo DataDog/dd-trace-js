@@ -5,9 +5,8 @@ const id = require('../../id')
 const { API_BASE_PATH } = require('./client')
 const { Row, ExperimentResult } = require('./result')
 
-// Mirrors dd-trace-py's _generate_metric_from_evaluation classification: dicts
-// (plain objects) are json, everything else non-primitive (including arrays)
-// falls through to the lowercased categorical fallback.
+// Mirrors dd-trace-py's _generate_metric_from_evaluation: plain objects are
+// json, everything else falls through to the lowercased categorical fallback.
 function inferMetricType (value) {
   if (typeof value === 'boolean') return 'boolean'
   if (typeof value === 'number' && Number.isFinite(value)) return 'score'
@@ -90,8 +89,8 @@ function toMetric (label, value, errorMessage, spanId, timestampMs, experimentId
   return metric
 }
 
-// Builder + run() orchestration. v0.1 runs sequentially, emits one root span per
-// dataset row, and posts all spans + metrics in a single events call.
+// Builder + run() orchestration: runs rows sequentially, emits one root span
+// per dataset row, and posts all spans + metrics in a single events call.
 class Experiment {
   #client
   #name
@@ -189,7 +188,7 @@ class Experiment {
         let errorType = null
         let errorMessage = null
         try {
-          // Sequential by design (v0.1): rows run one at a time.
+          // Rows run one at a time by design.
           // eslint-disable-next-line no-await-in-loop
           output = await this.#task(record.input, this.#config)
         } catch (err) {
@@ -246,8 +245,7 @@ class Experiment {
       }
 
       await this.#postEvents(experimentId, spans, metrics)
-      // A row's task/evaluator error is isolated (doesn't abort the run), but it
-      // still means the experiment overall did not succeed cleanly.
+      // A row error doesn't abort the run, but the experiment didn't succeed cleanly.
       await this.#updateStatus(
         experimentId,
         hasRowError ? 'failed' : 'completed',
@@ -262,7 +260,6 @@ class Experiment {
   }
 
   async #postEvents (experimentId, spans, metrics) {
-    // W2: the events POST uses type "experiments".
     await this.#client.request('POST', `${API_BASE_PATH}/experiments/${experimentId}/events`, {
       data: { type: 'experiments', attributes: { spans, metrics } },
     })

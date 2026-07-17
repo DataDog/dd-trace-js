@@ -117,7 +117,6 @@ class Dataset {
       return out
     })
 
-    // W1: the records POST must send type "datasets".
     let response
     try {
       response = await this.#client.request(

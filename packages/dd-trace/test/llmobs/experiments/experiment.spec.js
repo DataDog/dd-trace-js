@@ -92,7 +92,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(dataset.url(), 'https://app.datadoghq.com/llm/datasets/ds')
   })
 
-  it('sends records with type "datasets" (W1) and only new records on re-push', async () => {
+  it('sends records with type "datasets" and only new records on re-push', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('a')
     await dataset.push()
     dataset.addRecord('b')
@@ -143,7 +143,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(dataset.recordIds().length, 2)
   })
 
-  it('posts events with type "experiments" (W2), one span per row, auto tags and raw metadata', async () => {
+  it('posts events with type "experiments", one span per row, auto tags and raw metadata', async () => {
     const dataset = new Dataset(client, 'demo').addRecord({ q: 'apple' }, 'true', { row: 0 })
     await new Experiment(client, {
       name: 'exp-demo',
