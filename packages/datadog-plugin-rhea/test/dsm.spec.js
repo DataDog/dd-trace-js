@@ -53,8 +53,10 @@ describe('Plugin', () => {
             const checkAssertions = () => {
               if (++doneCount < 2) return
 
+              const calls = setCheckpointSpy.getCalls()
+              setCheckpointSpy.restore()
+
               try {
-                const calls = setCheckpointSpy.getCalls()
                 const checkpoint = (dir, tag) => calls.find(c =>
                   c.args[0].includes(`direction:${dir}`) && c.args[0].includes(tag)
                 )
@@ -71,8 +73,6 @@ describe('Plugin', () => {
                 done()
               } catch (e) {
                 done(e)
-              } finally {
-                setCheckpointSpy.restore()
               }
             }
 
