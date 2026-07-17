@@ -42,6 +42,8 @@ class NoopTracer {
   setUser () {
     return this
   }
+
+  refreshMetadata (config) {}
 }
 
 module.exports = NoopTracer
