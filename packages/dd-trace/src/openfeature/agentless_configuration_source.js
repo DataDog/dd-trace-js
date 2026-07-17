@@ -2,6 +2,7 @@
 
 const net = require('node:net')
 const { storage } = require('../../../datadog-core')
+const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const log = require('../log')
 
 const legacyStorage = storage('legacy')
@@ -141,7 +142,10 @@ class AgentlessConfigurationSource {
    * @returns {void}
    */
   _request (callback) {
-    const headers = { 'Accept-Encoding': 'gzip' }
+    const headers = {
+      ...getClientLibraryHeaders(),
+      'Accept-Encoding': 'gzip',
+    }
     if (this._apiKey) headers['DD-API-KEY'] = this._apiKey
     if (this._etag) headers['If-None-Match'] = this._etag
 

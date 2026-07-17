@@ -5,6 +5,7 @@ const http = require('node:http')
 const path = require('node:path')
 const zlib = require('node:zlib')
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
+const { VERSION } = require('../../version')
 const { sandboxCwd, useSandbox, spawnProc, stopProc } = require('../helpers')
 
 const UFC = {
@@ -123,6 +124,8 @@ describe('OpenFeature agentless configuration integration', () => {
     )
     assert.strictEqual(observedRequests[0].headers['dd-api-key'], 'integration-api-key')
     assert.strictEqual(observedRequests[0].headers['accept-encoding'], 'gzip')
+    assert.strictEqual(observedRequests[0].headers['dd-client-library-language'], 'nodejs')
+    assert.strictEqual(observedRequests[0].headers['dd-client-library-version'], VERSION)
     assert.strictEqual(observedRequests[0].headers['dd-flagging-source-mode'], undefined)
     assert.strictEqual(observedRequests[1].headers['if-none-match'], '"agentless-integration"')
   })

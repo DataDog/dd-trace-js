@@ -5,6 +5,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { VERSION } = require('../../../../version')
 require('../setup/core')
 
 const VALID_UFC = JSON.stringify({
@@ -115,6 +116,8 @@ describe('AgentlessConfigurationSource', () => {
     assert.deepStrictEqual(second, { error: null, result: { notModified: true } })
     assert.strictEqual(requests[0].options.headers['DD-API-KEY'], 'test-api-key')
     assert.strictEqual(requests[0].options.headers['Accept-Encoding'], 'gzip')
+    assert.strictEqual(requests[0].options.headers['DD-Client-Library-Language'], 'nodejs')
+    assert.strictEqual(requests[0].options.headers['DD-Client-Library-Version'], VERSION)
     assert.strictEqual(requests[0].options.headers['If-None-Match'], undefined)
     assert.strictEqual(requests[1].options.headers['If-None-Match'], '"ufc-v1"')
     assert.strictEqual(requests[0].options.redirect, 'manual')
