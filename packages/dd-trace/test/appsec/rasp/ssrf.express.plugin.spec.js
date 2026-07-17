@@ -15,6 +15,8 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
+const UNRESOLVABLE_HOST = 'not-a-threat.invalid'
+
 describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
@@ -84,12 +86,12 @@ describe('RASP - ssrf', () => {
                 res.end('end')
               })
 
-              clientRequest.on('error', noop)
+              clientRequest.on('error', () => res.end('end'))
             }
 
             await Promise.all([
               checkRaspExecutedAndNotThreat(agent),
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
             ])
           })
 
@@ -152,7 +154,7 @@ describe('RASP - ssrf', () => {
             }
 
             await Promise.all([
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -200,13 +202,13 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              requestToTest.get(`https://${req.query.host}`).on('response', () => {
-                res.end('end')
-              })
+              requestToTest.get(`https://${req.query.host}`)
+                .on('response', () => res.end('end'))
+                .on('error', () => res.end('end'))
             }
 
             await Promise.all([
-              axios.get('/?host=www.datadoghq.com'),
+              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
