@@ -4937,8 +4937,8 @@ rules:
   })
 
   describe('refreshRuntimeId', () => {
-    const loadConfigModule = (idOverride = {}) => {
-      const kernelUUID = idOverride.kernelUUID || require('../../src/id').kernelUUID
+    const loadConfigModule = (overrides = {}) => {
+      const uuid = overrides.uuid || require('../../../../vendor/dist/crypto-randomuuid')
       const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
       const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
       const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
@@ -4960,7 +4960,7 @@ rules:
         './helper': configHelper,
         '../pkg': pkg,
         '../../../../version': { DD_MAJOR },
-        '../id': { kernelUUID },
+        '../../../../vendor/dist/crypto-randomuuid': uuid,
       })
     }
 
@@ -4989,10 +4989,12 @@ rules:
       assert.notStrictEqual(config.tags['runtime-id'], originalId)
     })
 
-    it('should set config.tags[runtime-id] to the value returned by kernelUUID', () => {
+    it('should set config.tags[runtime-id] to the value returned by uuid', () => {
       const fixedUUID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
-      const kernelUUID = sinon.stub().returns(fixedUUID)
-      const configModule = loadConfigModule({ kernelUUID })
+      const uuid = sinon.stub()
+      uuid.onFirstCall().returns('initial-uuid')
+      uuid.onSecondCall().returns(fixedUUID)
+      const configModule = loadConfigModule({ uuid })
       const config = configModule()
 
       configModule.refreshRuntimeId(config)
@@ -5000,21 +5002,22 @@ rules:
       assert.strictEqual(config.tags['runtime-id'], fixedUUID)
     })
 
-    it('should call kernelUUID from id.js', () => {
-      const kernelUUID = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
-      const configModule = loadConfigModule({ kernelUUID })
+    it('should call uuid again to regenerate the runtime id', () => {
+      const uuid = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
+      const configModule = loadConfigModule({ uuid })
       const config = configModule()
 
       configModule.refreshRuntimeId(config)
 
-      sinon.assert.calledOnce(kernelUUID)
+      // once at module load for the initial runtimeId, once on refresh
+      sinon.assert.calledTwice(uuid)
     })
 
     it('should store new value that differs from original runtimeId', () => {
-      const kernelUUID = sinon.stub()
-      kernelUUID.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
-      kernelUUID.onSecondCall().returns('00000000-0000-4000-8000-000000000002')
-      const configModule = loadConfigModule({ kernelUUID })
+      const uuid = sinon.stub()
+      uuid.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
+      uuid.onSecondCall().returns('00000000-0000-4000-8000-000000000002')
+      const configModule = loadConfigModule({ uuid })
       const config = configModule()
 
       configModule.refreshRuntimeId(config)

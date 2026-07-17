@@ -855,14 +855,17 @@ describe('RemoteConfig', () => {
   })
 
   describe('refreshClientId', () => {
-    let kernelUUIDStub
+    let uuidStub
     let RemoteConfigWithId
 
     beforeEach(() => {
-      kernelUUIDStub = sinon.stub().returns('new-client-id-uuid')
+      uuidStub = sinon.stub()
+      // first call is the module-load-time `let clientId = uuid()`, second is the refresh
+      uuidStub.onFirstCall().returns('1234-5678')
+      uuidStub.onSecondCall().returns('new-client-id-uuid')
 
       RemoteConfigWithId = proxyquire('../../src/remote_config', {
-        '../../../../vendor/dist/crypto-randomuuid': uuid,
+        '../../../../vendor/dist/crypto-randomuuid': uuidStub,
         './scheduler': Scheduler,
         '../../../../package.json': { version: '3.0.0' },
         '../exporters/common/request': request,
@@ -872,7 +875,6 @@ describe('RemoteConfig', () => {
         '../service-naming/extra-services': {
           getExtraServices: () => extraServices,
         },
-        '../id': { kernelUUID: kernelUUIDStub },
       })
     })
 
@@ -892,7 +894,7 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
 
-    it('should set clientId to the value returned by kernelUUID', () => {
+    it('should set clientId to the value returned by uuid', () => {
       const rcConfig = {
         url: new URL('http://127.0.0.1:1337'),
         tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
@@ -937,10 +939,11 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
     })
 
-    it('should call kernelUUID to generate the new ID', () => {
+    it('should call uuid again to generate the new ID', () => {
       RemoteConfigWithId.refreshClientId(config)
 
-      sinon.assert.calledOnce(kernelUUIDStub)
+      // once at module load for the initial clientId, once on refresh
+      sinon.assert.calledTwice(uuidStub)
     })
   })
 })

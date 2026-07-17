@@ -743,13 +743,13 @@ function getConfig (options) {
 }
 
 /**
- * Regenerates the runtime ID from the kernel CSPRNG.
+ * Regenerates the runtime ID.
  *
  * Used for Lambda MicroVM `/run` lifecycle hooks, giving each clone a distinct runtime identity.
  *
  * @param {import('./config-base')} config
  */
 function refreshRuntimeId (config) {
-  runtimeId = require('../id').kernelUUID()
+  runtimeId = uuid()
   config.tags['runtime-id'] = runtimeId
 }
