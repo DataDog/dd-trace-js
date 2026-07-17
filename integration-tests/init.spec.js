@@ -278,9 +278,12 @@ describe('init.js', () => {
 // or on 18.0.0 in particular.
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
-    // Node 20.0.0 can leave short-lived loader-based children alive after they
-    // print the expected output, so terminate them after a short grace period.
-    setShouldKill(process.versions.node === '20.0.0')
+    // Node 20.0.0 and 22.0.0 can leave short-lived loader-based children alive after they
+    // print the expected output, so terminate them after a short grace period. Both are the
+    // first release of their major line to ship `module.register`'s off-thread hooks worker,
+    // which had known bugs around `process.exit()` not tearing down the hooks thread
+    // (e.g. nodejs/node#52706, #53097, #53182) that were fixed in later patch releases.
+    setShouldKill(['20.0.0', '22.0.0'].includes(process.versions.node))
     useSandbox()
     stubTracerIfNeeded()
 
