@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const http = require('node:http')
-const { execSync, spawn } = require('node:child_process')
+const { execFileSync, execSync, spawn } = require('node:child_process')
 const { once } = require('node:events')
 const { mkdirSync, writeFileSync, readdirSync, statSync, watch, watchFile, unwatchFile } = require('node:fs')
 const { rm } = require('node:fs/promises')
@@ -17,6 +17,7 @@ const { satisfies } = require('semver')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const { assertObjectContains, stopProc } = require('../../../integration-tests/helpers')
+const { BUN, BUN_CONFIG } = require('../../../integration-tests/helpers/bun')
 
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
@@ -324,12 +325,12 @@ describe('Plugin', function () {
 
         writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
 
-        // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
-        // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
+        // Install a standalone tree because copying node_modules from versions does not generate the server files.
+        const installArguments = [`--config=${BUN_CONFIG}`, 'install', '--linker=hoisted', '--trust']
         try {
-          execSync('yarn install', { cwd })
+          execFileSync(BUN, installArguments, { cwd })
         } catch { // retry in case of error from registry
-          execSync('yarn install', { cwd })
+          execFileSync(BUN, installArguments, { cwd })
         }
 
         // dd-trace is the package under test, not a published dependency of this app. Drop a tiny
@@ -352,7 +353,7 @@ describe('Plugin', function () {
         // next <12 needs OpenSSL's legacy provider for webpack's MD4 hashing on Node >=17; newer
         // next does not, and from 16 the flag is rejected in a build worker's NODE_OPTIONS.
         const legacyOpenssl = satisfies(realVersion, '<12') ? '--openssl-legacy-provider' : ''
-        execSync('yarn exec next build', {
+        execFileSync(BUN, ['run', 'next', 'build'], {
           cwd,
           env: {
             ...process.env,
@@ -377,7 +378,7 @@ describe('Plugin', function () {
           'package.json',
           'node_modules',
           '.next',
-          'yarn.lock',
+          'bun.lock',
         ]
         await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
