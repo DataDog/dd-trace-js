@@ -33,6 +33,7 @@ module.exports = {
   '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),
   '@elastic/transport': () => require('../elasticsearch'),
+  '@genkit-ai/core': { esmFirst: true, fn: () => require('../genkit') },
   '@google/genai': () => require('../google-genai'),
   '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
   '@google-cloud/vertexai': () => require('../google-cloud-vertexai'),
