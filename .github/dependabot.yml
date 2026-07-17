@@ -139,8 +139,8 @@ updates:
         patterns:
           - "*"
 
-  # npm-based composite action
-  - package-ecosystem: "npm"
+  # datadog-ci composite action
+  - package-ecosystem: "bun"
     directory: "/.github/actions/datadog-ci"
     schedule:
       interval: "weekly"
@@ -162,7 +162,7 @@ updates:
           - "*"
 
   # Vendored dependencies
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directories:
       - "/vendor"
     schedule:
