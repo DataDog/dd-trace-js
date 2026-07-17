@@ -14,6 +14,8 @@ const {
 describe('integrations', () => {
   let Client
   let McpServer
+  let Server
+  let ListToolsRequestSchema
   let InMemoryTransport
   let tool
   let loadMcpTools
@@ -42,6 +44,8 @@ describe('integrations', () => {
         const clientEntryPath = versionModule.getPath('@modelcontextprotocol/sdk/client')
         const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
         McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
+        Server = require(path.join(sdkDir, 'dist/cjs/server/index.js')).Server
+        ListToolsRequestSchema = require(path.join(sdkDir, 'dist/cjs/types.js')).ListToolsRequestSchema
 
         InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
         tool = require('../../../../../../versions/@langchain/core@1').get('@langchain/core/tools').tool
@@ -248,6 +252,65 @@ describe('integrations', () => {
           const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
           assert.equal(listToolsSpans.length, 2)
           assert.equal(llmobsSpans.length, 1)
+        })
+
+        it('captures tool inventories from separate clients in the same trace', async () => {
+          const otherServer = new McpServer({ name: 'other-server', version: '1.0.0' })
+          otherServer.registerTool(
+            'other-tool',
+            { description: 'A tool from another server', inputSchema: {} },
+            async () => ({ content: [{ type: 'text', text: 'Result from other-tool' }] })
+          )
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          const otherClient = new Client({ name: 'other-client', version: '1.0.0' })
+
+          try {
+            await otherServer.connect(serverTransport)
+            await otherClient.connect(clientTransport)
+            await tracer.trace('list-tools', () => Promise.all([client.listTools(), otherClient.listTools()]))
+
+            const { llmobsSpans } = await getEvents()
+            assert.equal(llmobsSpans.length, 2)
+          } finally {
+            await otherClient.close()
+            await otherServer.close()
+          }
+        })
+
+        it('captures every page of a paginated tool inventory', async () => {
+          const paginatedServer = new Server(
+            { name: 'paginated-server', version: '1.0.0' },
+            { capabilities: { tools: {} } }
+          )
+          paginatedServer.setRequestHandler(ListToolsRequestSchema, request => {
+            if (request.params?.cursor === 'page-2') {
+              return {
+                tools: [{ name: 'second-tool', description: 'Second page', inputSchema: { type: 'object' } }],
+              }
+            }
+
+            return {
+              tools: [{ name: 'first-tool', description: 'First page', inputSchema: { type: 'object' } }],
+              nextCursor: 'page-2',
+            }
+          })
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          const paginatedClient = new Client({ name: 'paginated-client', version: '1.0.0' })
+
+          try {
+            await paginatedServer.connect(serverTransport)
+            await paginatedClient.connect(clientTransport)
+            const tools = await tracer.trace('list-tools', () => loadMcpTools('paginated-server', paginatedClient))
+
+            assert.equal(tools.length, 2)
+            const { llmobsSpans } = await getEvents()
+            assert.equal(llmobsSpans.length, 2)
+            assert.ok(llmobsSpans.some(span => span.meta.output.value.includes('first-tool')))
+            assert.ok(llmobsSpans.some(span => span.meta.output.value.includes('second-tool')))
+          } finally {
+            await paginatedClient.close()
+            await paginatedServer.close()
+          }
         })
 
         it('captures the tool inventory after a dropped event in the same trace', async () => {

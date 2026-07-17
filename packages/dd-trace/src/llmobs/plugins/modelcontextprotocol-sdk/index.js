@@ -9,6 +9,30 @@ const { formatInput, formatOutput } = require('./utils')
 const listToolsTraces = new WeakMap()
 const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
 const LIST_TOOLS_CAPTURED = Symbol('dd-trace:mcp:list-tools-captured')
+const LIST_TOOLS_INITIAL_PAGE = Symbol('dd-trace:mcp:list-tools-initial-page')
+
+/**
+ * Gets the list-tools capture state for a client within a trace.
+ *
+ * @param {object} trace The active APM trace.
+ * @param {object} client The MCP client making the request.
+ * @returns {Map<string | symbol, object>} The page-to-span capture state.
+ */
+function getListToolsSpans (trace, client) {
+  let clients = listToolsTraces.get(trace)
+  if (!clients) {
+    clients = new WeakMap()
+    listToolsTraces.set(trace, clients)
+  }
+
+  let pages = clients.get(client)
+  if (!pages) {
+    pages = new Map()
+    clients.set(client, pages)
+  }
+
+  return pages
+}
 
 class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_tool_call'
@@ -63,7 +87,11 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
 
   getLLMObsSpanRegisterOptions (ctx) {
     const trace = ctx.currentStore?.span?.context()._trace
-    const previousSpan = trace && listToolsTraces.get(trace)
+    const client = ctx.self
+    const params = ctx.arguments?.[0]
+    const page = params?.cursor === undefined ? LIST_TOOLS_INITIAL_PAGE : params.cursor
+    const spans = trace && client && getListToolsSpans(trace, client)
+    const previousSpan = spans?.get(page)
     if (previousSpan) {
       const previousContext = previousSpan.context()
       if (!previousContext._isFinished ||
@@ -72,7 +100,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    if (trace) listToolsTraces.set(trace, ctx.currentStore.span)
+    if (spans) spans.set(page, ctx.currentStore.span)
 
     return {
       kind: 'task',
