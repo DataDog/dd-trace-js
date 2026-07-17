@@ -308,6 +308,7 @@ class Tracer extends NoopProxy {
    */
   #registerMicroVmRunHook (config) {
     const { channel } = require('dc-polyfill')
+    require('./microvm-identity-refresh')
     const ch = channel('http.server.request.start')
     let done = false
 
@@ -344,10 +345,9 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config
    */
   #refreshIdentity (config) {
-    require('./id').reseed()
-    getConfig.refreshRuntimeId(config)
-    require('./remote_config').refreshClientId(config)
-    this._tracer?.refreshMetadata(config)
+    const { channel } = require('dc-polyfill')
+    channel('datadog:identity:update').publish(config)
+    this._tracer.refreshMetadata(config)
   }
 
   /**
