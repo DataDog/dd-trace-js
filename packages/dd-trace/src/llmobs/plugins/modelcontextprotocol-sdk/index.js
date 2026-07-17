@@ -4,10 +4,10 @@ const { LLMOBS_DEDUPLICATION_KEY } = require('../../constants/tags')
 const { storage } = require('../../storage')
 
 const LLMObsPlugin = require('../base')
+const { shouldSkipMcpToolCall } = require('./dedup')
 const { formatInput, formatOutput } = require('./utils')
 
 const listToolsTraces = new WeakMap()
-const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
 const LIST_TOOLS_INITIAL_PAGE = Symbol('dd-trace:mcp:list-tools-initial-page')
 
 /**
@@ -42,8 +42,7 @@ class McpToolCallLLMObsPlugin extends LLMObsPlugin {
     // LangChain's Tool.invoke() is the canonical LLMObs tool span for its adapter-generated call.
     // Keep MCP's APM span for protocol visibility and propagation, but avoid duplicating its I/O payload.
     const params = ctx.arguments?.[0]
-    const adapterToolCall = storage.getStore()?.span?.[MCP_ADAPTER_TOOL]
-    if (adapterToolCall?.client === ctx.self && adapterToolCall.toolName === params?.name) return
+    if (shouldSkipMcpToolCall(storage.getStore()?.span, ctx.self, params?.name)) return
 
     const toolName = params?.name || 'unknown_tool'
 

@@ -3,6 +3,7 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 const { storage } = require('../../storage')
+const { skipMcpToolCall } = require('../modelcontextprotocol-sdk/dedup')
 
 const pluginManager = require('../../../../../..')._pluginManager
 
@@ -21,7 +22,6 @@ const WORKFLOW = 'workflow'
 const EMBEDDING = 'embedding'
 const TOOL = 'tool'
 const RETRIEVAL = 'retrieval'
-const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
 
 const ChainHandler = require('./handlers/chain')
 const ChatModelHandler = require('./handlers/chat_model')
@@ -215,8 +215,7 @@ class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
    */
   markMcpAdapterToolCall (ctx) {
     const { client, toolName } = ctx.arguments?.[0] || {}
-    const span = storage.getStore()?.span
-    if (span && client && toolName) span[MCP_ADAPTER_TOOL] = { client, toolName }
+    skipMcpToolCall(storage.getStore()?.span, client, toolName)
   }
 }
 
