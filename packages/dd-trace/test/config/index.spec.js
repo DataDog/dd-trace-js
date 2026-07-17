@@ -516,6 +516,8 @@ describe('Config', () => {
     const SENTINELS = {
       DD_API_KEY: 'SENTINEL_DD_API_KEY',
       DD_APP_KEY: 'SENTINEL_DD_APP_KEY',
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL:
+        'https://SENTINEL_AGENTLESS_ENDPOINT.example/ufc',
       OTEL_EXPORTER_OTLP_HEADERS: 'dd-api-key=SENTINEL_OTLP_BASE',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'dd-api-key=SENTINEL_OTLP_TRACES',
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'dd-api-key=SENTINEL_OTLP_METRICS',
@@ -4949,6 +4951,74 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  context('Feature Flagging configuration source', () => {
+    it('defaults to agentless delivery with cross-SDK timings', () => {
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
+      })
+    })
+
+    it('reads the configuration source environment variable', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+    })
+
+    it('reads the canonical agentless environment variables', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'https://example.com/ufc'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = '20'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = '5'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: 'https://example.com/ufc',
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 20,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
+      })
+    })
+
+    it('does not accept programmatic configuration-source options', () => {
+      const config = getConfig({
+        experimental: {
+          flaggingProvider: {
+            enabled: false,
+            configurationSource: 'remote_config',
+            agentlessBaseUrl: 'https://example.com/programmatic',
+            agentlessPollIntervalSeconds: 20,
+            agentlessRequestTimeoutSeconds: 5,
+          },
+        },
+      })
+
+      assert.strictEqual(config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+      assert.strictEqual(config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, undefined)
+      assert.strictEqual(config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS, 30)
+      assert.strictEqual(config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS, 2)
+      for (const name of [
+        'configurationSource',
+        'agentlessBaseUrl',
+        'agentlessPollIntervalSeconds',
+        'agentlessRequestTimeoutSeconds',
+      ]) {
+        sinon.assert.calledWithExactly(
+          log.warn,
+          'Unknown option %s with value %o',
+          `experimental.flaggingProvider.${name}`,
+          sinon.match.defined
+        )
+      }
     })
   })
 

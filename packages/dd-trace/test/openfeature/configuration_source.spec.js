@@ -16,16 +16,12 @@ describe('OpenFeature configuration source', () => {
   beforeEach(() => {
     config = {
       DD_API_KEY: 'test-api-key',
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
       site: 'datadoghq.com',
       env: 'my env',
-      experimental: {
-        flaggingProvider: {
-          configurationSource: 'agentless',
-          agentlessBaseUrl: undefined,
-          agentlessPollIntervalSeconds: 30,
-          agentlessRequestTimeoutSeconds: 2,
-        },
-      },
     }
     log = {
       debug: sinon.spy(),
@@ -41,7 +37,7 @@ describe('OpenFeature configuration source', () => {
 
   for (const value of [undefined, null, '', '   ', ' AgEnTlEsS ']) {
     it(`normalizes ${JSON.stringify(value)} to the default agentless source`, () => {
-      config.experimental.flaggingProvider.configurationSource = value
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
 
       assert.strictEqual(configurationSource.resolve(config).mode, 'agentless')
     })
@@ -71,7 +67,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('appends the standard path to a configured origin', () => {
-    config.experimental.flaggingProvider.agentlessBaseUrl = 'http://127.0.0.1:8080/'
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'http://127.0.0.1:8080/'
 
     const resolved = configurationSource.resolve(config)
     assert.strictEqual(
@@ -81,7 +77,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('preserves an exact configured path and query', () => {
-    config.experimental.flaggingProvider.agentlessBaseUrl = 'https://example.com/custom/ufc?tenant=one'
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'https://example.com/custom/ufc?tenant=one'
 
     assert.strictEqual(
       configurationSource.resolve(config).endpoint.toString(),
@@ -115,7 +111,8 @@ describe('OpenFeature configuration source', () => {
 
   it('allows an operator-owned agentless endpoint on GovCloud', () => {
     config.site = 'ddog-gov.com'
-    config.experimental.flaggingProvider.agentlessBaseUrl = 'https://flags.example.test/custom/ufc?tenant=test'
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://flags.example.test/custom/ufc?tenant=test'
 
     const resolved = configurationSource.resolve(config)
 
@@ -124,7 +121,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('rejects non-HTTP endpoints', () => {
-    config.experimental.flaggingProvider.agentlessBaseUrl = 'file:///tmp/ufc.json'
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'file:///tmp/ufc.json'
 
     assert.throws(
       () => configurationSource.resolve(config),
@@ -133,7 +130,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('rejects malformed endpoints without enabling a source', () => {
-    config.experimental.flaggingProvider.agentlessBaseUrl = 'not a URL'
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'not a URL'
     const provider = { _setConfigurationSource: sinon.spy() }
 
     assert.throws(
@@ -151,7 +148,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('recognizes explicit Remote Config without resolving agentless settings', () => {
-    config.experimental.flaggingProvider.configurationSource = ' REMOTE_CONFIG '
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = ' REMOTE_CONFIG '
     delete config.site
 
     assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
@@ -160,7 +157,7 @@ describe('OpenFeature configuration source', () => {
 
   for (const value of ['offline', 'other']) {
     it(`fails closed for the unsupported ${value} source`, () => {
-      config.experimental.flaggingProvider.configurationSource = value
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
 
       assert.throws(() => configurationSource.resolve(config), /Unsupported Feature Flagging configuration source/)
       assert.strictEqual(configurationSource.isRemoteConfig(config), false)
@@ -169,8 +166,8 @@ describe('OpenFeature configuration source', () => {
   }
 
   it('falls back to positive timing defaults with warnings', () => {
-    config.experimental.flaggingProvider.agentlessPollIntervalSeconds = 0
-    config.experimental.flaggingProvider.agentlessRequestTimeoutSeconds = -1
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 0
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = -1
 
     assert.strictEqual(configurationSource.isRemoteConfig(config), false)
     sinon.assert.notCalled(log.warn)
@@ -183,7 +180,7 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('caps the polling interval at one hour', () => {
-    config.experimental.flaggingProvider.agentlessPollIntervalSeconds = 4 * 60 * 60
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 4 * 60 * 60
 
     const resolved = configurationSource.resolve(config)
 
