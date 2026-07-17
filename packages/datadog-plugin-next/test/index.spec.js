@@ -551,8 +551,10 @@ describe('Plugin', function () {
             agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
+                const nextRequestSpans = spans.filter(span => span.name === 'next.request')
 
-                assert.strictEqual(spans[1].resource, 'GET /api/appDir/[name]')
+                assert.strictEqual(nextRequestSpans.length, 1)
+                assert.strictEqual(nextRequestSpans[0].resource, 'GET /api/appDir/[name]')
               })
               .then(done)
               .catch(done)
@@ -575,6 +577,36 @@ describe('Plugin', function () {
 
             axios.get(`http://127.0.0.1:${port}/appDir/hello`)
           })
+
+          if (satisfies(pkg.version, '>=15.4.1')) {
+            it('should attach a thrown app page error to the request span', done => {
+              agent
+                .assertSomeTraces(traces => {
+                  const spans = traces[0]
+                  const nextRequestSpan = spans.find(span => span.name === 'next.request')
+
+                  assert.ok(nextRequestSpan, 'next.request span should exist')
+                  assertObjectContains(nextRequestSpan, {
+                    resource: 'GET /appDir/page-error',
+                    error: 1,
+                    meta: {
+                      'http.status_code': '500',
+                      'error.message': 'thrown app page error',
+                      'error.type': 'Error',
+                    },
+                  })
+                  assert.ok(nextRequestSpan.meta['error.stack'])
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://127.0.0.1:${port}/appDir/page-error`)
+                .catch(error => {
+                  if (error.response?.status !== 500) done(error)
+                })
+            })
+          }
         })
       }
 

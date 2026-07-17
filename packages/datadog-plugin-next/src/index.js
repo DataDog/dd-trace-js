@@ -5,8 +5,10 @@ const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
+const REUSED_NEXT_REQUEST_SPAN = Symbol('reusedNextRequestSpan')
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
@@ -18,7 +20,12 @@ class NextPlugin extends ServerPlugin {
 
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
-    const childOf = store ? store.span : store
+    const parentSpan = store?.span
+    if (parentSpan?._integrationName === this.constructor.id) {
+      return { ...store, span: parentSpan, req, [REUSED_NEXT_REQUEST_SPAN]: true }
+    }
+
+    const childOf = parentSpan || web.extractIncomingServerContext(this.tracer, req.headers)
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const serviceName = this.config.service || schemaServiceName
     let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
@@ -42,7 +49,8 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    return { ...store, span, req }
+    const httpParentSpan = parentSpan?._integrationName === 'http' ? parentSpan : undefined
+    return { ...store, span, req, httpParentSpan }
   }
 
   error ({ span, error }) {
@@ -60,6 +68,7 @@ class NextPlugin extends ServerPlugin {
     const store = storage('legacy').getStore()
 
     if (!store) return
+    if (store[REUSED_NEXT_REQUEST_SPAN]) return
 
     const span = store.span
     const error = span.context().getTag('error')
@@ -88,12 +97,12 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page, isAppPath = false, isStatic = false }) {
+  pageLoad ({ page, isAppPath = false, isStatic = false, isFilesystemPath = isAppPath }) {
     const store = storage('legacy').getStore()
 
     if (!store) return
 
-    const { span, req } = store
+    const { span, req, httpParentSpan } = store
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
@@ -106,10 +115,12 @@ class NextPlugin extends ServerPlugin {
       return
     }
 
-    // remove ending /route or /page for appDir projects
-    // need to check if not an error page too, as those are marked as app directory
-    // in newer versions
-    if (isAppPath && !isErrorPage) page = page.slice(0, Math.max(0, page.lastIndexOf('/')))
+    // Remove the filesystem marker from appDir paths. Newer Next.js runtimes can
+    // publish an already-normalized pathname, which must be preserved as-is.
+    if (isFilesystemPath && !isErrorPage) {
+      if (isAppPath) page = normalizeAppPath(page)
+      page = normalizeIndexPage(page)
+    }
 
     // handle static resource
     if (isStatic) {
@@ -123,12 +134,38 @@ class NextPlugin extends ServerPlugin {
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page,
     })
+    setHttpParentRoute(httpParentSpan, req.method, page)
     web.setRoute(req, page)
   }
 
   configure (config) {
     return super.configure(normalizeConfig(config))
   }
+}
+
+function normalizeIndexPage (page) {
+  if (typeof page !== 'string') return page
+  if (page === '/index') return '/'
+  if (page.endsWith('/index')) return page.slice(0, -'/index'.length) || '/'
+  return page
+}
+
+function normalizeAppPath (page) {
+  if (typeof page !== 'string') return page
+
+  for (const suffix of ['/page', '/route']) {
+    if (page === suffix) return '/'
+    if (page.endsWith(suffix)) return page.slice(0, -suffix.length) || '/'
+  }
+
+  return page
+}
+
+function setHttpParentRoute (span, method, page) {
+  if (!span || span.context().getTag(HTTP_ROUTE)) return
+
+  span.setTag(HTTP_ROUTE, page)
+  span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
 }
 
 function normalizeConfig (config) {

@@ -219,7 +219,7 @@ const web = {
     const store = legacyStorage.getStore()
     const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
 
-    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    let childOf = pubsubSpan || this.extractIncomingServerContext(tracer, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -230,6 +230,10 @@ const web = {
     }
 
     return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+  },
+
+  extractIncomingServerContext (tracer, headers) {
+    return tracer.extract(FORMAT_HTTP_HEADERS, normalizeHeadersCarrier(headers))
   },
 
   // Validate a request's status code and then add error tags if necessary
@@ -343,6 +347,18 @@ const web = {
 
     applyRouteOrEndpointTag(context)
   },
+}
+
+function normalizeHeadersCarrier (headers) {
+  if (!headers || typeof headers.get !== 'function' || typeof headers[Symbol.iterator] !== 'function') {
+    return headers
+  }
+
+  const carrier = {}
+  for (const [key, value] of headers) {
+    carrier[String(key).toLowerCase()] = value
+  }
+  return carrier
 }
 
 function addAllowHeaders (req, res, headers) {
