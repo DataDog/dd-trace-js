@@ -443,6 +443,28 @@ module.exports = {
       dep: true,
     },
   ],
+  'modelcontextprotocol-sdk': [
+    {
+      name: '@langchain/mcp-adapters',
+      versions: ['>=1.1.3'],
+      dep: true,
+    },
+    {
+      name: '@langchain/core',
+      versions: ['>=1.1.48'],
+      dep: true,
+    },
+    {
+      name: '@langchain/langgraph',
+      versions: ['>=1.0.0'],
+      dep: true,
+    },
+    {
+      name: 'zod',
+      versions: ['>=4.0.0'],
+      dep: true,
+    },
+  ],
   ldapjs: [
     {
       name: 'ldapjs',

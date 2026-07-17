@@ -15,12 +15,13 @@ describe('integrations', () => {
   let Client
   let McpServer
   let InMemoryTransport
+  let loadMcpTools
 
   let client
   let server
 
   describe('modelcontextprotocol-sdk', () => {
-    const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
+    const { assertNoLlmObsSpans, getEvents } = useLlmObs({ plugin: ['langchain', 'modelcontextprotocol-sdk'] })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
@@ -37,6 +38,7 @@ describe('integrations', () => {
         McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
 
         InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+        loadMcpTools = require('../../../../../../versions/@langchain/mcp-adapters@1.1.3').get().loadMcpTools
 
         server = new McpServer({ name: 'test-server', version: '1.0.0' })
 
@@ -202,20 +204,35 @@ describe('integrations', () => {
       })
 
       describe('Client.listTools', () => {
-        it('creates a task span for listing tools', async () => {
+        it('does not capture a task payload for listing tools', async () => {
           const result = await client.listTools()
 
           assert.ok(result.tools)
           assert.equal(result.tools.length, 3)
 
-          const { apmSpans, llmobsSpans } = await getEvents()
+          await getEvents(0)
+          await assertNoLlmObsSpans()
+        })
+      })
+
+      describe('LangChain MCP adapter', () => {
+        it('keeps the LangChain tool as the only payload-bearing LLMObs tool span', async () => {
+          const [tool] = await loadMcpTools('test-server', client)
+          const result = await tool.invoke({})
+
+          assert.equal(result.content, 'Result from test-tool')
+
+          const { apmSpans, llmobsSpans } = await getEvents(1)
+          assert.equal(llmobsSpans.length, 1)
+          assert.ok(
+            apmSpans.some(span => span.name === 'mcp.request' && span.resource === 'client_tool_call'),
+            'MCP client APM span should remain present'
+          )
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'task',
-            name: 'MCP Client List Tools',
-            outputValue: JSON.stringify(result),
-            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+            spanKind: 'tool',
+            name: 'test-tool',
+            tags: { ml_app: 'test', integration: 'langchain' },
           })
         })
       })

@@ -1,5 +1,9 @@
 'use strict'
 
+const { INTEGRATION, SPAN_KIND } = require('../../constants/tags')
+const { storage } = require('../../storage')
+const LLMObsTagger = require('../../tagger')
+
 const LLMObsPlugin = require('../base')
 const { formatInput, formatOutput } = require('./utils')
 
@@ -9,6 +13,10 @@ class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_callTool'
 
   getLLMObsSpanRegisterOptions (ctx) {
+    const parentSpan = storage.getStore()?.span
+    const parentTags = LLMObsTagger.tagMap.get(parentSpan)
+    if (parentTags?.[INTEGRATION] === 'langchain' && parentTags[SPAN_KIND] === 'tool') return
+
     const params = ctx.arguments?.[0]
     const toolName = params?.name || 'unknown_tool'
 
@@ -50,12 +58,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   static integration = 'modelcontextprotocol-sdk'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
 
-  getLLMObsSpanRegisterOptions () {
-    return {
-      kind: 'task',
-      name: 'MCP Client List Tools',
-    }
-  }
+  getLLMObsSpanRegisterOptions () {}
 
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
