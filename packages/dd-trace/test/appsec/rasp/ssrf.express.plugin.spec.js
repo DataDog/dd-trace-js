@@ -148,7 +148,7 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`)
+              axiosToTest.get(`https://${req.query.host}`, { proxy: false })
                 .catch(noop) // swallow network error
                 .then(() => res.end('end'))
             }
@@ -202,7 +202,7 @@ describe('RASP - ssrf', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              requestToTest.get(`https://${req.query.host}`)
+              requestToTest.get(`https://${req.query.host}`, { proxy: false })
                 .on('response', () => res.end('end'))
                 .on('error', () => res.end('end'))
             }
