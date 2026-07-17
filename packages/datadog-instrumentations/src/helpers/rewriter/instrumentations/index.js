@@ -7,6 +7,7 @@ module.exports = [
   ...require('./claude-agent-sdk'),
   ...require('./graphql'),
   ...require('./langchain'),
+  ...require('./langchain-mcp-adapters'),
   ...require('./langgraph'),
   ...require('./mercurius'),
   ...require('./modelcontextprotocol-sdk'),

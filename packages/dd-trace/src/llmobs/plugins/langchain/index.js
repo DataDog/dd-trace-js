@@ -20,6 +20,7 @@ const WORKFLOW = 'workflow'
 const EMBEDDING = 'embedding'
 const TOOL = 'tool'
 const RETRIEVAL = 'retrieval'
+const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
 
 const ChainHandler = require('./handlers/chain')
 const ChatModelHandler = require('./handlers/chat_model')
@@ -195,6 +196,38 @@ class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
   static id = 'llmobs_langchain_tool_invoke'
   static lcType = 'tool'
   static prefix = 'tracing:orchestrion:@langchain/core:Tool_invoke'
+
+  constructor (...args) {
+    super(...args)
+
+    this.addSub(
+      'tracing:orchestrion:@langchain/mcp-adapters:loadMcpTools:asyncEnd',
+      this.markMcpAdapterTools.bind(this)
+    )
+  }
+
+  /**
+   * Marks the tools created by the LangChain MCP adapter so their nested MCP calls can be deduplicated.
+   *
+   * @param {{ result?: object[] }} ctx The adapter's `loadMcpTools` lifecycle context.
+   * @returns {void}
+   */
+  markMcpAdapterTools (ctx) {
+    if (!Array.isArray(ctx.result)) return
+
+    for (const tool of ctx.result) {
+      tool[MCP_ADAPTER_TOOL] = true
+    }
+  }
+
+  getLLMObsSpanRegisterOptions (ctx) {
+    const options = super.getLLMObsSpanRegisterOptions(ctx)
+    const span = ctx.currentStore?.span
+    if (options && span && ctx.self?.[MCP_ADAPTER_TOOL]) {
+      span[MCP_ADAPTER_TOOL] = true
+    }
+    return options
+  }
 }
 
 class VectorStoreSimilaritySearchPlugin extends BaseLangChainLLMObsPlugin {

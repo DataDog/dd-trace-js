@@ -15,6 +15,7 @@ describe('integrations', () => {
   let Client
   let McpServer
   let InMemoryTransport
+  let tool
   let loadMcpTools
   let tracer
 
@@ -43,6 +44,7 @@ describe('integrations', () => {
         McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
 
         InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+        tool = require('../../../../../../versions/@langchain/core@1').get('@langchain/core/tools').tool
         loadMcpTools = require('../../../../../../versions/@langchain/mcp-adapters@1.1.3').get().loadMcpTools
 
         server = new McpServer({ name: 'test-server', version: '1.0.0' })
@@ -264,6 +266,24 @@ describe('integrations', () => {
             outputValue: 'Result from test-tool',
             tags: { ml_app: 'test', integration: 'langchain' },
           })
+        })
+
+        it('keeps MCP spans for custom LangChain tools', async () => {
+          const customTool = tool(
+            () => client.callTool({ name: 'test-tool', arguments: {} }),
+            {
+              name: 'custom-mcp-tool',
+              description: 'Calls an MCP tool',
+              schema: {},
+            }
+          )
+
+          await customTool.invoke({})
+
+          const { llmobsSpans } = await getEvents(2)
+          assert.equal(llmobsSpans.length, 2)
+          assert.ok(llmobsSpans.some(span => span.name === 'custom-mcp-tool'))
+          assert.ok(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: test-tool'))
         })
       })
     })
