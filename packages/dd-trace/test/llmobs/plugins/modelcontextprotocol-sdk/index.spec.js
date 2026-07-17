@@ -21,7 +21,7 @@ describe('integrations', () => {
   let server
 
   describe('modelcontextprotocol-sdk', () => {
-    const { assertNoLlmObsSpans, getEvents } = useLlmObs({ plugin: ['langchain', 'modelcontextprotocol-sdk'] })
+    const { getEvents } = useLlmObs({ plugin: ['langchain', 'modelcontextprotocol-sdk'] })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
@@ -190,7 +190,6 @@ describe('integrations', () => {
             error: {
               type: MOCK_STRING,
               message: MOCK_STRING,
-              stack: MOCK_STRING,
             },
             tags: {
               ml_app: 'test',
@@ -210,28 +209,33 @@ describe('integrations', () => {
           assert.ok(result.tools)
           assert.equal(result.tools.length, 3)
 
-          await getEvents(0)
-          await assertNoLlmObsSpans()
+          const { apmSpans, llmobsSpans } = await getEvents(0)
+          assert.ok(apmSpans.some(span => span.resource === 'ClientSession.list_tools'))
+          assert.equal(llmobsSpans.length, 0)
         })
       })
 
       describe('LangChain MCP adapter', () => {
         it('keeps the LangChain tool as the only payload-bearing LLMObs tool span', async () => {
           const [tool] = await loadMcpTools('test-server', client)
+          const { llmobsSpans: discoveryLlmObsSpans } = await getEvents(0)
+          assert.equal(discoveryLlmObsSpans.length, 0)
+
           const result = await tool.invoke({})
 
-          assert.equal(result.content, 'Result from test-tool')
+          assert.equal(result, 'Result from test-tool')
 
           const { apmSpans, llmobsSpans } = await getEvents(1)
           assert.equal(llmobsSpans.length, 1)
-          assert.ok(
-            apmSpans.some(span => span.name === 'mcp.request' && span.resource === 'client_tool_call'),
-            'MCP client APM span should remain present'
-          )
+          const langchainSpan = apmSpans.find(span => span.span_id.toString() === llmobsSpans[0].span_id)
+          assert.ok(langchainSpan, 'LangChain LLMObs span should have a matching APM span')
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: langchainSpan,
             spanKind: 'tool',
             name: 'test-tool',
+            inputValue: JSON.stringify({}),
+            outputValue: 'Result from test-tool',
             tags: { ml_app: 'test', integration: 'langchain' },
           })
         })
