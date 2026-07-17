@@ -38,6 +38,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
   start (ctx) {
     if (!this.config.dsmEnabled) return
+    if (ctx.api !== 'publish' || !ctx.currentStore) return
     const { request } = ctx
     const messages = request.messages || []
     const topic = request.topic
