@@ -92,10 +92,15 @@ describe('OpenFeature configuration source', () => {
   it('derives and starts the managed GovCloud endpoint without hard-coding availability', () => {
     config.site = 'DDOG-GOV.COM'
     config.env = 'prod'
-    const provider = { _setConfigurationSource: sinon.spy() }
+    const provider = {
+      _setConfiguration: sinon.spy(),
+      _setConfigurationSource: sinon.spy(),
+    }
+    const configuration = { flags: {} }
 
     const resolved = configurationSource.resolve(config)
     configurationSource.enable(config, () => provider)
+    AgentlessConfigurationSource.firstCall.args[1](configuration)
 
     assert.strictEqual(
       resolved.endpoint.toString(),
@@ -103,6 +108,7 @@ describe('OpenFeature configuration source', () => {
     )
     sinon.assert.calledOnce(AgentlessConfigurationSource)
     sinon.assert.calledWithNew(AgentlessConfigurationSource)
+    sinon.assert.calledOnceWithExactly(provider._setConfiguration, configuration)
     sinon.assert.calledOnce(provider._setConfigurationSource)
     sinon.assert.notCalled(log.warn)
   })
@@ -124,6 +130,24 @@ describe('OpenFeature configuration source', () => {
       () => configurationSource.resolve(config),
       /must use HTTP or HTTPS/
     )
+  })
+
+  it('rejects malformed endpoints without enabling a source', () => {
+    config.experimental.flaggingProvider.agentlessBaseUrl = 'not a URL'
+    const provider = { _setConfigurationSource: sinon.spy() }
+
+    assert.throws(
+      () => configurationSource.resolve(config),
+      /Invalid Feature Flagging agentless URL: not a URL/
+    )
+    configurationSource.enable(config, () => provider)
+
+    sinon.assert.calledOnceWithMatch(
+      log.error,
+      'Unable to configure Feature Flagging configuration source',
+      sinon.match.instanceOf(Error)
+    )
+    sinon.assert.notCalled(provider._setConfigurationSource)
   })
 
   it('recognizes explicit Remote Config without resolving agentless settings', () => {
