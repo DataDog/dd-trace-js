@@ -365,6 +365,6 @@ wrongly-dismissed failure ships a real bug, while a wrongly-investigated flake c
 
 ## Vendoring Dependencies
 
-Using rspack: `vendor/` installs and bundles via `npm ci --include=dev` (driven by the root
+Using rspack: `vendor/` installs and bundles via `bun install --frozen-lockfile` (driven by the root
 `prepare` script in `package.json`) and emits the bundle into `packages/node_modules/`.
 (Some deps are excluded, e.g., `@opentelemetry/api`.)

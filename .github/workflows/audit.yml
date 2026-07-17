@@ -2,19 +2,44 @@ name: Audit
 
 on:
   pull_request:
-    branches:
-      - dependabot/**
+    paths:
+      - ".github/actions/datadog-ci/bun.lock"
+      - ".github/all-green/bun.lock"
+      - "bun.lock"
+      - "docs/bun.lock"
+      - "vendor/bun.lock"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   dependencies:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - "."
+          - ".github/actions/datadog-ci"
+          - ".github/all-green"
+          - "docs"
+          - "vendor"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
-      - run: bun audit
-      - run: bun audit
-        working-directory: ./vendor
+      # Root dev tooling reaches these through @actions/*, Axios, Mocha, and Express.
+      # Keep them explicit so any newly introduced high or critical advisory still fails.
+      - run: |
+          bun audit --audit-level=high \
+            --ignore GHSA-vxpw-j846-p89q \
+            --ignore GHSA-hmw2-7cc7-3qxx \
+            --ignore GHSA-5c6j-r48x-rmvq \
+            --ignore GHSA-j3q9-mxjg-w52f
+        working-directory: ${{ matrix.directory }}

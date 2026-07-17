@@ -20,7 +20,6 @@ const allowedLinePatterns = new Map([
   ['packages/dd-trace/src/appsec/recommended.json', /"(?:\/yarn\.lock|bin\/yarn)",/],
   ['requirements.json', /"yarn"|"Ignore the yarn CLI(?: \(symlink\))?"|"\*\/yarn(?:\.js)?"/],
   ['.gitlab/requirements_block.json', /"name": "yarn(?:-symlink)?".*"\/pathto\/yarn(?:\.js)?"/],
-  ['packages/dd-trace/test/appsec/next.utils.js', /yarn install|yarn exec next build|'yarn\.lock'/],
   [
     'integration-tests/esbuild/openfeature.spec.js',
     /npm install -g yarn|installing with yarn|install with yarn|yarn would error|yarn --ignore-engines/,
@@ -30,13 +29,9 @@ const allowedLinePatterns = new Map([
   ['packages/dd-trace/test/plugins/versions/package.json', /"yarn": "1\.22\.22"/],
   ['.github/workflows/platform.yml', /name: yarn(?:-berry)?$|install: yarn add$|&& yarn (?:set|config|add)/],
   ['benchmark/sirun/runall.sh', /\$HOME\/\.yarn|dependencies\.yarn|yarn install --ignore-engines|yarn services/],
-  ['.gitignore', /yarn\.lock$/],
   ['README.md', /^\$ yarn add dd-trace(?:@\d+)?(?: # .*)?$/],
   ['MIGRATING.md', /NODE_OPTIONS='-r dd-trace\/ci\/init' yarn test/],
   ['scripts/test/install-plugin-modules.spec.js', /removes yarn|bun \(not yarn\)/],
-])
-const allowedPrefixLinePatterns = new Map([
-  ['packages/datadog-plugin-next/test/', /yarn install|yarn exec next build|'yarn\.lock'/],
 ])
 
 /**
@@ -48,9 +43,6 @@ function isAllowedLine (file, line) {
 
   const pattern = allowedLinePatterns.get(file)
   if (pattern?.test(line.trim())) return true
-  for (const [prefix, prefixPattern] of allowedPrefixLinePatterns) {
-    if (file.startsWith(prefix) && prefixPattern.test(line.trim())) return true
-  }
   return false
 }
 
@@ -127,7 +119,10 @@ describe('no yarn dev references', function () {
     const rootBunConfig = fs.readFileSync(path.join(repoRoot, 'bunfig.toml'), 'utf8')
     assert.match(rootBunConfig, /^minimumReleaseAge = 259200$/m)
     assert.doesNotMatch(rootBunConfig, /@datadog\/\*/)
-    for (const packageName of [
+    const versionsBunConfig = fs.readFileSync(path.join(repoRoot, 'versions/bunfig.toml'), 'utf8')
+    assert.match(versionsBunConfig, /^minimumReleaseAge = 259200$/m)
+    const internalPackages = [
+      '@datadog/datadog-ci',
       '@datadog/flagging-core',
       '@datadog/libdatadog',
       '@datadog/native-appsec',
@@ -135,13 +130,14 @@ describe('no yarn dev references', function () {
       '@datadog/native-metrics',
       '@datadog/openfeature-node-server',
       '@datadog/pprof',
+      '@datadog/sketches-js',
       '@datadog/wasm-js-rewriter',
-    ]) {
-      assert.ok(rootBunConfig.includes(`"${packageName}"`), `${packageName} must bypass the release-age gate`)
+    ]
+    for (const packageName of internalPackages) {
+      for (const bunConfig of [rootBunConfig, versionsBunConfig]) {
+        assert.ok(bunConfig.includes(`"${packageName}"`), `${packageName} must bypass the release-age gate`)
+      }
     }
-
-    const versionsBunConfig = fs.readFileSync(path.join(repoRoot, 'versions/bunfig.toml'), 'utf8')
-    assert.match(versionsBunConfig, /^minimumReleaseAge = 259200$/m)
 
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
     assert.strictEqual(packageJson.devDependencies.bun, '1.3.1')
@@ -179,32 +175,71 @@ describe('no yarn dev references', function () {
     const projectWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/project.yml'), 'utf8')
     assert.match(projectWorkflow, /bun --config=\/tmp\/dd-trace-bunfig\.toml install/)
 
-    const actionPackage = JSON.parse(fs.readFileSync(
-      path.join(repoRoot, '.github/actions/datadog-ci/package.json'),
+    const internalLockDirectories = [
+      '.github/actions/datadog-ci',
+      '.github/all-green',
+      'docs',
+      'vendor',
+    ]
+    for (const directory of internalLockDirectories) {
+      assert.strictEqual(fs.existsSync(path.join(repoRoot, directory, 'bun.lock')), true)
+      assert.strictEqual(fs.existsSync(path.join(repoRoot, directory, 'package-lock.json')), false)
+      assert.strictEqual(fs.existsSync(path.join(repoRoot, directory, 'yarn.lock')), false)
+    }
+
+    const datadogCiAction = fs.readFileSync(
+      path.join(repoRoot, '.github/actions/datadog-ci/action.yml'),
       'utf8'
-    ))
-    const actionLock = JSON.parse(fs.readFileSync(
-      path.join(repoRoot, '.github/actions/datadog-ci/package-lock.json'),
-      'utf8'
-    ))
-    assert.strictEqual(
-      actionLock.packages[''].dependencies['@datadog/datadog-ci'],
-      actionPackage.dependencies['@datadog/datadog-ci']
+    )
+    assert.match(
+      datadogCiAction,
+      /bun --config="\$\{\{ github\.workspace \}\}\/bunfig\.toml" install --frozen-lockfile --ignore-scripts/
     )
 
+    assert.match(packageJson.scripts.prepare, /bun --config=\.\.\/bunfig\.toml install --frozen-lockfile/)
+
     const dependabot = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/dependabot.yml'), 'utf8'))
-    let bunUpdate
-    let actionUsesNpm = false
+    const bunDirectories = new Set()
     for (const update of dependabot.updates) {
       if (update['package-ecosystem'] === 'bun') {
-        bunUpdate = update
-      } else if (update['package-ecosystem'] === 'npm' &&
-        update.directory === '/.github/actions/datadog-ci') {
-        actionUsesNpm = true
+        for (const directory of update.directories ?? [update.directory]) {
+          bunDirectories.add(directory)
+        }
       }
     }
-    assert.ok(bunUpdate)
-    assert.deepStrictEqual(bunUpdate.directories, ['/', '/docs', '/.github/all-green'])
-    assert.strictEqual(actionUsesNpm, true)
+    assert.deepStrictEqual(
+      [...bunDirectories].filter(directory => internalLockDirectories.some(
+        internalDirectory => directory === `/${internalDirectory}`
+      )).sort(),
+      internalLockDirectories.map(directory => `/${directory}`).sort()
+    )
+    assert.ok(bunDirectories.has('/'))
+  })
+
+  it('audits every committed Bun dependency tree', () => {
+    const auditWorkflow = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/workflows/audit.yml'), 'utf8'))
+    const lockPaths = [
+      '.github/actions/datadog-ci/bun.lock',
+      '.github/all-green/bun.lock',
+      'bun.lock',
+      'docs/bun.lock',
+      'vendor/bun.lock',
+    ]
+    assert.deepStrictEqual(auditWorkflow.on.pull_request.paths.sort(), lockPaths)
+    assert.deepStrictEqual(
+      auditWorkflow.jobs.dependencies.strategy.matrix.directory.sort(),
+      ['.', '.github/actions/datadog-ci', '.github/all-green', 'docs', 'vendor']
+    )
+    const auditCommand = auditWorkflow.jobs.dependencies.steps.at(-1).run
+    assert.match(auditCommand, /^bun audit --audit-level=high/m)
+    assert.deepStrictEqual(
+      [...auditCommand.matchAll(/--ignore (GHSA-[\w-]+)/g)].map(match => match[1]),
+      [
+        'GHSA-vxpw-j846-p89q',
+        'GHSA-hmw2-7cc7-3qxx',
+        'GHSA-5c6j-r48x-rmvq',
+        'GHSA-j3q9-mxjg-w52f',
+      ]
+    )
   })
 })

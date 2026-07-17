@@ -168,14 +168,14 @@ $ bun install
 considering a freshly-published npm version. The window is set in `bunfig.toml` /
 `versions/bunfig.toml` via `minimumReleaseAge = 259200` and is meant to widen the gap in which
 a freshly-published compromised release gets caught and pulled from the registry before it lands
-in our installs. The Datadog-owned packages listed in the root `minimumReleaseAgeExcludes` bypass
+in our installs. The Datadog-owned packages listed in `minimumReleaseAgeExcludes` bypass
 the wait because our publishing pipeline is their trust boundary. Bun 1.3.1 only supports exact
 package names in this list; it does not expand the `@datadog/*` pattern used by Dependabot.
 
 CI runs `bun install --frozen-lockfile` (see `.github/actions/install/action.yml`); a `bun.lock`
 that disagrees with `package.json` fails the install step. If you change `package.json`, rerun
 `bun install` locally and commit the regenerated `bun.lock` in the same PR. Dependabot uses its
-Bun ecosystem for the root and `docs/`, so its PRs update each manifest and lockfile together.
+Bun ecosystem for every internal Bun workspace, so its PRs update each manifest and lockfile together.
 Its five-day cooldown applies to version updates but not security updates; a security PR can
 therefore lock a freshly-published fix, and frozen CI installs that reviewed lock without resolving
 against the registry.
