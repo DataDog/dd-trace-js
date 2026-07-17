@@ -50,7 +50,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 const cypressVersionsSupportingNode18 = DD_MAJOR === 5
-  ? ['10.2.0', '11.0.0', '12.0.0', '14.5.4']
+  ? ['10.2.0', '12.0.0', '14.5.4']
   : ['12.0.0', '14.5.4']
 
 function cleanupPrecompiledSourceLineDist (cwd) {
