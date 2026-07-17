@@ -128,6 +128,182 @@ describe('AgentlessWriter', () => {
       writer.flush(done)
     })
 
+    it('should wait for an active intake request when empty', (done) => {
+      let requestCallback
+      let flushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.onSecondCall().returns(0)
+
+      writer.flush()
+      writer.flush(() => {
+        flushed = true
+        done()
+      })
+
+      assert.strictEqual(flushed, false)
+      requestCallback(null, '{}', 200)
+    })
+
+    it('should wait for an active intake request when the new payload is empty', (done) => {
+      let requestCallback
+      let flushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.returns(1)
+      encoder.makePayload.onSecondCall().returns(Buffer.alloc(0))
+
+      writer.flush()
+      writer.flush(() => {
+        flushed = true
+        done()
+      })
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(flushed, false)
+      requestCallback(null, '{}', 200)
+    })
+
+    it('should wait for prior and newly submitted intake requests', (done) => {
+      const requestCallbacks = []
+      let flushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallbacks.push(callback)
+      })
+      encoder.count.returns(1)
+
+      writer.flush()
+      writer.flush(() => {
+        flushed = true
+        done()
+      })
+
+      requestCallbacks[1](null, '{}', 200)
+      assert.strictEqual(flushed, false)
+      requestCallbacks[0](null, '{}', 200)
+    })
+
+    it('should wait for the request submitted by the flush', (done) => {
+      const requestCallbacks = []
+      let flushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallbacks.push(callback)
+      })
+      encoder.count.returns(1)
+
+      writer.flush()
+      writer.flush(() => {
+        flushed = true
+        done()
+      })
+
+      requestCallbacks[0](null, '{}', 200)
+      assert.strictEqual(flushed, false)
+      requestCallbacks[1](null, '{}', 200)
+    })
+
+    it('should not wait for requests submitted by a later flush', () => {
+      const requestCallbacks = []
+      let firstFlushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallbacks.push(callback)
+      })
+      encoder.count.returns(1)
+
+      writer.flush(() => {
+        firstFlushed = true
+      })
+      writer.flush()
+
+      requestCallbacks[0](null, '{}', 200)
+      assert.strictEqual(firstFlushed, true)
+      requestCallbacks[1](null, '{}', 200)
+    })
+
+    it('should release an empty flush when an active request fails', (done) => {
+      let requestCallback
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.onSecondCall().returns(0)
+
+      writer.flush()
+      writer.flush(done)
+
+      requestCallback(new Error('ECONNRESET'))
+    })
+
+    it('should release every waiter when one callback throws', () => {
+      const error = new Error('flush callback failed')
+      let requestCallback
+      let secondCallbackCalled = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallback = callback
+      })
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.returns(0)
+
+      writer.flush()
+      writer.flush(() => {
+        throw error
+      })
+      writer.flush(() => {
+        secondCallbackCalled = true
+      })
+
+      assert.throws(() => requestCallback(null, '{}', 200), error)
+      assert.strictEqual(secondCallbackCalled, true)
+    })
+
+    it('should allow a waiter to flush reentrantly', () => {
+      const requestCallbacks = []
+      let reentrantFlushed = false
+
+      request.callsFake((data, options, callback) => {
+        requestCallbacks.push(callback)
+      })
+      encoder.count.returns(1)
+
+      writer.flush(() => {
+        writer.flush(() => {
+          reentrantFlushed = true
+        })
+      })
+
+      requestCallbacks[0](null, '{}', 200)
+      assert.strictEqual(reentrantFlushed, false)
+      requestCallbacks[1](null, '{}', 200)
+      assert.strictEqual(reentrantFlushed, true)
+    })
+
+    it('should not retain a request when submission throws', () => {
+      const error = new Error('submission failed')
+
+      request.throws(error)
+      encoder.count.onFirstCall().returns(1)
+      encoder.count.onSecondCall().returns(0)
+
+      assert.throws(() => writer.flush(), error)
+
+      request.resetBehavior()
+      let flushed = false
+      writer.flush(() => {
+        flushed = true
+      })
+      assert.strictEqual(flushed, true)
+    })
+
     it('should flush traces to the intake with correct headers', (done) => {
       const expectedData = Buffer.from('{"traces":[]}')
 
