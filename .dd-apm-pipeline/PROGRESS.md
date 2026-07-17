@@ -2,15 +2,15 @@
 
 This file is the compaction and handoff state.
 
-- [ ] [plan](01-plan.md) (required)
-  Status: pending
-  Evidence: pending
-- [ ] [plan_review](02-plan-review.md) (required)
-  Status: pending
-  Evidence: pending
-- [ ] [implement](03-implement.md) (required)
-  Status: pending
-  Evidence: pending
+- [x] [plan](01-plan.md) (required)
+  Status: complete
+  Evidence: `evidence/01/summary.md`; baseline reproduction in `evidence/01/raw/baseline.out`.
+- [x] [plan_review](02-plan-review.md) (required)
+  Status: complete
+  Evidence: `evidence/02/summary.md`.
+- [x] [implement](03-implement.md) (required)
+  Status: complete
+  Evidence: `evidence/03/summary.md`.
 - [ ] [test > diagnosis](04-test-diagnosis.md) (required)
   Status: pending
   Evidence: pending
