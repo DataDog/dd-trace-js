@@ -1,11 +1,18 @@
 'use strict'
 
+const { randomUUID } = require('crypto')
 const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
+
+const log = require('../../dd-trace/src/log')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
+const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
+  'Browser-side Cypress Test Optimization instrumentation was not installed.'
+const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
+  'Cypress configurations that cannot be intercepted through cypress.defineConfig were not auto-instrumented.'
 
 const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
 
@@ -24,6 +31,82 @@ const noopTask = {
   'dd:afterEach': () => null,
   'dd:addTags': () => null,
   'dd:log': () => null,
+}
+
+/** @typedef {Error & { code?: string, path?: string, syscall?: string }} FileSystemError */
+/** @typedef {{ directory: string, error: FileSystemError }} FileCreationFailure */
+
+/**
+ * @param {FileSystemError} error filesystem error
+ * @param {string} fallbackPath path used when the error does not include one
+ * @returns {string} concise error description
+ */
+function formatFileSystemError (error, fallbackPath) {
+  const code = error?.code || error?.name || 'UNKNOWN'
+  const syscall = error?.syscall ? ` during ${error.syscall}` : ''
+  return `${code}${syscall} at ${error?.path || fallbackPath}`
+}
+
+/**
+ * @param {string} artifact artifact that could not be created
+ * @param {FileCreationFailure[]} failures failed directory attempts
+ * @param {string} consequence effect on Cypress instrumentation
+ * @returns {void}
+ */
+function warnFileCreationFailures (artifact, failures, consequence) {
+  const details = failures.map(({ directory, error }) => formatFileSystemError(error, directory)).join('; ')
+  log.warn('Datadog could not create %s. Attempts failed: %s. %s', artifact, details, consequence)
+}
+
+/**
+ * @param {string} filePath generated file to remove
+ * @returns {void}
+ */
+function removeGeneratedFile (filePath) {
+  try {
+    fs.unlinkSync(filePath)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      log.warn(
+        'Datadog could not remove generated Cypress file %s: %s.',
+        filePath,
+        formatFileSystemError(error, filePath)
+      )
+    }
+  }
+}
+
+/**
+ * Writes a new file without following or overwriting an existing path. If the
+ * write fails after creation, removes the partial file before rethrowing.
+ *
+ * @param {string} filePath generated file path
+ * @param {string} content generated file content
+ * @returns {void}
+ */
+function writeExclusiveFile (filePath, content) {
+  let descriptor
+  let operationError
+
+  try {
+    descriptor = fs.openSync(filePath, 'wx')
+    fs.writeFileSync(descriptor, content)
+  } catch (error) {
+    operationError = error
+  }
+
+  if (descriptor !== undefined) {
+    try {
+      fs.closeSync(descriptor)
+    } catch (error) {
+      if (!operationError) operationError = error
+    }
+  }
+
+  if (operationError) {
+    if (descriptor !== undefined) removeGeneratedFile(filePath)
+    throw operationError
+  }
 }
 
 /**
@@ -103,16 +186,13 @@ function getRelativeImportPath (fromDirectory, importedFile) {
  *
  * @param {string} directory writable directory inside the Cypress project
  * @param {string|false|undefined} originalSupportFile user's support file
+ * @param {string} browserHooksSource Datadog browser-side support hooks
  * @returns {string[]} generated files
  */
-function createSupportWrapper (directory, originalSupportFile) {
-  const suffix = `${process.pid}`
+function createSupportWrapper (directory, originalSupportFile, browserHooksSource) {
+  const suffix = `${process.pid}-${randomUUID()}`
   const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
   const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
-  const browserHooksSource = fs.readFileSync(
-    require.resolve('../../datadog-plugin-cypress/src/support'),
-    'utf8'
-  )
   const wrapperImports = [
     `import ${JSON.stringify(getRelativeImportPath(directory, browserHooksFile))}`,
   ]
@@ -121,15 +201,18 @@ function createSupportWrapper (directory, originalSupportFile) {
     wrapperImports.push(`import ${JSON.stringify(getRelativeImportPath(directory, originalSupportFile))}`)
   }
 
-  fs.writeFileSync(browserHooksFile, browserHooksSource, { flag: 'wx' })
+  const generatedFiles = []
   try {
-    fs.writeFileSync(wrapperFile, `${wrapperImports.join('\n')}\n`, { flag: 'wx' })
+    writeExclusiveFile(browserHooksFile, browserHooksSource)
+    generatedFiles.push(browserHooksFile)
+    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n`)
+    generatedFiles.push(wrapperFile)
   } catch (error) {
-    try { fs.unlinkSync(browserHooksFile) } catch { /* best effort */ }
+    for (const generatedFile of generatedFiles) removeGeneratedFile(generatedFile)
     throw error
   }
 
-  return [browserHooksFile, wrapperFile]
+  return generatedFiles
 }
 
 /**
@@ -153,25 +236,60 @@ function injectSupportFile (config) {
           !trimmed.startsWith('//') && !trimmed.startsWith('*')
       })
       if (hasActiveDdTraceImport) return
-    } catch {
+    } catch (error) {
+      log.warn(
+        'Datadog could not read the Cypress support file %s: %s. %s',
+        originalSupportFile,
+        formatFileSystemError(error, originalSupportFile),
+        BROWSER_INSTRUMENTATION_NOT_INSTALLED
+      )
       return
     }
+  }
+
+  let browserHooksSource
+  let browserHooksPath
+  try {
+    browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+    browserHooksSource = fs.readFileSync(browserHooksPath, 'utf8')
+  } catch (error) {
+    log.warn(
+      'Datadog could not read its Cypress browser support hooks: %s. %s',
+      formatFileSystemError(error, browserHooksPath || 'dd-trace Cypress browser support hooks'),
+      BROWSER_INSTRUMENTATION_NOT_INSTALLED
+    )
+    return
   }
 
   const projectRoot = config.projectRoot
   const candidateDirectories = []
   if (originalSupportFile) candidateDirectories.push(path.dirname(originalSupportFile))
   if (projectRoot) candidateDirectories.push(projectRoot)
+  const failures = []
 
   for (const directory of new Set(candidateDirectories)) {
     if (projectRoot && !isPathInside(projectRoot, directory)) continue
     try {
-      const generatedFiles = createSupportWrapper(directory, originalSupportFile)
+      const generatedFiles = createSupportWrapper(directory, originalSupportFile, browserHooksSource)
       config.supportFile = generatedFiles[1]
       return generatedFiles
-    } catch {
+    } catch (error) {
+      failures.push({ directory, error })
       // Try the next directory inside the project.
     }
+  }
+
+  if (failures.length > 0) {
+    warnFileCreationFailures(
+      'the Cypress support wrapper',
+      failures,
+      BROWSER_INSTRUMENTATION_NOT_INSTALLED
+    )
+  } else {
+    log.warn(
+      'Datadog could not create the Cypress support wrapper because no project directory was available. %s',
+      BROWSER_INSTRUMENTATION_NOT_INSTALLED
+    )
   }
 }
 
@@ -232,7 +350,7 @@ function registerDdTraceHooks (
   const cleanupWrapper = () => {
     if (generatedSupportFiles) {
       for (const generatedFile of generatedSupportFiles) {
-        try { fs.unlinkSync(generatedFile) } catch { /* best effort */ }
+        removeGeneratedFile(generatedFile)
       }
     }
   }
@@ -415,7 +533,7 @@ function createConfigWrapper (originalConfigFile, wrapperDirectory) {
 
   const wrapperFile = path.join(
     wrapperDirectory,
-    `.dd-cypress-config-${process.pid}${wrapperExt}`
+    `.dd-cypress-config-${process.pid}-${randomUUID()}${wrapperExt}`
   )
 
   const cypressConfigPath = require.resolve('./cypress-config')
@@ -445,7 +563,7 @@ function createConfigWrapper (originalConfigFile, wrapperDirectory) {
         '',
       ].join('\n')
 
-  fs.writeFileSync(wrapperFile, body)
+  writeExclusiveFile(wrapperFile, body)
   return wrapperFile
 }
 
@@ -540,16 +658,25 @@ function wrapCliConfigFileOptions (options) {
   if (!configFilePath || !fs.existsSync(configFilePath)) return noop
 
   let wrapperFile
+  const failures = []
   for (const wrapperDirectory of new Set([path.dirname(configFilePath), projectRoot])) {
     try {
       wrapperFile = createConfigWrapper(configFilePath, wrapperDirectory)
       break
-    } catch {
-      // Try the project root if the config directory is read-only.
+    } catch (error) {
+      failures.push({ directory: wrapperDirectory, error })
+      // Try the project root as the fallback location.
     }
   }
 
-  if (!wrapperFile) return noop
+  if (!wrapperFile) {
+    warnFileCreationFailures(
+      'the Cypress configuration wrapper',
+      failures,
+      CONFIG_INSTRUMENTATION_NOT_INSTALLED
+    )
+    return noop
+  }
 
   try {
     const restoreTsNodeCompilerOptions = configureTsNodeForTypeScript6(projectRoot, configFilePath)
@@ -558,11 +685,11 @@ function wrapCliConfigFileOptions (options) {
       options: { ...options, configFile: wrapperFile },
       cleanup: () => {
         restoreTsNodeCompilerOptions()
-        try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
+        removeGeneratedFile(wrapperFile)
       },
     }
   } catch {
-    try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
+    removeGeneratedFile(wrapperFile)
     return noop
   }
 }

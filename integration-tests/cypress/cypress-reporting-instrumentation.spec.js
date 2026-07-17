@@ -167,6 +167,7 @@ moduleTypes.forEach(({
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
     const sandboxDependencies = [`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript']
     if (type === 'commonJS' && version === 'latest') {
+      // These dependencies are only needed by the component/Vite regression test below.
       sandboxDependencies.push(
         '@vitejs/plugin-react@4.3.4',
         'react@18.3.1',
