@@ -16,12 +16,17 @@ describe('integrations', () => {
   let McpServer
   let InMemoryTransport
   let loadMcpTools
+  let tracer
 
   let client
   let server
 
   describe('modelcontextprotocol-sdk', () => {
     const { getEvents } = useLlmObs({ plugin: ['langchain', 'modelcontextprotocol-sdk'] })
+
+    before(() => {
+      tracer = global._ddtrace
+    })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
@@ -203,23 +208,44 @@ describe('integrations', () => {
       })
 
       describe('Client.listTools', () => {
-        it('does not capture a task payload for listing tools', async () => {
+        it('captures the tool inventory', async () => {
           const result = await client.listTools()
 
           assert.ok(result.tools)
           assert.equal(result.tools.length, 3)
 
-          const { apmSpans, llmobsSpans } = await getEvents(0)
-          assert.ok(apmSpans.some(span => span.resource === 'ClientSession.list_tools'))
-          assert.equal(llmobsSpans.length, 0)
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpan = apmSpans.find(span => span.resource === 'ClientSession.list_tools')
+          assert.ok(listToolsSpan, 'MCP list-tools APM span should remain present')
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: listToolsSpan,
+            spanKind: 'task',
+            name: 'MCP Client List Tools',
+            outputValue: JSON.stringify(result),
+            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+          })
+        })
+
+        it('captures the tool inventory once per trace', async () => {
+          await tracer.trace('list-tools', async () => {
+            await client.listTools()
+            await client.listTools()
+          })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
+          assert.equal(listToolsSpans.length, 2)
+          assert.equal(llmobsSpans.length, 1)
         })
       })
 
       describe('LangChain MCP adapter', () => {
         it('keeps the LangChain tool as the only payload-bearing LLMObs tool span', async () => {
           const [tool] = await loadMcpTools('test-server', client)
-          const { llmobsSpans: discoveryLlmObsSpans } = await getEvents(0)
-          assert.equal(discoveryLlmObsSpans.length, 0)
+          const { llmobsSpans: discoveryLlmObsSpans } = await getEvents()
+          assert.equal(discoveryLlmObsSpans.length, 1)
+          assert.equal(discoveryLlmObsSpans[0].name, 'MCP Client List Tools')
 
           const result = await tool.invoke({})
 

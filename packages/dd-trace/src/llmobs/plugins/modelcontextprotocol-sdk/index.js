@@ -7,6 +7,8 @@ const LLMObsTagger = require('../../tagger')
 const LLMObsPlugin = require('../base')
 const { formatInput, formatOutput } = require('./utils')
 
+const listToolsTraces = new WeakMap()
+
 class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_tool_call'
   static integration = 'modelcontextprotocol-sdk'
@@ -15,6 +17,9 @@ class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const parentSpan = storage.getStore()?.span
     const parentTags = LLMObsTagger.tagMap.get(parentSpan)
+
+    // LangChain's Tool.invoke() is the canonical LLMObs tool span for adapter calls.
+    // Keep MCP's APM span for protocol visibility and propagation, but avoid duplicating its I/O payload.
     if (parentTags?.[INTEGRATION] === 'langchain' && parentTags[SPAN_KIND] === 'tool') return
 
     const params = ctx.arguments?.[0]
@@ -58,7 +63,17 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   static integration = 'modelcontextprotocol-sdk'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
 
-  getLLMObsSpanRegisterOptions () {}
+  getLLMObsSpanRegisterOptions (ctx) {
+    const trace = ctx.currentStore?.span?.context()._trace
+    if (trace && listToolsTraces.has(trace)) return
+
+    if (trace) listToolsTraces.set(trace, true)
+
+    return {
+      kind: 'task',
+      name: 'MCP Client List Tools',
+    }
+  }
 
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
