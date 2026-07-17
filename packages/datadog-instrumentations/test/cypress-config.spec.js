@@ -198,6 +198,35 @@ describe('cypress config instrumentation', () => {
       assert.match(warnings[0], /EACCES during read/)
     })
 
+    it('warns when the Datadog browser hooks cannot be read', () => {
+      const projectRoot = createProjectRoot()
+      const browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+
+      const { cypressConfig, warnings } = loadCypressConfig({
+        readFileSync (filePath, ...args) {
+          if (filePath === browserHooksPath) throw createFileError('EACCES', filePath, 'read')
+          return fs.readFileSync(filePath, ...args)
+        },
+      })
+      const resolvedConfig = { projectRoot, supportFile: false }
+      injectSupportFile(cypressConfig, resolvedConfig)
+
+      assert.strictEqual(resolvedConfig.supportFile, false)
+      assert.strictEqual(warnings.length, 1)
+      assert.match(warnings[0], /could not read its Cypress browser support hooks/)
+      assert.match(warnings[0], /EACCES during read/)
+    })
+
+    it('warns when no project directory is available for the support wrapper', () => {
+      const { cypressConfig, warnings } = loadCypressConfig()
+      const resolvedConfig = { supportFile: false }
+      injectSupportFile(cypressConfig, resolvedConfig)
+
+      assert.strictEqual(resolvedConfig.supportFile, false)
+      assert.strictEqual(warnings.length, 1)
+      assert.match(warnings[0], /no project directory was available/)
+    })
+
     it('removes partial support files when the filesystem runs out of space', () => {
       const projectRoot = createProjectRoot()
       const supportDirectory = path.join(projectRoot, 'cypress', 'support')
@@ -231,6 +260,53 @@ describe('cypress config instrumentation', () => {
       assert.strictEqual(warnings[0].match(/ENOSPC during write/g).length, 2)
       assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
       assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('removes partial support files when closing them fails', () => {
+      const projectRoot = createProjectRoot()
+      const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+      const supportFile = path.join(supportDirectory, 'e2e.js')
+      const pathsByDescriptor = new Map()
+      fs.mkdirSync(supportDirectory, { recursive: true })
+      fs.writeFileSync(supportFile, '// user support\n')
+
+      const { cypressConfig, warnings } = loadCypressConfig({
+        openSync (filePath, flags) {
+          const descriptor = fs.openSync(filePath, flags)
+          pathsByDescriptor.set(descriptor, filePath)
+          return descriptor
+        },
+        closeSync (descriptor) {
+          const filePath = pathsByDescriptor.get(descriptor)
+          pathsByDescriptor.delete(descriptor)
+          fs.closeSync(descriptor)
+          throw createFileError('EIO', filePath, 'close')
+        },
+      })
+      injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+      assert.strictEqual(warnings.length, 1)
+      assert.strictEqual(warnings[0].match(/EIO during close/g).length, 2)
+      assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+      assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+    })
+
+    it('warns when generated support files cannot be removed', async () => {
+      const projectRoot = createProjectRoot()
+
+      const { cypressConfig, warnings } = loadCypressConfig({
+        unlinkSync (filePath) {
+          throw createFileError('EACCES', filePath, 'unlink')
+        },
+      })
+      const { handlers } = injectSupportFile(cypressConfig, { projectRoot, supportFile: false })
+
+      await handlers['after:run']({})
+
+      assert.strictEqual(warnings.length, 2)
+      assert.ok(warnings.every(warning => warning.includes('could not remove generated Cypress file')))
+      assert.ok(warnings.every(warning => warning.includes('EACCES during unlink')))
+      assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
     })
   })
 
