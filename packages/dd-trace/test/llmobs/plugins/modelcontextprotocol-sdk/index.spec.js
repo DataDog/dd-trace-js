@@ -240,6 +240,34 @@ describe('integrations', () => {
           assert.equal(listToolsSpans.length, 2)
           assert.equal(llmobsSpans.length, 1)
         })
+
+        it('captures the tool inventory once for concurrent calls in a trace', async () => {
+          await tracer.trace('list-tools', () => Promise.all([client.listTools(), client.listTools()]))
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
+          assert.equal(listToolsSpans.length, 2)
+          assert.equal(llmobsSpans.length, 1)
+        })
+
+        it('captures the tool inventory after a dropped event in the same trace', async () => {
+          let processorCalls = 0
+          tracer.llmobs.registerProcessor(span => ++processorCalls === 1 ? null : span)
+
+          try {
+            await tracer.trace('list-tools', async () => {
+              await client.listTools()
+              await client.listTools()
+            })
+          } finally {
+            tracer.llmobs.deregisterProcessor()
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
+          assert.equal(listToolsSpans.length, 2)
+          assert.equal(llmobsSpans.length, 1)
+        })
       })
 
       describe('LangChain MCP adapter', () => {

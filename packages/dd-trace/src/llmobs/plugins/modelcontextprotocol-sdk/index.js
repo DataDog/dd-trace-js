@@ -1,5 +1,6 @@
 'use strict'
 
+const { LLMOBS_SUBMITTED_TAG_KEY } = require('../../constants/tags')
 const { storage } = require('../../storage')
 
 const LLMObsPlugin = require('../base')
@@ -7,6 +8,7 @@ const { formatInput, formatOutput } = require('./utils')
 
 const listToolsTraces = new WeakMap()
 const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
+const LIST_TOOLS_CAPTURED = Symbol('dd-trace:mcp:list-tools-captured')
 
 class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_tool_call'
@@ -61,7 +63,16 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
 
   getLLMObsSpanRegisterOptions (ctx) {
     const trace = ctx.currentStore?.span?.context()._trace
-    if (trace && listToolsTraces.has(trace)) return
+    const previousSpan = trace && listToolsTraces.get(trace)
+    if (previousSpan) {
+      const previousContext = previousSpan.context()
+      if (!previousContext._isFinished ||
+          (previousSpan[LIST_TOOLS_CAPTURED] && previousContext.getTag(LLMOBS_SUBMITTED_TAG_KEY) === '1')) {
+        return
+      }
+    }
+
+    if (trace) listToolsTraces.set(trace, ctx.currentStore.span)
 
     return {
       kind: 'task',
@@ -74,7 +85,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     if (!span || ctx.error) return
 
     this._tagger.tagTextIO(span, null, JSON.stringify(ctx.result))
-    listToolsTraces.set(span.context()._trace, true)
+    span[LIST_TOOLS_CAPTURED] = true
   }
 }
 
