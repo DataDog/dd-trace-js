@@ -6,15 +6,17 @@
 
 const { execSync } = require('node:child_process')
 const { copyFileSync, existsSync, readFileSync, renameSync } = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
 const ROOT = path.join(__dirname, '..', '..')
 const PACKAGE_JSON = path.join(ROOT, 'package.json')
 const ELECTRON_JSON = path.join(ROOT, 'package.electron.json')
-const BACKUP = path.join(ROOT, 'package.json.bak')
 const README = path.join(ROOT, 'README.md')
 const ELECTRON_README = path.join(ROOT, 'README.electron.md')
-const README_BACKUP = path.join(ROOT, 'README.md.bak')
+// Store backups outside the package root so they are never picked up by npm publish.
+const BACKUP = path.join(os.tmpdir(), 'dd-trace-package.json.bak')
+const README_BACKUP = path.join(os.tmpdir(), 'dd-trace-readme.md.bak')
 
 function run (cmd) {
   execSync(cmd, { cwd: ROOT, stdio: 'inherit' })
