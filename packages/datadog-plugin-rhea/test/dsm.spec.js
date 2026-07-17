@@ -11,20 +11,31 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   describe('rhea', function () {
+    before(() => {
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
+    })
+
+    after(() => {
+      delete process.env.DD_DATA_STREAMS_ENABLED
+    })
+
     after(() => agent.close({ ritmReset: false }))
 
     withVersions('rhea', 'rhea', version => {
       describe('data stream monitoring', function () {
         this.timeout(30000)
         let container
+        let connection
 
         beforeEach(() => {
-          agent.load('rhea')
-          const tracer = require('../../dd-trace')
-          tracer.use('rhea', { dsmEnabled: true })
+          return agent.load('rhea', { dsmEnabled: true })
         })
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => {
+          connection?.close()
+          connection = null
+          return agent.close({ ritmReset: false })
+        })
 
         describe('concurrent context isolation', () => {
           it('Should maintain separate DSM context for sequential consume-produce flows', (done) => {
@@ -76,7 +87,7 @@ describe('Plugin', () => {
               }
             })
 
-            const connection = container.connect({
+            connection = container.connect({
               username: 'admin',
               password: 'admin',
               host: 'localhost',
