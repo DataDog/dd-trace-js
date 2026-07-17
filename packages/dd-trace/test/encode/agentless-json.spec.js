@@ -119,7 +119,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(span.meta['_dd.p.tid'], undefined)
     })
 
-    it('should include span fields with start time converted to seconds', () => {
+    it('should include span fields with start time in nanoseconds', () => {
       encoder.encode(data)
 
       const buffer = encoder.makePayload()
@@ -132,11 +132,32 @@ describe('AgentlessJSONEncoder', () => {
         service: 'test-service',
         type: 'web',
         error: 0,
-        start: 1234567890,
+        start: 1234567890000000000,
         duration: 5000000,
       })
       assert.deepStrictEqual(span.meta, { foo: 'bar', '_dd.compute_stats': '1' })
       assert.deepStrictEqual(span.metrics, { example: 1.5, _trace_root: 1 })
+    })
+
+    it('should preserve span timing across separately encoded distributed trace chunks', () => {
+      data[0].duration = 2_000_000_000
+
+      encoder.encode(data)
+      encoder.encode([childSpan])
+
+      const buffer = encoder.makePayload()
+      assert.ok(buffer.includes(Buffer.from('"start":1234567890000000000')))
+      assert.ok(buffer.includes(Buffer.from('"start":1234567891000000000')))
+
+      const decoded = JSON.parse(buffer.toString())
+      const parent = decoded.traces[0].spans[0]
+      const child = decoded.traces[1].spans[0]
+
+      assert.strictEqual(parent.start, data[0].start)
+      assert.strictEqual(child.start, childSpan.start)
+      assert.strictEqual(child.start - parent.start, 1_000_000_000)
+      assert.ok(child.start > parent.start)
+      assert.ok(child.start < parent.start + parent.duration)
     })
 
     it('should handle multiple spans in one trace', () => {
