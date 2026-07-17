@@ -244,17 +244,18 @@ class SpanProcessor {
 
   process (span) {
     const spanContext = span.context()
-    const active = []
     const trace = spanContext._trace
     const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
     if (DD_TRACE_ENABLED === false) {
-      this._erase(trace, active)
+      this._erase(trace, [])
       return
     }
-    if (started.length === finished.length || finished.length >= flushMinSpans) {
+    const allStartedFinished = started.length === finished.length
+    if (allStartedFinished || finished.length >= flushMinSpans) {
+      const active = []
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
@@ -269,7 +270,7 @@ class SpanProcessor {
       // Pass raw spans to the native exporter; the WASM pipeline serializes
       // them. When native stats are enabled the concentrator handles stats
       // aggregation during flush_chunk.
-      const finishedSpansToExport = []
+      const finishedSpansToExport = allStartedFinished ? started : []
       const otelSemantics = this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
       let isFirstSpanInChunk = true
 
@@ -277,7 +278,7 @@ class SpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          finishedSpansToExport.push(span)
+          if (!allStartedFinished) finishedSpansToExport.push(span)
           const context = span.context()
 
           // OTLP trace metrics remain a JS-side stats feature. Build the same
