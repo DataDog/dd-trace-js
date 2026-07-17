@@ -36,6 +36,8 @@ describe('NativeSpanContext', () => {
       queueOp: sinon.stub(),
       queueBatchMeta: sinon.stub(),
       queueBatchMetrics: sinon.stub(),
+      queueBatchMetaFlat: sinon.stub(),
+      queueBatchMetricsFlat: sinon.stub(),
     }
 
     // Create a mock ID object with proper 8-byte buffer (big-endian)
@@ -105,6 +107,8 @@ describe('NativeSpanContext', () => {
       nativeSpans.queueOp.resetHistory()
       nativeSpans.queueBatchMeta.resetHistory()
       nativeSpans.queueBatchMetrics.resetHistory()
+      nativeSpans.queueBatchMetaFlat.resetHistory()
+      nativeSpans.queueBatchMetricsFlat.resetHistory()
 
       // After export the span's Create is gone from the WASM change-buffer map;
       // any further op would throw `span not found` and drop the whole pending
@@ -116,6 +120,8 @@ describe('NativeSpanContext', () => {
       assert.strictEqual(nativeSpans.queueOp.callCount, 0)
       assert.strictEqual(nativeSpans.queueBatchMeta.callCount, 0)
       assert.strictEqual(nativeSpans.queueBatchMetrics.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMetaFlat.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMetricsFlat.callCount, 0)
 
       // The JS tag cache still updates (parity with the JS-only pipeline, which
       // also serializes spans at export time so late tags never hit the wire).
@@ -386,6 +392,7 @@ describe('NativeSpanContext', () => {
 
     it('batches meta/metrics, drops NaN, and flattens objects one level', () => {
       spanContext.syncToNativeOnly({
+        'http.status_code': 201,
         'good.metric': 123,
         'bad.metric': Number.NaN,
         'a.string': 'hello',
@@ -393,19 +400,20 @@ describe('NativeSpanContext', () => {
         obj: { a: 1, b: 'x' },
       })
 
-      const metricBatch = nativeSpans.queueBatchMetrics.getCall(0).args[1]
-      const metaBatch = nativeSpans.queueBatchMeta.getCall(0).args[1]
+      const metricBatch = nativeSpans.queueBatchMetricsFlat.getCall(0).args[1]
+      const metaBatch = nativeSpans.queueBatchMetaFlat.getCall(0).args[1]
 
       // NaN is dropped; valid number, boolean, and flattened obj.a are metrics.
       assert.deepStrictEqual(metricBatch, [
-        ['good.metric', 123],
-        ['flag', 1],
-        ['obj.a', 1],
+        'good.metric', 123,
+        'flag', 1,
+        'obj.a', 1,
       ])
-      // Strings and the flattened obj.b land in meta.
+      // Strings, http.status_code, and the flattened obj.b land in meta.
       assert.deepStrictEqual(metaBatch, [
-        ['a.string', 'hello'],
-        ['obj.b', 'x'],
+        'http.status_code', '201',
+        'a.string', 'hello',
+        'obj.b', 'x',
       ])
     })
   })

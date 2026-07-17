@@ -738,6 +738,8 @@ describe('NativeSpansInterface', () => {
       const indexBefore = nativeSpans._cqbIndex
       nativeSpans.queueBatchMeta(spanId, [])
       nativeSpans.queueBatchMetrics(spanId, [])
+      nativeSpans.queueBatchMetaFlat(spanId, [])
+      nativeSpans.queueBatchMetricsFlat(spanId, [])
       assert.strictEqual(nativeSpans._cqbIndex, indexBefore)
       assert.strictEqual(nativeSpans._cqbCount, 0)
     })
@@ -757,6 +759,25 @@ describe('NativeSpansInterface', () => {
       // the value is written inline as an f64.
       const metaRecordEnd = nativeSpans._cqbIndex
       nativeSpans.queueBatchMetrics(spanId, [['m1', 1.5], ['m2', 2.5]])
+
+      assert.strictEqual(nativeSpans._cqbCount, 2)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(metaRecordEnd, true), 16)
+      assert.ok(nativeSpans._stringMap.has('m1'))
+      assert.ok(nativeSpans._stringMap.has('m2'))
+    })
+
+    it('writes flat meta and metric batches without pair arrays', () => {
+      nativeSpans.queueBatchMetaFlat(spanId, ['k1', 'v1', 'k2', 'v2'])
+
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 15)
+      assert.ok(nativeSpans._stringMap.has('k1'))
+      assert.ok(nativeSpans._stringMap.has('v1'))
+      assert.ok(nativeSpans._stringMap.has('k2'))
+      assert.ok(nativeSpans._stringMap.has('v2'))
+
+      const metaRecordEnd = nativeSpans._cqbIndex
+      nativeSpans.queueBatchMetricsFlat(spanId, ['m1', 1.5, 'm2', 2.5])
 
       assert.strictEqual(nativeSpans._cqbCount, 2)
       assert.strictEqual(nativeSpans._cqbView.getUint16(metaRecordEnd, true), 16)

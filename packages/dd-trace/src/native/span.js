@@ -12,6 +12,8 @@ const { MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
 const { encode: encodeMsgpack } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
+const { DD_MAJOR } = require('../../../../version')
 
 // Republished from the `addTags` override so subscribers (e.g. the wall
 // profiler's web-tag refresh) still receive tag updates on the native path.
@@ -387,13 +389,12 @@ class NativeDatadogSpan extends DatadogSpan {
 
     return spanContext
   }
-
   /**
    * Override `setTag` for a single-tag fast path that avoids the
    * `{ [key]: value }` literal + parsedTags round-trip the batched
-   * `addTags` path does, and short-circuits prioritySampler.sample
-   * once a priority is decided (sample() early-returns but still
-   * pays `_getContext()` + arg setup).
+   * `addTags` path does. Match the base span sampling guard: only manual
+   * priority tags need eager sampling; ordinary tags are sampled later by the
+   * processor.
    *
    * @param {string} key
    * @param {unknown} value
@@ -407,7 +408,7 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._spanContext.syncOneTagToNative(key, value)
 
-    if (this._spanContext._sampling.priority === undefined) {
+    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
     return this
@@ -426,7 +427,7 @@ class NativeDatadogSpan extends DatadogSpan {
    * @returns {this}
    */
   addTags (keyValuePairs) {
-    const tags = this._spanContext.getTags()
+    let mayChangeSamplingPriority
 
     // Fast path: plain object (the hot path from instrumentations).
     // `tagger.add` for object input is just `Object.assign(parsedTags, kv)`,
@@ -434,23 +435,32 @@ class NativeDatadogSpan extends DatadogSpan {
     // Use `Object.assign` (not `for-in`) so Symbol-keyed entries like
     // `IGNORE_OTEL_ERROR` reach the JS cache; `syncToNativeOnly` filters
     // symbol keys back out before they hit WASM.
-    if (keyValuePairs && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
+    if (keyValuePairs !== null && typeof keyValuePairs === 'object' && !Array.isArray(keyValuePairs)) {
+      const tags = this._spanContext.getTags()
       Object.assign(tags, keyValuePairs)
       this._spanContext.syncToNativeOnly(keyValuePairs)
-      if (this._spanContext._sampling.priority === undefined) {
-        this._prioritySampler.sample(this, false)
+      mayChangeSamplingPriority =
+        MANUAL_KEEP in keyValuePairs ||
+        MANUAL_DROP in keyValuePairs ||
+        SAMPLING_PRIORITY in keyValuePairs
+    } else {
+      // Slow path: string or array input. v6 does not support these shapes;
+      // match the base span fast return so addTags(undefined) from startSpan
+      // does not allocate an empty parsedTags object on every native span.
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValuePairs === 'string' || Array.isArray(keyValuePairs))) {
+        const tags = this._spanContext.getTags()
+        const parsedTags = {}
+        tagger.add(parsedTags, keyValuePairs)
+        Object.assign(tags, parsedTags)
+        this._spanContext.syncToNativeOnly(parsedTags)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
       }
-      if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
-      return this
     }
 
-    // Slow path: string or array input.
-    const parsedTags = {}
-    tagger.add(parsedTags, keyValuePairs)
-    Object.assign(tags, parsedTags)
-    this._spanContext.syncToNativeOnly(parsedTags)
-
-    if (this._spanContext._sampling.priority === undefined) {
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
     if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
@@ -598,3 +608,8 @@ class NativeDatadogSpan extends DatadogSpan {
 }
 
 module.exports = NativeDatadogSpan
+
+
+function isSamplingPriorityTag (key) {
+  return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
+}

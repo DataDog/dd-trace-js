@@ -707,6 +707,55 @@ class NativeSpansInterface {
   }
 
   /**
+   * Queue multiple meta tags from a flat scratch array: [key, value, ...].
+   * Mutates the scratch array to interned string ids before taking WASM views.
+   * Used by the Span#addTags hot path to avoid per-tag pair arrays.
+   *
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
+   * @param {Array<string|number>} tags Alternating key/value entries
+   */
+  queueBatchMetaFlat (spanId, tags) {
+    const count = tags.length >> 1
+    if (count === 0) return
+
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    let idx = this._cqbIndex
+    const needed = 16 + count * 8
+
+    if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve all string IDs first (may trigger memory growth). This array is a
+    // local scratch buffer from syncToNativeOnly, so mutating it is safe.
+    for (let i = 0; i < tags.length; i++) {
+      tags[i] = this.getStringId(tags[i])
+    }
+
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint16(idx, 15, true)
+    idx += 2
+    buf.set(spanId, idx)
+    idx += 8
+    view.setUint32(idx, count, true)
+    idx += 4
+    for (let i = 0; i < tags.length; i += 2) {
+      view.setUint32(idx, tags[i], true)
+      idx += 4
+      view.setUint32(idx, tags[i + 1], true)
+      idx += 4
+    }
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
    * Queue multiple metric tags using the BatchSetMetric opcode.
    * Single header, N key/value pairs. Written directly to WASM memory.
    *
@@ -744,6 +793,55 @@ class NativeSpansInterface {
       view.setUint32(idx, keyIds[i], true)
       idx += 4
       view.setFloat64(idx, tags[i][1], true)
+      idx += 8
+    }
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Queue multiple metric tags from a flat scratch array: [key, value, ...].
+   * Mutates key slots to interned string ids before taking WASM views. Used by
+   * the Span#addTags hot path to avoid per-tag pair arrays.
+   *
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
+   * @param {Array<string|number>} tags Alternating key/value entries
+   */
+  queueBatchMetricsFlat (spanId, tags) {
+    const count = tags.length >> 1
+    if (count === 0) return
+
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    let idx = this._cqbIndex
+    const needed = 16 + count * 12
+
+    if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve all string IDs first (may trigger memory growth). This array is a
+    // local scratch buffer from syncToNativeOnly, so mutating it is safe.
+    for (let i = 0; i < tags.length; i += 2) {
+      tags[i] = this.getStringId(tags[i])
+    }
+
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint16(idx, 16, true)
+    idx += 2
+    buf.set(spanId, idx)
+    idx += 8
+    view.setUint32(idx, count, true)
+    idx += 4
+    for (let i = 0; i < tags.length; i += 2) {
+      view.setUint32(idx, tags[i], true)
+      idx += 4
+      view.setFloat64(idx, tags[i + 1], true)
       idx += 8
     }
 

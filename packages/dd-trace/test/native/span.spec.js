@@ -450,12 +450,42 @@ describe('NativeDatadogSpan', () => {
       }
     })
 
-    it('should call prioritySampler.sample when priority is undefined', () => {
-      // Fresh span: priority starts undefined; setTag should re-evaluate sampling.
+    it('samples when setting a manual priority tag', () => {
       prioritySampler.sample.resetHistory()
       span._spanContext._sampling = {}
       span.setTag('manual.keep', true)
       sinon.assert.calledOnce(prioritySampler.sample)
+    })
+
+    it('does not sample when setting a non-priority tag', () => {
+      prioritySampler.sample.resetHistory()
+      span._spanContext._sampling = {}
+      span.setTag('http.method', 'GET')
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    it('samples when addTags includes a manual priority tag', () => {
+      prioritySampler.sample.resetHistory()
+      span._spanContext._sampling = {}
+      span.addTags({ 'manual.keep': true })
+      sinon.assert.calledOnce(prioritySampler.sample)
+    })
+
+    it('does not sample when addTags contains no priority tags', () => {
+      prioritySampler.sample.resetHistory()
+      span._spanContext._sampling = {}
+      span.addTags({ 'http.method': 'GET' })
+      sinon.assert.notCalled(prioritySampler.sample)
+    })
+
+    it('ignores invalid addTags input on v6', () => {
+      span.context().syncToNativeOnly.resetHistory()
+      prioritySampler.sample.resetHistory()
+      const tagsBefore = { ...span.context().getTags() }
+      span.addTags(undefined)
+      assert.deepStrictEqual(span.context().getTags(), tagsBefore)
+      sinon.assert.notCalled(span.context().syncToNativeOnly)
+      sinon.assert.notCalled(prioritySampler.sample)
     })
 
     it('should skip prioritySampler.sample when priority is already set', () => {

@@ -97,6 +97,42 @@ function appendTag (meta, metrics, key, value, nested) {
   }
 }
 
+/**
+ * Flat-array variant for the addTags hot path. Stores alternating key/value
+ * entries (`[key, value, ...]`) so bulk native sync avoids allocating a
+ * two-element array per tag.
+ *
+ * @param {Array<string>} meta
+ * @param {Array<string|number>} metrics
+ * @param {string} key
+ * @param {unknown} value
+ * @param {boolean} [nested] - true once recursed; blocks deeper flattening
+ */
+function appendTagFlat (meta, metrics, key, value, nested) {
+  switch (typeof value) {
+    case 'string':
+      meta.push(key, value)
+      break
+    case 'number':
+      // Old pipeline dropped NaN metrics rather than emitting NaN.
+      if (!Number.isNaN(value)) metrics.push(key, value)
+      break
+    case 'boolean':
+      metrics.push(key, value ? 1 : 0)
+      break
+    default:
+      if (value == null) break
+      // Flatten plain objects one level; everything else is a string leaf.
+      if (!nested && !Array.isArray(value) && !Buffer.isBuffer(value) && !(value instanceof URL)) {
+        for (const prop of Object.keys(value)) {
+          appendTagFlat(meta, metrics, `${key}.${prop}`, value[prop], true)
+        }
+      } else {
+        meta.push(key, safeString(value))
+      }
+  }
+}
+
 class NativeSpanContext extends DatadogSpanContext {
   #nativeSpans
 
@@ -239,18 +275,25 @@ class NativeSpanContext extends DatadogSpanContext {
       if (value === undefined || value === null) continue
       if (this.#isOtelDeferredKey(key)) continue
 
+      // http.status_code is special only because numbers must be stringified
+      // into meta. In addTags batches it can still share the BatchSetMeta op.
+      if (key === 'http.status_code') {
+        metaBatch.push(key, String(value))
+        continue
+      }
+
       if (SPECIAL_KEYS.has(key)) {
         this.#syncTagToNative(key, value)
       } else {
-        appendTag(metaBatch, metricBatch, key, value)
+        appendTagFlat(metaBatch, metricBatch, key, value)
       }
     }
 
     if (metaBatch.length > 0) {
-      this.#nativeSpans.queueBatchMeta(this._nativeSpanId, metaBatch)
+      this.#nativeSpans.queueBatchMetaFlat(this._nativeSpanId, metaBatch)
     }
     if (metricBatch.length > 0) {
-      this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, metricBatch)
+      this.#nativeSpans.queueBatchMetricsFlat(this._nativeSpanId, metricBatch)
     }
   }
 
