@@ -8,12 +8,12 @@ const { channel } = require('dc-polyfill')
 const DatadogSpan = require('../opentracing/span')
 const id = require('../id')
 const tagger = require('../tagger')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
+const { DD_MAJOR } = require('../../../../version')
 const { MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
 const { encode: encodeMsgpack } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
-const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
-const { DD_MAJOR } = require('../../../../version')
 
 // Republished from the `addTags` override so subscribers (e.g. the wall
 // profiler's web-tag refresh) still receive tag updates on the native path.
@@ -389,6 +389,7 @@ class NativeDatadogSpan extends DatadogSpan {
 
     return spanContext
   }
+
   /**
    * Override `setTag` for a single-tag fast path that avoids the
    * `{ [key]: value }` literal + parsedTags round-trip the batched
@@ -608,7 +609,6 @@ class NativeDatadogSpan extends DatadogSpan {
 }
 
 module.exports = NativeDatadogSpan
-
 
 function isSamplingPriorityTag (key) {
   return key === MANUAL_KEEP || key === MANUAL_DROP || key === SAMPLING_PRIORITY
