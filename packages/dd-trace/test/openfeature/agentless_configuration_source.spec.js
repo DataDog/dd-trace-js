@@ -207,6 +207,18 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledOnce(log.debug)
   })
 
+  it('reports non-gzip response body failures', async () => {
+    responses.push({
+      statusCode: 200,
+      bodyError: new TypeError('terminated'),
+    })
+
+    const outcome = await poll(source())
+
+    assert.match(outcome.error.message, /response body could not be read/)
+    sinon.assert.notCalled(applyConfiguration)
+  })
+
   it('accepts managed JSON API payloads larger than 500 KB', async () => {
     const expected = JSON.parse(VALID_UFC)
     expected.flags.large = { description: 'x'.repeat(500 * 1024) }
@@ -244,15 +256,26 @@ describe('AgentlessConfigurationSource', () => {
       {
         statusCode: 200,
         body: JSON.stringify({ data: { id: '1', type: 'universal-flag-configuration' } }),
+      },
+      {
+        statusCode: 200,
+        body: JSON.stringify({
+          data: {
+            id: '1',
+            type: 'universal-flag-configuration',
+            attributes: { createdAt: '2026-01-01T00:00:00.000Z' },
+          },
+        }),
       }
     )
     const configurationSource = source()
 
     await poll(configurationSource)
     await poll(configurationSource)
+    await poll(configurationSource)
 
     sinon.assert.notCalled(applyConfiguration)
-    sinon.assert.calledTwice(log.debug)
+    sinon.assert.calledThrice(log.debug)
   })
 
   it('preserves last-known-good configuration and ETag after malformed JSON', async () => {
@@ -470,6 +493,20 @@ describe('AgentlessConfigurationSource', () => {
 
     assert.strictEqual(requests.length, 1)
     assert.strictEqual(requests[0].options.signal.aborted, true)
+  })
+
+  it('stops a scheduled poll and reports subsequent polls as stopped', async () => {
+    responses.push({ statusCode: 200, body: VALID_RESPONSE })
+    const configurationSource = source()
+
+    configurationSource.start()
+    await completeScheduledResponse()
+    configurationSource.stop()
+    const outcome = await poll(configurationSource)
+    await clock.tickAsync(30_000)
+
+    assert.deepStrictEqual(outcome, { error: null, result: { stopped: true } })
+    assert.strictEqual(requests.length, 1)
   })
 
   it('starts only once', () => {
