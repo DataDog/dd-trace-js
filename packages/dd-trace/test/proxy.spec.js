@@ -87,6 +87,7 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy(),
+      refreshMetadata: sinon.stub(),
     }
 
     noopAiguardSdk = {
@@ -1119,7 +1120,6 @@ describe('TracerProxy', () => {
   })
 
   describe('MicroVM identity reset', () => {
-    let idMock
     let channelMock
     let diagnosticsChannelMock
     let MicroVmProxy
@@ -1130,19 +1130,15 @@ describe('TracerProxy', () => {
       origEnv = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
       process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
 
-      idMock = { reseed: sinon.stub() }
-
       channelMock = {
         subscribe: sinon.stub(),
         unsubscribe: sinon.stub(),
+        publish: sinon.stub(),
       }
 
       diagnosticsChannelMock = {
         channel: sinon.stub().returns(channelMock),
       }
-
-      Config.refreshRuntimeId = sinon.stub()
-      RemoteConfig.refreshClientId = sinon.stub()
 
       MicroVmProxy = proxyquire('../src/proxy', {
         './tracer': DatadogTracer,
@@ -1163,7 +1159,7 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
-        './id': idMock,
+        './microvm-identity-refresh': {},
         'dc-polyfill': diagnosticsChannelMock,
       })
 
@@ -1199,9 +1195,8 @@ describe('TracerProxy', () => {
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      sinon.assert.calledOnce(idMock.reseed)
-      sinon.assert.calledOnce(Config.refreshRuntimeId)
-      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:update')
+      sinon.assert.calledOnce(channelMock.publish)
       sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
@@ -1211,7 +1206,7 @@ describe('TracerProxy', () => {
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'GET', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      sinon.assert.notCalled(idMock.reseed)
+      sinon.assert.notCalled(channelMock.publish)
     })
 
     it('should NOT fire refreshIdentity on POST /other', () => {
@@ -1220,7 +1215,7 @@ describe('TracerProxy', () => {
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/other' } })
 
-      sinon.assert.notCalled(idMock.reseed)
+      sinon.assert.notCalled(channelMock.publish)
     })
 
     it('should unsubscribe HTTP channel after first fire', () => {
@@ -1232,29 +1227,23 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
     })
 
-    it('should call reseed then refreshRuntimeId then refreshClientId in order', () => {
+    it('should publish datadog:identity:update before calling tracer.refreshMetadata', () => {
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
-      assert.ok(idMock.reseed.calledBefore(Config.refreshRuntimeId))
-      assert.ok(Config.refreshRuntimeId.calledBefore(RemoteConfig.refreshClientId))
-      assert.ok(RemoteConfig.refreshClientId.calledBefore(tracer.refreshMetadata))
+      assert.ok(channelMock.publish.calledBefore(tracer.refreshMetadata))
     })
 
     it('should call refreshIdentity from resetRuntimeId when initialized and env var set', () => {
       microProxy.init()
-      idMock.reseed.resetHistory()
-      Config.refreshRuntimeId.resetHistory()
-      RemoteConfig.refreshClientId.resetHistory()
+      channelMock.publish.resetHistory()
       tracer.refreshMetadata.resetHistory()
 
       microProxy.resetRuntimeId()
 
-      sinon.assert.calledOnce(idMock.reseed)
-      sinon.assert.calledOnce(Config.refreshRuntimeId)
-      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      sinon.assert.calledOnce(channelMock.publish)
       sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
@@ -1262,18 +1251,28 @@ describe('TracerProxy', () => {
       // do not call init()
       microProxy.resetRuntimeId()
 
-      sinon.assert.notCalled(idMock.reseed)
+      sinon.assert.notCalled(channelMock.publish)
+    })
+
+    it('should still publish and call the noop tracer when the real tracer was never constructed', () => {
+      // simulate init() having run with tracing disabled, so #updateTracing never replaced the noop tracer
+      microProxy._initialized = true
+
+      microProxy.resetRuntimeId()
+
+      sinon.assert.calledOnce(channelMock.publish)
+      sinon.assert.calledOnce(noop.refreshMetadata)
     })
 
     it('should be a no-op from resetRuntimeId when env var not set', () => {
       delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
 
       microProxy.init()
-      idMock.reseed.resetHistory()
+      channelMock.publish.resetHistory()
 
       microProxy.resetRuntimeId()
 
-      sinon.assert.notCalled(idMock.reseed)
+      sinon.assert.notCalled(channelMock.publish)
     })
   })
 })
