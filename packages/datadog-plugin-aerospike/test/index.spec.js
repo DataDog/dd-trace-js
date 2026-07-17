@@ -25,7 +25,6 @@ describe('Plugin', () => {
 
     withVersions('aerospike', 'aerospike', version => {
       beforeEach(() => {
-        tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
       })
 
@@ -43,18 +42,15 @@ describe('Plugin', () => {
         keyString = `${ns}:${set}:${userKey}`
       })
 
-      after(() => {
-        return agent.close()
-      })
-
       describe('without configuration', () => {
-        before(function () {
+        before(async function () {
           this.timeout(10_000)
-          return agent.load('aerospike')
+          tracer = await agent.load('aerospike')
         })
 
         after(() => {
           aerospike?.releaseEventLoop()
+          return agent.close()
         })
 
         describe('client', () => {
@@ -304,13 +300,14 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(function () {
+        before(async function () {
           this.timeout(10_000)
-          return agent.load('aerospike', { service: 'custom' })
+          tracer = await agent.load('aerospike', { service: 'custom' })
         })
 
         after(() => {
           aerospike?.releaseEventLoop()
+          return agent.close()
         })
 
         it('should be configured with the correct values', done => {
