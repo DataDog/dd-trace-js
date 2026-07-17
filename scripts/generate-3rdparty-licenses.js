@@ -4,8 +4,8 @@
 'use strict'
 
 // Regenerate `LICENSE-3rdparty.csv` from the locks the project currently ships:
-// `bun.lock` for runtime + optional root deps, `vendor/package-lock.json` for the
-// vendored npm subtree, and `.github/vendored-dependencies.csv` for the vendor
+// `bun.lock` for runtime + optional root deps, `vendor/bun.lock` for the vendored
+// subtree, and `.github/vendored-dependencies.csv` for the vendor
 // entries we ship verbatim. The output matches the format the previous
 // `dd-license-attribution` CSV produced (`component,origin,license,copyright`,
 // values in Python-list strings) so reviewers see only meaningful diffs when
@@ -24,13 +24,12 @@ const mapWithConcurrency = require('./helpers/concurrency')
 const {
   collectAliasMap,
   listBunLockDependencies,
-  listNpmLockDependencies,
 } = require('./third-party-dependencies')
 
 const repoRoot = join(__dirname, '..')
 const csvPath = join(repoRoot, 'LICENSE-3rdparty.csv')
 const bunLockPath = join(repoRoot, 'bun.lock')
-const vendorLockPath = join(repoRoot, 'vendor', 'package-lock.json')
+const vendorLockPath = join(repoRoot, 'vendor', 'bun.lock')
 const vendoredCsvPath = join(repoRoot, '.github', 'vendored-dependencies.csv')
 const aliasMap = collectAliasMap([
   join(repoRoot, 'package.json'),
@@ -85,7 +84,7 @@ async function run () {
 
 /**
  * Walk `bun.lock` (root + transitives, regular and optional) and the vendor
- * `package-lock.json` and return a map of `<component> -> { name, version }`,
+ * `vendor/bun.lock` and return a map of `<component> -> { name, version }`,
  * normalized via `npm:` aliases declared in `package.json` so e.g. an aliased
  * `@datadog/source-map -> source-map` is recorded under the upstream name.
  *
@@ -102,7 +101,7 @@ function collectWantedComponents () {
   for (const { name, version } of listBunLockDependencies(bunLockPath)) {
     addWantedVersion(wanted, name, version)
   }
-  for (const { name, version } of listNpmLockDependencies(vendorLockPath)) {
+  for (const { name, version } of listBunLockDependencies(vendorLockPath)) {
     addWantedVersion(wanted, name, version)
   }
 
