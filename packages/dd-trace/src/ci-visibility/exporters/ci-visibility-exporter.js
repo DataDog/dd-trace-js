@@ -41,6 +41,7 @@ function getIsTestSessionTrace (trace) {
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
+const MAX_COVERAGE_REPORT_FLAGS = 32
 
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {
@@ -78,6 +79,16 @@ class CiVisibilityExporter extends BufferingExporter {
     this._logsTimer = undefined
     this._coverageBuffer = []
     this._testOptimizationHttpCache = new TestOptimizationHttpCache()
+    const coverageReportFlags = config?.testOptimization?.DD_CODE_COVERAGE_FLAGS
+    if (coverageReportFlags?.length > MAX_COVERAGE_REPORT_FLAGS) {
+      log.warn(
+        'Maximum of %d coverage report flags allowed, but %d flags were provided. Omitting coverage report flags.',
+        MAX_COVERAGE_REPORT_FLAGS,
+        coverageReportFlags.length
+      )
+    } else if (coverageReportFlags?.length) {
+      this._coverageReportFlags = [...coverageReportFlags]
+    }
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
@@ -487,7 +498,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} options.filePath - Path to the coverage report file
    * @param {string} options.format - Format of the coverage report
    * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
-   * @param {Function} callback - Callback function (err)
+   * @param {(error: Error|null) => void} callback - Callback function
    */
   uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
     if (!this._codeCoverageReportUrl) {
@@ -497,6 +508,7 @@ class CiVisibilityExporter extends BufferingExporter {
     uploadCoverageReportRequest({
       filePath,
       format,
+      flags: this._coverageReportFlags,
       testEnvironmentMetadata,
       url: this._codeCoverageReportUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
