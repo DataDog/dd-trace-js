@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
@@ -11,12 +11,19 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   describe('rhea', function () {
+    let previousDsmEnabled
+
     before(() => {
+      previousDsmEnabled = process.env.DD_DATA_STREAMS_ENABLED
       process.env.DD_DATA_STREAMS_ENABLED = 'true'
     })
 
     after(() => {
-      delete process.env.DD_DATA_STREAMS_ENABLED
+      if (previousDsmEnabled === undefined) {
+        delete process.env.DD_DATA_STREAMS_ENABLED
+      } else {
+        process.env.DD_DATA_STREAMS_ENABLED = previousDsmEnabled
+      }
     })
 
     after(() => agent.close({ ritmReset: false }))
