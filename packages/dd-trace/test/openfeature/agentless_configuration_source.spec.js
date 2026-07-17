@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -24,6 +24,7 @@ const VALID_RESPONSE = JSON.stringify({
 describe('AgentlessConfigurationSource', () => {
   let AgentlessConfigurationSource
   let applyConfiguration
+  let clock
   let config
   let fetch
   let log
@@ -32,6 +33,7 @@ describe('AgentlessConfigurationSource', () => {
   let runInNoopContext
 
   beforeEach(() => {
+    clock = sinon.useFakeTimers()
     applyConfiguration = sinon.stub()
     config = {
       endpoint: new URL('http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'),
@@ -41,6 +43,7 @@ describe('AgentlessConfigurationSource', () => {
     }
     log = {
       debug: sinon.spy(),
+      error: sinon.spy(),
       warn: sinon.spy(),
     }
     requests = []
@@ -76,11 +79,20 @@ describe('AgentlessConfigurationSource', () => {
     })
   })
 
+  afterEach(() => {
+    clock?.restore()
+  })
+
   function source (options = {}) {
     return new AgentlessConfigurationSource(config, applyConfiguration, {
       fetch,
+      random: () => 0.5,
       ...options,
     })
+  }
+
+  function completeScheduledResponse () {
+    return clock.tickAsync(0)
   }
 
   function poll (configurationSource) {
@@ -114,6 +126,30 @@ describe('AgentlessConfigurationSource', () => {
     source().pollOnce(() => {})
 
     sinon.assert.calledOnceWithMatch(runInNoopContext, { noop: true }, sinon.match.func)
+  })
+
+  it('does not send the API key over cleartext non-loopback connections', async () => {
+    config.endpoint = new URL('http://flags.example.test/custom/ufc')
+    responses.push({ statusCode: 200, body: VALID_RESPONSE })
+
+    await poll(source())
+
+    assert.strictEqual(requests[0].options.headers['DD-API-KEY'], undefined)
+    sinon.assert.calledOnceWithExactly(
+      log.error,
+      'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https Feature Flagging URL.',
+      'flags.example.test'
+    )
+  })
+
+  it('sends the API key to the local Docker host gateway', async () => {
+    config.endpoint = new URL('http://host.docker.internal/custom/ufc')
+    responses.push({ statusCode: 200, body: VALID_RESPONSE })
+
+    await poll(source())
+
+    assert.strictEqual(requests[0].options.headers['DD-API-KEY'], 'test-api-key')
+    sinon.assert.notCalled(log.error)
   })
 
   it('accepts a JSON API Universal Flag Configuration without optional format', async () => {
@@ -253,4 +289,196 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledThrice(applyConfiguration)
   })
 
+  it('does not advance the ETag and keeps scheduled polling after a listener failure', async () => {
+    applyConfiguration.onFirstCall().throws(new Error('listener failed'))
+    responses.push(
+      { statusCode: 200, headers: { etag: '"failed"' }, body: VALID_RESPONSE },
+      { statusCode: 200, headers: { etag: '"accepted"' }, body: VALID_RESPONSE }
+    )
+    const configurationSource = source()
+
+    configurationSource.start()
+    await completeScheduledResponse()
+    await clock.tickAsync(30_000)
+
+    assert.strictEqual(requests.length, 2)
+    assert.strictEqual(requests[1].options.headers['If-None-Match'], undefined)
+    sinon.assert.calledTwice(applyConfiguration)
+    sinon.assert.calledOnce(log.debug)
+  })
+
+  it('retries 429 and 5xx responses with bounded delays', async () => {
+    responses.push(
+      { statusCode: 500, bodyError: new Error('must not decode error responses') },
+      { statusCode: 429, bodyError: new Error('must not decode error responses') },
+      { statusCode: 200, body: VALID_RESPONSE }
+    )
+    const outcome = poll(source())
+
+    await completeScheduledResponse()
+    assert.strictEqual(requests.length, 1)
+
+    await clock.tickAsync(4999)
+    assert.strictEqual(requests.length, 1)
+    await clock.tickAsync(1)
+    assert.strictEqual(requests.length, 2)
+
+    await clock.tickAsync(9999)
+    assert.strictEqual(requests.length, 2)
+    await clock.tickAsync(1)
+
+    assert.strictEqual(requests.length, 3)
+    sinon.assert.calledOnce(applyConfiguration)
+    assert.deepStrictEqual(await outcome, { error: null, result: { applied: true } })
+  })
+
+  it('retries request timeout responses', async () => {
+    responses.push(
+      { statusCode: 408, body: '' },
+      { statusCode: 200, body: VALID_RESPONSE }
+    )
+
+    const outcome = poll(source())
+    await completeScheduledResponse()
+    await clock.tickAsync(5000)
+
+    assert.strictEqual(requests.length, 2)
+    sinon.assert.calledOnce(applyConfiguration)
+    assert.deepStrictEqual(await outcome, { error: null, result: { applied: true } })
+  })
+
+  it('settles a request timeout even when fetch does not reject after abort', async () => {
+    const delayedFetch = sinon.stub().returns(new Promise(() => {}))
+    const callback = sinon.spy()
+
+    source({ fetch: delayedFetch })._request(callback)
+    await clock.tickAsync(2000)
+
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].retryable, true)
+    assert.strictEqual(delayedFetch.firstCall.args[1].signal.aborted, true)
+  })
+
+  it('warns after retryable HTTP responses exhaust all attempts', async () => {
+    responses.push(
+      { statusCode: 500, body: '' },
+      { statusCode: 500, body: '' },
+      { statusCode: 500, body: '' }
+    )
+
+    const outcome = poll(source())
+    await completeScheduledResponse()
+    await clock.tickAsync(5000)
+    await clock.tickAsync(10_000)
+    await outcome
+
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Feature Flagging agentless endpoint returned HTTP %d after %d attempts',
+      500,
+      3
+    )
+  })
+
+  it('warns after request timeouts exhaust all attempts', async () => {
+    responses.push({ pending: true }, { pending: true }, { pending: true })
+
+    const outcome = poll(source())
+    await clock.tickAsync(2000)
+    await clock.tickAsync(5000)
+    await clock.tickAsync(2000)
+    await clock.tickAsync(10_000)
+    await clock.tickAsync(2000)
+    await outcome
+
+    sinon.assert.calledOnceWithMatch(
+      log.warn,
+      'Feature Flagging agentless request failed after %d attempts',
+      3,
+      sinon.match.instanceOf(Error)
+    )
+  })
+
+  it('does not retry authentication failures and rate-limits the warning', async () => {
+    responses.push(
+      { statusCode: 401, body: '' },
+      { statusCode: 403, body: '' },
+      { statusCode: 401, body: '' }
+    )
+    const configurationSource = source()
+
+    await poll(configurationSource)
+    await poll(configurationSource)
+    await clock.tickAsync(5 * 60 * 1000)
+    await poll(configurationSource)
+
+    assert.strictEqual(requests.length, 3)
+    sinon.assert.calledTwice(log.warn)
+    sinon.assert.notCalled(applyConfiguration)
+  })
+
+  it('retries request timeouts without overlapping requests', async () => {
+    responses.push({ pending: true }, { statusCode: 200, body: VALID_RESPONSE })
+    const configurationSource = source()
+    const first = sinon.spy()
+    const overlapping = sinon.spy()
+
+    configurationSource.pollOnce(first)
+    configurationSource.pollOnce(overlapping)
+    sinon.assert.calledOnceWithExactly(overlapping, null, { skipped: true })
+
+    await clock.tickAsync(2000)
+    await clock.tickAsync(5000)
+
+    sinon.assert.calledOnce(applyConfiguration)
+    sinon.assert.calledWith(first, null, { applied: true })
+    assert.strictEqual(requests.length, 2)
+  })
+
+  it('uses fixed-delay polling and never schedules while a request is active', async () => {
+    config.requestTimeoutMs = 60_000
+    responses.push(
+      { pending: true },
+      { statusCode: 200, body: VALID_RESPONSE }
+    )
+    const configurationSource = source()
+
+    configurationSource.start()
+    await clock.tickAsync(30_000)
+    assert.strictEqual(requests.length, 1)
+
+    requests[0].reject(new Error('network failure'))
+    await completeScheduledResponse()
+    await clock.tickAsync(5000)
+    assert.strictEqual(requests.length, 2)
+
+    await clock.tickAsync(29_999)
+    assert.strictEqual(requests.length, 2)
+    await clock.tickAsync(1)
+    assert.strictEqual(requests.length, 3)
+  })
+
+  it('stops retry timers and aborts an active request', async () => {
+    responses.push({ pending: true })
+    const configurationSource = source()
+
+    configurationSource.start()
+    configurationSource.stop()
+    configurationSource.stop()
+    await completeScheduledResponse()
+    await clock.tickAsync(60_000)
+
+    assert.strictEqual(requests.length, 1)
+    assert.strictEqual(requests[0].options.signal.aborted, true)
+  })
+
+  it('starts only once', () => {
+    responses.push({ pending: true })
+    const configurationSource = source()
+
+    configurationSource.start()
+    configurationSource.start()
+
+    assert.strictEqual(requests.length, 1)
+  })
 })
