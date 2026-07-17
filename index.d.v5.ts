@@ -888,39 +888,6 @@ declare namespace tracer {
          */
         initializationTimeoutMs?: number
         /**
-         * Where Universal Flag Configuration is loaded from. Agentless delivery
-         * fetches from the Datadog UFC CDN endpoint and evaluates locally.
-         *
-         * @default 'agentless'
-         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        configurationSource?: 'agentless' | 'remote_config'
-        /**
-         * Optional agentless configuration endpoint or base URL. A base URL
-         * receives the standard rules-based server path.
-         *
-         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        agentlessBaseUrl?: string
-        /**
-         * Agentless configuration polling interval in seconds, capped at one hour.
-         *
-         * @default 30
-         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        agentlessPollIntervalSeconds?: number
-        /**
-         * Agentless configuration request timeout in seconds.
-         *
-         * @default 2
-         * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS
-         * Programmatic configuration takes precedence over the environment variables listed above.
-         */
-        agentlessRequestTimeoutSeconds?: number
-        /**
          * Configuration for span enrichment with feature flag evaluation data.
          */
         spanEnrichment?: {

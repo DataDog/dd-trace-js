@@ -17,7 +17,6 @@ const MAX_POLL_INTERVAL_SECONDS = 60 * 60
  * @returns {object} Resolved source settings.
  */
 function resolve (config) {
-  const flaggingProvider = config.experimental.flaggingProvider
   const mode = resolveMode(config)
 
   if (mode === CONFIGURATION_SOURCE_REMOTE_CONFIG) {
@@ -26,15 +25,15 @@ function resolve (config) {
 
   return {
     mode,
-    endpoint: endpoint(config, flaggingProvider.agentlessBaseUrl),
+    endpoint: endpoint(config, config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL),
     pollIntervalMs: positiveMilliseconds(
-      flaggingProvider.agentlessPollIntervalSeconds,
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
       DEFAULT_POLL_INTERVAL_SECONDS,
       'poll interval',
       MAX_POLL_INTERVAL_SECONDS
     ),
     requestTimeoutMs: positiveMilliseconds(
-      flaggingProvider.agentlessRequestTimeoutSeconds,
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
       DEFAULT_REQUEST_TIMEOUT_SECONDS,
       'request timeout'
     ),
@@ -95,7 +94,7 @@ function isRemoteConfig (config) {
  * @returns {string} Selected configuration-source mode.
  */
 function resolveMode (config) {
-  const value = config.experimental.flaggingProvider.configurationSource
+  const value = config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
   const mode = String(value ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
   if (mode !== CONFIGURATION_SOURCE_AGENTLESS && mode !== CONFIGURATION_SOURCE_REMOTE_CONFIG) {
     throw new Error(`Unsupported Feature Flagging configuration source: ${mode}`)
