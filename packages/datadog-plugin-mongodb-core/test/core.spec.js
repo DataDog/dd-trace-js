@@ -149,6 +149,27 @@ describe('Plugin', () => {
           })
 
           it('should serialize BigInt without erroring', done => {
+            // It appears that most versions of MongodDB are happy to use a BigInt instance.
+            // For example, 2.0.0, 3.2.0, 3.1.10, etc.
+            // However, version 3.1.9 throws a synchronous error that it wants a Decimal128 instead.
+            // Registering the trace assertion only after the command starts avoids leaving a
+            // pending expectation that would reject on that early-return path.
+            try {
+              server.command(`test.${collection}`, {
+                find: `test.${collection}`,
+                query: {
+                  _id: 9999999999999999999999n,
+                },
+              }, () => {})
+            } catch (error) {
+              if (error.message.includes('Decimal128')) {
+                // eslint-disable-next-line no-console
+                console.log('This version of mongodb-core does not accept BigInt instances')
+                return done()
+              }
+              return done(error)
+            }
+
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
@@ -160,25 +181,6 @@ describe('Plugin', () => {
               })
               .then(done)
               .catch(done)
-
-            try {
-              server.command(`test.${collection}`, {
-                find: `test.${collection}`,
-                query: {
-                  _id: 9999999999999999999999n,
-                },
-              }, () => {})
-            } catch (err) {
-              // It appears that most versions of MongodDB are happy to use a BigInt instance.
-              // For example, 2.0.0, 3.2.0, 3.1.10, etc.
-              // However, version 3.1.9 throws a synchronous error that it wants a Decimal128 instead.
-              if (err.message.includes('Decimal128')) {
-                // eslint-disable-next-line no-console
-                console.log('This version of mongodb-core does not accept BigInt instances')
-                return done()
-              }
-              done(err)
-            }
           })
 
           it('should stringify BSON objects', done => {

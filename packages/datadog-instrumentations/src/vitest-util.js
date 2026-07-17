@@ -116,7 +116,6 @@ function getProvidedContext () {
       _ddTestCommand: testCommand,
       _ddRepositoryRoot: repositoryRoot,
       _ddCodeOwnersEntries: codeOwnersEntries,
-      _ddTestEnvironmentMetadata: testEnvironmentMetadata,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -138,7 +137,6 @@ function getProvidedContext () {
       testCommand,
       repositoryRoot,
       codeOwnersEntries,
-      testEnvironmentMetadata,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -161,7 +159,6 @@ function getProvidedContext () {
       testCommand: undefined,
       repositoryRoot: undefined,
       codeOwnersEntries: undefined,
-      testEnvironmentMetadata: undefined,
     }
   }
 }

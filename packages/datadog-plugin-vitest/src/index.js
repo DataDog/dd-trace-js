@@ -67,7 +67,6 @@ class VitestPlugin extends CiPlugin {
         testCommand: this.command,
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
-        testEnvironmentMetadata: this.testEnvironmentMetadata,
       })
     })
 
@@ -265,8 +264,10 @@ class VitestPlugin extends CiPlugin {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       const finish = () => {
-        if (duration) {
-          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        if (Number.isFinite(duration) && duration >= 0) {
+          span.finish(
+            span._startTime + Math.max(duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION, 0)
+          ) // milliseconds
         } else {
           span.finish() // `duration` is empty for retries, so we'll use clock time
         }
@@ -324,7 +325,6 @@ class VitestPlugin extends CiPlugin {
       const {
         codeOwnersEntries,
         repositoryRoot,
-        testEnvironmentMetadata,
         requestErrorTags,
         testSuiteAbsolutePath,
         frameworkVersion,
@@ -334,12 +334,6 @@ class VitestPlugin extends CiPlugin {
 
       const testCommand = ctx.testCommand || 'vitest run'
       const { testSessionId, testModuleId } = ctx
-      if (testEnvironmentMetadata) {
-        this.testEnvironmentMetadata = {
-          ...this.testEnvironmentMetadata,
-          ...testEnvironmentMetadata,
-        }
-      }
       this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion

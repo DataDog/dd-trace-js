@@ -373,14 +373,11 @@ describe('Plugin', () => {
         })
 
         it('should be able to filter commands', (done) => {
-          const timer = setTimeout(done, 200)
-
           agent
-            .assertSomeTraces((traces) => {
-              clearTimeout(timer)
-              done(new Error('Filtered commands should not be recorded.'))
-            })
-            .catch(done)
+            .assertNoTraces(() => {
+              throw new Error('Filtered commands should not be recorded.')
+            }, { timeoutMs: 200 })
+            .then(done, done)
 
           client.set('turtle', 'like')
         })

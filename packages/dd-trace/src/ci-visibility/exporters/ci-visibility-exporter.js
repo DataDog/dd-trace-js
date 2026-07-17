@@ -293,6 +293,9 @@ class CiVisibilityExporter extends BufferingExporter {
       isCoverageReportUploadEnabled,
     } = remoteConfiguration
     const { testOptimization } = this._config
+    const earlyFlakeDetectionRetryCount =
+      testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
+    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
     return {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
@@ -300,8 +303,16 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled:
         isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
-      earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionNumRetries:
+        hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries: hasEarlyFlakeDetectionRetryCount
+        ? {
+            '5s': earlyFlakeDetectionRetryCount,
+            '10s': earlyFlakeDetectionRetryCount,
+            '30s': earlyFlakeDetectionRetryCount,
+            '5m': earlyFlakeDetectionRetryCount,
+          }
+        : earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
@@ -318,6 +329,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
   sendGitMetadata (repositoryUrl) {
     if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
+      this._resolveGit()
       return
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {

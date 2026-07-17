@@ -65,12 +65,12 @@ describe('Plugin', () => {
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
-            const timer = setTimeout(done, 100)
 
-            agent.assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Agent received an unexpected trace.'))
-            })
+            agent
+              .assertNoTraces(() => {
+                throw new Error('Agent received an unexpected trace.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             axios
               .get(`http://localhost:${port}/user`)
@@ -1495,8 +1495,9 @@ describe('Plugin', () => {
         withVersions('express', 'loopback', loopbackVersion => {
           let loopback
 
-          beforeEach(function () {
-            this.timeout(5000)
+          before(function () {
+            // The public entry synchronously initializes LoopBack's model, connector, and remoting stack.
+            this.timeout(10000)
 
             // Legacy loopback emits the deprecated `util._extend` at module
             // load; allow it so the harness deprecation guard does not throw.
@@ -1677,20 +1678,12 @@ describe('Plugin', () => {
 
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
-            const spy = sinon.spy()
 
             agent
-              .assertSomeTraces(spy)
-              .catch(done)
-
-            setTimeout(() => {
-              try {
-                sinon.assert.notCalled(spy)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }, 100)
+              .assertNoTraces(() => {
+                throw new Error('Filtered URLs should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             axios
               .get(`http://localhost:${port}/health`)

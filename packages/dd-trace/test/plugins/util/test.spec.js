@@ -1284,13 +1284,14 @@ describe('getMaxEfdRetryCount', () => {
     assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
   })
 
-  it('preserves an explicit all-zero configuration', () => {
+  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
     assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
+    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
   })
 
-  it('returns 0 when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), 0)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), 0)
+  it('returns undefined when no slow test retry buckets are configured', () => {
+    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
+    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
   })
 })
 

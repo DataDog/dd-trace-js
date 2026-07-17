@@ -39,7 +39,7 @@ describe('optional-peer-bundler', () => {
   describe('matchesOptionalPeerFile', () => {
     it('matches a registered optional-peer file suffix', () => {
       assert.strictEqual(
-        matchesOptionalPeerFile('/app/node_modules/dd-trace/packages/dd-trace/src/openfeature/flagging_provider.js'),
+        matchesOptionalPeerFile('/app/node_modules/dd-trace/packages/dd-trace/src/openfeature/require-provider.js'),
         true
       )
     })

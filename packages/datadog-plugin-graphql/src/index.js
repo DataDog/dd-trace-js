@@ -6,6 +6,7 @@ const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLParsePlugin = require('./parse')
+const GraphQLRequestPlugin = require('./request')
 const GraphQLValidatePlugin = require('./validate')
 
 class GraphQLPlugin extends CompositePlugin {
@@ -14,6 +15,11 @@ class GraphQLPlugin extends CompositePlugin {
     return {
       execute: GraphQLExecutePlugin,
       parse: GraphQLParsePlugin,
+      // Top-level request span for drivers (mercurius) that funnel through a
+      // single entry point and parse/execute internally. graphql-js, apollo,
+      // and yoga produce no such channel, so the plugin simply never fires for
+      // them.
+      request: GraphQLRequestPlugin,
       validate: GraphQLValidatePlugin,
       // resolve plugin is absorbed into execute: per-field data is recorded
       // synchronously in wrapResolve, and all graphql.resolve spans are

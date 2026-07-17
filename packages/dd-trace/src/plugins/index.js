@@ -84,6 +84,9 @@ const plugins = {
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
+  // mercurius is traced under the graphql plugin: its instrumentation opens the
+  // top-level graphql.request span handled by the graphql CompositePlugin.
+  get mercurius () { return require('../../../datadog-plugin-graphql/src') },
   get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },
   get mocha () { return require('../../../datadog-plugin-mocha/src') },
   get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },
