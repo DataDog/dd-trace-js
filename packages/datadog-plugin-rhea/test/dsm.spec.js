@@ -28,6 +28,7 @@ describe('Plugin', () => {
         })
 
         afterEach(() => {
+          container?.removeAllListeners('message')
           connection?.close()
           connection = null
           return agent.close({ ritmReset: false })
@@ -44,13 +45,19 @@ describe('Plugin', () => {
             const addrAOut = 'amq.direct'
             const addrBOut = 'amq.match'
 
-            let doneCount = 0
+            let finished = false
+            let messageCount = 0
+
+            const finish = (err) => {
+              if (finished) return
+              finished = true
+              container.removeListener('message', onMessage)
+              setCheckpointSpy.restore()
+              done(err)
+            }
 
             const checkAssertions = () => {
-              if (++doneCount < 2) return
-
               const calls = setCheckpointSpy.getCalls()
-              setCheckpointSpy.restore()
 
               try {
                 const checkpoint = (dir, tag) => calls.find(c =>
@@ -66,22 +73,25 @@ describe('Plugin', () => {
                 assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
                 assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
                 assert.deepStrictEqual(produceB.args[2].hash, consumeB.returnValue.hash)
-                done()
+                finish()
               } catch (e) {
-                done(e)
+                finish(e)
               }
             }
 
-            container.on('message', msg => {
+            const onMessage = msg => {
               const address = msg.receiver?.options?.source?.address
               if (address === addrAIn) {
                 senderAOut.send({ body: 'from-a' })
-                checkAssertions()
               } else if (address === addrBIn) {
                 senderBOut.send({ body: 'from-b' })
-                checkAssertions()
+              } else {
+                return
               }
-            })
+              if (++messageCount === 2) checkAssertions()
+            }
+
+            container.on('message', onMessage)
 
             connection = container.connect({
               username: 'admin',
