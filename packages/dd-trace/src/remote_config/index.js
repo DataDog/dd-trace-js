@@ -576,13 +576,13 @@ function supportsAckCallback (handler) {
 }
 
 /**
- * Regenerates the RC client ID from the kernel CSPRNG and updates config tags.
+ * Regenerates the RC client ID and updates config tags.
  * `state.client.id` is a live getter, so subsequent RC polls pick up the new value.
  *
  * @param {import('../config/config-base')} config
  */
 function refreshClientId (config) {
-  clientId = require('../id').kernelUUID()
+  clientId = uuid()
   if (config.tags['_dd.rc.client_id']) {
     config.tags['_dd.rc.client_id'] = clientId
   }
