@@ -80,6 +80,12 @@ describe('integrations', () => {
           })
         )
 
+        server.registerTool(
+          'audit-tool',
+          { description: 'Records an audit event', inputSchema: {} },
+          async () => ({ content: [{ type: 'text', text: 'Audit recorded' }] })
+        )
+
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
         await server.connect(serverTransport)
 
@@ -218,7 +224,7 @@ describe('integrations', () => {
           const result = await client.listTools()
 
           assert.ok(result.tools)
-          assert.equal(result.tools.length, 3)
+          assert.equal(result.tools.length, 4)
 
           const { apmSpans, llmobsSpans } = await getEvents()
           const listToolsSpan = apmSpans.find(span => span.resource === 'ClientSession.list_tools')
@@ -313,15 +319,12 @@ describe('integrations', () => {
           }
         })
 
-        it('captures the tool inventory after a dropped event in the same trace', async () => {
+        it('captures a tool inventory when the first concurrent event is dropped', async () => {
           let processorCalls = 0
           tracer.llmobs.registerProcessor(span => ++processorCalls === 1 ? null : span)
 
           try {
-            await tracer.trace('list-tools', async () => {
-              await client.listTools()
-              await client.listTools()
-            })
+            await tracer.trace('list-tools', () => Promise.all([client.listTools(), client.listTools()]))
           } finally {
             tracer.llmobs.deregisterProcessor()
           }
@@ -375,6 +378,21 @@ describe('integrations', () => {
           assert.equal(llmobsSpans.length, 2)
           assert.ok(llmobsSpans.some(span => span.name === 'custom-mcp-tool'))
           assert.ok(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: test-tool'))
+        })
+
+        it('keeps MCP spans from adapter callbacks', async () => {
+          const [adapterTool] = await loadMcpTools('test-server', client, {
+            beforeToolCall: () => client.callTool({ name: 'audit-tool', arguments: {} }),
+          })
+          await getEvents()
+
+          await adapterTool.invoke({})
+
+          const { llmobsSpans } = await getEvents()
+          assert.equal(llmobsSpans.length, 2)
+          assert.ok(llmobsSpans.some(span => span.name === 'test-tool'))
+          assert.ok(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: audit-tool'))
+          assert.equal(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: test-tool'), false)
         })
       })
     })

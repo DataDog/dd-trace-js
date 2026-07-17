@@ -2,6 +2,7 @@
 
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
+const { storage } = require('../../storage')
 
 const pluginManager = require('../../../../../..')._pluginManager
 
@@ -201,32 +202,21 @@ class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
     super(...args)
 
     this.addSub(
-      'tracing:orchestrion:@langchain/mcp-adapters:loadMcpTools:asyncEnd',
-      this.markMcpAdapterTools.bind(this)
+      'tracing:orchestrion:@langchain/mcp-adapters:_callTool:start',
+      this.markMcpAdapterToolCall.bind(this)
     )
   }
 
   /**
-   * Marks the tools created by the LangChain MCP adapter so their nested MCP calls can be deduplicated.
+   * Marks the exact MCP call made by a LangChain adapter tool so callbacks retain their own MCP LLMObs events.
    *
-   * @param {{ result?: object[] }} ctx The adapter's `loadMcpTools` lifecycle context.
+   * @param {{ arguments?: [{ client?: object, toolName?: string }] }} ctx The adapter's `_callTool` lifecycle context.
    * @returns {void}
    */
-  markMcpAdapterTools (ctx) {
-    if (!Array.isArray(ctx.result)) return
-
-    for (const tool of ctx.result) {
-      tool[MCP_ADAPTER_TOOL] = true
-    }
-  }
-
-  getLLMObsSpanRegisterOptions (ctx) {
-    const options = super.getLLMObsSpanRegisterOptions(ctx)
-    const span = ctx.currentStore?.span
-    if (options && span && ctx.self?.[MCP_ADAPTER_TOOL]) {
-      span[MCP_ADAPTER_TOOL] = true
-    }
-    return options
+  markMcpAdapterToolCall (ctx) {
+    const { client, toolName } = ctx.arguments?.[0] || {}
+    const span = storage.getStore()?.span
+    if (span && client && toolName) span[MCP_ADAPTER_TOOL] = { client, toolName }
   }
 }
 
