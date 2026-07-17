@@ -33,10 +33,10 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   LLMOBS_SUBMITTED_TAG_KEY,
-  LLMOBS_DEDUPLICATION_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
 } = require('./constants/tags')
+const { getMcpListToolsCapture } = require('./dedup')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
@@ -88,7 +88,7 @@ class LLMObsSpanProcessor {
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
 
-    const deduplication = span[LLMOBS_DEDUPLICATION_KEY]
+    const deduplication = getMcpListToolsCapture(span)
     if (deduplication && (!deduplication.captured || deduplication.state.submitted)) return
 
     try {

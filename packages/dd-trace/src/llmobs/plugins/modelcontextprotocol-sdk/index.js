@@ -1,10 +1,9 @@
 'use strict'
 
-const { LLMOBS_DEDUPLICATION_KEY } = require('../../constants/tags')
 const { storage } = require('../../storage')
 
 const LLMObsPlugin = require('../base')
-const { shouldSkipMcpToolCall } = require('./dedup')
+const { registerMcpListToolsCapture, shouldSkipMcpToolCall, getMcpListToolsCapture } = require('../../dedup')
 const { formatInput, formatOutput } = require('./utils')
 
 const listToolsTraces = new WeakMap()
@@ -96,7 +95,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     if (spans) {
       const nextState = state || { submitted: false }
       spans.set(page, nextState)
-      ctx.currentStore.span[LLMOBS_DEDUPLICATION_KEY] = { state: nextState, captured: false }
+      registerMcpListToolsCapture(ctx.currentStore.span, { state: nextState, captured: false })
     }
 
     return {
@@ -110,7 +109,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     if (!span || ctx.error) return
 
     this._tagger.tagTextIO(span, null, JSON.stringify(ctx.result))
-    const deduplication = span[LLMOBS_DEDUPLICATION_KEY]
+    const deduplication = getMcpListToolsCapture(span)
     if (deduplication) deduplication.captured = true
   }
 }

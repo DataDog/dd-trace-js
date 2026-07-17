@@ -3,7 +3,7 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 const { storage } = require('../../storage')
-const { skipMcpToolCall } = require('../modelcontextprotocol-sdk/dedup')
+const { skipMcpToolCall } = require('../../dedup')
 
 const pluginManager = require('../../../../../..')._pluginManager
 
