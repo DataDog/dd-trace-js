@@ -18,7 +18,9 @@ const TEST_DATADOG_CONTEXT = {
   'x-datadog-parent-id': TEST_SPAN_ID,
   'x-datadog-sampling-priority': '1',
 }
-const EVENTBRIDGE_CONTEXT_BYTES = Buffer.byteLength(`,"_datadog":${JSON.stringify(TEST_DATADOG_CONTEXT)}`)
+const EVENTBRIDGE_CONTEXT_BYTES = Buffer.byteLength(
+  `,"_datadog":${JSON.stringify(TEST_DATADOG_CONTEXT)}`,
+)
 
 /**
  * @param {number} size
@@ -93,6 +95,7 @@ describe('EventBridge', () => {
         rulename: 'my-rule-name',
       })
     })
+
     it('won\'t create tags for a malformed event', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
@@ -288,6 +291,7 @@ describe('EventBridge', () => {
         rulename: 'my-rule-name',
       })
     })
+
     it('handles null response gracefully', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {

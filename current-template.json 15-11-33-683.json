@@ -1,0 +1,3178 @@
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  TalkForgeProductionPostgresVpcB004173E:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.2.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgeProductionPostgresVpc-dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/Resource
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: 10.2.0.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: public-subnet
+        - Key: aws-cdk:subnet-type
+          Value: Public
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/Subnet
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableF428C486:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/RouteTable
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableAssociation417306E4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableF428C486
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/RouteTableAssociation
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet1DefaultRoute2992C037:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: TalkForgeProductionPostgresVpcIGWA5234405
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableF428C486
+    DependsOn:
+      - TalkForgeProductionPostgresVpcVPCGW95DB94E0
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/DefaultRoute
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet1EIP28EB4AA0:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/EIP
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet1NATGateway2CEB6A70:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresVpcpublicsubnetSubnet1EIP28EB4AA0
+          - AllocationId
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    DependsOn:
+      - TalkForgeProductionPostgresVpcpublicsubnetSubnet1DefaultRoute2992C037
+      - TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableAssociation417306E4
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/NATGateway
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet2SubnetFFBE9B47:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: 10.2.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: public-subnet
+        - Key: aws-cdk:subnet-type
+          Value: Public
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/Subnet
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTable3548C3BA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/RouteTable
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTableAssociation0B2EB8AB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTable3548C3BA
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet2SubnetFFBE9B47
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/RouteTableAssociation
+  TalkForgeProductionPostgresVpcpublicsubnetSubnet2DefaultRouteD5AAF2A9:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: TalkForgeProductionPostgresVpcIGWA5234405
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTable3548C3BA
+    DependsOn:
+      - TalkForgeProductionPostgresVpcVPCGW95DB94E0
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/DefaultRoute
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: 10.2.2.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: private-subnet
+        - Key: aws-cdk:subnet-type
+          Value: Private
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/Subnet
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTable92756FEF:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/RouteTable
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTableAssociation58DCC9EB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTable92756FEF
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/RouteTableAssociation
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet1DefaultRouteD3206195:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1NATGateway2CEB6A70
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTable92756FEF
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/DefaultRoute
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: 10.2.3.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: private-subnet
+        - Key: aws-cdk:subnet-type
+          Value: Private
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/Subnet
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableD4E4C1C0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/RouteTable
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableAssociation41D229C1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableD4E4C1C0
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/RouteTableAssociation
+  TalkForgeProductionPostgresVpcprivatesubnetSubnet2DefaultRouteD6BA9E4B:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1NATGateway2CEB6A70
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableD4E4C1C0
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/DefaultRoute
+  TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: 10.2.4.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: isolated-subnet
+        - Key: aws-cdk:subnet-type
+          Value: Isolated
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1/Subnet
+  TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableBAB259F2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1/RouteTable
+  TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableAssociationC40B8F7E:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableBAB259F2
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1/RouteTableAssociation
+  TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: 10.2.5.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: isolated-subnet
+        - Key: aws-cdk:subnet-type
+          Value: Isolated
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2/Subnet
+  TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTable852DD21F:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2/RouteTable
+  TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTableAssociation50F02C14:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTable852DD21F
+      SubnetId:
+        Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2/RouteTableAssociation
+  TalkForgeProductionPostgresVpcIGWA5234405:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgeProductionPostgresVpc-dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/IGW
+  TalkForgeProductionPostgresVpcVPCGW95DB94E0:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: TalkForgeProductionPostgresVpcIGWA5234405
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/VPCGW
+  TalkForgeProductionPostgresVpcTalkForgeProductionPostgresSecretsManagerEndpoint721A7B31:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - Fn::GetAtt:
+            - TalkForgeProductionPostgresSecretsManagerEndpointSecurityGroup5F235C93
+            - GroupId
+      ServiceName:
+        Fn::Join:
+          - ""
+          - - com.amazonaws.
+            - Ref: AWS::Region
+            - .secretsmanager
+      SubnetIds:
+        - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+        - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: Name
+          Value: TalkForgeProductionPostgresVpc-dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcEndpointType: Interface
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/TalkForgeProductionPostgresSecretsManagerEndpoint/Resource
+  TalkForgeProductionPostgresSecretsManagerEndpointSecurityGroup5F235C93:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the Secrets Manager interface endpoint used by the Postgres data plane
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: 10.2.0.0/16
+          Description: Allow VPC workloads to reach the Secrets Manager interface endpoint
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+        - CidrIp:
+            Fn::GetAtt:
+              - TalkForgeProductionPostgresVpcB004173E
+              - CidrBlock
+          Description:
+            Fn::Join:
+              - ""
+              - - "from "
+                - Fn::GetAtt:
+                    - TalkForgeProductionPostgresVpcB004173E
+                    - CidrBlock
+                - :443
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecretsManagerEndpointSecurityGroup/Resource
+  TalkForgeProductionPostgresClientSecurityGroup905B1CBE:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Future client security group for TalkForge workloads that will connect to the production Postgres proxy
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresClientSecurityGroup/Resource
+  TalkForgeProductionPostgresProxySecurityGroupC83AD5BB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the TalkForge production Postgres RDS Proxy
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxySecurityGroup/Resource
+  TalkForgeProductionPostgresProxySecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC663025432EC39A2BC:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow future TalkForge workloads to reach the production Postgres proxy
+      FromPort: 5432
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxySecurityGroupC83AD5BB
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresClientSecurityGroup905B1CBE
+          - GroupId
+      ToPort: 5432
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxySecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC66302:5432
+  TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the TalkForge internal-only load balancer in the Postgres data plane
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancerSecurityGroup/Resource
+  TalkForgeInternalEdgeLoadBalancerSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC663028008893F80:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow approved TalkForge workloads to reach the internal load balancer
+      FromPort: 80
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresClientSecurityGroup905B1CBE
+          - GroupId
+      ToPort: 80
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancerSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC66302:80
+  TalkForgePublicEdgeLoadBalancerSecurityGroupCC610260:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the TalkForge public load balancer in the Postgres data plane
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgePublicEdgeLoadBalancerSecurityGroup/Resource
+  TalkForgePublicEdgeLoadBalancerSecurityGroupfrompl3b927c52800EBD8C03:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow HTTP traffic from CloudFront to the public load balancer
+      FromPort: 80
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgePublicEdgeLoadBalancerSecurityGroupCC610260
+          - GroupId
+      IpProtocol: tcp
+      SourcePrefixListId: pl-3b927c52
+      ToPort: 80
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgePublicEdgeLoadBalancerSecurityGroup/from pl-3b927c52:80
+  TalkForgePublicEdgeLoadBalancer6C218641:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: "false"
+        - Key: idle_timeout.timeout_seconds
+          Value: "180"
+      Name: TalkForgePublicAlb-dev
+      Scheme: internet-facing
+      SecurityGroups:
+        - Fn::GetAtt:
+            - TalkForgePublicEdgeLoadBalancerSecurityGroupCC610260
+            - GroupId
+      Subnets:
+        - Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616
+        - Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet2SubnetFFBE9B47
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Type: application
+    DependsOn:
+      - TalkForgeProductionPostgresVpcpublicsubnetSubnet1DefaultRoute2992C037
+      - TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableAssociation417306E4
+      - TalkForgeProductionPostgresVpcpublicsubnetSubnet2DefaultRouteD5AAF2A9
+      - TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTableAssociation0B2EB8AB
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgePublicEdgeLoadBalancer/Resource
+  TalkForgePublicEdgeLoadBalancerTalkForgePublicEdgeHttpListener92619D7D:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: Not found
+            StatusCode: "404"
+          Type: fixed-response
+      LoadBalancerArn:
+        Ref: TalkForgePublicEdgeLoadBalancer6C218641
+      Port: 80
+      Protocol: HTTP
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgePublicEdgeLoadBalancer/TalkForgePublicEdgeHttpListener/Resource
+  TalkForgeInternalEdgeLoadBalancer18DBEF36:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: "false"
+        - Key: idle_timeout.timeout_seconds
+          Value: "180"
+      Name: TalkForgeInternalAlb-dev
+      Scheme: internal
+      SecurityGroups:
+        - Fn::GetAtt:
+            - TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42
+            - GroupId
+      Subnets:
+        - Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E
+        - Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Type: application
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancer/Resource
+  TalkForgeInternalEdgeLoadBalancerTalkForgeInternalEdgeHttpListener65C9DFFA:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: Not found
+            StatusCode: "404"
+          Type: fixed-response
+      LoadBalancerArn:
+        Ref: TalkForgeInternalEdgeLoadBalancer18DBEF36
+      Port: 80
+      Protocol: HTTP
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancer/TalkForgeInternalEdgeHttpListener/Resource
+  TalkForgeInternalPrivateHostedZone82D146E9:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneTags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Name: internal.talkforge.
+      VPCs:
+        - VPCId:
+            Ref: TalkForgeProductionPostgresVpcB004173E
+          VPCRegion:
+            Ref: AWS::Region
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalPrivateHostedZone/Resource
+  TalkForgeProductionPostgresSecurityGroupF23D2438:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the TalkForge production Postgres instance
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/Resource
+  TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresRotationSingleUserSecurityGroupAE6EC47DIndirectPort0FFC3641:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresRotationSingleUserSecurityGroupAE6EC47D:{IndirectPort}
+      FromPort:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresSecurityGroupF23D2438
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1
+          - GroupId
+      ToPort:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresRotationSingleUserSecurityGroupAE6EC47D:{IndirectPort}
+  TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD5IndirectPort3B03B02E:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow connections to the database Instance from the Proxy
+      FromPort:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresSecurityGroupF23D2438
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxySecurityGroupC83AD5BB
+          - GroupId
+      ToPort:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD5:{IndirectPort}
+  TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD554323AA5CBBE:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow the production Postgres proxy to reach the database
+      FromPort: 5432
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresSecurityGroupF23D2438
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxySecurityGroupC83AD5BB
+          - GroupId
+      ToPort: 5432
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD5:5432
+  TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresBootstrapSecurityGroupC1A30B295432B2B5670C:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow the Postgres bootstrap custom resource to initialize service roles and databases
+      FromPort: 5432
+      GroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresSecurityGroupF23D2438
+          - GroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresBootstrapSecurityGroupA3DAB2EC
+          - GroupId
+      ToPort: 5432
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresBootstrapSecurityGroupC1A30B29:5432
+  TalkForgeProductionPostgresParameterGroup3C4111D6:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Parameter group for postgres16
+      Family: postgres16
+      Parameters:
+        idle_in_transaction_session_timeout: "60000"
+        log_min_duration_statement: "1000"
+        shared_preload_libraries: pg_stat_statements
+        statement_timeout: "300000"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresParameterGroup/Resource
+  TalkForgeProductionPostgresSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private isolated subnets for the TalkForge production Postgres data plane
+      DBSubnetGroupName: talkforge-production-postgres-dev
+      SubnetIds:
+        - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+        - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSubnetGroup/Default
+  TalkForgeProductionPostgresMonitoringRoleB989B1F7:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/MonitoringRole/Resource
+  TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description:
+        Fn::Join:
+          - ""
+          - - "Generated by the CDK for stack: "
+            - Ref: AWS::StackName
+      GenerateSecretString:
+        ExcludeCharacters: " %+~`#$&*()|[]{}:;<>?!'/@\"\\"
+        GenerateStringKey: password
+        PasswordLength: 30
+        SecretStringTemplate: '{"username":"talkforge_admin"}'
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Resource
+  TalkForgeProductionPostgresSecretAttachment19F15688:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId:
+        Ref: TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb
+      TargetId:
+        Ref: TalkForgeProductionPostgres861B38E9
+      TargetType: AWS::RDS::DBInstance
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Attachment/Resource
+  TalkForgeProductionPostgresSecretAttachmentRotationSchedule083C2D23:
+    Type: AWS::SecretsManager::RotationSchedule
+    Properties:
+      RotationLambdaARN:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresRotationSingleUser92B32EEE
+          - Outputs.RotationLambdaARN
+      RotationRules:
+        ScheduleExpression: rate(30 days)
+      SecretId:
+        Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Attachment/RotationSchedule/Resource
+  TalkForgeProductionPostgresSecretAttachmentPolicy8547851A:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      ResourcePolicy:
+        Statement:
+          - Action: secretsmanager:DeleteSecret
+            Effect: Deny
+            Principal:
+              AWS:
+                Fn::Join:
+                  - ""
+                  - - "arn:"
+                    - Ref: AWS::Partition
+                    - ":iam::"
+                    - Ref: AWS::AccountId
+                    - :root
+            Resource: "*"
+        Version: "2012-10-17"
+      SecretId:
+        Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Attachment/Policy/Resource
+  TalkForgeProductionPostgres861B38E9:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: "100"
+      AutoMinorVersionUpgrade: false
+      BackupRetentionPeriod: 14
+      CopyTagsToSnapshot: true
+      DBInstanceClass: db.t4g.medium
+      DBInstanceIdentifier: talkforge-production-postgres-dev
+      DBName: talkforge
+      DBParameterGroupName:
+        Ref: TalkForgeProductionPostgresParameterGroup3C4111D6
+      DBSubnetGroupName:
+        Ref: TalkForgeProductionPostgresSubnetGroup
+      DeleteAutomatedBackups: false
+      DeletionProtection: true
+      EnableCloudwatchLogsExports:
+        - postgresql
+      EnablePerformanceInsights: true
+      Engine: postgres
+      EngineVersion: "16.6"
+      MasterUserPassword:
+        Fn::Join:
+          - ""
+          - - "{{resolve:secretsmanager:"
+            - Ref: TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb
+            - :SecretString:password::}}
+      MasterUsername: talkforge_admin
+      MaxAllocatedStorage: 500
+      MonitoringInterval: 60
+      MonitoringRoleArn:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresMonitoringRoleB989B1F7
+          - Arn
+      MultiAZ: true
+      PerformanceInsightsRetentionPeriod: 7
+      Port: "5432"
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      StorageType: gp3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VPCSecurityGroups:
+        - Fn::GetAtt:
+            - TalkForgeProductionPostgresSecurityGroupF23D2438
+            - GroupId
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Resource
+  TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/RotationSingleUser/SecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/RotationSingleUser/SecurityGroup/Resource
+  TalkForgeProductionPostgresRotationSingleUser92B32EEE:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location:
+        ApplicationId:
+          Fn::FindInMap:
+            - TalkForgeProductionPostgresRotationSingleUserSARMappingD578A46E
+            - Ref: AWS::Partition
+            - applicationId
+        SemanticVersion:
+          Fn::FindInMap:
+            - TalkForgeProductionPostgresRotationSingleUserSARMappingD578A46E
+            - Ref: AWS::Partition
+            - semanticVersion
+      Parameters:
+        endpoint:
+          Fn::Join:
+            - ""
+            - - https://
+              - Ref: TalkForgeProductionPostgresVpcTalkForgeProductionPostgresSecretsManagerEndpoint721A7B31
+              - .secretsmanager.
+              - Ref: AWS::Region
+              - "."
+              - Ref: AWS::URLSuffix
+        functionName: aneStackdevTalkForgeProductionPostgresRotationSingleUserFC7D9E14
+        vpcSubnetIds:
+          Fn::Join:
+            - ""
+            - - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+              - ","
+              - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+        vpcSecurityGroupIds:
+          Fn::GetAtt:
+            - TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1
+            - GroupId
+        excludeCharacters: " %+~`#$&*()|[]{}:;<>?!'/@\"\\"
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/RotationSingleUser/Resource
+  PlanningStudioPostgresApplicationSecret3A2869D9:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Application credential for the TalkForge Planning Studio Postgres role
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        IncludeSpace: false
+        PasswordLength: 48
+        SecretStringTemplate: '{"username":"talkforge_planning_app"}'
+      Name: talkforge/postgres/dev/planning-studio/app-v3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/PlanningStudioPostgresApplicationSecret/Resource
+  SlidesPostgresApplicationSecret5702E3EC:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Application credential for the TalkForge Slides Postgres role
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        IncludeSpace: false
+        PasswordLength: 48
+        SecretStringTemplate: '{"username":"talkforge_slides_app"}'
+      Name: talkforge/postgres/dev/slides/app-v3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/SlidesPostgresApplicationSecret/Resource
+  ConferenceDiscoveryPostgresApplicationSecretEC876D78:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Application credential for the TalkForge Conference Discovery Postgres role
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        IncludeSpace: false
+        PasswordLength: 48
+        SecretStringTemplate: '{"username":"talkforge_conferences_app"}'
+      Name: talkforge/postgres/dev/conference-discovery/app-v3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/ConferenceDiscoveryPostgresApplicationSecret/Resource
+  UserAccessPostgresApplicationSecret0F44D3B5:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Application credential for the TalkForge User Access Postgres role
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        IncludeSpace: false
+        PasswordLength: 48
+        SecretStringTemplate: '{"username":"talkforge_user_access_app"}'
+      Name: talkforge/postgres/dev/user-access/app-v3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/UserAccessPostgresApplicationSecret/Resource
+  VoiceMediaPostgresApplicationSecret848E8F09:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Application credential for the TalkForge Voice Media Postgres role
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        IncludeSpace: false
+        PasswordLength: 48
+        SecretStringTemplate: '{"username":"talkforge_voice_media_app"}'
+      Name: talkforge/postgres/dev/voice-media/app-v3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/VoiceMediaPostgresApplicationSecret/Resource
+  RealtimeEngagementPostgresApplicationSecret05CCF316:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Application credential for the TalkForge Realtime Engagement Postgres role
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        IncludeSpace: false
+        PasswordLength: 48
+        SecretStringTemplate: '{"username":"talkforge_realtime_app"}'
+      Name: talkforge/postgres/dev/realtime-engagement/app-v3
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/RealtimeEngagementPostgresApplicationSecret/Resource
+  TalkForgeProductionPostgresProxyIAMRole3D8F59CF:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+        Version: "2012-10-17"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/IAMRole/Resource
+  TalkForgeProductionPostgresProxyIAMRoleDefaultPolicyAA8A6B02:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - secretsmanager:DescribeSecret
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+              - Ref: ConferenceDiscoveryPostgresApplicationSecretEC876D78
+              - Ref: PlanningStudioPostgresApplicationSecret3A2869D9
+              - Ref: RealtimeEngagementPostgresApplicationSecret05CCF316
+              - Ref: SlidesPostgresApplicationSecret5702E3EC
+              - Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+              - Ref: UserAccessPostgresApplicationSecret0F44D3B5
+              - Ref: VoiceMediaPostgresApplicationSecret848E8F09
+        Version: "2012-10-17"
+      PolicyName: TalkForgeProductionPostgresProxyIAMRoleDefaultPolicyAA8A6B02
+      Roles:
+        - Ref: TalkForgeProductionPostgresProxyIAMRole3D8F59CF
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/IAMRole/DefaultPolicy/Resource
+  TalkForgeProductionPostgresProxyC7401B86:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      Auth:
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: PlanningStudioPostgresApplicationSecret3A2869D9
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: SlidesPostgresApplicationSecret5702E3EC
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: ConferenceDiscoveryPostgresApplicationSecretEC876D78
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: UserAccessPostgresApplicationSecret0F44D3B5
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: VoiceMediaPostgresApplicationSecret848E8F09
+        - AuthScheme: SECRETS
+          IAMAuth: DISABLED
+          SecretArn:
+            Ref: RealtimeEngagementPostgresApplicationSecret05CCF316
+      DBProxyName: talkforge-production-postgres-proxy-dev
+      EngineFamily: POSTGRESQL
+      RequireTLS: true
+      RoleArn:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyIAMRole3D8F59CF
+          - Arn
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcSecurityGroupIds:
+        - Fn::GetAtt:
+            - TalkForgeProductionPostgresProxySecurityGroupC83AD5BB
+            - GroupId
+      VpcSubnetIds:
+        - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+        - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/Resource
+  TalkForgeProductionPostgresProxyProxyTargetGroupF31024E3:
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      ConnectionPoolConfigurationInfo:
+        ConnectionBorrowTimeout: 15
+        MaxConnectionsPercent: 90
+      DBInstanceIdentifiers:
+        - Ref: TalkForgeProductionPostgres861B38E9
+      DBProxyName:
+        Ref: TalkForgeProductionPostgresProxyC7401B86
+      TargetGroupName: default
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/ProxyTargetGroup
+  TalkForgeProductionPostgresBootstrapSecurityGroupA3DAB2EC:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the TalkForge Postgres service bootstrap custom resource
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      VpcId:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresBootstrapSecurityGroup/Resource
+  TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRole29CA5F8D:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    DependsOn:
+      - TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableAssociationC40B8F7E
+      - TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTableAssociation50F02C14
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapFunction/ServiceRole/Resource
+  TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRoleDefaultPolicyF6EA2349:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - secretsmanager:DescribeSecret
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+              - Ref: ConferenceDiscoveryPostgresApplicationSecretEC876D78
+              - Ref: PlanningStudioPostgresApplicationSecret3A2869D9
+              - Ref: RealtimeEngagementPostgresApplicationSecret05CCF316
+              - Ref: SlidesPostgresApplicationSecret5702E3EC
+              - Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+              - Ref: UserAccessPostgresApplicationSecret0F44D3B5
+              - Ref: VoiceMediaPostgresApplicationSecret848E8F09
+        Version: "2012-10-17"
+      PolicyName: TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRoleDefaultPolicyF6EA2349
+      Roles:
+        - Ref: TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRole29CA5F8D
+    DependsOn:
+      - TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableAssociationC40B8F7E
+      - TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTableAssociation50F02C14
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapFunction/ServiceRole/DefaultPolicy/Resource
+  TalkForgeProductionPostgresServiceContractBootstrapFunction391B7062:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Fn::Sub: cdk-hnb659fds-assets-${AWS::AccountId}-${AWS::Region}
+        S3Key: 7b0575629644ad7a20c7e70b80922f5384ac690d475f02d8c1d0ad18a8db4a1d.zip
+      Environment:
+        Variables:
+          ADMIN_SECRET_ARN:
+            Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+          DATABASE_HOST:
+            Fn::GetAtt:
+              - TalkForgeProductionPostgres861B38E9
+              - Endpoint.Address
+          DATABASE_PORT:
+            Fn::GetAtt:
+              - TalkForgeProductionPostgres861B38E9
+              - Endpoint.Port
+          DATABASE_NAME: talkforge
+          SERVICE_CONTRACTS:
+            Fn::Join:
+              - ""
+              - - '[{"id":"planning-studio","displayName":"Planning Studio","databaseName":"talkforge-planning","schemaName":"planning","roleName":"talkforge_planning_app","secretArn":"'
+                - Ref: PlanningStudioPostgresApplicationSecret3A2869D9
+                - '"},{"id":"slides","displayName":"Slides","databaseName":"talkforge-slides","schemaName":"slides","roleName":"talkforge_slides_app","secretArn":"'
+                - Ref: SlidesPostgresApplicationSecret5702E3EC
+                - '"},{"id":"conference-discovery","displayName":"Conference Discovery","databaseName":"talkforge-conferences","schemaName":"conferences","roleName":"talkforge_conferences_app","secretArn":"'
+                - Ref: ConferenceDiscoveryPostgresApplicationSecretEC876D78
+                - '"},{"id":"user-access","displayName":"User Access","databaseName":"talkforge-user-access","schemaName":"user_access","roleName":"talkforge_user_access_app","secretArn":"'
+                - Ref: UserAccessPostgresApplicationSecret0F44D3B5
+                - '"},{"id":"voice-media","displayName":"Voice Media","databaseName":"talkforge-voice-media","schemaName":"voice_media","roleName":"talkforge_voice_media_app","secretArn":"'
+                - Ref: VoiceMediaPostgresApplicationSecret848E8F09
+                - '"},{"id":"realtime-engagement","displayName":"Realtime Engagement","databaseName":"talkforge-realtime","schemaName":"realtime","roleName":"talkforge_realtime_app","secretArn":"'
+                - Ref: RealtimeEngagementPostgresApplicationSecret05CCF316
+                - '"}]'
+      Handler: index.handler
+      MemorySize: 512
+      Role:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRole29CA5F8D
+          - Arn
+      Runtime: nodejs20.x
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - Fn::GetAtt:
+              - TalkForgeProductionPostgresBootstrapSecurityGroupA3DAB2EC
+              - GroupId
+        SubnetIds:
+          - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+          - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+    DependsOn:
+      - TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRoleDefaultPolicyF6EA2349
+      - TalkForgeProductionPostgresServiceContractBootstrapFunctionServiceRole29CA5F8D
+      - TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableAssociationC40B8F7E
+      - TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTableAssociation50F02C14
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapFunction/Resource
+      aws:asset:path: asset.7b0575629644ad7a20c7e70b80922f5384ac690d475f02d8c1d0ad18a8db4a1d
+      aws:asset:is-bundled: true
+      aws:asset:property: Code
+  TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRole0E264F82:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapProvider/framework-onEvent/ServiceRole/Resource
+  TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRoleDefaultPolicyEDE1FEC0:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: lambda:InvokeFunction
+            Effect: Allow
+            Resource:
+              - Fn::GetAtt:
+                  - TalkForgeProductionPostgresServiceContractBootstrapFunction391B7062
+                  - Arn
+              - Fn::Join:
+                  - ""
+                  - - Fn::GetAtt:
+                        - TalkForgeProductionPostgresServiceContractBootstrapFunction391B7062
+                        - Arn
+                    - :*
+          - Action: lambda:GetFunction
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - TalkForgeProductionPostgresServiceContractBootstrapFunction391B7062
+                - Arn
+        Version: "2012-10-17"
+      PolicyName: TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRoleDefaultPolicyEDE1FEC0
+      Roles:
+        - Ref: TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRole0E264F82
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapProvider/framework-onEvent/ServiceRole/DefaultPolicy/Resource
+  TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEvent1E2E9820:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Fn::Sub: cdk-hnb659fds-assets-${AWS::AccountId}-${AWS::Region}
+        S3Key: bdc104ed9cab1b5b6421713c8155f0b753380595356f710400609664d3635eca.zip
+      Description: AWS CDK resource provider framework - onEvent (TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapProvider)
+      Environment:
+        Variables:
+          USER_ON_EVENT_FUNCTION_ARN:
+            Fn::GetAtt:
+              - TalkForgeProductionPostgresServiceContractBootstrapFunction391B7062
+              - Arn
+      Handler: framework.onEvent
+      LoggingConfig:
+        ApplicationLogLevel: FATAL
+        LogFormat: JSON
+      Role:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRole0E264F82
+          - Arn
+      Runtime: nodejs22.x
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Timeout: 900
+    DependsOn:
+      - TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRoleDefaultPolicyEDE1FEC0
+      - TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEventServiceRole0E264F82
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrapProvider/framework-onEvent/Resource
+      aws:asset:path: asset.bdc104ed9cab1b5b6421713c8155f0b753380595356f710400609664d3635eca
+      aws:asset:is-bundled: false
+      aws:asset:property: Code
+  TalkForgeProductionPostgresServiceContractBootstrap:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresServiceContractBootstrapProviderframeworkonEvent1E2E9820
+          - Arn
+      databaseHost:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Address
+      databasePort:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+      serviceContractsHash:
+        Fn::Join:
+          - ""
+          - - '[{"databaseName":"talkforge-planning","schemaName":"planning","roleName":"talkforge_planning_app","secretArn":"'
+            - Ref: PlanningStudioPostgresApplicationSecret3A2869D9
+            - '"},{"databaseName":"talkforge-slides","schemaName":"slides","roleName":"talkforge_slides_app","secretArn":"'
+            - Ref: SlidesPostgresApplicationSecret5702E3EC
+            - '"},{"databaseName":"talkforge-conferences","schemaName":"conferences","roleName":"talkforge_conferences_app","secretArn":"'
+            - Ref: ConferenceDiscoveryPostgresApplicationSecretEC876D78
+            - '"},{"databaseName":"talkforge-user-access","schemaName":"user_access","roleName":"talkforge_user_access_app","secretArn":"'
+            - Ref: UserAccessPostgresApplicationSecret0F44D3B5
+            - '"},{"databaseName":"talkforge-voice-media","schemaName":"voice_media","roleName":"talkforge_voice_media_app","secretArn":"'
+            - Ref: VoiceMediaPostgresApplicationSecret848E8F09
+            - '"},{"databaseName":"talkforge-realtime","schemaName":"realtime","roleName":"talkforge_realtime_app","secretArn":"'
+            - Ref: RealtimeEngagementPostgresApplicationSecret05CCF316
+            - '"}]'
+    DependsOn:
+      - ConferenceDiscoveryPostgresApplicationSecretEC876D78
+      - PlanningStudioPostgresApplicationSecret3A2869D9
+      - RealtimeEngagementPostgresApplicationSecret05CCF316
+      - SlidesPostgresApplicationSecret5702E3EC
+      - TalkForgeProductionPostgresMonitoringRoleB989B1F7
+      - TalkForgeProductionPostgres861B38E9
+      - TalkForgeProductionPostgresRotationSingleUser92B32EEE
+      - TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1
+      - TalkForgeProductionPostgresSecretAttachmentPolicy8547851A
+      - TalkForgeProductionPostgresSecretAttachment19F15688
+      - TalkForgeProductionPostgresSecretAttachmentRotationSchedule083C2D23
+      - TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb
+      - UserAccessPostgresApplicationSecret0F44D3B5
+      - VoiceMediaPostgresApplicationSecret848E8F09
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresServiceContractBootstrap/Default
+  TalkForgeProductionPostgresCpuCreditBalanceAlarmEC3109DA:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Burst credit balance is running low on the additive TalkForge Postgres instance
+      ComparisonOperator: LessThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value:
+            Ref: TalkForgeProductionPostgres861B38E9
+      EvaluationPeriods: 3
+      MetricName: CPUCreditBalance
+      Namespace: AWS/RDS
+      Period: 300
+      Statistic: Minimum
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Threshold: 100
+      TreatMissingData: notBreaching
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresCpuCreditBalanceAlarm/Resource
+  TalkForgeProductionPostgresCpuUtilizationAlarm179E5CEC:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CPU utilization is high on the additive TalkForge Postgres instance
+      ComparisonOperator: GreaterThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value:
+            Ref: TalkForgeProductionPostgres861B38E9
+      EvaluationPeriods: 3
+      MetricName: CPUUtilization
+      Namespace: AWS/RDS
+      Period: 300
+      Statistic: Average
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Threshold: 80
+      TreatMissingData: notBreaching
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresCpuUtilizationAlarm/Resource
+  TalkForgeProductionPostgresDatabaseConnectionsAlarmB655AFA3:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Database connections are high on the additive TalkForge Postgres instance
+      ComparisonOperator: GreaterThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value:
+            Ref: TalkForgeProductionPostgres861B38E9
+      EvaluationPeriods: 3
+      MetricName: DatabaseConnections
+      Namespace: AWS/RDS
+      Period: 300
+      Statistic: Average
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Threshold: 100
+      TreatMissingData: notBreaching
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresDatabaseConnectionsAlarm/Resource
+  TalkForgeProductionPostgresFreeStorageSpaceAlarm7CF83962:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Free storage space is running low on the additive TalkForge Postgres instance
+      ComparisonOperator: LessThanThreshold
+      DatapointsToAlarm: 1
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value:
+            Ref: TalkForgeProductionPostgres861B38E9
+      EvaluationPeriods: 1
+      MetricName: FreeStorageSpace
+      Namespace: AWS/RDS
+      Period: 300
+      Statistic: Minimum
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Threshold: 21474836480
+      TreatMissingData: notBreaching
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresFreeStorageSpaceAlarm/Resource
+  TalkForgeProductionPostgresProxyClientConnectionsAlarm1E3696B2:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Client connections are high on the additive TalkForge Postgres proxy
+      ComparisonOperator: GreaterThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: DBProxyName
+          Value:
+            Ref: TalkForgeProductionPostgresProxyC7401B86
+      EvaluationPeriods: 3
+      MetricName: ClientConnections
+      Namespace: AWS/RDS
+      Period: 300
+      Statistic: Average
+      Tags:
+        - Key: environment
+          Value: dev
+        - Key: owner
+          Value: advocacy
+        - Key: primary-contact
+          Value: james@datadog.com
+        - Key: project
+          Value: TalkForge
+        - Key: service
+          Value: talkforge
+      Threshold: 100
+      TreatMissingData: notBreaching
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxyClientConnectionsAlarm/Resource
+  Phase15SharedPlatformProductionPostgresVpcIdParameter673B3B35:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres VPC ID
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-vpc-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgeProductionPostgresVpcB004173E
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresVpcIdParameter/Resource
+  Phase15SharedPlatformProductionPostgresAvailabilityZonesParameter3ABAE2FA:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres VPC availability zones
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-availability-zones
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::Join:
+          - ","
+          - - Fn::Select:
+                - 0
+                - Fn::GetAZs: ""
+            - Fn::Select:
+                - 1
+                - Fn::GetAZs: ""
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresAvailabilityZonesParameter/Resource
+  Phase15SharedPlatformPublicSubnetIdsParameter13B3555D:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres public subnet IDs
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-public-subnet-ids
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::Join:
+          - ","
+          - - Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616
+            - Ref: TalkForgeProductionPostgresVpcpublicsubnetSubnet2SubnetFFBE9B47
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformPublicSubnetIdsParameter/Resource
+  Phase15SharedPlatformPrivateSubnetIdsParameter39D934C9:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres private subnet IDs
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-private-subnet-ids
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::Join:
+          - ","
+          - - Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E
+            - Ref: TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformPrivateSubnetIdsParameter/Resource
+  Phase15SharedPlatformIsolatedSubnetIdsParameter4F352D18:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres isolated subnet IDs
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-isolated-subnet-ids
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::Join:
+          - ","
+          - - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78
+            - Ref: TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformIsolatedSubnetIdsParameter/Resource
+  Phase15SharedPlatformProductionPostgresEndpointParameter3438335B:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres endpoint
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-endpoint
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Address
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresEndpointParameter/Resource
+  Phase15SharedPlatformProductionPostgresPortParameter3D79C6F2:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres port
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresPortParameter/Resource
+  Phase15SharedPlatformProductionPostgresDatabaseNameParameterB6347F48:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres database name
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-database-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresDatabaseNameParameter/Resource
+  Phase15SharedPlatformProductionPostgresSecretArnParameter736A2435:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres secret ARN
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgeProductionPostgresSecretAttachment19F15688
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresSecretArnParameter/Resource
+  Phase15SharedPlatformProductionPostgresSecurityGroupIdParameter980A733D:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres security group ID
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-security-group-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresSecurityGroupF23D2438
+          - GroupId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresSecurityGroupIdParameter/Resource
+  Phase15SharedPlatformProductionPostgresProxyEndpointParameter27E3B690:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres proxy endpoint
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-endpoint
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresProxyEndpointParameter/Resource
+  Phase15SharedPlatformProductionPostgresProxySecurityGroupIdParameter75FEC272:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge production Postgres proxy security group ID
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-security-group-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxySecurityGroupC83AD5BB
+          - GroupId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresProxySecurityGroupIdParameter/Resource
+  Phase15SharedPlatformProductionPostgresClientSecurityGroupIdParameter5703B390:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the additive TalkForge future Postgres client security group ID
+      Name: /talkforge/dev/v1/shared-platform/postgres-data-plane-client-security-group-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresClientSecurityGroup905B1CBE
+          - GroupId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresClientSecurityGroupIdParameter/Resource
+  Phase15PublicEdgeLoadBalancerArnParameter6F10C8E4:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge public-edge load balancer ARN
+      Name: /talkforge/dev/v1/public-edge/load-balancer-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgePublicEdgeLoadBalancer6C218641
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15PublicEdgeLoadBalancerArnParameter/Resource
+  Phase15PublicEdgeLoadBalancerDnsNameParameter2D267521:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge public-edge load balancer DNS name
+      Name: /talkforge/dev/v1/public-edge/load-balancer-dns-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgePublicEdgeLoadBalancer6C218641
+          - DNSName
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15PublicEdgeLoadBalancerDnsNameParameter/Resource
+  Phase15PublicEdgeLoadBalancerCanonicalHostedZoneIdParameter3B0CA96A:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge public-edge load balancer canonical hosted zone ID
+      Name: /talkforge/dev/v1/public-edge/load-balancer-canonical-hosted-zone-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgePublicEdgeLoadBalancer6C218641
+          - CanonicalHostedZoneID
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15PublicEdgeLoadBalancerCanonicalHostedZoneIdParameter/Resource
+  Phase15PublicEdgeLoadBalancerSecurityGroupIdParameterFE6BA71D:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge public-edge load balancer security group ID
+      Name: /talkforge/dev/v1/public-edge/load-balancer-security-group-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgePublicEdgeLoadBalancerSecurityGroupCC610260
+          - GroupId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15PublicEdgeLoadBalancerSecurityGroupIdParameter/Resource
+  Phase15PublicEdgeHttpListenerArnParameterF4ED38A1:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge public-edge HTTP listener ARN
+      Name: /talkforge/dev/v1/public-edge/http-listener-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgePublicEdgeLoadBalancerTalkForgePublicEdgeHttpListener92619D7D
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15PublicEdgeHttpListenerArnParameter/Resource
+  Phase15InternalEdgeLoadBalancerArnParameterC77EC7A3:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge load balancer ARN
+      Name: /talkforge/dev/v1/internal-edge/load-balancer-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgeInternalEdgeLoadBalancer18DBEF36
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerArnParameter/Resource
+  Phase15InternalEdgeLoadBalancerDnsNameParameterEFA40328:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge load balancer DNS name
+      Name: /talkforge/dev/v1/internal-edge/load-balancer-dns-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeInternalEdgeLoadBalancer18DBEF36
+          - DNSName
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerDnsNameParameter/Resource
+  Phase15InternalEdgeLoadBalancerCanonicalHostedZoneIdParameter2AF9078C:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge load balancer canonical hosted zone ID
+      Name: /talkforge/dev/v1/internal-edge/load-balancer-canonical-hosted-zone-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeInternalEdgeLoadBalancer18DBEF36
+          - CanonicalHostedZoneID
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerCanonicalHostedZoneIdParameter/Resource
+  Phase15InternalEdgeLoadBalancerSecurityGroupIdParameter85C308E6:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge load balancer security group ID
+      Name: /talkforge/dev/v1/internal-edge/load-balancer-security-group-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42
+          - GroupId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerSecurityGroupIdParameter/Resource
+  Phase15InternalEdgeHttpListenerArnParameter1738379B:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge HTTP listener ARN
+      Name: /talkforge/dev/v1/internal-edge/http-listener-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgeInternalEdgeLoadBalancerTalkForgeInternalEdgeHttpListener65C9DFFA
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeHttpListenerArnParameter/Resource
+  Phase15InternalEdgePrivateHostedZoneNameParameterCFFACAB9:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge private hosted zone name
+      Name: /talkforge/dev/v1/internal-edge/private-hosted-zone-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: internal.talkforge
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgePrivateHostedZoneNameParameter/Resource
+  Phase15InternalEdgePrivateHostedZoneIdParameter4A5427BB:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 1.5 SSM contract for the TalkForge internal-edge private hosted zone ID
+      Name: /talkforge/dev/v1/internal-edge/private-hosted-zone-id
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: TalkForgeInternalPrivateHostedZone82D146E9
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgePrivateHostedZoneIdParameter/Resource
+  PlanningStudioPostgresHostParameterBB944B8D:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Planning Studio Postgres proxy host
+      Name: /talkforge/dev/v1/planning-studio/db-host
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/PlanningStudioPostgresHostParameter/Resource
+  PlanningStudioPostgresPortParameter9199C938:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Planning Studio Postgres proxy port
+      Name: /talkforge/dev/v1/planning-studio/db-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/PlanningStudioPostgresPortParameter/Resource
+  PlanningStudioPostgresDatabaseNameParameter0C669249:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Planning Studio Postgres database name
+      Name: /talkforge/dev/v1/planning-studio/db-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge-planning
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/PlanningStudioPostgresDatabaseNameParameter/Resource
+  PlanningStudioPostgresSchemaParameterB704979B:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Planning Studio Postgres schema name
+      Name: /talkforge/dev/v1/planning-studio/db-schema
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: planning
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/PlanningStudioPostgresSchemaParameter/Resource
+  PlanningStudioPostgresSecretArnParameter2BA67AD2:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Planning Studio Postgres credential secret ARN
+      Name: /talkforge/dev/v1/planning-studio/db-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: PlanningStudioPostgresApplicationSecret3A2869D9
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/PlanningStudioPostgresSecretArnParameter/Resource
+  SlidesPostgresHostParameterBE2C4F78:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Slides Postgres proxy host
+      Name: /talkforge/dev/v1/slides/db-host
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/SlidesPostgresHostParameter/Resource
+  SlidesPostgresPortParameterD08DC01E:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Slides Postgres proxy port
+      Name: /talkforge/dev/v1/slides/db-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/SlidesPostgresPortParameter/Resource
+  SlidesPostgresDatabaseNameParameterFDCEFF24:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Slides Postgres database name
+      Name: /talkforge/dev/v1/slides/db-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge-slides
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/SlidesPostgresDatabaseNameParameter/Resource
+  SlidesPostgresSchemaParameter40A85255:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Slides Postgres schema name
+      Name: /talkforge/dev/v1/slides/db-schema
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: slides
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/SlidesPostgresSchemaParameter/Resource
+  SlidesPostgresSecretArnParameter39EB3699:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Slides Postgres credential secret ARN
+      Name: /talkforge/dev/v1/slides/db-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: SlidesPostgresApplicationSecret5702E3EC
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/SlidesPostgresSecretArnParameter/Resource
+  ConferenceDiscoveryPostgresHostParameterF84C9563:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Conference Discovery Postgres proxy host
+      Name: /talkforge/dev/v1/conference-discovery/db-host
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/ConferenceDiscoveryPostgresHostParameter/Resource
+  ConferenceDiscoveryPostgresPortParameter25B59691:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Conference Discovery Postgres proxy port
+      Name: /talkforge/dev/v1/conference-discovery/db-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/ConferenceDiscoveryPostgresPortParameter/Resource
+  ConferenceDiscoveryPostgresDatabaseNameParameter3E0B5AED:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Conference Discovery Postgres database name
+      Name: /talkforge/dev/v1/conference-discovery/db-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge-conferences
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/ConferenceDiscoveryPostgresDatabaseNameParameter/Resource
+  ConferenceDiscoveryPostgresSchemaParameterF288CE6E:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Conference Discovery Postgres schema name
+      Name: /talkforge/dev/v1/conference-discovery/db-schema
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: conferences
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/ConferenceDiscoveryPostgresSchemaParameter/Resource
+  ConferenceDiscoveryPostgresSecretArnParameter38B7B601:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Conference Discovery Postgres credential secret ARN
+      Name: /talkforge/dev/v1/conference-discovery/db-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: ConferenceDiscoveryPostgresApplicationSecretEC876D78
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/ConferenceDiscoveryPostgresSecretArnParameter/Resource
+  UserAccessPostgresHostParameter9E6EF0C7:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge User Access Postgres proxy host
+      Name: /talkforge/dev/v1/user-access/db-host
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/UserAccessPostgresHostParameter/Resource
+  UserAccessPostgresPortParameter1B1FF991:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge User Access Postgres proxy port
+      Name: /talkforge/dev/v1/user-access/db-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/UserAccessPostgresPortParameter/Resource
+  UserAccessPostgresDatabaseNameParameterA9971033:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge User Access Postgres database name
+      Name: /talkforge/dev/v1/user-access/db-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge-user-access
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/UserAccessPostgresDatabaseNameParameter/Resource
+  UserAccessPostgresSchemaParameter3624EDA3:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge User Access Postgres schema name
+      Name: /talkforge/dev/v1/user-access/db-schema
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: user_access
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/UserAccessPostgresSchemaParameter/Resource
+  UserAccessPostgresSecretArnParameter2CE1C1FA:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge User Access Postgres credential secret ARN
+      Name: /talkforge/dev/v1/user-access/db-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: UserAccessPostgresApplicationSecret0F44D3B5
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/UserAccessPostgresSecretArnParameter/Resource
+  VoiceMediaPostgresHostParameter5A4AC0D5:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Voice Media Postgres proxy host
+      Name: /talkforge/dev/v1/voice-media/db-host
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/VoiceMediaPostgresHostParameter/Resource
+  VoiceMediaPostgresPortParameter5D5CB2C3:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Voice Media Postgres proxy port
+      Name: /talkforge/dev/v1/voice-media/db-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/VoiceMediaPostgresPortParameter/Resource
+  VoiceMediaPostgresDatabaseNameParameter4E1C881C:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Voice Media Postgres database name
+      Name: /talkforge/dev/v1/voice-media/db-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge-voice-media
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/VoiceMediaPostgresDatabaseNameParameter/Resource
+  VoiceMediaPostgresSchemaParameter0A4FD766:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Voice Media Postgres schema name
+      Name: /talkforge/dev/v1/voice-media/db-schema
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: voice_media
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/VoiceMediaPostgresSchemaParameter/Resource
+  VoiceMediaPostgresSecretArnParameter16915A9F:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Voice Media Postgres credential secret ARN
+      Name: /talkforge/dev/v1/voice-media/db-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: VoiceMediaPostgresApplicationSecret848E8F09
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/VoiceMediaPostgresSecretArnParameter/Resource
+  RealtimeEngagementPostgresHostParameter22BF9E50:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Realtime Engagement Postgres proxy host
+      Name: /talkforge/dev/v1/realtime-engagement/db-host
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgresProxyC7401B86
+          - Endpoint
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/RealtimeEngagementPostgresHostParameter/Resource
+  RealtimeEngagementPostgresPortParameter1E8AB917:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Realtime Engagement Postgres proxy port
+      Name: /talkforge/dev/v1/realtime-engagement/db-port
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Fn::GetAtt:
+          - TalkForgeProductionPostgres861B38E9
+          - Endpoint.Port
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/RealtimeEngagementPostgresPortParameter/Resource
+  RealtimeEngagementPostgresDatabaseNameParameter24A3159C:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Realtime Engagement Postgres database name
+      Name: /talkforge/dev/v1/realtime-engagement/db-name
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: talkforge-realtime
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/RealtimeEngagementPostgresDatabaseNameParameter/Resource
+  RealtimeEngagementPostgresSchemaParameter8C8C1D38:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Realtime Engagement Postgres schema name
+      Name: /talkforge/dev/v1/realtime-engagement/db-schema
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value: realtime
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/RealtimeEngagementPostgresSchemaParameter/Resource
+  RealtimeEngagementPostgresSecretArnParameterBBD86A77:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Phase 8 SSM contract for the TalkForge Realtime Engagement Postgres credential secret ARN
+      Name: /talkforge/dev/v1/realtime-engagement/db-secret-arn
+      Tags:
+        environment: dev
+        owner: advocacy
+        primary-contact: james@datadog.com
+        project: TalkForge
+        service: talkforge
+      Type: String
+      Value:
+        Ref: RealtimeEngagementPostgresApplicationSecret05CCF316
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/RealtimeEngagementPostgresSecretArnParameter/Resource
+  CDKMetadata:
+    Type: AWS::CDK::Metadata
+    Properties:
+      Analytics: v2:deflate64:H4sIAAAAAAAA/31TTY/aMBD9LXs37i50Dz3ysd0itdsIVhx6QRNnCIbEjjxjKIry3ys7IWRZqad58+bx5sNhLMdP3+TjA5xppLLjqNCprNcM6ijgTNsa1VjWm0qJ+c5skrlIfFpotfapQQ7cDa2sZ3yHtMAbf+OmRFZpYG1NLw7gZZmE8Ab8CoxnuIjE6RMw3oyXhtEZ7AXtJF02ZQa1L9GwiLodKNxU6sVkldWGO3GfrlF5p/ny6qyv4pz/JZYmd0jUCCyAWKvCQpZCAUZpk5/Gsp5WVaFVXOunhWwWa+iC0Yd8qNPEaDpNhxvhwkGeJ7Lu1v9hiTH7Y0280i1rhMtI1gk4KJHR9XMvZndce8BBfUgsgCEFwqUhDhP2xBqVa8++mH0qJs7+vXTN7uA7uLwzb4SGUtYr234JMSa20CrqW9QIio2oBAM5Olm3pw+929AaDp63F3yqrCzHy67VHjN/7XrHrZCsdwpvk9wxrfn1d13aCIJSzndm8ICigDLNQNbfvVGBmAHFntdcXEHTSbfGZngg+RZDL6PJFoiQSU5DEDSRM6+OyNFQFdZnZ2C1l/W0AFeGFhE0gqgM/1KnTd6/ejzuNWmafuHA/4Kq0iYXsc+aIQ+J8sS23LpORzJx9qSz4BQrQ4Mh/u258tyIsJQ80JfT+Kt8epaPDwfSeuS8YV2iXLXxH8meac9gBAAA
+    Metadata:
+      aws:cdk:path: TalkForgePostgresDataPlaneStack-dev/CDKMetadata/Default
+    Condition: CDKMetadataAvailable
+Mappings:
+  TalkForgeProductionPostgresRotationSingleUserSARMappingD578A46E:
+    aws:
+      applicationId: arn:aws:serverlessrepo:us-east-1:297356227824:applications/SecretsManagerRDSPostgreSQLRotationSingleUser
+      semanticVersion: 1.1.618
+    aws-cn:
+      applicationId: arn:aws-cn:serverlessrepo:cn-north-1:193023089310:applications/SecretsManagerRDSPostgreSQLRotationSingleUser
+      semanticVersion: 1.1.237
+    aws-us-gov:
+      applicationId: arn:aws-us-gov:serverlessrepo:us-gov-west-1:023102451235:applications/SecretsManagerRDSPostgreSQLRotationSingleUser
+      semanticVersion: 1.1.213
+Outputs:
+  Phase15SharedPlatformProductionPostgresVpcIdParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres VPC ID contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-vpc-id
+  Phase15SharedPlatformProductionPostgresAvailabilityZonesParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres VPC availability zones contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-availability-zones
+  Phase15SharedPlatformPublicSubnetIdsParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres public subnet IDs contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-public-subnet-ids
+  Phase15SharedPlatformPrivateSubnetIdsParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres private subnet IDs contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-private-subnet-ids
+  Phase15SharedPlatformIsolatedSubnetIdsParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres isolated subnet IDs contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-isolated-subnet-ids
+  Phase15SharedPlatformProductionPostgresEndpointParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres endpoint contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-endpoint
+  Phase15SharedPlatformProductionPostgresSecretArnParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres secret ARN contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-secret-arn
+  Phase15SharedPlatformProductionPostgresSecurityGroupIdParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres security group ID contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-security-group-id
+  Phase15SharedPlatformProductionPostgresProxyEndpointParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres proxy endpoint contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-endpoint
+  Phase15SharedPlatformProductionPostgresProxySecurityGroupIdParameterName:
+    Description: SSM parameter name for the additive TalkForge production Postgres proxy security group ID contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-security-group-id
+  Phase15SharedPlatformProductionPostgresClientSecurityGroupIdParameterName:
+    Description: SSM parameter name for the additive TalkForge future Postgres client security group ID contract
+    Value: /talkforge/dev/v1/shared-platform/postgres-data-plane-client-security-group-id
+  Phase15PublicEdgeLoadBalancerArnParameterName:
+    Description: SSM parameter name for the TalkForge public-edge load balancer ARN contract
+    Value: /talkforge/dev/v1/public-edge/load-balancer-arn
+  Phase15PublicEdgeLoadBalancerDnsNameParameterName:
+    Description: SSM parameter name for the TalkForge public-edge load balancer DNS name contract
+    Value: /talkforge/dev/v1/public-edge/load-balancer-dns-name
+  Phase15PublicEdgeLoadBalancerCanonicalHostedZoneIdParameterName:
+    Description: SSM parameter name for the TalkForge public-edge load balancer canonical hosted zone ID contract
+    Value: /talkforge/dev/v1/public-edge/load-balancer-canonical-hosted-zone-id
+  Phase15PublicEdgeLoadBalancerSecurityGroupIdParameterName:
+    Description: SSM parameter name for the TalkForge public-edge load balancer security group ID contract
+    Value: /talkforge/dev/v1/public-edge/load-balancer-security-group-id
+  Phase15PublicEdgeHttpListenerArnParameterName:
+    Description: SSM parameter name for the TalkForge public-edge HTTP listener ARN contract
+    Value: /talkforge/dev/v1/public-edge/http-listener-arn
+  Phase15InternalEdgeLoadBalancerArnParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge load balancer ARN contract
+    Value: /talkforge/dev/v1/internal-edge/load-balancer-arn
+  Phase15InternalEdgeLoadBalancerDnsNameParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge load balancer DNS name contract
+    Value: /talkforge/dev/v1/internal-edge/load-balancer-dns-name
+  Phase15InternalEdgeLoadBalancerCanonicalHostedZoneIdParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge load balancer canonical hosted zone ID contract
+    Value: /talkforge/dev/v1/internal-edge/load-balancer-canonical-hosted-zone-id
+  Phase15InternalEdgeLoadBalancerSecurityGroupIdParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge load balancer security group ID contract
+    Value: /talkforge/dev/v1/internal-edge/load-balancer-security-group-id
+  Phase15InternalEdgeHttpListenerArnParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge HTTP listener ARN contract
+    Value: /talkforge/dev/v1/internal-edge/http-listener-arn
+  Phase15InternalEdgePrivateHostedZoneNameParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge private hosted zone name contract
+    Value: /talkforge/dev/v1/internal-edge/private-hosted-zone-name
+  Phase15InternalEdgePrivateHostedZoneIdParameterName:
+    Description: SSM parameter name for the TalkForge internal-edge private hosted zone ID contract
+    Value: /talkforge/dev/v1/internal-edge/private-hosted-zone-id
+Conditions:
+  CDKMetadataAvailable:
+    Fn::Or:
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - af-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-3
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-4
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-northwest-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-2
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - il-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - sa-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-1
+      - Fn::Equals:
+          - Ref: AWS::Region
+          - us-west-2
+Parameters:
+  BootstrapVersion:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /cdk-bootstrap/hnb659fds/version
+    Description: Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]

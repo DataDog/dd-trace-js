@@ -427,18 +427,15 @@ describe('Child process plugin', () => {
     let childProcess, tracer, util
     let Bluebird
 
-    // The regression only needs Bluebird to be the global `Promise` at the
-    // moment `util.promisify`/the wrapped child_process method runs, since that
-    // is when the instrumentation does `Promise.resolve(...).then(...)`. Holding
-    // the mutation across the awaited span round-trip leaks it into the shared
-    // mock agent and tracer, flip-flopping the process-wide `Promise` while the
-    // next test runs. Scope the mutation to the synchronous call and restore it
-    // before awaiting.
-    function withBluebird (fn) {
+    // Keep Bluebird installed only for the duration of the child_process
+    // promise lifecycle. Restoring it before the wrapped promise settles makes
+    // util.promisify-based calls hang; restoring it after the await prevents
+    // the process-wide Promise swap from leaking into the next test.
+    async function withBluebird (fn) {
       const original = global.Promise
       global.Promise = Bluebird
       try {
-        return fn()
+        return await fn()
       } finally {
         global.Promise = original
       }
@@ -494,7 +491,7 @@ describe('Child process plugin', () => {
         }))
       }
 
-      const promises = withBluebird(() => {
+      const results = await withBluebird(() => {
         const execFileAsync = util.promisify(childProcess.execFile)
         const calls = []
         for (let i = 0; i < 5; i++) {
@@ -506,10 +503,9 @@ describe('Child process plugin', () => {
               })
           )
         }
-        return calls
+        return Promise.all(calls)
       })
 
-      const results = await Promise.all(promises)
       assert.strictEqual(results.length, 5)
 
       // Drain every concurrent span so a late flush does not leak into the next

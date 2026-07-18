@@ -1,0 +1,3215 @@
+{
+    "TemplateBody": {
+        "Parameters": {
+            "BootstrapVersion": {
+                "Type": "AWS::SSM::Parameter::Value<String>",
+                "Default": "/cdk-bootstrap/hnb659fds/version",
+                "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+            }
+        },
+        "Mappings": {
+            "TalkForgeProductionPostgresRotationSingleUserSARMappingD578A46E": {
+                "aws": {
+                    "applicationId": "arn:aws:serverlessrepo:us-east-1:297356227824:applications/SecretsManagerRDSPostgreSQLRotationSingleUser",
+                    "semanticVersion": "1.1.618"
+                },
+                "aws-cn": {
+                    "applicationId": "arn:aws-cn:serverlessrepo:cn-north-1:193023089310:applications/SecretsManagerRDSPostgreSQLRotationSingleUser",
+                    "semanticVersion": "1.1.237"
+                },
+                "aws-us-gov": {
+                    "applicationId": "arn:aws-us-gov:serverlessrepo:us-gov-west-1:023102451235:applications/SecretsManagerRDSPostgreSQLRotationSingleUser",
+                    "semanticVersion": "1.1.213"
+                }
+            }
+        },
+        "Outputs": {
+            "Phase15SharedPlatformProductionPostgresVpcIdParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres VPC ID contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-vpc-id"
+            },
+            "Phase15SharedPlatformProductionPostgresAvailabilityZonesParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres VPC availability zones contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-availability-zones"
+            },
+            "Phase15SharedPlatformPrivateSubnetIdsParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres private subnet IDs contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-private-subnet-ids"
+            },
+            "Phase15SharedPlatformIsolatedSubnetIdsParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres isolated subnet IDs contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-isolated-subnet-ids"
+            },
+            "Phase15SharedPlatformProductionPostgresEndpointParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres endpoint contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-endpoint"
+            },
+            "Phase15SharedPlatformProductionPostgresSecretArnParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres secret ARN contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-secret-arn"
+            },
+            "Phase15SharedPlatformProductionPostgresSecurityGroupIdParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres security group ID contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-security-group-id"
+            },
+            "Phase15SharedPlatformProductionPostgresProxyEndpointParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres proxy endpoint contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-endpoint"
+            },
+            "Phase15SharedPlatformProductionPostgresProxySecurityGroupIdParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge production Postgres proxy security group ID contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-security-group-id"
+            },
+            "Phase15SharedPlatformProductionPostgresClientSecurityGroupIdParameterName": {
+                "Description": "SSM parameter name for the additive TalkForge future Postgres client security group ID contract",
+                "Value": "/talkforge/dev/v1/shared-platform/postgres-data-plane-client-security-group-id"
+            },
+            "Phase15InternalEdgeLoadBalancerArnParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge load balancer ARN contract",
+                "Value": "/talkforge/dev/v1/internal-edge/load-balancer-arn"
+            },
+            "Phase15InternalEdgeLoadBalancerDnsNameParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge load balancer DNS name contract",
+                "Value": "/talkforge/dev/v1/internal-edge/load-balancer-dns-name"
+            },
+            "Phase15InternalEdgeLoadBalancerCanonicalHostedZoneIdParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge load balancer canonical hosted zone ID contract",
+                "Value": "/talkforge/dev/v1/internal-edge/load-balancer-canonical-hosted-zone-id"
+            },
+            "Phase15InternalEdgeLoadBalancerSecurityGroupIdParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge load balancer security group ID contract",
+                "Value": "/talkforge/dev/v1/internal-edge/load-balancer-security-group-id"
+            },
+            "Phase15InternalEdgeHttpListenerArnParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge HTTP listener ARN contract",
+                "Value": "/talkforge/dev/v1/internal-edge/http-listener-arn"
+            },
+            "Phase15InternalEdgePrivateHostedZoneNameParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge private hosted zone name contract",
+                "Value": "/talkforge/dev/v1/internal-edge/private-hosted-zone-name"
+            },
+            "Phase15InternalEdgePrivateHostedZoneIdParameterName": {
+                "Description": "SSM parameter name for the TalkForge internal-edge private hosted zone ID contract",
+                "Value": "/talkforge/dev/v1/internal-edge/private-hosted-zone-id"
+            }
+        },
+        "Resources": {
+            "TalkForgeProductionPostgresVpcB004173E": {
+                "Type": "AWS::EC2::VPC",
+                "Properties": {
+                    "CidrBlock": "10.2.0.0/16",
+                    "EnableDnsHostnames": true,
+                    "EnableDnsSupport": true,
+                    "InstanceTenancy": "default",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgeProductionPostgresVpc-dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616": {
+                "Type": "AWS::EC2::Subnet",
+                "Properties": {
+                    "AvailabilityZone": {
+                        "Fn::Select": [
+                            0,
+                            {
+                                "Fn::GetAZs": ""
+                            }
+                        ]
+                    },
+                    "CidrBlock": "10.2.0.0/24",
+                    "MapPublicIpOnLaunch": true,
+                    "Tags": [
+                        {
+                            "Key": "aws-cdk:subnet-name",
+                            "Value": "public-subnet"
+                        },
+                        {
+                            "Key": "aws-cdk:subnet-type",
+                            "Value": "Public"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/Subnet"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableF428C486": {
+                "Type": "AWS::EC2::RouteTable",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/RouteTable"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableAssociation417306E4": {
+                "Type": "AWS::EC2::SubnetRouteTableAssociation",
+                "Properties": {
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableF428C486"
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/RouteTableAssociation"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1DefaultRoute2992C037": {
+                "Type": "AWS::EC2::Route",
+                "Properties": {
+                    "DestinationCidrBlock": "0.0.0.0/0",
+                    "GatewayId": {
+                        "Ref": "TalkForgeProductionPostgresVpcIGWA5234405"
+                    },
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableF428C486"
+                    }
+                },
+                "DependsOn": [
+                    "TalkForgeProductionPostgresVpcVPCGW95DB94E0"
+                ],
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/DefaultRoute"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1EIP28EB4AA0": {
+                "Type": "AWS::EC2::EIP",
+                "Properties": {
+                    "Domain": "vpc",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/EIP"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1NATGateway2CEB6A70": {
+                "Type": "AWS::EC2::NatGateway",
+                "Properties": {
+                    "AllocationId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresVpcpublicsubnetSubnet1EIP28EB4AA0",
+                            "AllocationId"
+                        ]
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet1SubnetB5F70616"
+                    },
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "DependsOn": [
+                    "TalkForgeProductionPostgresVpcpublicsubnetSubnet1DefaultRoute2992C037",
+                    "TalkForgeProductionPostgresVpcpublicsubnetSubnet1RouteTableAssociation417306E4"
+                ],
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet1/NATGateway"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet2SubnetFFBE9B47": {
+                "Type": "AWS::EC2::Subnet",
+                "Properties": {
+                    "AvailabilityZone": {
+                        "Fn::Select": [
+                            1,
+                            {
+                                "Fn::GetAZs": ""
+                            }
+                        ]
+                    },
+                    "CidrBlock": "10.2.1.0/24",
+                    "MapPublicIpOnLaunch": true,
+                    "Tags": [
+                        {
+                            "Key": "aws-cdk:subnet-name",
+                            "Value": "public-subnet"
+                        },
+                        {
+                            "Key": "aws-cdk:subnet-type",
+                            "Value": "Public"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/Subnet"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTable3548C3BA": {
+                "Type": "AWS::EC2::RouteTable",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/RouteTable"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTableAssociation0B2EB8AB": {
+                "Type": "AWS::EC2::SubnetRouteTableAssociation",
+                "Properties": {
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTable3548C3BA"
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet2SubnetFFBE9B47"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/RouteTableAssociation"
+                }
+            },
+            "TalkForgeProductionPostgresVpcpublicsubnetSubnet2DefaultRouteD5AAF2A9": {
+                "Type": "AWS::EC2::Route",
+                "Properties": {
+                    "DestinationCidrBlock": "0.0.0.0/0",
+                    "GatewayId": {
+                        "Ref": "TalkForgeProductionPostgresVpcIGWA5234405"
+                    },
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet2RouteTable3548C3BA"
+                    }
+                },
+                "DependsOn": [
+                    "TalkForgeProductionPostgresVpcVPCGW95DB94E0"
+                ],
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/public-subnetSubnet2/DefaultRoute"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E": {
+                "Type": "AWS::EC2::Subnet",
+                "Properties": {
+                    "AvailabilityZone": {
+                        "Fn::Select": [
+                            0,
+                            {
+                                "Fn::GetAZs": ""
+                            }
+                        ]
+                    },
+                    "CidrBlock": "10.2.2.0/24",
+                    "MapPublicIpOnLaunch": false,
+                    "Tags": [
+                        {
+                            "Key": "aws-cdk:subnet-name",
+                            "Value": "private-subnet"
+                        },
+                        {
+                            "Key": "aws-cdk:subnet-type",
+                            "Value": "Private"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/Subnet"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTable92756FEF": {
+                "Type": "AWS::EC2::RouteTable",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/RouteTable"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTableAssociation58DCC9EB": {
+                "Type": "AWS::EC2::SubnetRouteTableAssociation",
+                "Properties": {
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTable92756FEF"
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/RouteTableAssociation"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet1DefaultRouteD3206195": {
+                "Type": "AWS::EC2::Route",
+                "Properties": {
+                    "DestinationCidrBlock": "0.0.0.0/0",
+                    "NatGatewayId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet1NATGateway2CEB6A70"
+                    },
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet1RouteTable92756FEF"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet1/DefaultRoute"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA": {
+                "Type": "AWS::EC2::Subnet",
+                "Properties": {
+                    "AvailabilityZone": {
+                        "Fn::Select": [
+                            1,
+                            {
+                                "Fn::GetAZs": ""
+                            }
+                        ]
+                    },
+                    "CidrBlock": "10.2.3.0/24",
+                    "MapPublicIpOnLaunch": false,
+                    "Tags": [
+                        {
+                            "Key": "aws-cdk:subnet-name",
+                            "Value": "private-subnet"
+                        },
+                        {
+                            "Key": "aws-cdk:subnet-type",
+                            "Value": "Private"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/Subnet"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableD4E4C1C0": {
+                "Type": "AWS::EC2::RouteTable",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/RouteTable"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableAssociation41D229C1": {
+                "Type": "AWS::EC2::SubnetRouteTableAssociation",
+                "Properties": {
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableD4E4C1C0"
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/RouteTableAssociation"
+                }
+            },
+            "TalkForgeProductionPostgresVpcprivatesubnetSubnet2DefaultRouteD6BA9E4B": {
+                "Type": "AWS::EC2::Route",
+                "Properties": {
+                    "DestinationCidrBlock": "0.0.0.0/0",
+                    "NatGatewayId": {
+                        "Ref": "TalkForgeProductionPostgresVpcpublicsubnetSubnet1NATGateway2CEB6A70"
+                    },
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet2RouteTableD4E4C1C0"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/private-subnetSubnet2/DefaultRoute"
+                }
+            },
+            "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78": {
+                "Type": "AWS::EC2::Subnet",
+                "Properties": {
+                    "AvailabilityZone": {
+                        "Fn::Select": [
+                            0,
+                            {
+                                "Fn::GetAZs": ""
+                            }
+                        ]
+                    },
+                    "CidrBlock": "10.2.4.0/24",
+                    "MapPublicIpOnLaunch": false,
+                    "Tags": [
+                        {
+                            "Key": "aws-cdk:subnet-name",
+                            "Value": "isolated-subnet"
+                        },
+                        {
+                            "Key": "aws-cdk:subnet-type",
+                            "Value": "Isolated"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1/Subnet"
+                }
+            },
+            "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableBAB259F2": {
+                "Type": "AWS::EC2::RouteTable",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1/RouteTable"
+                }
+            },
+            "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableAssociationC40B8F7E": {
+                "Type": "AWS::EC2::SubnetRouteTableAssociation",
+                "Properties": {
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1RouteTableBAB259F2"
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet1/RouteTableAssociation"
+                }
+            },
+            "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B": {
+                "Type": "AWS::EC2::Subnet",
+                "Properties": {
+                    "AvailabilityZone": {
+                        "Fn::Select": [
+                            1,
+                            {
+                                "Fn::GetAZs": ""
+                            }
+                        ]
+                    },
+                    "CidrBlock": "10.2.5.0/24",
+                    "MapPublicIpOnLaunch": false,
+                    "Tags": [
+                        {
+                            "Key": "aws-cdk:subnet-name",
+                            "Value": "isolated-subnet"
+                        },
+                        {
+                            "Key": "aws-cdk:subnet-type",
+                            "Value": "Isolated"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2/Subnet"
+                }
+            },
+            "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTable852DD21F": {
+                "Type": "AWS::EC2::RouteTable",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2/RouteTable"
+                }
+            },
+            "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTableAssociation50F02C14": {
+                "Type": "AWS::EC2::SubnetRouteTableAssociation",
+                "Properties": {
+                    "RouteTableId": {
+                        "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2RouteTable852DD21F"
+                    },
+                    "SubnetId": {
+                        "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/isolated-subnetSubnet2/RouteTableAssociation"
+                }
+            },
+            "TalkForgeProductionPostgresVpcIGWA5234405": {
+                "Type": "AWS::EC2::InternetGateway",
+                "Properties": {
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgeProductionPostgresVpc-dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/IGW"
+                }
+            },
+            "TalkForgeProductionPostgresVpcVPCGW95DB94E0": {
+                "Type": "AWS::EC2::VPCGatewayAttachment",
+                "Properties": {
+                    "InternetGatewayId": {
+                        "Ref": "TalkForgeProductionPostgresVpcIGWA5234405"
+                    },
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/VPCGW"
+                }
+            },
+            "TalkForgeProductionPostgresVpcTalkForgeProductionPostgresSecretsManagerEndpoint721A7B31": {
+                "Type": "AWS::EC2::VPCEndpoint",
+                "Properties": {
+                    "PrivateDnsEnabled": true,
+                    "SecurityGroupIds": [
+                        {
+                            "Fn::GetAtt": [
+                                "TalkForgeProductionPostgresSecretsManagerEndpointSecurityGroup5F235C93",
+                                "GroupId"
+                            ]
+                        }
+                    ],
+                    "ServiceName": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "com.amazonaws.",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                ".secretsmanager"
+                            ]
+                        ]
+                    },
+                    "SubnetIds": [
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78"
+                        },
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "Name",
+                            "Value": "TalkForgeProductionPostgresVpc-dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcEndpointType": "Interface",
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresVpc/TalkForgeProductionPostgresSecretsManagerEndpoint/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSecretsManagerEndpointSecurityGroup5F235C93": {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties": {
+                    "GroupDescription": "Security group for the Secrets Manager interface endpoint used by the Postgres data plane",
+                    "SecurityGroupEgress": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "Allow all outbound traffic by default",
+                            "IpProtocol": "-1"
+                        }
+                    ],
+                    "SecurityGroupIngress": [
+                        {
+                            "CidrIp": "10.2.0.0/16",
+                            "Description": "Allow VPC workloads to reach the Secrets Manager interface endpoint",
+                            "FromPort": 443,
+                            "IpProtocol": "tcp",
+                            "ToPort": 443
+                        },
+                        {
+                            "CidrIp": {
+                                "Fn::GetAtt": [
+                                    "TalkForgeProductionPostgresVpcB004173E",
+                                    "CidrBlock"
+                                ]
+                            },
+                            "Description": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "from ",
+                                        {
+                                            "Fn::GetAtt": [
+                                                "TalkForgeProductionPostgresVpcB004173E",
+                                                "CidrBlock"
+                                            ]
+                                        },
+                                        ":443"
+                                    ]
+                                ]
+                            },
+                            "FromPort": 443,
+                            "IpProtocol": "tcp",
+                            "ToPort": 443
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecretsManagerEndpointSecurityGroup/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresClientSecurityGroup905B1CBE": {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties": {
+                    "GroupDescription": "Future client security group for TalkForge workloads that will connect to the production Postgres proxy",
+                    "SecurityGroupEgress": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "Allow all outbound traffic by default",
+                            "IpProtocol": "-1"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresClientSecurityGroup/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxySecurityGroupC83AD5BB": {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties": {
+                    "GroupDescription": "Security group for the TalkForge production Postgres RDS Proxy",
+                    "SecurityGroupEgress": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "Allow all outbound traffic by default",
+                            "IpProtocol": "-1"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxySecurityGroup/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxySecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC663025432EC39A2BC": {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Properties": {
+                    "Description": "Allow future TalkForge workloads to reach the production Postgres proxy",
+                    "FromPort": 5432,
+                    "GroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresProxySecurityGroupC83AD5BB",
+                            "GroupId"
+                        ]
+                    },
+                    "IpProtocol": "tcp",
+                    "SourceSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresClientSecurityGroup905B1CBE",
+                            "GroupId"
+                        ]
+                    },
+                    "ToPort": 5432
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxySecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC66302:5432"
+                }
+            },
+            "TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42": {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties": {
+                    "GroupDescription": "Security group for the TalkForge internal-only load balancer in the Postgres data plane",
+                    "SecurityGroupEgress": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "Allow all outbound traffic by default",
+                            "IpProtocol": "-1"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancerSecurityGroup/Resource"
+                }
+            },
+            "TalkForgeInternalEdgeLoadBalancerSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC663028008893F80": {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Properties": {
+                    "Description": "Allow approved TalkForge workloads to reach the internal load balancer",
+                    "FromPort": 80,
+                    "GroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42",
+                            "GroupId"
+                        ]
+                    },
+                    "IpProtocol": "tcp",
+                    "SourceSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresClientSecurityGroup905B1CBE",
+                            "GroupId"
+                        ]
+                    },
+                    "ToPort": 80
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancerSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresClientSecurityGroupDBC66302:80"
+                }
+            },
+            "TalkForgeInternalEdgeLoadBalancer18DBEF36": {
+                "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+                "Properties": {
+                    "LoadBalancerAttributes": [
+                        {
+                            "Key": "deletion_protection.enabled",
+                            "Value": "false"
+                        },
+                        {
+                            "Key": "idle_timeout.timeout_seconds",
+                            "Value": "180"
+                        }
+                    ],
+                    "Name": "TalkForgeInternalAlb-dev",
+                    "Scheme": "internal",
+                    "SecurityGroups": [
+                        {
+                            "Fn::GetAtt": [
+                                "TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42",
+                                "GroupId"
+                            ]
+                        }
+                    ],
+                    "Subnets": [
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E"
+                        },
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Type": "application"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancer/Resource"
+                }
+            },
+            "TalkForgeInternalEdgeLoadBalancerTalkForgeInternalEdgeHttpListener65C9DFFA": {
+                "Type": "AWS::ElasticLoadBalancingV2::Listener",
+                "Properties": {
+                    "DefaultActions": [
+                        {
+                            "FixedResponseConfig": {
+                                "ContentType": "text/plain",
+                                "MessageBody": "Not found",
+                                "StatusCode": "404"
+                            },
+                            "Type": "fixed-response"
+                        }
+                    ],
+                    "LoadBalancerArn": {
+                        "Ref": "TalkForgeInternalEdgeLoadBalancer18DBEF36"
+                    },
+                    "Port": 80,
+                    "Protocol": "HTTP"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalEdgeLoadBalancer/TalkForgeInternalEdgeHttpListener/Resource"
+                }
+            },
+            "TalkForgeInternalPrivateHostedZone82D146E9": {
+                "Type": "AWS::Route53::HostedZone",
+                "Properties": {
+                    "HostedZoneTags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Name": "internal.talkforge.",
+                    "VPCs": [
+                        {
+                            "VPCId": {
+                                "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                            },
+                            "VPCRegion": {
+                                "Ref": "AWS::Region"
+                            }
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeInternalPrivateHostedZone/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSecurityGroupF23D2438": {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties": {
+                    "GroupDescription": "Security group for the TalkForge production Postgres instance",
+                    "SecurityGroupEgress": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "Allow all outbound traffic by default",
+                            "IpProtocol": "-1"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresRotationSingleUserSecurityGroupAE6EC47DIndirectPort0FFC3641": {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Properties": {
+                    "Description": "from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresRotationSingleUserSecurityGroupAE6EC47D:{IndirectPort}",
+                    "FromPort": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgres861B38E9",
+                            "Endpoint.Port"
+                        ]
+                    },
+                    "GroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresSecurityGroupF23D2438",
+                            "GroupId"
+                        ]
+                    },
+                    "IpProtocol": "tcp",
+                    "SourceSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1",
+                            "GroupId"
+                        ]
+                    },
+                    "ToPort": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgres861B38E9",
+                            "Endpoint.Port"
+                        ]
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresRotationSingleUserSecurityGroupAE6EC47D:{IndirectPort}"
+                }
+            },
+            "TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD5IndirectPort3B03B02E": {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Properties": {
+                    "Description": "Allow connections to the database Instance from the Proxy",
+                    "FromPort": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgres861B38E9",
+                            "Endpoint.Port"
+                        ]
+                    },
+                    "GroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresSecurityGroupF23D2438",
+                            "GroupId"
+                        ]
+                    },
+                    "IpProtocol": "tcp",
+                    "SourceSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresProxySecurityGroupC83AD5BB",
+                            "GroupId"
+                        ]
+                    },
+                    "ToPort": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgres861B38E9",
+                            "Endpoint.Port"
+                        ]
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD5:{IndirectPort}"
+                }
+            },
+            "TalkForgeProductionPostgresSecurityGroupfromTalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD554323AA5CBBE": {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Properties": {
+                    "Description": "Allow the production Postgres proxy to reach the database",
+                    "FromPort": 5432,
+                    "GroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresSecurityGroupF23D2438",
+                            "GroupId"
+                        ]
+                    },
+                    "IpProtocol": "tcp",
+                    "SourceSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresProxySecurityGroupC83AD5BB",
+                            "GroupId"
+                        ]
+                    },
+                    "ToPort": 5432
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSecurityGroup/from TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresProxySecurityGroupAFEF1CD5:5432"
+                }
+            },
+            "TalkForgeProductionPostgresParameterGroup3C4111D6": {
+                "Type": "AWS::RDS::DBParameterGroup",
+                "Properties": {
+                    "Description": "Parameter group for postgres16",
+                    "Family": "postgres16",
+                    "Parameters": {
+                        "idle_in_transaction_session_timeout": "60000",
+                        "log_min_duration_statement": "1000",
+                        "shared_preload_libraries": "pg_stat_statements",
+                        "statement_timeout": "300000"
+                    },
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresParameterGroup/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSubnetGroup": {
+                "Type": "AWS::RDS::DBSubnetGroup",
+                "Properties": {
+                    "DBSubnetGroupDescription": "Private isolated subnets for the TalkForge production Postgres data plane",
+                    "DBSubnetGroupName": "talkforge-production-postgres-dev",
+                    "SubnetIds": [
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78"
+                        },
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "UpdateReplacePolicy": "Retain",
+                "DeletionPolicy": "Retain",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresSubnetGroup/Default"
+                }
+            },
+            "TalkForgeProductionPostgresMonitoringRoleB989B1F7": {
+                "Type": "AWS::IAM::Role",
+                "Properties": {
+                    "AssumeRolePolicyDocument": {
+                        "Statement": [
+                            {
+                                "Action": "sts:AssumeRole",
+                                "Effect": "Allow",
+                                "Principal": {
+                                    "Service": "monitoring.rds.amazonaws.com"
+                                }
+                            }
+                        ],
+                        "Version": "2012-10-17"
+                    },
+                    "ManagedPolicyArns": [
+                        {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:",
+                                    {
+                                        "Ref": "AWS::Partition"
+                                    },
+                                    ":iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+                                ]
+                            ]
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/MonitoringRole/Resource"
+                }
+            },
+            "TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb": {
+                "Type": "AWS::SecretsManager::Secret",
+                "Properties": {
+                    "Description": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "Generated by the CDK for stack: ",
+                                {
+                                    "Ref": "AWS::StackName"
+                                }
+                            ]
+                        ]
+                    },
+                    "GenerateSecretString": {
+                        "ExcludeCharacters": " %+~`#$&*()|[]{}:;<>?!'/@\"\\",
+                        "GenerateStringKey": "password",
+                        "PasswordLength": 30,
+                        "SecretStringTemplate": "{\"username\":\"talkforge_admin\"}"
+                    },
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSecretAttachment19F15688": {
+                "Type": "AWS::SecretsManager::SecretTargetAttachment",
+                "Properties": {
+                    "SecretId": {
+                        "Ref": "TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb"
+                    },
+                    "TargetId": {
+                        "Ref": "TalkForgeProductionPostgres861B38E9"
+                    },
+                    "TargetType": "AWS::RDS::DBInstance"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Attachment/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSecretAttachmentRotationSchedule083C2D23": {
+                "Type": "AWS::SecretsManager::RotationSchedule",
+                "Properties": {
+                    "RotationLambdaARN": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresRotationSingleUser92B32EEE",
+                            "Outputs.RotationLambdaARN"
+                        ]
+                    },
+                    "RotationRules": {
+                        "ScheduleExpression": "rate(30 days)"
+                    },
+                    "SecretId": {
+                        "Ref": "TalkForgeProductionPostgresSecretAttachment19F15688"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Attachment/RotationSchedule/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresSecretAttachmentPolicy8547851A": {
+                "Type": "AWS::SecretsManager::ResourcePolicy",
+                "Properties": {
+                    "ResourcePolicy": {
+                        "Statement": [
+                            {
+                                "Action": "secretsmanager:DeleteSecret",
+                                "Effect": "Deny",
+                                "Principal": {
+                                    "AWS": {
+                                        "Fn::Join": [
+                                            "",
+                                            [
+                                                "arn:",
+                                                {
+                                                    "Ref": "AWS::Partition"
+                                                },
+                                                ":iam::",
+                                                {
+                                                    "Ref": "AWS::AccountId"
+                                                },
+                                                ":root"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                "Resource": "*"
+                            }
+                        ],
+                        "Version": "2012-10-17"
+                    },
+                    "SecretId": {
+                        "Ref": "TalkForgeProductionPostgresSecretAttachment19F15688"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Secret/Attachment/Policy/Resource"
+                }
+            },
+            "TalkForgeProductionPostgres861B38E9": {
+                "Type": "AWS::RDS::DBInstance",
+                "Properties": {
+                    "AllocatedStorage": "100",
+                    "AutoMinorVersionUpgrade": false,
+                    "BackupRetentionPeriod": 14,
+                    "CopyTagsToSnapshot": true,
+                    "DBInstanceClass": "db.t4g.medium",
+                    "DBInstanceIdentifier": "talkforge-production-postgres-dev",
+                    "DBName": "talkforge",
+                    "DBParameterGroupName": {
+                        "Ref": "TalkForgeProductionPostgresParameterGroup3C4111D6"
+                    },
+                    "DBSubnetGroupName": {
+                        "Ref": "TalkForgeProductionPostgresSubnetGroup"
+                    },
+                    "DeleteAutomatedBackups": false,
+                    "DeletionProtection": true,
+                    "EnableCloudwatchLogsExports": [
+                        "postgresql"
+                    ],
+                    "EnablePerformanceInsights": true,
+                    "Engine": "postgres",
+                    "EngineVersion": "16.6",
+                    "MasterUserPassword": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "{{resolve:secretsmanager:",
+                                {
+                                    "Ref": "TalkForgePostgresDataPlaneStackdevTalkForgeProductionPostgresSecretC8D2D7AA3fdaad7efa858a3daf9490cf0a702aeb"
+                                },
+                                ":SecretString:password::}}"
+                            ]
+                        ]
+                    },
+                    "MasterUsername": "talkforge_admin",
+                    "MaxAllocatedStorage": 500,
+                    "MonitoringInterval": 60,
+                    "MonitoringRoleArn": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresMonitoringRoleB989B1F7",
+                            "Arn"
+                        ]
+                    },
+                    "MultiAZ": true,
+                    "PerformanceInsightsRetentionPeriod": 7,
+                    "Port": "5432",
+                    "PubliclyAccessible": false,
+                    "StorageEncrypted": true,
+                    "StorageType": "gp3",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VPCSecurityGroups": [
+                        {
+                            "Fn::GetAtt": [
+                                "TalkForgeProductionPostgresSecurityGroupF23D2438",
+                                "GroupId"
+                            ]
+                        }
+                    ]
+                },
+                "UpdateReplacePolicy": "Retain",
+                "DeletionPolicy": "Retain",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1": {
+                "Type": "AWS::EC2::SecurityGroup",
+                "Properties": {
+                    "GroupDescription": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/RotationSingleUser/SecurityGroup",
+                    "SecurityGroupEgress": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "Allow all outbound traffic by default",
+                            "IpProtocol": "-1"
+                        }
+                    ],
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcId": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgres/RotationSingleUser/SecurityGroup/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxyIAMRole3D8F59CF": {
+                "Type": "AWS::IAM::Role",
+                "Properties": {
+                    "AssumeRolePolicyDocument": {
+                        "Statement": [
+                            {
+                                "Action": "sts:AssumeRole",
+                                "Effect": "Allow",
+                                "Principal": {
+                                    "Service": "rds.amazonaws.com"
+                                }
+                            }
+                        ],
+                        "Version": "2012-10-17"
+                    },
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/IAMRole/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxyIAMRoleDefaultPolicyAA8A6B02": {
+                "Type": "AWS::IAM::Policy",
+                "Properties": {
+                    "PolicyDocument": {
+                        "Statement": [
+                            {
+                                "Action": [
+                                    "secretsmanager:DescribeSecret",
+                                    "secretsmanager:GetSecretValue"
+                                ],
+                                "Effect": "Allow",
+                                "Resource": {
+                                    "Ref": "TalkForgeProductionPostgresSecretAttachment19F15688"
+                                }
+                            }
+                        ],
+                        "Version": "2012-10-17"
+                    },
+                    "PolicyName": "TalkForgeProductionPostgresProxyIAMRoleDefaultPolicyAA8A6B02",
+                    "Roles": [
+                        {
+                            "Ref": "TalkForgeProductionPostgresProxyIAMRole3D8F59CF"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/IAMRole/DefaultPolicy/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxyC7401B86": {
+                "Type": "AWS::RDS::DBProxy",
+                "Properties": {
+                    "Auth": [
+                        {
+                            "AuthScheme": "SECRETS",
+                            "IAMAuth": "DISABLED",
+                            "SecretArn": {
+                                "Ref": "TalkForgeProductionPostgresSecretAttachment19F15688"
+                            }
+                        }
+                    ],
+                    "DBProxyName": "talkforge-production-postgres-proxy-dev",
+                    "EngineFamily": "POSTGRESQL",
+                    "RequireTLS": true,
+                    "RoleArn": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresProxyIAMRole3D8F59CF",
+                            "Arn"
+                        ]
+                    },
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "VpcSecurityGroupIds": [
+                        {
+                            "Fn::GetAtt": [
+                                "TalkForgeProductionPostgresProxySecurityGroupC83AD5BB",
+                                "GroupId"
+                            ]
+                        }
+                    ],
+                    "VpcSubnetIds": [
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78"
+                        },
+                        {
+                            "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B"
+                        }
+                    ]
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxyProxyTargetGroupF31024E3": {
+                "Type": "AWS::RDS::DBProxyTargetGroup",
+                "Properties": {
+                    "ConnectionPoolConfigurationInfo": {
+                        "ConnectionBorrowTimeout": 15,
+                        "MaxConnectionsPercent": 90
+                    },
+                    "DBInstanceIdentifiers": [
+                        {
+                            "Ref": "TalkForgeProductionPostgres861B38E9"
+                        }
+                    ],
+                    "DBProxyName": {
+                        "Ref": "TalkForgeProductionPostgresProxyC7401B86"
+                    },
+                    "TargetGroupName": "default"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxy/ProxyTargetGroup"
+                }
+            },
+            "TalkForgeProductionPostgresCpuCreditBalanceAlarmEC3109DA": {
+                "Type": "AWS::CloudWatch::Alarm",
+                "Properties": {
+                    "AlarmDescription": "Burst credit balance is running low on the additive TalkForge Postgres instance",
+                    "ComparisonOperator": "LessThanThreshold",
+                    "DatapointsToAlarm": 3,
+                    "Dimensions": [
+                        {
+                            "Name": "DBInstanceIdentifier",
+                            "Value": {
+                                "Ref": "TalkForgeProductionPostgres861B38E9"
+                            }
+                        }
+                    ],
+                    "EvaluationPeriods": 3,
+                    "MetricName": "CPUCreditBalance",
+                    "Namespace": "AWS/RDS",
+                    "Period": 300,
+                    "Statistic": "Minimum",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Threshold": 100,
+                    "TreatMissingData": "notBreaching"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresCpuCreditBalanceAlarm/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresCpuUtilizationAlarm179E5CEC": {
+                "Type": "AWS::CloudWatch::Alarm",
+                "Properties": {
+                    "AlarmDescription": "CPU utilization is high on the additive TalkForge Postgres instance",
+                    "ComparisonOperator": "GreaterThanThreshold",
+                    "DatapointsToAlarm": 3,
+                    "Dimensions": [
+                        {
+                            "Name": "DBInstanceIdentifier",
+                            "Value": {
+                                "Ref": "TalkForgeProductionPostgres861B38E9"
+                            }
+                        }
+                    ],
+                    "EvaluationPeriods": 3,
+                    "MetricName": "CPUUtilization",
+                    "Namespace": "AWS/RDS",
+                    "Period": 300,
+                    "Statistic": "Average",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Threshold": 80,
+                    "TreatMissingData": "notBreaching"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresCpuUtilizationAlarm/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresDatabaseConnectionsAlarmB655AFA3": {
+                "Type": "AWS::CloudWatch::Alarm",
+                "Properties": {
+                    "AlarmDescription": "Database connections are high on the additive TalkForge Postgres instance",
+                    "ComparisonOperator": "GreaterThanThreshold",
+                    "DatapointsToAlarm": 3,
+                    "Dimensions": [
+                        {
+                            "Name": "DBInstanceIdentifier",
+                            "Value": {
+                                "Ref": "TalkForgeProductionPostgres861B38E9"
+                            }
+                        }
+                    ],
+                    "EvaluationPeriods": 3,
+                    "MetricName": "DatabaseConnections",
+                    "Namespace": "AWS/RDS",
+                    "Period": 300,
+                    "Statistic": "Average",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Threshold": 100,
+                    "TreatMissingData": "notBreaching"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresDatabaseConnectionsAlarm/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresFreeStorageSpaceAlarm7CF83962": {
+                "Type": "AWS::CloudWatch::Alarm",
+                "Properties": {
+                    "AlarmDescription": "Free storage space is running low on the additive TalkForge Postgres instance",
+                    "ComparisonOperator": "LessThanThreshold",
+                    "DatapointsToAlarm": 1,
+                    "Dimensions": [
+                        {
+                            "Name": "DBInstanceIdentifier",
+                            "Value": {
+                                "Ref": "TalkForgeProductionPostgres861B38E9"
+                            }
+                        }
+                    ],
+                    "EvaluationPeriods": 1,
+                    "MetricName": "FreeStorageSpace",
+                    "Namespace": "AWS/RDS",
+                    "Period": 300,
+                    "Statistic": "Minimum",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Threshold": 21474836480,
+                    "TreatMissingData": "notBreaching"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresFreeStorageSpaceAlarm/Resource"
+                }
+            },
+            "TalkForgeProductionPostgresProxyClientConnectionsAlarm1E3696B2": {
+                "Type": "AWS::CloudWatch::Alarm",
+                "Properties": {
+                    "AlarmDescription": "Client connections are high on the additive TalkForge Postgres proxy",
+                    "ComparisonOperator": "GreaterThanThreshold",
+                    "DatapointsToAlarm": 3,
+                    "Dimensions": [
+                        {
+                            "Name": "DBProxyName",
+                            "Value": {
+                                "Ref": "TalkForgeProductionPostgresProxyC7401B86"
+                            }
+                        }
+                    ],
+                    "EvaluationPeriods": 3,
+                    "MetricName": "ClientConnections",
+                    "Namespace": "AWS/RDS",
+                    "Period": 300,
+                    "Statistic": "Average",
+                    "Tags": [
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ],
+                    "Threshold": 100,
+                    "TreatMissingData": "notBreaching"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/TalkForgeProductionPostgresProxyClientConnectionsAlarm/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresVpcIdParameter673B3B35": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres VPC ID",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-vpc-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Ref": "TalkForgeProductionPostgresVpcB004173E"
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresVpcIdParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresAvailabilityZonesParameter3ABAE2FA": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres VPC availability zones",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-availability-zones",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::Join": [
+                            ",",
+                            [
+                                {
+                                    "Fn::Select": [
+                                        0,
+                                        {
+                                            "Fn::GetAZs": ""
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::Select": [
+                                        1,
+                                        {
+                                            "Fn::GetAZs": ""
+                                        }
+                                    ]
+                                }
+                            ]
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresAvailabilityZonesParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformPrivateSubnetIdsParameter39D934C9": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres private subnet IDs",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-private-subnet-ids",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::Join": [
+                            ",",
+                            [
+                                {
+                                    "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet1Subnet984A0D8E"
+                                },
+                                {
+                                    "Ref": "TalkForgeProductionPostgresVpcprivatesubnetSubnet2Subnet584B29DA"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformPrivateSubnetIdsParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformIsolatedSubnetIdsParameter4F352D18": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres isolated subnet IDs",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-isolated-subnet-ids",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::Join": [
+                            ",",
+                            [
+                                {
+                                    "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78"
+                                },
+                                {
+                                    "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B"
+                                }
+                            ]
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformIsolatedSubnetIdsParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresEndpointParameter3438335B": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres endpoint",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-endpoint",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgres861B38E9",
+                            "Endpoint.Address"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresEndpointParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresPortParameter3D79C6F2": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres port",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-port",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgres861B38E9",
+                            "Endpoint.Port"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresPortParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresDatabaseNameParameterB6347F48": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres database name",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-database-name",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": "talkforge"
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresDatabaseNameParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresSecretArnParameter736A2435": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres secret ARN",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-secret-arn",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Ref": "TalkForgeProductionPostgresSecretAttachment19F15688"
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresSecretArnParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresSecurityGroupIdParameter980A733D": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres security group ID",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-security-group-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresSecurityGroupF23D2438",
+                            "GroupId"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresSecurityGroupIdParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresProxyEndpointParameter27E3B690": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres proxy endpoint",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-endpoint",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresProxyC7401B86",
+                            "Endpoint"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresProxyEndpointParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresProxySecurityGroupIdParameter75FEC272": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge production Postgres proxy security group ID",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-proxy-security-group-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresProxySecurityGroupC83AD5BB",
+                            "GroupId"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresProxySecurityGroupIdParameter/Resource"
+                }
+            },
+            "Phase15SharedPlatformProductionPostgresClientSecurityGroupIdParameter5703B390": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the additive TalkForge future Postgres client security group ID",
+                    "Name": "/talkforge/dev/v1/shared-platform/postgres-data-plane-client-security-group-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeProductionPostgresClientSecurityGroup905B1CBE",
+                            "GroupId"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15SharedPlatformProductionPostgresClientSecurityGroupIdParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgeLoadBalancerArnParameterC77EC7A3": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge load balancer ARN",
+                    "Name": "/talkforge/dev/v1/internal-edge/load-balancer-arn",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Ref": "TalkForgeInternalEdgeLoadBalancer18DBEF36"
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerArnParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgeLoadBalancerDnsNameParameterEFA40328": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge load balancer DNS name",
+                    "Name": "/talkforge/dev/v1/internal-edge/load-balancer-dns-name",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeInternalEdgeLoadBalancer18DBEF36",
+                            "DNSName"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerDnsNameParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgeLoadBalancerCanonicalHostedZoneIdParameter2AF9078C": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge load balancer canonical hosted zone ID",
+                    "Name": "/talkforge/dev/v1/internal-edge/load-balancer-canonical-hosted-zone-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeInternalEdgeLoadBalancer18DBEF36",
+                            "CanonicalHostedZoneID"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerCanonicalHostedZoneIdParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgeLoadBalancerSecurityGroupIdParameter85C308E6": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge load balancer security group ID",
+                    "Name": "/talkforge/dev/v1/internal-edge/load-balancer-security-group-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Fn::GetAtt": [
+                            "TalkForgeInternalEdgeLoadBalancerSecurityGroupDDF7AD42",
+                            "GroupId"
+                        ]
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeLoadBalancerSecurityGroupIdParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgeHttpListenerArnParameter1738379B": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge HTTP listener ARN",
+                    "Name": "/talkforge/dev/v1/internal-edge/http-listener-arn",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Ref": "TalkForgeInternalEdgeLoadBalancerTalkForgeInternalEdgeHttpListener65C9DFFA"
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgeHttpListenerArnParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgePrivateHostedZoneNameParameterCFFACAB9": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge private hosted zone name",
+                    "Name": "/talkforge/dev/v1/internal-edge/private-hosted-zone-name",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": "internal.talkforge"
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgePrivateHostedZoneNameParameter/Resource"
+                }
+            },
+            "Phase15InternalEdgePrivateHostedZoneIdParameter4A5427BB": {
+                "Type": "AWS::SSM::Parameter",
+                "Properties": {
+                    "Description": "Phase 1.5 SSM contract for the TalkForge internal-edge private hosted zone ID",
+                    "Name": "/talkforge/dev/v1/internal-edge/private-hosted-zone-id",
+                    "Tags": {
+                        "environment": "dev",
+                        "owner": "advocacy",
+                        "primary-contact": "james@datadog.com",
+                        "project": "TalkForge",
+                        "service": "talkforge"
+                    },
+                    "Type": "String",
+                    "Value": {
+                        "Ref": "TalkForgeInternalPrivateHostedZone82D146E9"
+                    }
+                },
+                "UpdateReplacePolicy": "Delete",
+                "DeletionPolicy": "Delete",
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/Phase15InternalEdgePrivateHostedZoneIdParameter/Resource"
+                }
+            },
+            "CDKMetadata": {
+                "Type": "AWS::CDK::Metadata",
+                "Properties": {
+                    "Analytics": "v2:deflate64:H4sIAAAAAAAA/31TTW/bMAz9Lb0rWuehhx3z0XUBus1Iihx2GWiZcdTKkiFSyQLD/32Q7NhpCgwwwMfHZ5J6sjOZff4q7+/gRDNVvs2MLmS7ZVBvAk70p0WVyXbXKLHc212+FHkojFbbUFjkyE1o4wLjCxQGJ37i5kROaWDt7CiO4HGdx/AT+AkYT3AWuddHYJwary2jtzgK+k2GbM4M6lCjZZF0e1C4a9SjLRunLQ/iMd2iCl7z+cm70KQ9/0usbeWRqBNogFgr46AswIBV2lbHTLbzpjFapWM9OygXqYY+NnqXX+s0MdpBM+BO+GjIwxfZDsf/7oix/O1scmnKOuFLkm0OHmpk9OPeq8UN1xt4Vb8mVsBQAOHaEscNR2KLyve2rxYfirl3f8/DsBv4Ar4amndCQy3bjeu/hBRzZ7RK+h51gtIgqsFChV62vfVxdh/6hlfXOwo+VDaOk7NbdcAyXKbecBskF7zCaZMbpm9+ea8TBLVc7u3VzQkDdVGC/BasivkCCIUyLpQnYHWQ7dyAr2PrBDpBVMefyWtbjZeTPLgkXTfuFfkf0DTaVhH+CtwE7oR1JcpX+nTM7mV87l5J65kPlnWNctPHf3JSe4HFAwAA"
+                },
+                "Metadata": {
+                    "aws:cdk:path": "TalkForgePostgresDataPlaneStack-dev/CDKMetadata/Default"
+                },
+                "Condition": "CDKMetadataAvailable"
+            },
+            "TalkForgeProductionPostgresRotationSingleUser92B32EEE": {
+                "Type": "AWS::CloudFormation::Stack",
+                "DeletionPolicy": "Delete",
+                "UpdateReplacePolicy": "Delete",
+                "Properties": {
+                    "TemplateURL": "https://awsserverlessrepo-changesets-plntc6bfnfj.s3.us-east-1.amazonaws.com/148203325623/arn%3Aaws%3Aserverlessrepo%3Aus-east-1%3A297356227824%3Aapplications-SecretsManagerRDSPostgreSQLRotationSingleUser-versions-1.1.618/f2eac179-edb7-45f6-ad2f-970861961fc0.yaml?X-Amz-Security-Token=IQoJb3JpZ2luX2VjEJf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJGMEQCID3mb%2Fs1VAh9yWQbypO0FCD78v4SfHoa96egfb39nbtSAiAMbZf1O5GRLYDxFZ%2FESsHy0vwSA58Iev2rKCdW1nxkVCqwBAhgEAIaDDA2NjI0MjQ2ODY1NCIMP5hNr0H47a5djtwEKo0E8JDYZelgxuW%2BPqd9LMw4o%2BTPES3GoxYsw4WZcLBuoIMzDSn2PBF9KrUEG%2F%2BxFRxu%2BPd47UDvk0zRunXR%2Fix6g%2FiCNb5KV%2Fr7UEHTbYmIPetXz%2BmlJ7PR4tTMuYc9%2FWUcKXoVxsTbqbBR%2FDmE7Lg1HIyx2FP9W28vN8HcCExqXY1ZRk1YbWaULaZycTqhMdtj9VMM6rZIdP%2FzlIdoOZCRa3HTWNbHmsa63iBHP5GTyVjIJLGSnf6CtqNC18Dkk5jqM46tMRnyTDGTVrocVtK11C%2BySz0HK285euhhaIGSVzP02SwXoZ9ndpoDGwawdn%2B2J5VuLnbTGrNimIIHGfj2EYuOj6bszRAoRfpKCnfLB5vgBz1dV52M4174kMRUXoA8L%2BMuwsTwkU4zpmm%2Fe1IeSVH4MhdY0t9LaVimkMfvNSGT%2B6boXwqivhtlBXuAR18sRibpDBf1sjlMmBexymS9UM29vh6AoMEyx%2Fb0vmD6URbnbJlU62fVBrukbdUeKnv9Mur4o%2BC%2F1oPiHNGG6kdGtrZEZNHG%2FW8IkkcfKipKZ8VH6JahSguVZwKIzfcvaAKnjahchkvehDZU3fzqMEqF%2FAlTxpd8v1KElKjuoXAT5J1Ygpb7yIngTrOZJI15Su4PlUxR6aDlJIzpZpqicsSVzhhzt47ddKTMiqcx63fLCChzoV6arSKRCIwy7y%2BmMOLmsNIGOqMB4DLuQNZqeaO%2BB86wPK%2FiezAs4wnZET3sz1gOLn22O1pcBb8wnlQehBFF97nGaGkX5gOh3F9u23al%2Fcl1PFE0rS4rBlLopptgdEHPmyFdoRA2o1Sa%2F8%2B4OH%2B8rF5dZuCTvfLouzBRrO3yPg6Jj1m2VtwXcBjKmuC2o805A%2BS09mKxWbe5z4SX%2Fo0xlgb8Hlu%2BqcQ3KxOYM7C73U%2FPJJ5iB559lA%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20260706T235348Z&X-Amz-SignedHeaders=host&X-Amz-Expires=21600&X-Amz-Credential=ASIAQ63C33MXPI72E6RQ%2F20260706%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=6fec4798e7b042c13940eb117cc0632182fd3d2146fc4a51064819a1ac4ccf8d",
+                    "Parameters": {
+                        "endpoint": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "https://",
+                                    {
+                                        "Ref": "TalkForgeProductionPostgresVpcTalkForgeProductionPostgresSecretsManagerEndpoint721A7B31"
+                                    },
+                                    ".secretsmanager.",
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    ".",
+                                    {
+                                        "Ref": "AWS::URLSuffix"
+                                    }
+                                ]
+                            ]
+                        },
+                        "functionName": "aneStackdevTalkForgeProductionPostgresRotationSingleUserFC7D9E14",
+                        "vpcSubnetIds": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet1SubnetDF984A78"
+                                    },
+                                    ",",
+                                    {
+                                        "Ref": "TalkForgeProductionPostgresVpcisolatedsubnetSubnet2SubnetED00DD3B"
+                                    }
+                                ]
+                            ]
+                        },
+                        "vpcSecurityGroupIds": {
+                            "Fn::GetAtt": [
+                                "TalkForgeProductionPostgresRotationSingleUserSecurityGroup7D8CEFE1",
+                                "GroupId"
+                            ]
+                        },
+                        "excludeCharacters": " %+~`#$&*()|[]{}:;<>?!'/@\"\\"
+                    },
+                    "Tags": [
+                        {
+                            "Key": "lambda:createdBy",
+                            "Value": "SAM"
+                        },
+                        {
+                            "Key": "serverlessrepo:applicationId",
+                            "Value": "arn:aws:serverlessrepo:us-east-1:297356227824:applications/SecretsManagerRDSPostgreSQLRotationSingleUser"
+                        },
+                        {
+                            "Key": "serverlessrepo:semanticVersion",
+                            "Value": "1.1.618"
+                        },
+                        {
+                            "Key": "environment",
+                            "Value": "dev"
+                        },
+                        {
+                            "Key": "owner",
+                            "Value": "advocacy"
+                        },
+                        {
+                            "Key": "primary-contact",
+                            "Value": "james@datadog.com"
+                        },
+                        {
+                            "Key": "project",
+                            "Value": "TalkForge"
+                        },
+                        {
+                            "Key": "service",
+                            "Value": "talkforge"
+                        }
+                    ]
+                }
+            }
+        },
+        "Rules": {
+            "CheckBootstrapVersion": {
+                "Assertions": [
+                    {
+                        "Assert": {
+                            "Fn::Not": [
+                                {
+                                    "Fn::Contains": [
+                                        [
+                                            "1",
+                                            "2",
+                                            "3",
+                                            "4",
+                                            "5"
+                                        ],
+                                        {
+                                            "Ref": "BootstrapVersion"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+                    }
+                ]
+            }
+        },
+        "Conditions": {
+            "CDKMetadataAvailable": {
+                "Fn::Or": [
+                    {
+                        "Fn::Or": [
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "af-south-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-east-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-northeast-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-northeast-2"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-northeast-3"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-south-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-south-2"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-southeast-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-southeast-2"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-southeast-3"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "Fn::Or": [
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ap-southeast-4"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ca-central-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "ca-west-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "cn-north-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "cn-northwest-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-central-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-central-2"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-north-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-south-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-south-2"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "Fn::Or": [
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-west-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-west-2"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "eu-west-3"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "il-central-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "me-central-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "me-south-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "sa-east-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "us-east-1"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "us-east-2"
+                                ]
+                            },
+                            {
+                                "Fn::Equals": [
+                                    {
+                                        "Ref": "AWS::Region"
+                                    },
+                                    "us-west-1"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "Fn::Equals": [
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "us-west-2"
+                        ]
+                    }
+                ]
+            }
+        }
+    },
+    "StagesAvailable": [
+        "Original",
+        "Processed"
+    ]
+}
