@@ -840,8 +840,7 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "description": "Experimental: Override the agentless Feature Flagging UFC endpoint or base URL.",
-        "sensitive": true
+        "description": "Experimental: Override the agentless Feature Flagging UFC endpoint or base URL."
       }
     ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS": [
