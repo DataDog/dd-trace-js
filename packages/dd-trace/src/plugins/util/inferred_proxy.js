@@ -26,14 +26,27 @@ const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
     component: 'aws-apigateway',
+    providesTimestamp: true,
   },
   'aws-httpapi': {
     spanName: 'aws.httpapi',
     component: 'aws-httpapi',
+    providesTimestamp: true,
   },
   'azure-apim': {
     spanName: 'azure.apim',
     component: 'azure-apim',
+    providesTimestamp: true,
+  },
+  'azure-gw': {
+    spanName: 'azure.app-gateway',
+    component: 'azure-gw',
+    providesTimestamp: false,
+  },
+  'azure-fd': {
+    spanName: 'azure.frontdoor',
+    component: 'azure-fd',
+    providesTimestamp: false,
   },
 }
 
@@ -109,21 +122,32 @@ function setInferredProxySpanTags (span, proxyContext) {
 }
 
 function extractInferredProxyContext (headers) {
-  if (!(PROXY_HEADER_START_TIME_MS in headers)) {
+  if (!(PROXY_HEADER_SYSTEM in headers)) {
+    return null
+  }
+  if (!Object.hasOwn(supportedProxies, headers[PROXY_HEADER_SYSTEM])) {
+    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type: %s',
+      headers[PROXY_HEADER_SYSTEM])
+
     return null
   }
 
-  if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
-    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
+  const detectedProxy = supportedProxies[headers[PROXY_HEADER_SYSTEM]]
+
+  if (detectedProxy.providesTimestamp && !headers[PROXY_HEADER_START_TIME_MS]) {
     return null
   }
 
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
       ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
-      : null,
+      : Date.now(),
     method: headers[PROXY_HEADER_HTTPMETHOD],
-    path: headers[PROXY_HEADER_PATH],
+    path: headers[PROXY_HEADER_PATH]
+      ? (headers[PROXY_HEADER_PATH].startsWith('/')
+          ? headers[PROXY_HEADER_PATH]
+          : '/' + headers[PROXY_HEADER_PATH])
+      : headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
     proxySystemName: headers[PROXY_HEADER_SYSTEM],
