@@ -1,0 +1,141 @@
+'use strict'
+
+const {
+  discoverScenarioTests,
+  discoveryEvidence,
+  error,
+  failWithDebugRerun,
+  pass,
+  prepareGeneratedScenario,
+  requireGeneratedScenario,
+  runInstrumentedCommand,
+  skip,
+  testEventSamples,
+  testsForDiscoveredScenario,
+} = require('./helpers')
+
+async function runEarlyFlakeDetection ({ framework, out, options }) {
+  const scenarioName = 'efd'
+  const skipResult = requireGeneratedScenario(framework, 'basic-pass', scenarioName)
+  if (skipResult) return skipResult
+
+  let outDir
+  try {
+    const { scenario } = await prepareGeneratedScenario(framework, 'basic-pass')
+    if (!scenario) {
+      return skip(framework, scenarioName, 'Generated scenario "basic-pass" is not present in the manifest.')
+    }
+
+    const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
+    if (discovery.tests.length === 0) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        diagnosis: 'The generated new-test candidate was not reported during baseline identity discovery.',
+        evidence: discoveryEvidence(discovery),
+        framework,
+        options,
+        out,
+        outDir: discovery.outDir,
+        scenarioName,
+      })
+    }
+
+    const fixtureConfig = {
+      settings: {
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      },
+      knownTests: {
+        [framework.framework]: {},
+      },
+    }
+
+    const run = await runInstrumentedCommand({
+      framework,
+      out,
+      scenarioName,
+      command: scenario.runCommand,
+      options,
+      fixtureConfig,
+    })
+    outDir = run.outDir
+
+    const tests = testsForDiscoveredScenario(run.events, scenario, discovery)
+    const earlyFlakeRetryEvents = tests.filter(test => test.retryReason === 'early_flake_detection')
+    const externalRetryEvents = tests.filter(test => test.isRetry && test.retryReason !== 'early_flake_detection')
+    const evidence = {
+      ...discoveryEvidence(discovery),
+      commandExitCode: run.result.exitCode,
+      commandTimedOut: run.result.timedOut,
+      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
+      knownTestsLoadedFromCache: run.offline.inputs.known_tests?.status === 'loaded',
+      matchingTestEvents: tests.length,
+      earlyFlakeRetryEvents: earlyFlakeRetryEvents.length,
+      externalRetryEvents: externalRetryEvents.length,
+      earlyFlakeTaggedEvents: tests.filter(test => test.earlyFlakeEnabled).length,
+      samples: testEventSamples(tests),
+    }
+
+    if (run.result.exitCode !== 0) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        fixtureConfig,
+        diagnosis: 'The generated new-test command reported Early Flake Detection retry evidence, but the ' +
+          `command exited ${run.result.exitCode}. Early Flake Detection is only valid when the command ` +
+          'completes successfully after retries.',
+        evidence,
+        framework,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
+    }
+
+    if (!evidence.settingsLoadedFromCache || !evidence.knownTestsLoadedFromCache) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        fixtureConfig,
+        diagnosis: 'EFD settings or known-tests data were not loaded from the offline cache fixture.',
+        evidence,
+        framework,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
+    }
+
+    if (tests.length < 2 || earlyFlakeRetryEvents.length === 0) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        fixtureConfig,
+        diagnosis: 'The generated new test did not appear to be retried for Early Flake Detection.',
+        evidence,
+        framework,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
+    }
+
+    return pass(
+      framework,
+      scenarioName,
+      'The generated new test was reported with retry evidence for Early Flake Detection.',
+      evidence,
+      outDir
+    )
+  } catch (err) {
+    return error(framework, scenarioName, err, outDir)
+  }
+}
+
+module.exports = { runEarlyFlakeDetection }
