@@ -118,8 +118,10 @@ function resolveConfiguration (config) {
   if (config.DD_FEATURE_FLAGS_ENABLED === false) return DISABLED_RESOLUTION
 
   const value = config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
+  const configuredSource = String(value ?? '').trim()
   const origin = config.getOrigin?.('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE')
-  const hasExplicitSource = origin ? origin !== 'default' : value !== undefined && value !== null
+  const hasExplicitSource = configuredSource !== '' &&
+    (origin ? origin !== 'default' : value !== undefined && value !== null)
 
   if (!hasExplicitSource) {
     const legacyEnabled = config.experimental?.flaggingProvider?.enabled
@@ -134,7 +136,7 @@ function resolveConfiguration (config) {
     }
   }
 
-  const source = String(value ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
+  const source = configuredSource.toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
   if (source === CONFIGURATION_SOURCE_AGENTLESS) return AGENTLESS_CONFIGURATION
   if (source === CONFIGURATION_SOURCE_REMOTE_CONFIG) return REMOTE_CONFIG_CONFIGURATION
   throw new Error(`Unsupported Feature Flagging configuration source: ${source}`)

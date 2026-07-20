@@ -50,6 +50,33 @@ describe('OpenFeature configuration source', () => {
     })
   }
 
+  for (const value of ['', '   ']) {
+    it(`treats explicit ${JSON.stringify(value)} as absent for legacy Remote Config grandfathering`, () => {
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
+      config.experimental.flaggingProvider.enabled = true
+      config.getOrigin.withArgs('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE').returns('env_var')
+      config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
+
+      assert.deepStrictEqual(configurationSource.resolve(config), { enabled: true, source: 'remote_config' })
+    })
+
+    it(`treats explicit ${JSON.stringify(value)} as absent for legacy disablement`, () => {
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
+      config.experimental.flaggingProvider.enabled = false
+      config.getOrigin.withArgs('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE').returns('env_var')
+      config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
+
+      assert.deepStrictEqual(configurationSource.resolve(config), { enabled: false })
+    })
+
+    it(`treats explicit ${JSON.stringify(value)} as absent for the default agentless source`, () => {
+      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
+      config.getOrigin.withArgs('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE').returns('env_var')
+
+      assert.strictEqual(configurationSource.resolve(config).source, 'agentless')
+    })
+  }
+
   it('grandfathers the legacy enabled setting onto Remote Config when the source is defaulted', () => {
     config.experimental.flaggingProvider.enabled = true
     config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
