@@ -39,7 +39,13 @@ if (!disabledInstrumentations.has('process')) {
 
 const debugEnabled = DD_TRACE_DEBUG
 checkRequireCache.checkForRequiredModules()
-if (debugEnabled) {
+
+// Scheduled lazily on the first instrumentation hook rather than here: `setImmediate` at
+// module-evaluation time is disallowed in global-scope-restricted runtimes (e.g. workerd).
+let potentialConflictsScheduled = false
+function scheduleConflictCheck () {
+  if (potentialConflictsScheduled) return
+  potentialConflictsScheduled = true
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
@@ -88,6 +94,8 @@ for (const name of names) {
   }
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    if (debugEnabled) scheduleConflictCheck()
+
     // All loaded versions are first expected to fail instrumentation.
     if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
       instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)

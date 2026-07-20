@@ -29,6 +29,12 @@ const potentialConflicts = new Set([
 
 const extractPackageAndModulePath = require('./extract-package-and-module-path')
 
+// A bundled require shim (e.g. workerd) may not expose `.cache`, so this degrades to an empty
+// scan instead of throwing on `Object.keys(undefined)`.
+function getRequireCacheKeys (cache) {
+  return Object.keys(cache || {})
+}
+
 /**
  * Frameworks that load their own server code before any user code (and thus
  * before a late `tracer.init()`) can run. When their server module is already
@@ -73,7 +79,7 @@ module.exports.checkForRequiredModules = function () {
   const frameworksSeen = new Set()
   let didWarn = false
 
-  for (const pathToModule of Object.keys(require.cache)) {
+  for (const pathToModule of getRequireCacheKeys(require.cache)) {
     // require.cache keys use the platform separator; normalize so the
     // `node_modules/<pkg>` parsing works on Windows (backslash paths).
     const { pkg, path } = extractPackageAndModulePath(pathToModule.replaceAll('\\', '/'))
@@ -129,7 +135,7 @@ module.exports.checkForPotentialConflicts = function () {
   const naughties = new Set()
   let didWarn = false
 
-  for (const pathToModule of Object.keys(require.cache)) {
+  for (const pathToModule of getRequireCacheKeys(require.cache)) {
     const { pkg } = extractPackageAndModulePath(pathToModule)
     if (naughties.has(pkg)) continue
     if (!potentialConflicts.has(pkg)) continue

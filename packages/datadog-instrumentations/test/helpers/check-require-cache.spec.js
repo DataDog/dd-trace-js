@@ -7,7 +7,12 @@ const Module = require('node:module')
 
 const { describe, it } = require('mocha')
 
-const { checkForRequiredModules, flushFrameworkWarnings } = require('../../src/helpers/check-require-cache')
+const {
+  checkForRequiredModules,
+  checkForPotentialConflicts,
+  flushFrameworkWarnings,
+  flushStartupLogs,
+} = require('../../src/helpers/check-require-cache')
 
 describe('check-require-cache', () => {
   const opts = {
@@ -15,6 +20,16 @@ describe('check-require-cache', () => {
     env: {
       DD_TRACE_STARTUP_LOGS: 'true',
     },
+  }
+
+  // Adds a fake entry to the real require.cache, exercising the normal (cache-present) path that
+  // both checkForRequiredModules and checkForPotentialConflicts scan via getRequireCacheKeys.
+  function cacheModule (modulePath) {
+    const fakeModule = new Module(modulePath)
+    fakeModule.exports = {}
+    fakeModule.loaded = true
+    require.cache[modulePath] = fakeModule
+    return () => delete require.cache[modulePath]
   }
 
   it('should be no warnings when tracer is loaded first', (done) => {
@@ -86,14 +101,6 @@ describe('check-require-cache', () => {
   })
 
   describe('checkForRequiredModules framework detection', () => {
-    function cacheModule (modulePath) {
-      const fakeModule = new Module(modulePath)
-      fakeModule.exports = {}
-      fakeModule.loaded = true
-      require.cache[modulePath] = fakeModule
-      return () => delete require.cache[modulePath]
-    }
-
     function drainFrameworkWarnings () {
       const messages = []
       flushFrameworkWarnings(message => messages.push(message))
@@ -225,6 +232,37 @@ describe('check-require-cache', () => {
       try {
         checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().every(message => !message.includes("'express'")))
+      } finally {
+        restore()
+      }
+    })
+  })
+
+  describe('checkForPotentialConflicts', () => {
+    function drainConflictWarnings () {
+      const messages = []
+      flushStartupLogs({ warn: message => messages.push(message) })
+      return messages
+    }
+
+    // Clear any residue collected from the real require.cache before asserting.
+    beforeEach(() => drainConflictWarnings())
+
+    it('warns when a known conflicting package is already required', () => {
+      const restore = cacheModule(path.join('/app', 'node_modules', '@sentry/node', 'lib', 'index.js'))
+      try {
+        checkForPotentialConflicts()
+        assert.ok(drainConflictWarnings().some(message => message.includes("'@sentry/node' may cause conflicts")))
+      } finally {
+        restore()
+      }
+    })
+
+    it('does not warn for packages outside the curated conflict set', () => {
+      const restore = cacheModule(path.join('/app', 'node_modules', 'express', 'lib', 'express.js'))
+      try {
+        checkForPotentialConflicts()
+        assert.ok(drainConflictWarnings().every(message => !message.includes("'express'")))
       } finally {
         restore()
       }
