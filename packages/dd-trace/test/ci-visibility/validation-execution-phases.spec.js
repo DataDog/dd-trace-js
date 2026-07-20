@@ -1256,6 +1256,114 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('ignores non-runtime package export conditions when checking self imports', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-runtime-export-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const typeDeclaration = path.join(root, 'dist', 'index.d.ts')
+    const missingEntrypoint = path.join(root, 'dist', 'index.js')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.mkdirSync(path.dirname(typeDeclaration), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'runtime-export-project',
+      exports: {
+        '.': {
+          types: './dist/index.d.ts',
+          import: './dist/index.js',
+        },
+      },
+    }))
+    fs.writeFileSync(testFile, "import 'runtime-export-project'\n")
+    fs.writeFileSync(typeDeclaration, 'export declare const value: true\n')
+
+    try {
+      assert.throws(
+        () => formatFrameworkPlan(root, framework),
+        new RegExp(`entrypoint ${escapeRegExp(missingEntrypoint)} does not exist`)
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores module references in comments and unrelated strings', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-commented-import-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'commented-import-project',
+      exports: './dist/index.js',
+    }))
+    fs.writeFileSync(testFile, [
+      "// require('commented-import-project')",
+      "/* import './missing-build-output' */",
+      'const example = "require(\'./also-missing\')"',
+      '',
+    ].join('\n'))
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('checks the selected test instead of a Jest option value', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-option-path-plan-'))
+    const configFile = path.join(root, 'jest.config.test.js')
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const packageJson = path.join(root, 'package.json')
+    const missingEntrypoint = path.join(root, 'dist', 'index.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [configFile] }
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, 'jest.js', '--config', configFile, testFile],
+    }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(configFile, 'module.exports = {}\n')
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'option-path-project',
+      exports: './dist/index.js',
+    }))
+    fs.writeFileSync(testFile, "require('option-path-project')\n")
+
+    try {
+      assert.throws(
+        () => formatFrameworkPlan(root, framework),
+        new RegExp(`entrypoint ${escapeRegExp(missingEntrypoint)} does not exist`)
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts extensionless imports of existing native addons', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-native-addon-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const nativeAddon = path.join(root, 'build', 'Release', 'addon.node')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.mkdirSync(path.dirname(nativeAddon), { recursive: true })
+    fs.writeFileSync(testFile, "require('../build/Release/addon')\n")
+    fs.writeFileSync(nativeAddon, '')
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a transitive self-package subpath whose exported build output is missing', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-transitive-self-import-plan-'))
     const testFile = path.join(root, 'test', 'hash.test.ts')
@@ -1360,6 +1468,67 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
+  it('uses an explicit Jest config before package.json collection rules', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-explicit-jest-config-plan-'))
+    const configFile = path.join(root, 'jest.validation.config.js')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project.packageJson = packageJson
+    framework.project.configFiles = [configFile]
+    for (const scenario of framework.generatedTestStrategy.scenarios) {
+      scenario.runCommand.argv.push('--config', configFile)
+    }
+    fs.writeFileSync(packageJson, JSON.stringify({ jest: { testMatch: ['**/*-test.js'] } }))
+    fs.writeFileSync(configFile, 'module.exports = { testMatch: ["**/*.js"] }\n')
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts generated Jest tests matched by common extglobs', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-extglob-plan-'))
+    const configFile = path.join(root, 'jest.config.js')
+    const generatedFile = path.join(root, 'test', 'dd-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile)
+    framework.project.configFiles = [configFile]
+    framework.generatedTestStrategy.files = [{ path: generatedFile }]
+    fs.writeFileSync(configFile, 'module.exports = { testMatch: ["**/?(*.)+(spec|test).[jt]s?(x)"] }\n')
+
+    try {
+      assert.strictEqual(getCommandSuitabilityError({
+        command: framework.generatedTestStrategy.scenarios[0].runCommand,
+        framework,
+        label: 'the basic-pass advanced-feature command',
+        repositoryRoot: root,
+      }), undefined)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('applies package.json Jest rootDir when checking generated paths', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-package-jest-root-plan-'))
+    const generatedFile = path.join(root, 'src', '__tests__', 'dd-validation.test.js')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(root, generatedFile)
+    framework.project.packageJson = packageJson
+    fs.writeFileSync(packageJson, JSON.stringify({
+      jest: {
+        rootDir: 'src',
+        testMatch: ['<rootDir>/__tests__/*.js'],
+      },
+    }))
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a pnpm script separator that would reach Jest as a literal argument', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-pnpm-forwarding-'))
     const command = {
@@ -1386,6 +1555,35 @@ describe('test optimization validator-owned execution phases', () => {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  for (const packageManager of ['pnpm', 'yarn']) {
+    it(`rejects a Corepack ${packageManager} script separator that would reach the runner`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-corepack-forwarding-'))
+      const command = {
+        cwd: root,
+        argv: ['corepack', packageManager, 'run', 'test:lib', '--', '--runTestsByPath', 'test/unit-test.ts'],
+      }
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { 'test:lib': 'jest' } }))
+
+      try {
+        assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
+          effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
+          forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+          packageManager,
+          script: 'jest',
+          scriptName: 'test:lib',
+        })
+        assert.match(getCommandSuitabilityError({
+          command,
+          framework: { framework: 'jest', project: { root, configFiles: [] } },
+          label: 'the CI test command',
+          repositoryRoot: root,
+        }), /literal extra "--".*append focused runner arguments directly/s)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('rejects generated Vitest runtime tests under a typecheck-enabled config', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-plan-'))
@@ -1897,6 +2095,17 @@ function setGeneratedTestFramework (framework, name) {
       stateFile: path.join(path.dirname(file.path), '.dd-test-optimization-validation-atr-state'),
     }).split('\n')
   }
+}
+
+function formatFrameworkPlan (root, framework) {
+  return formatExecutionPlan({
+    manifest: {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    },
+    out: path.join(root, 'results'),
+  })
 }
 
 function addFilenameSuffix (filename, suffix) {

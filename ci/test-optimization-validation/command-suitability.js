@@ -12,7 +12,22 @@ const MAX_STATIC_CONFIG_PATTERN_BYTES = 256
 const MAX_LOCAL_IMPORT_DEPTH = 4
 const MAX_LOCAL_IMPORT_FILES = 24
 const JEST_LOCAL_PATH_PATTERN = /(['"])(<rootDir>\/[^'"\r\n]+)\1/g
+const JEST_OPTIONS_WITH_VALUE = new Set([
+  '-c',
+  '--config',
+  '--env',
+  '--filter',
+  '--globalSetup',
+  '--globalTeardown',
+  '--outputFile',
+  '--reporters',
+  '--resolver',
+  '--runner',
+  '--testEnvironment',
+  '--testRegex',
+])
 const JEST_ROOT_DIR_PATTERN = /\brootDir\s*:\s*(['"])([^'"]+)\1/
+const NODE_EXPORT_CONDITIONS = new Set(['default', 'import', 'module-sync', 'node', 'node-addons', 'require'])
 const TYPECHECK_ENABLED_PATTERN = /typecheck\s*:\s*\{[\s\S]{0,2000}?enabled\s*:\s*true/
 const VITEST_CONFIG_FILENAMES = [
   'vitest.config.js',
@@ -161,7 +176,14 @@ function getMissingSelfPackageBuildError (command, framework, repositoryRoot) {
  */
 function getSelectedTestFile (command, projectRoot, repositoryRoot) {
   if (command.usesShell) return
-  for (const value of command.argv || []) {
+  const argv = command.argv || []
+  for (let index = 0; index < argv.length; index++) {
+    const value = argv[index]
+    if (JEST_OPTIONS_WITH_VALUE.has(value)) {
+      index++
+      continue
+    }
+    if (typeof value === 'string' && value.startsWith('-')) continue
     if (typeof value !== 'string' || !/(?:test|spec)\.[cm]?[jt]sx?$/.test(value)) continue
     const filename = path.resolve(command.cwd || projectRoot, value)
     if (!isPathInside(repositoryRoot, filename)) continue
@@ -173,21 +195,16 @@ function getSelectedTestFile (command, projectRoot, repositoryRoot) {
 }
 
 /**
- * Checks whether test source imports its own package by name.
+ * Extracts self-package module specifiers from test source.
  *
  * @param {string} source test source
  * @param {string} packageName package name
- * @returns {boolean} whether the package is imported
+ * @returns {string[]} self-package module specifiers
  */
 function getPackageModuleSpecifiers (source, packageName) {
-  const specifiers = []
-  const pattern = /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s+(?:\(\s*)?)['"]([^'"\r\n]+)['"]/g
-  for (const match of source.matchAll(pattern)) {
-    if ((match[1] === packageName || match[1].startsWith(`${packageName}/`)) && !specifiers.includes(match[1])) {
-      specifiers.push(match[1])
-    }
-  }
-  return specifiers
+  return getStaticModuleSpecifiers(source).filter(specifier => {
+    return specifier === packageName || specifier.startsWith(`${packageName}/`)
+  })
 }
 
 /**
@@ -201,11 +218,13 @@ function getPackageEntryTargets (packageJson, specifier) {
   const targets = []
   const subpath = specifier === packageJson.name ? '.' : `.${specifier.slice(packageJson.name.length)}`
   if (subpath === '.') {
-    collectStrings(packageJson.exports?.['.'] ?? packageJson.exports, targets)
-    collectStrings(packageJson.module, targets)
-    collectStrings(packageJson.main, targets)
+    if (packageJson.exports === undefined) {
+      collectRuntimeExportTargets(packageJson.main, targets)
+    } else {
+      collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, targets)
+    }
   } else {
-    collectStrings(packageJson.exports?.[subpath], targets)
+    collectRuntimeExportTargets(packageJson.exports?.[subpath], targets)
   }
   return [...new Set(targets)]
 }
@@ -218,15 +237,23 @@ function getPackageEntryTargets (packageJson, specifier) {
  * @param {number} [depth] current nesting depth
  * @returns {void}
  */
-function collectStrings (value, targets, depth = 0) {
+function collectRuntimeExportTargets (value, targets, depth = 0) {
   if (targets.length >= 32 || depth > 6) return
   if (typeof value === 'string') {
     targets.push(value)
     return
   }
   if (!value || typeof value !== 'object') return
-  for (const nested of Object.values(value).slice(0, 32)) {
-    collectStrings(nested, targets, depth + 1)
+  if (Array.isArray(value)) {
+    for (const nested of value.slice(0, 32)) {
+      collectRuntimeExportTargets(nested, targets, depth + 1)
+    }
+    return
+  }
+  for (const [condition, nested] of Object.entries(value).slice(0, 32)) {
+    if (NODE_EXPORT_CONDITIONS.has(condition)) {
+      collectRuntimeExportTargets(nested, targets, depth + 1)
+    }
   }
 }
 
@@ -281,12 +308,43 @@ function getMissingLocalModuleError (command, framework, repositoryRoot) {
  * @returns {string[]} relative module specifiers
  */
 function getRelativeModuleSpecifiers (source) {
+  return getStaticModuleSpecifiers(source).filter(specifier => /^\.\.?\//.test(specifier))
+}
+
+/**
+ * Extracts bounded literal module specifiers while skipping comments and unrelated strings.
+ *
+ * @param {string} source JavaScript or TypeScript source
+ * @returns {string[]} module specifiers
+ */
+function getStaticModuleSpecifiers (source) {
   const specifiers = []
-  const pattern = /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s+(?:\(\s*)?)['"](\.\.?\/[^'"\r\n]+)['"]/g
-  for (const match of source.matchAll(pattern)) {
-    if (!specifiers.includes(match[1])) specifiers.push(match[1])
-  }
+  visitConfigSource(source, ({ index }) => {
+    let match
+    if (isTokenAt(source, index, 'require')) {
+      match = /^require\s*\(\s*(['"])([^'"\r\n]{1,512})\1/.exec(source.slice(index))
+    } else if (isTokenAt(source, index, 'import')) {
+      match = /^import\s*(?:\(\s*)?(['"])([^'"\r\n]{1,512})\1/.exec(source.slice(index))
+    } else if (isTokenAt(source, index, 'from')) {
+      match = /^from\s*(['"])([^'"\r\n]{1,512})\1/.exec(source.slice(index))
+    }
+    if (match && !specifiers.includes(match[2])) specifiers.push(match[2])
+  })
   return specifiers
+}
+
+/**
+ * Checks for an identifier token at one source offset.
+ *
+ * @param {string} source source text
+ * @param {number} index candidate offset
+ * @param {string} token token text
+ * @returns {boolean} whether the token is present
+ */
+function isTokenAt (source, index, token) {
+  return source.startsWith(token, index) &&
+    !isIdentifierCharacter(source[index - 1]) &&
+    !isIdentifierCharacter(source[index + token.length])
 }
 
 /**
@@ -308,6 +366,9 @@ function resolveLocalModule (importer, specifier, repositoryRoot) {
 
   for (const candidate of getLocalModuleCandidates(target)) {
     if (!isPathInside(repositoryRoot, candidate)) continue
+    if (path.extname(candidate) === '.node' && isRepositoryFile(candidate, repositoryRoot)) {
+      return { target, resolved: true }
+    }
     const source = readRepositoryConfig(candidate, repositoryRoot)
     if (source !== undefined) return { filename: candidate, target }
   }
@@ -324,7 +385,7 @@ function getLocalModuleCandidates (target) {
   const extension = path.extname(target)
   const candidates = [target]
   if (!extension) {
-    for (const suffix of ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.tsx', '.jsx', '.json']) {
+    for (const suffix of ['.js', '.cjs', '.mjs', '.node', '.ts', '.cts', '.mts', '.tsx', '.jsx', '.json']) {
       candidates.push(`${target}${suffix}`, path.join(target, `index${suffix}`))
     }
   } else if (/\.[cm]?js$/.test(extension)) {
@@ -417,6 +478,10 @@ function getPackageScriptExpansion (command, repositoryRoot) {
   const argv = command.argv
   let packageManager = path.basename(argv[0] || '').replace(/\.cmd$/i, '').toLowerCase()
   let runIndex = 1
+  if (packageManager === 'corepack' && ['pnpm', 'yarn'].includes(argv[1])) {
+    packageManager = argv[1]
+    runIndex = 2
+  }
   if (path.resolve(argv[0] || '') === path.resolve(process.execPath) && /yarn-[^/]+\.cjs$/.test(argv[1] || '')) {
     packageManager = 'yarn'
     runIndex = 2
@@ -485,6 +550,15 @@ function getJestGeneratedPathError (command, framework, repositoryRoot) {
  * @returns {object|undefined} collection rules
  */
 function getJestCollectionRules (command, framework, repositoryRoot) {
+  const explicitConfig = getJestConfigFile(command, repositoryRoot)
+  if (explicitConfig) return getJestConfigCollectionRules(explicitConfig, repositoryRoot)
+
+  for (const configFile of framework.project?.configFiles || []) {
+    if (configFile === framework.project?.packageJson) continue
+    const rules = getJestConfigCollectionRules(configFile, repositoryRoot)
+    if (rules) return rules
+  }
+
   const packageJsonPath = framework.project?.packageJson
   const packageJsonSource = packageJsonPath && readRepositoryConfig(packageJsonPath, repositoryRoot)
   if (packageJsonSource) {
@@ -494,7 +568,9 @@ function getJestCollectionRules (command, framework, repositoryRoot) {
       const testRegex = getBoundedStringArray(jest?.testRegex)
       if (testMatch.length > 0 || testRegex.length > 0) {
         return {
-          rootDir: path.dirname(packageJsonPath),
+          rootDir: typeof jest.rootDir === 'string'
+            ? path.resolve(path.dirname(packageJsonPath), jest.rootDir)
+            : path.dirname(packageJsonPath),
           source: packageJsonPath,
           testMatch,
           testRegex,
@@ -502,25 +578,42 @@ function getJestCollectionRules (command, framework, repositoryRoot) {
       }
     } catch {}
   }
+}
 
-  const explicitConfig = getJestConfigFile(command, repositoryRoot)
-  const configFiles = [...new Set([
-    ...(explicitConfig ? [explicitConfig] : []),
-    ...(framework.project?.configFiles || []),
-  ])]
-  for (const configFile of configFiles) {
-    const source = readRepositoryConfig(configFile, repositoryRoot)
-    if (!source) continue
-    const testMatch = getLiteralPropertyArrayPatterns(source, 'testMatch')
-    const testRegex = getLiteralRegexPatterns(source, 'testRegex')
-    if (testMatch.length === 0 && testRegex.length === 0) continue
-    const rootDirMatch = source.match(JEST_ROOT_DIR_PATTERN)
-    return {
-      rootDir: rootDirMatch ? path.resolve(path.dirname(configFile), rootDirMatch[2]) : path.dirname(configFile),
-      source: configFile,
-      testMatch,
-      testRegex,
+/**
+ * Reads collection rules from one selected Jest config without executing it.
+ *
+ * @param {string} configFile Jest config path
+ * @param {string} repositoryRoot repository root
+ * @returns {object|undefined} collection rules
+ */
+function getJestConfigCollectionRules (configFile, repositoryRoot) {
+  const source = readRepositoryConfig(configFile, repositoryRoot)
+  if (!source) return
+  try {
+    const config = JSON.parse(source)
+    const testMatch = getBoundedStringArray(config?.testMatch)
+    const testRegex = getBoundedStringArray(config?.testRegex)
+    if (testMatch.length > 0 || testRegex.length > 0) {
+      return {
+        rootDir: typeof config.rootDir === 'string'
+          ? path.resolve(path.dirname(configFile), config.rootDir)
+          : path.dirname(configFile),
+        source: configFile,
+        testMatch,
+        testRegex,
+      }
     }
+  } catch {}
+  const testMatch = getLiteralPropertyArrayPatterns(source, 'testMatch')
+  const testRegex = getLiteralRegexPatterns(source, 'testRegex')
+  if (testMatch.length === 0 && testRegex.length === 0) return
+  const rootDirMatch = source.match(JEST_ROOT_DIR_PATTERN)
+  return {
+    rootDir: rootDirMatch ? path.resolve(path.dirname(configFile), rootDirMatch[2]) : path.dirname(configFile),
+    source: configFile,
+    testMatch,
+    testRegex,
   }
 }
 
@@ -846,13 +939,36 @@ function isIdentifierCharacter (character) {
 
 function matchesGlob (filename, pattern) {
   const normalized = pattern.replace(/^\.\//, '')
-  let source = '^'
+  return new RegExp(`^${getGlobRegexSource(normalized)}$`).test(filename)
+}
+
+/**
+ * Converts the bounded glob subset used by Jest and Vitest collection patterns.
+ *
+ * @param {string} pattern glob pattern
+ * @returns {string} regular-expression source
+ */
+function getGlobRegexSource (pattern) {
+  let source = ''
   let index = 0
 
-  while (index < normalized.length) {
-    const character = normalized[index]
-    if (character === '*' && normalized[index + 1] === '*') {
-      if (normalized[index + 2] === '/') {
+  while (index < pattern.length) {
+    const character = pattern[index]
+    if ((character === '?' || character === '+') && pattern[index + 1] === '(') {
+      const end = pattern.indexOf(')', index + 2)
+      const value = end === -1 ? '' : pattern.slice(index + 2, end)
+      const alternatives = value.split('|')
+      const safeOptional = character === '?' && alternatives.length === 1 && /^[A-Za-z0-9._*?-]+$/.test(value)
+      const safeRepeated = character === '+' && alternatives.every(value => /^[A-Za-z0-9._-]+$/.test(value))
+      if (safeOptional || safeRepeated) {
+        const group = `(?:${alternatives.map(getGlobRegexSource).join('|')})`
+        source += `${group}${character}`
+        index = end + 1
+        continue
+      }
+    }
+    if (character === '*' && pattern[index + 1] === '*') {
+      if (pattern[index + 2] === '/') {
         source += '(?:[^/]+/)*'
         index += 3
       } else {
@@ -862,21 +978,11 @@ function matchesGlob (filename, pattern) {
       continue
     } else if (character === '*') {
       source += '[^/]*'
-    } else if (character === '?' && normalized[index + 1] === '(') {
-      const end = normalized.indexOf(')', index + 2)
-      const value = end === -1 ? '' : normalized.slice(index + 2, end)
-      if (/^[A-Za-z0-9._-]+$/.test(value)) {
-        source += `(?:${escapeRegex(value)})?`
-        index = end + 1
-        continue
-      } else {
-        source += '[^/]'
-      }
     } else if (character === '?') {
       source += '[^/]'
     } else if (character === '[') {
-      const end = normalized.indexOf(']', index + 1)
-      const value = end === -1 ? '' : normalized.slice(index + 1, end)
+      const end = pattern.indexOf(']', index + 1)
+      const value = end === -1 ? '' : pattern.slice(index + 1, end)
       if (/^!?[A-Za-z0-9_-]+$/.test(value)) {
         source += `[${value.startsWith('!') ? `^${value.slice(1)}` : value}]`
         index = end + 1
@@ -885,8 +991,8 @@ function matchesGlob (filename, pattern) {
         source += String.raw`\[`
       }
     } else if (character === '{') {
-      const end = normalized.indexOf('}', index + 1)
-      const values = end === -1 ? [] : normalized.slice(index + 1, end).split(',')
+      const end = pattern.indexOf('}', index + 1)
+      const values = end === -1 ? [] : pattern.slice(index + 1, end).split(',')
       if (values.length > 1 && values.every(value => /^[A-Za-z0-9._-]+$/.test(value))) {
         source += `(?:${values.map(escapeRegex).join('|')})`
         index = end + 1
@@ -900,7 +1006,7 @@ function matchesGlob (filename, pattern) {
     index++
   }
 
-  return new RegExp(`${source}$`).test(filename)
+  return source
 }
 
 function escapeRegex (value) {
