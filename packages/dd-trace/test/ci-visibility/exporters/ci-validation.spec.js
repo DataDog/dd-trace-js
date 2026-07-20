@@ -477,6 +477,7 @@ describe('CI validation exporter', () => {
 
     assert.strictEqual(exporter.canReportCodeCoverage(), false)
     assert.strictEqual(exporter.canUploadTestScreenshots(), false)
+    assert.strictEqual(exporter.canUploadTestVideo(), false)
     exporter.sendGitMetadata()
     exporter.exportDiLogs()
     exporter.uploadCoverageReport({}, coverageError => {

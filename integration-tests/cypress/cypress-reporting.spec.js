@@ -931,7 +931,11 @@ moduleTypes.forEach(({
         // TODO: use over10It for evp proxy too once the Agent can forward the media endpoint.
         const onlyAgentlessIt = reportMethod === 'agentless' ? over10It : it.skip
 
-        function runCypressWithFailureScreenshots (specToRun) {
+        function runCypressWithFailureMedia (specToRun, {
+          captureVideo = false,
+          uploadScreenshots = true,
+          uploadVideo = false,
+        } = {}) {
           let testOutput = ''
           childProcess = exec(
             testCommand,
@@ -942,7 +946,9 @@ moduleTypes.forEach(({
                 CYPRESS_BASE_URL: webAppBaseUrl,
                 SPEC_PATTERN: specToRun,
                 CYPRESS_ENABLE_FAILURE_SCREENSHOTS: 'true',
-                DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+                CYPRESS_ENABLE_VIDEO: String(captureVideo),
+                DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(uploadScreenshots),
+                DD_TEST_FAILURE_VIDEO_ENABLED: String(uploadVideo),
               },
             }
           )
@@ -956,8 +962,8 @@ moduleTypes.forEach(({
           return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
         }
 
-        onlyAgentlessIt('uploads failure screenshots to the v2 media endpoint', async function () {
-          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
+        onlyAgentlessIt('uploads only failure screenshots when video upload is disabled', async function () {
+          const getTestOutput = runCypressWithFailureMedia('cypress/e2e/basic-fail.js', { captureVideo: true })
 
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -979,6 +985,10 @@ moduleTypes.forEach(({
 
                 const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
                 assert.ok(screenshotPayload, `a screenshot should be uploaded to the v2 media endpoint\n${testOutput}`)
+                assert.ok(
+                  !mediaPayloads.some(({ media }) => media.contentType === 'video/mp4'),
+                  `the video should not be uploaded when its feature flag is disabled\n${testOutput}`
+                )
                 assert.strictEqual(
                   screenshotPayload.url.split('?')[0],
                   `/api/v2/ci/test-runs/${expectedTraceId}/media`
@@ -1028,8 +1038,100 @@ moduleTypes.forEach(({
           ])
         })
 
+        onlyAgentlessIt('uploads only the failure video when screenshot upload is disabled', async function () {
+          const getTestOutput = runCypressWithFailureMedia('cypress/e2e/basic-fail.js', {
+            captureVideo: true,
+            uploadScreenshots: false,
+            uploadVideo: true,
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testOutput = getTestOutput()
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+                assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                const expectedTraceId = failedTest.content.trace_id.toString()
+                const videoPayload = mediaPayloads.find(({ media }) => media.contentType === 'video/mp4')
+
+                assert.ok(videoPayload, `a video should be uploaded to the v2 media endpoint\n${testOutput}`)
+                assert.ok(
+                  !mediaPayloads.some(({ media }) => media.contentType === 'image/png'),
+                  `screenshots should not be uploaded when their feature flag is disabled\n${testOutput}`
+                )
+                assert.strictEqual(
+                  videoPayload.url.split('?')[0],
+                  `/api/v2/ci/test-runs/${expectedTraceId}/media`
+                )
+                assert.strictEqual(videoPayload.media.traceId, expectedTraceId)
+                assert.strictEqual(videoPayload.headers['dd-api-key'], '1')
+                assert.match(decodeKeyFilename(videoPayload.media.idempotencyKey), /basic-fail\.js\.mp4$/)
+
+                const capturedAt = Number(videoPayload.media.capturedAt)
+                assert.ok(
+                  Number.isInteger(capturedAt) && capturedAt > 0,
+                  `captured_at_ms should be a positive integer, got ${videoPayload.media.capturedAt}`
+                )
+                assert.strictEqual(videoPayload.media.content.subarray(4, 8).toString(), 'ftyp')
+              }, { hardTimeout: 60000 })
+            .catch((error) => {
+              error.message += `\nCypress output:\n${getTestOutput()}`
+              throw error
+            })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
+
+        onlyAgentlessIt('does not enable Cypress video recording when the upload flag is set', async function () {
+          const getTestOutput = runCypressWithFailureMedia('cypress/e2e/basic-fail.js', {
+            uploadScreenshots: false,
+            uploadVideo: true,
+          })
+
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testOutput = getTestOutput()
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+                assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                assert.strictEqual(
+                  mediaPayloads.length,
+                  0,
+                  `no media should be uploaded when Cypress video recording is disabled\n${testOutput}`
+                )
+              }, { hardTimeout: 60000 })
+            .catch((error) => {
+              error.message += `\nCypress output:\n${getTestOutput()}`
+              throw error
+            })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
+
         onlyAgentlessIt('uploads only the auto failure frame, not a manual cy.screenshot()', async function () {
-          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/manual-screenshot-before-fail.js')
+          const getTestOutput = runCypressWithFailureMedia('cypress/e2e/manual-screenshot-before-fail.js')
 
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1151,7 +1253,7 @@ moduleTypes.forEach(({
 
         onlyAgentlessIt('continues normally when the media upload endpoint fails', async function () {
           receiver.setMediaResponseStatusCode(500)
-          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
+          const getTestOutput = runCypressWithFailureMedia('cypress/e2e/basic-fail.js')
 
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(

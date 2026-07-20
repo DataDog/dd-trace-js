@@ -147,6 +147,15 @@ class CiValidationExporter extends CiVisibilityExporter {
   }
 
   /**
+   * Reports that Cypress video upload is unavailable.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestVideo () {
+    return false
+  }
+
+  /**
    * Rejects screenshot upload in offline validation mode.
    *
    * @param {object} options ignored upload options

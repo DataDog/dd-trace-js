@@ -156,17 +156,16 @@ function isFailureScreenshotByMetadata (screenshot, screenshotFilePath) {
 }
 
 /**
- * Resolves a screenshot's capture time (epoch ms) for the media upload. Cypress
- * screenshot objects carry an ISO `takenAt`; falls back to the file's mtime, then
- * to the current time. Stamped once here and reused on retry via the idempotency
- * key, so the stored object is overwritten rather than duplicated.
+ * Resolves an artifact's capture time (epoch ms) for the media upload. Cypress
+ * screenshot objects carry an ISO `takenAt`; videos fall back to the file's mtime.
+ * The current time is used if the file cannot be read.
  *
- * @param {object|string} screenshot - Cypress screenshot object or path
- * @param {string} filePath - Resolved screenshot file path
+ * @param {object|string} artifact - Cypress screenshot object or media path
+ * @param {string} filePath - Resolved media file path
  * @returns {number} Capture time in epoch milliseconds
  */
-function getScreenshotCapturedAtMs (screenshot, filePath) {
-  const takenAt = screenshot !== null && typeof screenshot === 'object' ? screenshot.takenAt : undefined
+function getMediaCapturedAtMs (artifact, filePath) {
+  const takenAt = artifact !== null && typeof artifact === 'object' ? artifact.takenAt : undefined
   if (takenAt) {
     const parsedMs = new Date(takenAt).getTime()
     if (Number.isInteger(parsedMs) && parsedMs > 0) {
@@ -1423,12 +1422,13 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results) {
-    const { tests, stats, screenshots } = results || {}
+    const { tests, stats, screenshots, video } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
-    const screenshotUploadPromises = []
+    const mediaUploadPromises = []
     const testSpanFinishPromises = []
+    const failedTestTraceIds = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1539,13 +1539,14 @@ class CypressPlugin {
         let failedTestTraceId
         if (cypressTestStatus === 'fail' || finishedTest.testStatus === 'fail' || cypressTest.displayError) {
           failedTestTraceId = finishedTest.testSpan.context().toTraceId()
+          failedTestTraceIds.push(failedTestTraceId)
           const testScreenshots = getTestScreenshots(cypressTest, attemptIndex, specScreenshots)
           const screenshotUploadPromise = this.uploadTestScreenshots({
             screenshots: testScreenshots,
             traceId: failedTestTraceId,
           })
           if (screenshotUploadPromise) {
-            screenshotUploadPromises.push(screenshotUploadPromise)
+            mediaUploadPromises.push(screenshotUploadPromise)
           }
         }
 
@@ -1620,6 +1621,13 @@ class CypressPlugin {
       }
     }
 
+    if (video && failedTestTraceIds.length > 0) {
+      const videoUploadPromise = this.uploadTestVideo({ videoPath: video, traceIds: failedTestTraceIds })
+      if (videoUploadPromise) {
+        mediaUploadPromises.push(videoUploadPromise)
+      }
+    }
+
     const finishSuite = () => {
       if (this.testSuiteSpan) {
         const status = getSuiteStatus(stats)
@@ -1634,26 +1642,26 @@ class CypressPlugin {
       }
     }
 
-    const waitForScreenshotUploads = () => {
-      if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
+    const waitForMediaUploads = () => {
+      if (mediaUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
         const pendingScreenshotUploads = this.pendingScreenshotUploads
         this.pendingScreenshotUploads = []
-        return Promise.all([...pendingScreenshotUploads, ...screenshotUploadPromises]).then(() => null)
+        return Promise.all([...pendingScreenshotUploads, ...mediaUploadPromises]).then(() => null)
       }
     }
 
     finishSuite()
 
-    const screenshotUploadsPromise = waitForScreenshotUploads()
+    const mediaUploadsPromise = waitForMediaUploads()
     if (testSpanFinishPromises.length > 0) {
       const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
-      if (screenshotUploadsPromise) {
-        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      if (mediaUploadsPromise) {
+        return Promise.all([testSpansPromise, mediaUploadsPromise]).then(() => null)
       }
       return testSpansPromise
     }
 
-    return screenshotUploadsPromise
+    return mediaUploadsPromise
   }
 
   /**
@@ -1684,7 +1692,7 @@ class CypressPlugin {
       // same stored object instead of duplicating; the Cypress filename encodes the
       // test name and attempt, so it is unique within the trace.
       const idempotencyKey = `${traceId}:${basename(filePath)}`
-      const capturedAtMs = getScreenshotCapturedAtMs(screenshot, filePath)
+      const capturedAtMs = getMediaCapturedAtMs(screenshot, filePath)
       uploadPromises.push(new Promise(resolve => {
         exporter.uploadTestScreenshot({
           filePath,
@@ -1701,6 +1709,44 @@ class CypressPlugin {
       const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
+    }
+  }
+
+  /**
+   * Uploads the per-spec Cypress video to each failed test run in the spec.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.videoPath - Path to the Cypress video
+   * @param {string[]} options.traceIds - Failed test trace ids that own the video
+   * @returns {Promise<void>|undefined}
+   */
+  uploadTestVideo ({ videoPath, traceIds }) {
+    const exporter = this.tracer?._tracer?._exporter
+    if (!videoPath || !traceIds.length ||
+      !exporter?.canUploadTestVideo?.() ||
+      !exporter.uploadTestScreenshot) {
+      return
+    }
+
+    const capturedAtMs = getMediaCapturedAtMs(videoPath, videoPath)
+    const videoFileName = basename(videoPath)
+    const uploadPromises = []
+
+    for (const traceId of traceIds) {
+      uploadPromises.push(new Promise(resolve => {
+        exporter.uploadTestScreenshot({
+          filePath: videoPath,
+          traceId,
+          idempotencyKey: `${traceId}:${videoFileName}`,
+          capturedAtMs,
+        }, () => {
+          resolve()
+        })
+      }))
+    }
+
+    if (uploadPromises.length > 0) {
+      return Promise.all(uploadPromises).then(() => {})
     }
   }
 

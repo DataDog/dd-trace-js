@@ -85,6 +85,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this._isTestFailureScreenshotsEnabled =
       Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
+    this._isTestFailureVideoEnabled =
+      Boolean(config?.testOptimization?.DD_TEST_FAILURE_VIDEO_ENABLED)
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
@@ -536,6 +538,15 @@ class CiVisibilityExporter extends BufferingExporter {
    */
   canUploadTestScreenshots () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
+  }
+
+  /**
+   * Returns whether the exporter can upload Cypress test failure videos.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestVideo () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideoEnabled
   }
 
   /**

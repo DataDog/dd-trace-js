@@ -80,6 +80,12 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
+    it('uses the Cypress video content type for MP4 files', () => {
+      const { headers } = uploadForFile('test-run.mp4')
+
+      assert.strictEqual(headers['Content-Type'], 'video/mp4')
+    })
+
     it('reports an error when the request helper drops the upload', () => {
       const basename = 'screenshot.png'
       const filePath = join(tmpDir, basename)
