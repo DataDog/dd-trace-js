@@ -4,6 +4,7 @@ const { features } = require('../feature-registry')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const log = require('../log')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
 
@@ -76,6 +77,21 @@ class NoopProxy {
   setUrl () {
     this._tracer.setUrl.apply(this._tracer, arguments)
     return this
+  }
+
+  // Public flush(); see Tracer#flush in index.d.ts for the contract.
+  /**
+   * @returns {Promise<void>}
+   */
+  flush () {
+    return new Promise((resolve) => {
+      try {
+        this._tracer.flush(() => resolve())
+      } catch (error) {
+        log.error('Error flushing tracer:', error)
+        resolve()
+      }
+    })
   }
 
   startSpan () {

@@ -454,6 +454,8 @@ tracer.wrap('test', (foo: string) => 'test')
 
 promise = tracer.wrap('test', () => Promise.resolve())()
 
+promise = tracer.flush()
+
 const carrier = {}
 
 tracer.inject(span, HTTP_HEADERS, carrier);

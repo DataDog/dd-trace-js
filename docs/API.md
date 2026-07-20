@@ -286,6 +286,26 @@ function handle (a, b, c, callback) {
 const handleWithTrace = tracer.wrap('web.request', handle)
 ```
 
+<h3 id="tracer-flush">tracer.flush()</h3>
+
+This method flushes any buffered/pending spans immediately, without waiting for the usual flush interval, and returns a promise that resolves once the resulting export completes. It resolves immediately (without exporting anything) if there is nothing to flush, for example before `init()` is called or when tracing is disabled, and it never rejects.
+
+This is useful in serverless and isolate runtimes, where the process can freeze or exit before the tracer's normal timer-based flush has a chance to run. For example, in a Cloudflare Worker:
+
+```javascript
+export default {
+  async fetch (request, env, ctx) {
+    const response = await tracer.trace('handle.request', () => handleRequest(request))
+
+    ctx.waitUntil(tracer.flush())
+
+    return response
+  }
+}
+```
+
+`tracer.flush()` only waits on the trace exporter. If a separate exporter is active for another signal (for example the OTel span-stats exporter enabled via `OTEL_TRACES_SPAN_METRICS_ENABLED`), `tracer.flush()` does not currently wait on it.
+
 <h3 id="scope-manager">tracer.scope()</h3>
 
 In order to provide context propagation, this library includes a scope manager available with `tracer.scope()`. A scope is basically a wrapper around a span that can cross both synchronous and asynchronous contexts.

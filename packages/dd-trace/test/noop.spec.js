@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 
 require('./setup/core')
 const Span = require('../src/noop/span')
@@ -48,6 +49,20 @@ describe('NoopTracer', () => {
       assert.match(span.context().toTraceId(), /^\d+$/)
       assert.strictEqual(typeof span.context().toSpanId, 'function')
       assert.match(span.context().toSpanId(), /^\d+$/)
+    })
+  })
+
+  describe('flush', () => {
+    it('should call the done callback synchronously', () => {
+      const done = sinon.spy()
+
+      tracer.flush(done)
+
+      sinon.assert.calledOnce(done)
+    })
+
+    it('should not throw when called without a callback', () => {
+      tracer.flush()
     })
   })
 })

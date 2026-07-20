@@ -73,6 +73,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
+      flush: sinon.stub().callsArg(0),
       configure: sinon.spy(),
     }
 
@@ -84,6 +85,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
+      flush: sinon.stub().callsArg(0),
       configure: sinon.spy(),
     }
 
@@ -243,6 +245,7 @@ describe('TracerProxy', () => {
       '../aiguard/noop': NoopAIGuardSdk,
       '../appsec/sdk/noop': NoopAppsecSdk,
       './dogstatsd': NoopDogStatsDClient,
+      '../log': log,
     })
 
     ProxyClass = proxyquire('../src/proxy', {
@@ -790,6 +793,25 @@ describe('TracerProxy', () => {
       })
     })
 
+    describe('flush', () => {
+      it('should resolve once the underlying NoopTracer flush completes', async () => {
+        const returnValue = proxy.flush()
+
+        assert.strictEqual(typeof returnValue.then, 'function')
+        sinon.assert.called(noop.flush)
+        await returnValue
+      })
+
+      it('should resolve instead of rejecting when the underlying flush throws synchronously', async () => {
+        noop.flush = sinon.stub().throws(new Error('boom'))
+
+        const returnValue = proxy.flush()
+
+        await returnValue
+        sinon.assert.calledOnce(log.error)
+      })
+    })
+
     describe('baggage', () => {
       afterEach(() => {
         proxy.removeAllBaggageItems()
@@ -1028,6 +1050,41 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledWith(tracer.setUrl, 'http://example.com')
         assert.strictEqual(returnValue, proxy)
+      })
+    })
+
+    describe('flush', () => {
+      it('should resolve once the underlying DatadogTracer flush completes', async () => {
+        const returnValue = proxy.flush()
+
+        assert.strictEqual(typeof returnValue.then, 'function')
+        sinon.assert.called(tracer.flush)
+        await returnValue
+      })
+
+      it('should only resolve after the flush callback is invoked', async () => {
+        let flushDone
+        tracer.flush = sinon.stub().callsFake((done) => { flushDone = done })
+
+        let resolved = false
+        const returnValue = proxy.flush().then(() => { resolved = true })
+
+        // Give any (incorrect) synchronous resolution a chance to happen before asserting.
+        await Promise.resolve()
+        assert.strictEqual(resolved, false)
+
+        flushDone()
+        await returnValue
+        assert.strictEqual(resolved, true)
+      })
+
+      it('should resolve instead of rejecting when the underlying flush throws synchronously', async () => {
+        tracer.flush = sinon.stub().throws(new Error('boom'))
+
+        const returnValue = proxy.flush()
+
+        await returnValue
+        sinon.assert.calledOnce(log.error)
       })
     })
 

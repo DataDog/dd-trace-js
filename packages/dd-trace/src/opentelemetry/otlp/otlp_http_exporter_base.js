@@ -20,6 +20,8 @@ const legacyStorage = storage('legacy')
  */
 class OtlpHttpExporterBase {
   #transport = https
+  #pendingRequests = 0
+  #flushCallbacks = []
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -88,6 +90,17 @@ class OtlpHttpExporterBase {
       },
     }
 
+    this.#pendingRequests++
+    let settled = false
+    const onResult = (result) => {
+      // destroy() on timeout can still trigger a later 'error' for the same request; guard against double-counting.
+      if (settled) return
+      settled = true
+      this.#pendingRequests--
+      resultCallback(result)
+      this.#notifyFlushWaiters()
+    }
+
     legacyStorage.run({ noop: true }, () => {
       const req = this.#transport.request(options, (res) => {
         let data = ''
@@ -99,28 +112,54 @@ class OtlpHttpExporterBase {
         res.once('end', () => {
           // @ts-expect-error - res.statusCode can be undefined
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            resultCallback({ code: 0 })
+            onResult({ code: 0 })
           } else {
             const error = new Error(`HTTP ${res.statusCode}: ${data}`)
-            resultCallback({ code: 1, error })
+            onResult({ code: 1, error })
           }
         })
       })
 
       req.on('error', (error) => {
         log.error('Error sending OTLP %s:', this.signalType, error)
-        resultCallback({ code: 1, error })
+        onResult({ code: 1, error })
       })
 
       req.once('timeout', () => {
         req.destroy()
         const error = new Error('Request timeout')
-        resultCallback({ code: 1, error })
+        onResult({ code: 1, error })
       })
 
       req.write(payload)
       req.end()
     })
+  }
+
+  /**
+   * Resolves any callbacks registered through {@link flush} once every in-flight export
+   * request for this exporter has completed.
+   */
+  #notifyFlushWaiters () {
+    if (this.#pendingRequests !== 0 || this.#flushCallbacks.length === 0) return
+
+    const callbacks = this.#flushCallbacks
+    this.#flushCallbacks = []
+    for (const callback of callbacks) callback()
+  }
+
+  /**
+   * export() sends immediately, so flush() waits for in-flight requests rather than triggering a send.
+   *
+   * @param {Function} [done] - Callback invoked once all in-flight exports for this signal complete.
+   * @returns {void}
+   */
+  flush (done = () => {}) {
+    if (this.#pendingRequests === 0) {
+      done()
+    } else {
+      this.#flushCallbacks.push(done)
+    }
   }
 
   /**
