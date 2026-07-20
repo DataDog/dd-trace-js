@@ -30,7 +30,13 @@ function mapToJsonArray (map, filter) {
 }
 
 function hasPoints (metric) {
-  return metric.points.length > 0
+  return metric.hasPoints()
+}
+
+function createSketch () {
+  const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+
+  return new LogCollapsingLowestDenseDDSketch()
 }
 
 class Metric {
@@ -50,6 +56,13 @@ class Metric {
 
   reset () {
     this.points = []
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  hasPoints () {
+    return this.points.length > 0
   }
 
   track () {
@@ -92,19 +105,52 @@ class CountMetric extends Metric {
 }
 
 class DistributionMetric extends Metric {
+  constructor (namespace, metric, common, tags) {
+    super(namespace, metric, common, tags)
+
+    this.sketch = createSketch()
+    this.pointCount = 0
+  }
+
   get type () {
     return 'distribution'
   }
 
-  track (value = 1) {
-    this.points.push(value)
+  /**
+   * @returns {void}
+   */
+  reset () {
+    super.reset()
+    this.sketch = createSketch()
+    this.pointCount = 0
   }
 
+  /**
+   * @returns {boolean}
+   */
+  hasPoints () {
+    return this.pointCount > 0
+  }
+
+  /**
+   * @param {number} [value]
+   * @returns {void}
+   */
+  track (value = 1) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return
+
+    this.sketch.accept(value)
+    this.pointCount++
+  }
+
+  /**
+   * @returns {{ metric: string, sketch_b64: string, common: boolean, tags: string[] }}
+   */
   toJSON () {
-    const { metric, points, tags, common } = this
+    const { metric, tags, common } = this
     return {
       metric,
-      points,
+      sketch_b64: Buffer.from(this.sketch.toProto()).toString('base64'),
       common,
       tags,
     }
@@ -234,8 +280,8 @@ class Namespace {
   toJSON () {
     const { distributions, metrics } = this
     return {
-      distributions: distributions.toJSON(),
       metrics: metrics.toJSON(),
+      sketches: distributions.toJSON(),
     }
   }
 }
@@ -256,14 +302,14 @@ class NamespaceManager extends Map {
 
   send (config, application, host) {
     for (const namespace of this.values()) {
-      const { metrics, distributions } = namespace.toJSON()
+      const { metrics, sketches } = namespace.toJSON()
 
       if (metrics) {
         sendData(config, application, host, 'generate-metrics', metrics)
       }
 
-      if (distributions) {
-        sendData(config, application, host, 'distributions', distributions)
+      if (sketches) {
+        sendData(config, application, host, 'sketches', sketches)
       }
 
       // TODO: This could also be clear() but then it'd have to rebuild all
