@@ -42,8 +42,12 @@ describe('LLMObs Experiments facade', () => {
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())
-      const dataset = exp.createDataset('d', 'desc')
+      const dataset = exp.createDataset('d', {
+        description: 'desc',
+        records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
+      })
       assert.equal(typeof dataset.addRecord, 'function')
+      assert.equal(dataset.records()[0].input, 'in')
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
     })
@@ -113,6 +117,28 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(ds.records()[0].input, { q: '2+2' })
       assert.equal(ds.records()[0].expectedOutput, '4')
       assert.deepEqual(ds.records()[0].metadata, { a: 1 })
+    })
+
+    it('passes explicit dataset version when reading records', async () => {
+      global.fetch.callsFake(async (url) => {
+        const u = new URL(url)
+        let payload
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
+          assert.equal(u.searchParams.get('filter[version]'), '3')
+          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
+        } else {
+          payload = {}
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', { version: 3 })
+      assert.equal(ds.version(), 3)
+      assert.equal(ds.latestVersion(), 7)
     })
 
     it('waits (backoff) until the expected record count is readable', async () => {

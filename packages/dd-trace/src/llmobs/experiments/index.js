@@ -39,21 +39,30 @@ class Experiments {
   }
 
   // Create a local dataset buffer. Pushed remotely on first experiment run.
-  createDataset (name, description = '') {
-    return new Dataset(this.#client, name, description)
+  createDataset (name, descriptionOrOptions = '') {
+    const options = typeof descriptionOrOptions === 'string'
+      ? { description: descriptionOrOptions }
+      : (descriptionOrOptions ? { ...descriptionOrOptions } : {})
+    const dataset = new Dataset(this.#client, name, options.description ?? '')
+    for (const record of options.records ?? []) {
+      dataset.addRecord(record.inputData, record.expectedOutput, record.metadata)
+    }
+    return dataset
   }
 
   // Pull an existing dataset by name (with its records). Polls with exponential
   // backoff to absorb read-after-write lag; pass `expectedRecordCount` to also
   // wait until that many records are readable.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000 } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, version } = options
     const projectId = await this.#client.ensureProjectId()
 
     let datasetId = null
     let description = ''
     let records = []
     let recordIds = []
+    let datasetVersion = version ?? null
+    let latestVersion = null
     let lastError = ''
 
     const succeeded = await retryWithBackoff(async () => {
@@ -67,6 +76,8 @@ class Experiments {
             if (item?.attributes?.name === name) {
               datasetId = String(item?.id ?? '')
               description = String(item?.attributes?.description ?? '')
+              latestVersion = item?.attributes?.current_version ?? null
+              datasetVersion = version ?? latestVersion
               break
             }
           }
@@ -78,11 +89,14 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = cursor ? `?page[cursor]=${encodeURIComponent(cursor)}` : ''
+          const query = new URLSearchParams()
+          if (cursor) query.set('page[cursor]', cursor)
+          if (version !== undefined && version !== null) query.set('filter[version]', String(version))
+          const queryString = query.toString() ? `?${query.toString()}` : ''
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
             'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${query}`
+            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`
           )
           for (const item of resp?.data ?? []) {
             const attrs = item?.attributes ?? item
@@ -119,7 +133,17 @@ class Experiments {
       )
     }
 
-    return Dataset.fromExisting(this.#client, name, description, datasetId, projectId, records, recordIds)
+    return Dataset.fromExisting(
+      this.#client,
+      name,
+      description,
+      datasetId,
+      projectId,
+      records,
+      recordIds,
+      datasetVersion,
+      latestVersion
+    )
   }
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
