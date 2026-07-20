@@ -7,8 +7,9 @@ const path = require('node:path')
 const { getArtifactId } = require('./artifact-id')
 const { writeApprovalArtifacts } = require('./approval-artifacts')
 const { getCommandOutputPaths } = require('./command-output-policy')
-const { getCommandSuitabilityError } = require('./command-suitability')
+const { getCommandSuitabilityError, getPackageScriptExpansion } = require('./command-suitability')
 const { serializeApprovalCommand } = require('./command-runner')
+const { getGeneratedTestContractError } = require('./generated-test-contract')
 const {
   getApprovedExecutable,
   getUnavailableExecutable,
@@ -267,6 +268,10 @@ function formatApprovalSummary ({
   for (const framework of manifest.frameworks) {
     const label = formatFrameworkLabel(framework, repositoryRoot)
     lines.push(`- **${plainText(label)}**: ${formatFrameworkStatus(framework.status)}`)
+    if (framework.localSocketRequired) {
+      lines.push('  - Every safe representative test found appears to require a project localhost listener. ' +
+        'Validation may be blocked if the current execution environment denies those sockets.')
+    }
     if (framework.status !== 'runnable' && framework.notes?.[0]) {
       lines.push(`  - ${plainText(framework.notes[0])}`)
     }
@@ -314,9 +319,7 @@ function formatApprovalSummary ({
       usesShell: false,
     }))),
     '',
-    `Working directory: ${inlineCode(repositoryRoot)}`,
-    '',
-    'Approve executing the commands and temporary file operations shown in this summary?'
+    `Working directory: ${inlineCode(repositoryRoot)}`
   )
   return lines.join('\n')
 }
@@ -452,6 +455,10 @@ function appendApprovalSummaryCommand (lines, {
     `- Timeout: ${command.timeoutMs || 300_000} ms`
   )
   if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
+  const packageScriptExpansion = getPackageScriptExpansion(command, repositoryRoot)
+  if (packageScriptExpansion) {
+    lines.push(`- Effective package script: ${inlineCode(sanitizeString(packageScriptExpansion.effectiveCommand))}`)
+  }
   const outputPaths = getCommandOutputPaths(command)
   if (outputPaths.length > 0) {
     const cleanupTiming = deferOutputCleanup
@@ -497,6 +504,13 @@ function getApprovalSummaryPath (out) {
  */
 function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
   for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+    const generatedTestContractError = getGeneratedTestContractError(framework)
+    if (generatedTestContractError) {
+      throw new Error(
+        `Cannot render an approvable plan because generated tests for ${framework.id} ` +
+        generatedTestContractError
+      )
+    }
     const plannedCommands = getPlannedCommands(framework, requestedScenario)
     for (const plannedCommand of plannedCommands) {
       const executable = getUnavailableExecutable(plannedCommand.command)

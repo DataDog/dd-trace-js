@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { runDiagnosis } = require('../diagnose')
+const { GENERATED_SCENARIOS, getGeneratedTestContent } = require('./generated-test-contract')
 const { validateManifest } = require('./manifest-schema')
 
 const SUPPORTED_SCAFFOLD_FRAMEWORKS = new Set(['jest', 'mocha', 'vitest'])
@@ -235,6 +236,7 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
     language: /\.tsx?$/.test(generatedTestStrategy.fileExtension) ? 'typescript' : 'javascript',
     status: 'runnable',
     supportLevel: 'validator_supported',
+    localSocketRequired: representativeSelection.requiresLocalSocket,
     project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
     setup: { commands: [], services: [] },
     existingTestCommand: command,
@@ -259,6 +261,11 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
       preserveProjectWrapper
         ? `Basic Reporting preserves package script ${scriptName} because it uses a custom test wrapper.`
         : `Basic Reporting invokes the installed ${framework} runner directly; record the CI wrapper separately.`,
+      ...(representativeSelection.requiresLocalSocket
+        ? ['Every safe representative test found appears to open a local listener. The approved test command may ' +
+            'be blocked in an execution environment that denies project localhost sockets; do not escalate ' +
+            'permissions automatically.']
+        : []),
       'CI command selection still requires repository-specific evidence.',
     ],
   }
@@ -426,77 +433,24 @@ function getGeneratedTestConvention (representative, projectRoot) {
 }
 
 function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
-  const stateFileExpression = moduleSystem === 'esm'
-    ? "join(dirname(fileURLToPath(import.meta.url)), '.dd-test-optimization-validation-atr-state')"
-    : "path.join(__dirname, '.dd-test-optimization-validation-atr-state')"
-  const definitions = [
-    { id: 'basic-pass', purpose: 'basic_reporting|efd_candidate', testName: 'basic-pass' },
-    { id: 'atr-fail-once', purpose: 'auto_test_retries_candidate', testName: 'atr-fail-once' },
-    { id: 'test-management-target', purpose: 'test_management_candidate', testName: 'test-management-target' },
-  ]
-
-  return definitions.map(definition => {
-    const prefix = `dd-test-optimization-validation-${definition.id}`
+  return Object.entries(GENERATED_SCENARIOS).map(([id, definition]) => {
+    const prefix = `dd-test-optimization-validation-${id}`
     const filename = convention.exactFilename
       ? path.join(prefix, convention.exactFilename)
       : `${prefix}${convention.fileExtension}`
+    const generatedFile = path.join(convention.testDirectory, filename)
     return {
+      id,
       ...definition,
-      file: path.join(convention.testDirectory, filename),
-      content: getGeneratedTestContent({ framework, definition, moduleSystem, stateFileExpression }),
+      file: generatedFile,
+      content: getGeneratedTestContent({
+        framework,
+        moduleSystem,
+        scenarioId: id,
+        stateFile: path.join(path.dirname(generatedFile), '.dd-test-optimization-validation-atr-state'),
+      }),
     }
   })
-}
-
-function getGeneratedTestContent ({ framework, definition, moduleSystem, stateFileExpression }) {
-  const imports = []
-  if (framework === 'vitest' && moduleSystem === 'esm') {
-    imports.push("import { describe, expect, it } from 'vitest'")
-  }
-  if (framework === 'mocha') {
-    imports.push(moduleSystem === 'esm'
-      ? "import assert from 'node:assert/strict'"
-      : "const assert = require('node:assert/strict')")
-  }
-  if (definition.id === 'atr-fail-once') {
-    if (moduleSystem === 'esm') {
-      imports.push(
-        "import { existsSync, writeFileSync } from 'node:fs'",
-        "import { dirname, join } from 'node:path'",
-        "import { fileURLToPath } from 'node:url'"
-      )
-    } else {
-      imports.push("const fs = require('node:fs')", "const path = require('node:path')")
-    }
-  }
-  const assertion = framework === 'mocha' ? 'assert.equal(1, 1)' : 'expect(true).toBe(true)'
-  const testFunction = framework === 'jest' ? 'test' : 'it'
-  const body = definition.id === 'atr-fail-once'
-    ? getAtrBody({ moduleSystem, stateFileExpression, assertion })
-    : `    ${assertion}`
-
-  return [
-    ...imports,
-    imports.length > 0 ? '' : undefined,
-    "describe('dd-test-optimization-validation', () => {",
-    `  ${testFunction}('${definition.testName}', () => {`,
-    body,
-    '  })',
-    '})',
-  ].filter(line => line !== undefined).join('\n')
-}
-
-function getAtrBody ({ moduleSystem, stateFileExpression, assertion }) {
-  const exists = moduleSystem === 'esm' ? 'existsSync' : 'fs.existsSync'
-  const write = moduleSystem === 'esm' ? 'writeFileSync' : 'fs.writeFileSync'
-  return [
-    `    const stateFile = ${stateFileExpression}`,
-    `    if (!${exists}(stateFile)) {`,
-    `      ${write}(stateFile, 'failed-once')`,
-    "      throw new Error('dd-test-optimization-validation atr first failure')",
-    '    }',
-    `    ${assertion}`,
-  ].join('\n')
 }
 
 function buildGeneratedRunCommand (
@@ -751,13 +705,21 @@ function findRepresentativeTestFile (root, framework) {
   candidates.sort((left, right) => {
     return getTestDirectoryRank(left, root) - getTestDirectoryRank(right, root) ||
       getTestAreaRank(left, root) - getTestAreaRank(right, root) ||
+      getLocalListenerRank(left, root) - getLocalListenerRank(right, root) ||
       getIndependentTestProjectRank(left, root, packageRanks) -
         getIndependentTestProjectRank(right, root, packageRanks) ||
       left.localeCompare(right)
   })
   for (const filename of candidates) {
     const testName = getRepresentativeTestName(filename)
-    if (testName) return { file: filename, testName, rejected }
+    if (testName) {
+      return {
+        file: filename,
+        requiresLocalSocket: getLocalListenerRank(filename, root) > 0,
+        testName,
+        rejected,
+      }
+    }
     rejected.push(`${path.relative(root, filename)} (no bounded literal test name)`)
   }
   return { rejected }
@@ -818,9 +780,31 @@ function getRepresentativeTestName (filename) {
     return
   }
 
-  const match = /(?:^|[^\w$])(?:it|test|specify)(?:\.only)?\s*\(\s*(['"])((?:\\.|[^\\'"\r\n]){1,200})\1/m.exec(source)
-  if (!match) return
-  return match[2].replaceAll(/\\(['"\\])/g, '$1')
+  const pattern = /(?:^|[^\w$])(?:it|test|specify)(?:\.only)?\s*\(\s*(['"])((?:\\.|[^\\'"\r\n]){1,200})\1/gm
+  let match
+  while ((match = pattern.exec(source))) {
+    if (!isInsideRepeatedTestBlock(source, match.index)) {
+      return match[2].replaceAll(/\\(['"\\])/g, '$1')
+    }
+  }
+}
+
+/**
+ * Rejects a literal test declaration that appears inside a simple loop or table expansion.
+ *
+ * @param {string} source test source
+ * @param {number} testIndex literal test declaration offset
+ * @returns {boolean} whether the declaration can create multiple runtime tests
+ */
+function isInsideRepeatedTestBlock (source, testIndex) {
+  const prefix = source.slice(0, testIndex)
+  const lastBlockEnd = prefix.lastIndexOf('}')
+  return Math.max(
+    prefix.lastIndexOf('for ('),
+    prefix.lastIndexOf('for('),
+    prefix.lastIndexOf('.forEach('),
+    prefix.lastIndexOf('.each(')
+  ) > lastBlockEnd
 }
 
 /**
@@ -850,6 +834,36 @@ function getTestAreaRank (filename, root) {
 }
 
 /**
+ * Ranks tests that visibly open a local listener behind process-local unit tests.
+ *
+ * @param {string} filename candidate test file
+ * @param {string} root detected project root
+ * @returns {number} local-listener preference rank
+ */
+function getLocalListenerRank (filename, root) {
+  let stat
+  let physicalFilename
+  try {
+    stat = fs.lstatSync(filename)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024) return 1
+    physicalFilename = fs.realpathSync(filename)
+    if (!isPathInside(fs.realpathSync(root), physicalFilename)) return 1
+  } catch {
+    return 1
+  }
+
+  try {
+    const source = fs.readFileSync(physicalFilename, 'utf8')
+    return /(?:\bsupertest\b|\bcreateServer\s*\(|\.listen\s*\(|(?:from\s+|require\s*\(\s*)['"]node:(?:http|https|net)['"])/
+      .test(source)
+      ? 1
+      : 0
+  } catch {
+    return 1
+  }
+}
+
+/**
  * Ranks independently tested nested packages behind tests owned by the detected root command.
  *
  * @param {string} filename candidate test file
@@ -874,7 +888,7 @@ function getIndependentTestProjectRank (filename, root, cache) {
 }
 
 function getTestExtension (filename) {
-  const match = /((?:\.test|\.spec)\.(?:[cm]?[jt]s|[jt]sx))$/.exec(filename)
+  const match = /((?:[.-](?:test|spec))\.(?:[cm]?[jt]s|[jt]sx))$/.exec(filename)
   return match?.[1] || '.test.js'
 }
 

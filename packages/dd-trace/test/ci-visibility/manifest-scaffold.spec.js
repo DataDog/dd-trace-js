@@ -492,10 +492,11 @@ describe('test optimization validation manifest scaffold', () => {
         assert.ok(framework.generatedTestStrategy.files.every(file => file.contentLines.at(-1) !== ''))
         const atrFile = framework.generatedTestStrategy.files.find(file => file.path.includes('atr-fail-once'))
         const atrSource = atrFile.contentLines.join('\n')
+        const stateFile = path.join(path.dirname(atrFile.path), '.dd-test-optimization-validation-atr-state')
+        assert.ok(atrSource.includes(JSON.stringify(stateFile)))
+        assert.doesNotMatch(atrSource, /import\.meta|__dirname/)
         if (definition.expectedModuleSystem === 'esm') {
           assert.match(atrSource, /import \{ existsSync, writeFileSync \} from 'node:fs'/)
-          assert.match(atrSource, /join\(dirname\(fileURLToPath\(import\.meta\.url\)\)/)
-          assert.doesNotMatch(atrSource, /new URL/)
           if (definition.framework === 'vitest') {
             assert.match(atrSource, /import \{ describe, expect, it \} from 'vitest'/)
             assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
@@ -777,6 +778,102 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.status, 'requires_manual_setup')
       assert.match(framework.notes[0], /imports another runner/)
       assert.strictEqual(framework.existingTestCommand, undefined)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers a process-local Jest test and preserves its dash-test collection convention', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-listener-rank-'))
+    const runnerRoot = path.join(root, 'node_modules', 'jest')
+    const listenerTest = path.join(root, 'test', 'listener-test.js')
+    const unitTest = path.join(root, 'test', 'unit-test.js')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.dirname(listenerTest))
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'jest',
+      version: '29.7.0',
+      bin: { jest: 'bin.js' },
+    }))
+    fs.writeFileSync(listenerTest, "const request = require('supertest')\ntest('listener', () => request)\n")
+    fs.writeFileSync(unitTest, "test('unit', () => {})\n")
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'listener-project',
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'jest' },
+    }))
+
+    try {
+      const framework = createManifestScaffold({ root }).frameworks[0]
+
+      assert.ok(framework.existingTestCommand.argv.includes(unitTest))
+      assert.strictEqual(framework.localSocketRequired, false)
+      assert.ok(framework.generatedTestStrategy.files.every(file => /-test\.js$/.test(file.path)))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('records when every safe representative appears to need a localhost listener', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-listener-only-'))
+    const runnerRoot = path.join(root, 'node_modules', 'mocha')
+    const listenerTest = path.join(root, 'test', 'listener.test.js')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.dirname(listenerTest))
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'mocha',
+      version: '11.7.5',
+      bin: { mocha: 'bin.js' },
+    }))
+    fs.writeFileSync(listenerTest, "describe('suite', () => { it('listener', () => app.listen(0)) })\n")
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'listener-only-project',
+      devDependencies: { mocha: '11.7.5' },
+      scripts: { test: 'mocha' },
+    }))
+
+    try {
+      const framework = createManifestScaffold({ root }).frameworks[0]
+
+      assert.strictEqual(framework.localSocketRequired, true)
+      assert.match(framework.notes.join('\n'), /Every safe representative test found appears to open a local listener/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not select a literal test declaration that is expanded inside a loop', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-'))
+    const runnerRoot = path.join(root, 'node_modules', 'vitest')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.join(root, 'test'))
+    fs.writeFileSync(path.join(runnerRoot, 'vitest.mjs'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'vitest',
+      version: '4.1.0',
+      bin: { vitest: 'vitest.mjs' },
+    }))
+    fs.writeFileSync(path.join(root, 'test', 'dynamic.test.ts'), `
+      for (const implementation of ['node', 'browser']) {
+        it('works', () => implementation)
+      }
+    `)
+    fs.writeFileSync(path.join(root, 'test', 'unit.test.ts'), "it('one bounded test', () => {})\n")
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'loop-generated-tests',
+      type: 'module',
+      devDependencies: { vitest: '4.1.0' },
+      scripts: { test: 'vitest run' },
+    }))
+
+    try {
+      const manifest = createManifestScaffold({ root })
+      const command = manifest.frameworks[0].existingTestCommand
+
+      assert.ok(command.argv.includes(path.join(root, 'test', 'unit.test.ts')))
+      assert.ok(command.argv.includes('one bounded test'))
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { sanitizeString } = require('./redaction')
+
 const MAX_CONFIG_BYTES = 512 * 1024
 const MAX_STATIC_CONFIG_ARRAY_BYTES = 4096
 const MAX_STATIC_CONFIG_PATTERNS = 32
@@ -40,10 +42,16 @@ const VITEST_CONFIG_FILENAMES = [
 function getCommandSuitabilityError ({ command, framework, label, repositoryRoot }) {
   const yarnError = getRepositoryYarnError(command, repositoryRoot)
   if (yarnError) return yarnError
+  const packageScriptError = getPackageScriptForwardingError(command, repositoryRoot)
+  if (packageScriptError) return packageScriptError
 
   if (framework.framework === 'jest') {
-    const missingInputError = getJestMissingLocalInputError(framework)
+    const missingInputError = getJestMissingLocalInputError(framework, repositoryRoot)
     if (missingInputError) return missingInputError
+    if (label.includes('advanced-feature')) {
+      const generatedPathError = getJestGeneratedPathError(command, framework, repositoryRoot)
+      if (generatedPathError) return generatedPathError
+    }
   }
 
   if (label === 'the selected test command') {
@@ -86,26 +94,61 @@ function getMissingSelfPackageBuildError (command, framework, repositoryRoot) {
 
   const testFile = getSelectedTestFile(command, framework.project.root, repositoryRoot)
   if (!testFile) return
-  const source = readRepositoryConfig(testFile, repositoryRoot)
-  if (!source || !importsPackage(source, packageJson.name)) return
+  const pending = [{ filename: testFile, chain: [testFile], depth: 0 }]
+  const visited = new Set()
+  while (pending.length > 0 && visited.size < MAX_LOCAL_IMPORT_FILES) {
+    const current = pending.shift()
+    if (visited.has(current.filename)) continue
+    visited.add(current.filename)
 
-  const exportTargets = getPackageEntryTargets(packageJson)
-  if (exportTargets.length === 0) return
-  const entrypoints = exportTargets.map(target => path.resolve(path.dirname(packageJsonPath), target))
-  if (entrypoints.some(entrypoint => {
-    return isPathInside(repositoryRoot, entrypoint) &&
-      (fs.existsSync(entrypoint) || isProducedBySetup(framework, entrypoint))
-  })) return
-  const entrypoint = entrypoints[0]
-  if (!isPathInside(repositoryRoot, entrypoint)) {
-    return `selects ${testFile}, which imports its own package ${JSON.stringify(packageJson.name)}, but the package ` +
-      'entrypoint resolves outside the repository and cannot be inspected safely. Choose a source-based ' +
-      'representative or correct the package entrypoint before asking for approval.'
+    const source = readRepositoryConfig(current.filename, repositoryRoot)
+    if (!source) continue
+    for (const specifier of getPackageModuleSpecifiers(source, packageJson.name)) {
+      const exportTargets = getPackageEntryTargets(packageJson, specifier)
+      if (exportTargets.length === 0) continue
+      const entrypoints = exportTargets.map(target => path.resolve(path.dirname(packageJsonPath), target))
+      const usableEntrypoints = entrypoints.filter(entrypoint => {
+        return isPathInside(repositoryRoot, entrypoint) &&
+          (isRepositoryFile(entrypoint, repositoryRoot) || isProducedBySetup(framework, entrypoint))
+      })
+      if (usableEntrypoints.length === 0) {
+        const entrypoint = entrypoints[0]
+        const chain = current.chain.map(filename => path.relative(repositoryRoot, filename) || '.').join(' -> ')
+        if (!isPathInside(repositoryRoot, entrypoint)) {
+          return `selects ${testFile}, whose bounded import chain ${chain} imports its own package subpath ` +
+            `${JSON.stringify(specifier)}, but its entrypoint resolves outside the repository. Choose a source-based ` +
+            'representative or correct the package export before asking for approval.'
+        }
+        return `selects ${testFile}, whose bounded import chain ${chain} imports its own package subpath ` +
+          `${JSON.stringify(specifier)}, but entrypoint ${entrypoint} does not exist. Declare the reviewed build ` +
+          `command and ${entrypoint} as its output, or choose a representative that runs from source before ` +
+          'asking for approval.'
+      }
+      if (current.depth < MAX_LOCAL_IMPORT_DEPTH) {
+        for (const entrypoint of usableEntrypoints) {
+          if (isRepositoryFile(entrypoint, repositoryRoot)) {
+            pending.push({
+              filename: entrypoint,
+              chain: [...current.chain, entrypoint],
+              depth: current.depth + 1,
+            })
+          }
+        }
+      }
+    }
+    if (current.depth < MAX_LOCAL_IMPORT_DEPTH) {
+      for (const specifier of getRelativeModuleSpecifiers(source)) {
+        const resolution = resolveLocalModule(current.filename, specifier, repositoryRoot)
+        if (resolution.filename) {
+          pending.push({
+            filename: resolution.filename,
+            chain: [...current.chain, resolution.filename],
+            depth: current.depth + 1,
+          })
+        }
+      }
+    }
   }
-
-  return `selects ${testFile}, which imports its own package ${JSON.stringify(packageJson.name)}, but the package ` +
-    `entrypoint ${entrypoint} does not exist. Declare the reviewed build command and ${entrypoint} as its output, ` +
-    'or choose a representative test that runs from source before asking for approval.'
 }
 
 /**
@@ -136,24 +179,34 @@ function getSelectedTestFile (command, projectRoot, repositoryRoot) {
  * @param {string} packageName package name
  * @returns {boolean} whether the package is imported
  */
-function importsPackage (source, packageName) {
-  const escapedName = escapeRegex(packageName)
-  return new RegExp(
-    String.raw`(?:from\s+|require\s*\(\s*|import\s+(?:\(\s*)?)['"]${escapedName}(?:[/.'"]|$)`
-  ).test(source)
+function getPackageModuleSpecifiers (source, packageName) {
+  const specifiers = []
+  const pattern = /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s+(?:\(\s*)?)['"]([^'"\r\n]+)['"]/g
+  for (const match of source.matchAll(pattern)) {
+    if ((match[1] === packageName || match[1].startsWith(`${packageName}/`)) && !specifiers.includes(match[1])) {
+      specifiers.push(match[1])
+    }
+  }
+  return specifiers
 }
 
 /**
  * Returns a representative package entrypoint target.
  *
  * @param {object} packageJson parsed package metadata
- * @returns {string|undefined} entrypoint target
+ * @param {string} specifier self-package module specifier
+ * @returns {string[]} entrypoint targets
  */
-function getPackageEntryTargets (packageJson) {
+function getPackageEntryTargets (packageJson, specifier) {
   const targets = []
-  collectStrings(packageJson.exports?.['.'] ?? packageJson.exports, targets)
-  collectStrings(packageJson.module, targets)
-  collectStrings(packageJson.main, targets)
+  const subpath = specifier === packageJson.name ? '.' : `.${specifier.slice(packageJson.name.length)}`
+  if (subpath === '.') {
+    collectStrings(packageJson.exports?.['.'] ?? packageJson.exports, targets)
+    collectStrings(packageJson.module, targets)
+    collectStrings(packageJson.main, targets)
+  } else {
+    collectStrings(packageJson.exports?.[subpath], targets)
+  }
   return [...new Set(targets)]
 }
 
@@ -284,11 +337,12 @@ function getLocalModuleCandidates (target) {
  * Returns an error for an exact local file referenced by Jest config but absent before execution.
  *
  * @param {object} framework manifest framework entry
+ * @param {string} repositoryRoot repository root
  * @returns {string|undefined} suitability error
  */
-function getJestMissingLocalInputError (framework) {
+function getJestMissingLocalInputError (framework, repositoryRoot) {
   for (const configFile of framework.project?.configFiles || []) {
-    const config = readConfig(configFile)
+    const config = readRepositoryConfig(configFile, repositoryRoot)
     if (!config) continue
 
     const rootDirMatch = config.match(JEST_ROOT_DIR_PATTERN)
@@ -325,6 +379,234 @@ function isProducedBySetup (framework, localPath) {
     }
   }
   return false
+}
+
+/**
+ * Rejects package-manager separators that become a literal runner argument.
+ *
+ * @param {object} command structured command
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} forwarding error
+ */
+function getPackageScriptForwardingError (command, repositoryRoot) {
+  const expansion = getPackageScriptExpansion(command, repositoryRoot)
+  if (!expansion || !['pnpm', 'yarn'].includes(expansion.packageManager)) return
+  if (expansion.forwardedArgs[0] !== '--') return
+
+  return `expands package script ${JSON.stringify(expansion.scriptName)} to ` +
+    `${JSON.stringify(sanitizeString(expansion.effectiveCommand))}, including a literal extra "--" before the ` +
+    'runner arguments. ' +
+    `For ${expansion.packageManager}, append focused runner arguments directly after the script name, then render ` +
+    'a fresh plan. Preserve the original package-manager wrapper for CI replay.'
+}
+
+/**
+ * Returns a bounded readable package-script expansion for a structured command.
+ *
+ * @param {object} command structured command
+ * @param {string} repositoryRoot repository root
+ * @returns {object|undefined} package script expansion
+ */
+function getPackageScriptExpansion (command, repositoryRoot) {
+  if (command.usesShell || !Array.isArray(command.argv)) return
+  const argv = command.argv
+  let packageManager = path.basename(argv[0] || '').replace(/\.cmd$/i, '').toLowerCase()
+  let runIndex = 1
+  if (path.resolve(argv[0] || '') === path.resolve(process.execPath) && /yarn-[^/]+\.cjs$/.test(argv[1] || '')) {
+    packageManager = 'yarn'
+    runIndex = 2
+  }
+  if (!['npm', 'pnpm', 'yarn'].includes(packageManager) || argv[runIndex] !== 'run') return
+
+  const scriptName = argv[runIndex + 1]
+  if (typeof scriptName !== 'string') return
+  const packageJsonSource = readRepositoryConfig(path.join(command.cwd, 'package.json'), repositoryRoot)
+  if (!packageJsonSource) return
+  let packageJson
+  try {
+    packageJson = JSON.parse(packageJsonSource)
+  } catch {
+    return
+  }
+  const script = packageJson.scripts?.[scriptName]
+  if (typeof script !== 'string' || script.length > MAX_CONFIG_BYTES) return
+  const forwardedArgs = argv.slice(runIndex + 2)
+  return {
+    effectiveCommand: [script, ...forwardedArgs].join(' '),
+    forwardedArgs,
+    packageManager,
+    script,
+    scriptName,
+  }
+}
+
+/**
+ * Rejects generated Jest paths excluded by statically readable collection rules.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} generated path error
+ */
+function getJestGeneratedPathError (command, framework, repositoryRoot) {
+  const rules = getJestCollectionRules(command, framework, repositoryRoot)
+  if (!rules) return
+
+  for (const file of framework.generatedTestStrategy?.files || []) {
+    const relative = path.relative(rules.rootDir, file.path).split(path.sep).join('/')
+    if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) continue
+    const absolute = file.path.split(path.sep).join('/')
+    if (rules.testMatch.length > 0 && !rules.testMatch.some(pattern => {
+      return matchesGlob(relative, pattern.replaceAll('<rootDir>/', '')) ||
+        matchesGlob(absolute, pattern.replaceAll('<rootDir>', rules.rootDir.split(path.sep).join('/')))
+    })) {
+      return `uses temporary test path ${file.path}, which does not match the literal Jest testMatch patterns in ` +
+        `${rules.source}: ${rules.testMatch.join(', ')}. Choose a temporary path accepted by the selected Jest ` +
+        'config before asking for approval.'
+    }
+    if (rules.testRegex.length > 0 && !rules.testRegex.some(pattern => matchesTestRegex(absolute, pattern))) {
+      return `uses temporary test path ${file.path}, which does not match the literal Jest testRegex patterns in ` +
+        `${rules.source}: ${rules.testRegex.join(', ')}. Choose a temporary path accepted by the selected Jest ` +
+        'config before asking for approval.'
+    }
+  }
+}
+
+/**
+ * Reads bounded literal Jest collection rules without executing configuration.
+ *
+ * @param {object} command generated test command
+ * @param {object} framework manifest framework entry
+ * @param {string} repositoryRoot repository root
+ * @returns {object|undefined} collection rules
+ */
+function getJestCollectionRules (command, framework, repositoryRoot) {
+  const packageJsonPath = framework.project?.packageJson
+  const packageJsonSource = packageJsonPath && readRepositoryConfig(packageJsonPath, repositoryRoot)
+  if (packageJsonSource) {
+    try {
+      const jest = JSON.parse(packageJsonSource).jest
+      const testMatch = getBoundedStringArray(jest?.testMatch)
+      const testRegex = getBoundedStringArray(jest?.testRegex)
+      if (testMatch.length > 0 || testRegex.length > 0) {
+        return {
+          rootDir: path.dirname(packageJsonPath),
+          source: packageJsonPath,
+          testMatch,
+          testRegex,
+        }
+      }
+    } catch {}
+  }
+
+  const explicitConfig = getJestConfigFile(command, repositoryRoot)
+  const configFiles = [...new Set([
+    ...(explicitConfig ? [explicitConfig] : []),
+    ...(framework.project?.configFiles || []),
+  ])]
+  for (const configFile of configFiles) {
+    const source = readRepositoryConfig(configFile, repositoryRoot)
+    if (!source) continue
+    const testMatch = getLiteralPropertyArrayPatterns(source, 'testMatch')
+    const testRegex = getLiteralRegexPatterns(source, 'testRegex')
+    if (testMatch.length === 0 && testRegex.length === 0) continue
+    const rootDirMatch = source.match(JEST_ROOT_DIR_PATTERN)
+    return {
+      rootDir: rootDirMatch ? path.resolve(path.dirname(configFile), rootDirMatch[2]) : path.dirname(configFile),
+      source: configFile,
+      testMatch,
+      testRegex,
+    }
+  }
+}
+
+/**
+ * Returns a repository-contained explicit Jest config selected by a structured command.
+ *
+ * @param {object} command generated test command
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} selected config file
+ */
+function getJestConfigFile (command, repositoryRoot) {
+  if (command.usesShell) return
+  const argv = command.argv || []
+  for (let index = 0; index < argv.length; index++) {
+    let filename
+    if (argv[index] === '--config' && argv[index + 1]) filename = argv[index + 1]
+    if (argv[index].startsWith('--config=')) filename = argv[index].slice('--config='.length)
+    if (!filename) continue
+    const configFile = path.resolve(command.cwd, filename)
+    return isRepositoryFile(configFile, repositoryRoot) ? configFile : undefined
+  }
+}
+
+/**
+ * Normalizes a bounded string or string array.
+ *
+ * @param {unknown} value candidate config value
+ * @returns {string[]} bounded strings
+ */
+function getBoundedStringArray (value) {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
+  if (values.length > MAX_STATIC_CONFIG_PATTERNS || values.some(entry => {
+    return typeof entry !== 'string' || entry.length > MAX_STATIC_CONFIG_PATTERN_BYTES
+  })) return []
+  return values
+}
+
+/**
+ * Extracts an unambiguous literal string-array property from config source.
+ *
+ * @param {string} source config source
+ * @param {string} property property name
+ * @returns {string[]} literal values
+ */
+function getLiteralPropertyArrayPatterns (source, property) {
+  const candidates = []
+  visitConfigSource(source, ({ index }) => {
+    if (!isPropertyAt(source, index, property)) return
+    const match = new RegExp(String.raw`^${property}\s*:\s*\[`).exec(source.slice(index))
+    if (!match) return
+    const patterns = readLiteralStringArray(source, index + match[0].length)
+    if (patterns.length > 0) candidates.push(patterns)
+  })
+  if (candidates.length === 0) return []
+  const first = JSON.stringify(candidates[0])
+  return candidates.every(candidate => JSON.stringify(candidate) === first) ? candidates[0] : []
+}
+
+/**
+ * Extracts bounded string or regular-expression literals from config source.
+ *
+ * @param {string} source config source
+ * @param {string} property property name
+ * @returns {string[]} literal regular-expression sources
+ */
+function getLiteralRegexPatterns (source, property) {
+  const patterns = []
+  const expression = new RegExp(
+    String.raw`\b${property}\s*:\s*(?:(["'])([^"'\r\n]{1,256})\1|\/((?:\\.|[^/\r\n]){1,256})\/[dgimsuvy]*)`,
+    'g'
+  )
+  for (const match of source.matchAll(expression)) {
+    patterns.push(match[2] || match[3])
+    if (patterns.length === MAX_STATIC_CONFIG_PATTERNS) break
+  }
+  return patterns
+}
+
+/**
+ * Tests one file against a bounded literal regular expression.
+ *
+ * @param {string} filename normalized filename
+ * @param {string} source regular-expression source
+ * @returns {boolean} whether the filename matches
+ */
+function matchesTestRegex (filename, source) {
+  try {
+    return new RegExp(source).test(filename)
+  } catch {
+    return false
+  }
 }
 
 function getRepositoryYarnError (command, repositoryRoot) {
@@ -684,22 +966,8 @@ function readRepositoryConfig (filename, repositoryRoot) {
   } catch {}
 }
 
-/**
- * Reads a bounded test-runner config file.
- *
- * @param {string} filename config path
- * @returns {string|undefined} config text
- */
-function readConfig (filename) {
-  try {
-    const stat = fs.statSync(filename)
-    if (!stat.isFile() || stat.size > MAX_CONFIG_BYTES) return
-    return fs.readFileSync(filename, 'utf8')
-  } catch {}
-}
-
 function unquote (value) {
   return value.replaceAll(/^['"]|['"]$/g, '')
 }
 
-module.exports = { getCommandSuitabilityError }
+module.exports = { getCommandSuitabilityError, getPackageScriptExpansion }
