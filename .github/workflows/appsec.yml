@@ -40,28 +40,28 @@ jobs:
           id: ${{ github.job }}
 
   ubuntu:
-    name: ${{ github.workflow }} / ubuntu
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / ubuntu (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: appsec-ubuntu
+          flags: appsec-ubuntu-${{ matrix.version }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          id: ${{ github.job }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   windows:
     name: ${{ github.workflow }} / windows
