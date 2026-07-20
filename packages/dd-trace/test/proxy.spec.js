@@ -7,6 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const featureRegistry = require('../src/feature-registry')
+const RemoteConfigCapabilities = require('../src/remote_config/capabilities')
 
 require('./setup/core')
 
@@ -283,7 +284,7 @@ describe('TracerProxy', () => {
       noop: noopOpenfeature,
       factory: () => openfeature,
       remoteConfig (rc, config, proxy) {
-        openfeatureRcEnable(rc, () => proxy.openfeature)
+        openfeatureRcEnable(rc, () => proxy.openfeature, config.experimental.flaggingProvider.enabled === true)
       },
       enable (config, tracer, proxy, lazyProxy) {
         if (config.experimental.flaggingProvider.enabled) {
@@ -418,6 +419,17 @@ describe('TracerProxy', () => {
         handlers.get('FFE_FLAGS')('apply', flagConfig)
 
         sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
+      })
+
+      it('should not setup FFE_FLAGS Remote Config when openfeature provider is disabled', () => {
+        proxy.init()
+
+        assert.strictEqual(handlers.has('FFE_FLAGS'), false)
+        sinon.assert.neverCalledWith(
+          rc.updateCapabilities,
+          RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES,
+          true
+        )
       })
 
       it('should handle FFE_FLAGS modify action', () => {
