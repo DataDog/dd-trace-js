@@ -70,6 +70,7 @@
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
 /index.electron.js @DataDog/apm-idm-js
+/integration-tests/cloudflare-workers/ @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
