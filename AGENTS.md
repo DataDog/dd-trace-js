@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Node.js >= 18
-- bun 1.3.1 (matches `devDependencies.bun` in `package.json`)
+- bun 1.3.14 (matches `devDependencies.bun` in `package.json`)
 - Docker + docker-compose (for running service dependencies in tests)
 
 ## Setup
