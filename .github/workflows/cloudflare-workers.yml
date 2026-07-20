@@ -1,0 +1,30 @@
+name: Cloudflare Workers
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: 0 4 * * *
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  workerd:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: '22'
+      - uses: ./.github/actions/install
+      - run: npm run test:integration:cloudflare-workers
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
