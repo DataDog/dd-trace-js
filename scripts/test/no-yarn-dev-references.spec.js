@@ -34,6 +34,16 @@ const allowedLinePatterns = new Map([
   ['MIGRATING.md', /NODE_OPTIONS='-r dd-trace\/ci\/init' yarn test/],
   ['scripts/test/install-plugin-modules.spec.js', /removes yarn|bun \(not yarn\)/],
 ])
+const allowedPathPatterns = [
+  [
+    /^ci\/(?:diagnose\.js|runbook\.md|test-optimization-validation-manifest\.schema\.json|test-optimization-validation\/)/,
+    /yarn/i,
+  ],
+  [
+    /^packages\/dd-trace\/test\/ci-visibility\/(?:ci-wiring|manifest-scaffold|validation-execution-phases)\.spec\.js$/,
+    /yarn/i,
+  ],
+]
 
 /**
  * @param {string} file
@@ -44,6 +54,9 @@ function isAllowedLine (file, line) {
 
   const pattern = allowedLinePatterns.get(file)
   if (pattern?.test(line.trim())) return true
+  for (const [pathPattern, linePattern] of allowedPathPatterns) {
+    if (pathPattern.test(file) && linePattern.test(line.trim())) return true
+  }
   return false
 }
 
