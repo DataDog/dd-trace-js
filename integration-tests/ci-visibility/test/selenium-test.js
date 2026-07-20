@@ -1,5 +1,6 @@
 'use strict'
 
+const tracer = require('dd-trace')
 const assert = require('node:assert/strict')
 
 const { By, Builder } = require('selenium-webdriver')
@@ -49,7 +50,7 @@ describe('selenium', function () {
   })
 
   it('can run selenium tests', async function () {
-    await driver.get(process.env.WEB_APP_URL)
+    await tracer.trace('selenium.rum-navigation', () => driver.get(process.env.WEB_APP_URL))
     if (process.env.RUM_COOKIE_FAILURE) {
       assert.strictEqual(rejectedRumCookie.name, RUM_COOKIE_NAME)
       assert.match(rejectedRumCookie.value, /^\d+$/)

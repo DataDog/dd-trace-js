@@ -9,7 +9,7 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const satisfies = require('../../../vendor/dist/semifies')
 const {
   TEST_STATUS,
-  TEST_IS_RUM_ACTIVE,
+  setRumTestTags,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
   getTestLevelsMetadataTags,
@@ -1803,9 +1803,7 @@ class CypressPlugin {
         if (error) {
           this.activeTestSpan.setTag('error', error)
         }
-        if (isRUMActive) {
-          this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
-        }
+        setRumTestTags(this.activeTestSpan, isRUMActive)
         // Source-line resolution strategy:
         // 1. If plain JS and no source map, trust invocationDetails.line directly.
         // 2. Otherwise, try invocationDetails.stack line mapped through source map.

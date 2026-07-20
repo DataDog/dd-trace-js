@@ -19,8 +19,8 @@ const {
   getTestSuiteCommonTags,
   getTestSuitePath,
   isModifiedTest,
+  setRumTestCorrelation,
   TEST_BROWSER_NAME,
-  TEST_BROWSER_VERSION,
   TEST_CODE_OWNERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -239,21 +239,9 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:test:page-goto', (ctx) => {
-      const { isRumActive, browserVersion } = ctx
-      const store = storage('legacy').getStore()
-      const span = store && store.span
-      if (!span) {
+      const activeSpan = storage('legacy').getStore()?.span
+      if (!setRumTestCorrelation(ctx, activeSpan)) {
         log.error('ci:playwright:test:page-goto: test span not found')
-        return
-      }
-
-      if (isRumActive) {
-        span.setTag(TEST_IS_RUM_ACTIVE, 'true')
-
-        if (browserVersion) {
-          span.setTag(TEST_BROWSER_VERSION, browserVersion)
-        }
-        ctx.testExecutionId = span.context().toTraceId()
       }
     })
 

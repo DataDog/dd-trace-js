@@ -25,6 +25,9 @@ const log = require('../../dd-trace/src/log')
 const {
   getValueFromEnvSources,
 } = require('../../dd-trace/src/config/helper')
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
+} = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
@@ -67,7 +70,6 @@ const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WA
 const DD_PROPERTIES_TIMEOUT = 5000
 const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
-const RUM_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 let applyRepeatEachIndex = null
 

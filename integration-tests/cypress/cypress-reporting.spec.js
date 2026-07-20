@@ -30,6 +30,7 @@ const {
   TEST_NAME,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_IS_RUM_ACTIVE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -176,6 +177,7 @@ moduleTypes.forEach(({
                 [TEST_SUITE]: 'cypress/e2e/basic-pass.js',
                 [TEST_FRAMEWORK]: 'cypress',
                 [TEST_TYPE]: 'browser',
+                [TEST_IS_RUM_ACTIVE]: 'true',
                 [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
                 customTag: 'customValue',
                 addTagsBeforeEach: 'customBeforeEach',

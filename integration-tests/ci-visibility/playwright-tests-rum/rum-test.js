@@ -1,5 +1,6 @@
 'use strict'
 
+const tracer = require('dd-trace')
 const { test, expect } = require('@playwright/test')
 
 let cleanupCookie
@@ -45,7 +46,7 @@ test.beforeEach(async ({ page }) => {
       }
     }
   }
-  await page.goto(process.env.PW_BASE_URL)
+  await tracer.trace('playwright.rum-navigation', () => page.goto(process.env.PW_BASE_URL))
 })
 
 test.afterAll(() => {

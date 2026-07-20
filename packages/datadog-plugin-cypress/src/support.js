@@ -1,6 +1,8 @@
 'use strict'
 
-const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
+} = require('../../dd-trace/src/ci-visibility/rum')
 let rumFlushWaitMillis = 500
 
 let isEarlyFlakeDetectionEnabled = false

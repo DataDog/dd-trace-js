@@ -5,6 +5,9 @@ const realSetTimeout = setTimeout
 
 const shimmer = require('../../datadog-shimmer')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
+} = require('../../dd-trace/src/ci-visibility/rum')
 const log = require('../../dd-trace/src/log')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -21,7 +24,6 @@ if (window.DD_RUM && window.DD_RUM.stopSession) {
 const IS_RUM_ACTIVE_SCRIPT = 'return !!window.DD_RUM'
 
 const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
-const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 // TODO: can we increase the supported version range?
 addHook({
