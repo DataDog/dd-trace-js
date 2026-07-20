@@ -614,6 +614,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CODE_COVERAGE_FLAGS": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": [
       {
         "implementation": "A",
