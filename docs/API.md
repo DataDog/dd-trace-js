@@ -512,6 +512,10 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
+Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
+reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
+accepted; if more are provided, the report is uploaded without flags.
+
 Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to override the number of
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
