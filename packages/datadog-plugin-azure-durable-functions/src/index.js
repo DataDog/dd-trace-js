@@ -46,20 +46,9 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       )
     }
 
-    // The Durable Functions host re-propagates the trace with the W3C sampled flag
-    // cleared (traceparent `-00`) even when the datadog tracestate decision still
-    // says keep (`s:1`). W3C reconciliation lets the cleared flag win, so extraction
-    // resolves the continued chunk to a drop and it would be dropped independently of
-    // the kept HTTP root. A `manual.keep` tag can't fix this because the priority is
-    // already locked by propagation (child contexts share the parent's `_sampling`),
-    // so re-apply the propagated decision directly.
-    //
-    // Continue with the exact priority the host propagated (tracestate `s`) so the
-    // durable chunk matches the rest of the trace instead of being upgraded to a
-    // stronger keep. Only intervene when `s` indicates keep; genuine upstream drops
-    // (no dd tracestate, or `s` <= 0) are left untouched so the customer's sampling
-    // configuration is still respected. The propagated decision maker (`_dd.p.dm`),
-    // already set on the shared trace during extraction, is left in place.
+    // The host clears the W3C sampled flag in traceparent while datadog tracestate
+    // still says keep, so extraction would drop this chunk. Re-apply the propagated
+    // `s` priority when it indicates keep; upstream drop decisions are left untouched.
     const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
     if (childOf && sampledFlagCleared(ctx.traceparent) && propagatedPriority >= AUTO_KEEP) {
       span._prioritySampler?.setPriority(span, propagatedPriority)
