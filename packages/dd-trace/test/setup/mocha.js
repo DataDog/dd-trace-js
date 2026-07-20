@@ -188,7 +188,7 @@ function withNamingSchema (
  * @param {((callback: (error?: Error) => void) => unknown) | (() => Promise<unknown>)} spanGenerationFn
  * @param {string | (() => string)} service
  * @param {string} serviceSource
- * @param {{ desc?: string }} [opts]
+ * @param {{ component?: string, desc?: string }} [opts]
  */
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
@@ -207,19 +207,39 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     })
 
     it('should compute peer service', async () => {
-      const { expectSomeSpan } = require('../plugins/helpers')
       const currentTracer = global._ddtrace
       const parentSpan = currentTracer.startSpan('peer-service.test')
+      const traceId = BigInt(parentSpan.context().toTraceId())
+      const component = opts.component ?? pluginName
       let traceAssertion
 
+      /**
+       * @param {Array<Array<{ trace_id: bigint, meta: Record<string, string> }>>} traces
+       */
+      function assertPeerServiceSpan (traces) {
+        const expectedService = typeof service === 'function' ? service() : service
+
+        for (const trace of traces) {
+          for (const span of trace) {
+            if (
+              span.trace_id === traceId &&
+              span.meta.component === component &&
+              span.meta['peer.service'] === expectedService &&
+              span.meta['_dd.peer.service.source'] === serviceSource
+            ) {
+              return
+            }
+          }
+        }
+
+        assert.fail(
+          `No ${component} span in trace ${traceId} had peer.service=${expectedService} and ` +
+          `_dd.peer.service.source=${serviceSource}.\n\nCandidate Traces:\n${util.inspect(traces, { depth: null })}`
+        )
+      }
+
       try {
-        traceAssertion = expectSomeSpan(getAgent(), {
-          trace_id: BigInt(parentSpan.context().toTraceId()),
-          meta: {
-            'peer.service': typeof service === 'function' ? service() : service,
-            '_dd.peer.service.source': serviceSource,
-          },
-        })
+        traceAssertion = getAgent().assertSomeTraces(assertPeerServiceSpan, { timeoutMs: 9000 })
         const useCallback = spanGenerationFn.length === 1
         const spanGenerationPromise = currentTracer.scope().activate(parentSpan, () => {
           return useCallback
@@ -233,7 +253,6 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
             })
             : spanGenerationFn()
         })
-        parentSpan.finish()
 
         assert.strictEqual(
           typeof spanGenerationPromise?.then, 'function',
@@ -243,7 +262,10 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 
         await Promise.all([
           traceAssertion,
-          spanGenerationPromise,
+          (async () => {
+            await spanGenerationPromise
+            parentSpan.finish()
+          })(),
         ])
       } finally {
         parentSpan.finish()
