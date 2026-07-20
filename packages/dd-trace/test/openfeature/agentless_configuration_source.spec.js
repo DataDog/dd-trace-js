@@ -123,6 +123,26 @@ describe('AgentlessConfigurationSource', () => {
     assert.strictEqual(requests[0].options.redirect, 'manual')
   })
 
+  it('trims an accepted ETag before reusing it', async () => {
+    const paddedEtagFetch = sinon.stub()
+    paddedEtagFetch.onFirstCall().resolves({
+      status: 200,
+      headers: { get: name => name === 'etag' ? '  W/"ufc-v1"  ' : null },
+      text: () => Promise.resolve(VALID_RESPONSE),
+    })
+    paddedEtagFetch.onSecondCall().resolves({
+      status: 304,
+      headers: new Headers(),
+    })
+    const configurationSource = source({ fetch: paddedEtagFetch })
+
+    await poll(configurationSource)
+    await poll(configurationSource)
+
+    assert.strictEqual(paddedEtagFetch.secondCall.args[1].headers['If-None-Match'], 'W/"ufc-v1"')
+    sinon.assert.calledOnceWithExactly(applyConfiguration, JSON.parse(VALID_UFC))
+  })
+
   it('suppresses tracing around agentless requests', () => {
     responses.push({ statusCode: 200, body: VALID_RESPONSE })
 

@@ -234,7 +234,8 @@ class AgentlessConfigurationSource {
       return { rejected: true, applicationFailed: true }
     }
 
-    this._etag = response.etag?.trim() ? response.etag : undefined
+    const etag = response.etag?.trim()
+    this._etag = etag || undefined
     return { applied: true }
   }
 
