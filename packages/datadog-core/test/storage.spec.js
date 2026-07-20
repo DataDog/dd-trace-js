@@ -7,7 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 
 require('../../dd-trace/test/setup/core')
-const { storage } = require('../src/storage')
+const { storage, hasNativeEnterWith } = require('../src/storage')
 
 describe('storage', () => {
   let testStorage
@@ -89,6 +89,10 @@ describe('storage', () => {
 
     assert.strictEqual(testStorage.getStore(), undefined)
   })
+
+  it('should report native enterWith() support', () => {
+    assert.strictEqual(hasNativeEnterWith, true)
+  })
 })
 
 describe('storage with a partial AsyncLocalStorage (e.g. Cloudflare Workers)', () => {
@@ -132,6 +136,12 @@ describe('storage with a partial AsyncLocalStorage (e.g. Cloudflare Workers)', (
     const { isACFActive } = requireStorage()
 
     assert.strictEqual(isACFActive, true)
+  })
+
+  it('should report no native enterWith() support', () => {
+    const { hasNativeEnterWith } = requireStorage()
+
+    assert.strictEqual(hasNativeEnterWith, false)
   })
 
   it('should run and get a store via the native path, without the WeakMap fallback', () => {

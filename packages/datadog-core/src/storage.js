@@ -60,6 +60,19 @@ const isACFActive = (() => {
   return active
 })()
 
+// workerd lacks a working `enterWith()` despite passing the `isACFActive` probe above, so this
+// is a separate check. Checked once at load, not per call.
+const hasNativeEnterWith = (() => {
+  try {
+    const als = new AsyncLocalStorage()
+    als.enterWith()
+    als.disable()
+    return true
+  } catch {
+    return false
+  }
+})()
+
 if (!isACFActive) {
   const superGetStore = AsyncLocalStorage.prototype.getStore
   const superEnterWith = AsyncLocalStorage.prototype.enterWith
@@ -135,4 +148,4 @@ function storage (namespace) {
   return storages[namespace]
 }
 
-module.exports = { storage, isACFActive }
+module.exports = { storage, isACFActive, hasNativeEnterWith }

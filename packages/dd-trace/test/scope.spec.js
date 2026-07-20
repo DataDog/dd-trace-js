@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { Span } = require('opentracing')
@@ -168,6 +169,85 @@ describe('Scope', () => {
       it('should return the target', () => {
         assert.strictEqual(scope.bind('test', span), 'test')
       })
+    })
+  })
+})
+
+describe('Scope without a native enterWith() (e.g. Cloudflare Workers)', () => {
+  // `hasNativeEnterWith: false` forces scope.js onto the `run()` fallback (workerd's path).
+  // `storage` itself is untouched, so `activate()` still runs against a real ALS store.
+  const ScopeWithoutNativeEnterWith = proxyquire('../src/scope', {
+    '../../datadog-core/src/storage': { hasNativeEnterWith: false },
+  })
+
+  let scope
+  let span
+
+  beforeEach(() => {
+    scope = new ScopeWithoutNativeEnterWith()
+    span = new Span()
+  })
+
+  describe('activate()', () => {
+    it('should return the value returned by the callback', () => {
+      assert.strictEqual(scope.activate(span, () => 'test'), 'test')
+    })
+
+    it('should activate the span on the current scope and restore the prior scope after', () => {
+      assert.strictEqual(scope.active(), null)
+
+      scope.activate(span, () => {
+        assert.strictEqual(scope.active(), span)
+      })
+
+      assert.strictEqual(scope.active(), null)
+    })
+
+    it('should persist through an await within the callback', async () => {
+      await scope.activate(span, async () => {
+        assert.strictEqual(scope.active(), span)
+        await Promise.resolve()
+        assert.strictEqual(scope.active(), span)
+      })
+
+      assert.strictEqual(scope.active(), null)
+    })
+
+    it('should persist through setTimeout within the callback', done => {
+      scope.activate(span, () => {
+        setTimeout(() => {
+          assert.strictEqual(scope.active(), span)
+          done()
+        }, 0)
+      })
+    })
+
+    it('should restore the previously active span after nested activation', () => {
+      const outer = new Span()
+
+      scope.activate(outer, () => {
+        assert.strictEqual(scope.active(), outer)
+
+        scope.activate(span, () => {
+          assert.strictEqual(scope.active(), span)
+        })
+
+        assert.strictEqual(scope.active(), outer)
+      })
+    })
+
+    it('should handle errors', () => {
+      const error = new Error('boom')
+
+      sinon.spy(span, 'setTag')
+
+      assert.throws(() => {
+        scope.activate(span, () => {
+          throw error
+        })
+      }, error)
+
+      sinon.assert.calledWith(span.setTag, 'error', error)
     })
   })
 })
