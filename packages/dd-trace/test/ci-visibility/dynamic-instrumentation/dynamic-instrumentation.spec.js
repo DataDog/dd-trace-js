@@ -472,4 +472,64 @@ describe('test visibility with dynamic instrumentation', () => {
       'package.json.name': 'dd-trace',
     })
   })
+
+  it('waits for probe removal before reinstalling the same location', async () => {
+    const worker = new EventEmitter()
+    worker.unref = sinon.stub()
+    const Worker = sinon.stub().returns(worker)
+    const randomUUID = sinon.stub()
+    randomUUID.onFirstCall().returns('probe-1')
+    randomUUID.onSecondCall().returns('probe-2')
+    const createDynamicInstrumentation = proxyquire('../../../src/ci-visibility/dynamic-instrumentation', {
+      worker_threads: {
+        Worker,
+        threadId: 0,
+      },
+      crypto: {
+        randomUUID,
+      },
+      '../../config/helper': {
+        getEnvironmentVariables: sinon.stub().returns({}),
+      },
+      '../../debugger/config': sinon.stub().returns({}),
+    })
+    const dynamicInstrumentation = createDynamicInstrumentation({})
+    const setPostMessage = sinon.spy(dynamicInstrumentation.breakpointSetChannel.port2, 'postMessage')
+    const removePostMessage = sinon.spy(dynamicInstrumentation.breakpointRemoveChannel.port2, 'postMessage')
+
+    const [firstProbeId, firstSetPromise] = dynamicInstrumentation.addLineProbe(
+      { file: 'test.js', line: 23 },
+      sinon.stub()
+    )
+    dynamicInstrumentation.breakpointSetChannel.port1.postMessage(firstProbeId)
+    await firstSetPromise
+
+    const removePromise = dynamicInstrumentation.removeProbe(firstProbeId)
+    const [secondProbeId, secondSetPromise] = dynamicInstrumentation.addLineProbe(
+      { file: 'test.js', line: 23 },
+      sinon.stub()
+    )
+
+    sinon.assert.calledOnce(setPostMessage)
+    sinon.assert.calledOnceWithExactly(removePostMessage, firstProbeId)
+
+    dynamicInstrumentation.breakpointRemoveChannel.port1.postMessage(firstProbeId)
+    await removePromise
+    await setImmediatePromise()
+
+    assert.deepStrictEqual(setPostMessage.args, [
+      [{ id: firstProbeId, file: 'test.js', line: 23 }],
+      [{ id: secondProbeId, file: 'test.js', line: 23 }],
+    ])
+
+    dynamicInstrumentation.breakpointSetChannel.port1.postMessage(secondProbeId)
+    await secondSetPromise
+
+    dynamicInstrumentation.breakpointSetChannel.port1.close()
+    dynamicInstrumentation.breakpointSetChannel.port2.close()
+    dynamicInstrumentation.breakpointHitChannel.port1.close()
+    dynamicInstrumentation.breakpointHitChannel.port2.close()
+    dynamicInstrumentation.breakpointRemoveChannel.port1.close()
+    dynamicInstrumentation.breakpointRemoveChannel.port2.close()
+  })
 })

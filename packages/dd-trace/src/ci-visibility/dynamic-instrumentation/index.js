@@ -12,6 +12,11 @@ const probeIdToResolveBreakpointRemove = new Map()
 const drainRequestIdToResolveBreakpointHit = new Map()
 
 class TestVisDynamicInstrumentation {
+  /** @type {Map<string, Promise<void>>} */
+  #pendingProbeRemovalByLocation = new Map()
+  /** @type {Map<string, string>} */
+  #probeLocationById = new Map()
+
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration
    */
@@ -27,34 +32,60 @@ class TestVisDynamicInstrumentation {
     this.onHitBreakpointByProbeId = new Map()
   }
 
+  /**
+   * @param {string} probeId
+   */
   removeProbe (probeId) {
-    return new Promise(resolve => {
+    const removePromise = new Promise(resolve => {
       this.breakpointRemoveChannel.port2.postMessage(probeId)
 
       probeIdToResolveBreakpointRemove.set(probeId, resolve)
     })
+    const activeProbeKey = this.#probeLocationById.get(probeId)
+    if (activeProbeKey) {
+      this.#probeLocationById.delete(probeId)
+      this.#pendingProbeRemovalByLocation.set(activeProbeKey, removePromise)
+      removePromise.then(() => {
+        if (this.#pendingProbeRemovalByLocation.get(activeProbeKey) === removePromise) {
+          this.#pendingProbeRemovalByLocation.delete(activeProbeKey)
+        }
+      })
+    }
+    return removePromise
   }
 
-  // Return 2 elements:
-  // 1. Probe ID
-  // 2. Promise that's resolved when the breakpoint is set
+  /**
+   * @param {{ file: string, line: number }} location
+   * @param {(breakpoint: object) => void} onHitBreakpoint
+   */
   addLineProbe ({ file, line }, onHitBreakpoint) {
     if (!this.worker) { // not init yet
       this.start()
     }
     const probeId = randomUUID()
-
-    this.breakpointSetChannel.port2.postMessage(
-      { id: probeId, file, line }
-    )
+    const activeProbeKey = `${file}:${line}`
+    const pendingRemoval = this.#pendingProbeRemovalByLocation.get(activeProbeKey)
+    const setProbe = () => {
+      this.breakpointSetChannel.port2.postMessage(
+        { id: probeId, file, line }
+      )
+    }
 
     this.onHitBreakpointByProbeId.set(probeId, onHitBreakpoint)
+    this.#probeLocationById.set(probeId, activeProbeKey)
+
+    const setProbePromise = new Promise(resolve => {
+      probeIdToResolveBreakpointSet.set(probeId, resolve)
+    })
+    if (pendingRemoval) {
+      pendingRemoval.then(setProbe)
+    } else {
+      setProbe()
+    }
 
     return [
       probeId,
-      new Promise(resolve => {
-        probeIdToResolveBreakpointSet.set(probeId, resolve)
-      }),
+      setProbePromise,
     ]
   }
 
