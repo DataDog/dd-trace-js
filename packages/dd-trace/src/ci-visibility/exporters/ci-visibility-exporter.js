@@ -13,6 +13,7 @@ const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
+const { parsers } = require('../../config/parsers')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -79,7 +80,7 @@ class CiVisibilityExporter extends BufferingExporter {
     this._logsTimer = undefined
     this._coverageBuffer = []
     this._testOptimizationHttpCache = new TestOptimizationHttpCache()
-    const coverageReportFlags = config?.testOptimization?.DD_CODE_COVERAGE_FLAGS
+    const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
     if (coverageReportFlags?.length > MAX_COVERAGE_REPORT_FLAGS) {
       log.warn(
         'Maximum of %d coverage report flags allowed, but %d flags were provided. Omitting coverage report flags.',

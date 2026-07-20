@@ -617,8 +617,8 @@
     "DD_CODE_COVERAGE_FLAGS": [
       {
         "implementation": "A",
-        "type": "array",
-        "default": "",
+        "type": "string",
+        "default": null,
         "namespace": "testOptimization"
       }
     ],

@@ -991,7 +991,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
-      { name: 'DD_CODE_COVERAGE_FLAGS', value: '', origin: 'default' },
+      { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_HEADER', value: null, origin: 'default' },
       { name: 'DD_CODE_ORIGIN_FOR_SPANS_ENABLED', value: true, origin: 'default' },
@@ -3558,16 +3558,16 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, false)
       })
-      it('should default code coverage flags to an empty array', () => {
+      it('should leave code coverage flags unset by default', () => {
         const config = getConfig(options)
-        assert.deepStrictEqual(config.testOptimization.DD_CODE_COVERAGE_FLAGS, [])
+        assert.strictEqual(config.testOptimization.DD_CODE_COVERAGE_FLAGS, undefined)
       })
-      it('should parse code coverage flags from the environment', () => {
+      it('should read code coverage flags from the environment as a string', () => {
         process.env.DD_CODE_COVERAGE_FLAGS = ' type:unit-tests, ,jvm-21,type:unit-tests, '
         const config = getConfig(options)
-        assert.deepStrictEqual(
+        assert.strictEqual(
           config.testOptimization.DD_CODE_COVERAGE_FLAGS,
-          ['type:unit-tests', 'jvm-21', 'type:unit-tests']
+          ' type:unit-tests, ,jvm-21,type:unit-tests, '
         )
       })
       it('should activate ITR by default', () => {

@@ -1305,29 +1305,38 @@ describe('CI Visibility Exporter', () => {
 
     it('reuses exactly 32 coverage report flags for every upload', () => {
       const flags = Array.from({ length: 32 }, (_, index) => `flag-${index}`)
-      const expectedFlags = flags.slice()
-      const exporter = createExporter(flags)
+      const exporter = createExporter(flags.join(','))
       const callback = sinon.spy()
-      flags[0] = 'mutated-after-exporter-construction'
 
       upload(exporter, callback)
       upload(exporter, callback)
 
       sinon.assert.calledTwice(uploadCoverageReportRequest)
-      assert.deepStrictEqual(uploadCoverageReportRequest.firstCall.args[0].flags, expectedFlags)
+      assert.deepStrictEqual(uploadCoverageReportRequest.firstCall.args[0].flags, flags)
       assert.strictEqual(
         uploadCoverageReportRequest.firstCall.args[0].flags,
         uploadCoverageReportRequest.secondCall.args[0].flags
       )
-      assert.notStrictEqual(uploadCoverageReportRequest.firstCall.args[0].flags, flags)
       sinon.assert.calledTwice(callback)
       sinon.assert.alwaysCalledWithExactly(callback, null)
       sinon.assert.notCalled(warn)
     })
 
+    it('normalizes coverage report flags when the exporter is created', () => {
+      const exporter = createExporter(' type:unit-tests, ,jvm-21,type:unit-tests, ')
+
+      upload(exporter)
+
+      assert.deepStrictEqual(
+        uploadCoverageReportRequest.firstCall.args[0].flags,
+        ['type:unit-tests', 'jvm-21', 'type:unit-tests']
+      )
+      sinon.assert.notCalled(warn)
+    })
+
     it('warns once, omits 33 coverage report flags, and continues every upload', () => {
       const flags = Array.from({ length: 33 }, (_, index) => `flag-${index}`)
-      const exporter = createExporter(flags)
+      const exporter = createExporter(flags.join(','))
       const callback = sinon.spy()
 
       upload(exporter, callback)
@@ -1346,8 +1355,8 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.alwaysCalledWithExactly(callback, null)
     })
 
-    it('omits an empty coverage report flags list without warning', () => {
-      const exporter = createExporter([])
+    it('omits an empty coverage report flags string without warning', () => {
+      const exporter = createExporter('')
 
       upload(exporter)
 
