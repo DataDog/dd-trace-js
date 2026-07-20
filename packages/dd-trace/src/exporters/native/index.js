@@ -53,6 +53,7 @@ class NativeExporter {
   #timer
   #flushInFlight = false
   #firstFlushSent = false
+  #flushCallbacks = []
   // Set when libdatadog reports a fatal exporter-build failure (bad config):
   // building is one-shot and won't recover, so we stop exporting rather than
   // loop on the same error every flush.
@@ -278,29 +279,88 @@ class NativeExporter {
     return this._nativeSpans.flushStats()
   }
 
+  #finishFlushCallbacks () {
+    const callbacks = this.#flushCallbacks
+    this.#flushCallbacks = []
+    let firstError
+    let hasError = false
+    for (const done of callbacks) {
+      try {
+        done()
+      } catch (err) {
+        if (!hasError) {
+          firstError = err
+          hasError = true
+        }
+      }
+    }
+    if (hasError) {
+      setImmediate(() => { throw firstError })
+    }
+  }
+
+  #finishSend () {
+    if (this._pendingSpans.length > 0) {
+      this.flush()
+    } else {
+      this.#finishFlushCallbacks()
+    }
+  }
+
+  #handleSendError (err) {
+    this.#flushInFlight = false
+    runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+    runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+    if (err.code) {
+      runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+    }
+    log.error('Error sending spans to agent via native exporter:', err)
+    // A fatal exporter-build error (bad config) is one-shot and won't recover;
+    // libdatadog tags it as NativeExporterBuildError. Stop exporting instead of
+    // looping on the same error every flush, and drop buffered spans so they
+    // don't accumulate indefinitely.
+    if (err?.name === 'NativeExporterBuildError') {
+      this.#disabled = true
+      this._pendingSpans = []
+      clearTimeout(this.#timer)
+      this.#timer = undefined
+      log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
+      this.#finishFlushCallbacks()
+      return
+    }
+    // Drain on rejection too — otherwise a single transient failure would leave
+    // spans buffered indefinitely (no signal beyond the log line, and bursts of
+    // low-traffic services may never flush). Flush callbacks are still released
+    // once the exporter is idle; errors are logged, not propagated through the
+    // callback, matching the legacy writer contract.
+    this.#finishSend()
+  }
+
   /**
    * Flush pending spans to the agent.
    *
    * @param {Function} [done] - Callback when flush completes
    */
-  flush (done = () => {}) {
+  flush (done) {
+    if (done) this.#flushCallbacks.push(done)
+
     if (this.#disabled) {
-      done()
+      this.#finishFlushCallbacks()
       return
     }
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    if (this._pendingSpans.length === 0) {
-      done()
+    // If a send is already in flight, callbacks must wait for that send and any
+    // pending spans that drain after it. The system-tests /flush endpoint relies
+    // on this to observe spans that finished while a previous payload was still
+    // being sent.
+    if (this.#flushInFlight) {
       return
     }
 
-    // Don't prepare a new chunk while a send is in flight — the prepared
-    // spans would accumulate in native memory. Buffer them in JS instead
-    // and flush when the in-flight send completes.
-    if (this.#flushInFlight) {
-      done()
+    if (this._pendingSpans.length === 0) {
+      this.#finishFlushCallbacks()
       return
     }
 
@@ -371,12 +431,19 @@ class NativeExporter {
     // into the handler below and leaves later groups unsent — acceptable since
     // flushInterval:0 only runs against a local test agent or a short-lived
     // lambda.
-    const sendGrouped = this._config.flushInterval === 0 && groups.length > 1
-      ? groups.reduce(
-        (previous, group) => previous.then(() => this._nativeSpans.flushSpansGrouped([group])),
-        Promise.resolve('no spans to flush')
-      )
-      : this._nativeSpans.flushSpansGrouped(groups)
+    let sendGrouped
+    try {
+      sendGrouped = this._config.flushInterval === 0 && groups.length > 1
+        ? groups.reduce(
+          (previous, group) => previous.then(() => this._nativeSpans.flushSpansGrouped([group])),
+          Promise.resolve('no spans to flush')
+        )
+        : this._nativeSpans.flushSpansGrouped(groups)
+    } catch (err) {
+      this.#handleSendError(err)
+      return
+    }
+    this.#flushInFlight = true
     sendGrouped
       .then((response) => {
         this.#flushInFlight = false
@@ -385,39 +452,13 @@ class NativeExporter {
         // back into the priority sampler so adaptive (agent-driven) sampling
         // works in native mode, matching the legacy AgentWriter behaviour.
         this.#updateSamplingRates(response)
-        // Drain any spans that arrived while the send was in flight.
-        if (this._pendingSpans.length > 0) {
-          this.flush()
-        }
+        // Drain any spans that arrived while the send was in flight. Flush
+        // callbacks wait until the exporter is idle so explicit flush endpoints
+        // only acknowledge once all queued sends have reached the agent.
+        this.#finishSend()
       }, (err) => {
-        this.#flushInFlight = false
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
-        if (err.code) {
-          runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
-        }
-        log.error('Error sending spans to agent via native exporter:', err)
-        // A fatal exporter-build error (bad config) is one-shot and won't
-        // recover; libdatadog tags it as NativeExporterBuildError. Stop
-        // exporting instead of looping on the same error every flush, and drop
-        // buffered spans so they don't accumulate indefinitely.
-        if (err?.name === 'NativeExporterBuildError') {
-          this.#disabled = true
-          this._pendingSpans = []
-          clearTimeout(this.#timer)
-          this.#timer = undefined
-          log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
-          return
-        }
-        // Drain on rejection too — otherwise a single transient failure
-        // would leave spans buffered indefinitely (no signal beyond the
-        // log line, and bursts of low-traffic services may never flush).
-        if (this._pendingSpans.length > 0) {
-          this.flush()
-        }
+        this.#handleSendError(err)
       })
-    this.#flushInFlight = true
-    done()
   }
 
   /**

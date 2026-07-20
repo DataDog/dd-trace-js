@@ -290,21 +290,107 @@ describe('NativeExporter', () => {
       sinon.assert.calledTwice(nativeSpans.flushStats)
     })
 
+    it('waits for in-flight trace sends before _writer.flush force-flushes stats', async () => {
+      let resolveFirst
+      let resolveSecond
+      let resolveStats
+      nativeSpans.flushSpansGrouped
+        .onFirstCall().callsFake(() => new Promise(resolve => { resolveFirst = resolve }))
+        .onSecondCall().callsFake(() => new Promise(resolve => { resolveSecond = resolve }))
+      nativeSpans.flushStats.callsFake(() => new Promise(resolve => { resolveStats = resolve }))
+
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      exporter.export([createMockSpan(2n)])
+
+      let called = false
+      exporter._writer.flush(() => { called = true })
+
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      sinon.assert.notCalled(nativeSpans.flushStats)
+      assert.strictEqual(called, false)
+
+      resolveFirst('unchanged')
+      await clock.tickAsync(0)
+
+      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
+      sinon.assert.notCalled(nativeSpans.flushStats)
+      assert.strictEqual(called, false)
+
+      resolveSecond('unchanged')
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(nativeSpans.flushStats)
+      assert.strictEqual(called, false)
+
+      resolveStats(true)
+      await clock.tickAsync(0)
+
+      assert.strictEqual(called, true)
+    })
+
+    it('drains every queued flush callback when one callback throws', async () => {
+      let resolveSend
+      nativeSpans.flushSpansGrouped.callsFake(() => new Promise(resolve => { resolveSend = resolve }))
+      let scheduledThrow
+      const setImmediateStub = sinon.stub(global, 'setImmediate').callsFake(fn => { scheduledThrow = fn })
+      const throwValue = (value) => { throw value }
+
+      try {
+        exporter.export([createMockSpan(1n)])
+
+        let firstCalled = false
+        let secondCalled = false
+        exporter.flush(() => { firstCalled = true })
+        exporter.flush(() => { throwValue(0) })
+        exporter.flush(() => { secondCalled = true })
+
+        resolveSend('unchanged')
+        await clock.tickAsync(0)
+
+        assert.strictEqual(firstCalled, true)
+        assert.strictEqual(secondCalled, true)
+        sinon.assert.calledOnce(setImmediateStub)
+        try {
+          scheduledThrow()
+          assert.fail('expected scheduled throw')
+        } catch (err) {
+          assert.strictEqual(err, 0)
+        }
+      } finally {
+        setImmediateStub.restore()
+      }
+    })
+
+    it('settles queued flush callbacks when native send setup throws synchronously', () => {
+      nativeSpans.flushSpansGrouped.throws(new Error('prepare failed'))
+
+      exporter.export([createMockSpan(1n)])
+
+      let cbErr = 'unset'
+
+      exporter.flush((err) => { cbErr = err })
+
+      assert.strictEqual(cbErr, undefined)
+      sinon.assert.called(logError)
+    })
+
     // The success path is one observable sequence — splitting it across 5
     // it() blocks paid for 5x mocha-overhead while testing the same flow.
     // This single test pins all five aspects: flushSpansGrouped is called with the
-    // extracted slot indices, _pendingSpans drains, the done callback fires
-    // with no error, and pending spans drain once the in-flight send settles.
+    // extracted slot indices, _pendingSpans drains, the done callback fires after
+    // the async send settles, and pending spans drain once the in-flight send settles.
     it('end-to-end successful flush: calls flushSpansGrouped with span ids, drains pending, fires done',
       async () => {
         const span1 = createMockSpan(123n)
         const span2 = createMockSpan(456n)
         exporter.export([span1, span2])
 
-        // done() fires synchronously after flush() kicks off the async send.
+        // done() waits for the async send to settle so explicit /flush callers
+        // don't observe the trace before it reaches the agent.
         let cbErr = 'unset'
         exporter.flush((err) => { cbErr = err })
-        assert.strictEqual(cbErr, undefined)
+        assert.strictEqual(cbErr, 'unset')
 
         // flushSpansGrouped called with the extracted span-id array — the native
         // pipeline addresses spans by their span id.
@@ -321,6 +407,7 @@ describe('NativeExporter', () => {
 
         // Drain microtasks so the resolved-flush handler runs.
         await clock.tickAsync(0)
+        assert.strictEqual(cbErr, undefined)
       })
 
     it('sends one payload per trace at flushInterval:0 when a flush coalesced multiple traces',
@@ -469,10 +556,8 @@ describe('NativeExporter', () => {
     })
 
     it('should swallow flushSpansGrouped rejections (logged, not propagated to done)', async () => {
-      // flush() calls done() immediately after kicking off the
-      // async send, then log.error()s any rejection. Errors no longer
-      // surface through the done callback. Verify done is invoked
-      // without an argument and the rejection is observed (logged).
+      // flush() waits for async send settlement, then log.error()s any rejection.
+      // Errors do not surface through the done callback.
       nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
 
       const span = createMockSpan(1n)
@@ -480,12 +565,13 @@ describe('NativeExporter', () => {
 
       let cbErr = 'unset'
       exporter.flush((err) => { cbErr = err })
-      assert.strictEqual(cbErr, undefined)
+      assert.strictEqual(cbErr, 'unset')
 
       // Drain pending microtasks so the rejection handler runs. With
       // sinon.useFakeTimers() Promise microtasks still settle when we yield
       // to the host promise queue via tickAsync.
       await clock.tickAsync(0)
+      assert.strictEqual(cbErr, undefined)
 
       sinon.assert.called(logError)
     })
