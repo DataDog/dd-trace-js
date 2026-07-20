@@ -1944,7 +1944,8 @@ function instrumentWorkerMainMethods (workerMain) {
     })
     await res
 
-    const { status, error, annotations, retry, testId } = testInfo
+    const { status, error, annotations, retry, testId, attachments } = testInfo
+    const hasImages = attachments?.some(a => a.contentType?.startsWith('image/')) ?? false
     const testEfdKey = getTestEfdKey(test)
     const isEfdManagedTest = isTestEfdManaged(test)
     if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
@@ -2031,6 +2032,7 @@ function instrumentWorkerMainMethods (workerMain) {
       onDone,
       finalStatus,
       earlyFlakeAbortReason: test._ddEarlyFlakeAbortReason,
+      hasImages,
       ...testCtx.currentStore,
     })
 
