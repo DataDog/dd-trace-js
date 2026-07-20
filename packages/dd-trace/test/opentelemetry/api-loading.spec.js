@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { describe, it, afterEach } = require('mocha')
 
@@ -46,7 +47,7 @@ describe('OpenTelemetry API copy loading', () => {
 
         const args = []
         if (format === 'module') {
-          args.push('--loader', path.join(DD_TRACE_PATH, 'initialize.mjs'))
+          args.push('--loader', pathToFileURL(path.join(DD_TRACE_PATH, 'initialize.mjs')).href)
         }
         args.push(entry)
         const output = execFileSync(process.execPath, args, {

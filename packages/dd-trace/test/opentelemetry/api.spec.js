@@ -125,7 +125,7 @@ describe('opentelemetry/api', () => {
   })
 
   it('resolves application copies from a directory entrypoint', () => {
-    const entrypoint = '/app'
+    const entrypoint = path.join(path.parse(process.cwd()).root, 'app')
     const applicationRequire = missingApplicationRequire()
     const createRequire = sinon.stub().returns(applicationRequire)
     const existsSync = sinon.stub().callsFake(fs.existsSync)
