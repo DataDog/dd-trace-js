@@ -48,6 +48,7 @@ describe('SpanProcessor', () => {
         setTag: (key, value) => { tags[key] = value },
         hasTag: (key) => key in tags,
         clearTags: () => { tags = Object.create(null) },
+        syncErrorMetaToNative: sinon.stub(),
       }),
     }
 
@@ -109,6 +110,21 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
+  })
+
+  it('syncs deferred native error meta before export', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const syncOrder = []
+    const context = finishedSpan.context()
+
+    context.syncErrorMetaToNative.callsFake(() => syncOrder.push('sync'))
+    exporter.export.callsFake(() => syncOrder.push('export'))
+
+    processor.process(finishedSpan)
+
+    sinon.assert.calledOnce(context.syncErrorMetaToNative)
+    assert.deepStrictEqual(syncOrder, ['sync', 'export'])
   })
 
   it('should generate sampling priority when sampling manually', () => {

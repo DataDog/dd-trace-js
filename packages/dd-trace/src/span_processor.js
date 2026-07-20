@@ -312,6 +312,11 @@ class SpanProcessor {
           this._syncProcessTagsToNative(chunkRootContext, chunkRootContext._nativeSpanId)
         }
 
+        for (const span of finishedSpansToExport) {
+          const context = span.context()
+          if (typeof context.syncErrorMetaToNative === 'function') context.syncErrorMetaToNative()
+        }
+
         this._exporter.export(finishedSpansToExport)
         // The exporter has taken these spans; their native Create is (or is about
         // to be) removed from the change-buffer map. Mark each context exported
@@ -320,8 +325,8 @@ class SpanProcessor {
         //
         // Invariant this relies on: every OTHER native write for these spans
         // (`_syncTraceTagsToNative`, `_syncSamplingToNative`, `applyOtelHttpSemantics`,
-        // span-sampler metrics, finish-time span events/meta_struct) runs earlier in
-        // this same synchronous pass, and `_erase` drops exported spans from
+        // `syncErrorMetaToNative`, span-sampler metrics, finish-time span events/meta_struct)
+        // runs earlier in this same synchronous pass, and `_erase` drops exported spans from
         // `trace.started` so nothing revisits them. Only externally-driven
         // `setTag`/`addTags`/name writes can still arrive after export — those are
         // the ones `#exported` guards. Keep markExported here (after export), not

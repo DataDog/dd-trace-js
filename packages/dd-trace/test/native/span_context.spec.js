@@ -213,7 +213,9 @@ describe('NativeSpanContext', () => {
       spanContext.setTag('error.type', 'Error')
       const setErrorCalls = nativeSpans.queueOp.getCalls().filter(c => c.args[0] === OpCode.SetError)
       assert.strictEqual(setErrorCalls.length, 0, 'SetError must not be queued when IGNORE_OTEL_ERROR is set')
-      // The meta tag is still written.
+      // The meta tag is replayed at finish from the final tag map.
+      nativeSpans.queueOp.resetHistory()
+      spanContext.syncErrorMetaToNative()
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'error.type', 'Error')
     })
 
@@ -241,6 +243,8 @@ describe('NativeSpanContext', () => {
         nativeSpans.queueOp.resetHistory()
         spanContext.setTag(key, 'boom')
         sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetError, leSpanId, ['i32', 1])
+        nativeSpans.queueOp.resetHistory()
+        spanContext.syncErrorMetaToNative()
         sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, key, 'boom')
       }
     })
@@ -252,7 +256,62 @@ describe('NativeSpanContext', () => {
       nativeSpans.queueOp.resetHistory()
       spanContext.setTag('error', { message: 'foobar', code: 5 })
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetError, leSpanId, ['i32', 1])
+      nativeSpans.queueOp.resetHistory()
+      spanContext.syncErrorMetaToNative()
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'error.message', 'foobar')
+    })
+
+    it('extracts error meta from the final error tag value', () => {
+      // The JS formatter derives error meta at serialization time. If a hook
+      // replaces GraphQLError with an error-shaped object that has no name,
+      // native mode must not keep the earlier GraphQLError-derived error.type.
+      const error = new Error('boom')
+      error.name = 'GraphQLError'
+
+      spanContext.setTag('error', error)
+      spanContext.setTag('error', { message: 'boom' })
+
+      nativeSpans.queueOp.resetHistory()
+      spanContext.syncErrorMetaToNative()
+
+      const errorTypeCalls = nativeSpans.queueOp.getCalls()
+        .filter(call => call.args[0] === OpCode.SetMetaAttr && call.args[2] === 'error.type')
+      assert.strictEqual(errorTypeCalls.length, 0)
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'error.message', 'boom')
+    })
+
+    it('lets a later error=false override clear derived error meta', () => {
+      const error = new Error('Expected failure')
+      error.name = 'GraphQLError'
+
+      spanContext.setTag('error', error)
+      spanContext.setTag('error', false)
+
+      const setErrorValues = nativeSpans.queueOp.getCalls()
+        .filter(call => call.args[0] === OpCode.SetError)
+        .map(call => call.args[2])
+      assert.deepStrictEqual(setErrorValues, [['i32', 1], ['i32', 0]])
+
+      nativeSpans.queueOp.resetHistory()
+      spanContext.syncErrorMetaToNative()
+
+      const errorMetaCalls = nativeSpans.queueOp.getCalls()
+        .filter(call => call.args[0] === OpCode.SetMetaAttr && String(call.args[2]).startsWith('error.'))
+      assert.strictEqual(errorMetaCalls.length, 0)
+    })
+
+    it('replays direct error meta in final tag-map order', () => {
+      spanContext.setTag('error.type', 'ManualError')
+      spanContext.setTag('error', false)
+
+      nativeSpans.queueOp.resetHistory()
+      spanContext.syncErrorMetaToNative()
+
+      const setErrorValues = nativeSpans.queueOp.getCalls()
+        .filter(call => call.args[0] === OpCode.SetError)
+        .map(call => call.args[2])
+      assert.deepStrictEqual(setErrorValues, [['i32', 1]])
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'error.type', 'ManualError')
     })
 
     it('should set _dd.measured when span.kind is non-internal', () => {

@@ -32,6 +32,7 @@ const SPECIAL_KEYS = new Set([
   'service.name', 'resource.name', 'span.type',
   'error', 'http.status_code', 'error.type', 'error.message', 'error.stack', 'span.kind',
 ])
+const ERROR_META_KEYS = new Set(['error.type', 'error.message', 'error.stack'])
 
 // Symbol keys for internal backing storage — avoids Object.defineProperty deopt
 // while keeping properties non-enumerable to external code.
@@ -145,6 +146,7 @@ class NativeSpanContext extends DatadogSpanContext {
   // Skipping native sync once exported keeps both pipelines consistent and
   // prevents the batch-drop cascade (see the elasticsearch product-check ping).
   #exported = false
+  #hasErrorTags = false
 
   /**
    * @param {import('./native_spans')} nativeSpans - The NativeSpansInterface instance
@@ -223,6 +225,12 @@ class NativeSpanContext extends DatadogSpanContext {
 
     // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
     if (typeof key === 'symbol') return
+    if (ERROR_META_KEYS.has(key)) {
+      this.#hasErrorTags = true
+      this.#syncTagToNative(key, value)
+      return
+    }
+    if (key === 'error') this.#hasErrorTags = true
     if (value === undefined || value === null) return
     // Under OTEL semantics, DD HTTP keys are held out of WASM and remapped at
     // finish; guard here too so the fast paths below can't leak them.
@@ -272,6 +280,12 @@ class NativeSpanContext extends DatadogSpanContext {
     // counterpart) and stays inside the project's no-`for-in` rule.
     for (const key of Object.keys(tags)) {
       const value = tags[key]
+      if (ERROR_META_KEYS.has(key)) {
+        this.#hasErrorTags = true
+        this.#syncTagToNative(key, value)
+        continue
+      }
+      if (key === 'error') this.#hasErrorTags = true
       if (value === undefined || value === null) continue
       if (this.#isOtelDeferredKey(key)) continue
 
@@ -307,8 +321,14 @@ class NativeSpanContext extends DatadogSpanContext {
    */
   syncOneTagToNative (key, value) {
     if (this.#exported) return
-    if (value === undefined || value === null) return
     if (typeof key === 'symbol') return
+    if (ERROR_META_KEYS.has(key)) {
+      this.#hasErrorTags = true
+      this.#syncTagToNative(key, value)
+      return
+    }
+    if (key === 'error') this.#hasErrorTags = true
+    if (value === undefined || value === null) return
     if (this.#isOtelDeferredKey(key)) return
 
     if (SPECIAL_KEYS.has(key)) {
@@ -331,10 +351,48 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Sync a tag value to native storage.
-   * @param {string} key - Tag key
-   * @param {unknown} value - Tag value
+   * Replay error.type/message/stack from the final JS tag map, matching
+   * span_format.js serialization-time extraction and overwrite order.
    */
+  syncErrorMetaToNative () {
+    if (this.#exported || !this.#hasErrorTags || this._name === 'fs.operation') return
+
+    const tags = this.getTags()
+    for (const key of Object.keys(tags)) {
+      const value = tags[key]
+      switch (key) {
+        case 'error':
+          if (value?.message || value instanceof Error) {
+            if (value.name) {
+              this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.type', String(value.name))
+            }
+            if (value.message || value.code) {
+              this.#nativeSpans.queueOp(
+                OpCode.SetMetaAttr,
+                this._nativeSpanId,
+                'error.message',
+                String(value.message || value.code)
+              )
+            }
+            if (value.stack) {
+              this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.stack', String(value.stack))
+            }
+          }
+          break
+        case 'error.type':
+        case 'error.message':
+        case 'error.stack':
+          if (!this.getTag(IGNORE_OTEL_ERROR)) {
+            this.#nativeSpans.queueOp(OpCode.SetError, this._nativeSpanId, ['i32', 1])
+          }
+          if (value != null) {
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, key, String(value))
+          }
+          break
+      }
+    }
+  }
+
   /**
    * Under DD_TRACE_OTEL_SEMANTICS_ENABLED the Datadog HTTP tags are remapped to
    * OpenTelemetry names at finish (see `applyOtelHttpSemantics`). WASM has no
@@ -350,7 +408,25 @@ class NativeSpanContext extends DatadogSpanContext {
       (DD_HTTP_META_KEYS.has(key) || key === NETWORK_DESTINATION_PORT)
   }
 
+  /**
+   * Sync a tag value to native storage.
+   * @param {string} key - Tag key
+   * @param {unknown} value - Tag value
+   */
   #syncTagToNative (key, value) {
+    if (ERROR_META_KEYS.has(key)) {
+      if (this._name !== 'fs.operation' && !this.getTag(IGNORE_OTEL_ERROR)) {
+        this.#nativeSpans.queueOp(
+          OpCode.SetError,
+          this._nativeSpanId,
+          ['i32', 1]
+        )
+      }
+      // Error meta is replayed at finish from the final tag map in insertion
+      // order, preserving JS formatter overwrite semantics.
+      return
+    }
+
     if (value === undefined || value === null) {
       return
     }
@@ -398,9 +474,8 @@ class NativeSpanContext extends DatadogSpanContext {
         return
 
       case 'error':
-        // fs.operation spans suppress span.error = 1; the error details are
-        // still carried in meta tags but the span itself isn't marked failed,
-        // since fs ops failing isn't always a tracer-level error.
+        // fs.operation spans suppress both span.error and error meta, matching
+        // span_format.js: fs failures aren't always tracer-level failures.
         if (this._name === 'fs.operation') {
           return
         }
@@ -409,54 +484,15 @@ class NativeSpanContext extends DatadogSpanContext {
           this._nativeSpanId,
           ['i32', value ? 1 : 0]
         )
-        // Error objects: also extract error.type/message/stack as meta tags so
-        // consumers don't need to introspect the underlying Error. Mirror
-        // util.isError (duck-typed on `.message`) so plain error-shaped objects
-        // — e.g. gRPC's `{ message, code }` — get the same meta extraction the
-        // JS formatter's extractError performs.
-        if (value?.message || value instanceof Error) {
-          if (value.name) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.type', String(value.name))
-          }
-          if (value.message || value.code) {
-            const errMsg = String(value.message || value.code)
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.message', errMsg)
-          }
-          if (value.stack) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.stack', String(value.stack))
-          }
-        }
+        // Derived error.type/message/stack is intentionally deferred until
+        // finish. The JS formatter extracts error meta from the final tag map;
+        // immediate native writes would make a later hook-set `error` override
+        // unable to replace or suppress fields derived from the earlier error.
         return
 
       // http.status_code must be stored as string in meta, not number in
       // metrics — agent UI / downstream tooling expects the string form.
       case 'http.status_code':
-        this.#nativeSpans.queueOp(
-          OpCode.SetMetaAttr,
-          this._nativeSpanId,
-          key,
-          String(value)
-        )
-        return
-
-      // Any of error.type/message/stack implies span.error = 1 (mirrors the JS
-      // formatter's extractError, which flips the bit on all three), except on
-      // fs.operation spans which deliberately don't propagate fs failures up.
-      // OTel `recordException()` sets error.message alongside
-      // IGNORE_OTEL_ERROR=true so merely recording an exception does NOT flip
-      // the error bit (only setStatus(ERROR) clears the guard) — mirror
-      // span_format.js by skipping SetError when the guard is present.
-      case 'error.type':
-      case 'error.message':
-      case 'error.stack':
-        if (this._name !== 'fs.operation' && !this.getTag(IGNORE_OTEL_ERROR)) {
-          this.#nativeSpans.queueOp(
-            OpCode.SetError,
-            this._nativeSpanId,
-            ['i32', 1]
-          )
-        }
-        // Fall through to add the meta tag
         this.#nativeSpans.queueOp(
           OpCode.SetMetaAttr,
           this._nativeSpanId,
