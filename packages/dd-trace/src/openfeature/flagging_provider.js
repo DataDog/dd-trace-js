@@ -15,6 +15,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
 
+  /** @type {{ start: Function, stop: Function } | undefined} */
+  #configurationSource
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
@@ -50,10 +53,49 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
+    this.#configurationSource?.stop()
+    this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
   }
 
   /**
+   * Attaches and starts the provider's first-party configuration source.
+   * Repeated calls preserve the original source and dispose of the duplicate.
+   *
+   * @internal
+   * @param {{ start: Function, stop: Function }} source - Configuration source lifecycle.
+   */
+  _setConfigurationSource (source) {
+    if (this.#configurationSource) {
+      log.warn('%s already has a configuration source; ignoring duplicate source', this.constructor.name)
+      source.stop()
+      return
+    }
+    this.#configurationSource = source
+    source.start()
+  }
+
+  /**
+<<<<<<< HEAD
+=======
+   * Attaches and starts the provider's first-party configuration source.
+   * Repeated calls preserve the original source and dispose of the duplicate.
+   *
+   * @internal
+   * @param {{ start: Function, stop: Function }} source - Configuration source lifecycle.
+   */
+  _setConfigurationSource (source) {
+    if (this.#configurationSource) {
+      log.warn('%s already has a configuration source; ignoring duplicate source', this.constructor.name)
+      source.stop()
+      return
+    }
+    this.#configurationSource = source
+    source.start()
+  }
+
+  /**
+>>>>>>> bd5962c651 (fix(openfeature): harden configuration source handling)
    * Internal method to update flag configuration from Remote Config.
    * This method is called automatically when Remote Config delivers UFC updates.
    *

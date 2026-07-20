@@ -301,6 +301,31 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledThrice(log.debug)
   })
 
+  it('rejects arrays where UFC envelope objects are required', async () => {
+    const configuration = JSON.parse(VALID_UFC)
+    responses.push(
+      { statusCode: 200, body: JSON.stringify([]) },
+      { statusCode: 200, body: JSON.stringify({ data: [] }) },
+      {
+        statusCode: 200,
+        body: JSON.stringify({
+          data: {
+            type: 'universal-flag-configuration',
+            attributes: { ...configuration, environment: [] },
+          },
+        }),
+      }
+    )
+    const configurationSource = source()
+
+    await poll(configurationSource)
+    await poll(configurationSource)
+    await poll(configurationSource)
+
+    sinon.assert.notCalled(applyConfiguration)
+    sinon.assert.calledThrice(log.debug)
+  })
+
   it('preserves last-known-good configuration and ETag after malformed JSON', async () => {
     responses.push(
       { statusCode: 200, headers: { etag: '"good"' }, body: VALID_RESPONSE },

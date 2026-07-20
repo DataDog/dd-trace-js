@@ -32,7 +32,7 @@ class AgentlessConfigurationSource {
     this._clearTimeout = options.clearTimeout || clearTimeout
     this._started = false
     this._closed = false
-    this._polling = false
+    this._pollInFlight = false
     this._etag = undefined
     this._timer = undefined
     this._activeRequest = undefined
@@ -78,14 +78,14 @@ class AgentlessConfigurationSource {
       callback(null, { stopped: true })
       return
     }
-    if (this._polling) {
+    if (this._pollInFlight) {
       callback(null, { skipped: true })
       return
     }
 
-    this._polling = true
+    this._pollInFlight = true
     this._attempt(1, (error, result) => {
-      this._polling = false
+      this._pollInFlight = false
       if (error && !this._closed) {
         log.debug('Feature Flagging agentless poll failed', error)
       }
@@ -273,7 +273,8 @@ class AgentlessConfigurationSource {
  */
 function parseConfiguration (body) {
   const parsed = JSON.parse(body)
-  if (!parsed || typeof parsed !== 'object' || !parsed.data || typeof parsed.data !== 'object') {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      !parsed.data || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) {
     throw new Error('Expected a JSON:API Universal Flag Configuration response')
   }
   if (parsed.data.type !== 'universal-flag-configuration') {
@@ -285,6 +286,7 @@ function parseConfiguration (body) {
       typeof configuration.createdAt !== 'string' ||
       (configuration.format !== undefined && typeof configuration.format !== 'string') ||
       !configuration.environment || typeof configuration.environment !== 'object' ||
+      Array.isArray(configuration.environment) ||
       typeof configuration.environment.name !== 'string' ||
       !configuration.flags || typeof configuration.flags !== 'object' || Array.isArray(configuration.flags)) {
     const keys = configuration && typeof configuration === 'object'

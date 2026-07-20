@@ -26,13 +26,13 @@ function resolve (config) {
   return {
     mode,
     endpoint: endpoint(config, config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL),
-    pollIntervalMs: positiveMilliseconds(
+    pollIntervalMs: positiveMillisecondsFromSeconds(
       config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
       DEFAULT_POLL_INTERVAL_SECONDS,
       'poll interval',
       MAX_POLL_INTERVAL_SECONDS
     ),
-    requestTimeoutMs: positiveMilliseconds(
+    requestTimeoutMs: positiveMillisecondsFromSeconds(
       config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
       DEFAULT_REQUEST_TIMEOUT_SECONDS,
       'request timeout'
@@ -122,7 +122,7 @@ function endpoint (config, configuredBaseUrl) {
  * @param {number} [maximumSeconds] - Optional inclusive maximum.
  * @returns {number} Positive milliseconds.
  */
-function positiveMilliseconds (value, fallbackSeconds, setting, maximumSeconds) {
+function positiveMillisecondsFromSeconds (value, fallbackSeconds, setting, maximumSeconds) {
   const seconds = Number(value)
   if (!Number.isFinite(seconds) || seconds <= 0) {
     log.warn(

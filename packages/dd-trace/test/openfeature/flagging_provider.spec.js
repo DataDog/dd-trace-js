@@ -201,6 +201,36 @@ describe('FlaggingProvider', () => {
 
       sinon.assert.notCalled(mockSpanEnrichmentHook.destroy)
     })
+
+    it('stops the attached configuration source', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      provider._setConfigurationSource(source)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(source.start)
+      sinon.assert.calledOnce(source.stop)
+    })
+
+    it('keeps the first configuration source on repeated attachment', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const first = { start: sinon.spy(), stop: sinon.spy() }
+      const duplicate = { start: sinon.spy(), stop: sinon.spy() }
+
+      provider._setConfigurationSource(first)
+      provider._setConfigurationSource(duplicate)
+
+      sinon.assert.calledOnce(first.start)
+      sinon.assert.notCalled(first.stop)
+      sinon.assert.notCalled(duplicate.start)
+      sinon.assert.calledOnce(duplicate.stop)
+      sinon.assert.calledOnceWithExactly(
+        log.warn,
+        '%s already has a configuration source; ignoring duplicate source',
+        'FlaggingProvider'
+      )
+    })
   })
 
   describe('inheritance', () => {
