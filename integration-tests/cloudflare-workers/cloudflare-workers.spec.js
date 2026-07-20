@@ -77,4 +77,25 @@ describe('Cloudflare Workers (workerd) acceptance test', function () {
     const span = resourceSpan.scopeSpans[0].spans.find((candidate) => candidate.name === 'cf.worker.test')
     assert.ok(span, 'expected an OTLP span named "cf.worker.test"')
   })
+
+  it('parents a manually-created child span under its parent from inside real workerd', async () => {
+    // Proves scope.js's storage.run()-based fallback (see datadog-core/src/storage.js): workerd
+    // has no imperative AsyncLocalStorage.prototype.enterWith(), so tracer.trace() nesting only
+    // works if activate() correctly propagates the parent span through run()'s bounding callback.
+    const tracesPromise = waitForOtlpTraces(agent, 15_000)
+
+    const response = await worker.fetch('/parented')
+    assert.strictEqual(response.status, 200)
+
+    const { payload } = await tracesPromise
+
+    const spans = payload.resourceSpans[0].scopeSpans[0].spans
+    const parent = spans.find((candidate) => candidate.name === 'cf.parent')
+    const child = spans.find((candidate) => candidate.name === 'cf.child')
+
+    assert.ok(parent, 'expected an OTLP span named "cf.parent"')
+    assert.ok(child, 'expected an OTLP span named "cf.child"')
+    assert.strictEqual(child.traceId, parent.traceId)
+    assert.strictEqual(child.parentSpanId, parent.spanId)
+  })
 })

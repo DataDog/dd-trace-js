@@ -15,11 +15,24 @@ export default {
       initialized = true
     }
 
-    // A flat span: scope.activate()/parenting is not supported in workerd yet.
-    const span = tracer.startSpan('cf.worker.test')
-    span.setTag('http.method', request.method)
-    span.setTag('deploy.target', 'cloudflare-workers')
-    span.finish()
+    const { pathname } = new URL(request.url)
+
+    if (pathname === '/parented') {
+      // Manual parenting via tracer.trace(): scope.js falls back to a storage.run()-scoped
+      // activation on workerd, since workerd's AsyncLocalStorage has no imperative enterWith()
+      // (see datadog-core/src/storage.js and scope.js). The child span is created while the
+      // parent is the active span, so it must come back with the parent as its parent.
+      tracer.trace('cf.parent', () => {
+        tracer.trace('cf.child', () => {})
+      })
+    } else {
+      // A flat span: automatic plugin instrumentation is unsupported in workerd (it imperatively
+      // calls enterWith() with no bounding callback, which scope.js's fallback can't emulate).
+      const span = tracer.startSpan('cf.worker.test')
+      span.setTag('http.method', request.method)
+      span.setTag('deploy.target', 'cloudflare-workers')
+      span.finish()
+    }
 
     // span.finish() fires the OTLP export as fire-and-forget async I/O (an
     // http.request() call), and dd-trace exposes no awaitable flush yet, so
