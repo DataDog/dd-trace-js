@@ -16,6 +16,8 @@ const {
   SAMPLING_DECISION,
   PROPAGATED_SAMPLE_RATE_KEY,
   PROPAGATED_SAMPLING_DECISION_KEY,
+  TRACE_ID,
+  PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
@@ -137,8 +139,9 @@ function handleLLMObsInjection ({ carrier }) {
     mlObsSpanTags?.[SESSION_ID] ??
     parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
     parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
+  const llmobsTraceId = mlObsSpanTags?.[TRACE_ID] ?? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
 
-  if (!parentId && !mlApp && samplingDecision == null && !sessionId) return
+  if (!parentId && !mlApp && samplingDecision == null && !sessionId && !llmobsTraceId) return
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
@@ -149,6 +152,7 @@ function handleLLMObsInjection ({ carrier }) {
   if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
+  if (llmobsTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${llmobsTraceId}`
   if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
 

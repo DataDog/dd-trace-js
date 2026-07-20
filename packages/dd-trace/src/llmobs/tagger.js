@@ -51,9 +51,17 @@ const {
   SAMPLING_DECISION_DROPPED,
   PROPAGATED_SAMPLE_RATE_KEY,
   PROPAGATED_SAMPLING_DECISION_KEY,
+  TRACE_ID,
+  PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
+const {
+  findGenAIAncestorSpanId,
+  validateCostTags,
+  writeBridgeTags,
+  validateToolDefinitions,
+  generateLlmObsTraceId,
+} = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -126,12 +134,20 @@ class LLMObsTagger {
 
     this._register(span)
 
+    const traceTags = span.context()._trace.tags
+
+    const llmobsTraceId =
+      registry.get(parent)?.[TRACE_ID] ??
+      traceTags[PROPAGATED_TRACE_ID_KEY] ??
+      generateLlmObsTraceId(span._startTime)
+    this._setTag(span, TRACE_ID, llmobsTraceId)
+
     // When the registering span sits below an OTel `gen_ai.*` ancestor, use
     // that ancestor as the parent_id fallback and suppress the bridge
     // parent_id tag so the indexer doesn't invert the trace.
     const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
 
-    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null })
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null, llmobsTraceId })
 
     this._setTag(span, ML_APP, spanMlApp)
 
@@ -141,7 +157,6 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    const traceTags = span.context()._trace.tags
     sessionId = sessionId ||
       registry.get(parent)?.[SESSION_ID] ||
       traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||

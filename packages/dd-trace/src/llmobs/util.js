@@ -1,5 +1,6 @@
 'use strict'
 
+const id = require('../id')
 const log = require('../log')
 const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
@@ -312,12 +313,12 @@ function safeJsonParse (value, fallback) {
 // LLMObs root and hoists the gen_ai ancestors under it, inverting the trace.
 /**
  * @param {import('../opentracing/span')} span
- * @param {{ includeParentId?: boolean }} [opts]
+ * @param {{ includeParentId?: boolean, llmobsTraceId: string }} [opts]
  */
-function writeBridgeTags (span, { includeParentId = true } = {}) {
+function writeBridgeTags (span, { includeParentId = true, llmobsTraceId } = {}) {
   const traceTags = span?.context?.()._trace?.tags
   if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
-  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = llmobsTraceId ?? span.context().toTraceId(true)
   if (includeParentId) {
     traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
   }
@@ -362,6 +363,16 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
+function generateLlmObsTraceId (startTime) {
+  const identifier = id()
+  const traceIdHigh = Math.floor(startTime / 1000)
+    .toString(16)
+    .padStart(8, '0')
+    .padEnd(16, '0')
+
+  return identifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
+}
+
 module.exports = {
   encodeUnicode,
   findGenAIAncestorSpanId,
@@ -372,4 +383,5 @@ module.exports = {
   spanHasError,
   writeBridgeTags,
   validateToolDefinitions,
+  generateLlmObsTraceId,
 }
