@@ -5,7 +5,11 @@
 const path = require('path')
 const { spawn } = require('child_process')
 
-const { cleanupCommandOutputs, prepareCommandOutputs } = require('./command-output-policy')
+const {
+  cleanupCommandOutputs,
+  deferCommandOutputCleanup,
+  prepareCommandOutputs,
+} = require('./command-output-policy')
 const {
   getExecutableForSpawn,
   isEnvExecutable,
@@ -83,6 +87,7 @@ function runCommand (command, options = {}) {
   const {
     env = {},
     envMode = 'inherit',
+    deferOutputCleanup = false,
     outDir,
     label,
     repositoryRoot,
@@ -110,8 +115,10 @@ function runCommand (command, options = {}) {
     durationMs: 0,
     timedOut: false,
     stdout: '',
+    stdoutOmittedBytes: 0,
     stdoutTruncated: false,
     stderr: '',
+    stderrOmittedBytes: 0,
     stderrTruncated: false,
     artifacts: {},
   }
@@ -166,7 +173,7 @@ function runCommand (command, options = {}) {
       result.stderr = `${error.stack || error}\n`
       result.durationMs = Date.now() - startedAt
       try {
-        result.commandOutputPaths = cleanupCommandOutputs(outputStates)
+        finishCommandOutputCleanup(result, outputStates, deferOutputCleanup)
       } catch (cleanupError) {
         result.outputCleanupError = cleanupError?.message || String(cleanupError)
       }
@@ -183,6 +190,8 @@ function runCommand (command, options = {}) {
     let killTimer
     let finalizeTimer
     let stopTimer
+    let stdoutCapture
+    let stderrCapture
     const timeout = setTimeout(() => {
       result.timedOut = true
       processGroupCleanupPending = useProcessGroup
@@ -213,14 +222,18 @@ function runCommand (command, options = {}) {
     }
 
     child.stdout.on('data', chunk => {
-      const capture = appendCapturedOutput(result.stdout, chunk, maxOutputBytes)
+      const capture = appendCapturedOutput(stdoutCapture, chunk, maxOutputBytes)
+      stdoutCapture = capture
       result.stdout = capture.output
-      result.stdoutTruncated = result.stdoutTruncated || capture.truncated
+      result.stdoutOmittedBytes = capture.omittedBytes
+      result.stdoutTruncated = capture.truncated
     })
     child.stderr.on('data', chunk => {
-      const capture = appendCapturedOutput(result.stderr, chunk, maxOutputBytes)
+      const capture = appendCapturedOutput(stderrCapture, chunk, maxOutputBytes)
+      stderrCapture = capture
       result.stderr = capture.output
-      result.stderrTruncated = result.stderrTruncated || capture.truncated
+      result.stderrOmittedBytes = capture.omittedBytes
+      result.stderrTruncated = capture.truncated
     })
     child.on('error', err => {
       result.stderr += `${err.stack || err}\n`
@@ -255,7 +268,7 @@ function runCommand (command, options = {}) {
       result.durationMs = Date.now() - startedAt
 
       try {
-        result.commandOutputPaths = cleanupCommandOutputs(outputStates)
+        finishCommandOutputCleanup(result, outputStates, deferOutputCleanup)
       } catch (err) {
         result.outputCleanupError = err && err.message ? err.message : String(err)
         result.stderr += '\n[test-optimization-validator] could not clean up command outputs: ' +
@@ -271,13 +284,13 @@ function runCommand (command, options = {}) {
         writeFileSafely(
           artifactRoot,
           result.artifacts.stdout,
-          sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes)),
+          sanitizeString(result.stdout),
           'command stdout artifact'
         )
         writeFileSafely(
           artifactRoot,
           result.artifacts.stderr,
-          sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes)),
+          sanitizeString(result.stderr),
           'command stderr artifact'
         )
         writeFileSafely(artifactRoot, result.artifacts.command, `${JSON.stringify({
@@ -291,7 +304,9 @@ function runCommand (command, options = {}) {
           timedOut: result.timedOut,
           stoppedEarly: result.stoppedEarly,
           stdoutTruncated: result.stdoutTruncated,
+          stdoutOmittedBytes: result.stdoutOmittedBytes,
           stderrTruncated: result.stderrTruncated,
+          stderrOmittedBytes: result.stderrOmittedBytes,
           maxOutputBytes,
           commandOutputPaths: result.commandOutputPaths,
           outputCleanupError: result.outputCleanupError,
@@ -306,6 +321,23 @@ function runCommand (command, options = {}) {
       resolve(result)
     }
   })
+}
+
+/**
+ * Cleans command outputs now or records an opaque handle for a later validation-wide cleanup.
+ *
+ * @param {object} result command result
+ * @param {object[]} outputStates prepared command output state
+ * @param {boolean} deferOutputCleanup whether outputs are needed by later commands
+ * @returns {void}
+ */
+function finishCommandOutputCleanup (result, outputStates, deferOutputCleanup) {
+  if (deferOutputCleanup && outputStates.length > 0) {
+    result.outputCleanupHandle = deferCommandOutputCleanup(outputStates)
+    result.commandOutputPaths = outputStates.map(({ outputPath }) => ({ outputPath, action: 'deferred' }))
+    return
+  }
+  result.commandOutputPaths = cleanupCommandOutputs(outputStates)
 }
 
 /**
@@ -327,41 +359,48 @@ function getCommandExecutionSettings (command) {
 /**
  * Appends output while retaining only the latest bytes for diagnostic artifacts.
  *
- * @param {string} current currently captured output
+ * @param {object|undefined} current currently captured output state
  * @param {Buffer|string} chunk new output chunk
  * @param {number} maxBytes maximum retained bytes
  * @returns {{output: string, truncated: boolean}} retained output and truncation flag
  */
 function appendCapturedOutput (current, chunk, maxBytes) {
-  const next = Buffer.concat([
-    Buffer.from(current),
-    Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)),
-  ])
+  const nextChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+  const totalBytes = (current?.totalBytes || 0) + nextChunk.length
+  const headLimit = Math.floor(maxBytes / 2)
+  const tailLimit = maxBytes - headLimit
+  let head = current?.head || Buffer.alloc(0)
+  let tail
 
-  if (next.length <= maxBytes) {
-    return {
-      output: next.toString('utf8'),
-      truncated: false,
+  if (current?.truncated) {
+    const combinedTail = Buffer.concat([current.tail, nextChunk])
+    tail = combinedTail.subarray(Math.max(0, combinedTail.length - tailLimit))
+  } else {
+    const combined = Buffer.concat([current?.tail || Buffer.alloc(0), nextChunk])
+    if (combined.length <= maxBytes) {
+      return {
+        head,
+        tail: combined,
+        totalBytes,
+        omittedBytes: 0,
+        output: combined.toString('utf8'),
+        truncated: false,
+      }
     }
+    head = combined.subarray(0, headLimit)
+    tail = combined.subarray(combined.length - tailLimit)
   }
 
+  const omittedBytes = totalBytes - head.length - tail.length
   return {
-    output: next.subarray(next.length - maxBytes).toString('utf8'),
+    head,
+    tail,
+    totalBytes,
+    omittedBytes,
+    output: `${head.toString('utf8')}\n[test-optimization-validator] ${omittedBytes} bytes omitted\n` +
+      tail.toString('utf8'),
     truncated: true,
   }
-}
-
-/**
- * Adds truncation context to a captured command output artifact.
- *
- * @param {string} output captured output
- * @param {boolean} truncated whether earlier output was omitted
- * @param {number} maxBytes maximum retained bytes
- * @returns {string} output artifact content
- */
-function formatCapturedOutput (output, truncated, maxBytes) {
-  if (!truncated) return output
-  return `[test-optimization-validator] output truncated to last ${maxBytes} bytes\n${output}`
 }
 
 function shouldUseProcessGroup () {
@@ -494,7 +533,7 @@ function assertNoInlineValidationEnvOverrides (command, env) {
  * @param {Set<string>} reservedEnvNames validator-controlled environment names
  */
 function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
-  const source = String(shellCommand || '')
+  const source = normalizeShellVariableNames(String(shellCommand || ''))
   const environmentReset =
     /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-(?=\s|$)|-i\b|--ignore-environment\b)/i
 
@@ -515,6 +554,24 @@ function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
 
     if (assignment.test(source) || removal.test(source)) throwReservedEnvOverride(name)
   }
+}
+
+/**
+ * Joins quoted identifier fragments so shell quoting cannot hide a reserved variable name.
+ *
+ * @param {string} source shell source
+ * @returns {string} source normalized for assignment-name detection only
+ */
+function normalizeShellVariableNames (source) {
+  let normalized = source
+  let previous
+  do {
+    previous = normalized
+    normalized = normalized
+      .replaceAll(/(['"])([A-Za-z_][A-Za-z0-9_]*)\1/g, '$2')
+      .replaceAll(/([A-Za-z0-9_])['"](?=[A-Za-z0-9_])/g, '$1')
+  } while (normalized !== previous)
+  return normalized
 }
 
 /**

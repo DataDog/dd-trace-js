@@ -1430,9 +1430,11 @@ function addNotSelectedResults ({ manifest, results, runSummary }) {
   if (omittedScenarios.length === 0) return results
 
   const selected = formatScenarioList(runSummary.checkedScenarios || [])
+  const selectedFrameworkIds = new Set(runSummary.selectedFrameworkIds || [])
   const additions = []
   for (const framework of manifest.frameworks || []) {
     if (framework.status !== 'runnable') continue
+    if (selectedFrameworkIds.size > 0 && !selectedFrameworkIds.has(framework.id)) continue
     for (const scenario of omittedScenarios) {
       if (results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) continue
       additions.push({
@@ -1456,7 +1458,7 @@ function addNotSelectedResults ({ manifest, results, runSummary }) {
  */
 function getValidationCoverageSummary (runSummary) {
   if (runSummary.validationCoverage === 'complete') {
-    return 'Validation coverage: complete. All checks selected by the full workflow produced a result.'
+    return 'Validation coverage: complete. Every selected check reached a conclusive pass or fail result.'
   }
   const checked = formatScenarioList(runSummary.checkedScenarios || [])
   const omitted = formatScenarioList(runSummary.omittedScenarios || [])

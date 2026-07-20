@@ -131,6 +131,34 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('rejects a clean preflight that ran a failing test', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-failure-'))
+    const framework = {
+      id: 'jest:root',
+      framework: 'jest',
+      existingTestCommand: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'console.log("Tests: 1 failed, 1 total"); process.exit(1)'],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.preflight.observedTestCount, 1)
+      assert.match(outcome.failure.diagnosis, /ran 1 test but exited 1 without Datadog/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('reports a package-manager filesystem denial as an execution-environment blocker', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-package-manager-'))
     const framework = {
@@ -163,6 +191,75 @@ describe('test optimization validator-owned execution phases', () => {
       assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'package-manager-filesystem-blocked')
       assert.match(outcome.failure.diagnosis, /package manager could not write to its tool or cache directory/)
       assert.match(outcome.failure.evidence.commandFailure.recommendation, /writable package-manager home or cache/)
+      assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a denied project localhost listener as an execution-environment blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-local-listener-'))
+    const framework = {
+      id: 'vitest:root',
+      framework: 'vitest',
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          'console.error("listen EPERM: operation not permitted 127.0.0.1"); process.exit(1)',
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'local-test-socket-blocked')
+      assert.match(outcome.failure.diagnosis, /project test could not start its localhost listener/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Do not request broader permissions/)
+      assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports module resolution failures before unknown test-count diagnostics', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-module-resolution-'))
+    const framework = {
+      id: 'jest:root',
+      framework: 'jest',
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          'console.error("Error: Cannot find module \'./dist/index.js\'"); process.exit(1)',
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'project-command-initialization-failed')
+      assert.match(outcome.failure.diagnosis, /failed during module resolution/)
       assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -975,6 +1072,106 @@ describe('test optimization validator-owned execution phases', () => {
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
       })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a selected test whose bounded local import chain reaches missing build output', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-local-import-plan-'))
+    const testFile = path.join(root, 'spec', 'unit.test.ts')
+    const helperFile = path.join(root, 'src', 'helper.ts')
+    const packageJson = path.join(root, 'package.json')
+    const missingBuildOutput = path.join(root, 'dist', 'core')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'spec', 'dd-test-optimization-validation.test.ts'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, testFile],
+    }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.mkdirSync(path.dirname(helperFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({ name: 'local-import-project' }))
+    fs.writeFileSync(testFile, "import '../src/helper'\n")
+    fs.writeFileSync(helperFile, "export { default } from '../dist/core'\n")
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), new RegExp(`bounded local import chain .* reaches missing module ${escapeRegExp(missingBuildOutput)}`))
+
+      framework.setup = {
+        commands: [{
+          id: 'build',
+          cwd: root,
+          argv: [process.execPath, '-e', 'process.exit(0)'],
+          outputPaths: [path.join(root, 'dist')],
+        }],
+      }
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      })
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('requires one usable self-package entrypoint before approving a self-importing test', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-self-import-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const sourceEntrypoint = path.join(root, 'src', 'index.js')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'test', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, testFile],
+    }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.mkdirSync(path.dirname(sourceEntrypoint), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'self-import-project',
+      exports: {
+        '.': {
+          types: './dist/index.d.ts',
+          import: './src/index.js',
+        },
+      },
+    }))
+    fs.writeFileSync(testFile, "import 'self-import-project'\n")
+    fs.writeFileSync(sourceEntrypoint, 'export default true\n')
+
+    const formatPlan = () => formatExecutionPlan({
+      manifest: {
+        __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+        repository: { root },
+        frameworks: [framework],
+      },
+      out: path.join(root, 'dd-test-optimization-validation-results'),
+    })
+
+    try {
+      formatPlan()
+      fs.rmSync(sourceEntrypoint)
+      assert.throws(formatPlan, /imports its own package "self-import-project".*entrypoint .* does not exist/s)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

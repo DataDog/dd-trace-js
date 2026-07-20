@@ -263,6 +263,18 @@ describe('test optimization validation command runner', () => {
         usesShell: true,
         shellCommand: '$env:NODE_OPTIONS += " --no-warnings"; npm test',
       }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: "export NO'DE'_OPTIONS=--no-warnings; npm test",
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: "'NODE_OPTIONS'=--no-warnings npm test",
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
@@ -647,7 +659,7 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('caps command stdout and stderr artifacts to bounded tails', async () => {
+  it('caps command stdout and stderr artifacts to bounded heads and tails', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
 
     try {
@@ -669,19 +681,23 @@ describe('test optimization validation command runner', () => {
 
       assert.strictEqual(result.stdoutTruncated, true)
       assert.strictEqual(result.stderrTruncated, true)
+      assert.match(result.stdout, /^stdout-start/)
+      assert.match(result.stderr, /^stderr-start/)
       assert.match(result.stdout, /stdout-end$/)
       assert.match(result.stderr, /stderr-end$/)
-      assert.doesNotMatch(result.stdout, /stdout-start/)
-      assert.doesNotMatch(result.stderr, /stderr-start/)
+      assert.ok(result.stdoutOmittedBytes > 0)
+      assert.ok(result.stderrOmittedBytes > 0)
 
       const stdoutArtifact = fs.readFileSync(path.join(outDir, 'stdout.txt'), 'utf8')
       const stderrArtifact = fs.readFileSync(path.join(outDir, 'stderr.txt'), 'utf8')
       const commandArtifact = JSON.parse(fs.readFileSync(path.join(outDir, 'command.json'), 'utf8'))
 
-      assert.match(stdoutArtifact, /output truncated to last 32 bytes/)
-      assert.match(stderrArtifact, /output truncated to last 32 bytes/)
+      assert.match(stdoutArtifact, /\d+ bytes omitted/)
+      assert.match(stderrArtifact, /\d+ bytes omitted/)
       assert.strictEqual(commandArtifact.stdoutTruncated, true)
       assert.strictEqual(commandArtifact.stderrTruncated, true)
+      assert.ok(commandArtifact.stdoutOmittedBytes > 0)
+      assert.ok(commandArtifact.stderrOmittedBytes > 0)
       assert.strictEqual(commandArtifact.maxOutputBytes, 32)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
@@ -761,6 +777,35 @@ describe('test optimization validation command runner', () => {
       assert.strictEqual(fs.existsSync(path.join(repositoryRoot, 'coverage')), false)
       assert.deepStrictEqual(result.commandOutputPaths, [{
         outputPath: path.join(repositoryRoot, 'coverage'),
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('removes a newly created nyc output directory recursively', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    fs.mkdirSync(artifactRoot)
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'const fs = require("node:fs"); fs.mkdirSync(".nyc_output", { recursive: true }); ' +
+            'fs.writeFileSync(".nyc_output/process.json", "{}")',
+          'nyc',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(path.join(repositoryRoot, '.nyc_output')), false)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: path.join(repositoryRoot, '.nyc_output'),
         action: 'removed',
       }])
     } finally {

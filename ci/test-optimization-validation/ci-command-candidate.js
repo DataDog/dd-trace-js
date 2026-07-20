@@ -4,6 +4,7 @@ const {
   getCommandDetails,
   serializeDisplayCommand,
 } = require('./command-runner')
+const { getCiRuntimeCompatibility } = require('./ci-runtime-compatibility')
 const { sanitizeEnv } = require('./redaction')
 
 /**
@@ -18,6 +19,9 @@ function buildCiCommandCandidate (framework) {
 
   if (!command && !hasCiWiringContext(ciWiring)) return
 
+  const originalCommand = formatCiCommand(ciWiring.command)
+  const validationReplayCommand = command && serializeDisplayCommand(command)
+
   return removeUndefined({
     provider: ciWiring.provider || undefined,
     configFile: ciWiring.configFile || undefined,
@@ -26,11 +30,14 @@ function buildCiCommandCandidate (framework) {
     step: ciWiring.step || undefined,
     runner: ciWiring.runner || undefined,
     shell: ciWiring.shell || undefined,
-    command: command ? serializeDisplayCommand(command) : ciWiring.command,
+    command: originalCommand || validationReplayCommand,
+    originalCommand,
+    validationReplayCommand,
     cwd: command?.cwd || ciWiring.workingDirectory,
     whySelected: ciWiring.whySelected || ciWiring.selectionReason || ciWiring.diagnosis,
     replayability: ciWiring.replayability,
     replayBlocker: ciWiring.replayBlocker,
+    runtimeCompatibility: getCiRuntimeCompatibility(framework),
     initialization: ciWiring.initialization,
     env: buildCiEnvSummary(ciWiring, command),
     packageScriptExpansionChain: getFirstArray(
@@ -47,6 +54,11 @@ function buildCiCommandCandidate (framework) {
     unresolved: ciWiring.unresolved,
     commandDetails: command && getCommandDetails(command),
   })
+}
+
+function formatCiCommand (command) {
+  if (typeof command === 'string') return command
+  if (command && typeof command === 'object') return serializeDisplayCommand(command)
 }
 
 function buildCiEnvSummary (ciWiring, command) {

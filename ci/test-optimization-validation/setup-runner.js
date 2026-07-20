@@ -9,6 +9,7 @@ async function runSetupCommands ({ framework, out, options }) {
   const commands = framework.setup?.commands || []
   const results = []
   const artifacts = []
+  const outputCleanupHandles = []
 
   for (let index = 0; index < commands.length; index++) {
     const command = commands[index]
@@ -21,6 +22,7 @@ async function runSetupCommands ({ framework, out, options }) {
     // eslint-disable-next-line no-await-in-loop
     const result = await runCommand(command, {
       artifactRoot: out,
+      deferOutputCleanup: true,
       envMode: 'clean',
       outDir,
       label: `${framework.id}:setup:${command.id || index + 1}`,
@@ -31,6 +33,7 @@ async function runSetupCommands ({ framework, out, options }) {
     const summary = summarizeSetupCommand(command, result, outDir)
     results.push(summary)
     artifacts.push(...Object.values(result.artifacts))
+    if (result.outputCleanupHandle) outputCleanupHandles.push(result.outputCleanupHandle)
 
     if (command.required !== false && result.exitCode !== 0) {
       const failure = getSetupFailure(framework, command, result, results)
@@ -40,11 +43,12 @@ async function runSetupCommands ({ framework, out, options }) {
         results,
         artifacts,
         failure,
+        outputCleanupHandles,
       }
     }
   }
 
-  return { ok: true, results, artifacts }
+  return { ok: true, results, artifacts, outputCleanupHandles }
 }
 
 function getSetupFailure (framework, command, result, setupCommands) {

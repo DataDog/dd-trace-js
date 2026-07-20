@@ -197,6 +197,10 @@ function quoteShellValue (value) {
 }
 
 function getTestCommand (ciWiring, command) {
+  if (typeof ciWiring.command === 'string' && ciWiring.command.trim()) return ciWiring.command
+  if (ciWiring.command && typeof ciWiring.command === 'object') {
+    return serializeDisplayCommand(ciWiring.command)
+  }
   if (command) return serializeDisplayCommand(command)
   return ciWiring.packageScriptExpansionChain?.[0] || ciWiring.runnerToolChain?.[0] ||
     '# keep the existing test command here'

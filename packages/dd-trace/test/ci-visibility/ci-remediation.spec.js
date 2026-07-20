@@ -131,6 +131,25 @@ describe('test optimization CI remediation', () => {
     assert.doesNotMatch(remediation.variants[0].snippet, /keep the existing test command here/)
   })
 
+  it('preserves the original CI command instead of a narrowed validation replay', () => {
+    const originalCommand = 'npm test -- --project "unit tests" && echo "$CI_JOB"'
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      project: { name: 'example' },
+      ciWiring: {
+        provider: 'github-actions',
+        command: originalCommand,
+      },
+      ciWiringCommand: {
+        cwd: '/repo',
+        argv: ['npm', 'test', '--', '--runTestsByPath', 'one.test.js'],
+      },
+    })
+
+    assert.match(remediation.variants[0].snippet, /npm test -- --project "unit tests" && echo "\$CI_JOB"/)
+    assert.doesNotMatch(remediation.variants[0].snippet, /runTestsByPath/)
+  })
+
   it('quotes shell values for non-GitHub CI providers', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',

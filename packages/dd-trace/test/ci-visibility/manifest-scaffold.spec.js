@@ -20,7 +20,7 @@ describe('test optimization validation manifest scaffold', () => {
     fs.mkdirSync(path.join(root, '.github', 'workflows'), { recursive: true })
     fs.symlinkSync(mochaRoot, path.join(root, 'node_modules', 'mocha'), 'dir')
     fs.writeFileSync(path.join(root, '.github', 'workflows', 'test.yml'), 'jobs: {}\n')
-    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("suite", () => { it("unit", () => {}) })\n')
     fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
     fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), 'packages: []\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
@@ -48,7 +48,7 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(manifest.frameworks.length, 1)
       assert.strictEqual(manifest.frameworks[0].framework, 'mocha')
       assert.strictEqual(manifest.frameworks[0].preflight.status, 'pending')
-      assert.strictEqual(manifest.frameworks[0].preflight.maxTestCount, 50)
+      assert.strictEqual(manifest.frameworks[0].preflight.maxTestCount, 1)
       assert.strictEqual(manifest.frameworks[0].ciWiring.initialization.status, 'unknown')
       assert.strictEqual(manifest.frameworks[0].ciWiring.replayability, 'not_replayable')
       assert.match(manifest.frameworks[0].ciWiring.replayBlocker, /CI command selection has not been completed/)
@@ -96,6 +96,8 @@ describe('test optimization validation manifest scaffold', () => {
         fs.realpathSync(path.join(runnerRoot, 'bin.js')),
         'run',
         representative,
+        '--testNamePattern',
+        'unit',
       ])
       assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
         return scenario.runCommand.argv[0] === process.execPath &&
@@ -119,7 +121,7 @@ describe('test optimization validation manifest scaffold', () => {
       version: '11.7.5',
       bin: { mocha: 'bin.js' },
     }))
-    fs.writeFileSync(representative, 'describe("unit", () => {})\n')
+    fs.writeFileSync(representative, 'describe("suite", () => { it("unit", () => {}) })\n')
     fs.writeFileSync(path.join(root, 'yarn.lock'), '')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'yarn-classic-mocha-project',
@@ -135,6 +137,8 @@ describe('test optimization validation manifest scaffold', () => {
         process.execPath,
         fs.realpathSync(path.join(runnerRoot, 'bin.js')),
         representative,
+        '--grep',
+        'unit',
       ])
       assert.doesNotMatch(JSON.stringify(framework.existingTestCommand), /yarn exec/)
     } finally {
@@ -142,7 +146,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('preserves package scripts that supply required runner flags', () => {
+  it('preserves required runner config while narrowing a bare package script directly', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-runner-flags-'))
     const runnerRoot = path.join(root, 'node_modules', 'jest')
     const representative = path.join(root, 'test', 'unit.test.js')
@@ -168,12 +172,19 @@ describe('test optimization validation manifest scaffold', () => {
       const framework = manifest.frameworks[0]
 
       assert.deepStrictEqual(validateManifest(manifest), [])
-      assert.deepStrictEqual(framework.existingTestCommand.argv.slice(0, 4), ['npm', 'run', 'test', '--'])
+      assert.deepStrictEqual(framework.existingTestCommand.argv.slice(0, 4), [
+        process.execPath,
+        fs.realpathSync(path.join(runnerRoot, 'bin.js')),
+        '--config',
+        './jest.validation.config.js',
+      ])
       assert.ok(framework.existingTestCommand.argv.includes(representative))
       assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
-        return scenario.runCommand.argv.slice(0, 4).join(' ') === 'npm run test --'
+        return scenario.runCommand.argv[0] === process.execPath &&
+          scenario.runCommand.argv[1] === fs.realpathSync(path.join(runnerRoot, 'bin.js')) &&
+          scenario.runCommand.argv.includes('./jest.validation.config.js')
       }))
-      assert.match(framework.notes.join('\n'), /preserves package script test/)
+      assert.match(framework.notes.join('\n'), /invokes the installed jest runner directly/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -225,7 +236,7 @@ describe('test optimization validation manifest scaffold', () => {
       name: 'karma',
       version: '6.4.4',
     }))
-    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("suite", () => { it("unit", () => {}) })\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'mixed-runner-project',
       devDependencies: {
@@ -277,7 +288,8 @@ describe('test optimization validation manifest scaffold', () => {
         assert.strictEqual(manifest.frameworks.length, 1)
         assert.strictEqual(manifest.frameworks[0].framework, definition.framework)
         assert.strictEqual(manifest.frameworks[0].status, 'detected_not_runnable')
-        assert.match(manifest.frameworks[0].notes[0], /automatic generated-test scaffolding is not available/)
+        assert.match(manifest.frameworks[0].notes[0], /validator has no live .* adapter/)
+        assert.match(manifest.frameworks[0].notes[0], /Live validation currently supports Jest, Mocha, and Vitest/)
       } finally {
         fs.rmSync(root, { recursive: true, force: true })
       }
@@ -292,7 +304,7 @@ describe('test optimization validation manifest scaffold', () => {
     fs.mkdirSync(path.join(root, 'test'))
     fs.mkdirSync(nestedJestRoot, { recursive: true })
     fs.symlinkSync(mochaRoot, path.join(root, 'node_modules', 'mocha'), 'dir')
-    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'test', 'unit.spec.js'), 'describe("suite", () => { it("unit", () => {}) })\n')
     fs.writeFileSync(path.join(root, 'package-lock.json'), '{}\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'scaffold-project',
@@ -347,7 +359,7 @@ describe('test optimization validation manifest scaffold', () => {
       scripts: { test: 'jest' },
     }))
     fs.writeFileSync(path.join(sourceRoot, 'forks', 'HostConfig.test.js'), '')
-    fs.writeFileSync(representative, '')
+    fs.writeFileSync(representative, 'test("app", () => {})\n')
     fs.writeFileSync(path.join(auxiliaryTestRoot, 'Compiler-test.js'), '')
     fs.writeFileSync(path.join(root, 'yarn.lock'), '')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
@@ -370,6 +382,8 @@ describe('test optimization validation manifest scaffold', () => {
         'test',
         '--runTestsByPath',
         representative,
+        '--testNamePattern',
+        'app',
         '--runInBand',
         '--no-watchman',
       ])
@@ -444,7 +458,10 @@ describe('test optimization validation manifest scaffold', () => {
         version: definition.version,
         bin: { [definition.framework]: 'bin.js' },
       }))
-      fs.writeFileSync(path.join(root, 'test', definition.testFilename), 'describe("unit", () => {})\n')
+      fs.writeFileSync(
+        path.join(root, 'test', definition.testFilename),
+        'describe("suite", () => { it("unit", () => {}) })\n'
+      )
       fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
         name: `${definition.framework}-project`,
         type: definition.packageType,
@@ -508,7 +525,7 @@ describe('test optimization validation manifest scaffold', () => {
     fs.mkdirSync(testRoot, { recursive: true })
     fs.symlinkSync(mochaRoot, path.join(root, 'node_modules', 'mocha'), 'dir')
     fs.writeFileSync(path.join(testRoot, 'package.json'), JSON.stringify({ type: 'commonjs' }))
-    fs.writeFileSync(path.join(testRoot, 'unit.spec.js'), 'describe("unit", () => {})\n')
+    fs.writeFileSync(path.join(testRoot, 'unit.spec.js'), 'describe("suite", () => { it("unit", () => {}) })\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'nested-commonjs-tests',
       type: 'module',
@@ -574,7 +591,10 @@ describe('test optimization validation manifest scaffold', () => {
       version: '2.1.9',
       bin: { vitest: 'bin.js' },
     }))
-    fs.writeFileSync(path.join(sourceRoot, 'add', 'test.ts'), 'describe("add", () => {})\n')
+    fs.writeFileSync(
+      path.join(sourceRoot, 'add', 'test.ts'),
+      'describe("add", () => { test("adds", () => {}) })\n'
+    )
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'vitest-exact-test-project',
       type: 'module',
@@ -613,7 +633,7 @@ describe('test optimization validation manifest scaffold', () => {
       version: '2.1.9',
       bin: { vitest: 'bin.js' },
     }))
-    fs.writeFileSync(path.join(root, 'test.ts'), 'describe("root", () => {})\n')
+    fs.writeFileSync(path.join(root, 'test.ts'), 'describe("root", () => { test("works", () => {}) })\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'vitest-root-test-project',
       type: 'module',
@@ -628,6 +648,135 @@ describe('test optimization validation manifest scaffold', () => {
       assert.deepStrictEqual(validateManifest(manifest), [])
       assert.strictEqual(strategy.testDirectory, root)
       assert.ok(strategy.files.every(file => file.path.startsWith(`${root}${path.sep}`)))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('records a detected supported family with an unsupported installed version without commands', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-old-jest-'))
+    const runnerRoot = path.join(root, 'node_modules', 'jest')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.join(root, 'test'))
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'jest',
+      version: '24.9.0',
+      bin: { jest: 'bin.js' },
+    }))
+    fs.writeFileSync(path.join(root, 'test', 'unit.test.js'), 'test("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'old-jest-project',
+      devDependencies: { jest: '24.9.0' },
+      scripts: { test: 'jest' },
+    }))
+
+    try {
+      const manifest = createManifestScaffold({ root })
+      const framework = manifest.frameworks[0]
+
+      assert.deepStrictEqual(validateManifest(manifest), [])
+      assert.strictEqual(framework.framework, 'jest')
+      assert.strictEqual(framework.frameworkVersion, '24.9.0')
+      assert.strictEqual(framework.status, 'detected_not_runnable')
+      assert.strictEqual(framework.existingTestCommand, undefined)
+      assert.match(framework.notes[0], /supports >=28\.0\.0/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('records Cypress as supported by dd-trace but diagnostic-only in this validator', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-cypress-'))
+    const runnerRoot = path.join(root, 'node_modules', 'cypress')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'cypress',
+      version: '14.0.0',
+      bin: { cypress: 'bin.js' },
+    }))
+    fs.writeFileSync(path.join(root, 'cypress.config.js'), 'module.exports = {}\n')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'cypress-project',
+      devDependencies: { cypress: '14.0.0' },
+      scripts: { test: 'cypress run' },
+    }))
+
+    try {
+      const framework = createManifestScaffold({ root }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'detected_not_runnable')
+      assert.strictEqual(framework.supportLevel, 'dd_trace_supported_but_validator_missing_adapter')
+      assert.match(framework.notes[0], /Live validation currently supports Jest, Mocha, and Vitest/)
+      assert.strictEqual(framework.existingTestCommand, undefined)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('falls back to an installed Vitest runner when every matching script is ineligible', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-vitest-bench-'))
+    const runnerRoot = path.join(root, 'node_modules', 'vitest')
+    const representative = path.join(root, 'test', 'unit.test.js')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.dirname(representative))
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'vitest',
+      version: '4.0.5',
+      bin: { vitest: 'bin.js' },
+    }))
+    fs.writeFileSync(representative, 'test("unit", () => {})\n')
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'vitest-benchmark-project',
+      devDependencies: { vitest: '4.0.5' },
+      scripts: { benchmark: 'vitest bench' },
+    }))
+
+    try {
+      const framework = createManifestScaffold({ root }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.existingTestCommand.argv, [
+        process.execPath,
+        fs.realpathSync(path.join(runnerRoot, 'bin.js')),
+        'run',
+        representative,
+        '--testNamePattern',
+        'unit',
+      ])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not select a test owned by a different runner', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-mixed-runner-'))
+    const runnerRoot = path.join(root, 'node_modules', 'vitest')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.join(root, 'test'))
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'vitest',
+      version: '4.0.5',
+      bin: { vitest: 'bin.js' },
+    }))
+    fs.writeFileSync(
+      path.join(root, 'test', 'unit.test.js'),
+      "const { test } = require('node:test'); test('unit', () => {})\n"
+    )
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'mixed-runner-project',
+      devDependencies: { vitest: '4.0.5' },
+      scripts: { test: 'vitest run' },
+    }))
+
+    try {
+      const framework = createManifestScaffold({ root }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /imports another runner/)
+      assert.strictEqual(framework.existingTestCommand, undefined)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

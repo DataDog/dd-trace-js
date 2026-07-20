@@ -5,6 +5,7 @@ const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
 const { buildCiRemediation } = require('../ci-remediation')
+const { getCiRuntimeCompatibility } = require('../ci-runtime-compatibility')
 const { getCommandBlocker } = require('../command-blocker')
 const { serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
@@ -12,6 +13,7 @@ const { runInitializationProbe } = require('../init-probe')
 const { findLateInitialization } = require('../late-initialization')
 const { getCiWiringCommand } = require('../local-command')
 const { ensureSafeDirectory } = require('../safe-files')
+const { getObservedTestCount } = require('../test-output')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
   basicEventEvidence,
@@ -31,9 +33,14 @@ const INCONCLUSIVE_CI_WIRING_FAILURES = new Set([
   'package-manager-filesystem-blocked',
   'package-manager-version-mismatch',
   'watchman-filesystem-blocked',
+  'local-test-socket-blocked',
+  'project-command-initialization-failed',
   'ci-wiring-command-failed-before-tests',
+  'ci-wiring-command-failed-after-tests',
+  'ci-wiring-preload-resolution-failed',
   'ci-wiring-command-timed-out',
   'ci-wiring-no-observed-tests',
+  'ci-wiring-representative-scope-mismatch',
   'ci-wiring-project-filter-mismatch',
   'ci-wiring-test-filter-mismatch',
   'no-test-optimization-events',
@@ -43,6 +50,25 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
   const scenarioName = 'ci-wiring'
 
   try {
+    const runtimeCompatibility = getCiRuntimeCompatibility(framework)
+    if (runtimeCompatibility?.status === 'incompatible') {
+      const versions = runtimeCompatibility.configuredNodeVersions.join(', ')
+      return inconclusive(
+        framework,
+        scenarioName,
+        `CI wiring was not replayed because every recorded CI Node.js version (${versions}) is outside the ` +
+          `installed dd-trace supported range (${runtimeCompatibility.ddTraceSupportedRange}). No live CI-wiring ` +
+          'conclusion was reached.',
+        {
+          ciCommandCandidate: buildCiCommandCandidate(framework),
+          ciWiring: framework.ciWiring,
+          runtimeCompatibility,
+          recommendation: 'Select or upgrade a CI matrix entry to a Node.js version supported by the installed ' +
+            'dd-trace package, then replay that unchanged supported command shape.',
+        }
+      )
+    }
+
     const command = getCiWiringCommand(framework)
     if (!command) return getMissingCiWiringCommandResult(framework, manifest)
 
@@ -60,12 +86,14 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
     const { result, events } = run
 
     const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
+    const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)
     const evidence = {
       ...baseEvidence,
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
       commandDescription: command.description,
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
+      observedTestCount,
       ciCommandExecution: {
         mode: 'full-replay',
         fullReplayRan: true,
@@ -81,6 +109,13 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
       },
       offlineExporterSummary: run.offline.summary,
       ...basicEventEvidence(events),
+    }
+
+    const scopeFailure = getCiWiringScopeFailure(ciWiringPreflight, observedTestCount)
+    if (scopeFailure) {
+      evidence.commandFailure = scopeFailure
+      evidence.eventLevelFailure = scopeFailure
+      return inconclusive(framework, scenarioName, scopeFailure.summary, evidence, outDir)
     }
 
     if (!hasAllBasicEventTypes(events)) {
@@ -117,29 +152,43 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
       )
     }
 
-    if (matchesPreflightExitCode(ciWiringPreflight, result.exitCode)) {
-      evidence.commandExitMatchesPreflight = true
-      return pass(
-        framework,
-        scenarioName,
-        'The CI test command emitted session, module, suite, and test events with the initialization configured ' +
-          'by CI. ' +
-          `The command exited ${result.exitCode}, matching the dd-trace-less preflight run.`,
-        evidence,
-        outDir
-      )
-    }
-
     evidence.commandExitMatchesPreflight = false
-    return fail(
+    return inconclusive(
       framework,
       scenarioName,
-      `CI wiring emitted Test Optimization events, but the command exited ${result.exitCode}.`,
+      `The CI-shaped command emitted Test Optimization events but exited ${result.exitCode}. A failing CI test ` +
+        'command cannot prove that CI wiring is healthy, so no conclusive CI wiring result was reached.',
       evidence,
       outDir
     )
   } catch (err) {
     return error(framework, scenarioName, err)
+  }
+}
+
+/**
+ * Returns an inconclusive result when a focused CI replay exceeds its approved test bound.
+ *
+ * @param {object} preflight comparable CI preflight
+ * @param {number|null} observedTestCount parsed CI replay test count
+ * @returns {object|undefined} scope failure
+ */
+function getCiWiringScopeFailure (preflight, observedTestCount) {
+  const maxTestCount = preflight?.maxTestCount
+  if (!Number.isInteger(maxTestCount)) return
+  if (Number.isInteger(observedTestCount) && observedTestCount >= 1 && observedTestCount <= maxTestCount) return
+
+  const observed = Number.isInteger(observedTestCount)
+    ? `${observedTestCount} test${observedTestCount === 1 ? '' : 's'}`
+    : 'an unknown number of tests'
+  return {
+    kind: 'ci-wiring-representative-scope-mismatch',
+    signals: [],
+    summary: `The CI-shaped command ran ${observed}, outside the approved representative scope of at most ` +
+      `${maxTestCount}. No CI wiring conclusion was reached because the selected file or name filter may not have ` +
+      'reached the final test runner.',
+    recommendation: 'Correct the package-manager or wrapper argument forwarding, record a matching CI preflight, ' +
+      'or explicitly approve the unchanged broader CI command before rerunning validation.',
   }
 }
 
@@ -153,6 +202,7 @@ function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command })
     ciCommandCandidate: buildCiCommandCandidate(framework),
     ciWiring: framework.ciWiring,
     ciRemediation: buildCiRemediation(framework),
+    runtimeCompatibility: getCiRuntimeCompatibility(framework),
     nodeOptionsRemoval: findNodeOptionsRemoval(framework, manifest),
     existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
     lateInitialization: findLateInitialization(manifest, framework),
@@ -214,7 +264,8 @@ function getMissingCiWiringCommandResult (framework, manifest) {
     ciCommandCandidate: buildCiCommandCandidate(framework),
     ciWiring,
     ciRemediation,
-    recommendation: 'Resolve the recorded CI replay blocker, then add ciWiringCommand and rerun validation.',
+    recommendation: 'Resolve the recorded CI replay blocker, then rerun validation with the unchanged CI test ' +
+      'command.',
   }
 
   return incomplete(
@@ -228,6 +279,17 @@ function getMissingCiWiringCommandResult (framework, manifest) {
 function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) {
   const localFailure = getMissingEventDiagnosis({ framework, result, evidence })
   const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary)
+
+  if (testsRan && result.exitCode !== 0) {
+    return {
+      ...localFailure,
+      kind: 'ci-wiring-command-failed-after-tests',
+      summary: `The CI-shaped command ran tests but exited ${result.exitCode}. No Test Optimization events were ` +
+        'reported, but a failing CI replay cannot establish whether initialization is wired correctly.',
+      recommendation: 'Fix the selected CI command or its test failures, then replay the unchanged CI command ' +
+        'again before drawing a CI wiring conclusion.',
+    }
+  }
 
   if (testsRan) {
     return {
@@ -436,9 +498,6 @@ function summarizeCiCommandFailure (result, evidence) {
     }
   }
 
-  const commandBlocker = getCommandBlocker(result)
-  if (commandBlocker) return { ...common, ...commandBlocker }
-
   const preloadFailure = detectDatadogPreloadResolutionFailure(output)
   if (preloadFailure) {
     return {
@@ -452,6 +511,9 @@ function summarizeCiCommandFailure (result, evidence) {
         'wiring validation to check whether the required Datadog setup reaches the final test runner.',
     }
   }
+
+  const commandBlocker = getCommandBlocker(result)
+  if (commandBlocker) return { ...common, ...commandBlocker }
 
   if (result.timedOut === true) {
     return {
@@ -537,13 +599,6 @@ function summarizeCiCommandFailure (result, evidence) {
 }
 
 function getComparableCiWiringPreflight (framework, command) {
-  if (framework.ciWiringPreflight?.ran === true) {
-    return {
-      ...framework.ciWiringPreflight,
-      source: 'ciWiringPreflight',
-    }
-  }
-
   if (commandsHaveSameExecutionShape(command, framework.existingTestCommand)) {
     return {
       ...framework.preflight,
@@ -740,12 +795,6 @@ function commandOutputShowsTestsRan (lines) {
   })
 }
 
-function matchesPreflightExitCode (preflight, exitCode) {
-  return preflight?.ran === true &&
-    Number.isInteger(preflight.exitCode) &&
-    preflight.exitCode === exitCode
-}
-
 function summarizePreflight (preflight) {
   if (!preflight || preflight.ran !== true) {
     return {
@@ -759,6 +808,7 @@ function summarizePreflight (preflight) {
     source: preflight.source,
     exitCode: preflight.exitCode,
     observedTestCount: preflight.observedTestCount,
+    maxTestCount: preflight.maxTestCount,
     stdoutSummary: preflight.stdoutSummary,
     stderrSummary: preflight.stderrSummary,
   }

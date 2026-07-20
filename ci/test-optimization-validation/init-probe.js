@@ -7,6 +7,7 @@ const {
   mergeNodeOptions,
   runCommand,
 } = require('./command-runner')
+const { isEnvExecutable, parseArgv } = require('./executable')
 const { inheritApprovedExecutable } = require('./executable-approval')
 const { sanitizeForReport } = require('./redaction')
 const { createFileSafely, ensureSafeDirectory, writeFileSafely } = require('./safe-files')
@@ -76,56 +77,37 @@ async function runInitializationProbe ({ command, framework, outDir, options }) 
 }
 
 function getProbeCommand (command) {
-  if (!command.env?.NODE_OPTIONS) return command
-
   const env = { ...command.env }
-  const nodeOptions = removeDatadogPreloads(env.NODE_OPTIONS)
-  if (nodeOptions) {
-    env.NODE_OPTIONS = nodeOptions
-  } else {
-    delete env.NODE_OPTIONS
-  }
+  delete env.NODE_OPTIONS
 
-  return inheritApprovedExecutable(command, {
+  const probeCommand = {
     ...command,
     env,
-  })
-}
-
-function removeDatadogPreloads (nodeOptions) {
-  const tokens = tokenizeNodeOptions(nodeOptions)
-  const kept = []
-
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index]
-    if (isSeparatedPreloadFlag(token) && isDatadogPreload(tokens[index + 1])) {
-      index++
-      continue
-    }
-    if (isInlineDatadogPreload(token)) continue
-    kept.push(token)
+  }
+  if (command.usesShell) {
+    probeCommand.shellCommand = removeInlineShellNodeOptions(command.shellCommand)
+  } else if (isEnvExecutable(command.argv?.[0])) {
+    probeCommand.argv = removeInlineArgvNodeOptions(command.argv)
   }
 
-  return kept.join(' ')
+  return inheritApprovedExecutable(command, probeCommand)
 }
 
-function tokenizeNodeOptions (nodeOptions) {
-  return String(nodeOptions || '').match(/"[^"]*"|'[^']*'|\S+/g) || []
+function removeInlineArgvNodeOptions (argv) {
+  const { commandIndex } = parseArgv(argv)
+  const sanitized = []
+  for (let index = 0; index < argv.length; index++) {
+    if (index < commandIndex && /^NODE_OPTIONS=/i.test(argv[index])) continue
+    sanitized.push(argv[index])
+  }
+  return sanitized
 }
 
-function isSeparatedPreloadFlag (token) {
-  return token === '-r' || token === '--require' || token === '--import'
-}
-
-function isInlineDatadogPreload (token) {
-  return (token.startsWith('--require=') && isDatadogPreload(token.slice('--require='.length))) ||
-    (token.startsWith('--import=') && isDatadogPreload(token.slice('--import='.length))) ||
-    (token.startsWith('-r') && token.length > 2 && isDatadogPreload(token.slice(2)))
-}
-
-function isDatadogPreload (value) {
-  const normalized = String(value || '').replaceAll(/^['"]|['"]$/g, '')
-  return normalized.includes('dd-trace/ci/init') || normalized.includes('dd-trace/register')
+function removeInlineShellNodeOptions (source) {
+  return String(source || '').replaceAll(
+    /(\bexport\s+)?NODE_OPTIONS\s*=\s*("[^"]*"|'[^']*'|[^\s;&|]+)(?:\s*;)?/gi,
+    ''
+  )
 }
 
 function summarizeProbeResult ({ framework, result, records, recordsPath }) {

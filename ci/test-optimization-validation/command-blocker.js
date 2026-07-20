@@ -1,6 +1,9 @@
 'use strict'
 
 const FILESYSTEM_PERMISSION_PATTERN = /\b(?:EACCES|EPERM|Operation not permitted|Permission denied)\b/i
+const LOCAL_SOCKET_PATTERN = /\b(?:127\.0\.0\.1|localhost|listen)\b/i
+const MODULE_OR_TRANSFORM_PATTERN =
+  /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Could not resolve|transform failed|SyntaxError)\b/i
 const PACKAGE_MANAGER_PATH_PATTERN = /(?:^|[/\\.])(?:corepack|npm|pnpm|yarn)(?:$|[/\\.])/i
 const WATCHMAN_PATTERN = /\bwatchman\b/i
 
@@ -41,6 +44,22 @@ function getCommandBlocker (result) {
     }
   }
 
+  if (LOCAL_SOCKET_PATTERN.test(output) && FILESYSTEM_PERMISSION_PATTERN.test(output)) {
+    return {
+      kind: 'local-test-socket-blocked',
+      summary: 'The selected project test could not start its localhost listener in this execution environment. ' +
+        'No Test Optimization conclusion was reached.',
+      recommendation: 'Run the same approved plan in an environment that permits the project test to use its ' +
+        'required localhost socket. Do not request broader permissions automatically or interpret this as a ' +
+        'Test Optimization failure.',
+      signals: getMatchingLines(
+        output,
+        /127\.0\.0\.1|localhost|listen|EACCES|EPERM|Operation not permitted|Permission denied/i
+      ),
+      blockedByExecutionEnvironment: true,
+    }
+  }
+
   const permissionLines = getMatchingLines(
     output,
     /EACCES|EPERM|Operation not permitted|Permission denied/i
@@ -54,6 +73,18 @@ function getCommandBlocker (result) {
         'home or cache directory. Do not interpret this launcher failure as a Test Optimization problem.',
       signals: permissionLines,
       blockedByExecutionEnvironment: true,
+    }
+  }
+
+  if (result.exitCode !== 0 && MODULE_OR_TRANSFORM_PATTERN.test(output)) {
+    return {
+      kind: 'project-command-initialization-failed',
+      summary: 'The selected project test command failed during module resolution, transformation, or runner ' +
+        'initialization before a reliable test result was observed. No Test Optimization conclusion was reached.',
+      recommendation: 'Satisfy the selected test command\'s build and module prerequisites, or select a bounded ' +
+        'test command whose prerequisites already exist, then render and approve a fresh plan.',
+      signals: getMatchingLines(output, MODULE_OR_TRANSFORM_PATTERN),
+      toolchainBlocked: true,
     }
   }
 }

@@ -47,7 +47,7 @@ async function runFrameworkPreflight ({ framework, out, options }) {
   const scopeMatched = testCountKnown && observedTestCount >= 1 && observedTestCount <= maxTestCount
   preflight.scopeMatched = scopeMatched
 
-  if (!result.timedOut && scopeMatched && (result.exitCode === 0 || observedTestCount > 0)) {
+  if (!result.timedOut && result.exitCode === 0 && scopeMatched) {
     return { ok: true, preflight }
   }
 
@@ -107,8 +107,9 @@ function getPreflightFailureDiagnosis ({ maxTestCount, observedTestCount, result
     return 'The selected command did not report any tests. Select a runnable representative before validating ' +
       'Test Optimization.'
   }
-  return 'The selected test command failed before the validator could confirm that tests ran without Datadog ' +
-    'initialization. Fix the project command or its setup before validating Test Optimization.'
+  return `The selected test command ran ${observedTestCount} test${observedTestCount === 1 ? '' : 's'} but exited ` +
+    `${result.exitCode} without Datadog initialization. Fix the failing project test or its setup before ` +
+    'validating Test Optimization.'
 }
 
 module.exports = { runFrameworkPreflight }

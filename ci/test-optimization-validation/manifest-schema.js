@@ -217,7 +217,7 @@ function commandInitializesDatadog (command) {
     command?.shellCommand,
     command?.env?.NODE_OPTIONS,
   ].filter(Boolean).join(' ')
-  return /dd-trace\/ci\/init/.test(values)
+  return /(?:dd-trace|\.\.?)\/ci\/init/.test(values.replaceAll('\\', '/'))
 }
 
 function validateRepositoryContainedPaths (manifest, errors) {
@@ -342,6 +342,7 @@ function validateFramework (framework, index, errors) {
     requiredObject(framework, 'ciWiring', errors, prefix)
   } else {
     requireNonEmptyNotes(framework, errors, prefix)
+    validateNonRunnableFramework(framework, prefix, errors)
   }
 
   if (framework.ciWiringCommand) {
@@ -372,6 +373,25 @@ function validateFramework (framework, index, errors) {
 
   if (framework.generatedTestStrategy) {
     validateGeneratedTestStrategy(framework.generatedTestStrategy, `${prefix}.generatedTestStrategy`, errors)
+  }
+}
+
+/**
+ * Rejects live execution instructions on framework entries that cannot be run.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string} prefix manifest field path
+ * @param {{push: function(string): void}} errors bounded validation error collector
+ * @returns {void}
+ */
+function validateNonRunnableFramework (framework, prefix, errors) {
+  for (const field of ['existingTestCommand', 'ciWiringCommand', 'preflight', 'generatedTestStrategy']) {
+    if (framework[field] !== undefined) {
+      errors.push(`${prefix}.${field} must be omitted when ${prefix}.status is not runnable.`)
+    }
+  }
+  if (Array.isArray(framework.setup?.commands) && framework.setup.commands.length > 0) {
+    errors.push(`${prefix}.setup.commands must be empty or omitted when ${prefix}.status is not runnable.`)
   }
 }
 

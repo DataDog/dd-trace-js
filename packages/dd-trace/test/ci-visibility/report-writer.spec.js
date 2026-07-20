@@ -973,6 +973,11 @@ describe('test optimization validation report writer', () => {
         framework: 'vitest',
         status: 'runnable',
         project: { name: 'unit tests', root: tmpDir },
+      }, {
+        id: 'jest:other',
+        framework: 'jest',
+        status: 'runnable',
+        project: { name: 'other tests', root: tmpDir },
       }],
     }
     const originalLog = console.log
@@ -1001,6 +1006,7 @@ describe('test optimization validation report writer', () => {
           checkedScenarios: ['basic-reporting'],
           omittedScenarios: ['ci-wiring', 'efd', 'atr', 'test-management'],
           requestedScenario: 'basic-reporting',
+          selectedFrameworkIds: ['vitest:unit'],
         },
       })
 
@@ -1008,6 +1014,7 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Validation coverage: partial/)
       assert.match(markdown, /did not check CI Wiring, Early Flake Detection, Auto Test Retries, Test Management/)
       assert.strictEqual((markdown.match(/NOT CHECKED/g) || []).length, 4)
+      assert.doesNotMatch(markdown, /other tests/)
       assert.match(logs.join('\n'), /Validation coverage: partial/)
       assert.match(logs.join('\n'), /NOT CHECKED unit tests \(Vitest\) - Does the selected CI job initialize Datadog/)
     } finally {

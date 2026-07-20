@@ -5,6 +5,10 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const {
+  cleanupDeferredCommandOutputs,
+} = require('../../../../ci/test-optimization-validation/command-output-policy')
+const { runCommand } = require('../../../../ci/test-optimization-validation/command-runner')
 const { runSetupCommands } = require('../../../../ci/test-optimization-validation/setup-runner')
 
 describe('test optimization validation setup runner', () => {
@@ -132,6 +136,104 @@ describe('test optimization validation setup runner', () => {
       assert.deepStrictEqual(setup.failure.artifacts, [])
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  for (const exitCode of [0, 2]) {
+    it(`keeps declared setup outputs until validation-wide cleanup after exit ${exitCode}`, async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-setup-'))
+      const out = path.join(root, 'results')
+      const outputPath = path.join(root, 'dist')
+      const framework = {
+        id: 'vitest:package',
+        setup: {
+          commands: [{
+            id: 'build',
+            cwd: root,
+            argv: [
+              process.execPath,
+              '-e',
+              `require('node:fs').mkdirSync(${JSON.stringify(outputPath)}); process.exit(${exitCode})`,
+            ],
+            outputPaths: [outputPath],
+            required: true,
+          }],
+        },
+      }
+
+      try {
+        fs.mkdirSync(out)
+        const setup = await runSetupCommands({
+          framework,
+          out,
+          options: { repositoryRoot: root, verbose: false },
+        })
+
+        assert.strictEqual(setup.ok, exitCode === 0)
+        assert.strictEqual(fs.existsSync(outputPath), true)
+        assert.strictEqual(setup.outputCleanupHandles.length, 1)
+        cleanupDeferredCommandOutputs(setup.outputCleanupHandles[0])
+        assert.strictEqual(fs.existsSync(outputPath), false)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('keeps a setup artifact available to Basic Reporting and generated-scenario consumers', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-setup-consumer-'))
+    const out = path.join(root, 'results')
+    const outputPath = path.join(root, 'dist')
+    const inputPath = path.join(outputPath, 'entry.js')
+    const framework = {
+      id: 'vitest:package',
+      setup: {
+        commands: [{
+          id: 'build',
+          cwd: root,
+          argv: [
+            process.execPath,
+            '-e',
+            `require('node:fs').mkdirSync(${JSON.stringify(outputPath)}); ` +
+              `require('node:fs').writeFileSync(${JSON.stringify(inputPath)}, 'built')`,
+          ],
+          outputPaths: [outputPath],
+          required: true,
+        }],
+      },
+    }
+
+    try {
+      fs.mkdirSync(out)
+      const setup = await runSetupCommands({
+        framework,
+        out,
+        options: { repositoryRoot: root, verbose: false },
+      })
+      const consumer = exitCode => runCommand({
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          `if (require('node:fs').readFileSync(${JSON.stringify(inputPath)}, 'utf8') !== 'built') process.exit(3); ` +
+            `process.exit(${exitCode})`,
+        ],
+      }, {
+        outDir: path.join(out, `consumer-${exitCode}`),
+        repositoryRoot: root,
+        role: 'test',
+        verbose: false,
+      })
+
+      assert.strictEqual(setup.ok, true)
+      assert.strictEqual((await consumer(0)).exitCode, 0)
+      assert.strictEqual((await consumer(2)).exitCode, 2)
+      assert.strictEqual(fs.existsSync(inputPath), true)
+
+      cleanupDeferredCommandOutputs(setup.outputCleanupHandles[0])
+      assert.strictEqual(fs.existsSync(outputPath), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
     }
   })
 })

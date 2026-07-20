@@ -10,6 +10,7 @@ const { DD_MAJOR } = require('../../version')
 
 const { assertApprovalDigest, getApprovalDigest } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
+const { cleanupDeferredCommandOutputs } = require('./command-output-policy')
 
 const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
@@ -155,8 +156,11 @@ Options:
 }
 
 async function main (argv) {
+  let activeManifest
+  let activeOut
   try {
     const options = parseArgs(argv)
+    assertCompatibleModes(options)
     if (options.help) {
       printHelp()
       return
@@ -232,6 +236,8 @@ async function main (argv) {
       )
     }
     const out = validateOutputPath(manifest, options.out)
+    activeManifest = manifest
+    activeOut = out
     options.repositoryRoot = manifest.repository.root
     const selectedFrameworks = filterFrameworks(manifest.frameworks, options.frameworks)
     const approvalManifest = getApprovalManifest(manifest, options.frameworks)
@@ -254,6 +260,7 @@ async function main (argv) {
 
     const results = []
     const runnableFrameworks = []
+    const setupOutputCleanups = []
 
     try {
       const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
@@ -279,6 +286,7 @@ async function main (argv) {
         if (framework.setup?.commands?.length > 0) logPhaseStart(framework, 'Project setup')
         // eslint-disable-next-line no-await-in-loop
         const setup = await runSetupCommands({ framework, out, options })
+        setupOutputCleanups.push(...(setup.outputCleanupHandles || []).map(handle => ({ framework, handle })))
         if (framework.setup?.commands?.length > 0) {
           logPhaseComplete(framework, 'Project setup', setup.ok ? 'pass' : setup.failure?.status)
         }
@@ -367,7 +375,18 @@ async function main (argv) {
         }
       }
     } finally {
-      await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+      try {
+        await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+      } catch (error) {
+        results.push(getValidationCleanupFailure('temporary validation files', error))
+      }
+      for (const cleanup of setupOutputCleanups.reverse()) {
+        try {
+          cleanupDeferredCommandOutputs(cleanup.handle)
+        } catch (error) {
+          results.push(getValidationCleanupFailure('project setup outputs', error, cleanup.framework))
+        }
+      }
     }
 
     addMissingRequiredResults(results, runnableFrameworks, options.scenarios)
@@ -389,12 +408,80 @@ async function main (argv) {
         checkedScenarios: [...options.scenarios],
         omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
         requestedScenario: options.requestedScenario,
+        selectedFrameworkIds: selectedFrameworks.map(framework => framework.id),
       },
     })
     process.exitCode = validatorExitCode
   } catch (err) {
     process.exitCode = 1
+    if (activeManifest && activeOut) {
+      try {
+        await writeReport({
+          manifest: activeManifest,
+          results: [{
+            frameworkId: 'validator',
+            scenario: 'all',
+            status: 'error',
+            diagnosis: err?.message || String(err),
+            evidence: { validationIncomplete: true, validationOrchestrationFailed: true },
+            artifacts: [],
+          }],
+          out: activeOut,
+          runSummary: {
+            runCompleted: true,
+            validatorExitCode: 1,
+            validationCoverage: 'partial',
+            checkedScenarios: [],
+            omittedScenarios: getSelectableScenarios(),
+            selectedFrameworkIds: [],
+          },
+        })
+      } catch {}
+    }
     console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
+  }
+}
+
+/**
+ * Prevents a reviewed live-run artifact from being combined with a print-only mode.
+ *
+ * @param {object} options parsed CLI options
+ * @returns {void}
+ */
+function assertCompatibleModes (options) {
+  if (!options.runApprovedPlan) return
+  const incompatible = [
+    ['--help', options.help],
+    ['--init-manifest', options.initManifest],
+    ['--print-approval-sha256', options.printApprovalSha256],
+    ['--print-plan', options.printPlan],
+    ['--validate-manifest', options.validateManifest],
+  ].find(([, enabled]) => enabled)
+  if (incompatible) {
+    throw new Error(`--run-approved-plan cannot be combined with ${incompatible[0]}.`)
+  }
+}
+
+/**
+ * Creates a fail-closed result when validation-owned cleanup cannot be completed safely.
+ *
+ * @param {string} target customer-facing cleanup target
+ * @param {Error} error cleanup error
+ * @param {object} [framework] affected framework
+ * @returns {object} validation error result
+ */
+function getValidationCleanupFailure (target, error, framework) {
+  return {
+    frameworkId: framework?.id || 'validation-cleanup',
+    scenario: 'all',
+    status: 'error',
+    diagnosis: `The validator could not safely remove ${target}. Review the local artifacts before rerunning.`,
+    evidence: {
+      validationIncomplete: true,
+      cleanupFailed: true,
+      error: error?.message || String(error),
+    },
+    artifacts: [],
   }
 }
 
@@ -547,6 +634,10 @@ function getValidationCoverage ({ results, requestedScenario, frameworks, scenar
   for (const framework of runnableFrameworks) {
     for (const scenario of scenarios) {
       if (!results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) {
+        return 'partial'
+      }
+      const result = results.find(result => result.frameworkId === framework.id && result.scenario === scenario)
+      if (!['pass', 'fail'].includes(result.status) || result.evidence?.validationIncomplete === true) {
         return 'partial'
       }
     }
@@ -710,6 +801,24 @@ function getStaticFailure (framework, blocker, staticDiagnosisPath) {
 function getFrameworkStatusResult (framework) {
   const evidence = getFrameworkStatusEvidence(framework)
 
+  if (framework.supportLevel === 'dd_trace_supported_but_validator_missing_adapter') {
+    const frameworkName = getDisplayFrameworkName(framework.framework)
+    return {
+      frameworkId: framework.id,
+      scenario: 'all',
+      status: 'skip',
+      diagnosis: `${frameworkName} was detected and is supported by dd-trace, but this local validator does not ` +
+        `yet provide a live ${frameworkName} adapter. No project test command was run.`,
+      evidence: {
+        ...evidence,
+        validatorAdapterUnavailable: true,
+        recommendation: 'Use the static diagnostic evidence for this framework. Live local validation currently ' +
+          'supports Jest, Mocha, and Vitest.',
+      },
+      artifacts: [],
+    }
+  }
+
   if (framework.status === 'unsupported_by_validator') {
     const frameworkName = getDisplayFrameworkName(framework.framework)
 
@@ -800,6 +909,7 @@ function getFrameworkStatusEvidence (framework) {
   return {
     frameworkStatus: framework.status,
     frameworkVersion: framework.frameworkVersion,
+    supportLevel: framework.supportLevel,
     manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
     directDependency: root ? getDirectDependency(root, framework.framework) : undefined,
     frameworkScripts: root ? findFrameworkScripts(root, framework.framework) : [],

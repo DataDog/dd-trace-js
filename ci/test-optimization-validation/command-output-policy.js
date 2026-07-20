@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const deferredCleanups = new WeakMap()
+
 /**
  * Returns command-created paths that must be declared and removed after validation.
  *
@@ -12,8 +14,9 @@ const path = require('node:path')
 function getCommandOutputPaths (command) {
   const paths = new Set((command.outputPaths || []).map(outputPath => path.resolve(command.cwd, outputPath)))
   const tokens = command.usesShell ? tokenizeShell(command.shellCommand) : command.argv || []
-  const coverageDirectory = getCoverageDirectory(tokens)
-  if (coverageDirectory) paths.add(path.resolve(command.cwd, coverageDirectory))
+  for (const coverageDirectory of getCoverageDirectories(tokens)) {
+    paths.add(path.resolve(command.cwd, coverageDirectory))
+  }
   return [...paths]
 }
 
@@ -67,6 +70,31 @@ function cleanupCommandOutputs (states) {
     actions.push({ outputPath: state.outputPath, action: existed ? 'removed' : 'absent' })
   }
   return actions.reverse()
+}
+
+/**
+ * Creates an opaque handle for outputs that must survive beyond one command.
+ *
+ * @param {{outputPath: string, repositoryRoot: string, parentIdentities: object[]}[]} states cleanup state
+ * @returns {object} opaque cleanup handle
+ */
+function deferCommandOutputCleanup (states) {
+  const handle = {}
+  deferredCleanups.set(handle, states)
+  return handle
+}
+
+/**
+ * Cleans outputs associated with an opaque deferred-cleanup handle exactly once.
+ *
+ * @param {object} handle opaque cleanup handle
+ * @returns {object[]} customer-safe cleanup summary
+ */
+function cleanupDeferredCommandOutputs (handle) {
+  const states = deferredCleanups.get(handle)
+  if (!states) throw new Error('Command output cleanup handle is invalid or has already been used.')
+  deferredCleanups.delete(handle)
+  return cleanupCommandOutputs(states)
 }
 
 /**
@@ -140,18 +168,22 @@ function pathExists (filename) {
   }
 }
 
-function getCoverageDirectory (tokens) {
+function getCoverageDirectories (tokens) {
+  const directories = new Set()
   let coverageEnabled = false
   for (let index = 0; index < tokens.length; index++) {
     const token = String(tokens[index])
+    if (path.basename(token).replace(/\.cmd$/i, '') === 'nyc') directories.add('.nyc_output')
     if (token === '--coverage' || token === '--coverage=true') coverageEnabled = true
     const inline = /^(?:--coverageDirectory|--coverage-directory|--coverage\.reportsDirectory)=(.+)$/.exec(token)
-    if (inline) return inline[1]
+    if (inline) directories.add(inline[1])
     if (['--coverageDirectory', '--coverage-directory', '--coverage.reportsDirectory'].includes(token)) {
-      return tokens[index + 1]
+      directories.add(tokens[index + 1])
     }
   }
-  return coverageEnabled ? 'coverage' : undefined
+  if (coverageEnabled) directories.add('coverage')
+  directories.delete(undefined)
+  return directories
 }
 
 function tokenizeShell (source) {
@@ -201,6 +233,8 @@ function isPathInside (directory, filename) {
 
 module.exports = {
   cleanupCommandOutputs,
+  cleanupDeferredCommandOutputs,
+  deferCommandOutputCleanup,
   getCommandOutputPaths,
   prepareCommandOutputs,
 }

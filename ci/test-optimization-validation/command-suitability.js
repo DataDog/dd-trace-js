@@ -7,6 +7,8 @@ const MAX_CONFIG_BYTES = 512 * 1024
 const MAX_STATIC_CONFIG_ARRAY_BYTES = 4096
 const MAX_STATIC_CONFIG_PATTERNS = 32
 const MAX_STATIC_CONFIG_PATTERN_BYTES = 256
+const MAX_LOCAL_IMPORT_DEPTH = 4
+const MAX_LOCAL_IMPORT_FILES = 24
 const JEST_LOCAL_PATH_PATTERN = /(['"])(<rootDir>\/[^'"\r\n]+)\1/g
 const JEST_ROOT_DIR_PATTERN = /\brootDir\s*:\s*(['"])([^'"]+)\1/
 const TYPECHECK_ENABLED_PATTERN = /typecheck\s*:\s*\{[\s\S]{0,2000}?enabled\s*:\s*true/
@@ -44,6 +46,13 @@ function getCommandSuitabilityError ({ command, framework, label, repositoryRoot
     if (missingInputError) return missingInputError
   }
 
+  if (label === 'the selected test command') {
+    const missingBuildError = getMissingSelfPackageBuildError(command, framework, repositoryRoot)
+    if (missingBuildError) return missingBuildError
+    const missingLocalModuleError = getMissingLocalModuleError(command, framework, repositoryRoot)
+    if (missingLocalModuleError) return missingLocalModuleError
+  }
+
   if (framework.framework === 'vitest' &&
     (label === 'the selected test command' || label.includes('advanced-feature'))) {
     if (label.includes('advanced-feature')) {
@@ -52,6 +61,223 @@ function getCommandSuitabilityError ({ command, framework, label, repositoryRoot
     }
     return getVitestTypecheckError(command, label.includes('advanced-feature'), repositoryRoot)
   }
+}
+
+/**
+ * Identifies a selected source test whose own package entrypoint still requires a build.
+ *
+ * @param {object} command manifest command
+ * @param {object} framework manifest framework
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} suitability error
+ */
+function getMissingSelfPackageBuildError (command, framework, repositoryRoot) {
+  const packageJsonPath = framework.project?.packageJson
+  const packageJsonSource = packageJsonPath && readRepositoryConfig(packageJsonPath, repositoryRoot)
+  if (!packageJsonSource) return
+
+  let packageJson
+  try {
+    packageJson = JSON.parse(packageJsonSource)
+  } catch {
+    return
+  }
+  if (typeof packageJson.name !== 'string') return
+
+  const testFile = getSelectedTestFile(command, framework.project.root, repositoryRoot)
+  if (!testFile) return
+  const source = readRepositoryConfig(testFile, repositoryRoot)
+  if (!source || !importsPackage(source, packageJson.name)) return
+
+  const exportTargets = getPackageEntryTargets(packageJson)
+  if (exportTargets.length === 0) return
+  const entrypoints = exportTargets.map(target => path.resolve(path.dirname(packageJsonPath), target))
+  if (entrypoints.some(entrypoint => {
+    return isPathInside(repositoryRoot, entrypoint) &&
+      (fs.existsSync(entrypoint) || isProducedBySetup(framework, entrypoint))
+  })) return
+  const entrypoint = entrypoints[0]
+  if (!isPathInside(repositoryRoot, entrypoint)) {
+    return `selects ${testFile}, which imports its own package ${JSON.stringify(packageJson.name)}, but the package ` +
+      'entrypoint resolves outside the repository and cannot be inspected safely. Choose a source-based ' +
+      'representative or correct the package entrypoint before asking for approval.'
+  }
+
+  return `selects ${testFile}, which imports its own package ${JSON.stringify(packageJson.name)}, but the package ` +
+    `entrypoint ${entrypoint} does not exist. Declare the reviewed build command and ${entrypoint} as its output, ` +
+    'or choose a representative test that runs from source before asking for approval.'
+}
+
+/**
+ * Returns the bounded selected test file from a structured command.
+ *
+ * @param {object} command manifest command
+ * @param {string} projectRoot project root
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} selected test file
+ */
+function getSelectedTestFile (command, projectRoot, repositoryRoot) {
+  if (command.usesShell) return
+  for (const value of command.argv || []) {
+    if (typeof value !== 'string' || !/(?:test|spec)\.[cm]?[jt]sx?$/.test(value)) continue
+    const filename = path.resolve(command.cwd || projectRoot, value)
+    if (!isPathInside(repositoryRoot, filename)) continue
+    try {
+      const stat = fs.lstatSync(filename)
+      if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= MAX_CONFIG_BYTES) return filename
+    } catch {}
+  }
+}
+
+/**
+ * Checks whether test source imports its own package by name.
+ *
+ * @param {string} source test source
+ * @param {string} packageName package name
+ * @returns {boolean} whether the package is imported
+ */
+function importsPackage (source, packageName) {
+  const escapedName = escapeRegex(packageName)
+  return new RegExp(
+    String.raw`(?:from\s+|require\s*\(\s*|import\s+(?:\(\s*)?)['"]${escapedName}(?:[/.'"]|$)`
+  ).test(source)
+}
+
+/**
+ * Returns a representative package entrypoint target.
+ *
+ * @param {object} packageJson parsed package metadata
+ * @returns {string|undefined} entrypoint target
+ */
+function getPackageEntryTargets (packageJson) {
+  const targets = []
+  collectStrings(packageJson.exports?.['.'] ?? packageJson.exports, targets)
+  collectStrings(packageJson.module, targets)
+  collectStrings(packageJson.main, targets)
+  return [...new Set(targets)]
+}
+
+/**
+ * Collects a bounded set of strings from a package export condition tree.
+ *
+ * @param {unknown} value package export value
+ * @param {string[]} targets collected package targets
+ * @param {number} [depth] current nesting depth
+ * @returns {void}
+ */
+function collectStrings (value, targets, depth = 0) {
+  if (targets.length >= 32 || depth > 6) return
+  if (typeof value === 'string') {
+    targets.push(value)
+    return
+  }
+  if (!value || typeof value !== 'object') return
+  for (const nested of Object.values(value).slice(0, 32)) {
+    collectStrings(nested, targets, depth + 1)
+  }
+}
+
+/**
+ * Identifies a bounded relative-import chain that reaches a missing local build artifact.
+ *
+ * @param {object} command manifest command
+ * @param {object} framework manifest framework
+ * @param {string} repositoryRoot repository root
+ * @returns {string|undefined} suitability error
+ */
+function getMissingLocalModuleError (command, framework, repositoryRoot) {
+  const testFile = getSelectedTestFile(command, framework.project.root, repositoryRoot)
+  if (!testFile) return
+
+  const pending = [{ filename: testFile, chain: [testFile], depth: 0 }]
+  const visited = new Set()
+  while (pending.length > 0 && visited.size < MAX_LOCAL_IMPORT_FILES) {
+    const current = pending.shift()
+    if (visited.has(current.filename)) continue
+    visited.add(current.filename)
+
+    const source = readRepositoryConfig(current.filename, repositoryRoot)
+    if (!source) continue
+    for (const specifier of getRelativeModuleSpecifiers(source)) {
+      const resolution = resolveLocalModule(current.filename, specifier, repositoryRoot)
+      if (resolution.external) continue
+      if (!resolution.filename) {
+        if (isProducedBySetup(framework, resolution.target)) continue
+        const chain = [...current.chain, resolution.target]
+          .map(filename => path.relative(repositoryRoot, filename) || '.')
+          .join(' -> ')
+        return `selects ${testFile}, whose bounded local import chain ${chain} reaches missing module ` +
+          `${resolution.target}. Declare the reviewed build command and its output, or choose a representative ` +
+          'whose local module prerequisites already exist before asking for approval.'
+      }
+      if (current.depth < MAX_LOCAL_IMPORT_DEPTH) {
+        pending.push({
+          filename: resolution.filename,
+          chain: [...current.chain, resolution.filename],
+          depth: current.depth + 1,
+        })
+      }
+    }
+  }
+}
+
+/**
+ * Extracts literal relative JavaScript module references.
+ *
+ * @param {string} source JavaScript or TypeScript source
+ * @returns {string[]} relative module specifiers
+ */
+function getRelativeModuleSpecifiers (source) {
+  const specifiers = []
+  const pattern = /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s+(?:\(\s*)?)['"](\.\.?\/[^'"\r\n]+)['"]/g
+  for (const match of source.matchAll(pattern)) {
+    if (!specifiers.includes(match[1])) specifiers.push(match[1])
+  }
+  return specifiers
+}
+
+/**
+ * Resolves one relative module without executing project resolution hooks.
+ *
+ * @param {string} importer importing source file
+ * @param {string} specifier relative module specifier
+ * @param {string} repositoryRoot repository root
+ * @returns {{filename?: string, target: string, external?: boolean}} bounded resolution
+ */
+function resolveLocalModule (importer, specifier, repositoryRoot) {
+  const target = path.resolve(path.dirname(importer), specifier)
+  if (!isPathInside(repositoryRoot, target)) return { target, external: true }
+
+  for (const candidate of getLocalModuleCandidates(target)) {
+    if (!isPathInside(repositoryRoot, candidate)) continue
+    const source = readRepositoryConfig(candidate, repositoryRoot)
+    if (source !== undefined) return { filename: candidate, target }
+  }
+  return { target }
+}
+
+/**
+ * Returns conservative Node.js and TypeScript file candidates for a local module.
+ *
+ * @param {string} target unresolved module target
+ * @returns {string[]} candidate files
+ */
+function getLocalModuleCandidates (target) {
+  const extension = path.extname(target)
+  const candidates = [target]
+  if (!extension) {
+    for (const suffix of ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.tsx', '.jsx', '.json']) {
+      candidates.push(`${target}${suffix}`, path.join(target, `index${suffix}`))
+    }
+  } else if (/\.[cm]?js$/.test(extension)) {
+    const base = target.slice(0, -extension.length)
+    for (const suffix of extension === '.mjs' ? ['.mts'] : extension === '.cjs' ? ['.cts'] : ['.ts', '.tsx']) {
+      candidates.push(`${base}${suffix}`)
+    }
+  } else if (!/\.(?:[cm]?ts|tsx|jsx|json)$/.test(extension)) {
+    return []
+  }
+  return candidates
 }
 
 /**
@@ -392,6 +618,18 @@ function matchesGlob (filename, pattern) {
 
 function escapeRegex (value) {
   return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, String.raw`\$&`)
+}
+
+/**
+ * Checks whether a path is lexically inside a root.
+ *
+ * @param {string} root allowed root
+ * @param {string} filename candidate path
+ * @returns {boolean} whether the path is inside the root
+ */
+function isPathInside (root, filename) {
+  const relative = path.relative(path.resolve(root), path.resolve(filename))
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 function getVitestConfigFile (command, repositoryRoot) {

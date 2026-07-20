@@ -6,6 +6,9 @@ const os = require('node:os')
 const path = require('node:path')
 
 const { getArtifactId } = require('../../../../ci/test-optimization-validation/artifact-id')
+const {
+  getCiRuntimeCompatibility,
+} = require('../../../../ci/test-optimization-validation/ci-runtime-compatibility')
 const { runCiWiring } = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
 
 function validationOptions (repositoryRoot) {
@@ -18,6 +21,51 @@ function validationOptions (repositoryRoot) {
 }
 
 describe('test optimization CI wiring validation', () => {
+  it('reports an entirely unsupported CI Node matrix as a compatibility blocker', async () => {
+    const framework = {
+      id: 'mocha:root',
+      framework: 'mocha',
+      project: { name: 'fixture' },
+      ciWiring: {
+        status: 'unknown',
+        replayability: 'replayable',
+        matrix: { 'node-version': ['12.20.0', '14.13.1', '16.0.0'] },
+      },
+      ciWiringCommand: {
+        cwd: process.cwd(),
+        argv: [process.execPath, '-e', 'throw new Error("must not run")'],
+      },
+    }
+
+    const result = await runCiWiring({ manifest: {}, framework })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.validationIncomplete, true)
+    assert.strictEqual(result.evidence.runtimeCompatibility.status, 'incompatible')
+    assert.deepStrictEqual(result.evidence.runtimeCompatibility.unsupportedNodeVersions, [
+      '12.20.0',
+      '14.13.1',
+      '16.0.0',
+    ])
+    assert.match(result.diagnosis, /every recorded CI Node\.js version/)
+    assert.match(result.evidence.recommendation, /Select or upgrade a CI matrix entry/)
+  })
+
+  it('identifies a supported entry in a mixed CI Node matrix', () => {
+    const currentNodeMajor = process.versions.node.split('.')[0]
+    const compatibility = getCiRuntimeCompatibility({
+      ciWiring: {
+        matrix: {
+          node: ['16', `${currentNodeMajor}.0.0`],
+        },
+      },
+    })
+
+    assert.strictEqual(compatibility.status, 'mixed')
+    assert.deepStrictEqual(compatibility.supportedNodeVersions, [`${currentNodeMajor}.0.0`])
+    assert.deepStrictEqual(compatibility.unsupportedNodeVersions, ['16'])
+  })
+
   it('reports a static CI wiring classification as incomplete when its command is missing', async () => {
     const result = await runCiWiring({
       manifest: {},
@@ -712,11 +760,81 @@ describe('test optimization CI wiring validation', () => {
         },
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-command-failed-after-tests')
+      assert.match(result.diagnosis, /ran tests but exited 1/)
       assert.doesNotMatch(result.diagnosis, /failed before tests/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a focused CI replay inconclusive when wrapper forwarding runs a broad suite', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const command = {
+      cwd: out,
+      argv: [process.execPath, '-e', 'console.log("52 passing")'],
+    }
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'mocha:root',
+          framework: 'mocha',
+          existingTestCommand: command,
+          ciWiringCommand: command,
+          preflight: {
+            ran: true,
+            exitCode: 0,
+            observedTestCount: 1,
+            maxTestCount: 1,
+          },
+        },
+        out,
+        options: validationOptions(out),
+      })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.validationIncomplete, true)
+      assert.strictEqual(result.evidence.observedTestCount, 52)
+      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-representative-scope-mismatch')
+      assert.match(result.diagnosis, /outside the approved representative scope of at most 1/)
+      assert.match(result.evidence.commandFailure.recommendation, /wrapper argument forwarding/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores manifest-authored CI preflight evidence for a different command shape', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'mocha:root',
+          framework: 'mocha',
+          existingTestCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("1 passing")'],
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("52 passing")'],
+          },
+          ciWiringPreflight: {
+            ran: true,
+            exitCode: 0,
+            observedTestCount: 1,
+            maxTestCount: 1,
+          },
+        },
+        out,
+        options: validationOptions(out),
+        basicResult: { status: 'pass' },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.preflight.ran, false)
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -742,10 +860,9 @@ describe('test optimization CI wiring validation', () => {
         },
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.match(result.diagnosis, /required Datadog initialization directly/)
+      assert.match(result.diagnosis, /ran tests but exited 1/)
       assert.strictEqual(result.evidence.initializationProbe.ran, true)
       assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
       assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
@@ -789,13 +906,13 @@ describe('test optimization CI wiring validation', () => {
         },
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitMatchesPreflight, false)
       assert.deepStrictEqual(result.evidence.preflight, {
         ran: false,
         reason: 'No dd-trace-less preflight result was recorded for the selected CI wiring command shape.',
       })
-      assert.match(result.diagnosis, /emitted Test Optimization events, but the command exited 7/)
+      assert.match(result.diagnosis, /emitted Test Optimization events but exited 7/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -826,10 +943,10 @@ describe('test optimization CI wiring validation', () => {
         },
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandFailure, undefined)
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-command-failed-after-tests')
+      assert.match(result.diagnosis, /ran tests but exited 1/)
       assert.doesNotMatch(result.diagnosis, /failed before tests started/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
@@ -859,7 +976,7 @@ describe('test optimization CI wiring validation', () => {
         },
       })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.commandExitCode, 1)
       assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-preload-resolution-failed')
       assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
@@ -988,7 +1105,7 @@ describe('test optimization CI wiring validation', () => {
 
       assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.validationIncomplete, true)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-command-failed-before-tests')
+      assert.strictEqual(result.evidence.commandFailure.kind, 'project-command-initialization-failed')
       assert.notStrictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
     } finally {
       fs.rmSync(out, { recursive: true, force: true })

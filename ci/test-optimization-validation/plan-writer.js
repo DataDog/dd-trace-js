@@ -339,6 +339,7 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
   for (const setupCommand of framework.setup?.commands || []) {
     appendApprovalSummaryCommand(lines, {
       command: setupCommand,
+      deferOutputCleanup: true,
       label: `Project setup: ${setupCommand.id || setupCommand.description || 'setup'}`,
       repositoryRoot,
       runs: '1',
@@ -424,6 +425,7 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
  * @param {string[]} lines rendered summary lines
  * @param {object} input command summary
  * @param {object} input.command structured command
+ * @param {boolean} [input.deferOutputCleanup] whether outputs remain available through validation
  * @param {Record<string, string>} [input.environmentOverrides] validator-provided readable environment
  * @param {string} input.label customer-facing command label
  * @param {string} [input.note] additional execution behavior
@@ -433,6 +435,7 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
  */
 function appendApprovalSummaryCommand (lines, {
   command,
+  deferOutputCleanup = false,
   environmentOverrides = {},
   label,
   note,
@@ -451,7 +454,10 @@ function appendApprovalSummaryCommand (lines, {
   if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
   const outputPaths = getCommandOutputPaths(command)
   if (outputPaths.length > 0) {
-    lines.push('- Command-created outputs removed afterward: ' + outputPaths.map(outputPath => {
+    const cleanupTiming = deferOutputCleanup
+      ? 'remain available to later checks and are removed after validation'
+      : 'are removed after this command'
+    lines.push(`- Command-created outputs ${cleanupTiming}: ` + outputPaths.map(outputPath => {
       return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
     }).join(', '))
   }

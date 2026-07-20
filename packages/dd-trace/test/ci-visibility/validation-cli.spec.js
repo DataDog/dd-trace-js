@@ -147,6 +147,30 @@ describe('test optimization validation cli', () => {
     assert.strictEqual(options.approvedArtifactSha256, digest)
   })
 
+  for (const mode of ['--help', '--init-manifest', '--print-plan', '--print-approval-sha256', '--validate-manifest']) {
+    it(`rejects an approved live run combined with ${mode}`, async () => {
+      const errors = []
+      const originalError = console.error
+      const originalExitCode = process.exitCode
+      console.error = message => errors.push(message)
+      process.exitCode = undefined
+
+      try {
+        await runValidationCli([
+          '--run-approved-plan', 'results/approval.json',
+          '--sha256', 'a'.repeat(64),
+          mode,
+        ])
+
+        assert.strictEqual(process.exitCode, 1)
+        assert.match(errors.join('\n'), new RegExp(`cannot be combined with ${mode}`))
+      } finally {
+        console.error = originalError
+        process.exitCode = originalExitCode
+      }
+    })
+  }
+
   it('parses the read-only approval digest verification mode', () => {
     const options = parseArgs(['--offline-fixture-nonce', 'b'.repeat(32), '--print-approval-sha256'])
 
@@ -725,6 +749,27 @@ describe('test optimization validation cli', () => {
     assert.deepStrictEqual(validation.runSummary.omittedScenarios, [])
   })
 
+  it('reports partial coverage when the workflow finishes without conclusive checks', async () => {
+    const validation = await runCliFixture({
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'error',
+            diagnosis: 'The test command could not start.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+    })
+
+    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.runSummary.runCompleted, true)
+    assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
+  })
+
   it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
     const validation = await runCliFixture({}, manifest => {
       manifest.frameworks[0].ciWiring = {
@@ -745,7 +790,7 @@ describe('test optimization validation cli', () => {
       'No live CI-wiring conclusion was reached.')
     assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
     assert.strictEqual(validation.results[1].evidence.recommendation,
-      'Resolve the recorded CI replay blocker, then add ciWiringCommand and rerun validation.')
+      'Resolve the recorded CI replay blocker, then rerun validation with the unchanged CI test command.')
   })
 
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {

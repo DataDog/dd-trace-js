@@ -34,6 +34,7 @@ const SKIPPED_DIRECTORIES = new Set([
   '.yarn',
   'build',
   'coverage',
+  'dd-test-optimization-validation-results',
   'dist',
   'node_modules',
   'out',
@@ -123,9 +124,8 @@ function getFrameworkDefinitions (ddMajor) {
       commandPatterns: [/\bjest\b/],
       configPatterns: [/^jest\.config\./, /^config-jest\./],
       supportedRange: ddMajor >= 6 ? '>=28.0.0' : '>=24.8.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Jest to >=28.0.0, or use dd-trace v5 for older Jest versions.'
-        : 'Upgrade Jest to >=24.8.0.',
+      recommendation: 'Use a Jest and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Jest ${ddMajor >= 6 ? '>=28.0.0' : '>=24.8.0'}.`,
     },
     {
       id: 'mocha',
@@ -134,9 +134,8 @@ function getFrameworkDefinitions (ddMajor) {
       commandPatterns: [/\bmocha\b/],
       configPatterns: [/^\.mocharc\./],
       supportedRange: ddMajor >= 6 ? '>=8.0.0' : '>=5.2.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Mocha to >=8.0.0, or use dd-trace v5 for older Mocha versions.'
-        : 'Upgrade Mocha to >=5.2.0.',
+      recommendation: 'Use a Mocha and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Mocha ${ddMajor >= 6 ? '>=8.0.0' : '>=5.2.0'}.`,
       notes: [
         'Impacted tests are detected at suite level for Mocha.',
       ],
@@ -158,9 +157,8 @@ function getFrameworkDefinitions (ddMajor) {
       configPatterns: [/^cypress\.config\./, /^cypress\.json$/],
       supportedRange: ddMajor >= 6 ? '>=12.0.0' : '>=6.7.0',
       autoInstrumentationRange: ddMajor >= 6 ? '>=12.0.0' : '>=10.2.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Cypress to >=12.0.0, or use dd-trace v5 for older Cypress versions.'
-        : 'Upgrade Cypress to >=6.7.0.',
+      recommendation: 'Use a Cypress and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Cypress ${ddMajor >= 6 ? '>=12.0.0' : '>=6.7.0'}.`,
     },
     {
       id: 'playwright',
@@ -169,9 +167,8 @@ function getFrameworkDefinitions (ddMajor) {
       commandPatterns: [/\bplaywright\s+test\b/],
       configPatterns: [/^playwright\.config\./],
       supportedRange: ddMajor >= 6 ? '>=1.38.0' : '>=1.18.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Playwright to >=1.38.0, or use dd-trace v5 for older Playwright versions.'
-        : 'Upgrade Playwright to >=1.18.0.',
+      recommendation: 'Use a Playwright and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Playwright ${ddMajor >= 6 ? '>=1.38.0' : '>=1.18.0'}.`,
       notes: [
         'Test Impact Analysis suite skipping is not supported for Playwright.',
         'Impacted tests are detected at suite level for Playwright.',
@@ -199,7 +196,7 @@ const UNSUPPORTED_FRAMEWORKS = [
     id: 'node-test',
     name: 'Node.js test runner',
     packages: [],
-    commandPatterns: [/\bnode\s+--test\b/, /\bnode\s+--experimental-test-coverage\b/],
+    commandPatterns: [/\bnode\s+--test\b/, /\bnode\s+--experimental-test-coverage\b/, /\bbnt\b/],
   },
   { id: 'ava', name: 'AVA', packages: ['ava'], commandPatterns: [/\bava\b/] },
   { id: 'tap', name: 'tap', packages: ['tap'], commandPatterns: [/\btap\b/] },
@@ -1200,8 +1197,6 @@ function getEligibleCommandMatch (framework) {
     return script
   }
 
-  if (scriptMatches.length > 0) return
-
   if (framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest') {
     return framework.dependencyEntries?.[0] && {
       command: `direct ${framework.id} binary`,
@@ -2011,6 +2006,8 @@ function formatLocations (locations) {
  * @returns {object} serializable framework summary
  */
 function serializeSupportedFramework (framework) {
+  const eligibleCommand = getEligibleCommandMatch(framework)
+  const supportedVersion = getSupportedVersionDetection(framework, eligibleCommand?.relativePath)
   return {
     id: framework.id,
     name: framework.name,
@@ -2018,6 +2015,8 @@ function serializeSupportedFramework (framework) {
     supportedRange: framework.supportedRange,
     locations: framework.locations,
     versionDetections: framework.versionDetections,
+    eligibleCommand,
+    supportedVersion,
   }
 }
 

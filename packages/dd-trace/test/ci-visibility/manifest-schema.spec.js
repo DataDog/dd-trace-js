@@ -130,6 +130,40 @@ describe('test optimization validation manifest schema', () => {
     ])
   })
 
+  it('recognizes repository-local CI initialization in contradiction checks', () => {
+    const manifest = getManifest({
+      ciWiring: {
+        ...getCiWiring(),
+        initialization: {
+          status: 'not_configured',
+          evidence: ['The selected job has no NODE_OPTIONS or DD_* configuration.'],
+        },
+      },
+      ciWiringCommand: {
+        ...getCiWiringCommand(),
+        env: { NODE_OPTIONS: '-r ./ci/init' },
+      },
+    })
+
+    assert.match(validateManifest(manifest)[0], /adds dd-trace initialization/)
+  })
+
+  it('rejects execution instructions on a non-runnable framework', () => {
+    const manifest = getManifest({
+      status: 'detected_not_runnable',
+      notes: ['The installed runner version is unsupported.'],
+      setup: { commands: [getCiWiringCommand()] },
+      generatedTestStrategy: { status: 'not_possible', reason: 'Unsupported runner version.' },
+    })
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand must be omitted when frameworks[0].status is not runnable.',
+      'frameworks[0].preflight must be omitted when frameworks[0].status is not runnable.',
+      'frameworks[0].generatedTestStrategy must be omitted when frameworks[0].status is not runnable.',
+      'frameworks[0].setup.commands must be empty or omitted when frameworks[0].status is not runnable.',
+    ])
+  })
+
   it('rejects conclusive CI initialization status without evidence', () => {
     const manifest = getManifest({
       ciWiring: {

@@ -36,7 +36,12 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
   const unsupported = diagnosis.unsupportedFrameworks.filter(framework => {
     return frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0])
   })
-  if (selected.length === 0 && unsupported.length === 0) {
+  const selectedKinds = new Set(selected.map(framework => framework.id))
+  const detectedNotRunnable = diagnosis.supportedFrameworks.filter(framework => {
+    return !selectedKinds.has(framework.id) &&
+      (frameworks.size === 0 || frameworks.has(framework.id) || frameworks.has(framework.id.split(':')[0]))
+  })
+  if (selected.length === 0 && unsupported.length === 0 && detectedNotRunnable.length === 0) {
     throw new Error('No test framework was detected for manifest scaffolding.')
   }
 
@@ -60,6 +65,7 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
     ciDiscovery: discoverCiFiles(repositoryRoot),
     frameworks: [
       ...selected.map(framework => buildFrameworkScaffold(repositoryRoot, framework)),
+      ...detectedNotRunnable.map(framework => buildDetectedNotRunnableFrameworkScaffold(repositoryRoot, framework)),
       ...unsupported.map(framework => buildUnsupportedFrameworkScaffold(repositoryRoot, framework)),
     ],
     omitted: [],
@@ -70,6 +76,42 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
     throw new Error(`Generated manifest scaffold is invalid:\n- ${errors.join('\n- ')}`)
   }
   return manifest
+}
+
+/**
+ * Builds a non-runnable scaffold for a detected framework without an eligible live command.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object} detection framework detection
+ * @returns {object} manifest framework entry
+ */
+function buildDetectedNotRunnableFrameworkScaffold (repositoryRoot, detection) {
+  const locations = detection.locations || []
+  const packageJsonPath = getDetectionPackageJson(repositoryRoot, locations)
+  const projectRoot = path.dirname(packageJsonPath)
+  const packageJson = readJson(packageJsonPath) || {}
+  const version = detection.versionDetections?.[0]?.version || detection.versionDetections?.[0]?.rawVersion || null
+  const reason = detection.supportedVersion
+    ? `A supported ${detection.name} version was detected, but no eligible test command was found.`
+    : `${detection.name} ${version || 'with an undetermined version'} was detected, but this dd-trace version ` +
+      `supports ${detection.supportedRange}.`
+
+  return {
+    id: `${detection.id}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+    framework: detection.id,
+    frameworkVersion: version,
+    language: 'unknown',
+    status: 'detected_not_runnable',
+    supportLevel: 'detected_only',
+    project: getProject({
+      packageJson,
+      packageJsonPath,
+      projectRoot,
+      repositoryRoot,
+      framework: detection.id,
+    }),
+    notes: [reason],
+  }
 }
 
 /**
@@ -112,8 +154,12 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
       framework,
       frameworkVersion: detection.version,
       status: 'detected_not_runnable',
+      supportLevel: 'dd_trace_supported_but_validator_missing_adapter',
       project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
-      notes: [`${detection.name} was detected, but automatic generated-test scaffolding is not available.`],
+      notes: [
+        `${detection.name} was detected and is supported by dd-trace, but this local validator has no live ` +
+          `${detection.name} adapter. Live validation currently supports Jest, Mocha, and Vitest.`,
+      ],
     }
   }
 
@@ -132,19 +178,43 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
     }
   }
   const scriptName = getPackageScriptName(packageJson, detection.command)
-  const preserveProjectWrapper = Boolean(scriptName) && !usesBareFrameworkRunner(detection.command, framework)
+  const preserveProjectWrapper = Boolean(scriptName) && !usesFrameworkRunner(detection.command, framework)
   const baseCommand = buildExistingCommand({
     framework,
+    detectedCommand: detection.command,
     projectRoot,
     repositoryRoot,
     runner,
     scriptName,
     preserveProjectWrapper,
   })
-  const representative = findRepresentativeTestFile(projectRoot)
-  const command = representative
-    ? buildFocusedCommand(baseCommand, framework, representative, Boolean(scriptName), preserveProjectWrapper)
-    : baseCommand
+  const representativeSelection = findRepresentativeTestFile(projectRoot, framework)
+  const representative = representativeSelection.file
+  if (!representative) {
+    const reason = representativeSelection.rejected.length > 0
+      ? `Candidate test files could not be selected safely: ${representativeSelection.rejected.slice(0, 3).join(', ')}.`
+      : 'No bounded representative test file could be selected from the detected project.'
+    return {
+      id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
+      framework,
+      frameworkVersion: detection.version,
+      language: 'unknown',
+      status: 'requires_manual_setup',
+      supportLevel: 'validator_supported',
+      project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+      notes: [`${reason} Select a real ${detection.name} test before live validation.`],
+    }
+  }
+  const representativeTestName = representativeSelection.testName
+  const command = buildFocusedCommand(
+    baseCommand,
+    framework,
+    representative,
+    Boolean(scriptName),
+    preserveProjectWrapper,
+    undefined,
+    representativeTestName
+  )
 
   const generatedTestStrategy = buildGeneratedTestStrategy({
     baseCommand: preserveProjectWrapper ? baseCommand : undefined,
@@ -153,6 +223,9 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
     projectRoot,
     representative,
     runner,
+    runnerConfigurationArgs: preserveProjectWrapper
+      ? []
+      : getRunnerConfigurationArgs(framework, detection.command),
   })
 
   return {
@@ -165,7 +238,7 @@ function buildFrameworkScaffold (repositoryRoot, detection) {
     project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
     setup: { commands: [], services: [] },
     existingTestCommand: command,
-    preflight: { status: 'pending', maxTestCount: 50 },
+    preflight: { status: 'pending', maxTestCount: 1 },
     ciWiring: {
       status: 'unknown',
       replayability: 'not_replayable',
@@ -202,6 +275,7 @@ function getProject ({ packageJson, packageJsonPath, projectRoot, repositoryRoot
 }
 
 function buildExistingCommand ({
+  detectedCommand,
   framework,
   projectRoot,
   repositoryRoot,
@@ -212,7 +286,7 @@ function buildExistingCommand ({
   const packageManager = preserveProjectWrapper ? detectPackageManager(repositoryRoot) : undefined
   const argv = preserveProjectWrapper
     ? getPackageScriptArgv(packageManager, scriptName, repositoryRoot)
-    : getDirectRunnerArgv(framework, runner)
+    : getDirectRunnerArgv(framework, runner, detectedCommand)
   return {
     description: preserveProjectWrapper
       ? `Detected custom package script ${scriptName}`
@@ -226,7 +300,15 @@ function buildExistingCommand ({
   }
 }
 
-function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, projectRoot, representative, runner }) {
+function buildGeneratedTestStrategy ({
+  baseCommand,
+  framework,
+  packageJson,
+  projectRoot,
+  representative,
+  runner,
+  runnerConfigurationArgs,
+}) {
   const convention = getGeneratedTestConvention(representative, projectRoot)
   const packageType = getNearestPackageType(convention.testDirectory, projectRoot, packageJson.type)
   const moduleSystem = getGeneratedModuleSystem(framework, convention.fileExtension, packageType)
@@ -250,8 +332,24 @@ function buildGeneratedTestStrategy ({ baseCommand, framework, packageJson, proj
       id: definition.id,
       purpose: definition.purpose,
       runCommand: baseCommand
-        ? buildFocusedCommand(baseCommand, framework, definition.file, true, true, moduleSystem)
-        : buildGeneratedRunCommand(framework, projectRoot, definition.file, runner, moduleSystem),
+        ? buildFocusedCommand(
+          baseCommand,
+          framework,
+          definition.file,
+          true,
+          true,
+          moduleSystem,
+          definition.testName
+        )
+        : buildGeneratedRunCommand(
+          framework,
+          projectRoot,
+          definition.file,
+          runner,
+          moduleSystem,
+          runnerConfigurationArgs,
+          definition.testName
+        ),
       expectedWithoutDatadog: {
         exitCode: definition.id === 'atr-fail-once' ? 1 : 0,
         observedTestCount: 1,
@@ -401,7 +499,15 @@ function getAtrBody ({ moduleSystem, stateFileExpression, assertion }) {
   ].join('\n')
 }
 
-function buildGeneratedRunCommand (framework, projectRoot, filename, runner, moduleSystem) {
+function buildGeneratedRunCommand (
+  framework,
+  projectRoot,
+  filename,
+  runner,
+  moduleSystem,
+  runnerConfigurationArgs = [],
+  testName
+) {
   const args = {
     jest: ['--runTestsByPath', filename, '--runInBand', '--silent', '--no-watchman'],
     mocha: ['--reporter', 'spec', filename],
@@ -409,7 +515,13 @@ function buildGeneratedRunCommand (framework, projectRoot, filename, runner, mod
   }[framework]
   return {
     cwd: projectRoot,
-    argv: [process.execPath, runner, ...args],
+    argv: [
+      process.execPath,
+      runner,
+      ...runnerConfigurationArgs,
+      ...args,
+      ...getFocusedTestNameArgs(framework, testName),
+    ],
     env: {},
     requiredEnvVars: [],
     timeoutMs: 300_000,
@@ -426,6 +538,7 @@ function buildGeneratedRunCommand (framework, projectRoot, filename, runner, mod
  * @param {boolean} packageScript whether the command invokes a package script
  * @param {boolean} preserveDefaultReporter whether a repository wrapper owns reporter selection
  * @param {string} [moduleSystem] generated test module system
+ * @param {string} [testName] selected test name
  * @returns {object} focused project command
  */
 function buildFocusedCommand (
@@ -434,11 +547,12 @@ function buildFocusedCommand (
   filename,
   packageScript,
   preserveDefaultReporter,
-  moduleSystem
+  moduleSystem,
+  testName
 ) {
   const argv = [...baseCommand.argv]
   if (packageScript && path.basename(argv[0]).toLowerCase() === 'npm') argv.push('--')
-  argv.push(...getFocusedTestArgs(framework, filename, preserveDefaultReporter, moduleSystem))
+  argv.push(...getFocusedTestArgs(framework, filename, preserveDefaultReporter, moduleSystem, testName))
 
   return {
     ...baseCommand,
@@ -454,19 +568,42 @@ function buildFocusedCommand (
  * @param {string} filename selected test file
  * @param {boolean} preserveDefaultReporter whether a repository wrapper owns reporter selection
  * @param {string} [moduleSystem] generated test module system
+ * @param {string} [testName] selected test name
  * @returns {string[]} focused test arguments
  */
-function getFocusedTestArgs (framework, filename, preserveDefaultReporter, moduleSystem) {
+function getFocusedTestArgs (framework, filename, preserveDefaultReporter, moduleSystem, testName) {
   if (framework === 'jest') {
     return [
       '--runTestsByPath',
       filename,
+      ...getFocusedTestNameArgs(framework, testName),
       '--runInBand',
       ...(preserveDefaultReporter ? [] : ['--silent']),
       '--no-watchman',
     ]
   }
-  return [filename, ...(framework === 'vitest' && moduleSystem === 'commonjs' ? ['--globals'] : [])]
+  return [
+    filename,
+    ...getFocusedTestNameArgs(framework, testName),
+    ...(framework === 'vitest' && moduleSystem === 'commonjs' ? ['--globals'] : []),
+  ]
+}
+
+/**
+ * Returns a runner-native literal test-name filter.
+ *
+ * Mocha receives an unanchored leaf-title filter because its full title includes parent suites. The clean
+ * preflight must still prove that the filter selected exactly one test.
+ *
+ * @param {string} framework framework name
+ * @param {string|undefined} testName selected test name
+ * @returns {string[]} runner arguments
+ */
+function getFocusedTestNameArgs (framework, testName) {
+  if (!testName) return []
+  const pattern = escapeRegex(testName)
+  if (framework === 'mocha') return ['--grep', pattern]
+  return ['--testNamePattern', pattern]
 }
 
 /**
@@ -517,20 +654,68 @@ function getPackageScriptName (packageJson, command) {
  * @param {string} framework detected test framework
  * @returns {boolean} whether the command starts with the framework binary
  */
-function usesBareFrameworkRunner (command, framework) {
+function usesFrameworkRunner (command, framework) {
   const tokens = String(command || '').trim().split(/\s+/)
   const executable = path.basename(tokens[0] || '').replace(/\.cmd$/i, '').toLowerCase()
-  if (executable !== framework) return false
-  return tokens.length === 1 || framework === 'vitest' && tokens.length === 2 && tokens[1] === 'run'
+  return executable === framework
 }
 
-function getDirectRunnerArgv (framework, runner) {
-  return [process.execPath, runner, ...(framework === 'vitest' ? ['run'] : [])]
+/**
+ * Builds a direct local runner invocation while retaining bounded configuration flags.
+ *
+ * @param {string} framework framework name
+ * @param {string} runner resolved runner entrypoint
+ * @param {string} detectedCommand detected package command
+ * @returns {string[]} command arguments
+ */
+function getDirectRunnerArgv (framework, runner, detectedCommand) {
+  return [
+    process.execPath,
+    runner,
+    ...(framework === 'vitest' ? ['run'] : []),
+    ...getRunnerConfigurationArgs(framework, detectedCommand),
+  ]
 }
 
-function findRepresentativeTestFile (root) {
+/**
+ * Extracts framework configuration arguments that are safe to preserve in focused commands.
+ *
+ * @param {string} framework framework name
+ * @param {string} command detected package command
+ * @returns {string[]} configuration arguments
+ */
+function getRunnerConfigurationArgs (framework, command) {
+  const allowed = {
+    jest: new Set(['--config']),
+    mocha: new Set(['--config', '--extension', '--loader', '--require', '--timeout', '--ui']),
+    vitest: new Set(['--config', '--environment', '--project', '--root']),
+  }[framework]
+  if (!allowed) return []
+
+  const tokens = String(command || '').trim().split(/\s+/).slice(1)
+  const args = []
+  for (let index = 0; index < tokens.length; index++) {
+    const inlineName = tokens[index].split('=', 1)[0]
+    if (!allowed.has(inlineName)) continue
+    args.push(tokens[index])
+    if (!tokens[index].includes('=') && tokens[index + 1] && !tokens[index + 1].startsWith('-')) {
+      args.push(tokens[++index])
+    }
+  }
+  return args
+}
+
+/**
+ * Finds a bounded representative test owned by the selected framework.
+ *
+ * @param {string} root project root
+ * @param {string} framework selected framework
+ * @returns {{file?: string, testName?: string, rejected: string[]}} representative selection
+ */
+function findRepresentativeTestFile (root, framework) {
   const stack = [root]
   const candidates = []
+  const rejected = []
   const packageRanks = new Map()
   let visited = 0
   while (stack.length > 0 && visited < 5000) {
@@ -553,7 +738,12 @@ function findRepresentativeTestFile (root) {
       const inTestsDirectory = path.relative(root, directory).split(path.sep).includes('__tests__')
       if (/^(?:test\.(?:[cm]?[jt]s|[jt]sx)|.+[.-](?:test|spec)\.(?:[cm]?[jt]s|[jt]sx))$/.test(entry.name) ||
         (inTestsDirectory && /\.(?:[cm]?[jt]s|[jt]sx)$/.test(entry.name))) {
-        candidates.push(filename)
+        const ownershipConflict = getRunnerOwnershipConflict(filename, root, framework)
+        if (ownershipConflict) {
+          rejected.push(`${path.relative(root, filename)} (${ownershipConflict})`)
+        } else {
+          candidates.push(filename)
+        }
       }
     }
   }
@@ -565,7 +755,72 @@ function findRepresentativeTestFile (root) {
         getIndependentTestProjectRank(right, root, packageRanks) ||
       left.localeCompare(right)
   })
-  return candidates[0]
+  for (const filename of candidates) {
+    const testName = getRepresentativeTestName(filename)
+    if (testName) return { file: filename, testName, rejected }
+    rejected.push(`${path.relative(root, filename)} (no bounded literal test name)`)
+  }
+  return { rejected }
+}
+
+/**
+ * Identifies when a test candidate imports a different runner API.
+ *
+ * @param {string} filename candidate test file
+ * @param {string} root project root
+ * @param {string} framework selected framework
+ * @returns {string|undefined} conflict reason
+ */
+function getRunnerOwnershipConflict (filename, root, framework) {
+  let stat
+  let physicalFilename
+  try {
+    stat = fs.lstatSync(filename)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024) return 'unsafe or oversized candidate'
+    physicalFilename = fs.realpathSync(filename)
+    if (!isPathInside(fs.realpathSync(root), physicalFilename)) return 'candidate resolves outside the project'
+  } catch {
+    return 'candidate could not be read safely'
+  }
+
+  let source
+  try {
+    source = fs.readFileSync(physicalFilename, 'utf8')
+  } catch {
+    return 'candidate could not be read safely'
+  }
+  const conflicts = {
+    jest: [
+      [/(?:from\s+|require\s*\(\s*)['"]vitest['"]/, 'imports Vitest'],
+      [/(?:from\s+|require\s*\(\s*)['"]node:test['"]/, 'imports node:test'],
+    ],
+    mocha: [
+      [/(?:from\s+|require\s*\(\s*)['"](?:vitest|@jest\/globals|node:test)['"]/, 'imports another runner'],
+    ],
+    vitest: [
+      [/(?:from\s+|require\s*\(\s*)['"](?:@jest\/globals|node:test)['"]/, 'imports another runner'],
+    ],
+  }[framework] || []
+  return conflicts.find(([pattern]) => pattern.test(source))?.[1]
+}
+
+/**
+ * Extracts one bounded literal test name from a representative source file.
+ *
+ * @param {string} filename representative test file
+ * @returns {string|undefined} literal test name
+ */
+function getRepresentativeTestName (filename) {
+  let source
+  try {
+    source = fs.readFileSync(filename, 'utf8')
+  } catch {
+    return
+  }
+
+  const match = /(?:^|[^\w$])(?:it|test|specify)(?:\.only)?\s*\(\s*(['"])((?:\\.|[^\\'"\r\n]){1,200})\1/m.exec(source)
+  if (!match) return
+  return match[2].replaceAll(/\\(['"\\])/g, '$1')
 }
 
 /**
@@ -722,6 +977,16 @@ function findYarnRelease (root) {
 function getProjectIdentifier (packageJson, projectRoot, repositoryRoot) {
   if (packageJson.name) return packageJson.name.replaceAll(/[^A-Za-z0-9._-]+/g, '-')
   return (path.relative(repositoryRoot, projectRoot) || 'root').replaceAll(path.sep, '-')
+}
+
+/**
+ * Escapes a literal value for a test-name regular expression.
+ *
+ * @param {string} value literal value
+ * @returns {string} escaped expression
+ */
+function escapeRegex (value) {
+  return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, String.raw`\$&`)
 }
 
 function isPathInside (root, filename) {

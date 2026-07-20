@@ -267,7 +267,10 @@ describe('test optimization validation manifest schema', () => {
     assert.ok(frameworkAllOf.some(condition => {
       return condition.if?.properties?.status?.enum?.includes('requires_manual_setup') &&
         condition.then?.required?.includes('notes') &&
-        condition.then?.properties?.notes?.minItems === 1
+        condition.then?.properties?.notes?.minItems === 1 &&
+        condition.then?.properties?.existingTestCommand === false &&
+        condition.then?.properties?.preflight === false &&
+        condition.then?.properties?.generatedTestStrategy === false
     }))
     assert.ok(commandAllOf.some(condition => {
       return condition.if?.properties?.usesShell?.const === true &&

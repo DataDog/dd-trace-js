@@ -12,6 +12,27 @@ const {
 } = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
+  it('recognizes Better Node Test scripts as node:test diagnostics', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { '@better-node-test/bnt': '0.4.0' },
+      scripts: { test: 'bnt --test-reporter spec' },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.ok(report.unsupportedFrameworks.some(framework => framework.id === 'node-test'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('ignores a root package.json symbolic link that escapes the repository', function () {
     if (process.platform === 'win32') this.skip()
 
@@ -531,7 +552,7 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
-  it('does not select Jest watchAll scripts as eligible validation commands', () => {
+  it('does not select Jest watchAll scripts but retains the installed-runner fallback', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
 
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
@@ -552,7 +573,10 @@ describe('test optimization validation static diagnosis', () => {
         },
       })
 
-      assert.deepStrictEqual(report.eligibleFrameworks, [])
+      assert.strictEqual(report.eligibleFrameworks.length, 1)
+      assert.strictEqual(report.eligibleFrameworks[0].id, 'jest')
+      assert.strictEqual(report.eligibleFrameworks[0].command, 'direct jest binary')
+      assert.doesNotMatch(report.eligibleFrameworks[0].command, /watchAll/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

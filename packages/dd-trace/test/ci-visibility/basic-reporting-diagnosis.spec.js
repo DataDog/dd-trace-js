@@ -278,6 +278,26 @@ describe('test optimization basic reporting diagnosis', () => {
     assert.deepStrictEqual(diagnosis.signals.testOutputSummary, ['1 passing (2ms)', '1 passing (1ms)'])
   })
 
+  for (const output of ['1 failing', 'Tests: 1 failed, 1 total']) {
+    it(`recognizes failed-only output as evidence that tests ran: ${output}`, () => {
+      const diagnosis = getDebugAwareDiagnosis('No Test Optimization test events reached the event artifact.', {
+        commandOutputSummary: [output],
+        eventLevelFailure: { kind: 'no-test-optimization-events' },
+        debugRerun: {
+          ran: true,
+          testSessionEvents: 0,
+          testModuleEvents: 0,
+          testSuiteEvents: 0,
+          testEvents: 0,
+          debugLines: ['dd-trace is not initialized in a package manager.'],
+          stdoutExcerpt: [],
+        },
+      })
+
+      assert.strictEqual(diagnosis.kind, 'tests-ran-tracer-not-initialized')
+    })
+  }
+
   it('reports a dd-trace preload dependency failure before missing-event diagnosis', () => {
     const diagnosis = getMissingEventDiagnosis({
       framework: { framework: 'vitest' },

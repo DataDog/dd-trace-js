@@ -17,7 +17,13 @@ describe('Test Optimization validation initialization', () => {
     const offlineExporter = {}
     const agentProxyExporter = {}
     const agentlessExporter = {}
+    const values = {
+      [VALIDATION_MANIFEST_ENV]: '/private/validation/manifest.txt',
+      [VALIDATION_MODE_ENV]: '1',
+      [VALIDATION_OUTPUT_ENV]: '/private/validation/output',
+    }
     const getExporter = proxyquire('../../src/exporter', {
+      '../../dd-trace/src/config/helper': { getEnvironmentVariable: name => values[name] },
       './ci-visibility/exporters/agent-proxy': agentProxyExporter,
       './ci-visibility/exporters/agentless': agentlessExporter,
       './ci-visibility/exporters/ci-validation': offlineExporter,
@@ -28,6 +34,36 @@ describe('Test Optimization validation initialization', () => {
     assert.strictEqual(selected, offlineExporter)
     assert.notStrictEqual(selected, agentProxyExporter)
     assert.notStrictEqual(selected, agentlessExporter)
+  })
+
+  it('ignores the private exporter name without the full validation environment tuple', () => {
+    const offlineExporter = {}
+    const agentExporter = {}
+    const values = { [VALIDATION_MODE_ENV]: '1' }
+    const getExporter = proxyquire('../../src/exporter', {
+      '../../dd-trace/src/config/helper': { getEnvironmentVariable: name => values[name] },
+      './ci-visibility/exporters/ci-validation': offlineExporter,
+      './exporters/agent': agentExporter,
+    })
+
+    assert.strictEqual(getExporter('ci_validation'), agentExporter)
+  })
+
+  it('ignores the private exporter name when validation mode is explicitly false', () => {
+    const offlineExporter = {}
+    const agentExporter = {}
+    const values = {
+      [VALIDATION_MANIFEST_ENV]: '/private/validation/manifest.txt',
+      [VALIDATION_MODE_ENV]: 'false',
+      [VALIDATION_OUTPUT_ENV]: '/private/validation/output',
+    }
+    const getExporter = proxyquire('../../src/exporter', {
+      '../../dd-trace/src/config/helper': { getEnvironmentVariable: name => values[name] },
+      './ci-visibility/exporters/ci-validation': offlineExporter,
+      './exporters/agent': agentExporter,
+    })
+
+    assert.strictEqual(getExporter('ci_validation'), agentExporter)
   })
 
   it('selects the offline exporter without an API key and ahead of agentless configuration', () => {

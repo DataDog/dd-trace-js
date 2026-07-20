@@ -517,6 +517,58 @@ describe('test optimization validation scenario artifacts', () => {
       fs.rmSync(out, { recursive: true, force: true })
     }
   })
+
+  it('removes inline CI NODE_OPTIONS before adding the initialization probe preload', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-inline-'))
+    const blocker = path.join(out, 'blocked-preload.js')
+    fs.writeFileSync(blocker, "throw new Error('inline preload was not removed')\n")
+
+    try {
+      const probe = await runInitializationProbe({
+        command: {
+          cwd: out,
+          argv: ['/usr/bin/env', `NODE_OPTIONS=-r ${blocker}`, process.execPath, '-e', ''],
+        },
+        framework: { id: 'vitest:probe', framework: 'vitest' },
+        outDir: out,
+        options: validationOptions(out),
+      })
+
+      assert.strictEqual(probe.summary.commandExitCode, 0)
+      assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('removes an exported shell NODE_OPTIONS before adding the initialization probe preload', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-shell-'))
+    const blocker = path.join(out, 'blocked-preload.js')
+    fs.writeFileSync(blocker, "throw new Error('inline preload was not removed')\n")
+
+    try {
+      const probe = await runInitializationProbe({
+        command: {
+          cwd: out,
+          usesShell: true,
+          shell: '/bin/sh',
+          shellCommand: `export NODE_OPTIONS='-r ${blocker}'; ${JSON.stringify(process.execPath)} -e ''`,
+        },
+        framework: { id: 'vitest:probe', framework: 'vitest' },
+        outDir: out,
+        options: validationOptions(out),
+      })
+
+      assert.strictEqual(probe.summary.commandExitCode, 0)
+      assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
 })
 
 function generatedScenario (id, file, runCommand) {
