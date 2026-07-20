@@ -227,9 +227,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (!span) return
 
     // Synchronous execute() throw (e.g. execute(null, doc)) — error handler
-    // already tagged the span, just finish it.
+    // already tagged the span.
     if (ctx.error) {
-      this.#drain(ctx, span)
+      if (ctx.ddAborted) {
+        span.finish()
+      } else {
+        this.#finishSpan(ctx, span)
+      }
       return ctx.parentStore
     }
 
@@ -238,10 +242,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (typeof result?.then === 'function') {
       result.then(
         (res) => this.#finishSpan(ctx, span, res),
-        (err) => {
-          span.setTag('error', err)
-          this.#drain(ctx, span)
-        }
+        (err) => this.#finishSpan(ctx, span, undefined, err)
       )
     } else {
       this.#finishSpan(ctx, span, result)
@@ -260,8 +261,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
   }
 
-  #finishSpan (ctx, span, res) {
-    this.config.hooks.execute(span, ctx.ddArgs, res)
+  /**
+   * @param {object} ctx
+   * @param {import('../../dd-trace/src/opentracing/span')} span
+   * @param {import('graphql').ExecutionResult} [res]
+   * @param {unknown} [error]
+   */
+  #finishSpan (ctx, span, res, error) {
+    if (error !== undefined) {
+      span.setTag('error', error)
+    }
 
     if (res?.errors?.length) {
       span.setTag('error', res.errors[0])
@@ -270,17 +279,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    this.#drain(ctx, span)
-  }
-
-  #drain (ctx, span) {
-    span.finish()
     if (ctx.ddContextValue) {
       contexts.delete(ctx.ddContextValue)
     }
     if (ctx.ddInstrumentedArgs) {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
+
+    this.config.hooks.execute(span, ctx.ddArgs, res)
+
+    span.finish()
   }
 
   // Public — called from wrapResolve (free function, crosses class boundary).
