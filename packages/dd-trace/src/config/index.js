@@ -40,7 +40,15 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
-const RUNTIME_ID = uuid()
+let runtimeId
+
+// Computing this at module load would call crypto RNG in global scope, which Cloudflare Workers forbid.
+function getRuntimeId () {
+  if (runtimeId === undefined) {
+    runtimeId = uuid()
+  }
+  return runtimeId
+}
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -560,7 +568,7 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = RUNTIME_ID
+    this.tags['runtime-id'] = getRuntimeId()
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
