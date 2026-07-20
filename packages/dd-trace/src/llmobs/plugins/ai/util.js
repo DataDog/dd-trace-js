@@ -28,9 +28,31 @@ const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
 
 /**
  * @typedef {{
- *   type: string,
- *   value?: unknown,
- *   reason?: unknown
+ *   type: 'text',
+ *   text: string
+ * } | {
+ *   type: 'media' | 'file',
+ *   mediaType: string
+ * } | {
+ *   type: 'file-data' | 'file-url' | 'file-id' | 'file-reference'
+ * } | {
+ *   type: 'image-data' | 'image-url' | 'image-file-id' | 'image-file-reference'
+ * } | {
+ *   type: 'custom'
+ * }} ToolCallContentPart
+ *
+ * @typedef {{
+ *   type: 'text' | 'error-text',
+ *   value: string
+ * } | {
+ *   type: 'json' | 'error-json',
+ *   value: unknown
+ * } | {
+ *   type: 'content',
+ *   value: ToolCallContentPart[]
+ * } | {
+ *   type: 'execution-denied',
+ *   reason?: string
  * }} ToolCallOutput
  *
  * @typedef {{ output?: ToolCallOutput, result?: unknown } & Record<string, unknown>} ToolCallResultContent
@@ -315,7 +337,7 @@ function stringifyToolCallResult (value) {
 }
 
 /**
- * @param {unknown} value
+ * @param {ToolCallContentPart[]} value
  * @returns {string}
  */
 function formatToolCallContent (value) {
@@ -329,13 +351,23 @@ function formatToolCallContent (value) {
     if (type === 'text') {
       if (typeof part.text !== 'string') return UNPARSABLE_TOOL_RESULT
       result += part.text
-    } else if (type === 'media') {
+    } else if (type === 'media' || type === 'file') {
       const { mediaType } = part
       if (typeof mediaType !== 'string') return UNPARSABLE_TOOL_RESULT
-      result += mediaType.startsWith('image/') ? '[Image]' : '[File]'
-    } else if (type === 'file-data' || type === 'file-url' || type === 'file-id') {
+      result += mediaType === 'image' || mediaType.startsWith('image/') ? '[Image]' : '[File]'
+    } else if (
+      type === 'file-data' ||
+      type === 'file-url' ||
+      type === 'file-id' ||
+      type === 'file-reference'
+    ) {
       result += '[File]'
-    } else if (type === 'image-data' || type === 'image-url' || type === 'image-file-id') {
+    } else if (
+      type === 'image-data' ||
+      type === 'image-url' ||
+      type === 'image-file-id' ||
+      type === 'image-file-reference'
+    ) {
       result += '[Image]'
     } else if (type === 'custom') {
       result += '[Custom Content]'

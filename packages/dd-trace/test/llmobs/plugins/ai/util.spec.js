@@ -46,19 +46,25 @@ describe('AI SDK LLMObs utilities', () => {
         { type: 'text', text: 'before' },
         { type: 'media', mediaType: 'image/png', data: 'legacy-image-data' },
         { type: 'media', mediaType: 'application/pdf', data: 'legacy-file-data' },
+        { type: 'file', mediaType: 'image', data: { type: 'data', data: 'image-data' } },
+        { type: 'file', mediaType: 'image/png', data: { type: 'url', url: 'https://example.com/image' } },
+        { type: 'file', mediaType: 'application/pdf', data: { type: 'text', text: 'file-data' } },
         { type: 'file-data', mediaType: 'application/pdf', data: 'file-data' },
         { type: 'file-url', url: 'https://example.com/private-file' },
         { type: 'file-id', fileId: 'private-file-id' },
+        { type: 'file-reference', providerReference: { openai: 'private-file-id' } },
         { type: 'image-data', mediaType: 'image/png', data: 'image-data' },
         { type: 'image-url', url: 'https://example.com/private-image' },
         { type: 'image-file-id', fileId: 'private-image-id' },
+        { type: 'image-file-reference', providerReference: { openai: 'private-image-id' } },
         { type: 'custom', providerOptions: { secret: 'provider-data' } },
         { type: 'text', text: 'after' },
       ]
 
       assert.strictEqual(
         getToolCallResultContent({ output: { type: 'content', value: content } }),
-        'before[Image][File][File][File][File][Image][Image][Image][Custom Content]after'
+        'before[Image][File][Image][Image][File][File][File][File][File]' +
+        '[Image][Image][Image][Image][Custom Content]after'
       )
     })
 
@@ -109,6 +115,8 @@ describe('AI SDK LLMObs utilities', () => {
         [{ type: 'text' }],
         [{ type: 'text', text: 42 }],
         [{ type: 'media' }],
+        [{ type: 'file' }],
+        [{ type: 'file', mediaType: 42 }],
         [{ type: 'unknown' }],
         [{ type: Symbol('text'), text: 'result' }],
         [{ type: 'text', text: 'before' }, { type: 'unknown' }],

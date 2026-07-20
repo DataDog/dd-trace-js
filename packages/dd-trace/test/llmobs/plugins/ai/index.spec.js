@@ -481,6 +481,10 @@ describe('Plugin', () => {
               location,
               temperature: 72,
             }),
+            toModelOutput: () => ({
+              type: 'content',
+              value: [{ type: 'text', text: '{"location":"Tokyo","temperature":72}' }],
+            }),
           }),
         }
 
