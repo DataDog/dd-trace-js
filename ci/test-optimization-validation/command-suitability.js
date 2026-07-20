@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { sanitizeString } = require('./redaction')
+const { maskJavaScriptComments } = require('./source-text')
 
 const MAX_CONFIG_BYTES = 512 * 1024
 const MAX_STATIC_CONFIG_ARRAY_BYTES = 4096
@@ -27,7 +28,7 @@ const JEST_OPTIONS_WITH_VALUE = new Set([
   '--testRegex',
 ])
 const JEST_ROOT_DIR_PATTERN = /\brootDir\s*:\s*(['"])([^'"]+)\1/
-const NODE_EXPORT_CONDITIONS = new Set(['default', 'import', 'module-sync', 'node', 'node-addons', 'require'])
+const COMMON_NODE_EXPORT_CONDITIONS = new Set(['default', 'module-sync', 'node', 'node-addons'])
 const TYPECHECK_ENABLED_PATTERN = /typecheck\s*:\s*\{[\s\S]{0,2000}?enabled\s*:\s*true/
 const VITEST_CONFIG_FILENAMES = [
   'vitest.config.js',
@@ -118,8 +119,9 @@ function getMissingSelfPackageBuildError (command, framework, repositoryRoot) {
 
     const source = readRepositoryConfig(current.filename, repositoryRoot)
     if (!source) continue
-    for (const specifier of getPackageModuleSpecifiers(source, packageJson.name)) {
-      const exportTargets = getPackageEntryTargets(packageJson, specifier)
+    for (const reference of getPackageModuleReferences(source, packageJson.name)) {
+      const { condition, specifier } = reference
+      const exportTargets = getPackageEntryTargets(packageJson, specifier, condition)
       if (exportTargets.length === 0) continue
       const entrypoints = exportTargets.map(target => path.resolve(path.dirname(packageJsonPath), target))
       const usableEntrypoints = entrypoints.filter(entrypoint => {
@@ -199,10 +201,10 @@ function getSelectedTestFile (command, projectRoot, repositoryRoot) {
  *
  * @param {string} source test source
  * @param {string} packageName package name
- * @returns {string[]} self-package module specifiers
+ * @returns {{condition: 'import'|'require', specifier: string}[]} self-package module references
  */
-function getPackageModuleSpecifiers (source, packageName) {
-  return getStaticModuleSpecifiers(source).filter(specifier => {
+function getPackageModuleReferences (source, packageName) {
+  return getStaticModuleReferences(source).filter(({ specifier }) => {
     return specifier === packageName || specifier.startsWith(`${packageName}/`)
   })
 }
@@ -212,19 +214,20 @@ function getPackageModuleSpecifiers (source, packageName) {
  *
  * @param {object} packageJson parsed package metadata
  * @param {string} specifier self-package module specifier
+ * @param {'import'|'require'} condition runtime module condition
  * @returns {string[]} entrypoint targets
  */
-function getPackageEntryTargets (packageJson, specifier) {
+function getPackageEntryTargets (packageJson, specifier, condition) {
   const targets = []
   const subpath = specifier === packageJson.name ? '.' : `.${specifier.slice(packageJson.name.length)}`
   if (subpath === '.') {
     if (packageJson.exports === undefined) {
-      collectRuntimeExportTargets(packageJson.main, targets)
+      collectRuntimeExportTargets(packageJson.main, targets, condition)
     } else {
-      collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, targets)
+      collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, targets, condition)
     }
   } else {
-    collectRuntimeExportTargets(packageJson.exports?.[subpath], targets)
+    collectRuntimeExportTargets(packageJson.exports?.[subpath], targets, condition)
   }
   return [...new Set(targets)]
 }
@@ -234,10 +237,11 @@ function getPackageEntryTargets (packageJson, specifier) {
  *
  * @param {unknown} value package export value
  * @param {string[]} targets collected package targets
+ * @param {'import'|'require'} condition runtime module condition
  * @param {number} [depth] current nesting depth
  * @returns {void}
  */
-function collectRuntimeExportTargets (value, targets, depth = 0) {
+function collectRuntimeExportTargets (value, targets, condition, depth = 0) {
   if (targets.length >= 32 || depth > 6) return
   if (typeof value === 'string') {
     targets.push(value)
@@ -246,13 +250,14 @@ function collectRuntimeExportTargets (value, targets, depth = 0) {
   if (!value || typeof value !== 'object') return
   if (Array.isArray(value)) {
     for (const nested of value.slice(0, 32)) {
-      collectRuntimeExportTargets(nested, targets, depth + 1)
+      collectRuntimeExportTargets(nested, targets, condition, depth + 1)
     }
     return
   }
-  for (const [condition, nested] of Object.entries(value).slice(0, 32)) {
-    if (NODE_EXPORT_CONDITIONS.has(condition)) {
-      collectRuntimeExportTargets(nested, targets, depth + 1)
+  for (const [exportCondition, nested] of Object.entries(value).slice(0, 32)) {
+    if (exportCondition === condition || COMMON_NODE_EXPORT_CONDITIONS.has(exportCondition)) {
+      collectRuntimeExportTargets(nested, targets, condition, depth + 1)
+      break
     }
   }
 }
@@ -308,29 +313,45 @@ function getMissingLocalModuleError (command, framework, repositoryRoot) {
  * @returns {string[]} relative module specifiers
  */
 function getRelativeModuleSpecifiers (source) {
-  return getStaticModuleSpecifiers(source).filter(specifier => /^\.\.?\//.test(specifier))
+  return getStaticModuleReferences(source)
+    .map(({ specifier }) => specifier)
+    .filter(specifier => /^\.\.?\//.test(specifier))
 }
 
 /**
  * Extracts bounded literal module specifiers while skipping comments and unrelated strings.
  *
  * @param {string} source JavaScript or TypeScript source
- * @returns {string[]} module specifiers
+ * @returns {{condition: 'import'|'require', specifier: string}[]} runtime module references
  */
-function getStaticModuleSpecifiers (source) {
-  const specifiers = []
+function getStaticModuleReferences (source) {
+  source = maskJavaScriptComments(source)
+  const references = []
   visitConfigSource(source, ({ index }) => {
+    let condition
     let match
     if (isTokenAt(source, index, 'require')) {
+      condition = 'require'
       match = /^require\s*\(\s*(['"])([^'"\r\n]{1,512})\1/.exec(source.slice(index))
     } else if (isTokenAt(source, index, 'import')) {
-      match = /^import\s*(?:\(\s*)?(['"])([^'"\r\n]{1,512})\1/.exec(source.slice(index))
-    } else if (isTokenAt(source, index, 'from')) {
-      match = /^from\s*(['"])([^'"\r\n]{1,512})\1/.exec(source.slice(index))
+      condition = 'import'
+      const statement = source.slice(index, index + 1024)
+      if (/^import\s+type\b/.test(statement)) return
+      match = /^import\s*(?:\(\s*)?(['"])([^'"\r\n]{1,512})\1/.exec(statement) ||
+        /^import\s+[^;]{0,900}?\bfrom\s*(['"])([^'"\r\n]{1,512})\1/.exec(statement)
+    } else if (isTokenAt(source, index, 'export')) {
+      condition = 'import'
+      const statement = source.slice(index, index + 1024)
+      if (/^export\s+type\b/.test(statement)) return
+      match = /^export\s+[*{][^;]{0,900}?\bfrom\s*(['"])([^'"\r\n]{1,512})\1/.exec(statement)
     }
-    if (match && !specifiers.includes(match[2])) specifiers.push(match[2])
+    if (!match) return
+    const reference = { condition, specifier: match[2] }
+    if (!references.some(entry => entry.condition === condition && entry.specifier === match[2])) {
+      references.push(reference)
+    }
   })
-  return specifiers
+  return references
 }
 
 /**
@@ -372,7 +393,44 @@ function resolveLocalModule (importer, specifier, repositoryRoot) {
     const source = readRepositoryConfig(candidate, repositoryRoot)
     if (source !== undefined) return { filename: candidate, target }
   }
+  const packageResolution = resolveLocalPackageDirectory(target, repositoryRoot)
+  if (packageResolution) return packageResolution
   return { target }
+}
+
+/**
+ * Resolves a bounded local package directory through package.json main or runtime exports.
+ *
+ * @param {string} target local directory target
+ * @param {string} repositoryRoot repository root
+ * @returns {{filename?: string, target: string, resolved?: boolean}|undefined} bounded resolution
+ */
+function resolveLocalPackageDirectory (target, repositoryRoot) {
+  const packageSource = readRepositoryConfig(path.join(target, 'package.json'), repositoryRoot)
+  if (!packageSource) return
+
+  let packageJson
+  try {
+    packageJson = JSON.parse(packageSource)
+  } catch {
+    return
+  }
+  const entryTargets = []
+  if (packageJson.exports === undefined) {
+    collectRuntimeExportTargets(packageJson.main, entryTargets, 'require')
+  } else {
+    collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, entryTargets, 'require')
+  }
+  for (const entryTarget of entryTargets) {
+    const entrypoint = path.resolve(target, entryTarget)
+    for (const candidate of getLocalModuleCandidates(entrypoint)) {
+      if (!isPathInside(repositoryRoot, candidate)) continue
+      if (path.extname(candidate) === '.node' && isRepositoryFile(candidate, repositoryRoot)) {
+        return { target, resolved: true }
+      }
+      if (readRepositoryConfig(candidate, repositoryRoot) !== undefined) return { filename: candidate, target }
+    }
+  }
 }
 
 /**
@@ -680,6 +738,7 @@ function getLiteralPropertyArrayPatterns (source, property) {
  * @returns {string[]} literal regular-expression sources
  */
 function getLiteralRegexPatterns (source, property) {
+  source = maskJavaScriptComments(source)
   const patterns = []
   const expression = new RegExp(
     String.raw`\b${property}\s*:\s*(?:(["'])([^"'\r\n]{1,256})\1|\/((?:\\.|[^/\r\n]){1,256})\/[dgimsuvy]*)`,

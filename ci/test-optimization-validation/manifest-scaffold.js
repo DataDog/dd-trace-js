@@ -8,6 +8,7 @@ const path = require('node:path')
 const { runDiagnosis } = require('../diagnose')
 const { GENERATED_SCENARIOS, getGeneratedTestContent } = require('./generated-test-contract')
 const { validateManifest } = require('./manifest-schema')
+const { maskJavaScriptComments } = require('./source-text')
 
 const SUPPORTED_SCAFFOLD_FRAMEWORKS = new Set(['jest', 'mocha', 'vitest'])
 const CI_PATHS = [
@@ -781,6 +782,7 @@ function getRepresentativeTestName (filename) {
   } catch {
     return
   }
+  source = maskJavaScriptComments(source)
 
   const pattern = /(?:^|[^\w$])(?:it|test|specify)(?:\.only)?\s*\(\s*(['"])((?:\\.|[^\\'"\r\n]){1,200})\1/gm
   let match

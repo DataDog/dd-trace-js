@@ -27,6 +27,7 @@ const {
 const {
   GENERATED_SCENARIOS,
   getGeneratedTestContent,
+  getGeneratedTestContractError,
 } = require('../../../../ci/test-optimization-validation/generated-test-contract')
 const {
   verifyGeneratedTestStrategy,
@@ -1209,6 +1210,33 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('accepts cwd-relative generated test paths in structured and shell commands', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-relative-generated-path-'))
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+
+    try {
+      for (const scenario of framework.generatedTestStrategy.scenarios) {
+        const filename = scenario.testIdentities[0].file
+        scenario.runCommand.argv = scenario.runCommand.argv.map(value => {
+          return value === filename ? path.relative(scenario.runCommand.cwd, filename) : value
+        })
+      }
+      assert.strictEqual(getGeneratedTestContractError(framework), undefined)
+
+      for (const scenario of framework.generatedTestStrategy.scenarios) {
+        const filename = scenario.testIdentities[0].file
+        scenario.runCommand = {
+          cwd: root,
+          usesShell: true,
+          shellCommand: `node --runTestsByPath="${path.relative(root, filename)}"`,
+        }
+      }
+      assert.strictEqual(getGeneratedTestContractError(framework), undefined)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('requires one usable self-package entrypoint before approving a self-importing test', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-self-import-plan-'))
     const testFile = path.join(root, 'test', 'unit.test.js')
@@ -1315,6 +1343,70 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('ignores type-only module references when checking runtime prerequisites', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-type-only-import-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.ts')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'type-only-project',
+      exports: './dist/index.js',
+    }))
+    fs.writeFileSync(testFile, [
+      "import type { Input } from 'type-only-project'",
+      "export type { Output } from '../missing-types'",
+      'export const value = true',
+      '',
+    ].join('\n'))
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const condition of ['import', 'require']) {
+    it(`requires the package export selected by ${condition} syntax`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-conditional-export-plan-'))
+      const testFile = path.join(root, 'test', 'unit.test.js')
+      const packageJson = path.join(root, 'package.json')
+      const existingCondition = condition === 'import' ? 'require' : 'import'
+      const existingEntrypoint = path.join(root, 'src', `${existingCondition}.js`)
+      const missingEntrypoint = path.join(root, 'dist', `${condition}.js`)
+      const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+      framework.project = { root, packageJson, configFiles: [] }
+      framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+      fs.mkdirSync(path.dirname(testFile), { recursive: true })
+      fs.mkdirSync(path.dirname(existingEntrypoint), { recursive: true })
+      fs.writeFileSync(packageJson, JSON.stringify({
+        name: 'conditional-export-project',
+        exports: {
+          '.': {
+            [condition]: `./dist/${condition}.js`,
+            [existingCondition]: `./src/${existingCondition}.js`,
+          },
+        },
+      }))
+      fs.writeFileSync(testFile, condition === 'import'
+        ? "import 'conditional-export-project'\n"
+        : "require('conditional-export-project')\n")
+      fs.writeFileSync(existingEntrypoint, 'module.exports = true\n')
+
+      try {
+        assert.throws(
+          () => formatFrameworkPlan(root, framework),
+          new RegExp(`entrypoint ${escapeRegExp(missingEntrypoint)} does not exist`)
+        )
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
   it('checks the selected test instead of a Jest option value', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-option-path-plan-'))
     const configFile = path.join(root, 'jest.config.test.js')
@@ -1363,6 +1455,31 @@ describe('test optimization validator-owned execution phases', () => {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  for (const packageField of ['exports', 'main']) {
+    it(`resolves local package directories through package.json ${packageField}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-local-package-plan-'))
+      const testFile = path.join(root, 'test', 'unit.test.js')
+      const packageRoot = path.join(root, 'fixtures', 'pkg')
+      const entrypoint = path.join(packageRoot, 'main.js')
+      const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+      framework.project = { root, configFiles: [] }
+      framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+      fs.mkdirSync(path.dirname(testFile), { recursive: true })
+      fs.mkdirSync(packageRoot, { recursive: true })
+      fs.writeFileSync(testFile, "require('../fixtures/pkg')\n")
+      fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify(
+        packageField === 'main' ? { main: 'main.js' } : { exports: { '.': { require: './main.js' } } }
+      ))
+      fs.writeFileSync(entrypoint, 'module.exports = true\n')
+
+      try {
+        formatFrameworkPlan(root, framework)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('rejects a transitive self-package subpath whose exported build output is missing', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-transitive-self-import-plan-'))
@@ -1521,6 +1638,26 @@ describe('test optimization validator-owned execution phases', () => {
         testMatch: ['<rootDir>/__tests__/*.js'],
       },
     }))
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores commented Jest testRegex rules', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-commented-jest-regex-plan-'))
+    const configFile = path.join(root, 'jest.config.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project.configFiles = [configFile]
+    fs.writeFileSync(configFile, [
+      'module.exports = {',
+      '  // testRegex: /-test\\.js$/,',
+      '  testMatch: ["**/*.js"],',
+      '}',
+      '',
+    ].join('\n'))
 
     try {
       formatFrameworkPlan(root, framework)

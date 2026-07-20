@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
 
@@ -130,7 +131,7 @@ describe('test optimization validation manifest schema', () => {
     ])
   })
 
-  it('recognizes repository-local CI initialization in contradiction checks', () => {
+  it('does not treat a project-local ci/init script as Datadog initialization', () => {
     const manifest = getManifest({
       ciWiring: {
         ...getCiWiring(),
@@ -142,6 +143,24 @@ describe('test optimization validation manifest schema', () => {
       ciWiringCommand: {
         ...getCiWiringCommand(),
         env: { NODE_OPTIONS: '-r ./ci/init' },
+      },
+    })
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('recognizes the validator init path in contradiction checks', () => {
+    const manifest = getManifest({
+      ciWiring: {
+        ...getCiWiring(),
+        initialization: {
+          status: 'not_configured',
+          evidence: ['The selected job has no NODE_OPTIONS or DD_* configuration.'],
+        },
+      },
+      ciWiringCommand: {
+        ...getCiWiringCommand(),
+        env: { NODE_OPTIONS: `-r ${path.resolve(__dirname, '../../../../ci/init.js')}` },
       },
     })
 

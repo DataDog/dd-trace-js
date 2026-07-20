@@ -217,7 +217,10 @@ function commandInitializesDatadog (command) {
     command?.shellCommand,
     command?.env?.NODE_OPTIONS,
   ].filter(Boolean).join(' ')
-  return /(?:dd-trace|\.\.?)\/ci\/init/.test(values.replaceAll('\\', '/'))
+  const normalized = values.replaceAll('\\', '/')
+  const validatorInit = path.resolve(__dirname, '..', 'init.js').replaceAll('\\', '/')
+  return normalized.includes(validatorInit) ||
+    /(?:^|[\s"'=/])dd-trace\/ci\/init(?:\.js)?(?=$|[\s"'])/.test(normalized)
 }
 
 function validateRepositoryContainedPaths (manifest, errors) {

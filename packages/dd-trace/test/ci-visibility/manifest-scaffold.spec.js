@@ -77,7 +77,7 @@ describe('test optimization validation manifest scaffold', () => {
       version: '4.0.5',
       bin: { vitest: 'bin.js' },
     }))
-    fs.writeFileSync(representative, 'test("unit", () => {})\n')
+    fs.writeFileSync(representative, '// test("stale comment", () => {})\ntest("unit", () => {})\n')
     fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'pnpm-vitest-project',

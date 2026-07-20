@@ -155,8 +155,17 @@ function getGeneratedTestContractError (framework) {
  * @returns {boolean} whether the command selects the file
  */
 function commandReferencesFile (command, filename) {
-  if (command?.usesShell) return String(command.shellCommand || '').includes(filename)
-  return (command?.argv || []).includes(filename)
+  const values = command?.usesShell
+    ? String(command.shellCommand || '').match(/"[^"]*"|'[^']*'|[^\s]+/g)?.map(value => {
+      return value.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
+    }) || []
+    : command?.argv || []
+  return values.some(value => {
+    if (typeof value !== 'string') return false
+    let pathValue = value.startsWith('--') && value.includes('=') ? value.slice(value.indexOf('=') + 1) : value
+    pathValue = pathValue.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
+    return path.resolve(command.cwd, pathValue) === path.resolve(filename)
+  })
 }
 
 /**
