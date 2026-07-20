@@ -228,6 +228,8 @@ class NativeDatadogSpan extends DatadogSpan {
     if (fields.tags) {
       this._spanContext.syncToNativeOnly(fields.tags)
     }
+
+    processor?._exporter?._trackSpanStart?.()
   }
 
   /**
@@ -501,7 +503,11 @@ class NativeDatadogSpan extends DatadogSpan {
       ['ns', resolvedFinishTime - this._startTime]
     )
 
-    super.finish(resolvedFinishTime)
+    try {
+      super.finish(resolvedFinishTime)
+    } finally {
+      this._processor?._exporter?._trackSpanFinish?.()
+    }
   }
 
   /**

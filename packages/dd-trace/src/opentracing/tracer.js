@@ -58,13 +58,19 @@ class DatadogTracer {
     // The electron APM exporter also rides the JS pipeline: it consumes
     // JS-formatted spans and publishes them over the electron diagnostic
     // channel instead of shipping to the agent, so it can't use native spans.
-    const useElectronExporter = config.experimental?.exporter === exporters.ELECTRON
+    const configuredExporter = config.experimental?.exporter
+    const useElectronExporter = configuredExporter === exporters.ELECTRON
+    const unsupportedApmExporter = configuredExporter &&
+      configuredExporter !== exporters.AGENT &&
+      !useElectronExporter &&
+      !config.isCiVisibility
+
     if (config.isCiVisibility || useElectronExporter) {
       this._useJsSpans = true
       this._isCiVisibility = config.isCiVisibility === true
       const Exporter = useElectronExporter
         ? require('../exporters/electron')
-        : getExporter(config.experimental.exporter)
+        : getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
       this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config)
       this._url = this._exporter._url
@@ -73,6 +79,12 @@ class DatadogTracer {
         ? 'Electron exporter enabled (JS span pipeline)'
         : 'CI Visibility mode enabled (JS span pipeline)')
     } else {
+      if (unsupportedApmExporter) {
+        log.warn(
+          'Native spans mode ignores unsupported experimental exporter "%s"; using native agent exporter',
+          configuredExporter
+        )
+      }
       this._useJsSpans = false
       // Native spans are the only supported APM pipeline. libdatadog is a
       // required dependency; if NativeSpansInterface construction fails, that's

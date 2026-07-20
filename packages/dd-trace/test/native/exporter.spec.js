@@ -701,6 +701,39 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
       assert.strictEqual(exporter._url.toString(), 'http://new-agent:9999/')
     })
+
+    it('waits for active spans to finish before reinitializing native state', async () => {
+      let resolveSend
+      nativeSpans.flushSpansGrouped.returns(new Promise(resolve => { resolveSend = resolve }))
+
+      exporter._trackSpanStart()
+      exporter.setUrl('http://new-agent:9999')
+
+      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+
+      exporter.export([createMockSpan(1n)])
+      exporter._trackSpanFinish()
+
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+
+      resolveSend('unchanged')
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
+      assert.strictEqual(exporter._url.toString(), 'http://new-agent:9999/')
+    })
+
+    it('keeps ordinary flush callbacks independent from active spans', () => {
+      const done = sinon.stub()
+
+      exporter._trackSpanStart()
+      exporter.flush(done)
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+    })
   })
 
   describe('health metrics', () => {

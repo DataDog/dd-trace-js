@@ -54,11 +54,12 @@ class NativeExporter {
   #flushInFlight = false
   #firstFlushSent = false
   #flushCallbacks = []
+  #activeSpans = 0
+  #urlUpdateCallbacks = []
   // Set when libdatadog reports a fatal exporter-build failure (bad config):
   // building is one-shot and won't recover, so we stop exporting rather than
   // loop on the same error every flush.
   #disabled = false
-
   /**
    * @param {object} config - Tracer configuration
    * @param {object} prioritySampler - Priority sampler instance
@@ -179,6 +180,42 @@ class NativeExporter {
     })
   }
 
+  _trackSpanStart () {
+    this.#activeSpans++
+  }
+
+  _trackSpanFinish () {
+    if (this.#activeSpans > 0) this.#activeSpans--
+    this.#finishUrlUpdateCallbacks()
+  }
+
+  #finishUrlUpdateCallbacks () {
+    if (this.#urlUpdateCallbacks.length === 0) return
+    if (this.#activeSpans > 0 || this.#flushInFlight) return
+    if (this._pendingSpans.length > 0) {
+      this.flush()
+      return
+    }
+
+    const callbacks = this.#urlUpdateCallbacks
+    this.#urlUpdateCallbacks = []
+    let firstError
+    let hasError = false
+    for (const callback of callbacks) {
+      try {
+        callback()
+      } catch (err) {
+        if (!hasError) {
+          firstError = err
+          hasError = true
+        }
+      }
+    }
+    if (hasError) {
+      setImmediate(() => { throw firstError })
+    }
+  }
+
   /**
    * Update the agent URL.
    * @param {string|URL} url - New agent URL
@@ -205,11 +242,8 @@ class NativeExporter {
       }
     }
 
-    if (this.#flushInFlight || this._pendingSpans.length > 0) {
-      this.flush(applyUrl)
-    } else {
-      applyUrl()
-    }
+    this.#urlUpdateCallbacks.push(applyUrl)
+    this.#finishUrlUpdateCallbacks()
   }
 
   /**
@@ -313,6 +347,7 @@ class NativeExporter {
       this.flush()
     } else {
       this.#finishFlushCallbacks()
+      this.#finishUrlUpdateCallbacks()
     }
   }
 

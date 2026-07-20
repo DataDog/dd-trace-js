@@ -72,6 +72,10 @@ describe('NativeDatadogSpan', () => {
 
     processor = {
       process: sinon.stub(),
+      _exporter: {
+        _trackSpanStart: sinon.stub(),
+        _trackSpanFinish: sinon.stub(),
+      },
     }
 
     prioritySampler = {
@@ -288,6 +292,14 @@ describe('NativeDatadogSpan', () => {
       }, false, nativeSpans)
 
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, sinon.match.any, 'language', 'javascript')
+    })
+
+    it('tracks active native spans on the exporter', () => {
+      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'test-operation',
+      }, false, nativeSpans)
+
+      sinon.assert.calledOnce(processor._exporter._trackSpanStart)
     })
 
     it('coerces a non-string operation name so the WASM string table never sees undefined', () => {
@@ -522,6 +534,12 @@ describe('NativeDatadogSpan', () => {
         sinon.match.any,
         ['ns', sinon.match.number]
       )
+    })
+
+    it('tracks finished native spans on the exporter', () => {
+      span.finish()
+
+      sinon.assert.calledOnce(processor._exporter._trackSpanFinish)
     })
 
     it('forwards qualifying meta_struct entries as msgpack bytes, skipping null/boolean', () => {

@@ -134,6 +134,30 @@ describe('Tracer', () => {
     sinon.assert.calledWith(SpanProcessor, exporter, sampler, config, nativeSpansInstance)
   })
 
+  it('warns and uses native spans for unsupported APM exporters', () => {
+    config.experimental.exporter = 'log'
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, false)
+    sinon.assert.calledWith(
+      log.warn,
+      'Native spans mode ignores unsupported experimental exporter "%s"; using native agent exporter',
+      'log'
+    )
+    sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
+  })
+
+  it('treats the agent exporter as the native APM default', () => {
+    config.experimental.exporter = 'agent'
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, false)
+    sinon.assert.notCalled(log.warn)
+    sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
+  })
+
   describe('startSpan', () => {
     it('should start a span', () => {
       fields.tags = { foo: 'bar' }
