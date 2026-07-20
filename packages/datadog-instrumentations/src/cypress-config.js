@@ -13,6 +13,8 @@ const BROWSER_INSTRUMENTATION_NOT_INSTALLED =
   'Browser-side Cypress Test Optimization instrumentation was not installed.'
 const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
   'Cypress configurations that cannot be intercepted through cypress.defineConfig were not auto-instrumented.'
+const generatedFilesForExitCleanup = new Set()
+let exitCleanupRegistered = false
 
 const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
 
@@ -93,6 +95,46 @@ function removeGeneratedFile (filePath) {
         formatFileSystemError(error, filePath)
       )
     }
+  }
+}
+
+/**
+ * Removes project-local support files when Cypress exits without firing
+ * after:run, as happens in open mode without experimental run events.
+ *
+ * @returns {void}
+ */
+function removeGeneratedFilesAtExit () {
+  exitCleanupRegistered = false
+  for (const filePath of generatedFilesForExitCleanup) removeGeneratedFile(filePath)
+  generatedFilesForExitCleanup.clear()
+}
+
+/**
+ * @param {string[]} filePaths generated support files
+ * @returns {void}
+ */
+function registerGeneratedFilesForExitCleanup (filePaths) {
+  for (const filePath of filePaths) generatedFilesForExitCleanup.add(filePath)
+  if (exitCleanupRegistered) return
+
+  exitCleanupRegistered = true
+  process.once('exit', removeGeneratedFilesAtExit)
+}
+
+/**
+ * @param {string[]} filePaths generated support files
+ * @returns {void}
+ */
+function cleanupGeneratedFiles (filePaths) {
+  for (const filePath of filePaths) {
+    generatedFilesForExitCleanup.delete(filePath)
+    removeGeneratedFile(filePath)
+  }
+
+  if (generatedFilesForExitCleanup.size === 0 && exitCleanupRegistered) {
+    process.removeListener('exit', removeGeneratedFilesAtExit)
+    exitCleanupRegistered = false
   }
 }
 
@@ -345,6 +387,23 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
 }
 
 /**
+ * Registers one Cypress after:spec handler that runs every collected handler
+ * in registration order. Cypress 10+ otherwise keeps only the last handler.
+ *
+ * @param {Function} on Cypress event registration function
+ * @param {Function[]} handlers collected after:spec handlers
+ * @returns {void}
+ */
+function registerAfterSpecHandlers (on, handlers) {
+  if (handlers.length === 0) return
+
+  on('after:spec', (spec, results) => handlers.reduce(
+    (chain, handler) => chain.then(() => handler(spec, results)),
+    Promise.resolve()
+  ))
+}
+
+/**
  * Registers dd-trace's Cypress hooks (before:run, after:spec, after:run, tasks)
  * and injects the support file. Communicates with the plugin layer via
  * the `ci:cypress:setup-node-events` diagnostic channel, avoiding direct
@@ -367,13 +426,10 @@ function registerDdTraceHooks (
   manualPlugin
 ) {
   const generatedSupportFiles = injectSupportFile(config)
+  if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
 
   const cleanupWrapper = () => {
-    if (generatedSupportFiles) {
-      for (const generatedFile of generatedSupportFiles) {
-        removeGeneratedFile(generatedFile)
-      }
-    }
+    if (generatedSupportFiles) cleanupGeneratedFiles(generatedSupportFiles)
   }
 
   const registerAfterRunWithCleanup = () => {
@@ -387,14 +443,14 @@ function registerDdTraceHooks (
   }
 
   const registerNoopHandlers = () => {
-    for (const h of userAfterSpecHandlers) on('after:spec', h)
+    registerAfterSpecHandlers(on, userAfterSpecHandlers)
     for (const h of userAfterScreenshotHandlers) on('after:screenshot', h)
     registerAfterRunWithCleanup()
     on('task', noopTask)
   }
 
   if (manualPlugin.detected) {
-    for (const handler of userAfterSpecHandlers) on('after:spec', handler)
+    registerAfterSpecHandlers(on, userAfterSpecHandlers)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup()
     return config
@@ -534,19 +590,20 @@ function isUnderEsmPackage (filePath) {
  * @returns {string} path to the generated wrapper file
  */
 function createConfigWrapper (originalConfigFile, wrapperDirectory) {
-  // Decide the wrapper's module mode (ESM vs CJS). It must match how
-  // Cypress would interpret the user's original config so that (1) Cypress
-  // keeps the loader it would have used (notably the ts-node registration
-  // for `.ts` configs), and (2) the wrapper body parses in that mode.
+  // Match the module mode Cypress would use for the user's original config
+  // so the generated wrapper body parses and imports it correctly.
   const originalExt = path.extname(originalConfigFile)
   const isEsm = originalExt === '.mjs' || originalExt === '.mts' ||
     (originalExt !== '.cjs' && originalExt !== '.cts' && isUnderEsmPackage(originalConfigFile))
 
-  // Preserve `.ts`/`.cts`/`.mts` so Cypress keeps ts-node registered for
-  // the wrapper. For plain JS originals, pick the extension that encodes
-  // the chosen module mode directly.
+  // Preserve explicit TypeScript extensions. If an ambiguous `.ts` wrapper
+  // falls back across package scopes, make its original module mode explicit
+  // instead of inheriting the fallback scope.
   let wrapperExt
-  if (originalExt === '.ts' || originalExt === '.cts' || originalExt === '.mts') {
+  if (originalExt === '.ts') {
+    const wrapperIsEsm = isUnderEsmPackage(path.join(wrapperDirectory, 'wrapper.ts'))
+    wrapperExt = wrapperIsEsm === isEsm ? originalExt : (isEsm ? '.mts' : '.cts')
+  } else if (originalExt === '.cts' || originalExt === '.mts') {
     wrapperExt = originalExt
   } else {
     wrapperExt = isEsm ? '.mjs' : '.cjs'

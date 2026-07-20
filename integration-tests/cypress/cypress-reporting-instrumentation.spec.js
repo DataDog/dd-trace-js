@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec, execSync } = require('node:child_process')
+const { exec, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -528,6 +528,7 @@ moduleTypes.forEach(({
     // the full citestcycle span hierarchy through the channel's _isInit=true branch.
     over10It('correctly chains hooks when auto-instrumentation and manual plugin are both active', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
+      let testOutput = ''
 
       const legacyConfigFile = type === 'esm'
         ? 'cypress-legacy-plugin.config.mjs'
@@ -540,10 +541,13 @@ moduleTypes.forEach(({
           env: {
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_ENABLE_AFTER_SPEC_USER: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
       )
+      childProcess.stdout?.on('data', (data) => { testOutput += data })
+      childProcess.stderr?.on('data', (data) => { testOutput += data })
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -571,10 +575,13 @@ moduleTypes.forEach(({
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
         receiverPromise,
       ])
 
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.match(testOutput, /\[custom:after:spec:manual\]/)
     })
 
     over10It(
@@ -743,6 +750,89 @@ moduleTypes.forEach(({
         fs.rmSync(readOnlyConfigDir, { recursive: true, force: true })
       }
     })
+
+    const readOnlyTypeScriptConfigIt = process.platform !== 'win32' &&
+      type === 'commonJS' && version === '14.5.4' && NODE_MAJOR > 18
+      ? it
+      : it.skip
+    readOnlyTypeScriptConfigIt(
+      'auto-instruments a TypeScript config when the writable fallback has a different module scope',
+      async () => {
+        const projectRoot = path.join(cwd, 'read-only-typescript-project')
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        const specDirectory = path.join(projectRoot, 'cypress', 'e2e')
+        fs.rmSync(projectRoot, { recursive: true, force: true })
+        fs.mkdirSync(configDirectory, { recursive: true })
+        fs.mkdirSync(specDirectory, { recursive: true })
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(configFile, [
+          'module.exports = {',
+          '  e2e: { specPattern: "cypress/e2e/basic-pass.js", supportFile: false },',
+          '  video: false,',
+          '  screenshotOnRunFailure: false,',
+          '}',
+          '',
+        ].join('\n'))
+        fs.copyFileSync(
+          path.join(cwd, 'cypress', 'e2e', 'basic-pass.js'),
+          path.join(specDirectory, 'basic-pass.js')
+        )
+        fs.chmodSync(configDirectory, 0o555)
+
+        const getGeneratedFiles = () => fs.readdirSync(projectRoot)
+          .filter(file => file.startsWith('.dd-cypress-config-') || file.startsWith('dd-cypress-support-'))
+          .sort()
+        const generatedFilesBefore = getGeneratedFiles()
+        let testOutput = ''
+
+        try {
+          childProcess = exec(
+            `./node_modules/.bin/cypress run --project ${projectRoot} --config-file ${configFile}`,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                CYPRESS_BASE_URL: webAppBaseUrl,
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (data) => { testOutput += data })
+          childProcess.stderr?.on('data', (data) => { testOutput += data })
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testEvents = payloads
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                const passedTest = testEvents.find(event =>
+                  event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+                )
+
+                assertObjectContains(passedTest?.content, {
+                  meta: {
+                    [TEST_STATUS]: 'pass',
+                    [TEST_FRAMEWORK]: 'cypress',
+                  },
+                })
+              }, { hardTimeout: 60000 })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+          assert.deepStrictEqual(getGeneratedFiles(), generatedFilesBefore)
+        } finally {
+          fs.chmodSync(configDirectory, 0o755)
+          fs.rmSync(projectRoot, { recursive: true, force: true })
+        }
+      }
+    )
 
     const componentIt = type === 'commonJS' && version === 'latest' ? it : it.skip
     componentIt('auto-instruments component tests with the Vite dev server', async () => {
@@ -1631,6 +1721,31 @@ if (requestedVersion === 'latest' &&
         assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
       })
 
+      it('removes generated support files when the config process exits without after:run', () => {
+        const projectRoot = createProjectRoot()
+        const generatedCountFile = path.join(projectRoot, 'generated-count')
+        const cypressConfigPath = require.resolve('../../packages/datadog-instrumentations/src/cypress-config')
+        const script = [
+          'const fs = require("node:fs")',
+          `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
+          `const projectRoot = ${JSON.stringify(projectRoot)}`,
+          'const config = { e2e: {} }',
+          'cypressConfig.wrapConfig(config)',
+          'config.e2e.setupNodeEvents(() => {}, { projectRoot, supportFile: false })',
+          'const generatedCount = fs.readdirSync(projectRoot)',
+          '  .filter(file => file.startsWith("dd-cypress-support-")).length',
+          `fs.writeFileSync(${JSON.stringify(generatedCountFile)}, String(generatedCount))`,
+          'process.exit(0)',
+        ].join('\n')
+
+        execFileSync(process.execPath, ['-e', script], {
+          env: { ...process.env, NODE_OPTIONS: '' },
+        })
+
+        assert.strictEqual(fs.readFileSync(generatedCountFile, 'utf8'), '2')
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
       it('logs an error with every failed location when no directory is writable', () => {
         const projectRoot = createProjectRoot()
         const supportDirectory = path.join(projectRoot, 'cypress', 'support')
@@ -1813,6 +1928,68 @@ if (requestedVersion === 'latest' &&
         assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
         assert.deepStrictEqual(warnings, [])
         assert.strictEqual(getGeneratedFiles(projectRoot).length, 1)
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('uses .cts when a CommonJS TypeScript config falls back into an ESM scope', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.strictEqual(path.extname(result.options.configFile), '.cts')
+        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /module\.exports/)
+        assert.deepStrictEqual(warnings, [])
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('uses .mts when an ESM TypeScript config falls back into a CommonJS scope', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(configFile, 'export default {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.strictEqual(path.extname(result.options.configFile), '.mts')
+        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /export default/)
+        assert.deepStrictEqual(warnings, [])
 
         result.cleanup()
         assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
