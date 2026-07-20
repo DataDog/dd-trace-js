@@ -84,14 +84,20 @@ const yarnPattern = /\byarn\b/
 describe('no yarn dev references', function () {
   this.timeout(60_000)
 
-  it('packs a single non-empty artifact', () => {
+  it('packs a complete artifact from a clean checkout', () => {
     const archiveDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-pack-'))
     const indexTypesPath = path.join(repoRoot, 'index.d.ts')
     const originalIndexTypes = fs.readFileSync(indexTypesPath)
+    const vendorDistPath = path.join(repoRoot, 'vendor', 'dist')
+    const vendorDistBackupPath = path.join(repoRoot, 'vendor', `.dist-backup-${process.pid}`)
     const { name, version } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
     try {
+      if (fs.existsSync(vendorDistPath)) {
+        fs.renameSync(vendorDistPath, vendorDistBackupPath)
+      }
+
       const filename = execFileSync(
         npm,
         ['pack', '--silent', '--pack-destination', archiveDirectory],
@@ -103,10 +109,20 @@ describe('no yarn dev references', function () {
       ).trim()
 
       assert.strictEqual(filename, `${name}-${version}.tgz`)
-      assert.ok(fs.statSync(path.join(archiveDirectory, filename)).size > 0)
+      const archivePath = path.join(archiveDirectory, filename)
+      assert.ok(fs.statSync(archivePath).size > 0)
+      const archiveFiles = new Set(
+        execFileSync('tar', ['-tzf', archivePath], { encoding: 'utf8' }).split('\n')
+      )
+      assert.ok(archiveFiles.has('package/vendor/dist/limiter/index.js'))
+      assert.ok(archiveFiles.has('package/vendor/dist/istanbul-lib-coverage/index.js'))
     } finally {
       fs.writeFileSync(indexTypesPath, originalIndexTypes)
       fs.rmSync(archiveDirectory, { recursive: true, force: true })
+      fs.rmSync(vendorDistPath, { recursive: true, force: true })
+      if (fs.existsSync(vendorDistBackupPath)) {
+        fs.renameSync(vendorDistBackupPath, vendorDistPath)
+      }
     }
   })
 
@@ -119,6 +135,51 @@ describe('no yarn dev references', function () {
         PATH: [path.join(repoRoot, 'node_modules', '.bin'), process.env.PATH].filter(Boolean).join(path.delimiter),
       },
     })
+  })
+
+  it('bootstraps pinned Bun inside the checkout when it is absent from PATH', async () => {
+    const { bun: bunVersion } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+      .devDependencies
+    const bootstrapDirectory = path.join(repoRoot, 'node_modules', '.cache', `bun-${bunVersion}`)
+    const backupDirectory = `${bootstrapDirectory}.backup-${process.pid}`
+
+    try {
+      if (fs.existsSync(bootstrapDirectory)) {
+        fs.renameSync(bootstrapDirectory, backupDirectory)
+      }
+      const bunBinary = execFileSync(
+        process.execPath,
+        ['-e', "process.stdout.write(require('./scripts/bun').getBunBinary())"],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            npm_execpath: '',
+            PATH: [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
+          },
+        }
+      )
+
+      assert.strictEqual(await Promise.resolve(bunBinary), path.join(
+        bootstrapDirectory,
+        'node_modules',
+        'bun',
+        'bin',
+        'bun.exe'
+      ))
+      assert.strictEqual(execFileSync(bunBinary, ['--version'], { encoding: 'utf8' }).trim(), bunVersion)
+      const bootstrapPackage = JSON.parse(
+        fs.readFileSync(path.join(bootstrapDirectory, 'package.json'), 'utf8')
+      )
+      assert.strictEqual(bootstrapPackage.allowScripts[`bun@${bunVersion}`], true)
+      assert.strictEqual(fs.existsSync(path.join(bootstrapDirectory, 'package-lock.json')), false)
+    } finally {
+      fs.rmSync(bootstrapDirectory, { recursive: true, force: true })
+      if (fs.existsSync(backupDirectory)) {
+        fs.renameSync(backupDirectory, bootstrapDirectory)
+      }
+    }
   })
 
   it('contains no yarn dev-tooling references outside the allowlist', () => {
@@ -202,8 +263,15 @@ describe('no yarn dev references', function () {
     assert.strictEqual(dockerBunVersion[1], packageJson.devDependencies.bun)
     assert.strictEqual(packageJson.scripts.prepare, 'node scripts/prepare.js')
     const prepareScript = fs.readFileSync(path.join(repoRoot, 'scripts/prepare.js'), 'utf8')
-    assert.match(prepareScript, /process\.env\.npm_command !== 'pack'/)
-    assert.match(prepareScript, /execFileSync\(\s*'bun'/)
+    assert.doesNotMatch(prepareScript, /npm_command/)
+    assert.match(prepareScript, /getBunBinary\(\)/)
+    const bunHelper = fs.readFileSync(path.join(repoRoot, 'scripts/bun.js'), 'utf8')
+    assert.match(bunHelper, /devDependencies\.bun/)
+    assert.match(bunHelper, /--package-lock=false/)
+    assert.match(bunHelper, /--include=optional/)
+    assert.match(bunHelper, /--ignore-scripts=false/)
+    assert.match(bunHelper, /allowScripts/)
+    assert.match(bunHelper, /node_modules.*\.cache/)
 
     const allGreenWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/all-green.yml'), 'utf8')
     const allGreenInstall = 'bun install --frozen-lockfile --ignore-scripts'
@@ -244,15 +312,16 @@ describe('no yarn dev references', function () {
     assert.match(packStep.run, /test -f "binaries\/\$filename"/)
     const ociPackScript = fs.readFileSync(path.join(repoRoot, '.gitlab/prepare-oci-package.sh'), 'utf8')
     assert.match(ociPackScript, /^archive=\$\(npm pack --silent\)$/m)
-    assert.match(ociPackScript, /^npm install --global .*"bun@\$bun_version"$/m)
+    assert.match(ociPackScript, /^bun=\$\(node -e .*getBunBinary/m)
     assert.match(ociPackScript, /^tar -xOf "\$archive" package\/package\.json > packaging\/sources\/package\.json$/m)
     assert.match(ociPackScript, /^cp bun\.lock packaging\/sources\/bun\.lock$/m)
     assert.match(
       ociPackScript,
-      /^bun --config="\$PWD\/bunfig\.toml" install --production --frozen-lockfile --ignore-scripts /m
+      /^"\$bun" --config="\$PWD\/bunfig\.toml" install --production --frozen-lockfile --ignore-scripts /m
     )
     assert.match(ociPackScript, /-C packaging\/sources\/node_modules\/dd-trace$/m)
     assert.doesNotMatch(ociPackScript, /^npm pack$/m)
+    assert.doesNotMatch(ociPackScript, /^npm install --global/m)
     assert.doesNotMatch(ociPackScript, /^npm install --prefix/m)
 
     const internalLockDirectories = [
