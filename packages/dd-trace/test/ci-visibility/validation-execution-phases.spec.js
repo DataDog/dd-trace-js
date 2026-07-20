@@ -1275,6 +1275,7 @@ describe('test optimization validator-owned execution phases', () => {
     fs.writeFileSync(sourceFile, "export { digest as hash } from 'ohash/crypto'\n")
 
     try {
+      const sourceRelative = path.relative(root, sourceFile)
       assert.throws(() => formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'manifest.json'),
@@ -1282,7 +1283,10 @@ describe('test optimization validator-owned execution phases', () => {
           frameworks: [framework],
         },
         out: path.join(root, 'results'),
-      }), new RegExp(`bounded import chain .*src/hash\\.ts.*ohash/crypto.*${escapeRegExp(missingEntrypoint)}`, 's'))
+      }), new RegExp(
+        `bounded import chain .*${escapeRegExp(sourceRelative)}.*ohash/crypto.*${escapeRegExp(missingEntrypoint)}`,
+        's'
+      ))
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
