@@ -165,6 +165,7 @@
 /integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-auto-esm.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-component.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-double-run.js @DataDog/ci-app-libraries
 /integration-tests/cypress-double-run.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
@@ -176,11 +177,13 @@
 /integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-support-file-false.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-typescript.config.ts @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.ts @DataDog/ci-app-libraries
+/integration-tests/vite.config.mjs @DataDog/ci-app-libraries
 
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
