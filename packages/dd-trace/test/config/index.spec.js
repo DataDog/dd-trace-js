@@ -3277,7 +3277,7 @@ describe('Config', () => {
       this.skip()
       return
     }
-    const tempDir = mkdtempSync(path.join(process.cwd(), 'dd-trace-span-sampling-rules-'))
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-span-sampling-rules-'))
     const rulesPath = path.join(tempDir, 'span-sampling-rules.json')
     writeFileSync(rulesPath, '{"sample_rate":')
 
