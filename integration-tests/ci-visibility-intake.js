@@ -240,12 +240,12 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+    app.post('/api/v2/ci/test-runs/:testRunId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
       res.status(this.#mediaResponseStatusCode).send()
       this.emit('message', {
         headers: req.headers,
         media: {
-          traceId: req.params.traceId,
+          testRunId: req.params.testRunId,
           contentType: req.headers['content-type'],
           // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
           // evp_proxy, which forwards only an allow-listed header set.

@@ -11,11 +11,11 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-describe('ci-visibility/requests/upload-test-screenshot', () => {
-  const traceId = '1234567890123456789'
+describe('ci-visibility/requests/upload-test-media', () => {
+  const testRunId = '1234567890123456789'
   let tmpDir
   let requestStub
-  let uploadTestScreenshot
+  let uploadTestMedia
 
   // Runs an upload for a file with the given basename and returns the request stub's call args
   // ({ path, headers, query }). The file is written with real non-empty bytes so readFileSync
@@ -25,11 +25,11 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     writeFileSync(filePath, 'not-empty')
 
     requestStub.resetHistory()
-    uploadTestScreenshot(
+    uploadTestMedia(
       {
         filePath,
-        traceId,
-        idempotencyKey: `${traceId}:${basename}`,
+        testRunId,
+        idempotencyKey: `${testRunId}:${basename}`,
         capturedAtMs: 1_700_000_000_000,
         url: new URL('http://localhost:8126'),
         ...extra,
@@ -44,19 +44,19 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
   }
 
   before(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'upload-test-screenshot-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'upload-test-media-'))
   })
 
   beforeEach(() => {
     requestStub = sinon.stub().callsFake((_payload, _options, cb) => cb(null, 'ok', 200))
-    const { uploadTestScreenshot: upload } = proxyquire(
-      '../../../src/ci-visibility/requests/upload-test-screenshot',
+    const { uploadTestMedia: upload } = proxyquire(
+      '../../../src/ci-visibility/requests/upload-test-media',
       {
         '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
         '../../exporters/common/request': requestStub,
       }
     )
-    uploadTestScreenshot = upload
+    uploadTestMedia = upload
   })
 
   describe('agentless', () => {
@@ -64,7 +64,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       const basename = 'screenshot.png'
       const { headers, query } = uploadForFile(basename)
 
-      const expectedKey = `${traceId}:${Buffer.from(basename, 'utf8').toString('hex')}`
+      const expectedKey = `${testRunId}:${Buffer.from(basename, 'utf8').toString('hex')}`
       assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
       // Metadata must not travel as X-Dd-* headers anymore (the proxy strips them).
@@ -75,7 +75,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     it('posts to the media endpoint with the API key and no evp subdomain header', () => {
       const { path, headers } = uploadForFile('screenshot.png')
 
-      assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${testRunId}/media\\?`))
       assert.strictEqual(headers['DD-API-KEY'], 'test-api-key')
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
@@ -93,11 +93,11 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       requestStub.callsFake((_payload, _options, cb) => cb(null))
 
       let callbackError
-      uploadTestScreenshot(
+      uploadTestMedia(
         {
           filePath,
-          traceId,
-          idempotencyKey: `${traceId}:${basename}`,
+          testRunId,
+          idempotencyKey: `${testRunId}:${basename}`,
           capturedAtMs: 1_700_000_000_000,
           url: new URL('http://localhost:8126'),
         },
@@ -114,15 +114,15 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     it('hex-encodes the filename in the idempotency key to the proxy-safe charset', () => {
       // A real failure screenshot name has spaces and parens (and here an em-dash, U+2014). The
       // Agent's evp_proxy validates the forwarded query against a restrictive charset and rejects
-      // those, so the filename part is hex-encoded (trace id and ':' stay readable); this also
+      // those, so the filename part is hex-encoded (test run ID and ':' stay readable); this also
       // keeps the path pure ASCII so http.request can't throw ERR_INVALID_CHAR.
       const basename = 'login — redirects to dashboard (failed).png'
       const { path, query } = uploadForFile(basename)
 
       const key = query.get('idempotency_key')
-      // Only proxy-safe chars: trace id digits, ':', hex filename — no spaces/parens/non-ASCII.
+      // Only proxy-safe chars: test run ID digits, ':', hex filename — no spaces/parens/non-ASCII.
       assert.match(key, /^\d+:[0-9a-f]+$/)
-      assert.strictEqual(key, `${traceId}:${Buffer.from(basename, 'utf8').toString('hex')}`)
+      assert.strictEqual(key, `${testRunId}:${Buffer.from(basename, 'utf8').toString('hex')}`)
       // eslint-disable-next-line no-control-regex
       assert.match(path, /^[\x00-\x7F]+$/)
     })
@@ -143,12 +143,12 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       const basename = 'screenshot.png'
       const { path, headers, query } = uploadForFile(basename, { isEvpProxy: true, evpProxyPrefix })
 
-      assert.match(path, new RegExp(`^${evpProxyPrefix}/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.match(path, new RegExp(`^${evpProxyPrefix}/api/v2/ci/test-runs/${testRunId}/media\\?`))
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], 'api')
       // The Agent injects the API key; the client must not send it.
       assert.strictEqual(headers['DD-API-KEY'], undefined)
       // Metadata still rides the query string (filename hex-encoded) so it survives the proxy.
-      const expectedKey = `${traceId}:${Buffer.from(basename, 'utf8').toString('hex')}`
+      const expectedKey = `${testRunId}:${Buffer.from(basename, 'utf8').toString('hex')}`
       assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
     })

@@ -8,8 +8,8 @@ const request = require('../../exporters/common/request')
 const log = require('../../log')
 
 const UPLOAD_TIMEOUT_MS = 30_000
-const TEST_SCREENSHOT_ENDPOINT_PREFIX = '/api/v2/ci/test-runs/'
-const TEST_SCREENSHOT_ENDPOINT_SUFFIX = '/media'
+const TEST_MEDIA_ENDPOINT_PREFIX = '/api/v2/ci/test-runs/'
+const TEST_MEDIA_ENDPOINT_SUFFIX = '/media'
 const UINT64_MAX = 18_446_744_073_709_551_615n
 
 function getContentType (filePath) {
@@ -29,22 +29,22 @@ function getContentType (filePath) {
   return 'image/png'
 }
 
-function isValidTraceId (traceId) {
-  if (!/^[1-9]\d*$/.test(traceId)) {
+function isValidTestRunId (testRunId) {
+  if (!/^[1-9]\d*$/.test(testRunId)) {
     return false
   }
-  return BigInt(traceId) <= UINT64_MAX
+  return BigInt(testRunId) <= UINT64_MAX
 }
 
 /**
- * Renders the idempotency key (`${traceId}:${basename(filePath)}`) into a value safe to carry in
+ * Renders the idempotency key (`${testRunId}:${basename(filePath)}`) into a value safe to carry in
  * the upload's query string. The Agent's evp_proxy validates the forwarded query against a
  * restrictive charset and rejects a raw Cypress filename (spaces, parens, non-ASCII), so the
- * filename part is hex-encoded to [0-9a-f]; the decimal trace id and ':' separator are already in
+ * filename part is hex-encoded to [0-9a-f]; the decimal test run ID and ':' separator are already in
  * the allowed set and stay readable. Deterministic, so a retried upload reproduces the same key
  * and the backend's UUIDv5 overwrite-on-retry holds.
  *
- * @param {string} idempotencyKey - The raw idempotency key (`<traceId>:<filename>`)
+ * @param {string} idempotencyKey - The raw idempotency key (`<testRunId>:<filename>`)
  * @returns {string} A query-safe, deterministic representation of the key
  */
 function toIdempotencyQueryValue (idempotencyKey) {
@@ -52,14 +52,14 @@ function toIdempotencyQueryValue (idempotencyKey) {
   if (separatorIndex === -1) {
     return Buffer.from(idempotencyKey, 'utf8').toString('hex')
   }
-  const traceIdPart = idempotencyKey.slice(0, separatorIndex)
+  const testRunIdPart = idempotencyKey.slice(0, separatorIndex)
   const filenamePart = idempotencyKey.slice(separatorIndex + 1)
-  return `${traceIdPart}:${Buffer.from(filenamePart, 'utf8').toString('hex')}`
+  return `${testRunIdPart}:${Buffer.from(filenamePart, 'utf8').toString('hex')}`
 }
 
 /**
- * Uploads a single test screenshot to the Test Optimization media intake.
- * The trace id is included in the request path and the body is the raw image bytes.
+ * Uploads a single artifact to the Test Optimization media intake.
+ * The owning test run id is included in the request path and the body contains the raw media bytes.
  *
  * The media service requires two values from the tracer, sent as query params so they
  * survive the Agent's evp_proxy (which forwards only an allow-listed header set and would
@@ -70,42 +70,42 @@ function toIdempotencyQueryValue (idempotencyKey) {
  *   capture and resent unchanged on retry (it is part of the stored object key).
  *
  * @param {object} options - Upload options
- * @param {string} options.filePath - Path to the screenshot file
- * @param {string} options.traceId - Test trace id used as the screenshot key
+ * @param {string} options.filePath - Path to the media file
+ * @param {string} options.testRunId - Test or test suite id that owns the media
  * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
  * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
- * @param {URL} options.url - The base URL for the screenshot upload
+ * @param {URL} options.url - The base URL for the media upload
  * @param {boolean} [options.isEvpProxy] - Whether to upload through the Agent's evp_proxy
  * @param {string} [options.evpProxyPrefix] - The evp_proxy path prefix (e.g. '/evp_proxy/v4')
  * @param {Function} callback - Callback function (err)
  */
-function uploadTestScreenshot (
-  { filePath, traceId, idempotencyKey, capturedAtMs, url, isEvpProxy, evpProxyPrefix },
+function uploadTestMedia (
+  { filePath, testRunId, idempotencyKey, capturedAtMs, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
   const { DD_API_KEY } = getConfig()
 
-  if (!isValidTraceId(traceId)) {
-    return callback(new Error('A non-zero decimal uint64 trace_id is required for test screenshot upload'))
+  if (!isValidTestRunId(testRunId)) {
+    return callback(new Error('A non-zero decimal uint64 test run ID is required for test media upload'))
   }
   if (!DD_API_KEY && !isEvpProxy) {
-    return callback(new Error('DD_API_KEY is required for test screenshot upload'))
+    return callback(new Error('DD_API_KEY is required for test media upload'))
   }
   if (!idempotencyKey) {
-    return callback(new Error('An idempotency key is required for test screenshot upload'))
+    return callback(new Error('An idempotency key is required for test media upload'))
   }
   if (!Number.isInteger(capturedAtMs) || capturedAtMs <= 0) {
-    return callback(new Error('A positive captured-at timestamp (epoch ms) is required for test screenshot upload'))
+    return callback(new Error('A positive captured-at timestamp (epoch ms) is required for test media upload'))
   }
 
-  let screenshotContent
+  let mediaContent
   try {
-    screenshotContent = readFileSync(filePath)
+    mediaContent = readFileSync(filePath)
   } catch (err) {
-    return callback(new Error(`Failed to read screenshot at ${filePath}: ${err.message}`))
+    return callback(new Error(`Failed to read test media at ${filePath}: ${err.message}`))
   }
-  if (screenshotContent.length === 0) {
-    return callback(new Error(`Screenshot at ${filePath} is empty`))
+  if (mediaContent.length === 0) {
+    return callback(new Error(`Test media at ${filePath} is empty`))
   }
 
   // Metadata rides the query string, not X-Dd-* headers: the Agent's evp_proxy strips
@@ -117,7 +117,7 @@ function uploadTestScreenshot (
     idempotency_key: toIdempotencyQueryValue(idempotencyKey),
     captured_at_ms: String(capturedAtMs),
   }).toString()
-  const basePath = `${TEST_SCREENSHOT_ENDPOINT_PREFIX}${traceId}${TEST_SCREENSHOT_ENDPOINT_SUFFIX}`
+  const basePath = `${TEST_MEDIA_ENDPOINT_PREFIX}${testRunId}${TEST_MEDIA_ENDPOINT_SUFFIX}`
 
   const contentType = getContentType(filePath)
   const options = {
@@ -139,21 +139,21 @@ function uploadTestScreenshot (
     options.headers['DD-API-KEY'] = DD_API_KEY
   }
 
-  log.debug('Uploading test screenshot %s to %s', filePath, new URL(options.path, url).href)
+  log.debug('Uploading test media %s to %s', filePath, new URL(options.path, url).href)
 
-  request(screenshotContent, options, (err, res, statusCode) => {
+  request(mediaContent, options, (err, res, statusCode) => {
     if (err) {
-      log.error('Error uploading test screenshot: %s', err.message)
+      log.error('Error uploading test media: %s', err.message)
       return callback(err)
     }
     if (statusCode === undefined) {
-      const uploadError = new Error('Test screenshot upload request was dropped before it was sent')
-      log.error('Error uploading test screenshot: %s', uploadError.message)
+      const uploadError = new Error('Test media upload request was dropped before it was sent')
+      log.error('Error uploading test media: %s', uploadError.message)
       return callback(uploadError)
     }
-    log.debug('Test screenshot uploaded successfully (status: %d)', statusCode)
+    log.debug('Test media uploaded successfully (status: %d)', statusCode)
     callback(null)
   })
 }
 
-module.exports = { TEST_SCREENSHOT_ENDPOINT_PREFIX, TEST_SCREENSHOT_ENDPOINT_SUFFIX, uploadTestScreenshot }
+module.exports = { TEST_MEDIA_ENDPOINT_PREFIX, TEST_MEDIA_ENDPOINT_SUFFIX, uploadTestMedia }

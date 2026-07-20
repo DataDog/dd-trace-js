@@ -1428,7 +1428,6 @@ class CypressPlugin {
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const mediaUploadPromises = []
     const testSpanFinishPromises = []
-    const failedTestTraceIds = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1539,7 +1538,6 @@ class CypressPlugin {
         let failedTestTraceId
         if (cypressTestStatus === 'fail' || finishedTest.testStatus === 'fail' || cypressTest.displayError) {
           failedTestTraceId = finishedTest.testSpan.context().toTraceId()
-          failedTestTraceIds.push(failedTestTraceId)
           const testScreenshots = getTestScreenshots(cypressTest, attemptIndex, specScreenshots)
           const screenshotUploadPromise = this.uploadTestScreenshots({
             screenshots: testScreenshots,
@@ -1621,8 +1619,10 @@ class CypressPlugin {
       }
     }
 
-    if (video && failedTestTraceIds.length > 0) {
-      const videoUploadPromise = this.uploadTestVideo({ videoPath: video, traceIds: failedTestTraceIds })
+    const testSuiteStatus = getSuiteStatus(stats)
+    if (video && testSuiteStatus === 'fail') {
+      const testSuiteId = this.testSuiteSpan.context().toSpanId()
+      const videoUploadPromise = this.uploadTestVideo({ videoPath: video, testSuiteId })
       if (videoUploadPromise) {
         mediaUploadPromises.push(videoUploadPromise)
       }
@@ -1630,8 +1630,7 @@ class CypressPlugin {
 
     const finishSuite = () => {
       if (this.testSuiteSpan) {
-        const status = getSuiteStatus(stats)
-        this.testSuiteSpan.setTag(TEST_STATUS, status)
+        this.testSuiteSpan.setTag(TEST_STATUS, testSuiteStatus)
 
         if (latestError) {
           this.testSuiteSpan.setTag('error', latestError)
@@ -1676,7 +1675,7 @@ class CypressPlugin {
     const exporter = this.tracer?._tracer?._exporter
     if (!screenshots.length ||
       !exporter?.canUploadTestScreenshots?.() ||
-      !exporter.uploadTestScreenshot) {
+      !exporter.uploadTestMedia) {
       return
     }
 
@@ -1694,9 +1693,9 @@ class CypressPlugin {
       const idempotencyKey = `${traceId}:${basename(filePath)}`
       const capturedAtMs = getMediaCapturedAtMs(screenshot, filePath)
       uploadPromises.push(new Promise(resolve => {
-        exporter.uploadTestScreenshot({
+        exporter.uploadTestMedia({
           filePath,
-          traceId,
+          testRunId: traceId,
           idempotencyKey,
           capturedAtMs,
         }, (err) => {
@@ -1713,41 +1712,33 @@ class CypressPlugin {
   }
 
   /**
-   * Uploads the per-spec Cypress video to each failed test run in the spec.
+   * Uploads the per-spec Cypress video to the failing test suite.
    *
    * @param {object} options - Upload options
    * @param {string} options.videoPath - Path to the Cypress video
-   * @param {string[]} options.traceIds - Failed test trace ids that own the video
+   * @param {string} options.testSuiteId - Test suite id that owns the video
    * @returns {Promise<void>|undefined}
    */
-  uploadTestVideo ({ videoPath, traceIds }) {
+  uploadTestVideo ({ videoPath, testSuiteId }) {
     const exporter = this.tracer?._tracer?._exporter
-    if (!videoPath || !traceIds.length ||
+    if (!videoPath || !testSuiteId ||
       !exporter?.canUploadTestVideo?.() ||
-      !exporter.uploadTestScreenshot) {
+      !exporter.uploadTestMedia) {
       return
     }
 
     const capturedAtMs = getMediaCapturedAtMs(videoPath, videoPath)
     const videoFileName = basename(videoPath)
-    const uploadPromises = []
-
-    for (const traceId of traceIds) {
-      uploadPromises.push(new Promise(resolve => {
-        exporter.uploadTestScreenshot({
-          filePath: videoPath,
-          traceId,
-          idempotencyKey: `${traceId}:${videoFileName}`,
-          capturedAtMs,
-        }, () => {
-          resolve()
-        })
-      }))
-    }
-
-    if (uploadPromises.length > 0) {
-      return Promise.all(uploadPromises).then(() => {})
-    }
+    return new Promise(resolve => {
+      exporter.uploadTestMedia({
+        filePath: videoPath,
+        testRunId: testSuiteId,
+        idempotencyKey: `${testSuiteId}:${videoFileName}`,
+        capturedAtMs,
+      }, () => {
+        resolve()
+      })
+    })
   }
 
   getTasks () {

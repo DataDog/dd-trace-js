@@ -1279,13 +1279,13 @@ describe('CI Visibility Exporter', () => {
         url,
         testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: false },
       })
-      ciVisibilityExporter._testScreenshotUploadUrl = url
+      ciVisibilityExporter._testMediaUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
     })
 
     it('should return false when the URL is set but the screenshots flag is absent (default off)', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url })
-      ciVisibilityExporter._testScreenshotUploadUrl = url
+      ciVisibilityExporter._testMediaUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
     })
 
@@ -1294,7 +1294,7 @@ describe('CI Visibility Exporter', () => {
         url,
         testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
       })
-      ciVisibilityExporter._testScreenshotUploadUrl = url
+      ciVisibilityExporter._testMediaUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
     })
   })
@@ -1313,13 +1313,13 @@ describe('CI Visibility Exporter', () => {
         url,
         testOptimization: { DD_TEST_FAILURE_VIDEO_ENABLED: false },
       })
-      ciVisibilityExporter._testScreenshotUploadUrl = url
+      ciVisibilityExporter._testMediaUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), false)
     })
 
     it('should return false when the URL is set but the video flag is absent', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url })
-      ciVisibilityExporter._testScreenshotUploadUrl = url
+      ciVisibilityExporter._testMediaUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), false)
     })
 
@@ -1328,7 +1328,7 @@ describe('CI Visibility Exporter', () => {
         url,
         testOptimization: { DD_TEST_FAILURE_VIDEO_ENABLED: true },
       })
-      ciVisibilityExporter._testScreenshotUploadUrl = url
+      ciVisibilityExporter._testMediaUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), true)
     })
   })

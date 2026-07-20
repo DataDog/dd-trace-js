@@ -482,8 +482,8 @@ describe('CI validation exporter', () => {
     exporter.exportDiLogs()
     exporter.uploadCoverageReport({}, coverageError => {
       assert.match(coverageError.message, /disabled during offline Test Optimization validation/)
-      exporter.uploadTestScreenshot({}, screenshotError => {
-        assert.match(screenshotError.message, /disabled during offline Test Optimization validation/)
+      exporter.uploadTestMedia({}, mediaError => {
+        assert.match(mediaError.message, /disabled during offline Test Optimization validation/)
         assert(networkStubs.every(stub => stub.notCalled))
         exporter._sink.writeSummary()
         done()

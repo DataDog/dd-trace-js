@@ -12,7 +12,7 @@ const { getTestManagementTests: getTestManagementTestsRequest } =
 const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
-const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
+const { uploadTestMedia: uploadTestMediaRequest } = require('../requests/upload-test-media')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -537,7 +537,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @returns {boolean}
    */
   canUploadTestScreenshots () {
-    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
+    return Boolean(this._testMediaUploadUrl) && this._isTestFailureScreenshotsEnabled
   }
 
   /**
@@ -546,30 +546,30 @@ class CiVisibilityExporter extends BufferingExporter {
    * @returns {boolean}
    */
   canUploadTestVideo () {
-    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideoEnabled
+    return Boolean(this._testMediaUploadUrl) && this._isTestFailureVideoEnabled
   }
 
   /**
-   * Uploads a single test screenshot to the Test Optimization media intake.
+   * Uploads a single artifact to the Test Optimization media intake.
    *
    * @param {object} options - Upload options
-   * @param {string} options.filePath - Path to the screenshot file
-   * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {string} options.filePath - Path to the media file
+   * @param {string} options.testRunId - Test or test suite id that owns the media
    * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {Function} callback - Callback function (err)
    */
-  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs }, callback) {
-    if (!this._testScreenshotUploadUrl) {
-      return callback(new Error('Test screenshot upload URL not configured'))
+  uploadTestMedia ({ filePath, testRunId, idempotencyKey, capturedAtMs }, callback) {
+    if (!this._testMediaUploadUrl) {
+      return callback(new Error('Test media upload URL not configured'))
     }
 
-    uploadTestScreenshotRequest({
+    uploadTestMediaRequest({
       filePath,
-      traceId,
+      testRunId,
       idempotencyKey,
       capturedAtMs,
-      url: this._testScreenshotUploadUrl,
+      url: this._testMediaUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
     }, callback)

@@ -68,9 +68,9 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           evpProxyPrefix,
         })
         this._codeCoverageReportUrl = this._url
-        // Screenshot media uploads go through the Agent's evp_proxy: the uploader prefixes the
-        // path with evpProxyPrefix and sets X-Datadog-EVP-Subdomain: api (see uploadTestScreenshot).
-        this._testScreenshotUploadUrl = this._url
+        // Test media uploads go through the Agent's evp_proxy: the uploader prefixes the path with
+        // evpProxyPrefix and sets X-Datadog-EVP-Subdomain: api (see uploadTestMedia).
+        this._testMediaUploadUrl = this._url
         if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {

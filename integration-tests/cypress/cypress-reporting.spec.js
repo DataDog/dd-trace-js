@@ -26,6 +26,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_SUITE,
+  TEST_SUITE_ID,
   TEST_CODE_OWNERS,
   TEST_NAME,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
@@ -993,7 +994,7 @@ moduleTypes.forEach(({
                   screenshotPayload.url.split('?')[0],
                   `/api/v2/ci/test-runs/${expectedTraceId}/media`
                 )
-                assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+                assert.strictEqual(screenshotPayload.media.testRunId, expectedTraceId)
                 assert.strictEqual(screenshotPayload.headers['dd-api-key'], '1')
 
                 // v2 metadata rides the query string, not X-Dd-* headers, so it survives the
@@ -1052,27 +1053,37 @@ moduleTypes.forEach(({
               (payloads) => {
                 const testOutput = getTestOutput()
                 const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
-                const failedTest = payloads
+                const events = payloads
                   .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
                   .flatMap(({ payload }) => payload.events)
+                const failedTest = events
                   .filter(event => event.type === 'test')
                   .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+                const failedTestSuite = events.find(event => event.type === 'test_suite_end')
 
                 assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
-                const expectedTraceId = failedTest.content.trace_id.toString()
-                const videoPayload = mediaPayloads.find(({ media }) => media.contentType === 'video/mp4')
+                assert.ok(failedTestSuite, `failed test suite event should be reported\n${testOutput}`)
+                const expectedTestSuiteId = failedTestSuite.content[TEST_SUITE_ID].toString()
+                assert.notStrictEqual(expectedTestSuiteId, failedTest.content.trace_id.toString())
+                const videoPayloads = mediaPayloads.filter(({ media }) => media.contentType === 'video/mp4')
 
-                assert.ok(videoPayload, `a video should be uploaded to the v2 media endpoint\n${testOutput}`)
+                assert.strictEqual(
+                  videoPayloads.length,
+                  1,
+                  `one video should be uploaded for the test suite\n${testOutput}`
+                )
+                const [videoPayload] = videoPayloads
                 assert.ok(
                   !mediaPayloads.some(({ media }) => media.contentType === 'image/png'),
                   `screenshots should not be uploaded when their feature flag is disabled\n${testOutput}`
                 )
                 assert.strictEqual(
                   videoPayload.url.split('?')[0],
-                  `/api/v2/ci/test-runs/${expectedTraceId}/media`
+                  `/api/v2/ci/test-runs/${expectedTestSuiteId}/media`
                 )
-                assert.strictEqual(videoPayload.media.traceId, expectedTraceId)
+                assert.strictEqual(videoPayload.media.testRunId, expectedTestSuiteId)
                 assert.strictEqual(videoPayload.headers['dd-api-key'], '1')
+                assert.match(videoPayload.media.idempotencyKey, new RegExp(`^${expectedTestSuiteId}:`))
                 assert.match(decodeKeyFilename(videoPayload.media.idempotencyKey), /basic-fail\.js\.mp4$/)
 
                 const capturedAt = Number(videoPayload.media.capturedAt)
@@ -1160,7 +1171,7 @@ moduleTypes.forEach(({
                   `only the auto failure screenshot should be uploaded\n${testOutput}`
                 )
                 const [screenshotPayload] = screenshotPayloads
-                assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+                assert.strictEqual(screenshotPayload.media.testRunId, expectedTraceId)
 
                 assert.match(
                   decodeKeyFilename(screenshotPayload.media.idempotencyKey),

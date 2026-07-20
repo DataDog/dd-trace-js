@@ -156,13 +156,13 @@ class CiValidationExporter extends CiVisibilityExporter {
   }
 
   /**
-   * Rejects screenshot upload in offline validation mode.
+   * Rejects media upload in offline validation mode.
    *
    * @param {object} options ignored upload options
    * @param {Function} callback completion callback
    */
-  uploadTestScreenshot (options, callback) {
-    callback(new Error('Screenshot upload is disabled during offline Test Optimization validation.'))
+  uploadTestMedia (options, callback) {
+    callback(new Error('Media upload is disabled during offline Test Optimization validation.'))
   }
 }
 
