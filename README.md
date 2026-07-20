@@ -28,7 +28,7 @@ Most of the documentation for `dd-trace` is available on these webpages:
 | [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | NO | NO | **EOL** | 2022-01-28     | 2023-08-15  |
 | [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | NO | YES | **EOL** | 2022-08-15     | 2024-05-15  |
 | [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square) | `>= v16` | YES | YES | **EOL**     | 2023-05-12     | 2025-01-11     |
-| [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest-node18?color=white&label=%20&style=flat-square)  | `>= v18` | YES | YES | **Maintenance** | 2024-01-11     | Unknown     |
+| [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest-node18?color=white&label=%20&style=flat-square)  | `>= v18` | YES | YES | **Maintenance** | 2024-01-11     | 2027-07-02     |
 | [`v6`](https://github.com/DataDog/dd-trace-js/tree/v6.x) | ![npm v6](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)         | `>= v22` | YES | YES | **Current**     | 2026-07-02     | Unknown     |
 
 * EOL = End-of-life
@@ -92,6 +92,23 @@ Regardless of where you open the issue, someone at Datadog will try to help.
 ## Bundling
 
 If you would like to trace your bundled application then please read this page on [bundling and dd-trace](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling). It includes information on how to use our ESBuild plugin and includes caveats for other bundlers.
+
+When using the experimental OpenFeature provider, file-traced deployments can force the optional provider and
+its dependencies into the output with a side-effect import before accessing `tracer.openfeature`:
+
+CommonJS:
+
+```js
+require('dd-trace/openfeature')
+```
+
+ES modules:
+
+```js
+import 'dd-trace/openfeature.js'
+```
+
+This is a fallback for build tools that do not recognize the provider's optional-require wrapper.
 
 
 ## Security Vulnerabilities

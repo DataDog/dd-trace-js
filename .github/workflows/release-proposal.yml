@@ -66,7 +66,7 @@ jobs:
         run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
@@ -89,7 +89,7 @@ jobs:
                     GitHub's rebase limit is 100 — once reached, commits that don't fit
                     will be deferred to a subsequent release.
                     Consider cutting this release soon.
-      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&

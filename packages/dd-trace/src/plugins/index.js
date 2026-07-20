@@ -1,6 +1,7 @@
 'use strict'
 
 const plugins = {
+  get '@anthropic-ai/claude-agent-sdk' () { return require('../../../datadog-plugin-claude-agent-sdk/src') },
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
@@ -46,6 +47,7 @@ const plugins = {
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
   get child_process () { return require('../../../datadog-plugin-child_process/src') },
+  get 'claude-agent-sdk' () { return require('../../../datadog-plugin-claude-agent-sdk/src') },
   get connect () { return require('../../../datadog-plugin-connect/src') },
   get couchbase () { return require('../../../datadog-plugin-couchbase/src') },
   get cypress () { return require('../../../datadog-plugin-cypress/src') },
@@ -82,6 +84,9 @@ const plugins = {
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
+  // mercurius is traced under the graphql plugin: its instrumentation opens the
+  // top-level graphql.request span handled by the graphql CompositePlugin.
+  get mercurius () { return require('../../../datadog-plugin-graphql/src') },
   get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },
   get mocha () { return require('../../../datadog-plugin-mocha/src') },
   get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },

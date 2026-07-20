@@ -51,6 +51,13 @@ exports.tracingChannel = function (name) {
  * inside Express) still reaches its subscribers instead of being dropped, and
  * the guard costs a closure read rather than a per-publish channel lookup.
  *
+ * The flag bounds only synchronous re-entry. A sequential re-drive of the same
+ * error (fastify's avvio boot loop) runs after the publish returned and the
+ * `finally` cleared the flag, so the framework that produces that shape guards
+ * it at its own seam; the middleware frameworks that republish the same error
+ * once per unwound layer (koa, router, connect, restify, each tagging a
+ * distinct span) must keep publishing it.
+ *
  * @param {Channel} errorChannel
  */
 exports.createErrorPublisher = function createErrorPublisher (errorChannel) {

@@ -47,6 +47,8 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
   #settingsResponseStatusCode = 200
+  #settingsResponseStatusCodes = []
+  #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
   #gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
@@ -102,6 +104,19 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettingsResponseCode (statusCode) {
     this.#settingsResponseStatusCode = statusCode
+  }
+
+  /**
+   * @param {number[]} statusCodes
+   */
+  setSettingsResponseStatusCodes (statusCodes) {
+    this.#settingsResponseStatusCodes = statusCodes.slice()
+  }
+
+  // Lets a test simulate the media endpoint failing (e.g. 500) to verify the
+  // cypress run still completes and reports normally when an upload fails.
+  setMediaResponseStatusCode (statusCode) {
+    this.#mediaResponseStatusCode = statusCode
   }
 
   setWaitingTime (newWaitingTime) {
@@ -225,12 +240,31 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
+    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+      res.status(this.#mediaResponseStatusCode).send()
+      this.emit('message', {
+        headers: req.headers,
+        media: {
+          traceId: req.params.traceId,
+          contentType: req.headers['content-type'],
+          // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
+          // evp_proxy, which forwards only an allow-listed header set.
+          idempotencyKey: req.query.idempotency_key,
+          capturedAt: req.query.captured_at_ms,
+          content: req.body,
+        },
+        url: req.url,
+      })
+    })
+
     app.post([
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      res.status(this.#settingsResponseStatusCode)
-      if (this.#settingsResponseStatusCode >= 200 && this.#settingsResponseStatusCode < 300) {
+      const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
+        this.#settingsResponseStatusCode
+      res.status(settingsResponseStatusCode)
+      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
         res.send(JSON.stringify({
           data: {
             attributes: this.#settings,
@@ -365,6 +399,7 @@ class FakeCiVisIntake extends FakeAgent {
   stop () {
     this.#settings = DEFAULT_SETTINGS
     this.#settingsResponseStatusCode = 200
+    this.#settingsResponseStatusCodes = []
     this.#suitesToSkip = DEFAULT_SUITES_TO_SKIP
     this.#skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
     this.#gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS

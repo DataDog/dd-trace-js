@@ -2000,6 +2000,156 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with multiple argument-bearing fields in one operation', () => {
+        let variableFilterCalls
+
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', {
+            variables: variables => {
+              variableFilterCalls += 1
+              return variables
+            },
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          variableFilterCalls = 0
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        // graphql coerces variableValues once per execute and hands the same
+        // object to every resolver, so the plugin memoizes the user filter on
+        // the operation and reuses it across every argument-bearing field. The
+        // two sibling fields must each still be tagged only with their own
+        // arguments from that shared filtered object, and the filter must not
+        // re-run per field.
+        it('reuses the filtered variables across sibling resolve spans', () => {
+          const source = `
+            query TwoFields($name: String!, $title: String!) {
+              first: hello(name: $name)
+              second: hello(title: $title)
+            }
+          `
+          const variableValues = { name: 'world', title: 'planet' }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const resolveSpans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+
+            assert.strictEqual(resolveSpans.length, 2)
+
+            const nameSpan = resolveSpans.find(span => 'graphql.variables.name' in span.meta)
+            const titleSpan = resolveSpans.find(span => 'graphql.variables.title' in span.meta)
+
+            assert.ok(nameSpan, 'expected a resolve span tagged with the name variable')
+            assert.ok(titleSpan, 'expected a resolve span tagged with the title variable')
+            assert.strictEqual(nameSpan.meta['graphql.variables.name'], 'world')
+            assert.strictEqual(titleSpan.meta['graphql.variables.title'], 'planet')
+            assert.ok(!('graphql.variables.title' in nameSpan.meta))
+            assert.ok(!('graphql.variables.name' in titleSpan.meta))
+          }, { spanResourceMatch: /TwoFields/ })
+
+          return Promise.all([
+            assertion,
+            graphql.graphql({ schema, source, variableValues }).then(() => {
+              // One call tags the execute span; the second is the memoized
+              // resolve-path call shared by both fields. Without the cache the
+              // second field would trigger a third call.
+              assert.strictEqual(variableFilterCalls, 2)
+            }),
+          ])
+        })
+      })
+
+      describe('with nested executions sharing a contextValue', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', {
+            variables: variables => variables,
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        // A resolver that re-enters execute() with the same object contextValue
+        // (Apollo federation and stitching do this) is short-circuited by the
+        // plugin and its resolvers reuse the outer operation's context. The
+        // per-resolver variable tags must still come from each field's own
+        // variableValues, not the outer operation's.
+        it('tags each resolve span with its own operation variables', () => {
+          const outerDocument = graphql.parse('query Outer($x: String) { outer(x: $x) }')
+          const innerDocument = graphql.parse('query Inner($y: String) { inner(y: $y) }')
+
+          const nestedSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'NestedQuery',
+              fields: {
+                outer: {
+                  type: graphql.GraphQLString,
+                  args: { x: { type: graphql.GraphQLString } },
+                  resolve (source, args, contextValue) {
+                    return graphql.execute({
+                      schema: nestedSchema,
+                      document: innerDocument,
+                      contextValue,
+                      variableValues: { y: 'inner' },
+                    }).then(result => `outer:${result.data.inner}`)
+                  },
+                },
+                inner: {
+                  type: graphql.GraphQLString,
+                  args: { y: { type: graphql.GraphQLString } },
+                  resolve () {
+                    return 'inner-value'
+                  },
+                },
+              },
+            }),
+          })
+
+          const resolveSpans = new Map()
+          const assertion = agent.assertSomeTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'graphql.resolve') resolveSpans.set(span.resource, span)
+              }
+            }
+
+            const outerSpan = resolveSpans.get('outer:String')
+            const innerSpan = resolveSpans.get('inner:String')
+            assert.ok(outerSpan, 'expected an outer graphql.resolve span')
+            assert.ok(innerSpan,
+              `expected an inner graphql.resolve span, got: ${[...resolveSpans.keys()].join(', ')}`)
+
+            assert.strictEqual(outerSpan.meta['graphql.variables.x'], 'outer')
+            assert.strictEqual(innerSpan.meta['graphql.variables.y'], 'inner')
+          }, { timeoutMs: 3000 })
+
+          const contextValue = {}
+          const execution = graphql.execute({
+            schema: nestedSchema,
+            document: outerDocument,
+            contextValue,
+            variableValues: { x: 'outer' },
+          })
+
+          return Promise.all([assertion, execution])
+        })
+      })
+
       describe('with an array of variable names', () => {
         before(() => {
           tracer = require('../../dd-trace')
@@ -2034,6 +2184,64 @@ describe('Plugin', () => {
           })
 
           return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
+        })
+      })
+
+      describe('with configured error extensions', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', { errorExtensions: ['code', 'extra'] })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('traces with the configured extensions resolved', () => {
+          const source = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+      })
+
+      describe('with invalid configuration', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', { depth: 'all', variables: 5, errorExtensions: 'code' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('falls back to defaults and still traces', () => {
+          const source = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
       })
 
@@ -2788,6 +2996,414 @@ describe('Plugin', () => {
             runQuery(params)
               .catch(done)
           })
+        })
+      })
+
+      // Apollo Federation exposes entity types only through the synthetic
+      // `_Entity` union returned by `Query._entities`, and abstract types through
+      // interfaces. graphql resolves the concrete type at runtime, so the
+      // schema-traversal that wraps resolvers must descend into union members and
+      // interface implementations or those resolvers never get a graphql.resolve
+      // span. The schemas are built by hand with the same versioned graphql the
+      // suite instruments (a separate instance would emit no spans). Regression
+      // for https://github.com/DataDog/dd-trace-js/issues/1057.
+      describe('federation / abstract types', () => {
+        // Apollo Federation (and the abstract-type schema shapes it relies on)
+        // targets modern graphql; the pre-1.0 majors still in the matrix predate
+        // the schema APIs these fixtures use, so scope the suite to 15+.
+        const supported = semver.satisfies(graphqlVersion, '>=15.0.0')
+
+        before(async function () {
+          if (!supported) return this.skip()
+
+          tracer = await agent.load('graphql')
+        })
+
+        beforeEach(function () {
+          if (!supported) return this.skip()
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        after(() => agent.close())
+
+        function createHealthCheckSchema () {
+          return new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                hello: { type: graphql.GraphQLString, resolve: () => 'world' },
+              },
+            }),
+          })
+        }
+
+        /**
+         * @param {import('graphql').DocumentNode} document
+         * @param {string} [operationName]
+         */
+        async function executeAndCountStarts (document, operationName) {
+          const executeCh = dc.channel('apm:graphql:execute:start')
+          let starts = 0
+          const handler = () => { starts++ }
+          executeCh.subscribe(handler)
+
+          try {
+            const result = await graphql.execute({
+              schema: createHealthCheckSchema(),
+              document,
+              operationName,
+            })
+            return { result, starts }
+          } finally {
+            executeCh.unsubscribe(handler)
+          }
+        }
+
+        it('should create graphql.resolve spans for fields reached only through a union member', () => {
+          // Product is reachable only as a union member (no field returns it
+          // directly), mirroring federation's `_Entity` union. Without descending
+          // into union members the current traversal never wraps Product.name.
+          const Product = new graphql.GraphQLObjectType({
+            name: 'Product',
+            fields: {
+              name: { type: graphql.GraphQLString, resolve: () => 'Table' },
+            },
+          })
+
+          const Entity = new graphql.GraphQLUnionType({
+            name: '_Entity',
+            types: [Product],
+            resolveType: () => 'Product',
+          })
+
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                entity: { type: Entity, resolve: () => ({}) },
+              },
+            }),
+          })
+
+          const source = 'query { entity { ... on Product { name } } }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            const productName = spans.find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'name')
+            assert.ok(productName, 'graphql.resolve span for the field reached via the union should be emitted')
+            assert.strictEqual(productName.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /name:String/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('should create graphql.resolve spans for fields reached only through an interface', () => {
+          const Node = new graphql.GraphQLInterfaceType({
+            name: 'Node',
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID) },
+            },
+            resolveType: () => 'Widget',
+          })
+
+          // Widget.label is reachable only as an interface implementation, and
+          // Widget.next loops back to the Node interface — the recursive-interface
+          // shape that must terminate the per-schema descent instead of recursing.
+          const Widget = new graphql.GraphQLObjectType({
+            name: 'Widget',
+            interfaces: [Node],
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
+              label: { type: graphql.GraphQLString, resolve: () => 'a widget' },
+              next: { type: Node, resolve: () => undefined },
+            },
+          })
+
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                node: { type: Node, resolve: () => ({}) },
+              },
+            }),
+            // Widget implements Node but is referenced by no field, so it reaches
+            // the type map only through this explicit registration — the shape a
+            // federated interface implementation has.
+            types: [Widget],
+          })
+
+          const source = 'query { node { id ... on Widget { label next { id } } } }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            const label = spans.find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'label')
+            assert.ok(label, 'graphql.resolve span for the interface implementation field should be emitted')
+            assert.strictEqual(label.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /label:String/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('should create no graphql spans for the federation health-check operation', async () => {
+          const schema = createHealthCheckSchema()
+          // The sentinel makes absence observable: each graphql span should occur exactly once.
+          const graphqlSpans = new Map()
+          const collect = traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name.startsWith('graphql.')) {
+                  graphqlSpans.set(span.name, (graphqlSpans.get(span.name) ?? 0) + 1)
+                }
+              }
+            }
+          }
+          agent.subscribe(collect)
+
+          try {
+            // The exact operation Apollo Gateway polls subgraphs with.
+            const healthCheck = await graphql.graphql({
+              schema,
+              source: 'query __ApolloServiceHealthCheck__ { __typename }',
+            })
+            assert.ok(!healthCheck.errors, inspect(healthCheck.errors))
+
+            const sentinel = await graphql.graphql({ schema, source: 'query { hello }' })
+            assert.ok(!sentinel.errors, inspect(sentinel.errors))
+
+            await agent.assertSomeTraces(() => {
+              assert.strictEqual(graphqlSpans.get('graphql.parse'), 1,
+                'only the sentinel query may emit a graphql.parse span')
+              assert.strictEqual(graphqlSpans.get('graphql.validate'), 1,
+                'only the sentinel query may emit a graphql.validate span')
+              assert.strictEqual(graphqlSpans.get(expectedSchema.server.opName), 1,
+                'only the sentinel query may emit a graphql.execute span')
+              assert.strictEqual(graphqlSpans.get('graphql.resolve'), 1,
+                'only the sentinel query may emit a graphql.resolve span')
+            })
+          } finally {
+            agent.unsubscribe(collect)
+          }
+        })
+
+        it('should skip a health-check document that reaches execute without an instrumented parse', async () => {
+          // A cloned AST reproduces Apollo Server's cached path without the parse-side marker.
+          const document = JSON.parse(JSON.stringify(
+            graphql.parse('query __ApolloServiceHealthCheck__ { __typename }')))
+          const { result, starts } = await executeAndCountStarts(document)
+          assert.ok(!result.errors, inspect(result.errors))
+          assert.strictEqual(starts, 0, 'the cached health-check document must skip its execute span')
+        })
+
+        it('should trace a health-check document changed after parsing', async () => {
+          const schema = createHealthCheckSchema()
+          const document = graphql.parse('query __ApolloServiceHealthCheck__ { __typename }')
+          document.definitions[0].selectionSet.selections[0].name.value = 'hello'
+
+          let validationErrors
+          await Promise.all([
+            agent.assertFirstTraceSpan({ name: 'graphql.validate' }),
+            (async () => {
+              validationErrors = graphql.validate(schema, document)
+            })(),
+          ])
+          assert.deepStrictEqual(validationErrors, [])
+
+          const executeCh = dc.channel('apm:graphql:execute:start')
+          const resolverCh = dc.channel('datadog:graphql:resolver:start')
+          let executeStarts = 0
+          let resolverStarts = 0
+          const executeHandler = () => { executeStarts++ }
+          const resolverHandler = () => { resolverStarts++ }
+          executeCh.subscribe(executeHandler)
+          resolverCh.subscribe(resolverHandler)
+
+          try {
+            const result = await graphql.execute({ schema, document })
+            assert.ok(!result.errors, inspect(result.errors))
+            assert.strictEqual(result.data.hello, 'world')
+            assert.strictEqual(executeStarts, 1, 'a changed document must keep its execute span')
+            assert.strictEqual(resolverStarts, 1, 'a changed document must keep its AppSec resolver channel')
+          } finally {
+            executeCh.unsubscribe(executeHandler)
+            resolverCh.unsubscribe(resolverHandler)
+          }
+        })
+
+        it('should trace a cached health-check operation from a larger document', async () => {
+          const document = graphql.parse(`
+            query __ApolloServiceHealthCheck__ { __typename }
+            query Other { hello }
+          `)
+          const { result, starts } = await executeAndCountStarts(document, '__ApolloServiceHealthCheck__')
+          assert.ok(!result.errors, inspect(result.errors))
+          assert.strictEqual(starts, 1, 'only Apollo\'s complete document may skip its execute span')
+        })
+
+        // execute() accepts cached documents without parsing or validating them.
+        const warmPathDivergences = {
+          'a variable definition': 'query __ApolloServiceHealthCheck__($unused: Boolean) { __typename }',
+          'an operation-level directive': 'query __ApolloServiceHealthCheck__ @cached { __typename }',
+        }
+
+        for (const [divergence, source] of Object.entries(warmPathDivergences)) {
+          it(`should trace a cached health-check-named document with ${divergence}`, async () => {
+            const document = graphql.parse(source)
+            const { result, starts } = await executeAndCountStarts(document)
+            assert.ok(!result.errors, inspect(result.errors))
+            assert.strictEqual(starts, 1,
+              'a document diverging from the exact health-check shape must still be traced')
+          })
+        }
+
+        // The reserved name is client-controlled; every non-Apollo shape must remain traced.
+        const spoofedHealthChecks = {
+          'a real field instead of __typename': 'query __ApolloServiceHealthCheck__ { hello }',
+          'an extra selection alongside __typename': 'query __ApolloServiceHealthCheck__ { __typename hello }',
+          'the mutation operation type': 'mutation __ApolloServiceHealthCheck__ { hello }',
+        }
+
+        for (const [divergence, source] of Object.entries(spoofedHealthChecks)) {
+          it(`should trace an operation that spoofs the health-check name with ${divergence}`, async () => {
+            const helloField = { type: graphql.GraphQLString, resolve: () => 'world' }
+            const schema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({ name: 'Query', fields: { hello: helloField } }),
+              mutation: new graphql.GraphQLObjectType({ name: 'Mutation', fields: { hello: helloField } }),
+            })
+
+            const executeCh = dc.channel('apm:graphql:execute:start')
+            let starts = 0
+            const handler = () => { starts++ }
+            executeCh.subscribe(handler)
+
+            try {
+              const spoofed = await graphql.graphql({ schema, source })
+              assert.ok(!spoofed.errors, inspect(spoofed.errors))
+              assert.strictEqual(starts, 1, 'an operation spoofing the health-check name must still be traced')
+            } finally {
+              executeCh.unsubscribe(handler)
+            }
+          })
+        }
+
+        it('should not let a shared interface hide a second schema\'s implementation fields', async () => {
+          // One Node interface instance, reused across two schemas that each
+          // register a different implementation. resolveType picks the concrete
+          // type off __typename, which the root resolver stamps on the value.
+          const Node = new graphql.GraphQLInterfaceType({
+            name: 'Node',
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID) },
+            },
+            resolveType: value => value.__typename,
+          })
+
+          // Each impl exposes a distinctly-named field so the graphql.resolve
+          // resource identifies which schema's implementation was wrapped —
+          // `widgetLabel:String` vs `gadgetLabel:String`. A shared `label` would
+          // let the first schema's span satisfy the second schema's assertion.
+          const makeImpl = name => new graphql.GraphQLObjectType({
+            name,
+            interfaces: [Node],
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
+              [`${name.toLowerCase()}Label`]: { type: graphql.GraphQLString, resolve: () => `a ${name}` },
+            },
+          })
+
+          const makeSchema = impl => new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                node: { type: Node, resolve: () => ({ __typename: impl.name }) },
+              },
+            }),
+            // Impl reaches the type map only through this explicit registration —
+            // the shape a federated interface implementation has.
+            types: [impl],
+          })
+
+          const firstSchema = makeSchema(makeImpl('Widget'))
+          const secondSchema = makeSchema(makeImpl('Gadget'))
+
+          // Walk the first schema so the shared Node interface is recorded; a
+          // global one-time guard would then stop the second schema's walk before
+          // it reaches Gadget, leaving gadgetLabel unwrapped. getPossibleTypes is
+          // schema-specific, so the interface descent must run per schema.
+          await graphql.graphql({
+            schema: firstSchema,
+            source: 'query { node { id ... on Widget { widgetLabel } } }',
+          })
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const label = sort(traces[0]).find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'gadgetLabel')
+            assert.ok(label, 'the second schema\'s interface implementation field should be wrapped')
+            assert.strictEqual(label.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /gadgetLabel:String/ })
+
+          await Promise.all([
+            assertion,
+            graphql.graphql({
+              schema: secondSchema,
+              source: 'query { node { id ... on Gadget { gadgetLabel } } }',
+            }),
+          ])
+        })
+
+        it('should wrap a second schema\'s implementations when both reuse the same parent type', async () => {
+          const Node = new graphql.GraphQLInterfaceType({
+            name: 'Node',
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID) },
+            },
+          })
+
+          const makeImpl = name => new graphql.GraphQLObjectType({
+            name,
+            interfaces: [Node],
+            isTypeOf: () => true,
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
+              [`${name.toLowerCase()}Label`]: { type: graphql.GraphQLString, resolve: () => `a ${name}` },
+            },
+          })
+
+          // The same Query instance in both schemas is the shared parent that a
+          // global walk-guard marks on the first schema, stopping the second
+          // schema's walk before it reaches the `node` field's interface.
+          const Query = new graphql.GraphQLObjectType({
+            name: 'Query',
+            fields: {
+              node: { type: Node, resolve: () => ({}) },
+            },
+          })
+
+          const firstSchema = new graphql.GraphQLSchema({ query: Query, types: [makeImpl('Widget')] })
+          const secondSchema = new graphql.GraphQLSchema({ query: Query, types: [makeImpl('Gadget')] })
+
+          await graphql.graphql({
+            schema: firstSchema,
+            source: 'query { node { id ... on Widget { widgetLabel } } }',
+          })
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const label = sort(traces[0]).find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'gadgetLabel')
+            assert.ok(label, 'the second schema\'s interface implementation field should be wrapped')
+            assert.strictEqual(label.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /gadgetLabel:String/ })
+
+          await Promise.all([
+            assertion,
+            graphql.graphql({
+              schema: secondSchema,
+              source: 'query { node { id ... on Gadget { gadgetLabel } } }',
+            }),
+          ])
         })
       })
     })

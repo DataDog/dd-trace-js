@@ -5,7 +5,7 @@ const VercelAILLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/ai')
 const VercelAITracingPlugin = require('./tracing')
 
 class VercelAIPlugin extends CompositePlugin {
-  static get id () { return 'ai' }
+  static id = 'ai'
   static get plugins () {
     return {
       llmobs: VercelAILLMObsPlugin,

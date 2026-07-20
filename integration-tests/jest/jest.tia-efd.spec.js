@@ -289,6 +289,51 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       )
     })
 
+    it('does not wait for git readiness when git upload is disabled', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+        require_git: true,
+      })
+
+      const settingsPath = '/api/v2/libraries/tests/services/setting'
+      const skippablePath = '/api/v2/ci/tests/skippable'
+
+      /**
+       * @param {{ url: string }} message
+       */
+      const isReadinessRequest = ({ url }) => url === settingsPath || url === skippablePath
+
+      /**
+       * @param {{ url: string }[]} payloads
+       */
+      const assertReadinessRequests = (payloads) => {
+        assert.strictEqual(payloads.filter(({ url }) => url === settingsPath).length, 2)
+        assert.strictEqual(payloads.filter(({ url }) => url === skippablePath).length, 1)
+      }
+
+      const requestsPromise = receiver.gatherPayloadsMaxTimeout(
+        isReadinessRequest,
+        assertReadinessRequests
+      )
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        requestsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
       receiver.setSuitesToSkip([{
         type: 'suite',
@@ -691,6 +736,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('works with multi project setup and test skipping', (done) => {
+      const projects = ['standard', 'node'].map(displayName => ({
+        displayName,
+        rootDir: 'ci-visibility/test',
+        testPathIgnorePatterns: ['/node_modules/'],
+        cache: false,
+        testMatch: ['**/ci-visibility-test*'],
+        testRunner: 'jest-circus/runner',
+        testEnvironment: 'node',
+      }))
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -727,10 +781,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
 
       childProcess = exec(
-        'node ./node_modules/jest/bin/jest --config config-jest-multiproject.js',
+        'node ./node_modules/jest/bin/jest --config config-jest.js',
         {
           cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PROJECTS: JSON.stringify(projects),
+          },
         }
       )
 
@@ -913,8 +970,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('skips repository-relative suites when jest rootDir is a subproject', async () => {
-      const suite = 'ci-visibility/subproject/subproject-test.js'
+    it('skips rootDir-relative suites and backfills legacy Windows coverage paths', async () => {
+      const suite = 'subproject-test.js'
+      const suiteCoveragePath = 'ci-visibility\\subproject\\subproject-test.js'
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: true,
@@ -930,8 +988,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
       ])
       receiver.setSkippableCoverage({
-        [suite]: getLinesBitmapBase64(1, 11),
-        'ci-visibility/subproject/dependency.js': getLinesBitmapBase64(1, 5),
+        [suiteCoveragePath]: getLinesBitmapBase64(1, 11),
+        'ci-visibility\\subproject\\dependency.js': getLinesBitmapBase64(1, 5),
       })
 
       const eventsPromise = receiver
@@ -1606,6 +1664,63 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('retries new concurrent tests', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const concurrentTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/concurrent-test.js' &&
+            test.meta[TEST_NAME] === 'early flake detection concurrent tests can pass normally'
+          )
+
+          assert.strictEqual(concurrentTests.length, NUM_RETRIES_EFD + 1)
+          for (const test of concurrentTests) {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+
+          const retriedTests = concurrentTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          for (const retryTest of retriedTests) {
+            assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DO_NOT_INJECT_GLOBALS: 'true',
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-test',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
     })
 
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
@@ -3503,7 +3618,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
           },
@@ -3550,7 +3665,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
         }
@@ -3631,7 +3746,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
         }
@@ -3645,6 +3760,75 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('runs multiple retries with DI', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const retrySpanIdsWithDebugInfo = new Set()
+      const diLogSpanIds = []
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+
+          assert.strictEqual(retriedTests.length, 3)
+          for (const retriedTest of retriedTests) {
+            if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+              retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
+            }
+          }
+          assert.strictEqual(retrySpanIdsWithDebugInfo.size, 2)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+          assert.strictEqual(diLogs.length, 2)
+          for (const diLog of diLogs) {
+            diLogSpanIds.push(diLog.dd.span_id)
+          }
+        })
+
+      childProcess = exec(runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint-multiple-retries\\.js$',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        logsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
+      for (const diLogSpanId of diLogSpanIds) {
+        assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+      }
     })
 
     onlyLatestIt('runs retries with DI in parallel mode', (done) => {
@@ -3765,7 +3949,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
         }
@@ -3803,7 +3987,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             TEST_SHOULD_PASS_AFTER_RETRY: '1',
           },

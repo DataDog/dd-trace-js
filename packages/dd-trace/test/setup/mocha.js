@@ -259,6 +259,13 @@ function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {
     cb = range
     range = undefined
+  } else if (typeof range !== 'string' || range.length === 0) {
+    // A caller passed something in the range slot that is not a version range. The usual culprit is a Node-version
+    // gate written as `NODE_MAJOR >= 25 && '>=1.3.0'`, which evaluates to `false` on older Node and silently filtered
+    // every version through `!range`. Demand a real range string (use `'*'` for "all versions") so the misuse fails
+    // loudly instead of running zero tests.
+    throw new TypeError(`withVersions: the version range must be a non-empty string, got ${util.inspect(range)}. ` +
+      "Use '*' to match every installed version.")
   }
 
   if (!process.env.DD_INJECT_FORCE &&
@@ -284,31 +291,27 @@ function withVersions (plugin, modules, range, cb) {
     /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
-    let moduleMatched = false
+    const declarations = []
     for (const instrumentation of instrumentations) {
-      if (instrumentation.name !== moduleName) continue
-      moduleMatched = true
-
-      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
-      // Treat those as "not a test target" instead of crashing.
-      // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
-      // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
-      const { versionList } = resolvePluginVersions({
-        name: moduleName,
-        declaredVersions: normalizeVersions(instrumentation.versions),
-      })
-
-      for (const { versionKey, range: declaredRange } of versionList) {
-        // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
-        const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
-        testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
-      }
+      if (instrumentation.name === moduleName) declarations.push(instrumentation)
     }
 
     // A module no instrumentation declares would silently run zero tests instead of failing.
-    if (!moduleMatched) {
+    if (declarations.length === 0) {
       throw new Error(`withVersions: no instrumentation declares the module "${moduleName}". Pass the integration ` +
         `name as the first argument (e.g. 'express'), or register "${moduleName}" in test/plugins/externals.js.`)
+    }
+
+    // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+    // Treat those as "not a test target" instead of crashing.
+    // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
+    // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
+    const { versionList } = resolvePluginVersions({ name: moduleName, declarations })
+
+    for (const { versionKey, range: declaredRange } of versionList) {
+      // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
+      const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
+      testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
     }
 
     const testCases = Array.from(testVersions.values())
@@ -360,11 +363,6 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
-}
-
-function normalizeVersions (versions) {
-  if (!versions) return []
-  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**
@@ -466,10 +464,12 @@ exports.mochaHooks = {
     watchdog.unref()
   },
   afterEach () {
-    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
+    // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
+    // ordering keeps that throw from skipping the unconditional cleanup above.
+    if (_agent) _agent.reset()
   },
 }

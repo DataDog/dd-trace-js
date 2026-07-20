@@ -239,18 +239,6 @@ versions.forEach((version) => {
 
     contextNewVersions('check retries tagging', () => {
       it('does not send attempt to fix tags if test is retried and not attempt to fix', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, NUM_RETRIES_EFD + 1)
-            for (const test of tests) {
-              assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-            }
-          })
-
         receiver.setKnownTests({ playwright: {} })
         receiver.setSettings({
           impacted_tests_enabled: true,
@@ -278,7 +266,21 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([once(proc, 'exit'), receiverPromise])
+        await receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url === '/api/v2/citestcycle',
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, NUM_RETRIES_EFD + 1)
+            for (const test of tests) {
+              assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+            }
+          },
+          { hardTimeout: 70_000 }
+        )
       })
     })
 

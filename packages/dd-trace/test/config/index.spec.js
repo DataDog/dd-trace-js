@@ -1036,6 +1036,7 @@ describe('Config', () => {
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED', value: true, origin: 'default' },
+      { name: 'DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', value: null, origin: 'default' },
       { name: 'DD_CIVISIBILITY_FLAKY_RETRY_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_ITR_ENABLED', value: true, origin: 'default' },
@@ -1633,6 +1634,110 @@ describe('Config', () => {
     })
   })
 
+  it('should transform safe programmatic option types', () => {
+    const config = getConfig({
+      startupLogs: 'False',
+      flushInterval: '1234.9',
+      remoteConfig: {
+        pollInterval: '2.5',
+      },
+      profiling: true,
+      service: 1234,
+      baggageTagKeys: ['valid', 1, true],
+    })
+
+    assert.strictEqual(config.startupLogs, false)
+    assert.strictEqual(config.flushInterval, 1234)
+    assert.strictEqual(config.remoteConfig.pollInterval, 2.5)
+    assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+    assert.strictEqual(config.service, '1234')
+    assert.deepStrictEqual(config.baggageTagKeys, ['valid', 1, true])
+  })
+
+  it('should accept infinite numeric programmatic option values', () => {
+    const config = getConfig({
+      flushInterval: Infinity,
+      remoteConfig: {
+        pollInterval: '-Infinity',
+      },
+    })
+
+    assert.strictEqual(config.flushInterval, Infinity)
+    assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
+  })
+
+  it('should ignore undefined programmatic option values', () => {
+    const config = getConfig({ startupLogs: undefined })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('should preserve environment tags when the programmatic tags type is invalid', () => {
+    process.env.DD_TRACE_GLOBAL_TAGS = 'team:checkout,tier:backend'
+
+    const config = getConfig({ tags: process.env.DD_TRACE_GLOBAL_TAGS })
+
+    assertObjectContains(config.tags, { team: 'checkout', tier: 'backend' })
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid MAP input: 'team:checkout,tier:backend' for tags (source: code), picked default",
+    )
+  })
+
+  it('should ignore invalid programmatic option types and report them to telemetry', () => {
+    const samplingRules = JSON.stringify([{ service: 'web', sample_rate: 1 }])
+    const config = getConfig({
+      startupLogs: 'yes',
+      flushInterval: {},
+      remoteConfig: {
+        pollInterval: [],
+      },
+      service: {},
+      baggageTagKeys: [null],
+      headerTags: 'valid:value',
+      serviceMapping: 'mysql:database',
+      samplingRules,
+    })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
+    assert.strictEqual(config.service, 'node')
+    assert.deepStrictEqual(config.baggageTagKeys, defaults.baggageTagKeys)
+    assert.deepStrictEqual(config.headerTags, defaults.headerTags)
+    assert.deepStrictEqual(config.serviceMapping, defaults.serviceMapping)
+    assert.deepStrictEqual(config.samplingRules, defaults.samplingRules)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
+    )
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+      name: 'DD_TRACE_STARTUP_LOGS',
+      value: 'yes',
+      origin: 'code',
+      error: {
+        message: "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
+      },
+    }])
+  })
+
+  it('should ignore invalid primitive programmatic option values', () => {
+    const config = getConfig({
+      startupLogs: 1,
+      flushInterval: ' ',
+      remoteConfig: {
+        pollInterval: NaN,
+      },
+      service: null,
+    })
+
+    assert.strictEqual(config.startupLogs, defaults.startupLogs)
+    assert.strictEqual(config.flushInterval, defaults.flushInterval)
+    assert.strictEqual(config.remoteConfig.pollInterval, defaults['remoteConfig.pollInterval'])
+    assert.strictEqual(config.service, 'node')
+  })
+
   it('should initialize from environment variables with url taking precedence', () => {
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:7777'
     process.env.DD_SITE = 'datadoghq.eu'
@@ -1847,7 +1952,7 @@ describe('Config', () => {
       },
       dogstatsd: {
         hostname: 'agent-dsd',
-        port: '5218',
+        port: 5218,
       },
       dynamicInstrumentation: {
         enabled: true,
@@ -2945,6 +3050,53 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
+  describe('graphql plugin config env vars', () => {
+    it('parses the defaults onto the config object', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_GRAPHQL_COLLAPSE, true)
+      assert.strictEqual(config.DD_TRACE_GRAPHQL_DEPTH, -1)
+      assert.deepStrictEqual(config.DD_TRACE_GRAPHQL_VARIABLES, [])
+      assert.deepStrictEqual(config.DD_TRACE_GRAPHQL_ERROR_EXTENSIONS, [])
+    })
+
+    it('parses DD_TRACE_GRAPHQL_COLLAPSE as a boolean', () => {
+      process.env.DD_TRACE_GRAPHQL_COLLAPSE = 'false'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_COLLAPSE, false)
+    })
+
+    it('parses DD_TRACE_GRAPHQL_DEPTH as an integer', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '2'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, 2)
+    })
+
+    it('accepts the depth=0 boundary', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '0'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, 0)
+    })
+
+    it('rejects a non-integer depth and falls back to the default', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = 'foo'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, -1)
+    })
+
+    it('rejects an out-of-contract negative depth and falls back to the default', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '-5'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, -1)
+    })
+
+    it('parses DD_TRACE_GRAPHQL_VARIABLES as an array', () => {
+      process.env.DD_TRACE_GRAPHQL_VARIABLES = 'foo,bar'
+
+      assert.deepStrictEqual(getConfig().DD_TRACE_GRAPHQL_VARIABLES, ['foo', 'bar'])
+    })
+  })
+
   describe('flushInterval in Lambda', () => {
     afterEach(() => {
       existsSyncReturn = undefined
@@ -3367,12 +3519,15 @@ describe('Config', () => {
   context('ci visibility config', () => {
     let options = {}
     beforeEach(() => {
+      delete process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
+      delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3391,6 +3546,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, false)
+      })
+      it('should enable code coverage report upload by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, true)
+      })
+      it('should disable code coverage report upload from the environment', () => {
+        process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, false)
       })
       it('should activate ITR by default', () => {
         const config = getConfig(options)
@@ -3432,6 +3596,30 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, false)
       })
+      it('should leave DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+      })
+      it('should read DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT if present', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+      })
+      it('should allow zero DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT retries', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '0'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 0)
+      })
+      it('should round DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT down to an integer', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2.9'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+      })
+      it('should reject a negative DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '-1'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+      })
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true)
@@ -3440,6 +3628,20 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, false)
+      })
+      it('should disable test failure screenshots by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, undefined)
+      })
+      it('should enable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true', () => {
+        process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, true)
+      })
+      it('should disable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is false', () => {
+        process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'

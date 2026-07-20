@@ -1,5 +1,6 @@
 'use strict'
 
+const { MAX_SIZE, OverflowError } = require('../msgpack')
 const { normalizeSpan } = require('./tags-processors')
 const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
 
@@ -30,7 +31,17 @@ class AgentEncoder extends BaseEncoder {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
     const traceSize = this._traceBytes.length + 5
-    const buffer = Buffer.allocUnsafe(prefixSize + stringSize + traceSize)
+    const payloadSize = prefixSize + stringSize + traceSize
+
+    // The string table and the trace bytes are capped independently, so both
+    // can sit just under the cap while their concatenation crosses it. `encode`
+    // never sees this overflow — it only exists once the two are summed here —
+    // so the writer's flush-time catch drops the payload.
+    if (payloadSize > MAX_SIZE) {
+      throw new OverflowError(payloadSize)
+    }
+
+    const buffer = Buffer.allocUnsafe(payloadSize)
 
     buffer[0] = ARRAY_OF_TWO
 

@@ -23,8 +23,13 @@ async function runCypress () {
         },
         specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
       },
+      // Mirror the env-driven gating in cypress.config.js: off by default so most
+      // specs do not capture screenshots; the failure-screenshot upload tests set
+      // CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
+      // The 'esm' module type runs Cypress through this programmatic config rather
+      // than cypress.config.js, so the same gating has to live here too.
       video: false,
-      screenshotOnRunFailure: false,
+      screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
     },
   })
 

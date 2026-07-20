@@ -192,7 +192,7 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason, promises }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
@@ -202,8 +202,21 @@ class VitestPlugin extends CiPlugin {
         if (earlyFlakeAbortReason) {
           span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
-        span.finish(this.taskToFinishTime.get(task))
-        finishAllTraceSpans(span)
+        const finish = () => {
+          span.finish(this.taskToFinishTime.get(task))
+          finishAllTraceSpans(span)
+        }
+
+        if (finalStatus) {
+          if (promises && this.diBreakpointHitPromise) {
+            promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+            return
+          }
+          finish()
+          this.cancelDiBreakpointHitWait()
+          return
+        }
+        finish()
       }
     })
 
@@ -212,6 +225,7 @@ class VitestPlugin extends CiPlugin {
       duration,
       error,
       shouldSetProbe,
+      shouldWaitForHitProbe,
       promises,
       hasFailedAllRetries,
       attemptToFixFailed,
@@ -227,7 +241,8 @@ class VitestPlugin extends CiPlugin {
           const { file, line, stackIndex, setProbePromise } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
-          promises.setProbePromise = setProbePromise
+          this.prepareDiBreakpointHitWait()
+          promises.setProbePromise = this.waitForDiOperation(setProbePromise)
         }
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
@@ -248,12 +263,33 @@ class VitestPlugin extends CiPlugin {
       if (earlyFlakeAbortReason) {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
-      if (duration) {
-        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
-      } else {
-        span.finish() // `duration` is empty for retries, so we'll use clock time
+      const finish = () => {
+        if (Number.isFinite(duration) && duration >= 0) {
+          span.finish(
+            span._startTime + Math.max(duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION, 0)
+          ) // milliseconds
+        } else {
+          span.finish() // `duration` is empty for retries, so we'll use clock time
+        }
+        finishAllTraceSpans(span)
       }
-      finishAllTraceSpans(span)
+
+      if (!shouldSetProbe && finalStatus && promises && this.diBreakpointHitPromise) {
+        promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+        return
+      }
+      finish()
+      if (shouldWaitForHitProbe) {
+        this.prepareDiBreakpointHitWait()
+      } else if (!shouldSetProbe) {
+        this.cancelDiBreakpointHitWait()
+      }
+    })
+
+    this.addSub('ci:vitest:test:di:wait', ({ promises }) => {
+      if (this.di) {
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
+      }
     })
 
     this.addSub('ci:vitest:test:skip', ({

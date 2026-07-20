@@ -6,7 +6,7 @@ const vm = require('node:vm')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const MongodbCorePlugin = require('../src/index')
+const MongodbCorePlugin = require('../src/query')
 
 // The sanitisation helpers are module-private; exercise them through `bindStart`,
 // which surfaces their output as `meta['mongodb.query']`.

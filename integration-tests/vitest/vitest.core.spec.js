@@ -297,6 +297,42 @@ versions.forEach((version) => {
       })
     })
 
+    it('does not report negative durations for short failed tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.strictEqual(tests.length, 1)
+          assert.strictEqual(tests[0].meta[TEST_NAME], 'reports a non-negative duration for a short failed test')
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+          assert.strictEqual(Number(tests[0].duration), 0)
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/short-failed-test.mjs',
+            VITEST_RUNNER: 'ci-visibility/vitest-tests/short-failed-test-runner.mjs',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 1, testOutput)
+    })
+
     for (const workerPoolConfig of poolConfig) {
       it(`sets DD_VITEST_WORKER in workers with pool=${workerPoolConfig}`, async () => {
         const eventsPromise = receiver
@@ -2538,6 +2574,76 @@ versions.forEach((version) => {
           })
         })
 
+        it('runs multiple retries with dynamic instrumentation', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const retrySpanIdsWithDebugInfo = new Set()
+          const diLogSpanIds = []
+          let testOutput = ''
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.strictEqual(retriedTests.length, 3)
+              for (const retriedTest of retriedTests) {
+                if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+                  retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
+                }
+              }
+              assert.strictEqual(retrySpanIdsWithDebugInfo.size, 2)
+            })
+
+          const logsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+              const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+              assert.strictEqual(diLogs.length, 2)
+              for (const diLog of diLogs) {
+                diLogSpanIds.push(diLog.dd.span_id)
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=3',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/ftr-multiple-retries.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+          const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+            logsPromise,
+            stdoutEndPromise,
+            stderrEndPromise,
+          ])
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
+          for (const diLogSpanId of diLogSpanIds) {
+            assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+          }
+        })
+
         it('does not run Failed Test Replay for files with concurrent tests', async () => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
@@ -2673,5 +2779,58 @@ versions.forEach((version) => {
         })
       })
     }
+  })
+})
+
+const describeCloudflareWorkers = NODE_MAJOR < 20 ? describe.skip : describe
+
+describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.12.21', () => {
+  let cwd, receiver, childProcess, testOutput
+
+  useSandbox([
+    'vitest@3.2.4',
+    '@cloudflare/vitest-pool-workers@0.12.21',
+  ], true)
+
+  before(function () {
+    cwd = sandboxCwd()
+  })
+
+  beforeEach(async function () {
+    testOutput = ''
+    receiver = await new FakeCiVisIntake().start()
+  })
+
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver?.stop()
+  })
+
+  it('keeps Cloudflare worker pool context safe with Unicode git metadata', async () => {
+    childProcess = exec(
+      './node_modules/.bin/vitest run',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          TEST_DIR: 'ci-visibility/vitest-tests/cloudflare-worker-pool.mjs',
+          CLOUDFLARE_WORKERS_POOL: '1',
+          USE_VITEST_DEFAULT_POOL: '1',
+          // The emoji keeps this a regression test: Miniflare rejects its UTF-16 surrogate when
+          // DD_GIT_COMMIT_MESSAGE is accidentally propagated through Vitest providedContext headers.
+          DD_GIT_COMMIT_MESSAGE: 'ship vitest metadata 😄',
+          DD_SERVICE: undefined,
+        },
+      }
+    )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const [[code]] = await Promise.all([
+      once(childProcess, 'exit'),
+    ])
+
+    assert.strictEqual(code, 0, testOutput)
   })
 })

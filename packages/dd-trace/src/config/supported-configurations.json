@@ -470,6 +470,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
       {
         "implementation": "A",
@@ -491,6 +499,15 @@
         "implementation": "B",
         "type": "boolean",
         "default": "true",
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "allowed": "0|[1-9][0-9]*",
+        "default": null,
         "namespace": "testOptimization"
       }
     ],
@@ -1819,6 +1836,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_FLEET_CONFIG_PATH": [
       {
         "implementation": "A",
@@ -1940,6 +1965,13 @@
       }
     ],
     "DD_TRACE_ANTHROPIC_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_CLAUDE_AGENT_SDK_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2742,6 +2774,21 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GRAPHQL_COLLAPSE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_GRAPHQL_DEPTH": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "-1",
+        "allowed": "-1|\\d+"
+      }
+    ],
     "DD_TRACE_GRAPHQL_ENABLED": [
       {
         "implementation": "A",
@@ -2775,6 +2822,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_GRAPHQL_VARIABLES": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": ""
       }
     ],
     "DD_TRACE_GRAPHQL_YOGA_ENABLED": [
