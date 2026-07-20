@@ -40,6 +40,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -335,6 +337,109 @@ versions.forEach((version) => {
           )
           await Promise.all([eventsPromise, once(proc, 'exit')])
         })
+      })
+    })
+
+    contextNewVersions('failure screenshots', () => {
+      function runWithFailureScreenshots (receiver, run) {
+        let testOutput = ''
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              PLAYWRIGHT_ENABLE_FAILURE_SCREENSHOTS: '1',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        return { proc, getTestOutput: () => testOutput }
+      }
+
+      it('uploads only automatic failure screenshots to the media endpoint', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)
+        const payloadsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const testOutput = getTestOutput()
+              const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+              const failedTest = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+              assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+              assert.strictEqual(mediaPayloads.length, 1, `only the automatic screenshot should upload\n${testOutput}`)
+
+              const [screenshotPayload] = mediaPayloads
+              const expectedTraceId = failedTest.content.trace_id.toString()
+              assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+              assert.strictEqual(screenshotPayload.media.contentType, 'image/png')
+              assert.strictEqual(screenshotPayload.headers['dd-api-key'], '1')
+              assert.strictEqual(
+                screenshotPayload.url.split('?')[0],
+                `/api/v2/ci/test-runs/${expectedTraceId}/media`
+              )
+
+              const [idempotencyTraceId, encodedFilename] = screenshotPayload.media.idempotencyKey.split(':')
+              assert.strictEqual(idempotencyTraceId, expectedTraceId)
+              assert.match(Buffer.from(encodedFilename, 'hex').toString('utf8'), /^test-failed-\d+\.png$/)
+
+              const capturedAt = Number(screenshotPayload.media.capturedAt)
+              assert.ok(Number.isInteger(capturedAt) && capturedAt > 0)
+              assert.deepStrictEqual(
+                [...screenshotPayload.media.content.subarray(0, 8)],
+                [137, 80, 78, 71, 13, 10, 26, 10]
+              )
+            },
+            { hardTimeout: 60000 }
+          )
+          .catch((error) => {
+            error.message += `\nPlaywright output:\n${getTestOutput()}`
+            throw error
+          })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it('reports upload errors without changing the Playwright result', async (receiver, run) => {
+        receiver.setMediaResponseStatusCode(500)
+        const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)
+        const payloadsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const failedTest = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+              assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            },
+            { hardTimeout: 60000 }
+          )
+          .catch((error) => {
+            error.message += `\nPlaywright output:\n${getTestOutput()}`
+            throw error
+          })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
       })
     })
 
