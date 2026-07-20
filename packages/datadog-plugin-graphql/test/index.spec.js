@@ -1161,6 +1161,16 @@ describe('Plugin', () => {
                       profile: { __typename: 'AlienProfile', value: 'visitor' },
                     },
                     {
+                      __typename: 'Pet',
+                      name: 'rex',
+                      profile: { __typename: 'PetProfile', value: 'animal' },
+                    },
+                    {
+                      __typename: 'Robot',
+                      name: 'c3po',
+                      profile: { __typename: 'RobotProfile', value: 'machine' },
+                    },
+                    {
                       __typename: 'Human',
                       name: 'bob',
                       profile: { __typename: 'HumanProfile', value: 'person' },

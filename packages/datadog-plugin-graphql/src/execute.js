@@ -435,8 +435,8 @@ function wrapResolve (resolve) {
     const parentTypeName = info.parentType.name
     let field = rootCtx.fields.get(fieldKey)
     const collapsedField = field
-    if (config.collapse && field?.parentTypeName !== parentTypeName) {
-      const parentTypeFields = field?.parentTypeFields
+    if (config.collapse && field !== undefined && field.parentTypeName !== parentTypeName) {
+      const parentTypeFields = field.parentTypeFields
       if (parentTypeFields?.parentTypeName === undefined) {
         field = parentTypeFields?.get(parentTypeName)
       } else if (parentTypeFields.parentTypeName === parentTypeName) {
@@ -639,6 +639,9 @@ function buildCachedPathString (path, cache, collapse) {
  * @param {object} field
  */
 function cacheFieldByPath (rootCtx, path, field) {
+  // Leaf fields cannot parent resolver spans, so their concrete paths are never read.
+  if (field.fieldNode?.selectionSet === undefined) return
+
   // Concrete info path objects cannot collide with collapsed path string keys.
   rootCtx.hasFieldsByPath = true
   rootCtx.fields.set(path, field)
