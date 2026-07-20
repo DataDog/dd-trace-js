@@ -1,5 +1,7 @@
 'use strict'
 
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+
 const { sendData } = require('./send-data')
 
 function getId (type, namespace, name, tags) {
@@ -34,8 +36,6 @@ function hasPoints (metric) {
 }
 
 function createSketch () {
-  const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
-
   return new LogCollapsingLowestDenseDDSketch()
 }
 
