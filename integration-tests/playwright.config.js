@@ -8,7 +8,7 @@ const projects = [
     name: 'chromium',
     use: {
       ...devices['Desktop Chrome'],
-      screenshot: process.env.PLAYWRIGHT_ENABLE_FAILURE_SCREENSHOTS ? 'only-on-failure' : 'off',
+      screenshot: process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_MODE || 'off',
     },
   },
 ]
