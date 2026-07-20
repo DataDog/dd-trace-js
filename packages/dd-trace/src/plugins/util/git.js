@@ -206,6 +206,16 @@ function getRepositoryUrl () {
   )
 }
 
+function getCommitSHA () {
+  return sanitizedExec(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+  )
+}
+
 function getLatestCommits () {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
   const startTime = Date.now()
@@ -559,17 +569,7 @@ function getGitMetadata (ciMetadata) {
 }
 
 function getGitInformationDiscrepancy () {
-  const gitRepositoryUrl = getRepositoryUrl()
-
-  const gitCommitSHA = sanitizedExec(
-    'git',
-    ['rev-parse', 'HEAD'],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
-  )
-
-  return { gitRepositoryUrl, gitCommitSHA }
+  return { gitRepositoryUrl: getRepositoryUrl(), gitCommitSHA: getCommitSHA() }
 }
 
 function fetchHeadCommitSha (headSha) {
@@ -594,6 +594,7 @@ function fetchHeadCommitSha (headSha) {
 
 module.exports = {
   getGitMetadata,
+  getCommitSHA,
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,

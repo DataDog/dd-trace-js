@@ -27,6 +27,10 @@ describe('span processor', () => {
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
       '../../../../package.json': { version: 'x.y.z' },
       '../log': log,
+      // Default to no git metadata so the exact-tag assertions stay deterministic
+      // regardless of the resolver's process-global cache. The git-metadata
+      // describe block below overrides this with its own stub.
+      './git-metadata': () => ({ commitSHA: undefined, repositoryUrl: undefined }),
     })
 
     processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
@@ -765,6 +769,67 @@ describe('span processor', () => {
       processor.process(span)
 
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+  })
+
+  describe('git metadata tags', () => {
+    function makeSpan (mlObsTags) {
+      const span = {
+        _name: 'test',
+        _startTime: 0,
+        _duration: 1,
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'workflow', '_ml_obs.meta.ml_app': 'myApp', ...mlObsTags })
+      return span
+    }
+
+    function buildProcessor (gitMetadata) {
+      const GitAwareProcessor = proxyquire('../../src/llmobs/span_processor', {
+        '../../../../package.json': { version: 'x.y.z' },
+        '../log': log,
+        './git-metadata': () => gitMetadata,
+      })
+      const p = new GitAwareProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
+      p.setWriter(writer)
+      return p
+    }
+
+    it('tags spans with the resolved git commit sha and repository url', () => {
+      const p = buildProcessor({ commitSHA: 'abc123', repositoryUrl: 'https://github.com/example/repo' })
+      p.process(makeSpan())
+
+      const { tags } = writer.append.getCall(0).firstArg
+      assert.ok(tags.includes('git.commit.sha:abc123'))
+      assert.ok(tags.includes('git.repository_url:https://github.com/example/repo'))
+    })
+
+    it('omits git tags when metadata is unavailable', () => {
+      const p = buildProcessor({ commitSHA: undefined, repositoryUrl: undefined })
+      p.process(makeSpan())
+
+      const { tags } = writer.append.getCall(0).firstArg
+      assert.ok(!tags.some(tag => tag.startsWith('git.commit.sha:')))
+      assert.ok(!tags.some(tag => tag.startsWith('git.repository_url:')))
+    })
+
+    it('lets user-supplied git tags win over the resolved values', () => {
+      const p = buildProcessor({ commitSHA: 'abc123', repositoryUrl: 'https://github.com/example/repo' })
+      p.process(makeSpan({ '_ml_obs.tags': { 'git.commit.sha': 'user-override' } }))
+
+      const { tags } = writer.append.getCall(0).firstArg
+      assert.ok(tags.includes('git.commit.sha:user-override'))
+      assert.ok(!tags.includes('git.commit.sha:abc123'))
+      assert.ok(tags.includes('git.repository_url:https://github.com/example/repo'))
     })
   })
 })
