@@ -23,8 +23,7 @@ withVersions('ldapjs', 'ldapjs', '>=2', version => {
       bindingName: 'ldapjs',
       packageName: 'ldapjs',
       defaultExport: true,
-      namedExports: ['createClient'],
-      namedExportBinding: 'namespace',
+      namedExports: [],
     })
 
     beforeEach(async () => {

@@ -30,8 +30,7 @@ describe('esm', () => {
       bindingName: 'Valkey',
       packageName: 'iovalkey',
       defaultExport: true,
-      namedExports: ['Valkey'],
-      namedExportBinding: 'direct',
+      namedExports: [],
     })
 
     afterEach(async () => {

@@ -50,7 +50,7 @@ function Hook (modules, hookOptions, onrequire) {
   const patched = new WeakMap()
 
   /**
-   * @param {object|Function} moduleExports
+   * @param {object|Function|undefined} moduleExports
    * @param {string} moduleName
    * @param {string|undefined} moduleBaseDir
    * @param {string|undefined} moduleVersion
@@ -60,7 +60,7 @@ function Hook (modules, hookOptions, onrequire) {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
-    const defaultExport = moduleExports.default
+    const defaultExport = isIitm && moduleExports.default
     let defaultExportAliases
     let defaultWrapResult
 
@@ -86,7 +86,6 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     if (
-      isIitm &&
       defaultExport &&
       (typeof defaultExport === 'object' ||
       typeof defaultExport === 'function')
@@ -105,7 +104,7 @@ function Hook (modules, hookOptions, onrequire) {
     if (defaultWrapResult && defaultExportAliases) {
       newExports.default = defaultWrapResult
       for (const exportName of defaultExportAliases) {
-        newExports[exportName] = defaultWrapResult
+        moduleExports[exportName] = defaultWrapResult
       }
     }
 

@@ -25,8 +25,7 @@ describe('esm', () => {
       bindingName: 'mongoose',
       packageName: 'mongoose',
       defaultExport: true,
-      namedExports: ['Schema', 'model', 'connect', 'disconnect'],
-      namedExportBinding: 'namespace',
+      namedExports: [],
     })
 
     beforeEach(async () => {

@@ -25,8 +25,7 @@ describe('esm', () => {
       bindingName: 'Redis',
       packageName: 'ioredis',
       defaultExport: true,
-      namedExports: ['Redis'],
-      namedExportBinding: 'direct',
+      namedExports: [],
     })
 
     beforeEach(async () => {
