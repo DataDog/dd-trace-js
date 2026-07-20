@@ -477,6 +477,27 @@ describe('NativeSpanContext', () => {
     })
   })
 
+  describe('syncOneTagToNative (setTag fast path)', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id,
+      })
+    })
+
+    it('queues primitive tags directly without one-element batch arrays', () => {
+      spanContext.syncOneTagToNative('http.method', 'GET')
+      spanContext.syncOneTagToNative('http.status_code.raw', 200)
+      spanContext.syncOneTagToNative('cache.hit', true)
+
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'http.method', 'GET')
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetricAttr, leSpanId, 'http.status_code.raw', ['f64', 200])
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetricAttr, leSpanId, 'cache.hit', ['f64', 1])
+      sinon.assert.notCalled(nativeSpans.queueBatchMeta)
+      sinon.assert.notCalled(nativeSpans.queueBatchMetrics)
+    })
+  })
+
   // getTag/hasTag/deleteTag/getTags inherit from DatadogSpanContext and are
   // covered by `packages/dd-trace/test/opentracing/span_context.spec.js`. The
   // native subclass adds native-storage sync on setTag (tested above) but

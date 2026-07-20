@@ -312,9 +312,9 @@ class NativeSpanContext extends DatadogSpanContext {
   }
 
   /**
-   * Single-tag fast path used by Span#setTag. Avoids the array allocations
+   * Single-tag fast path used by Span#setTag. Avoids the batch arrays
    * (`metaBatch`, `metricBatch`, plus the `[[k,v]]` pair) that syncToNativeOnly
-   * does for the batched case.
+   * and one-element queueBatch* calls use for batched writes.
    *
    * @param {string} key
    * @param {unknown} value
@@ -333,13 +333,15 @@ class NativeSpanContext extends DatadogSpanContext {
 
     if (SPECIAL_KEYS.has(key)) {
       this.#syncTagToNative(key, value)
+    } else if (typeof value === 'string') {
+      this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, key, value)
     } else if (typeof value === 'number') {
       // NaN metrics are dropped to match the legacy formatter (see appendTag).
-      if (!Number.isNaN(value)) this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, [[key, value]])
+      if (!Number.isNaN(value)) {
+        this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._nativeSpanId, key, ['f64', value])
+      }
     } else if (typeof value === 'boolean') {
-      this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, [[key, value ? 1 : 0]])
-    } else if (typeof value === 'string') {
-      this.#nativeSpans.queueBatchMeta(this._nativeSpanId, [[key, value]])
+      this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._nativeSpanId, key, ['f64', value ? 1 : 0])
     } else {
       // Objects: flatten one level via the shared coercion helper.
       const meta = []
