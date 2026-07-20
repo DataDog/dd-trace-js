@@ -15,6 +15,11 @@ const { createFileSafely, ensureSafeDirectory, writeFileSafely } = require('./sa
 const PROBE_PRELOAD = path.join(__dirname, 'init-probe-preload.js')
 const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
 const MAX_PROBE_RECORD_BYTES = 1024 * 1024
+const DATADOG_PRELOAD_PATTERN = /(?:^|[/\\])dd-trace(?:[/\\](?:ci[/\\]init(?:\.js)?|register\.js))?$/
+const DATADOG_PRELOAD_PATHS = new Set([
+  path.resolve(__dirname, '..', 'init.js'),
+  path.resolve(__dirname, '..', '..', 'register.js'),
+].map(normalizePath))
 
 /**
  * Runs a CI-shaped command with a lightweight NODE_OPTIONS preload that records process reachability.
@@ -78,6 +83,8 @@ async function runInitializationProbe ({ command, framework, outDir, options }) 
 
 function getProbeCommand (command) {
   const env = { ...command.env }
+  const nodeOptions = []
+  if (env.NODE_OPTIONS) nodeOptions.push(removeDatadogNodeOptions(env.NODE_OPTIONS))
   delete env.NODE_OPTIONS
 
   const probeCommand = {
@@ -85,29 +92,109 @@ function getProbeCommand (command) {
     env,
   }
   if (command.usesShell) {
-    probeCommand.shellCommand = removeInlineShellNodeOptions(command.shellCommand)
+    const inline = removeInlineShellNodeOptions(command.shellCommand)
+    probeCommand.shellCommand = inline.command
+    nodeOptions.push(...inline.nodeOptions)
   } else if (isEnvExecutable(command.argv?.[0])) {
-    probeCommand.argv = removeInlineArgvNodeOptions(command.argv)
+    const inline = removeInlineArgvNodeOptions(command.argv)
+    probeCommand.argv = inline.argv
+    nodeOptions.push(...inline.nodeOptions)
   }
+  const preservedNodeOptions = mergeNodeOptions(...nodeOptions)
+  if (preservedNodeOptions) probeCommand.env.NODE_OPTIONS = preservedNodeOptions
 
   return inheritApprovedExecutable(command, probeCommand)
 }
 
+/**
+ * Removes env-wrapped NODE_OPTIONS assignments while retaining their non-Datadog values.
+ *
+ * @param {string[]} argv command arguments
+ * @returns {{argv: string[], nodeOptions: string[]}} rewritten arguments and preserved options
+ */
 function removeInlineArgvNodeOptions (argv) {
   const { commandIndex } = parseArgv(argv)
   const sanitized = []
+  const nodeOptions = []
   for (let index = 0; index < argv.length; index++) {
-    if (index < commandIndex && /^NODE_OPTIONS=/i.test(argv[index])) continue
+    if (index < commandIndex && /^NODE_OPTIONS=/i.test(argv[index])) {
+      nodeOptions.push(removeDatadogNodeOptions(argv[index].slice(argv[index].indexOf('=') + 1)))
+      continue
+    }
     sanitized.push(argv[index])
   }
-  return sanitized
+  return { argv: sanitized, nodeOptions }
 }
 
+/**
+ * Removes shell NODE_OPTIONS assignments while retaining their non-Datadog values.
+ *
+ * @param {string} source shell command
+ * @returns {{command: string, nodeOptions: string[]}} rewritten command and preserved options
+ */
 function removeInlineShellNodeOptions (source) {
-  return String(source || '').replaceAll(
+  const nodeOptions = []
+  const command = String(source || '').replaceAll(
     /(\bexport\s+)?NODE_OPTIONS\s*=\s*("[^"]*"|'[^']*'|[^\s;&|]+)(?:\s*;)?/gi,
-    ''
+    (assignment, _export, value) => {
+      nodeOptions.push(removeDatadogNodeOptions(unquote(value)))
+      return ''
+    }
   )
+  return { command, nodeOptions }
+}
+
+/**
+ * Removes dd-trace initialization flags while retaining options required by the project runner.
+ *
+ * @param {string} value NODE_OPTIONS value
+ * @returns {string} non-Datadog NODE_OPTIONS
+ */
+function removeDatadogNodeOptions (value) {
+  const tokens = String(value || '').match(/"[^"]*"|'[^']*'|[^\s]+/g) || []
+  const preserved = []
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    const inline = /^(--require|--import|-r)=(.+)$/.exec(token)
+    if (inline && isDatadogPreload(inline[2])) continue
+    if (['--require', '--import', '-r'].includes(token) && isDatadogPreload(tokens[index + 1])) {
+      index++
+      continue
+    }
+    preserved.push(token)
+  }
+  return preserved.join(' ')
+}
+
+/**
+ * Reports whether one Node.js preload initializes dd-trace.
+ *
+ * @param {string|undefined} value preload target
+ * @returns {boolean} whether the preload belongs to dd-trace initialization
+ */
+function isDatadogPreload (value) {
+  const preload = normalizePath(unquote(String(value || '')))
+  return DATADOG_PRELOAD_PATHS.has(preload) || DATADOG_PRELOAD_PATTERN.test(preload)
+}
+
+/**
+ * Removes one pair of shell-style quotes.
+ *
+ * @param {string} value quoted value
+ * @returns {string} unquoted value
+ */
+function unquote (value) {
+  return value.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
+}
+
+/**
+ * Normalizes a preload path for platform-independent comparison.
+ *
+ * @param {string} value preload path
+ * @returns {string} normalized path
+ */
+function normalizePath (value) {
+  return value.replaceAll('\\', '/')
 }
 
 function summarizeProbeResult ({ framework, result, records, recordsPath }) {

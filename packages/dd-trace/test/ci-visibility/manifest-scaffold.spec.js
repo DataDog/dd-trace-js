@@ -146,7 +146,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('preserves required runner config while narrowing a bare package script directly', () => {
+  it('preserves a package script with required runner flags', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-runner-flags-'))
     const runnerRoot = path.join(root, 'node_modules', 'jest')
     const representative = path.join(root, 'test', 'unit.test.js')
@@ -164,7 +164,7 @@ describe('test optimization validation manifest scaffold', () => {
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
       name: 'configured-jest-project',
       devDependencies: { jest: '29.7.0' },
-      scripts: { test: 'jest --config ./jest.validation.config.js' },
+      scripts: { test: 'jest --config ./jest.validation.config.js --env=jsdom' },
     }))
 
     try {
@@ -173,18 +173,19 @@ describe('test optimization validation manifest scaffold', () => {
 
       assert.deepStrictEqual(validateManifest(manifest), [])
       assert.deepStrictEqual(framework.existingTestCommand.argv.slice(0, 4), [
-        process.execPath,
-        fs.realpathSync(path.join(runnerRoot, 'bin.js')),
-        '--config',
-        './jest.validation.config.js',
+        'npm',
+        'run',
+        'test',
+        '--',
       ])
       assert.ok(framework.existingTestCommand.argv.includes(representative))
       assert.ok(framework.generatedTestStrategy.scenarios.every(scenario => {
-        return scenario.runCommand.argv[0] === process.execPath &&
-          scenario.runCommand.argv[1] === fs.realpathSync(path.join(runnerRoot, 'bin.js')) &&
-          scenario.runCommand.argv.includes('./jest.validation.config.js')
+        return scenario.runCommand.argv[0] === 'npm' &&
+          scenario.runCommand.argv[1] === 'run' &&
+          scenario.runCommand.argv[2] === 'test' &&
+          scenario.runCommand.argv.includes(scenario.testIdentities[0].file)
       }))
-      assert.match(framework.notes.join('\n'), /invokes the installed jest runner directly/)
+      assert.match(framework.notes.join('\n'), /preserves package script test.*runner flags/s)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

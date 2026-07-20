@@ -171,9 +171,16 @@ function pathExists (filename) {
 function getCoverageDirectories (tokens) {
   const directories = new Set()
   let coverageEnabled = false
+  let nycDetected = false
+  let nycTempDirectory
   for (let index = 0; index < tokens.length; index++) {
     const token = String(tokens[index])
-    if (path.basename(token).replace(/\.cmd$/i, '') === 'nyc') directories.add('.nyc_output')
+    if (path.basename(token).replace(/\.cmd$/i, '') === 'nyc') nycDetected = true
+    const nycTempDirectoryMatch = /^(?:--temp-dir|-t)=(.+)$/.exec(token)
+    if (nycTempDirectoryMatch) nycTempDirectory = nycTempDirectoryMatch[1]
+    if ((token === '--temp-dir' || token === '-t') && tokens[index + 1]) {
+      nycTempDirectory = tokens[index + 1]
+    }
     if (token === '--coverage' || token === '--coverage=true') coverageEnabled = true
     const inline = /^(?:--coverageDirectory|--coverage-directory|--coverage\.reportsDirectory)=(.+)$/.exec(token)
     if (inline) directories.add(inline[1])
@@ -181,6 +188,7 @@ function getCoverageDirectories (tokens) {
       directories.add(tokens[index + 1])
     }
   }
+  if (nycDetected) directories.add(nycTempDirectory || '.nyc_output')
   if (coverageEnabled) directories.add('coverage')
   directories.delete(undefined)
   return directories

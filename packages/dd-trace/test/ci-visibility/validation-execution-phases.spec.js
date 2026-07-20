@@ -1139,6 +1139,76 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('treats an existing relative asset import as a resolved leaf', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-local-asset-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const assetFile = path.join(root, 'test', 'style.css')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'test', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, testFile],
+    }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, "import './style.css'\n")
+    fs.writeFileSync(assetFile, '.example { color: red; }\n')
+
+    try {
+      const manifest = {
+        __path: path.join(root, 'manifest.json'),
+        repository: { root },
+        frameworks: [framework],
+      }
+      formatExecutionPlan({ manifest, out: path.join(root, 'results'), requestedScenario: 'basic-reporting' })
+
+      fs.rmSync(assetFile)
+      assert.throws(() => formatExecutionPlan({
+        manifest,
+        out: path.join(root, 'missing-results'),
+        requestedScenario: 'basic-reporting',
+      }), /reaches missing module .*style\.css/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not validate generated-test contracts for non-advanced scenario plans', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-scenario-contract-plan-'))
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'test', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.generatedTestStrategy.files[0].contentLines = ['tampered generated source']
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+
+    try {
+      formatExecutionPlan({
+        manifest,
+        out: path.join(root, 'basic-results'),
+        requestedScenario: 'basic-reporting',
+      })
+      formatExecutionPlan({
+        manifest,
+        out: path.join(root, 'ci-results'),
+        requestedScenario: 'ci-wiring',
+      })
+      assert.throws(() => formatExecutionPlan({
+        manifest,
+        out: path.join(root, 'all-results'),
+      }), /scenario basic-pass source differs/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('requires one usable self-package entrypoint before approving a self-importing test', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-self-import-plan-'))
     const testFile = path.join(root, 'test', 'unit.test.js')

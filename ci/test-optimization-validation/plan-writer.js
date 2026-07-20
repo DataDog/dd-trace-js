@@ -504,12 +504,15 @@ function getApprovalSummaryPath (out) {
  */
 function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
   for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
-    const generatedTestContractError = getGeneratedTestContractError(framework)
-    if (generatedTestContractError) {
-      throw new Error(
-        `Cannot render an approvable plan because generated tests for ${framework.id} ` +
-        generatedTestContractError
-      )
+    const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
+    if (!requestedScenario || selectedGeneratedScenario) {
+      const generatedTestContractError = getGeneratedTestContractError(framework)
+      if (generatedTestContractError) {
+        throw new Error(
+          `Cannot render an approvable plan because generated tests for ${framework.id} ` +
+          generatedTestContractError
+        )
+      }
     }
     const plannedCommands = getPlannedCommands(framework, requestedScenario)
     for (const plannedCommand of plannedCommands) {

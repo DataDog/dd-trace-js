@@ -253,7 +253,7 @@ function getMissingLocalModuleError (command, framework, repositoryRoot) {
     if (!source) continue
     for (const specifier of getRelativeModuleSpecifiers(source)) {
       const resolution = resolveLocalModule(current.filename, specifier, repositoryRoot)
-      if (resolution.external) continue
+      if (resolution.external || resolution.resolved) continue
       if (!resolution.filename) {
         if (isProducedBySetup(framework, resolution.target)) continue
         const chain = [...current.chain, resolution.target]
@@ -295,11 +295,16 @@ function getRelativeModuleSpecifiers (source) {
  * @param {string} importer importing source file
  * @param {string} specifier relative module specifier
  * @param {string} repositoryRoot repository root
- * @returns {{filename?: string, target: string, external?: boolean}} bounded resolution
+ * @returns {{filename?: string, target: string, external?: boolean, resolved?: boolean}} bounded resolution
  */
 function resolveLocalModule (importer, specifier, repositoryRoot) {
   const target = path.resolve(path.dirname(importer), specifier)
   if (!isPathInside(repositoryRoot, target)) return { target, external: true }
+
+  const extension = path.extname(target)
+  if (extension && !/\.(?:[cm]?[jt]s|tsx|jsx|json)$/.test(extension)) {
+    return isRepositoryFile(target, repositoryRoot) ? { target, resolved: true } : { target }
+  }
 
   for (const candidate of getLocalModuleCandidates(target)) {
     if (!isPathInside(repositoryRoot, candidate)) continue

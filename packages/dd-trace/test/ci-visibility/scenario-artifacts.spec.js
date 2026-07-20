@@ -518,18 +518,19 @@ describe('test optimization validation scenario artifacts', () => {
     }
   })
 
-  it('removes inline CI NODE_OPTIONS before adding the initialization probe preload', async function () {
+  it('preserves inline non-Datadog NODE_OPTIONS while adding the initialization probe preload', async function () {
     if (process.platform === 'win32') this.skip()
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-inline-'))
-    const blocker = path.join(out, 'blocked-preload.js')
-    fs.writeFileSync(blocker, "throw new Error('inline preload was not removed')\n")
+    const requiredPreload = path.join(out, 'required-preload.js')
+    const marker = path.join(out, 'required-preload-ran')
+    fs.writeFileSync(requiredPreload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
 
     try {
       const probe = await runInitializationProbe({
         command: {
           cwd: out,
-          argv: ['/usr/bin/env', `NODE_OPTIONS=-r ${blocker}`, process.execPath, '-e', ''],
+          argv: ['/usr/bin/env', `NODE_OPTIONS=-r ${requiredPreload}`, process.execPath, '-e', ''],
         },
         framework: { id: 'vitest:probe', framework: 'vitest' },
         outDir: out,
@@ -538,17 +539,19 @@ describe('test optimization validation scenario artifacts', () => {
 
       assert.strictEqual(probe.summary.commandExitCode, 0)
       assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
+      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran')
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
   })
 
-  it('removes an exported shell NODE_OPTIONS before adding the initialization probe preload', async function () {
+  it('preserves shell non-Datadog NODE_OPTIONS while adding the initialization probe preload', async function () {
     if (process.platform === 'win32') this.skip()
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-shell-'))
-    const blocker = path.join(out, 'blocked-preload.js')
-    fs.writeFileSync(blocker, "throw new Error('inline preload was not removed')\n")
+    const requiredPreload = path.join(out, 'required-preload.js')
+    const marker = path.join(out, 'required-preload-ran')
+    fs.writeFileSync(requiredPreload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
 
     try {
       const probe = await runInitializationProbe({
@@ -556,7 +559,7 @@ describe('test optimization validation scenario artifacts', () => {
           cwd: out,
           usesShell: true,
           shell: '/bin/sh',
-          shellCommand: `export NODE_OPTIONS='-r ${blocker}'; ${JSON.stringify(process.execPath)} -e ''`,
+          shellCommand: `export NODE_OPTIONS='-r ${requiredPreload}'; ${JSON.stringify(process.execPath)} -e ''`,
         },
         framework: { id: 'vitest:probe', framework: 'vitest' },
         outDir: out,
@@ -565,6 +568,33 @@ describe('test optimization validation scenario artifacts', () => {
 
       assert.strictEqual(probe.summary.commandExitCode, 0)
       assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
+      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran')
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves command environment NODE_OPTIONS required by the test runner', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-environment-'))
+    const requiredPreload = path.join(out, 'required-preload.js')
+    const marker = path.join(out, 'required-preload-ran')
+    fs.writeFileSync(requiredPreload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
+
+    try {
+      const probe = await runInitializationProbe({
+        command: {
+          cwd: out,
+          argv: [process.execPath, '-e', ''],
+          env: { NODE_OPTIONS: `-r ${requiredPreload} -r dd-trace/ci/init` },
+        },
+        framework: { id: 'vitest:probe', framework: 'vitest' },
+        outDir: out,
+        options: validationOptions(out),
+      })
+
+      assert.strictEqual(probe.summary.commandExitCode, 0)
+      assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
+      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran')
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }

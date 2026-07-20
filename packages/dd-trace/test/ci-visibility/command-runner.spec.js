@@ -813,6 +813,41 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('honors a custom nyc temp directory without touching the default output', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const defaultOutput = path.join(repositoryRoot, '.nyc_output')
+    const customOutput = path.join(repositoryRoot, 'tmp', 'nyc')
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(defaultOutput)
+    fs.writeFileSync(path.join(defaultOutput, 'original.json'), '{}')
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'require("node:fs").mkdirSync("tmp/nyc", { recursive: true })',
+          'nyc',
+          '--temp-dir',
+          'tmp/nyc',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(customOutput), false)
+      assert.strictEqual(fs.existsSync(path.join(defaultOutput, 'original.json')), true)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: customOutput,
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
   it('fails closed when a command replaces an output parent before cleanup', async function () {
     if (process.platform === 'win32') this.skip()
 
