@@ -418,6 +418,11 @@ function useLlmObs ({
 
   useEnv({
     _DD_LLMOBS_FLUSH_INTERVAL: 0,
+    // Git metadata tags (git.commit.sha / git.repository_url) are derived from the
+    // checkout the tests run in, so their values are environment-dependent and can't
+    // be pinned in the exact-tag assertions. Disable them here; the git-tagging
+    // behavior is covered deterministically in span_processor.spec / git-metadata.spec.
+    DD_TRACE_GIT_METADATA_ENABLED: 'false',
   })
 
   before(async () => {

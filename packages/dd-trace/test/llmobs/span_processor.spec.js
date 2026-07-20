@@ -789,7 +789,11 @@ describe('span processor', () => {
           }
         },
       }
-      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'workflow', '_ml_obs.meta.ml_app': 'myApp', ...mlObsTags })
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+        '_ml_obs.meta.ml_app': 'myApp',
+        ...mlObsTags,
+      })
       return span
     }
 
