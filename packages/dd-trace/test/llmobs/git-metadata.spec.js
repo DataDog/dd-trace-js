@@ -31,7 +31,9 @@ describe('llmobs git metadata resolver', () => {
   let config
 
   beforeEach(() => {
-    config = { DD_TRACE_GIT_METADATA_ENABLED: true }
+    // __dirname always exists, so the CLI fallback's git-folder gate passes without
+    // depending on the working directory the tests happen to run from.
+    config = { DD_TRACE_GIT_METADATA_ENABLED: true, DD_GIT_FOLDER_PATH: __dirname }
   })
 
   it('returns file/env metadata without consulting the CLI when both are present', () => {
@@ -60,7 +62,7 @@ describe('llmobs git metadata resolver', () => {
     })
   })
 
-  it('fills only the missing field from the CLI', () => {
+  it('fills only the missing commit sha from the CLI', () => {
     const { resolveLLMObsGitMetadata, getCommitSHA, getRepositoryUrl } = load({
       fromFile: { repositoryUrl: 'https://github.com/from-env' },
       commitSHA: 'shellsha',
@@ -75,6 +77,30 @@ describe('llmobs git metadata resolver', () => {
     sinon.assert.notCalled(getRepositoryUrl)
   })
 
+  it('fills only the missing repository url from the CLI', () => {
+    const { resolveLLMObsGitMetadata, getCommitSHA, getRepositoryUrl } = load({
+      fromFile: { commitSHA: 'envsha' },
+      commitSHA: 'shellsha',
+      repositoryUrl: 'https://github.com/from-shell',
+    })
+
+    assert.deepStrictEqual(resolveLLMObsGitMetadata(config), {
+      commitSHA: 'envsha',
+      repositoryUrl: 'https://github.com/from-shell',
+    })
+    sinon.assert.notCalled(getCommitSHA)
+    sinon.assert.calledOnce(getRepositoryUrl)
+  })
+
+  it('leaves values undefined when the CLI resolves to empty strings', () => {
+    const { resolveLLMObsGitMetadata } = load({ commitSHA: '', repositoryUrl: '' })
+
+    assert.deepStrictEqual(resolveLLMObsGitMetadata(config), {
+      commitSHA: undefined,
+      repositoryUrl: undefined,
+    })
+  })
+
   it('strips credentials from a CLI-resolved repository url', () => {
     const { resolveLLMObsGitMetadata } = load({
       commitSHA: 'shellsha',
@@ -86,10 +112,28 @@ describe('llmobs git metadata resolver', () => {
     assert.strictEqual(repositoryUrl, 'https://github.com/example/repo.git')
   })
 
+  it('skips the CLI when not inside a git checkout', () => {
+    const { resolveLLMObsGitMetadata, getCommitSHA, getRepositoryUrl, isGitAvailable } = load({
+      commitSHA: 'shellsha',
+      repositoryUrl: 'https://github.com/from-shell',
+    })
+
+    const result = resolveLLMObsGitMetadata({
+      DD_TRACE_GIT_METADATA_ENABLED: true,
+      DD_GIT_FOLDER_PATH: '/nonexistent/.git',
+    })
+    assert.deepStrictEqual(result, { commitSHA: undefined, repositoryUrl: undefined })
+    sinon.assert.notCalled(isGitAvailable)
+    sinon.assert.notCalled(getCommitSHA)
+    sinon.assert.notCalled(getRepositoryUrl)
+  })
+
   it('returns undefined values and skips the CLI when git is unavailable', () => {
     const { resolveLLMObsGitMetadata, getCommitSHA, getRepositoryUrl } = load({ gitAvailable: false })
 
-    assert.deepStrictEqual(resolveLLMObsGitMetadata(config), {
+    // No DD_GIT_FOLDER_PATH here, so the folder gate falls back to `${cwd}/.git`
+    // (present when the suite runs from the repo root).
+    assert.deepStrictEqual(resolveLLMObsGitMetadata({ DD_TRACE_GIT_METADATA_ENABLED: true }), {
       commitSHA: undefined,
       repositoryUrl: undefined,
     })
@@ -113,16 +157,24 @@ describe('llmobs git metadata resolver', () => {
     sinon.assert.notCalled(getRepositoryUrl)
   })
 
-  it('resolves once and caches for the process lifetime', () => {
+  it('caches enabled and disabled results independently', () => {
     const { resolveLLMObsGitMetadata, getGitMetadata, getCommitSHA } = load({
       commitSHA: 'shellsha',
       repositoryUrl: 'https://github.com/from-shell',
     })
 
-    const first = resolveLLMObsGitMetadata(config)
-    const second = resolveLLMObsGitMetadata(config)
+    // A disabled call first must not poison a later enabled call.
+    const disabled = resolveLLMObsGitMetadata({ DD_TRACE_GIT_METADATA_ENABLED: false })
+    assert.deepStrictEqual(disabled, { commitSHA: undefined, repositoryUrl: undefined })
 
-    assert.strictEqual(first, second)
+    const enabled = resolveLLMObsGitMetadata(config)
+    assert.deepStrictEqual(enabled, {
+      commitSHA: 'shellsha',
+      repositoryUrl: 'https://github.com/from-shell',
+    })
+
+    // Both results are memoized: a repeat call returns the same object without re-resolving.
+    assert.strictEqual(resolveLLMObsGitMetadata(config), enabled)
     sinon.assert.calledOnce(getGitMetadata)
     sinon.assert.calledOnce(getCommitSHA)
   })

@@ -1,11 +1,19 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
+
 const getGitMetadata = require('../git_metadata')
 const { getCommitSHA, getRepositoryUrl, isGitAvailable } = require('../plugins/util/git')
 const { filterSensitiveInfoFromRepository } = require('../plugins/util/url')
 
-/** @type {{ commitSHA: string | undefined, repositoryUrl: string | undefined } | undefined} */
-let cache
+/**
+ * @typedef {{ commitSHA: string | undefined, repositoryUrl: string | undefined }} GitMetadata
+ * Cache enabled and disabled results independently: a disabled first call must not
+ * short-circuit a later enabled initialization in the same process (mirrors git_metadata.js).
+ * @type {{ enabled?: GitMetadata, disabled?: GitMetadata }}
+ */
+const cache = {}
 
 /**
  * Resolve the git commit sha and repository url to tag LLMObs spans and
@@ -17,27 +25,31 @@ let cache
  * `DD_TRACE_GIT_METADATA_ENABLED`.
  *
  * @param {import('../config/config-types').ConfigProperties} config
- * @returns {{ commitSHA: string | undefined, repositoryUrl: string | undefined }}
+ * @returns {GitMetadata}
  */
 function resolveLLMObsGitMetadata (config) {
-  if (cache) return cache
-
   if (!config.DD_TRACE_GIT_METADATA_ENABLED) {
-    cache = { commitSHA: undefined, repositoryUrl: undefined }
-    return cache
+    cache.disabled ??= { commitSHA: undefined, repositoryUrl: undefined }
+    return cache.disabled
   }
+  if (cache.enabled) return cache.enabled
 
   let { commitSHA, repositoryUrl } = getGitMetadata(config)
 
-  // Only spawn the CLI when the file/env reads left something missing and git
-  // is actually installed — avoids failed subprocess spawns + error telemetry.
-  if ((!commitSHA || !repositoryUrl) && isGitAvailable()) {
-    commitSHA ||= getCommitSHA() || undefined
-    repositoryUrl ||= filterSensitiveInfoFromRepository(getRepositoryUrl()) || undefined
+  // Only spawn the CLI when the file/env reads left something missing and we are
+  // inside a git checkout with git installed. Gating on the .git folder keeps
+  // no-repo production images (git present, no checkout) from spawning
+  // `git rev-parse` and emitting per-startup "not a git repository" error logs.
+  if (!commitSHA || !repositoryUrl) {
+    const gitFolder = config.DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
+    if (fs.existsSync(gitFolder) && isGitAvailable()) {
+      commitSHA ||= getCommitSHA() || undefined
+      repositoryUrl ||= filterSensitiveInfoFromRepository(getRepositoryUrl()) || undefined
+    }
   }
 
-  cache = { commitSHA, repositoryUrl }
-  return cache
+  cache.enabled = { commitSHA, repositoryUrl }
+  return cache.enabled
 }
 
 module.exports = resolveLLMObsGitMetadata
