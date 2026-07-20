@@ -38,6 +38,7 @@ describe('OpenFeature register', () => {
     }
     configurationSource = {
       enable: sinon.spy(),
+      isEnabled: sinon.stub().returns(true),
       isRemoteConfig: sinon.stub().returns(false),
     }
 
@@ -81,54 +82,75 @@ describe('OpenFeature register', () => {
     assert.strictEqual(feature.factory(), openfeatureModule)
   })
 
-  it('defines the flagging provider when enabled', () => {
+  it('does not construct the flagging provider until application code accesses it', () => {
     feature.enable(config, tracer, proxy, lazyProxy)
 
     sinon.assert.calledOnceWithExactly(proxy._modules.openfeature.enable, config)
-    sinon.assert.calledOnce(lazyProxy)
-    assert.ok(proxy.openfeature instanceof FlaggingProvider)
-    assert.deepStrictEqual(proxy.openfeature.args, [tracer, config])
+    sinon.assert.notCalled(lazyProxy)
+    sinon.assert.notCalled(configurationSource.enable)
+    assert.strictEqual(typeof Reflect.getOwnPropertyDescriptor(proxy, 'openfeature').get, 'function')
+
+    const provider = proxy.openfeature
+
+    assert.ok(provider instanceof FlaggingProvider)
+    assert.deepStrictEqual(provider.args, [tracer, config])
     sinon.assert.calledOnceWithExactly(configurationSource.enable, config, sinon.match.func)
   })
 
   it('keeps an existing flagging provider on repeated enable calls', () => {
     feature.enable(config, tracer, proxy, lazyProxy)
-    const provider = proxy.openfeature
+    feature.enable(config, tracer, proxy, lazyProxy)
+    sinon.assert.notCalled(configurationSource.enable)
 
+    const provider = proxy.openfeature
     feature.enable(config, tracer, proxy, lazyProxy)
 
-    sinon.assert.calledTwice(proxy._modules.openfeature.enable)
-    sinon.assert.calledOnce(lazyProxy)
-    sinon.assert.calledTwice(configurationSource.enable)
+    sinon.assert.calledThrice(proxy._modules.openfeature.enable)
+    sinon.assert.notCalled(lazyProxy)
+    sinon.assert.calledOnce(configurationSource.enable)
     assert.strictEqual(proxy.openfeature, provider)
   })
 
   it('does not define the flagging provider when disabled', () => {
     config.experimental.flaggingProvider.enabled = false
+    configurationSource.isEnabled.returns(false)
 
     feature.enable(config, tracer, proxy, lazyProxy)
 
+    sinon.assert.calledOnceWithExactly(configurationSource.isEnabled, config)
     sinon.assert.notCalled(proxy._modules.openfeature.enable)
     sinon.assert.notCalled(lazyProxy)
     assert.strictEqual(proxy.openfeature, feature.noop)
+    sinon.assert.notCalled(configurationSource.enable)
   })
 
-  it('installs Remote Config delivery only when explicitly selected', () => {
+  it('installs Remote Config delivery when the provider is enabled and Remote Config is selected', () => {
     const rc = {}
     configurationSource.isRemoteConfig.returns(true)
 
     feature.remoteConfig(rc, config, proxy)
 
     sinon.assert.calledOnceWithExactly(configurationSource.isRemoteConfig, config)
-    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, config, sinon.match.func, true)
+    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, true)
   })
 
-  it('advertises Remote Config support without installing delivery for the default agentless source', () => {
+  it('does not install Remote Config delivery when the provider is disabled', () => {
+    const rc = {}
+    config.experimental.flaggingProvider.enabled = false
+    configurationSource.isRemoteConfig.returns(false)
+
+    feature.remoteConfig(rc, config, proxy)
+
+    sinon.assert.calledOnceWithExactly(configurationSource.isRemoteConfig, config)
+    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, false)
+  })
+
+  it('does not install Remote Config delivery unless explicitly selected', () => {
     const rc = {}
 
     feature.remoteConfig(rc, config, proxy)
 
     sinon.assert.calledOnceWithExactly(configurationSource.isRemoteConfig, config)
-    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, config, sinon.match.func, false)
+    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, false)
   })
 })

@@ -3,6 +3,7 @@
 const log = require('../log')
 
 const CONFIGURATION_SOURCE_AGENTLESS = 'agentless'
+const CONFIGURATION_SOURCE_DISABLED = 'disabled'
 const CONFIGURATION_SOURCE_REMOTE_CONFIG = 'remote_config'
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
@@ -19,7 +20,7 @@ const MAX_POLL_INTERVAL_SECONDS = 60 * 60
 function resolve (config) {
   const mode = resolveMode(config)
 
-  if (mode === CONFIGURATION_SOURCE_REMOTE_CONFIG) {
+  if (mode !== CONFIGURATION_SOURCE_AGENTLESS) {
     return { mode }
   }
 
@@ -87,6 +88,23 @@ function isRemoteConfig (config) {
 }
 
 /**
+ * Reports whether the provider should be exposed for the resolved source.
+ *
+ * Invalid source values fail closed.
+ *
+ * @param {import('../config/config-base')} config - Tracer configuration.
+ * @returns {boolean} Whether Feature Flagging is enabled.
+ */
+function isEnabled (config) {
+  try {
+    return resolveMode(config) !== CONFIGURATION_SOURCE_DISABLED
+  } catch (error) {
+    log.error('Unable to configure Feature Flagging configuration source', error)
+    return false
+  }
+}
+
+/**
  * Normalizes and validates source selection without resolving agentless
  * endpoint or timing configuration.
  *
@@ -94,7 +112,25 @@ function isRemoteConfig (config) {
  * @returns {string} Selected configuration-source mode.
  */
 function resolveMode (config) {
+  if (config.DD_FEATURE_FLAGS_ENABLED === false) return CONFIGURATION_SOURCE_DISABLED
+
   const value = config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
+  const origin = config.getOrigin?.('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE')
+  const hasExplicitSource = origin ? origin !== 'default' : value !== undefined && value !== null
+
+  if (!hasExplicitSource) {
+    const legacyEnabled = config.experimental?.flaggingProvider?.enabled
+    const legacyOrigin = config.getOrigin?.('experimental.flaggingProvider.enabled')
+    const hasExplicitLegacySetting = legacyOrigin
+      ? legacyOrigin !== 'default'
+      : legacyEnabled !== undefined && legacyEnabled !== null
+
+    if (hasExplicitLegacySetting) {
+      if (legacyEnabled === true) return CONFIGURATION_SOURCE_REMOTE_CONFIG
+      if (legacyEnabled === false) return CONFIGURATION_SOURCE_DISABLED
+    }
+  }
+
   const mode = String(value ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
   if (mode !== CONFIGURATION_SOURCE_AGENTLESS && mode !== CONFIGURATION_SOURCE_REMOTE_CONFIG) {
     throw new Error(`Unsupported Feature Flagging configuration source: ${mode}`)
@@ -176,6 +212,7 @@ function positiveMilliseconds (value, fallbackSeconds, setting, maximumSeconds) 
 
 module.exports = {
   enable,
+  isEnabled,
   isRemoteConfig,
   resolve,
 }

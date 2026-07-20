@@ -16,10 +16,17 @@ describe('OpenFeature configuration source', () => {
   beforeEach(() => {
     config = {
       DD_API_KEY: 'test-api-key',
+      DD_FEATURE_FLAGS_ENABLED: true,
       DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
       DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
       DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
       DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
+      experimental: {
+        flaggingProvider: {
+          enabled: false,
+        },
+      },
+      getOrigin: sinon.stub().returns('default'),
       site: 'datadoghq.com',
       env: 'my env',
     }
@@ -42,6 +49,54 @@ describe('OpenFeature configuration source', () => {
       assert.strictEqual(configurationSource.resolve(config).mode, 'agentless')
     })
   }
+
+  it('grandfathers the legacy enabled setting onto Remote Config when the source is defaulted', () => {
+    config.experimental.flaggingProvider.enabled = true
+    config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
+
+    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
+    assert.strictEqual(configurationSource.isRemoteConfig(config), true)
+    assert.strictEqual(configurationSource.isEnabled(config), true)
+  })
+
+  it('keeps the provider disabled for the legacy false setting when the source is defaulted', () => {
+    config.experimental.flaggingProvider.enabled = false
+    config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
+
+    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'disabled' })
+    assert.strictEqual(configurationSource.isRemoteConfig(config), false)
+    assert.strictEqual(configurationSource.isEnabled(config), false)
+  })
+
+  it('lets an explicit agentless source override legacy enablement', () => {
+    config.experimental.flaggingProvider.enabled = true
+    config.getOrigin.returns('env_var')
+
+    assert.strictEqual(configurationSource.resolve(config).mode, 'agentless')
+    assert.strictEqual(configurationSource.isRemoteConfig(config), false)
+    assert.strictEqual(configurationSource.isEnabled(config), true)
+  })
+
+  it('lets an explicit Remote Config source override legacy disablement', () => {
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+    config.experimental.flaggingProvider.enabled = false
+    config.getOrigin.returns('env_var')
+
+    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
+    assert.strictEqual(configurationSource.isRemoteConfig(config), true)
+    assert.strictEqual(configurationSource.isEnabled(config), true)
+  })
+
+  it('lets the stable kill switch override every configuration source', () => {
+    config.DD_FEATURE_FLAGS_ENABLED = false
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+    config.experimental.flaggingProvider.enabled = true
+    config.getOrigin.returns('env_var')
+
+    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'disabled' })
+    assert.strictEqual(configurationSource.isRemoteConfig(config), false)
+    assert.strictEqual(configurationSource.isEnabled(config), false)
+  })
 
   it('defaults to the Datadog UFC CDN endpoint and includes the environment', () => {
     config.DD_SITE = 'raw-env-key.invalid'

@@ -4939,16 +4939,37 @@ rules:
   })
 
   context('Feature Flagging configuration source', () => {
-    it('defaults to agentless delivery with cross-SDK timings', () => {
+    it('defaults to an enabled provider with agentless delivery and cross-SDK timings', () => {
       const config = getConfig()
 
       assertObjectContains(config, {
+        DD_FEATURE_FLAGS_ENABLED: true,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
       })
+      assert.strictEqual(config.experimental.flaggingProvider.enabled, false)
     })
+
+    it('reads the stable provider kill switch', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_FEATURE_FLAGS_ENABLED, false)
+    })
+
+    for (const value of ['true', 'false']) {
+      it(`retains the deprecated experimental provider setting when set to ${value}`, () => {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = value
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_FEATURE_FLAGS_ENABLED, true)
+        assert.strictEqual(config.experimental.flaggingProvider.enabled, value === 'true')
+      })
+    }
 
     it('reads the configuration source environment variable', () => {
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'

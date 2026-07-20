@@ -283,7 +283,7 @@ describe('TracerProxy', () => {
       noop: noopOpenfeature,
       factory: () => openfeature,
       remoteConfig (rc, config, proxy) {
-        openfeatureRcEnable(rc, config, () => proxy.openfeature)
+        openfeatureRcEnable(rc, () => proxy.openfeature)
       },
       enable (config, tracer, proxy, lazyProxy) {
         if (config.experimental.flaggingProvider.enabled) {
