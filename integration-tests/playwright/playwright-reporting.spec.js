@@ -54,6 +54,8 @@ const versions = [oldest, latest]
 const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
 const SCREENSHOT_CAPTURE_DISABLED_WARNING =
   'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.'
+const SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING =
+  'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -353,7 +355,8 @@ versions.forEach((version) => {
         receiver,
         run,
         screenshotMode = 'only-on-failure',
-        isScreenshotUploadEnabled = true
+        isScreenshotUploadEnabled = true,
+        testOptimizationConfig = getCiVisAgentlessConfig(receiver.port)
       ) {
         let testOutput = ''
         const proc = run(
@@ -361,7 +364,7 @@ versions.forEach((version) => {
           {
             cwd,
             env: {
-              ...getCiVisAgentlessConfig(receiver.port),
+              ...testOptimizationConfig,
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
@@ -473,6 +476,23 @@ versions.forEach((version) => {
           assert.strictEqual(warningCount, isScreenshotUploadEnabled ? 1 : 0, getTestOutput())
         })
       }
+
+      it('warns when the active transport cannot upload screenshots', async (receiver, run) => {
+        receiver.setInfoResponse({ endpoints: [] })
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          true,
+          getCiVisEvpProxyConfig(receiver.port)
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 1)
+        const warningCount = getTestOutput().split(SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING).length - 1
+        assert.strictEqual(warningCount, 1, getTestOutput())
+        assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING))
+      })
 
       it('excludes screenshot upload time from the failed test duration', async (receiver, run) => {
         receiver.setMediaResponseDelay(500)

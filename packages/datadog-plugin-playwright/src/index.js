@@ -99,12 +99,22 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:session:start', ({ isFailureScreenshotEnabled }) => {
-      if (getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED &&
-        !isFailureScreenshotEnabled) {
+      if (!getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) return
+
+      if (!isFailureScreenshotEnabled) {
         log.warn(
           '%s %s',
           'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.',
           'Set Playwright use.screenshot to "only-on-failure", "on-first-failure", or "on".'
+        )
+        return
+      }
+
+      if (!this.tracer._exporter?.canUploadTestScreenshots?.()) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported',
+          'by the active Test Optimization transport.'
         )
       }
     })
