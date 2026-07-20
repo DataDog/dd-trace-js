@@ -48,6 +48,36 @@ const proxyConfigs = {
     expectedUrl: 'https://azure-example.com/test',
     expectedStartTime: '1729780025472999936',
   },
+  'azure-gw': {
+    headers: {
+      'x-dd-proxy': 'azure-gw',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'azure-example.com',
+      // Add any other Azure-specific headers here
+    },
+    expectedSpanName: 'azure.app-gateway',
+    expectedService: 'azure-example.com',
+    expectedComponent: 'azure-gw',
+    expectedUrl: 'https://azure-example.com/test',
+    expectedStartTime: '1729780025472999936',
+  },
+  'azure-fd': {
+    headers: {
+      'x-dd-proxy': 'azure-fd',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'myapp.azure-fd.org',
+      // Add any other Azure-specific headers here
+    },
+    expectedSpanName: 'azure.frontdoor',
+    expectedService: 'myapp.azure-fd.org',
+    expectedComponent: 'azure-fd',
+    expectedUrl: 'https://myapp.azure-fd.org/test',
+    expectedStartTime: '1729780025472999936',
+  },
 }
 
 Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
@@ -95,7 +125,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
-      return new Promise(/** @type {() => void} */ (resolve, reject) => {
+      return new Promise(/** @type {() => void} */(resolve, reject) => {
         appListener = server.listen(0, '127.0.0.1', () => {
           port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           appListener._connections = connections
@@ -115,7 +145,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           }
         }
 
-        await new Promise(/** @type {() => void} */ (resolve, reject) => {
+        await new Promise(/** @type {() => void} */(resolve, reject) => {
           appListener.close((err) => {
             if (err) {
               reject(err)
@@ -147,6 +177,34 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         expectedUrl: 'https://example.com/test',
         expectedComponent: 'aws-httpapi',
         expectedStartTime: '1729780025472999936',
+      },
+      'aws-missingtimestamp': {
+        headers: {
+          'x-dd-proxy': 'aws-httpapi',
+          'x-dd-proxy-path': '/test',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+        },
+        expectedSpanName: 'aws.httpapi',
+        expectedService: 'example.com',
+        expectedResource: 'GET /test',
+        expectedUrl: 'https://example.com/test',
+        expectedComponent: 'aws-httpapi',
+      },
+      'azure-missingtimestamp': {
+        headers: {
+          'x-dd-proxy': 'azure-gw',
+          'x-dd-proxy-path': '/test',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+        },
+        expectedSpanName: 'azure.app-gateway',
+        expectedService: 'example.com',
+        expectedResource: 'GET /test',
+        expectedUrl: 'https://example.com/test',
+        expectedComponent: 'azure-gw',
       },
       'with-route': {
         headers: {
@@ -333,6 +391,82 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
+      it('should create a timestamp if it is an Azure Application Gateway proxy', async () => {
+        const testCase = additionalTestCases['azure-missingtimestamp']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 2)
+
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+          assert.strictEqual(spans[0].service, testCase.expectedService)
+          assert.strictEqual(spans[0].resource, testCase.expectedResource)
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': testCase.expectedUrl,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: testCase.expectedComponent,
+              '_dd.integration': testCase.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
+          assert.match(spans[0].start.toString(), /^\d+$/)
+          assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+          assertObjectContains(spans[1], {
+            name: 'web.request',
+            service: 'aws-server',
+            type: 'web',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
+      })
+      it('should not create a span if timestamp is missing from headers', async () => {
+        const testCase = additionalTestCases['aws-missingtimestamp']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 1)
+
+          assertObjectContains(spans[0], {
+            name: 'web.request',
+            service: 'aws-server',
+            type: 'web',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
+      })
       it('should include http.route when x-dd-proxy-resource-path header is present', async () => {
         const testCase = additionalTestCases['with-route']
         await loadTest({})
@@ -521,6 +655,217 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             },
           })
         })
+      })
+    })
+  })
+})
+
+describe('Inferred Proxy Spans - various edge case tests', function () {
+  let http
+  let appListener
+  let port
+
+  const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
+    const options = {
+      inferredProxyServicesEnabled,
+      service: 'aws-server',
+    }
+
+    await agent.load(
+      ['http', 'dns', 'net'],
+      [{ client: false }, { enabled: false }, { enabled: false }],
+      options
+    )
+
+    const tracer = require('../../../../dd-trace').init(options)
+    tracer._tracer._config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
+
+    http = require('http')
+
+    const server = new http.Server(async (req, res) => {
+      res.writeHead(200)
+      res.end(JSON.stringify({ message: 'OK' }))
+    })
+
+    const connections = new Set()
+    server.on('connection', (connection) => {
+      connections.add(connection)
+      connection.on('close', () => {
+        connections.delete(connection)
+      })
+    })
+
+    return new Promise(/** @type {() => void} */(resolve, reject) => {
+      appListener = server.listen(0, '127.0.0.1', () => {
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+        appListener._connections = connections
+        resolve()
+      })
+    })
+  }
+
+  const cleanupTest = async function () {
+    if (appListener) {
+      if (appListener._connections) {
+        for (const connection of appListener._connections) {
+          connection.destroy()
+        }
+      }
+
+      await new Promise(/** @type {() => void} */(resolve, reject) => {
+        appListener.close((err) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve()
+          }
+        })
+      })
+      appListener = null
+    }
+
+    await agent.close()
+  }
+
+  afterEach(async () => {
+    await cleanupTest()
+  })
+
+  it('should not create a proxy span if the timestamp header is present but empty', async () => {
+    await loadTest({})
+
+    await httpClient.get(`http://127.0.0.1:${port}/`, {
+      headers: {
+        'x-dd-proxy': 'aws-apigateway',
+        'x-dd-proxy-request-time-ms': '',
+        'x-dd-proxy-path': '/test',
+        'x-dd-proxy-httpmethod': 'GET',
+        'x-dd-proxy-domain-name': 'example.com',
+        'x-dd-proxy-stage': 'dev',
+      },
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+
+      assert.strictEqual(spans.length, 1)
+
+      assertObjectContains(spans[0], {
+        name: 'web.request',
+        service: 'aws-server',
+        type: 'web',
+        resource: 'GET',
+        meta: {
+          component: 'http',
+          'span.kind': 'server',
+          'http.url': `http://127.0.0.1:${port}/`,
+          'http.method': 'GET',
+          'http.status_code': '200',
+        },
+      })
+    })
+  })
+
+  it('should not create a proxy span if the proxy system header is not present in the supported list', async () => {
+    await loadTest({})
+
+    await httpClient.get(`http://127.0.0.1:${port}/`, {
+      headers: {
+        'x-dd-proxy': 'dummy-proxy',
+        'x-dd-proxy-request-time-ms': '',
+        'x-dd-proxy-path': '/test',
+        'x-dd-proxy-httpmethod': 'GET',
+        'x-dd-proxy-domain-name': 'example.com',
+        'x-dd-proxy-stage': 'dev',
+      },
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+
+      assert.strictEqual(spans.length, 1)
+
+      assertObjectContains(spans[0], {
+        name: 'web.request',
+        service: 'aws-server',
+        type: 'web',
+        resource: 'GET',
+        meta: {
+          component: 'http',
+          'span.kind': 'server',
+          'http.url': `http://127.0.0.1:${port}/`,
+          'http.method': 'GET',
+          'http.status_code': '200',
+        },
+      })
+    })
+  })
+
+  it('should not create a proxy span if the proxy system header is present but empty', async () => {
+    await loadTest({})
+
+    await httpClient.get(`http://127.0.0.1:${port}/`, {
+      headers: {
+        'x-dd-proxy': '',
+        'x-dd-proxy-request-time-ms': '',
+        'x-dd-proxy-path': '/test',
+        'x-dd-proxy-httpmethod': 'GET',
+        'x-dd-proxy-domain-name': 'example.com',
+        'x-dd-proxy-stage': 'dev',
+      },
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+
+      assert.strictEqual(spans.length, 1)
+
+      assertObjectContains(spans[0], {
+        name: 'web.request',
+        service: 'aws-server',
+        type: 'web',
+        resource: 'GET',
+        meta: {
+          component: 'http',
+          'span.kind': 'server',
+          'http.url': `http://127.0.0.1:${port}/`,
+          'http.method': 'GET',
+          'http.status_code': '200',
+        },
+      })
+    })
+  })
+
+  it('should prepend a forward-slash to path if one is not provided.', async () => {
+    await loadTest({})
+
+    await httpClient.get(`http://127.0.0.1:${port}/`, {
+      headers: {
+        'x-dd-proxy': 'azure-gw',
+        'x-dd-proxy-request-time-ms': '',
+        'x-dd-proxy-path': 'test',
+        'x-dd-proxy-httpmethod': 'GET',
+        'x-dd-proxy-domain-name': 'example.com',
+        'x-dd-proxy-stage': 'dev',
+      },
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+
+      assert.strictEqual(spans.length, 2)
+
+      assertObjectContains(spans[0], {
+        name: 'azure.app-gateway',
+        service: 'example.com',
+        resource: 'GET /test',
+        meta: {
+          'http.url': 'https://example.com/test',
+        },
+      })
+
+      assertObjectContains(spans[1], {
+        name: 'web.request',
       })
     })
   })

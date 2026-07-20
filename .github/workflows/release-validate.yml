@@ -15,16 +15,23 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      id-token: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+      - name: Get GitHub Token via dd-octo-sts
+        id: generate-token
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        with:
+          scope: DataDog/dd-trace-js
+          policy: self.release-validate
       - uses: ./.github/actions/node
         with:
           version: ""
       - uses: ./.github/actions/install/branch-diff
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.generate-token.outputs.token }}
       - run: node scripts/release/validate
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
