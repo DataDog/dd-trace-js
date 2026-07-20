@@ -7,6 +7,7 @@
 const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
 const yaml = require('yaml')
@@ -69,6 +70,43 @@ const yarnPattern = /\byarn\b/
 
 describe('no yarn dev references', function () {
   this.timeout(60_000)
+
+  it('packs a single non-empty artifact', () => {
+    const archiveDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-pack-'))
+    const indexTypesPath = path.join(repoRoot, 'index.d.ts')
+    const originalIndexTypes = fs.readFileSync(indexTypesPath)
+    const { name, version } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+
+    try {
+      const filename = execFileSync(
+        npm,
+        ['pack', '--silent', '--pack-destination', archiveDirectory],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: { ...process.env, npm_config_loglevel: 'silent' },
+        }
+      ).trim()
+
+      assert.strictEqual(filename, `${name}-${version}.tgz`)
+      assert.ok(fs.statSync(path.join(archiveDirectory, filename)).size > 0)
+    } finally {
+      fs.writeFileSync(indexTypesPath, originalIndexTypes)
+      fs.rmSync(archiveDirectory, { recursive: true, force: true })
+    }
+  })
+
+  it('prepares the frozen vendor tree outside npm pack', () => {
+    execFileSync(process.execPath, ['scripts/prepare.js'], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        npm_command: 'install',
+        PATH: [path.join(repoRoot, 'node_modules', '.bin'), process.env.PATH].filter(Boolean).join(path.delimiter),
+      },
+    })
+  })
 
   it('contains no yarn dev-tooling references outside the allowlist', () => {
     const files = listTrackedFiles()
@@ -140,11 +178,19 @@ describe('no yarn dev references', function () {
     }
 
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
-    assert.strictEqual(packageJson.devDependencies.bun, '1.3.1')
+    assert.strictEqual(packageJson.devDependencies.bun, '1.3.14')
     const nodeSetupAction = fs.readFileSync(path.join(repoRoot, '.github/actions/node/setup/action.yml'), 'utf8')
     const setupBunVersion = /npm install -g bun@(\d+\.\d+\.\d+)/.exec(nodeSetupAction)
     assert.ok(setupBunVersion)
     assert.strictEqual(setupBunVersion[1], packageJson.devDependencies.bun)
+    const playwrightDockerfile = fs.readFileSync(path.join(repoRoot, '.github/playwright/Dockerfile'), 'utf8')
+    const dockerBunVersion = /^FROM oven\/bun:(\d+\.\d+\.\d+)@/m.exec(playwrightDockerfile)
+    assert.ok(dockerBunVersion)
+    assert.strictEqual(dockerBunVersion[1], packageJson.devDependencies.bun)
+    assert.strictEqual(packageJson.scripts.prepare, 'node scripts/prepare.js')
+    const prepareScript = fs.readFileSync(path.join(repoRoot, 'scripts/prepare.js'), 'utf8')
+    assert.match(prepareScript, /process\.env\.npm_command !== 'pack'/)
+    assert.match(prepareScript, /execFileSync\(\s*'bun'/)
 
     const allGreenWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/all-green.yml'), 'utf8')
     const allGreenInstall = 'bun install --frozen-lockfile --ignore-scripts'
@@ -174,6 +220,27 @@ describe('no yarn dev references', function () {
     assert.match(platformWorkflow, /bun --config="\$GITHUB_WORKSPACE\/bunfig\.toml" add --linker=hoisted/)
     const projectWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/project.yml'), 'utf8')
     assert.match(projectWorkflow, /bun --config=\/tmp\/dd-trace-bunfig\.toml install/)
+    const systemTestsWorkflow = yaml.parse(fs.readFileSync(
+      path.join(repoRoot, '.github/workflows/system-tests.yml'),
+      'utf8'
+    ))
+    const buildArtifactSteps = systemTestsWorkflow.jobs['build-artifacts'].steps
+    const packStep = buildArtifactSteps.find(step => step.name === 'Pack dd-trace-js')
+    assert.ok(packStep)
+    assert.match(packStep.run, /filename=\$\(npm pack --silent --pack-destination binaries\)/)
+    assert.match(packStep.run, /test -f "binaries\/\$filename"/)
+    const ociPackScript = fs.readFileSync(path.join(repoRoot, '.gitlab/prepare-oci-package.sh'), 'utf8')
+    assert.match(ociPackScript, /^archive=\$\(npm pack --silent\)$/m)
+    assert.match(ociPackScript, /^npm install --global .*"bun@\$bun_version"$/m)
+    assert.match(ociPackScript, /^tar -xOf "\$archive" package\/package\.json > packaging\/sources\/package\.json$/m)
+    assert.match(ociPackScript, /^cp bun\.lock packaging\/sources\/bun\.lock$/m)
+    assert.match(
+      ociPackScript,
+      /^bun --config="\$PWD\/bunfig\.toml" install --production --frozen-lockfile --ignore-scripts /m
+    )
+    assert.match(ociPackScript, /-C packaging\/sources\/node_modules\/dd-trace$/m)
+    assert.doesNotMatch(ociPackScript, /^npm pack$/m)
+    assert.doesNotMatch(ociPackScript, /^npm install --prefix/m)
 
     const internalLockDirectories = [
       '.github/actions/datadog-ci',
@@ -195,8 +262,6 @@ describe('no yarn dev references', function () {
       datadogCiAction,
       /bun --config="\$\{\{ github\.workspace \}\}\/bunfig\.toml" install --frozen-lockfile --ignore-scripts/
     )
-
-    assert.match(packageJson.scripts.prepare, /bun --config=\.\.\/bunfig\.toml install --frozen-lockfile/)
 
     const dependabot = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/dependabot.yml'), 'utf8'))
     const bunDirectories = new Set()
