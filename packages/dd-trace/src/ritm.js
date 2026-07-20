@@ -101,7 +101,7 @@ function Hook (modules, options, onrequire) {
     // return known patched modules immediately
     if (cache[moduleId]) {
       // require.cache was potentially altered externally
-      const cacheEntry = require.cache[filename]
+      const cacheEntry = require.cache?.[filename]
       if (cacheEntry && cacheEntry.exports !== cache[moduleId].original) {
         return cacheEntry.exports
       }

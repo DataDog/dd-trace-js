@@ -13,7 +13,7 @@ const NODE_MODULES_PATTERN_START = `node_modules${sep}`
  * This is needed for local and CI where dd-trace-js is not in node_modules.
  * In production, these frames are already filtered by isNodeModulesFrame.
  */
-const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = __filename.endsWith(
+const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = typeof __filename !== 'undefined' && __filename.endsWith(
   join('packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
 )
 
