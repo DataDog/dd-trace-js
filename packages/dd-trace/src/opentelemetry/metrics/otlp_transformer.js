@@ -2,11 +2,13 @@
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { AGGREGATION_TEMPORALITY } = require('../otlp/otlp_enums')
 const { METRIC_TYPES, TEMPORALITY } = require('./constants')
 
-const { protoAggregationTemporality } = getProtobufTypes()
-const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
-const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_CUMULATIVE
+// Temporality integers come from the frozen constants, not `getProtobufTypes`, so the JSON
+// export path never loads the `.proto` files.
+const AGGREGATION_TEMPORALITY_DELTA = AGGREGATION_TEMPORALITY.AGGREGATION_TEMPORALITY_DELTA
+const AGGREGATION_TEMPORALITY_CUMULATIVE = AGGREGATION_TEMPORALITY.AGGREGATION_TEMPORALITY_CUMULATIVE
 
 /**
  * @typedef {import('./periodic_metric_reader').AggregatedMetric} AggregatedMetric

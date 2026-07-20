@@ -5,6 +5,7 @@ const { trace } = require('@opentelemetry/api')
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { SEVERITY_NUMBER } = require('../otlp/otlp_enums')
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -192,14 +193,13 @@ class OtlpTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Maps OpenTelemetry severity number to protobuf severity number.
+   * Maps OpenTelemetry severity number to OTLP severity number.
    * @param {number} severityNumber - OpenTelemetry severity number
-   * @returns {number} Protobuf severity number
+   * @returns {number} OTLP severity number
    */
   #mapSeverityNumber (severityNumber) {
-    const { protoSeverityNumber } = getProtobufTypes()
     const severityName = SEVERITY_MAP[severityNumber] || 'SEVERITY_NUMBER_INFO'
-    return protoSeverityNumber.values[severityName]
+    return SEVERITY_NUMBER[severityName]
   }
 
   /**
