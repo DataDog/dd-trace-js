@@ -2744,6 +2744,8 @@ describe('Plugin', () => {
           if (res?.errors?.some(error => error.message === 'Expected failure')) {
             span.setTag('error', false)
           }
+
+          context.contextValue?.executeHook?.()
         }
 
         /**
@@ -2846,6 +2848,44 @@ describe('Plugin', () => {
             })
 
           return Promise.all([assertion, action])
+        })
+
+        it('should trace executions started by the execute hook', () => {
+          const localSchema = graphql.buildSchema('type Query { outer: String, nested: String }')
+          const outerDocument = graphql.parse('query Outer { outer }')
+          const nestedDocument = graphql.parse('query Nested { nested }')
+          const contextValue = {}
+
+          contextValue.executeHook = () => {
+            contextValue.executeHook = undefined
+            graphql.execute({
+              schema: localSchema,
+              document: nestedDocument,
+              contextValue,
+              rootValue: { nested: 'nested' },
+            })
+          }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            const executeSpans = spans.filter(span => span.name === expectedSchema.server.opName)
+
+            assert.strictEqual(executeSpans.length, 2)
+            assert.deepStrictEqual(
+              executeSpans.map(span => span.resource).sort(),
+              ['query Nested{nested}', 'query Outer{outer}']
+            )
+            sinon.assert.calledTwice(config.hooks.execute)
+          }, { spanResourceMatch: /Outer/ })
+
+          graphql.execute({
+            schema: localSchema,
+            document: outerDocument,
+            contextValue,
+            rootValue: { outer: 'outer' },
+          })
+
+          return assertion
         })
 
         it('should preserve an execute hook error override for synchronous results', () => {

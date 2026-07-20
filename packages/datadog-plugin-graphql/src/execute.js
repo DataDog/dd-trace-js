@@ -230,7 +230,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // already tagged the span.
     if (ctx.error) {
       if (ctx.ddAborted) {
-        this.#drain(ctx, span)
+        span.finish()
       } else {
         this.#finishSpan(ctx, span)
       }
@@ -279,19 +279,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    this.config.hooks.execute(span, ctx.ddArgs, res)
-
-    this.#drain(ctx, span)
-  }
-
-  #drain (ctx, span) {
-    span.finish()
     if (ctx.ddContextValue) {
       contexts.delete(ctx.ddContextValue)
     }
     if (ctx.ddInstrumentedArgs) {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
+
+    this.config.hooks.execute(span, ctx.ddArgs, res)
+
+    span.finish()
   }
 
   // Public — called from wrapResolve (free function, crosses class boundary).
