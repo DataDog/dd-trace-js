@@ -33,6 +33,7 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   LLMOBS_SUBMITTED_TAG_KEY,
+  LLMOBS_DEDUPLICATION_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
 } = require('./constants/tags')
@@ -87,6 +88,9 @@ class LLMObsSpanProcessor {
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
 
+    const deduplication = span[LLMOBS_DEDUPLICATION_KEY]
+    if (deduplication && (!deduplication.captured || deduplication.state.submitted)) return
+
     try {
       const formattedEvent = this.format(span)
       telemetry.incrementLLMObsSpanFinishedCount(span)
@@ -110,6 +114,7 @@ class LLMObsSpanProcessor {
       // has no corresponding LLMObs event.
       if (enqueued) {
         span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+        if (deduplication) deduplication.state.submitted = true
       }
     } catch (e) {
       // this should be a rare case

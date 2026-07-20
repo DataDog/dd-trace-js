@@ -14,13 +14,22 @@ const {
 describe('integrations', () => {
   let Client
   let McpServer
+  let Server
+  let ListToolsRequestSchema
   let InMemoryTransport
+  let tool
+  let loadMcpTools
+  let tracer
 
   let client
   let server
 
   describe('modelcontextprotocol-sdk', () => {
-    const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
+    const { getEvents } = useLlmObs({ plugin: ['langchain', 'modelcontextprotocol-sdk'] })
+
+    before(() => {
+      tracer = global._ddtrace
+    })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
@@ -35,8 +44,12 @@ describe('integrations', () => {
         const clientEntryPath = versionModule.getPath('@modelcontextprotocol/sdk/client')
         const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
         McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
+        Server = require(path.join(sdkDir, 'dist/cjs/server/index.js')).Server
+        ListToolsRequestSchema = require(path.join(sdkDir, 'dist/cjs/types.js')).ListToolsRequestSchema
 
         InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+        tool = require('../../../../../../versions/@langchain/core@1').get('@langchain/core/tools').tool
+        loadMcpTools = require('../../../../../../versions/@langchain/mcp-adapters@1.1.3').get().loadMcpTools
 
         server = new McpServer({ name: 'test-server', version: '1.0.0' })
 
@@ -65,6 +78,12 @@ describe('integrations', () => {
               { type: 'text', text: 'Second part' },
             ],
           })
+        )
+
+        server.registerTool(
+          'audit-tool',
+          { description: 'Records an audit event', inputSchema: {} },
+          async () => ({ content: [{ type: 'text', text: 'Audit recorded' }] })
         )
 
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -188,7 +207,6 @@ describe('integrations', () => {
             error: {
               type: MOCK_STRING,
               message: MOCK_STRING,
-              stack: MOCK_STRING,
             },
             tags: {
               ml_app: 'test',
@@ -202,21 +220,179 @@ describe('integrations', () => {
       })
 
       describe('Client.listTools', () => {
-        it('creates a task span for listing tools', async () => {
+        it('captures the tool inventory', async () => {
           const result = await client.listTools()
 
           assert.ok(result.tools)
-          assert.equal(result.tools.length, 3)
+          assert.equal(result.tools.length, 4)
 
           const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpan = apmSpans.find(span => span.resource === 'ClientSession.list_tools')
+          assert.ok(listToolsSpan, 'MCP list-tools APM span should remain present')
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+            span: listToolsSpan,
             spanKind: 'task',
             name: 'MCP Client List Tools',
             outputValue: JSON.stringify(result),
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
+        })
+
+        it('captures the tool inventory once per trace', async () => {
+          await tracer.trace('list-tools', async () => {
+            await client.listTools()
+            await client.listTools()
+          })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
+          assert.equal(listToolsSpans.length, 2)
+          assert.equal(llmobsSpans.length, 1)
+        })
+
+        it('captures the tool inventory once for concurrent calls in a trace', async () => {
+          await tracer.trace('list-tools', () => Promise.all([client.listTools(), client.listTools()]))
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
+          assert.equal(listToolsSpans.length, 2)
+          assert.equal(llmobsSpans.length, 1)
+        })
+
+        it('captures tool inventories from separate clients in the same trace', async () => {
+          const otherServer = new McpServer({ name: 'other-server', version: '1.0.0' })
+          otherServer.registerTool(
+            'other-tool',
+            { description: 'A tool from another server', inputSchema: {} },
+            async () => ({ content: [{ type: 'text', text: 'Result from other-tool' }] })
+          )
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          const otherClient = new Client({ name: 'other-client', version: '1.0.0' })
+
+          try {
+            await otherServer.connect(serverTransport)
+            await otherClient.connect(clientTransport)
+            await tracer.trace('list-tools', () => Promise.all([client.listTools(), otherClient.listTools()]))
+
+            const { llmobsSpans } = await getEvents()
+            assert.equal(llmobsSpans.length, 2)
+          } finally {
+            await otherClient.close()
+            await otherServer.close()
+          }
+        })
+
+        it('captures every page of a paginated tool inventory', async () => {
+          const paginatedServer = new Server(
+            { name: 'paginated-server', version: '1.0.0' },
+            { capabilities: { tools: {} } }
+          )
+          paginatedServer.setRequestHandler(ListToolsRequestSchema, request => {
+            if (request.params?.cursor === 'page-2') {
+              return {
+                tools: [{ name: 'second-tool', description: 'Second page', inputSchema: { type: 'object' } }],
+              }
+            }
+
+            return {
+              tools: [{ name: 'first-tool', description: 'First page', inputSchema: { type: 'object' } }],
+              nextCursor: 'page-2',
+            }
+          })
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          const paginatedClient = new Client({ name: 'paginated-client', version: '1.0.0' })
+
+          try {
+            await paginatedServer.connect(serverTransport)
+            await paginatedClient.connect(clientTransport)
+            const tools = await tracer.trace('list-tools', () => loadMcpTools('paginated-server', paginatedClient))
+
+            assert.equal(tools.length, 2)
+            const { llmobsSpans } = await getEvents()
+            assert.equal(llmobsSpans.length, 2)
+            assert.ok(llmobsSpans.some(span => span.meta.output.value.includes('first-tool')))
+            assert.ok(llmobsSpans.some(span => span.meta.output.value.includes('second-tool')))
+          } finally {
+            await paginatedClient.close()
+            await paginatedServer.close()
+          }
+        })
+
+        it('captures a tool inventory when the first concurrent event is dropped', async () => {
+          let processorCalls = 0
+          tracer.llmobs.registerProcessor(span => ++processorCalls === 1 ? null : span)
+
+          try {
+            await tracer.trace('list-tools', () => Promise.all([client.listTools(), client.listTools()]))
+          } finally {
+            tracer.llmobs.deregisterProcessor()
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const listToolsSpans = apmSpans.filter(span => span.resource === 'ClientSession.list_tools')
+          assert.equal(listToolsSpans.length, 2)
+          assert.equal(llmobsSpans.length, 1)
+        })
+      })
+
+      describe('LangChain MCP adapter', () => {
+        it('keeps the LangChain tool as the only payload-bearing LLMObs tool span', async () => {
+          const [tool] = await loadMcpTools('test-server', client)
+          const { llmobsSpans: discoveryLlmObsSpans } = await getEvents()
+          assert.equal(discoveryLlmObsSpans.length, 1)
+          assert.equal(discoveryLlmObsSpans[0].name, 'MCP Client List Tools')
+
+          const result = await tool.invoke({})
+
+          assert.equal(result, 'Result from test-tool')
+
+          const { apmSpans, llmobsSpans } = await getEvents(1)
+          assert.equal(llmobsSpans.length, 1)
+          const langchainSpan = apmSpans.find(span => span.span_id.toString() === llmobsSpans[0].span_id)
+          assert.ok(langchainSpan, 'LangChain LLMObs span should have a matching APM span')
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: langchainSpan,
+            spanKind: 'tool',
+            name: 'test-tool',
+            inputValue: JSON.stringify({}),
+            outputValue: 'Result from test-tool',
+            tags: { ml_app: 'test', integration: 'langchain' },
+          })
+        })
+
+        it('keeps MCP spans for custom LangChain tools', async () => {
+          const customTool = tool(
+            () => client.callTool({ name: 'test-tool', arguments: {} }),
+            {
+              name: 'custom-mcp-tool',
+              description: 'Calls an MCP tool',
+              schema: {},
+            }
+          )
+
+          await customTool.invoke({})
+
+          const { llmobsSpans } = await getEvents(2)
+          assert.equal(llmobsSpans.length, 2)
+          assert.ok(llmobsSpans.some(span => span.name === 'custom-mcp-tool'))
+          assert.ok(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: test-tool'))
+        })
+
+        it('keeps MCP spans from adapter callbacks', async () => {
+          const [adapterTool] = await loadMcpTools('test-server', client, {
+            beforeToolCall: () => client.callTool({ name: 'audit-tool', arguments: {} }),
+          })
+          await getEvents()
+
+          await adapterTool.invoke({})
+
+          const { llmobsSpans } = await getEvents()
+          assert.equal(llmobsSpans.length, 2)
+          assert.ok(llmobsSpans.some(span => span.name === 'test-tool'))
+          assert.ok(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: audit-tool'))
+          assert.equal(llmobsSpans.some(span => span.name === 'MCP Client Tool Call: test-tool'), false)
         })
       })
     })

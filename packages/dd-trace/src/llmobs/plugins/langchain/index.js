@@ -2,6 +2,7 @@
 
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
+const { storage } = require('../../storage')
 
 const pluginManager = require('../../../../../..')._pluginManager
 
@@ -20,6 +21,7 @@ const WORKFLOW = 'workflow'
 const EMBEDDING = 'embedding'
 const TOOL = 'tool'
 const RETRIEVAL = 'retrieval'
+const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
 
 const ChainHandler = require('./handlers/chain')
 const ChatModelHandler = require('./handlers/chat_model')
@@ -195,6 +197,27 @@ class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
   static id = 'llmobs_langchain_tool_invoke'
   static lcType = 'tool'
   static prefix = 'tracing:orchestrion:@langchain/core:Tool_invoke'
+
+  constructor (...args) {
+    super(...args)
+
+    this.addSub(
+      'tracing:orchestrion:@langchain/mcp-adapters:_callTool:start',
+      this.markMcpAdapterToolCall.bind(this)
+    )
+  }
+
+  /**
+   * Marks the exact MCP call made by a LangChain adapter tool so callbacks retain their own MCP LLMObs events.
+   *
+   * @param {{ arguments?: [{ client?: object, toolName?: string }] }} ctx The adapter's `_callTool` lifecycle context.
+   * @returns {void}
+   */
+  markMcpAdapterToolCall (ctx) {
+    const { client, toolName } = ctx.arguments?.[0] || {}
+    const span = storage.getStore()?.span
+    if (span && client && toolName) span[MCP_ADAPTER_TOOL] = { client, toolName }
+  }
 }
 
 class VectorStoreSimilaritySearchPlugin extends BaseLangChainLLMObsPlugin {

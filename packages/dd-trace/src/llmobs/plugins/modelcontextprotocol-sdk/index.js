@@ -1,7 +1,37 @@
 'use strict'
 
+const { LLMOBS_DEDUPLICATION_KEY } = require('../../constants/tags')
+const { storage } = require('../../storage')
+
 const LLMObsPlugin = require('../base')
 const { formatInput, formatOutput } = require('./utils')
+
+const listToolsTraces = new WeakMap()
+const MCP_ADAPTER_TOOL = Symbol.for('dd-trace:langchain:mcp-adapter-tool')
+const LIST_TOOLS_INITIAL_PAGE = Symbol('dd-trace:mcp:list-tools-initial-page')
+
+/**
+ * Gets the list-tools capture state for a client within a trace.
+ *
+ * @param {object} trace The active APM trace.
+ * @param {object} client The MCP client making the request.
+ * @returns {Map<string | symbol, { submitted: boolean }>} The page capture state.
+ */
+function getListToolsSpans (trace, client) {
+  let clients = listToolsTraces.get(trace)
+  if (!clients) {
+    clients = new WeakMap()
+    listToolsTraces.set(trace, clients)
+  }
+
+  let pages = clients.get(client)
+  if (!pages) {
+    pages = new Map()
+    clients.set(client, pages)
+  }
+
+  return pages
+}
 
 class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_tool_call'
@@ -9,7 +39,12 @@ class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_callTool'
 
   getLLMObsSpanRegisterOptions (ctx) {
+    // LangChain's Tool.invoke() is the canonical LLMObs tool span for its adapter-generated call.
+    // Keep MCP's APM span for protocol visibility and propagation, but avoid duplicating its I/O payload.
     const params = ctx.arguments?.[0]
+    const adapterToolCall = storage.getStore()?.span?.[MCP_ADAPTER_TOOL]
+    if (adapterToolCall?.client === ctx.self && adapterToolCall.toolName === params?.name) return
+
     const toolName = params?.name || 'unknown_tool'
 
     return {
@@ -50,7 +85,21 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   static integration = 'modelcontextprotocol-sdk'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
 
-  getLLMObsSpanRegisterOptions () {
+  getLLMObsSpanRegisterOptions (ctx) {
+    const trace = ctx.currentStore?.span?.context()._trace
+    const client = ctx.self
+    const params = ctx.arguments?.[0]
+    const page = params?.cursor === undefined ? LIST_TOOLS_INITIAL_PAGE : params.cursor
+    const spans = trace && client && getListToolsSpans(trace, client)
+    const state = spans?.get(page)
+    if (state?.submitted) return
+
+    if (spans) {
+      const nextState = state || { submitted: false }
+      spans.set(page, nextState)
+      ctx.currentStore.span[LLMOBS_DEDUPLICATION_KEY] = { state: nextState, captured: false }
+    }
+
     return {
       kind: 'task',
       name: 'MCP Client List Tools',
@@ -62,6 +111,8 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     if (!span || ctx.error) return
 
     this._tagger.tagTextIO(span, null, JSON.stringify(ctx.result))
+    const deduplication = span[LLMOBS_DEDUPLICATION_KEY]
+    if (deduplication) deduplication.captured = true
   }
 }
 

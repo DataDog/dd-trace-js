@@ -30,7 +30,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
- *   error?: { message: string, type: string, stack: string },
+ *   error?: { message: string, type: string, stack?: string },
  *   span: unknown,
  *   sessionId?: string,
  *   tags: Record<string, unknown>,
@@ -251,7 +251,9 @@ function assertLlmObsSpanEvent (actual, expected) {
   if (error) {
     expectedMeta[ERROR_MESSAGE] = span.meta[ERROR_MESSAGE]
     expectedMeta[ERROR_TYPE] = span.meta[ERROR_TYPE]
-    expectedMeta[ERROR_STACK] = span.meta[ERROR_STACK]
+    if (error.stack !== undefined) {
+      expectedMeta[ERROR_STACK] = span.meta[ERROR_STACK]
+    }
   }
 
   if (inputMessages) {

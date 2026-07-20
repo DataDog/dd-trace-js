@@ -29,6 +29,7 @@ module.exports = {
   LLMOBS_TRACE_ID_BRIDGE_KEY: 'llmobs_trace_id',
   LLMOBS_PARENT_ID_BRIDGE_KEY: 'llmobs_parent_id',
   LLMOBS_SUBMITTED_TAG_KEY: '_dd.llmobs.submitted',
+  LLMOBS_DEDUPLICATION_KEY: Symbol.for('dd-trace:llmobs:deduplication'),
   ROOT_PARENT_ID: 'undefined',
   DEFAULT_PROMPT_NAME: 'unnamed-prompt',
   INTERNAL_CONTEXT_VARIABLE_KEYS: '_dd_context_variable_keys',
