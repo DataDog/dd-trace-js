@@ -99,7 +99,7 @@ jobs:
       # `--ignore-scripts` skips the `prepare` script (the frozen vendor install):
       # the packed tarball ships pre-built `vendor/dist/**` artifacts but not
       # `vendor/bun.lock`, so a fresh consumer install can't rebuild vendor.
-      # Bun 1.3.1 applies the release-age gate while resolving omitted dev dependencies.
+      # Bun applies the release-age gate while resolving omitted dev dependencies.
       # Remove them for the consumer install, then restore the shipped manifest for the size report.
       - run: |
           cp package.json /tmp/dd-trace-package.json
