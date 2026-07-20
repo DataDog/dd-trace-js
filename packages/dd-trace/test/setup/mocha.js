@@ -233,6 +233,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
             })
             : spanGenerationFn()
         })
+        parentSpan.finish()
 
         assert.strictEqual(
           typeof spanGenerationPromise?.then, 'function',
@@ -242,10 +243,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 
         await Promise.all([
           traceAssertion,
-          (async () => {
-            await spanGenerationPromise
-            parentSpan.finish()
-          })(),
+          spanGenerationPromise,
         ])
       } finally {
         parentSpan.finish()
