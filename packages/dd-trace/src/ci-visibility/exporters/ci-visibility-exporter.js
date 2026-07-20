@@ -73,13 +73,14 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 }
 
 class CiVisibilityExporter extends BufferingExporter {
-  constructor (config) {
+  constructor (config, options = {}) {
     super(config)
     this._timer = undefined
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
-    this._testOptimizationHttpCache = new TestOptimizationHttpCache()
+    this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
+    this._isTestOptimizationCacheOnly = options.cacheOnly === true
     const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
     if (coverageReportFlags?.length > MAX_COVERAGE_REPORT_FLAGS) {
       log.warn(
@@ -193,6 +194,9 @@ class CiVisibilityExporter extends BufferingExporter {
       const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
       return callback(null, skippableSuites, correlationId, coverage)
     }
+    if (this._isTestOptimizationCacheOnly) {
+      return callback(this._getCacheOnlyError('skippable tests'), [])
+    }
 
     this._gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
@@ -210,6 +214,9 @@ class CiVisibilityExporter extends BufferingExporter {
     if (cachedKnownTests !== CACHE_MISS) {
       return callback(null, cachedKnownTests)
     }
+    if (this._isTestOptimizationCacheOnly) {
+      return callback(this._getCacheOnlyError('known tests'))
+    }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
@@ -220,6 +227,9 @@ class CiVisibilityExporter extends BufferingExporter {
     const cachedTestManagementTests = this._testOptimizationHttpCache.readTestManagementTests()
     if (cachedTestManagementTests !== CACHE_MISS) {
       return callback(null, cachedTestManagementTests)
+    }
+    if (this._isTestOptimizationCacheOnly) {
+      return callback(this._getCacheOnlyError('test management tests'))
     }
     getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
@@ -253,6 +263,10 @@ class CiVisibilityExporter extends BufferingExporter {
         return callback(null, this._libraryConfig)
       }
 
+      if (this._isTestOptimizationCacheOnly) {
+        return callback(this._getCacheOnlyError('settings'), {})
+      }
+
       this.sendGitMetadata(repositoryUrl)
       getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
@@ -280,6 +294,17 @@ class CiVisibilityExporter extends BufferingExporter {
         }
       })
     })
+  }
+
+  /**
+   * Returns the deterministic cache error for offline exporters.
+   *
+   * @param {string} input required cache input
+   * @returns {Error} cache error
+   */
+  _getCacheOnlyError (input) {
+    return this._testOptimizationHttpCache.getLastError?.() ||
+      new Error(`Offline Test Optimization validation requires a valid ${input} cache fixture.`)
   }
 
   // Takes into account potential kill switches
