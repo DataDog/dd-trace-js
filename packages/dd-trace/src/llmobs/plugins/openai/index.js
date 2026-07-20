@@ -7,11 +7,13 @@ const {
   INSTRUMENTATION_METHOD_AUTO,
   UNKNOWN_MODEL_PROVIDER,
 } = require('../../constants/tags')
-const { safeJsonParse } = require('../../util')
+const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
+const { AUDIO_MIME_TYPES } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
+  extractContentParts,
   hasMultimodalInputs,
 } = require('./utils')
 
@@ -27,6 +29,22 @@ function isIterable (obj) {
     return false
   }
   return typeof obj[Symbol.iterator] === 'function'
+}
+
+// Flattens multimodal chat input messages (array `content`) into readable text plus structured
+// `audioParts`, leaving plain-string messages untouched. Model-agnostic: keys off message
+// structure, so it works for any audio-capable chat model (gpt-audio*, gpt-4o-audio-preview, ...).
+function flattenChatInputMessages (messages) {
+  if (!Array.isArray(messages)) return messages
+
+  return messages.map(message => {
+    if (!Array.isArray(message?.content)) return message
+
+    const { content, audioParts } = extractContentParts(message.content)
+    const flattenedMessage = { ...message, content }
+    if (audioParts.length) flattenedMessage.audioParts = audioParts
+    return flattenedMessage
+  })
 }
 
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
@@ -193,47 +211,63 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagMetadata(span, metadata)
 
+    const inputMessages = flattenChatInputMessages(messages)
+
     if (error) {
-      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
     const outputMessages = []
     const { choices } = response
     if (!isIterable(choices)) {
-      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
+    // Output audio (non-streamed) is returned in the requested format; chat-completions
+    const outputAudioFormat = inputs.audio?.format
+
     for (const choice of choices) {
       const message = choice.message || choice.delta
-      const content = message.content || ''
+      let content = message.content || ''
       const role = message.role
 
+      const audio = message.audio
+      let audioParts
+      if (audio) {
+        if (audio.data) {
+          audioParts = [formatAudioPart(audio.data, audioMimeTypeFromFormat(outputAudioFormat, AUDIO_MIME_TYPES))]
+        }
+        // gpt-audio* / gpt-4o-audio-preview return null content; surface the transcript as text.
+        if (!content) content = audio.transcript || ''
+      }
+
+      const outputMessage = { content, role }
+      if (audioParts) outputMessage.audioParts = audioParts
+
       if (message.function_call) {
-        const functionCallInfo = {
+        outputMessage.toolCalls = [{
           name: message.function_call.name,
           arguments: safeJsonParse(message.function_call.arguments),
-        }
-        outputMessages.push({ content, role, toolCalls: [functionCallInfo] })
+        }]
       } else if (message.tool_calls) {
         const toolCallsInfo = []
         for (const toolCall of message.tool_calls) {
-          const toolCallInfo = {
+          toolCallsInfo.push({
             arguments: safeJsonParse(toolCall.function.arguments),
             name: toolCall.function.name,
             toolId: toolCall.id,
             type: toolCall.type,
-          }
-          toolCallsInfo.push(toolCallInfo)
+          })
         }
-        outputMessages.push({ content, role, toolCalls: toolCallsInfo })
-      } else {
-        outputMessages.push({ content, role })
+        outputMessage.toolCalls = toolCallsInfo
       }
+
+      outputMessages.push(outputMessage)
     }
 
-    this._tagger.tagLLMIO(span, messages, outputMessages)
+    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
   }
 
   #tagResponse (span, inputs, response, error) {
