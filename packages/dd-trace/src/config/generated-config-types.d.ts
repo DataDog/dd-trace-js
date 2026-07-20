@@ -562,6 +562,7 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
     DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
     DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
+    DD_CODE_COVERAGE_FLAGS: string | undefined;
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
     DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
@@ -654,6 +655,7 @@ export interface GeneratedEnvVarConfig {
   DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
   DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
   DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
+  DD_CODE_COVERAGE_FLAGS: string | undefined;
   DD_CODE_ORIGIN_FOR_SPANS_ENABLED: boolean;
   DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
