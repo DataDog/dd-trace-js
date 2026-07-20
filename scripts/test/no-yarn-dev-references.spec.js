@@ -12,6 +12,8 @@ const path = require('node:path')
 
 const yaml = require('yaml')
 
+const { getBunBinary } = require('../bun')
+
 const repoRoot = path.resolve(__dirname, '..', '..')
 const guardFile = 'scripts/test/no-yarn-dev-references.spec.js'
 const allowedLinePatterns = new Map([
@@ -142,24 +144,18 @@ describe('no yarn dev references', function () {
       .devDependencies
     const bootstrapDirectory = path.join(repoRoot, 'node_modules', '.cache', `bun-${bunVersion}`)
     const backupDirectory = `${bootstrapDirectory}.backup-${process.pid}`
+    const originalNpmExecPath = process.env.npm_execpath
+    const originalPath = process.env.PATH
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
     try {
       if (fs.existsSync(bootstrapDirectory)) {
         fs.renameSync(bootstrapDirectory, backupDirectory)
       }
-      const bunBinary = execFileSync(
-        process.execPath,
-        ['-e', "process.stdout.write(require('./scripts/bun').getBunBinary())"],
-        {
-          cwd: repoRoot,
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            npm_execpath: '',
-            PATH: [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
-          },
-        }
-      )
+      const globalNpmRoot = execFileSync(npm, ['root', '--global'], { encoding: 'utf8' }).trim()
+      process.env.npm_execpath = path.join(globalNpmRoot, 'npm', 'bin', 'npm-cli.js')
+      process.env.PATH = [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter)
+      const bunBinary = getBunBinary()
 
       assert.strictEqual(await Promise.resolve(bunBinary), path.join(
         bootstrapDirectory,
@@ -169,12 +165,52 @@ describe('no yarn dev references', function () {
         'bun.exe'
       ))
       assert.strictEqual(execFileSync(bunBinary, ['--version'], { encoding: 'utf8' }).trim(), bunVersion)
+      assert.strictEqual(getBunBinary(), bunBinary)
       const bootstrapPackage = JSON.parse(
         fs.readFileSync(path.join(bootstrapDirectory, 'package.json'), 'utf8')
       )
       assert.strictEqual(bootstrapPackage.allowScripts[`bun@${bunVersion}`], true)
       assert.strictEqual(fs.existsSync(path.join(bootstrapDirectory, 'package-lock.json')), false)
     } finally {
+      if (originalNpmExecPath === undefined) {
+        delete process.env.npm_execpath
+      } else {
+        process.env.npm_execpath = originalNpmExecPath
+      }
+      process.env.PATH = originalPath
+      fs.rmSync(bootstrapDirectory, { recursive: true, force: true })
+      if (fs.existsSync(backupDirectory)) {
+        fs.renameSync(backupDirectory, bootstrapDirectory)
+      }
+    }
+  })
+
+  it('fails when the pinned Bun bootstrap does not produce a runnable binary', () => {
+    const { bun: bunVersion } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+      .devDependencies
+    const bootstrapDirectory = path.join(repoRoot, 'node_modules', '.cache', `bun-${bunVersion}`)
+    const backupDirectory = `${bootstrapDirectory}.backup-${process.pid}`
+    const fakeNpm = path.join(os.tmpdir(), `dd-fake-npm-${process.pid}.js`)
+    const originalNpmExecPath = process.env.npm_execpath
+    const originalPath = process.env.PATH
+
+    try {
+      if (fs.existsSync(bootstrapDirectory)) {
+        fs.renameSync(bootstrapDirectory, backupDirectory)
+      }
+      fs.writeFileSync(fakeNpm, '')
+      process.env.npm_execpath = fakeNpm
+      process.env.PATH = [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter)
+
+      assert.throws(() => getBunBinary(), /Could not install Bun/)
+    } finally {
+      if (originalNpmExecPath === undefined) {
+        delete process.env.npm_execpath
+      } else {
+        process.env.npm_execpath = originalNpmExecPath
+      }
+      process.env.PATH = originalPath
+      fs.rmSync(fakeNpm, { force: true })
       fs.rmSync(bootstrapDirectory, { recursive: true, force: true })
       if (fs.existsSync(backupDirectory)) {
         fs.renameSync(backupDirectory, bootstrapDirectory)
