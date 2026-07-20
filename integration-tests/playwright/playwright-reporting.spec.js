@@ -347,6 +347,7 @@ versions.forEach((version) => {
       if (version === latest || satisfies(version, '>=1.49.0')) {
         screenshotModes.push('on-first-failure')
       }
+      let screenshotRunId = 0
 
       function runWithFailureScreenshots (
         receiver,
@@ -364,6 +365,7 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
+              PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-screenshots-${++screenshotRunId}`,
               DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled ? 'true' : undefined,
               DD_TRACE_DEBUG: 'true',
               DD_TRACE_LOG_LEVEL: 'warn',
