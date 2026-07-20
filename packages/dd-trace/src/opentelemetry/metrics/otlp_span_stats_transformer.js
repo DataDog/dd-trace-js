@@ -3,6 +3,7 @@
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../../vendor/dist/@datadog/sketches-js')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { AGGREGATION_TEMPORALITY } = require('../otlp/otlp_enums')
 
 const NS_PER_S = 1e9
 
@@ -28,16 +29,6 @@ function sketchToFixedHistogram (sketch) {
     bucketCounts[idx] += weight
   }
   return bucketCounts.map((weight) => Math.round(weight))
-}
-
-let _deltaTemporality
-
-function getDeltaTemporality () {
-  if (_deltaTemporality === undefined) {
-    const { protoAggregationTemporality } = getProtobufTypes()
-    _deltaTemporality = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
-  }
-  return _deltaTemporality
 }
 
 const ERROR_STATUS_ATTR = { key: 'status.code', value: { intValue: 2 } }
@@ -76,7 +67,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   #buildScopeMetrics (drained, bucketSizeNs, isJson) {
-    const temporality = isJson ? 'AGGREGATION_TEMPORALITY_DELTA' : getDeltaTemporality()
+    const temporality = isJson ? 'AGGREGATION_TEMPORALITY_DELTA' : AGGREGATION_TEMPORALITY.AGGREGATION_TEMPORALITY_DELTA
 
     const dataPoints = []
 

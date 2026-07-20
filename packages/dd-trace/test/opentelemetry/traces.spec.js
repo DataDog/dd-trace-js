@@ -124,8 +124,8 @@ describe('OpenTelemetry Traces', () => {
 
   describe('Transformer', () => {
     const OtlpTraceTransformer = require('../../src/opentelemetry/trace/otlp_transformer')
-    const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
-    const { protoSpanKind } = getProtobufTypes()
+    // The JSON transformer never loads the `.proto` files (see otlp_enums.js), so span kinds
+    // are asserted against the frozen OTLP integer constants rather than protobuf_loader.
     const {
       SPAN_KIND_UNSPECIFIED,
       SPAN_KIND_INTERNAL,
@@ -133,7 +133,7 @@ describe('OpenTelemetry Traces', () => {
       SPAN_KIND_CLIENT,
       SPAN_KIND_PRODUCER,
       SPAN_KIND_CONSUMER,
-    } = protoSpanKind.values
+    } = require('../../src/opentelemetry/otlp/otlp_enums').SPAN_KIND
 
     /**
      * Helper to decode the JSON payload from the transformer.
@@ -224,6 +224,26 @@ describe('OpenTelemetry Traces', () => {
 
       const decoded = decodePayload(transformer.transformSpans([span]))
       assert.strictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].kind, SPAN_KIND_UNSPECIFIED)
+    })
+
+    it('maps span kinds to OTLP integers without loading the .proto files', () => {
+      // otlp_transformer.js only ever produces JSON, so it must not need protobuf_loader's
+      // getProtobufTypes() at all -- restricted runtimes (e.g. workerd) have no __dirname to
+      // resolve the .proto files against.
+      const protobufLoader = require('../../src/opentelemetry/otlp/protobuf_loader')
+      const getProtobufTypesSpy = sinon.spy(protobufLoader, 'getProtobufTypes')
+
+      const transformer = new OtlpTraceTransformer({})
+      const kinds = ['internal', 'server', 'client', 'producer', 'consumer']
+      const expected = [SPAN_KIND_INTERNAL, SPAN_KIND_SERVER, SPAN_KIND_CLIENT, SPAN_KIND_PRODUCER, SPAN_KIND_CONSUMER]
+
+      for (let i = 0; i < kinds.length; i++) {
+        const span = createMockSpan({ meta: { 'span.kind': kinds[i] } })
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        assert.strictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].kind, expected[i])
+      }
+
+      sinon.assert.notCalled(getProtobufTypesSpy)
     })
 
     it('maps error status correctly', () => {

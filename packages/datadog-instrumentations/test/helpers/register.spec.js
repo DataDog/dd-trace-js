@@ -8,6 +8,7 @@ const sinon = require('sinon')
 describe('register', () => {
   let hooksMock
   let HookMock
+  let checkRequireCacheMock
   let originalModuleProtoRequire
 
   const clearRegisterCache = () => {
@@ -18,6 +19,7 @@ describe('register', () => {
   beforeEach(() => {
     delete process.env.DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED
     delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+    delete process.env.DD_TRACE_DEBUG
 
     hooksMock = {
       '@confluentinc/kafka-javascript': {
@@ -29,6 +31,10 @@ describe('register', () => {
     }
 
     HookMock = sinon.stub()
+    checkRequireCacheMock = {
+      checkForRequiredModules: sinon.stub(),
+      checkForPotentialConflicts: sinon.stub(),
+    }
 
     const registerPath = require.resolve('../../src/helpers/register')
     originalModuleProtoRequire = Module.prototype.require
@@ -38,6 +44,7 @@ describe('register', () => {
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
+          './check-require-cache': checkRequireCacheMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }
@@ -81,5 +88,45 @@ describe('register', () => {
 
     sinon.assert.notCalled(hooksMock['@confluentinc/kafka-javascript'].fn)
     sinon.assert.notCalled(hooksMock['mongodb-core'].fn)
+  })
+
+  describe('potential-conflicts check scheduling', () => {
+    let setImmediateSpy
+
+    beforeEach(() => {
+      setImmediateSpy = sinon.spy(global, 'setImmediate')
+    })
+
+    it('does not schedule a timer at module-evaluation time, even under DD_TRACE_DEBUG', () => {
+      loadRegisterWithEnv({ DD_TRACE_DEBUG: 'true' })
+
+      sinon.assert.notCalled(setImmediateSpy)
+    })
+
+    it('schedules the check once the first instrumentation hook runs, under DD_TRACE_DEBUG', () => {
+      loadRegisterWithEnv({ DD_TRACE_DEBUG: 'true' })
+
+      runHookCallbacks(HookMock)
+
+      sinon.assert.calledOnce(setImmediateSpy)
+      sinon.assert.calledWith(setImmediateSpy, checkRequireCacheMock.checkForPotentialConflicts)
+    })
+
+    it('schedules the check only once across multiple hook executions', () => {
+      loadRegisterWithEnv({ DD_TRACE_DEBUG: 'true' })
+
+      runHookCallbacks(HookMock)
+      runHookCallbacks(HookMock)
+
+      sinon.assert.calledOnce(setImmediateSpy)
+    })
+
+    it('never schedules the check when DD_TRACE_DEBUG is off', () => {
+      loadRegisterWithEnv()
+
+      runHookCallbacks(HookMock)
+
+      sinon.assert.notCalled(setImmediateSpy)
+    })
   })
 })

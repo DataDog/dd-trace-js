@@ -1,11 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { describe, it } = require('mocha')
 
 require('./setup/core')
-const { isEmpty, isTrue, isFalse, globMatch } = require('../src/util')
+
+const { isEmpty, isTrue, isFalse, globMatch, ddBasePath } = require('../src/util')
 
 const TRUES = [
   1,
@@ -78,5 +80,12 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
     // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
     assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+  })
+
+  describe('ddBasePath', () => {
+    it('derives a directory that prefixes this package\'s own source files', () => {
+      assert.strictEqual(ddBasePath.endsWith(path.sep), true)
+      assert.strictEqual(require.resolve('../src/util').startsWith(ddBasePath), true)
+    })
   })
 })

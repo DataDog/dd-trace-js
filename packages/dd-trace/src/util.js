@@ -78,6 +78,12 @@ function globMatch (pattern, subject) {
 }
 
 function calculateDDBasePath (dirname) {
+  if (dirname === undefined) {
+    // No `__dirname` here (e.g. Cloudflare Workers). A NUL byte matches no real path: log-collector
+    // then keeps nothing (safe), but frame-exclusion consumers (stack_trace.js, path-line.js) can't
+    // identify dd-trace's own frames — inert here, since appsec/IAST need native addons that don't load.
+    return '\0'
+  }
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
   return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
@@ -110,7 +116,8 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
-  ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
+  ddBasePath: globalThis.__DD_ESBUILD_BASEPATH ||
+    calculateDDBasePath(typeof __dirname === 'undefined' ? undefined : __dirname),
   normalizePluginEnvName,
   formatKnuthRate,
 }

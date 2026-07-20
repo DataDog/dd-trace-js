@@ -36,7 +36,11 @@ function getProtobufTypes () {
       protoAggregationTemporality,
     }
   }
-  // Load the proto files
+  // No `__dirname` in bundled/global-scope-restricted runtimes (e.g. Cloudflare Workers); fail
+  // clearly instead of an opaque ReferenceError if the protobuf export path is reached there.
+  if (typeof __dirname === 'undefined') {
+    throw new TypeError('OTLP protobuf export is not supported in this runtime (no __dirname available)')
+  }
   const protoDir = __dirname
   const protoFiles = [
     'common.proto',

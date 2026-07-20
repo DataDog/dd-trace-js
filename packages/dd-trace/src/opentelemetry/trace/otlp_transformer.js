@@ -1,18 +1,19 @@
 'use strict'
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
-const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { SPAN_KIND } = require('../otlp/otlp_enums')
 const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
 
-const { protoSpanKind } = getProtobufTypes()
-const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
-const SPAN_KIND_INTERNAL = protoSpanKind.values.SPAN_KIND_INTERNAL
-const SPAN_KIND_SERVER = protoSpanKind.values.SPAN_KIND_SERVER
-const SPAN_KIND_CLIENT = protoSpanKind.values.SPAN_KIND_CLIENT
-const SPAN_KIND_PRODUCER = protoSpanKind.values.SPAN_KIND_PRODUCER
-const SPAN_KIND_CONSUMER = protoSpanKind.values.SPAN_KIND_CONSUMER
+// This transformer only produces JSON (see class docstring below), so it reads the OTLP span
+// kind integers straight from the frozen constants instead of loading the `.proto` files.
+const SPAN_KIND_UNSPECIFIED = SPAN_KIND.SPAN_KIND_UNSPECIFIED
+const SPAN_KIND_INTERNAL = SPAN_KIND.SPAN_KIND_INTERNAL
+const SPAN_KIND_SERVER = SPAN_KIND.SPAN_KIND_SERVER
+const SPAN_KIND_CLIENT = SPAN_KIND.SPAN_KIND_CLIENT
+const SPAN_KIND_PRODUCER = SPAN_KIND.SPAN_KIND_PRODUCER
+const SPAN_KIND_CONSUMER = SPAN_KIND.SPAN_KIND_CONSUMER
 
 // Cached zero Identifier used to detect zero IDs without re-allocating per span.
 const ZERO_ID = id('0')
