@@ -3,8 +3,11 @@
 const log = require('../log')
 
 const CONFIGURATION_SOURCE_AGENTLESS = 'agentless'
-const CONFIGURATION_SOURCE_DISABLED = 'disabled'
 const CONFIGURATION_SOURCE_REMOTE_CONFIG = 'remote_config'
+
+const DISABLED_RESOLUTION = Object.freeze({ enabled: false })
+const AGENTLESS_CONFIGURATION = Object.freeze({ enabled: true, source: CONFIGURATION_SOURCE_AGENTLESS })
+const REMOTE_CONFIG_CONFIGURATION = Object.freeze({ enabled: true, source: CONFIGURATION_SOURCE_REMOTE_CONFIG })
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
 const DEFAULT_POLL_INTERVAL_SECONDS = 30
@@ -18,14 +21,14 @@ const MAX_POLL_INTERVAL_SECONDS = 60 * 60
  * @returns {object} Resolved source settings.
  */
 function resolve (config) {
-  const mode = resolveMode(config)
+  const configuration = resolveConfiguration(config)
 
-  if (mode !== CONFIGURATION_SOURCE_AGENTLESS) {
-    return { mode }
+  if (!configuration.enabled || configuration.source !== CONFIGURATION_SOURCE_AGENTLESS) {
+    return configuration
   }
 
   return {
-    mode,
+    ...configuration,
     endpoint: endpoint(config, config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL),
     pollIntervalMs: positiveMilliseconds(
       config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
@@ -61,7 +64,7 @@ function enable (config, getOpenfeatureProxy) {
     return
   }
 
-  if (sourceConfig.mode === CONFIGURATION_SOURCE_AGENTLESS) {
+  if (sourceConfig.source === CONFIGURATION_SOURCE_AGENTLESS) {
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
     const source = new AgentlessConfigurationSource(sourceConfig, ufc => {
       getOpenfeatureProxy()._setConfiguration(ufc)
@@ -80,7 +83,7 @@ function enable (config, getOpenfeatureProxy) {
  */
 function isRemoteConfig (config) {
   try {
-    return resolveMode(config) === CONFIGURATION_SOURCE_REMOTE_CONFIG
+    return resolveConfiguration(config).source === CONFIGURATION_SOURCE_REMOTE_CONFIG
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)
     return false
@@ -97,7 +100,7 @@ function isRemoteConfig (config) {
  */
 function isEnabled (config) {
   try {
-    return resolveMode(config) !== CONFIGURATION_SOURCE_DISABLED
+    return resolveConfiguration(config).enabled
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)
     return false
@@ -109,10 +112,10 @@ function isEnabled (config) {
  * endpoint or timing configuration.
  *
  * @param {import('../config/config-base')} config - Tracer configuration.
- * @returns {string} Selected configuration-source mode.
+ * @returns {{enabled: boolean, source?: string}} Resolved enablement and source selection.
  */
-function resolveMode (config) {
-  if (config.DD_FEATURE_FLAGS_ENABLED === false) return CONFIGURATION_SOURCE_DISABLED
+function resolveConfiguration (config) {
+  if (config.DD_FEATURE_FLAGS_ENABLED === false) return DISABLED_RESOLUTION
 
   const value = config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
   const origin = config.getOrigin?.('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE')
@@ -126,16 +129,15 @@ function resolveMode (config) {
       : legacyEnabled !== undefined && legacyEnabled !== null
 
     if (hasExplicitLegacySetting) {
-      if (legacyEnabled === true) return CONFIGURATION_SOURCE_REMOTE_CONFIG
-      if (legacyEnabled === false) return CONFIGURATION_SOURCE_DISABLED
+      if (legacyEnabled === true) return REMOTE_CONFIG_CONFIGURATION
+      if (legacyEnabled === false) return DISABLED_RESOLUTION
     }
   }
 
-  const mode = String(value ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
-  if (mode !== CONFIGURATION_SOURCE_AGENTLESS && mode !== CONFIGURATION_SOURCE_REMOTE_CONFIG) {
-    throw new Error(`Unsupported Feature Flagging configuration source: ${mode}`)
-  }
-  return mode
+  const source = String(value ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
+  if (source === CONFIGURATION_SOURCE_AGENTLESS) return AGENTLESS_CONFIGURATION
+  if (source === CONFIGURATION_SOURCE_REMOTE_CONFIG) return REMOTE_CONFIG_CONFIGURATION
+  throw new Error(`Unsupported Feature Flagging configuration source: ${source}`)
 }
 
 /**

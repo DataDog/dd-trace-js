@@ -46,7 +46,7 @@ describe('OpenFeature configuration source', () => {
     it(`normalizes ${JSON.stringify(value)} to the default agentless source`, () => {
       config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
 
-      assert.strictEqual(configurationSource.resolve(config).mode, 'agentless')
+      assert.strictEqual(configurationSource.resolve(config).source, 'agentless')
     })
   }
 
@@ -54,7 +54,7 @@ describe('OpenFeature configuration source', () => {
     config.experimental.flaggingProvider.enabled = true
     config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
+    assert.deepStrictEqual(configurationSource.resolve(config), { enabled: true, source: 'remote_config' })
     assert.strictEqual(configurationSource.isRemoteConfig(config), true)
     assert.strictEqual(configurationSource.isEnabled(config), true)
   })
@@ -63,7 +63,7 @@ describe('OpenFeature configuration source', () => {
     config.experimental.flaggingProvider.enabled = false
     config.getOrigin.withArgs('experimental.flaggingProvider.enabled').returns('env_var')
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'disabled' })
+    assert.deepStrictEqual(configurationSource.resolve(config), { enabled: false })
     assert.strictEqual(configurationSource.isRemoteConfig(config), false)
     assert.strictEqual(configurationSource.isEnabled(config), false)
   })
@@ -72,7 +72,7 @@ describe('OpenFeature configuration source', () => {
     config.experimental.flaggingProvider.enabled = true
     config.getOrigin.returns('env_var')
 
-    assert.strictEqual(configurationSource.resolve(config).mode, 'agentless')
+    assert.strictEqual(configurationSource.resolve(config).source, 'agentless')
     assert.strictEqual(configurationSource.isRemoteConfig(config), false)
     assert.strictEqual(configurationSource.isEnabled(config), true)
   })
@@ -82,7 +82,7 @@ describe('OpenFeature configuration source', () => {
     config.experimental.flaggingProvider.enabled = false
     config.getOrigin.returns('env_var')
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
+    assert.deepStrictEqual(configurationSource.resolve(config), { enabled: true, source: 'remote_config' })
     assert.strictEqual(configurationSource.isRemoteConfig(config), true)
     assert.strictEqual(configurationSource.isEnabled(config), true)
   })
@@ -93,7 +93,7 @@ describe('OpenFeature configuration source', () => {
     config.experimental.flaggingProvider.enabled = true
     config.getOrigin.returns('env_var')
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'disabled' })
+    assert.deepStrictEqual(configurationSource.resolve(config), { enabled: false })
     assert.strictEqual(configurationSource.isRemoteConfig(config), false)
     assert.strictEqual(configurationSource.isEnabled(config), false)
   })
@@ -206,19 +206,17 @@ describe('OpenFeature configuration source', () => {
     config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = ' REMOTE_CONFIG '
     delete config.site
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
+    assert.deepStrictEqual(configurationSource.resolve(config), { enabled: true, source: 'remote_config' })
     assert.strictEqual(configurationSource.isRemoteConfig(config), true)
   })
 
-  for (const value of ['offline', 'other']) {
-    it(`fails closed for the unsupported ${value} source`, () => {
-      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
+  it('fails closed for an unsupported source', () => {
+    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'other'
 
-      assert.throws(() => configurationSource.resolve(config), /Unsupported Feature Flagging configuration source/)
-      assert.strictEqual(configurationSource.isRemoteConfig(config), false)
-      sinon.assert.calledOnce(log.error)
-    })
-  }
+    assert.throws(() => configurationSource.resolve(config), /Unsupported Feature Flagging configuration source/)
+    assert.strictEqual(configurationSource.isRemoteConfig(config), false)
+    sinon.assert.calledOnce(log.error)
+  })
 
   it('falls back to positive timing defaults with warnings', () => {
     config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 0

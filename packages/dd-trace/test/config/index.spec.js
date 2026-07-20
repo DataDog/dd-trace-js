@@ -4950,6 +4950,8 @@ rules:
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
       })
       assert.strictEqual(config.experimental.flaggingProvider.enabled, false)
+      assert.strictEqual(config.getOrigin('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'default')
+      assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'default')
     })
 
     it('reads the stable provider kill switch', () => {
@@ -4958,6 +4960,7 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.getOrigin('DD_FEATURE_FLAGS_ENABLED'), 'env_var')
     })
 
     for (const value of ['true', 'false']) {
@@ -4968,6 +4971,7 @@ rules:
 
         assert.strictEqual(config.DD_FEATURE_FLAGS_ENABLED, true)
         assert.strictEqual(config.experimental.flaggingProvider.enabled, value === 'true')
+        assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
       })
     }
 
@@ -4977,6 +4981,7 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+      assert.strictEqual(config.getOrigin('DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
     })
 
     it('reads the canonical agentless environment variables', () => {
