@@ -4737,6 +4737,17 @@ rules:
       assert.strictEqual(config.sampleRate, 0.5)
     })
 
+    it('should ignore a sensitive configuration', () => {
+      const config = getConfig()
+      assert.strictEqual(config.sampleRate, undefined)
+      config.setRemoteConfigFromSdkConfig({
+        DD_TRACE_SAMPLE_RATE: '0.5',
+        DD_API_KEY: 'should-not-be-applied',
+      })
+      assert.strictEqual(config.sampleRate, 0.5)
+      assert.strictEqual(config.DD_API_KEY, undefined)
+    })
+
     it('should clear RC fields when called with null', () => {
       const config = getConfig({ logInjection: true, sampleRate: 0.5 })
 
