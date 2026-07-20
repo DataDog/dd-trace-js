@@ -30,6 +30,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { replaceFile } = require('./replace-file')
+
 // Inline marker so the script can detect a previous run without parsing the
 // whole replacement body. Bump the version suffix when the patch body changes.
 const SENTINEL = '// dd-trace-js patch v2: fold fnMap/branchMap into getLineCoverage'
@@ -142,10 +144,8 @@ for (const marker of requiredMarkers) {
   }
 }
 
-let targetFile
-try {
-  targetFile = require.resolve('istanbul-lib-coverage/lib/file-coverage.js', { paths: [repoRoot] })
-} catch {
+const targetFile = path.join(repoRoot, 'node_modules', 'istanbul-lib-coverage', 'lib', 'file-coverage.js')
+if (!fs.existsSync(targetFile)) {
   log('skipping: istanbul-lib-coverage is not installed yet')
   return
 }
@@ -179,5 +179,5 @@ if (current !== ORIGINAL && !current.includes(PATCH_MARKER)) {
   return
 }
 
-fs.writeFileSync(targetFile, source.replace(current, REPLACEMENT))
+replaceFile(targetFile, source.replace(current, REPLACEMENT))
 log(`patched ${relativeTarget}`)
