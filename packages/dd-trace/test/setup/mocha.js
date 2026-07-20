@@ -214,7 +214,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 
       try {
         traceAssertion = expectSomeSpan(getAgent(), {
-          parent_id: BigInt(parentSpan.context().toSpanId()),
+          trace_id: BigInt(parentSpan.context().toTraceId()),
           meta: {
             'peer.service': typeof service === 'function' ? service() : service,
             '_dd.peer.service.source': serviceSource,
