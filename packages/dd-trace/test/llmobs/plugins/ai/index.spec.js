@@ -831,7 +831,7 @@ describe('Plugin', () => {
     it('extracts last user message content from messages in generateText', async function () {
       if (semifies(realVersion, '<5.0.0')) this.skip()
 
-      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
         apiKey: 'test-api-key',
@@ -872,7 +872,7 @@ describe('Plugin', () => {
     it('extracts last user message content from messages in generateObject', async function () {
       if (semifies(realVersion, '<5.0.0')) this.skip()
 
-      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
         apiKey: 'test-api-key',
