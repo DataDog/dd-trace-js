@@ -7,14 +7,13 @@ cd ..
 archive=$(npm pack --silent)
 test -f "$archive"
 
-bun_version=$(node -p "require('./package.json').devDependencies.bun")
-npm install --global --prefer-offline --no-audit --no-fund "bun@$bun_version"
+bun=$(node -e "process.stdout.write(require('./scripts/bun').getBunBinary())")
 
 mkdir -p packaging/sources
 
 tar -xOf "$archive" package/package.json > packaging/sources/package.json
 cp bun.lock packaging/sources/bun.lock
-bun --config="$PWD/bunfig.toml" install --production --frozen-lockfile --ignore-scripts \
+"$bun" --config="$PWD/bunfig.toml" install --production --frozen-lockfile --ignore-scripts \
   --linker=hoisted --network-concurrency 8 --cwd packaging/sources
 
 rm packaging/sources/package.json packaging/sources/bun.lock
