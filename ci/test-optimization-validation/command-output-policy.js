@@ -171,18 +171,24 @@ function pathExists (filename) {
 function getCoverageDirectories (tokens) {
   const directories = new Set()
   let coverageEnabled = false
+  let coverageDirectoryConfigured = false
   for (let index = 0; index < tokens.length; index++) {
     const token = String(tokens[index])
     if (token === '--coverage' || token === '--coverage=true') coverageEnabled = true
     const inline = /^(?:--coverageDirectory|--coverage-directory|--coverage\.reportsDirectory)=(.+)$/.exec(token)
-    if (inline) directories.add(inline[1])
-    if (['--coverageDirectory', '--coverage-directory', '--coverage.reportsDirectory'].includes(token)) {
+    if (inline) {
+      directories.add(inline[1])
+      coverageDirectoryConfigured = true
+    }
+    if (['--coverageDirectory', '--coverage-directory', '--coverage.reportsDirectory'].includes(token) &&
+      tokens[index + 1] !== undefined) {
       directories.add(tokens[index + 1])
+      coverageDirectoryConfigured = true
     }
   }
   const nycTempDirectory = getNycTempDirectory(tokens)
   if (nycTempDirectory) directories.add(nycTempDirectory)
-  if (coverageEnabled) directories.add('coverage')
+  if (coverageEnabled && !coverageDirectoryConfigured) directories.add('coverage')
   directories.delete(undefined)
   return directories
 }

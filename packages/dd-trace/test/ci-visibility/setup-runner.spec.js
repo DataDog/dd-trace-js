@@ -236,4 +236,48 @@ describe('test optimization validation setup runner', () => {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('cleans earlier setup outputs when a later setup command throws', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-setup-throw-'))
+    const out = path.join(root, 'results')
+    const createdOutput = path.join(root, 'dist')
+    const preExistingOutput = path.join(root, 'existing')
+    const framework = {
+      id: 'vitest:package',
+      setup: {
+        commands: [
+          {
+            id: 'build',
+            cwd: root,
+            argv: [
+              process.execPath,
+              '-e',
+              `require('node:fs').mkdirSync(${JSON.stringify(createdOutput)})`,
+            ],
+            outputPaths: [createdOutput],
+          },
+          {
+            id: 'unsafe-output',
+            cwd: root,
+            argv: [process.execPath, '-e', 'throw new Error("must not run")'],
+            outputPaths: [preExistingOutput],
+          },
+        ],
+      },
+    }
+
+    fs.mkdirSync(out)
+    fs.mkdirSync(preExistingOutput)
+    try {
+      await assert.rejects(runSetupCommands({
+        framework,
+        out,
+        options: { repositoryRoot: root, verbose: false },
+      }), /already exists and will not be moved or overwritten/)
+      assert.strictEqual(fs.existsSync(createdOutput), false)
+      assert.strictEqual(fs.existsSync(preExistingOutput), true)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 })

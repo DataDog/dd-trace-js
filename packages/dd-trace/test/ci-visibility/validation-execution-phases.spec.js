@@ -1487,6 +1487,37 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
+  it('resolves local package directories with the importing module condition', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-local-package-condition-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.mjs')
+    const packageRoot = path.join(root, 'fixtures', 'pkg')
+    const existingRequireEntrypoint = path.join(packageRoot, 'src', 'index.cjs')
+    const missingImportEntrypoint = path.join(packageRoot, 'dist', 'index.mjs')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.mjs'))
+    framework.project = { root, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.mkdirSync(path.dirname(existingRequireEntrypoint), { recursive: true })
+    fs.writeFileSync(testFile, "import '../fixtures/pkg'\n")
+    fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({
+      exports: {
+        '.': {
+          import: './dist/index.mjs',
+          require: './src/index.cjs',
+        },
+      },
+    }))
+    fs.writeFileSync(existingRequireEntrypoint, 'module.exports = true\n')
+
+    try {
+      assert.throws(() => formatFrameworkPlan(root, framework), new RegExp(
+        `reaches missing module ${escapeRegExp(missingImportEntrypoint)}`
+      ))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a transitive self-package subpath whose exported build output is missing', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-transitive-self-import-plan-'))
     const testFile = path.join(root, 'test', 'hash.test.ts')
@@ -1672,7 +1703,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('rejects a pnpm script separator that would reach Jest as a literal argument', () => {
+  it('allows a pnpm script separator that is stripped before Jest arguments', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-pnpm-forwarding-'))
     const command = {
       cwd: root,
@@ -1682,25 +1713,25 @@ describe('test optimization validator-owned execution phases', () => {
 
     try {
       assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
-        effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
-        forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+        effectiveCommand: 'jest --runTestsByPath test/unit-test.ts',
+        forwardedArgs: ['--runTestsByPath', 'test/unit-test.ts'],
         packageManager: 'pnpm',
         script: 'jest',
         scriptName: 'test:lib',
       })
-      assert.match(getCommandSuitabilityError({
+      assert.strictEqual(getCommandSuitabilityError({
         command,
         framework: { framework: 'jest', project: { root, configFiles: [] } },
         label: 'the CI test command',
         repositoryRoot: root,
-      }), /literal extra "--".*append focused runner arguments directly/s)
+      }), undefined)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
   for (const packageManager of ['pnpm', 'yarn']) {
-    it(`rejects a Corepack ${packageManager} script separator that would reach the runner`, () => {
+    it(`${packageManager === 'pnpm' ? 'allows' : 'rejects'} a Corepack ${packageManager} script separator`, () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-corepack-forwarding-'))
       const command = {
         cwd: root,
@@ -1709,19 +1740,27 @@ describe('test optimization validator-owned execution phases', () => {
       fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { 'test:lib': 'jest' } }))
 
       try {
+        const forwardedArgs = packageManager === 'pnpm'
+          ? ['--runTestsByPath', 'test/unit-test.ts']
+          : ['--', '--runTestsByPath', 'test/unit-test.ts']
         assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
-          effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
-          forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+          effectiveCommand: ['jest', ...forwardedArgs].join(' '),
+          forwardedArgs,
           packageManager,
           script: 'jest',
           scriptName: 'test:lib',
         })
-        assert.match(getCommandSuitabilityError({
+        const error = getCommandSuitabilityError({
           command,
           framework: { framework: 'jest', project: { root, configFiles: [] } },
           label: 'the CI test command',
           repositoryRoot: root,
-        }), /literal extra "--".*append focused runner arguments directly/s)
+        })
+        if (packageManager === 'pnpm') {
+          assert.strictEqual(error, undefined)
+        } else {
+          assert.match(error, /literal extra "--".*append focused runner arguments directly/s)
+        }
       } finally {
         fs.rmSync(root, { recursive: true, force: true })
       }

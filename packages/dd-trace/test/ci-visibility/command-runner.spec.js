@@ -784,6 +784,47 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  for (const coverageArguments of [
+    ['--coverageDirectory', 'tmp-coverage'],
+    ['--coverage-directory=tmp-coverage'],
+    ['--coverage.reportsDirectory=tmp-coverage'],
+  ]) {
+    it(`uses explicit coverage output ${coverageArguments.join(' ')}`, async () => {
+      const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+      const artifactRoot = path.join(repositoryRoot, 'results')
+      const outDir = path.join(artifactRoot, 'run')
+      const defaultOutput = path.join(repositoryRoot, 'coverage')
+      const configuredOutput = path.join(repositoryRoot, 'tmp-coverage')
+      fs.mkdirSync(artifactRoot)
+      fs.mkdirSync(defaultOutput)
+      fs.writeFileSync(path.join(defaultOutput, 'original.json'), '{}')
+
+      try {
+        const result = await runCommand({
+          cwd: repositoryRoot,
+          argv: [
+            process.execPath,
+            '-e',
+            'require("node:fs").mkdirSync("tmp-coverage", { recursive: true })',
+            '--',
+            '--coverage',
+            ...coverageArguments,
+          ],
+        }, { artifactRoot, outDir, repositoryRoot })
+
+        assert.strictEqual(result.exitCode, 0)
+        assert.strictEqual(fs.existsSync(configuredOutput), false)
+        assert.strictEqual(fs.existsSync(path.join(defaultOutput, 'original.json')), true)
+        assert.deepStrictEqual(result.commandOutputPaths, [{
+          outputPath: configuredOutput,
+          action: 'removed',
+        }])
+      } finally {
+        fs.rmSync(repositoryRoot, { recursive: true, force: true })
+      }
+    })
+  }
+
   it('removes a newly created nyc output directory recursively', async () => {
     const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
     const artifactRoot = path.join(repositoryRoot, 'results')

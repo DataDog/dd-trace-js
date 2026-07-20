@@ -3,6 +3,7 @@
 const path = require('path')
 
 const { getArtifactId } = require('./artifact-id')
+const { cleanupDeferredCommandOutputs } = require('./command-output-policy')
 const { runCommand } = require('./command-runner')
 
 async function runSetupCommands ({ framework, out, options }) {
@@ -11,44 +12,73 @@ async function runSetupCommands ({ framework, out, options }) {
   const artifacts = []
   const outputCleanupHandles = []
 
-  for (let index = 0; index < commands.length; index++) {
-    const command = commands[index]
-    const outDir = path.join(
-      out,
-      'setup',
-      getArtifactId(framework.id),
-      `${index + 1}-${getArtifactId(command.id || 'setup')}`
-    )
-    // eslint-disable-next-line no-await-in-loop
-    const result = await runCommand(command, {
-      artifactRoot: out,
-      deferOutputCleanup: true,
-      envMode: 'clean',
-      outDir,
-      label: `${framework.id}:setup:${command.id || index + 1}`,
-      repositoryRoot: options.repositoryRoot,
-      requireExecutableApproval: options.requireExecutableApproval,
-      verbose: options.verbose,
-    })
-    const summary = summarizeSetupCommand(command, result, outDir)
-    results.push(summary)
-    artifacts.push(...Object.values(result.artifacts))
-    if (result.outputCleanupHandle) outputCleanupHandles.push(result.outputCleanupHandle)
+  try {
+    for (let index = 0; index < commands.length; index++) {
+      const command = commands[index]
+      const outDir = path.join(
+        out,
+        'setup',
+        getArtifactId(framework.id),
+        `${index + 1}-${getArtifactId(command.id || 'setup')}`
+      )
+      // eslint-disable-next-line no-await-in-loop
+      const result = await runCommand(command, {
+        artifactRoot: out,
+        deferOutputCleanup: true,
+        envMode: 'clean',
+        outDir,
+        label: `${framework.id}:setup:${command.id || index + 1}`,
+        repositoryRoot: options.repositoryRoot,
+        requireExecutableApproval: options.requireExecutableApproval,
+        verbose: options.verbose,
+      })
+      const summary = summarizeSetupCommand(command, result, outDir)
+      results.push(summary)
+      artifacts.push(...Object.values(result.artifacts))
+      if (result.outputCleanupHandle) outputCleanupHandles.push(result.outputCleanupHandle)
 
-    if (command.required !== false && result.exitCode !== 0) {
-      const failure = getSetupFailure(framework, command, result, results)
-      failure.artifacts.push(...artifacts)
-      return {
-        ok: false,
-        results,
-        artifacts,
-        failure,
-        outputCleanupHandles,
+      if (command.required !== false && result.exitCode !== 0) {
+        const failure = getSetupFailure(framework, command, result, results)
+        failure.artifacts.push(...artifacts)
+        return {
+          ok: false,
+          results,
+          artifacts,
+          failure,
+          outputCleanupHandles,
+        }
       }
     }
+  } catch (error) {
+    cleanupSetupCommandOutputs(outputCleanupHandles, error)
+    throw error
   }
 
   return { ok: true, results, artifacts, outputCleanupHandles }
+}
+
+/**
+ * Cleans deferred outputs collected before setup orchestration threw.
+ *
+ * @param {object[]} handles deferred output cleanup handles
+ * @param {Error} setupError original setup orchestration error
+ * @returns {void}
+ */
+function cleanupSetupCommandOutputs (handles, setupError) {
+  const cleanupErrors = []
+  for (const handle of handles.reverse()) {
+    try {
+      cleanupDeferredCommandOutputs(handle)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      [setupError, ...cleanupErrors],
+      'Project setup failed and one or more earlier setup outputs could not be cleaned.'
+    )
+  }
 }
 
 function getSetupFailure (framework, command, result, setupCommands) {

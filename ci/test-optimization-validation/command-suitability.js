@@ -154,8 +154,8 @@ function getMissingSelfPackageBuildError (command, framework, repositoryRoot) {
       }
     }
     if (current.depth < MAX_LOCAL_IMPORT_DEPTH) {
-      for (const specifier of getRelativeModuleSpecifiers(source)) {
-        const resolution = resolveLocalModule(current.filename, specifier, repositoryRoot)
+      for (const { condition, specifier } of getRelativeModuleReferences(source)) {
+        const resolution = resolveLocalModule(current.filename, specifier, condition, repositoryRoot)
         if (resolution.filename) {
           pending.push({
             filename: resolution.filename,
@@ -283,8 +283,8 @@ function getMissingLocalModuleError (command, framework, repositoryRoot) {
 
     const source = readRepositoryConfig(current.filename, repositoryRoot)
     if (!source) continue
-    for (const specifier of getRelativeModuleSpecifiers(source)) {
-      const resolution = resolveLocalModule(current.filename, specifier, repositoryRoot)
+    for (const { condition, specifier } of getRelativeModuleReferences(source)) {
+      const resolution = resolveLocalModule(current.filename, specifier, condition, repositoryRoot)
       if (resolution.external || resolution.resolved) continue
       if (!resolution.filename) {
         if (isProducedBySetup(framework, resolution.target)) continue
@@ -310,12 +310,11 @@ function getMissingLocalModuleError (command, framework, repositoryRoot) {
  * Extracts literal relative JavaScript module references.
  *
  * @param {string} source JavaScript or TypeScript source
- * @returns {string[]} relative module specifiers
+ * @returns {{condition: 'import'|'require', specifier: string}[]} relative module references
  */
-function getRelativeModuleSpecifiers (source) {
+function getRelativeModuleReferences (source) {
   return getStaticModuleReferences(source)
-    .map(({ specifier }) => specifier)
-    .filter(specifier => /^\.\.?\//.test(specifier))
+    .filter(({ specifier }) => /^\.\.?\//.test(specifier))
 }
 
 /**
@@ -373,10 +372,11 @@ function isTokenAt (source, index, token) {
  *
  * @param {string} importer importing source file
  * @param {string} specifier relative module specifier
+ * @param {'import'|'require'} condition runtime module condition
  * @param {string} repositoryRoot repository root
  * @returns {{filename?: string, target: string, external?: boolean, resolved?: boolean}} bounded resolution
  */
-function resolveLocalModule (importer, specifier, repositoryRoot) {
+function resolveLocalModule (importer, specifier, condition, repositoryRoot) {
   const target = path.resolve(path.dirname(importer), specifier)
   if (!isPathInside(repositoryRoot, target)) return { target, external: true }
 
@@ -393,7 +393,7 @@ function resolveLocalModule (importer, specifier, repositoryRoot) {
     const source = readRepositoryConfig(candidate, repositoryRoot)
     if (source !== undefined) return { filename: candidate, target }
   }
-  const packageResolution = resolveLocalPackageDirectory(target, repositoryRoot)
+  const packageResolution = resolveLocalPackageDirectory(target, condition, repositoryRoot)
   if (packageResolution) return packageResolution
   return { target }
 }
@@ -402,10 +402,11 @@ function resolveLocalModule (importer, specifier, repositoryRoot) {
  * Resolves a bounded local package directory through package.json main or runtime exports.
  *
  * @param {string} target local directory target
+ * @param {'import'|'require'} condition runtime module condition
  * @param {string} repositoryRoot repository root
  * @returns {{filename?: string, target: string, resolved?: boolean}|undefined} bounded resolution
  */
-function resolveLocalPackageDirectory (target, repositoryRoot) {
+function resolveLocalPackageDirectory (target, condition, repositoryRoot) {
   const packageSource = readRepositoryConfig(path.join(target, 'package.json'), repositoryRoot)
   if (!packageSource) return
 
@@ -417,9 +418,9 @@ function resolveLocalPackageDirectory (target, repositoryRoot) {
   }
   const entryTargets = []
   if (packageJson.exports === undefined) {
-    collectRuntimeExportTargets(packageJson.main, entryTargets, 'require')
+    collectRuntimeExportTargets(packageJson.main, entryTargets, condition)
   } else {
-    collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, entryTargets, 'require')
+    collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, entryTargets, condition)
   }
   for (const entryTarget of entryTargets) {
     const entrypoint = path.resolve(target, entryTarget)
@@ -431,6 +432,7 @@ function resolveLocalPackageDirectory (target, repositoryRoot) {
       if (readRepositoryConfig(candidate, repositoryRoot) !== undefined) return { filename: candidate, target }
     }
   }
+  if (entryTargets.length > 0) return { target: path.resolve(target, entryTargets[0]) }
 }
 
 /**
@@ -506,7 +508,7 @@ function isProducedBySetup (framework, localPath) {
 }
 
 /**
- * Rejects package-manager separators that become a literal runner argument.
+ * Rejects Yarn separators that become a literal runner argument.
  *
  * @param {object} command structured command
  * @param {string} repositoryRoot repository root
@@ -514,7 +516,7 @@ function isProducedBySetup (framework, localPath) {
  */
 function getPackageScriptForwardingError (command, repositoryRoot) {
   const expansion = getPackageScriptExpansion(command, repositoryRoot)
-  if (!expansion || !['pnpm', 'yarn'].includes(expansion.packageManager)) return
+  if (!expansion || expansion.packageManager !== 'yarn') return
   if (expansion.forwardedArgs[0] !== '--') return
 
   return `expands package script ${JSON.stringify(expansion.scriptName)} to ` +
@@ -558,7 +560,8 @@ function getPackageScriptExpansion (command, repositoryRoot) {
   }
   const script = packageJson.scripts?.[scriptName]
   if (typeof script !== 'string' || script.length > MAX_CONFIG_BYTES) return
-  const forwardedArgs = argv.slice(runIndex + 2)
+  let forwardedArgs = argv.slice(runIndex + 2)
+  if (packageManager === 'pnpm' && forwardedArgs[0] === '--') forwardedArgs = forwardedArgs.slice(1)
   return {
     effectiveCommand: [script, ...forwardedArgs].join(' '),
     forwardedArgs,
