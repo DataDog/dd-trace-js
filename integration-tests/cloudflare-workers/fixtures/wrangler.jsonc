@@ -1,0 +1,20 @@
+{
+  // Template consumed by cloudflare-workers.spec.js: it copies this file and substitutes the
+  // OTLP traces endpoint placeholder below with the FakeAgent's actual listening address before
+  // passing the generated config to wrangler. Not used directly by `wrangler dev`.
+  "name": "dd-trace-cloudflare-workers-test",
+  "main": "./worker.mjs",
+  // FinalizationRegistry/WeakRef are gated by compatibility_date in workerd (absent on older
+  // dates, present on recent ones); dd-trace's opentracing/span.js constructs a
+  // FinalizationRegistry at module load, so a recent date is required for this fixture to load.
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "vars": {
+    "DD_TRACE_OTEL_ENABLED": "true",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "__OTLP_ENDPOINT__",
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "dd-api-key=fake",
+    "DD_SERVICE": "cf-workers-ci",
+    "DD_ENV": "ci"
+  }
+}
