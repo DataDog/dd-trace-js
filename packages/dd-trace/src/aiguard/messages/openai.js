@@ -1,7 +1,6 @@
 'use strict'
 
-const FILE_FALLBACK = '[file]'
-const IMAGE_FALLBACK = '[image]'
+const { FILE_FALLBACK, IMAGE_FALLBACK, stringifyOrEmpty } = require('./utils')
 
 const OPENAI_RESPONSE_TOOL_CALL_TYPES = new Set([
   'apply_patch_call',
@@ -25,28 +24,6 @@ const OPENAI_RESPONSE_TOOL_OUTPUT_TYPES = new Set([
   'local_shell_call_output',
   'shell_call_output',
 ])
-
-/**
- * Returns the value as a string, JSON-stringifying it when it is not already a string.
- * Returns the value unchanged when it is `null` or `undefined`.
- *
- * @param {unknown} value
- * @returns {string|undefined|null}
- */
-function stringifyIfNeeded (value) {
-  if (value == null) return value
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
-
-/**
- * Returns a stringified value, falling back to an empty string for absent values.
- *
- * @param {unknown} value
- * @returns {string}
- */
-function stringifyOrEmpty (value) {
-  return stringifyIfNeeded(value) ?? ''
-}
 
 /**
  * Converts OpenAI chat-completions messages to the message format expected by AI Guard.
