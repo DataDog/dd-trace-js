@@ -677,11 +677,29 @@ describe('NativeExporter', () => {
       exporter = new NativeExporter(config, prioritySampler, nativeSpans)
     })
 
-    it('should update the URL', () => {
+    it('should update the URL immediately when the exporter is idle', () => {
       const originalUrl = exporter._url.toString()
       exporter.setUrl('http://new-agent:9999')
 
+      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
       assert.notStrictEqual(exporter._url.toString(), originalUrl)
+    })
+
+    it('flushes pending spans before reinitializing native state', async () => {
+      let resolveSend
+      nativeSpans.flushSpansGrouped.returns(new Promise(resolve => { resolveSend = resolve }))
+
+      exporter.export([createMockSpan(1n)])
+      exporter.setUrl('http://new-agent:9999')
+
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+
+      resolveSend('unchanged')
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnceWithExactly(nativeSpans.setAgentUrl, 'http://new-agent:9999/')
+      assert.strictEqual(exporter._url.toString(), 'http://new-agent:9999/')
     })
   })
 

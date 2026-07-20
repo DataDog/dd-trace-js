@@ -191,15 +191,24 @@ class NativeExporter {
       log.warn('Failed to parse new agent URL %s: %s', url, e.message)
       return
     }
-    try {
-      // Reinitialize native state with new URL. Only commit `_url` after
-      // setAgentUrl succeeds — otherwise a thrown setAgentUrl would leave
-      // `_url` reflecting the new URL while the WASM state still points at
-      // the old one (silent JS/WASM divergence).
-      this._nativeSpans.setAgentUrl(parsed.toString())
-      this._url = parsed
-    } catch (e) {
-      log.warn('Failed to apply new agent URL to native state %s: %s', url, e.message)
+
+    const applyUrl = () => {
+      try {
+        // Reinitialize native state with new URL. Only commit `_url` after
+        // setAgentUrl succeeds — otherwise a thrown setAgentUrl would leave
+        // `_url` reflecting the new URL while the WASM state still points at
+        // the old one (silent JS/WASM divergence).
+        this._nativeSpans.setAgentUrl(parsed.toString())
+        this._url = parsed
+      } catch (e) {
+        log.warn('Failed to apply new agent URL to native state %s: %s', url, e.message)
+      }
+    }
+
+    if (this.#flushInFlight || this._pendingSpans.length > 0) {
+      this.flush(applyUrl)
+    } else {
+      applyUrl()
     }
   }
 
