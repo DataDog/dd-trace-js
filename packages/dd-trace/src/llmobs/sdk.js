@@ -19,6 +19,7 @@ const {
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+const { createExperiments } = require('./experiments')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -32,6 +33,12 @@ class LLMObs extends NoopLLMObs {
    * @type {boolean}
    */
   #hasUserSpanProcessor = false
+
+  /**
+   * Lazily-created experiments facade (see ./experiments).
+   * @type {import('./experiments').Experiments | undefined}
+   */
+  #experiments
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
@@ -50,6 +57,16 @@ class LLMObs extends NoopLLMObs {
 
   get enabled () {
     return this._config.llmobs.DD_LLMOBS_ENABLED ?? false
+  }
+
+  /**
+   * Datasets & Experiments API. Requires LLM Observability to be enabled and
+   * DD_API_KEY / DD_APP_KEY to be set; otherwise the returned facade throws with
+   * a clear message on use.
+   */
+  get experiments () {
+    this.#experiments ??= createExperiments(this._config)
+    return this.#experiments
   }
 
   enable (options = {}) {
