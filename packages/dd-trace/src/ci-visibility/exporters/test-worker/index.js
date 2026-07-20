@@ -18,6 +18,7 @@ const { getEnvironmentVariable } = require('../../../config/helper')
 const Writer = require('./writer')
 
 let screenshotRequestId = 0
+const SCREENSHOT_RESPONSE_TIMEOUT_MS = 5000
 
 function getInterprocessTraceCode () {
   const { DD_PLAYWRIGHT_WORKER, DD_VITEST_WORKER } = getConfig()
@@ -138,6 +139,7 @@ class TestWorkerCiVisibilityExporter {
     const finish = (error, uploaded) => {
       if (isComplete) return
       isComplete = true
+      clearTimeout(timeoutId)
       process.removeListener('message', onMessage)
       callback(error, uploaded)
     }
@@ -149,6 +151,10 @@ class TestWorkerCiVisibilityExporter {
       finish(error, message.uploaded === true)
     }
     process.on('message', onMessage)
+    const timeoutId = setTimeout(() => {
+      finish(new Error('Timed out waiting for the Playwright screenshot upload response'), true)
+    }, SCREENSHOT_RESPONSE_TIMEOUT_MS)
+    timeoutId.unref?.()
 
     try {
       process.send({

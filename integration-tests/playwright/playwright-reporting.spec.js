@@ -472,6 +472,36 @@ versions.forEach((version) => {
         })
       }
 
+      it('excludes screenshot upload time from the failed test duration', async (receiver, run) => {
+        receiver.setMediaResponseDelay(500)
+        const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+            assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+            assert.strictEqual(mediaPayloads.length, 1)
+            const [screenshotPayload] = mediaPayloads
+            const testEndTimeMs = (Number(failedTest.content.start) + Number(failedTest.content.duration)) / 1e6
+            assert.ok(
+              testEndTimeMs <= screenshotPayload.media.receivedAtMs + 100,
+              `test span should finish before the screenshot upload starts\n${getTestOutput()}`
+            )
+          },
+          { hardTimeout: 60000 }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
       it('reports upload errors without changing the Playwright result', async (receiver, run) => {
         receiver.setMediaResponseStatusCode(500)
         const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)

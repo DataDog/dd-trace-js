@@ -304,6 +304,28 @@ describe('CI Visibility Test Worker Exporter', () => {
       assert.strictEqual(callback.firstCall.args[1], true)
     })
 
+    it('times out screenshot upload requests without a runner response', () => {
+      const clock = sinon.useFakeTimers()
+      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const callback = sinon.spy()
+      const initialMessageListenerCount = process.listenerCount('message')
+
+      try {
+        playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
+
+        clock.tick(4999)
+        sinon.assert.notCalled(callback)
+        clock.tick(1)
+
+        sinon.assert.calledOnce(callback)
+        assert.match(callback.firstCall.args[0].message, /Timed out waiting for the Playwright screenshot upload response/)
+        assert.strictEqual(callback.firstCall.args[1], true)
+        assert.strictEqual(process.listenerCount('message'), initialMessageListenerCount)
+      } finally {
+        clock.restore()
+      }
+    })
+
     it('does not request screenshot uploads without an IPC channel', () => {
       delete process.send
       const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()

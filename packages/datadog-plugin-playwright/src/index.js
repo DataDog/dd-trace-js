@@ -384,6 +384,7 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       if (!span) return
 
+      const finishTime = span._getTime()
       const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
 
       span.setTag(TEST_STATUS, testStatus)
@@ -485,7 +486,7 @@ class PlaywrightPlugin extends CiPlugin {
             isModified,
           }
         )
-        span.finish()
+        span.finish(finishTime)
 
         finishAllTraceSpans(span)
         if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
