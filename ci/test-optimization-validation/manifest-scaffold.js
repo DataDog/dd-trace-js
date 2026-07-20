@@ -8,7 +8,7 @@ const path = require('node:path')
 const { runDiagnosis } = require('../diagnose')
 const { GENERATED_SCENARIOS, getGeneratedTestContent } = require('./generated-test-contract')
 const { validateManifest } = require('./manifest-schema')
-const { maskJavaScriptComments } = require('./source-text')
+const { maskJavaScriptComments, maskJavaScriptNonCode } = require('./source-text')
 
 const SUPPORTED_SCAFFOLD_FRAMEWORKS = new Set(['jest', 'mocha', 'vitest'])
 const CI_PATHS = [
@@ -782,13 +782,16 @@ function getRepresentativeTestName (filename) {
   } catch {
     return
   }
+  const code = maskJavaScriptNonCode(source)
   source = maskJavaScriptComments(source)
 
-  const pattern = /(?:^|[^\w$])(?:it|test|specify)(?:\.only)?\s*\(\s*(['"])((?:\\.|[^\\'"\r\n]){1,200})\1/gm
+  const pattern = /(^|[^\w$])(?:it|test|specify)(?:\.only)?\s*\(\s*(['"])((?:\\.|[^\\'"\r\n]){1,200})\2/gm
   let match
   while ((match = pattern.exec(source))) {
+    const declarationIndex = match.index + match[1].length
+    if (code[declarationIndex] === ' ') continue
     if (!isInsideRepeatedTestBlock(source, match.index)) {
-      return match[2].replaceAll(/\\(['"\\])/g, '$1')
+      return match[3].replaceAll(/\\(['"\\])/g, '$1')
     }
   }
 }

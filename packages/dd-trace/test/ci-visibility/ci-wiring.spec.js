@@ -1086,17 +1086,25 @@ describe('test optimization CI wiring validation', () => {
 
   it('does not classify unrelated preload failures as dd-trace preload failures', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const command = {
+      cwd: out,
+      argv: [process.execPath, '-e', 'console.log("this should not run")'],
+      env: {
+        NODE_OPTIONS: '-r ./missing-preload.js',
+      },
+    }
     try {
       const result = await runCiWiring({
         framework: {
           id: 'mocha:fixture',
           framework: 'mocha',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("this should not run")'],
-            env: {
-              NODE_OPTIONS: '-r ./missing-preload.js',
-            },
+          existingTestCommand: command,
+          ciWiringCommand: command,
+          preflight: {
+            ran: true,
+            exitCode: 0,
+            observedTestCount: 1,
+            maxTestCount: 1,
           },
         },
         out,

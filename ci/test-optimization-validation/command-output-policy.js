@@ -171,16 +171,8 @@ function pathExists (filename) {
 function getCoverageDirectories (tokens) {
   const directories = new Set()
   let coverageEnabled = false
-  let nycDetected = false
-  let nycTempDirectory
   for (let index = 0; index < tokens.length; index++) {
     const token = String(tokens[index])
-    if (path.basename(token).replace(/\.cmd$/i, '') === 'nyc') nycDetected = true
-    const nycTempDirectoryMatch = /^(?:--temp-dir|-t)=(.+)$/.exec(token)
-    if (nycTempDirectoryMatch) nycTempDirectory = nycTempDirectoryMatch[1]
-    if ((token === '--temp-dir' || token === '-t') && tokens[index + 1]) {
-      nycTempDirectory = tokens[index + 1]
-    }
     if (token === '--coverage' || token === '--coverage=true') coverageEnabled = true
     const inline = /^(?:--coverageDirectory|--coverage-directory|--coverage\.reportsDirectory)=(.+)$/.exec(token)
     if (inline) directories.add(inline[1])
@@ -188,10 +180,32 @@ function getCoverageDirectories (tokens) {
       directories.add(tokens[index + 1])
     }
   }
-  if (nycDetected) directories.add(nycTempDirectory || '.nyc_output')
+  const nycTempDirectory = getNycTempDirectory(tokens)
+  if (nycTempDirectory) directories.add(nycTempDirectory)
   if (coverageEnabled) directories.add('coverage')
   directories.delete(undefined)
   return directories
+}
+
+/**
+ * Returns nyc's temp directory without interpreting wrapped-runner options.
+ *
+ * @param {string[]} tokens command tokens
+ * @returns {string|undefined} configured or default nyc temp directory
+ */
+function getNycTempDirectory (tokens) {
+  const nycIndex = tokens.findIndex(token => path.basename(String(token)).replace(/\.cmd$/i, '') === 'nyc')
+  if (nycIndex === -1) return
+
+  for (let index = nycIndex + 1; index < tokens.length; index++) {
+    const token = String(tokens[index])
+    if (token === '--' || !token.startsWith('-')) break
+    const inline = /^(?:--temp-dir|-t)=(.+)$/.exec(token)
+    if (inline) return inline[1]
+    if ((token === '--temp-dir' || token === '-t') && tokens[index + 1]) return String(tokens[index + 1])
+  }
+
+  return '.nyc_output'
 }
 
 function tokenizeShell (source) {

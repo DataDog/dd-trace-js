@@ -3,7 +3,7 @@
 const FILESYSTEM_PERMISSION_PATTERN = /\b(?:EACCES|EPERM|Operation not permitted|Permission denied)\b/i
 const LOCAL_SOCKET_PATTERN = /\b(?:127\.0\.0\.1|localhost|listen)\b/i
 const MODULE_OR_TRANSFORM_PATTERN =
-  /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Could not resolve|transform failed|SyntaxError)\b/i
+  /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Could not resolve|transform failed)\b/i
 const PACKAGE_MANAGER_PATH_PATTERN = /(?:^|[/\\.])(?:corepack|npm|pnpm|yarn)(?:$|[/\\.])/i
 const WATCHMAN_PATTERN = /\bwatchman\b/i
 

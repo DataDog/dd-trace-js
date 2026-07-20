@@ -147,7 +147,12 @@ describe('test optimization validator-owned execution phases', () => {
       framework: 'jest',
       existingTestCommand: {
         cwd: root,
-        argv: [process.execPath, '-e', 'console.log("Tests: 1 failed, 1 total"); process.exit(1)'],
+        argv: [
+          process.execPath,
+          '-e',
+          'console.error("SyntaxError: expected true to equal false"); ' +
+            'console.log("Tests: 1 failed, 1 total"); process.exit(1)',
+        ],
       },
       preflight: { status: 'pending', maxTestCount: 1 },
     }
@@ -163,6 +168,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.strictEqual(outcome.ok, false)
       assert.strictEqual(outcome.preflight.observedTestCount, 1)
       assert.match(outcome.failure.diagnosis, /ran 1 test but exited 1 without Datadog/)
+      assert.strictEqual(outcome.failure.evidence.commandFailure, undefined)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

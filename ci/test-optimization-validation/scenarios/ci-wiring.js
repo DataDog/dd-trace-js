@@ -175,12 +175,10 @@ async function runCiWiring ({ manifest, framework, out, options, basicResult }) 
  */
 function getCiWiringScopeFailure (preflight, observedTestCount) {
   const maxTestCount = preflight?.maxTestCount
-  if (!Number.isInteger(maxTestCount)) return
-  if (Number.isInteger(observedTestCount) && observedTestCount >= 1 && observedTestCount <= maxTestCount) return
+  if (!Number.isInteger(maxTestCount) || !Number.isInteger(observedTestCount)) return
+  if (observedTestCount >= 1 && observedTestCount <= maxTestCount) return
 
-  const observed = Number.isInteger(observedTestCount)
-    ? `${observedTestCount} test${observedTestCount === 1 ? '' : 's'}`
-    : 'an unknown number of tests'
+  const observed = `${observedTestCount} test${observedTestCount === 1 ? '' : 's'}`
   return {
     kind: 'ci-wiring-representative-scope-mismatch',
     signals: [],

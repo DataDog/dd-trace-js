@@ -848,6 +848,37 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('does not treat wrapped runner options as nyc temp-directory options', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    fs.mkdirSync(artifactRoot)
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'require("node:fs").mkdirSync(".nyc_output", { recursive: true })',
+          'nyc',
+          'mocha',
+          '-t',
+          '10000',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(path.join(repositoryRoot, '.nyc_output')), false)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: path.join(repositoryRoot, '.nyc_output'),
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
   it('fails closed when a command replaces an output parent before cleanup', async function () {
     if (process.platform === 'win32') this.skip()
 
