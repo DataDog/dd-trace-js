@@ -52,6 +52,10 @@ if (process.env.CUSTOM_SEQUENCER) {
   }
 }
 
+if (process.env.VITEST_RUNNER) {
+  config.test.runner = process.env.VITEST_RUNNER
+}
+
 if (process.env.PROJECT_POOL_CONFIG) {
   const projectConfigs = []
   const firstProjectConfig = {

@@ -7,8 +7,11 @@ const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
 const {
   ML_APP,
+  SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   PROPAGATED_ML_APP_KEY,
   PROPAGATED_PARENT_ID_KEY,
+  PROPAGATED_SESSION_ID_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
   PROPAGATED_SAMPLE_RATE_KEY,
@@ -110,7 +113,7 @@ function disable () {
 }
 
 // since LLMObs traces can extend between services and be the same trace,
-// we need to propagate the parent id, mlApp, and sampling rate/decision.
+// we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
 function handleLLMObsInjection ({ carrier }) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
@@ -130,8 +133,12 @@ function handleLLMObsInjection ({ carrier }) {
     mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
   const samplingDecision =
     mlObsSpanTags?.[SAMPLING_DECISION] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLING_DECISION_KEY]
+  const sessionId =
+    mlObsSpanTags?.[SESSION_ID] ??
+    parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
+    parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
 
-  if (!parentId && !mlApp && samplingDecision == null) return
+  if (!parentId && !mlApp && samplingDecision == null && !sessionId) return
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
@@ -139,6 +146,7 @@ function handleLLMObsInjection ({ carrier }) {
   let tags = existing || ''
   if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
   if (tags !== existing) carrier['x-datadog-tags'] = tags
