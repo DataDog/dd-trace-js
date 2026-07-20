@@ -4,9 +4,16 @@ const Scope = require('../noop/scope')
 const Span = require('./span')
 
 class NoopTracer {
+  #span
+
   constructor (config) {
     this._scope = new Scope()
-    this._span = new Span(this)
+  }
+
+  // Eager construction would call crypto RNG at module load, which Cloudflare Workers forbid in global scope.
+  get _span () {
+    this.#span ??= new Span(this)
+    return this.#span
   }
 
   configure (options) {}
