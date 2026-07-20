@@ -51,11 +51,31 @@ function formatFileSystemError (error, fallbackPath) {
  * @param {string} artifact artifact that could not be created
  * @param {FileCreationFailure[]} failures failed directory attempts
  * @param {string} consequence effect on Cypress instrumentation
+ * @param {boolean} [customerVisible] whether to report the failure without requiring debug logging
  * @returns {void}
  */
-function warnFileCreationFailures (artifact, failures, consequence) {
+function warnFileCreationFailures (artifact, failures, consequence, customerVisible = false) {
   const details = failures.map(({ directory, error }) => formatFileSystemError(error, directory)).join('; ')
-  log.warn('Datadog could not create %s. Attempts failed: %s. %s', artifact, details, consequence)
+  const message = 'Datadog could not create %s. Attempts failed: %s. %s'
+
+  if (customerVisible) {
+    // eslint-disable-next-line no-console
+    console.error('ERROR: ' + message, artifact, details, consequence)
+  } else {
+    log.warn(message, artifact, details, consequence)
+  }
+}
+
+/**
+ * Reports a definitive browser-instrumentation failure even when dd-trace debug logging is disabled.
+ *
+ * @param {string} message printf-style error message
+ * @param {...unknown} args message arguments
+ * @returns {void}
+ */
+function logBrowserInstrumentationError (message, ...args) {
+  // eslint-disable-next-line no-console
+  console.error('ERROR: ' + message, ...args)
 }
 
 /**
@@ -237,7 +257,7 @@ function injectSupportFile (config) {
       })
       if (hasActiveDdTraceImport) return
     } catch (error) {
-      log.warn(
+      logBrowserInstrumentationError(
         'Datadog could not read the Cypress support file %s: %s. %s',
         originalSupportFile,
         formatFileSystemError(error, originalSupportFile),
@@ -253,7 +273,7 @@ function injectSupportFile (config) {
     browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
     browserHooksSource = fs.readFileSync(browserHooksPath, 'utf8')
   } catch (error) {
-    log.warn(
+    logBrowserInstrumentationError(
       'Datadog could not read its Cypress browser support hooks: %s. %s',
       formatFileSystemError(error, browserHooksPath || 'dd-trace Cypress browser support hooks'),
       BROWSER_INSTRUMENTATION_NOT_INSTALLED
@@ -283,10 +303,11 @@ function injectSupportFile (config) {
     warnFileCreationFailures(
       'the Cypress support wrapper',
       failures,
-      BROWSER_INSTRUMENTATION_NOT_INSTALLED
+      BROWSER_INSTRUMENTATION_NOT_INSTALLED,
+      true
     )
   } else {
-    log.warn(
+    logBrowserInstrumentationError(
       'Datadog could not create the Cypress support wrapper because no project directory was available. %s',
       BROWSER_INSTRUMENTATION_NOT_INSTALLED
     )

@@ -6,13 +6,21 @@ const os = require('node:os')
 const path = require('node:path')
 const { format } = require('node:util')
 
-const { afterEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
 
 describe('cypress config instrumentation', () => {
   const temporaryDirectories = []
+  let errors
+
+  beforeEach(() => {
+    errors = []
+    sinon.stub(console, 'error').callsFake((...args) => errors.push(format(...args)))
+  })
 
   afterEach(() => {
+    sinon.restore()
     for (const directory of temporaryDirectories.splice(0)) {
       fs.rmSync(directory, { force: true, recursive: true })
     }
@@ -44,7 +52,7 @@ describe('cypress config instrumentation', () => {
   /**
    * @param {object} [fsStub] filesystem overrides
    * @param {() => string} [randomUUID] UUID generator
-   * @returns {{ cypressConfig: object, warnings: string[] }} loaded instrumentation and warnings
+   * @returns {{ cypressConfig: object, errors: string[], warnings: string[] }} loaded instrumentation and logs
    */
   function loadCypressConfig (fsStub, randomUUID) {
     const warnings = []
@@ -65,6 +73,7 @@ describe('cypress config instrumentation', () => {
 
     return {
       cypressConfig: proxyquire('../src/cypress-config', stubs),
+      errors,
       warnings,
     }
   }
@@ -155,14 +164,14 @@ describe('cypress config instrumentation', () => {
       assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
     })
 
-    it('warns with every failed location when no directory is writable', () => {
+    it('logs an error with every failed location when no directory is writable', () => {
       const projectRoot = createProjectRoot()
       const supportDirectory = path.join(projectRoot, 'cypress', 'support')
       const supportFile = path.join(supportDirectory, 'e2e.js')
       fs.mkdirSync(supportDirectory, { recursive: true })
       fs.writeFileSync(supportFile, '// user support\n')
 
-      const { cypressConfig, warnings } = loadCypressConfig({
+      const { cypressConfig, errors, warnings } = loadCypressConfig({
         openSync (filePath) {
           throw createFileError('EROFS', filePath)
         },
@@ -171,19 +180,20 @@ describe('cypress config instrumentation', () => {
       injectSupportFile(cypressConfig, resolvedConfig)
 
       assert.strictEqual(resolvedConfig.supportFile, supportFile)
-      assert.strictEqual(warnings.length, 1)
-      assert.match(warnings[0], /could not create the Cypress support wrapper/)
-      assert.strictEqual(warnings[0].match(/EROFS during open/g).length, 2)
-      assert.match(warnings[0], new RegExp(supportDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-      assert.match(warnings[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      assert.strictEqual(errors.length, 1)
+      assert.deepStrictEqual(warnings, [])
+      assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+      assert.strictEqual(errors[0].match(/EROFS during open/g).length, 2)
+      assert.match(errors[0], new RegExp(supportDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      assert.match(errors[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     })
 
-    it('warns when the original support file cannot be read', () => {
+    it('logs an error when the original support file cannot be read', () => {
       const projectRoot = createProjectRoot()
       const supportFile = path.join(projectRoot, 'e2e.js')
       fs.writeFileSync(supportFile, '// user support\n')
 
-      const { cypressConfig, warnings } = loadCypressConfig({
+      const { cypressConfig, errors } = loadCypressConfig({
         readFileSync (filePath, ...args) {
           if (filePath === supportFile) throw createFileError('EACCES', filePath, 'read')
           return fs.readFileSync(filePath, ...args)
@@ -193,16 +203,16 @@ describe('cypress config instrumentation', () => {
       injectSupportFile(cypressConfig, resolvedConfig)
 
       assert.strictEqual(resolvedConfig.supportFile, supportFile)
-      assert.strictEqual(warnings.length, 1)
-      assert.match(warnings[0], /could not read the Cypress support file/)
-      assert.match(warnings[0], /EACCES during read/)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /^ERROR: Datadog could not read the Cypress support file/)
+      assert.match(errors[0], /EACCES during read/)
     })
 
-    it('warns when the Datadog browser hooks cannot be read', () => {
+    it('logs an error when the Datadog browser hooks cannot be read', () => {
       const projectRoot = createProjectRoot()
       const browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
 
-      const { cypressConfig, warnings } = loadCypressConfig({
+      const { cypressConfig, errors } = loadCypressConfig({
         readFileSync (filePath, ...args) {
           if (filePath === browserHooksPath) throw createFileError('EACCES', filePath, 'read')
           return fs.readFileSync(filePath, ...args)
@@ -212,19 +222,20 @@ describe('cypress config instrumentation', () => {
       injectSupportFile(cypressConfig, resolvedConfig)
 
       assert.strictEqual(resolvedConfig.supportFile, false)
-      assert.strictEqual(warnings.length, 1)
-      assert.match(warnings[0], /could not read its Cypress browser support hooks/)
-      assert.match(warnings[0], /EACCES during read/)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /^ERROR: Datadog could not read its Cypress browser support hooks/)
+      assert.match(errors[0], /EACCES during read/)
     })
 
-    it('warns when no project directory is available for the support wrapper', () => {
-      const { cypressConfig, warnings } = loadCypressConfig()
+    it('logs an error when no project directory is available for the support wrapper', () => {
+      const { cypressConfig, errors } = loadCypressConfig()
       const resolvedConfig = { supportFile: false }
       injectSupportFile(cypressConfig, resolvedConfig)
 
       assert.strictEqual(resolvedConfig.supportFile, false)
-      assert.strictEqual(warnings.length, 1)
-      assert.match(warnings[0], /no project directory was available/)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+      assert.match(errors[0], /no project directory was available/)
     })
 
     it('removes partial support files when the filesystem runs out of space', () => {
@@ -234,11 +245,11 @@ describe('cypress config instrumentation', () => {
       fs.mkdirSync(supportDirectory, { recursive: true })
       fs.writeFileSync(supportFile, '// user support\n')
 
-      const { cypressConfig, warnings } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+      const { cypressConfig, errors } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
       injectSupportFile(cypressConfig, { projectRoot, supportFile })
 
-      assert.strictEqual(warnings.length, 1)
-      assert.match(warnings[0], /ENOSPC during write/)
+      assert.strictEqual(errors.length, 1)
+      assert.match(errors[0], /ENOSPC during write/)
       assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
       assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
     })
@@ -251,13 +262,13 @@ describe('cypress config instrumentation', () => {
       fs.writeFileSync(supportFile, '// user support\n')
 
       const failWrapperWrites = writeNumber => writeNumber % 2 === 0
-      const { cypressConfig, warnings } = loadCypressConfig(
+      const { cypressConfig, errors } = loadCypressConfig(
         createPartialWriteFailure('ENOSPC', failWrapperWrites)
       )
       injectSupportFile(cypressConfig, { projectRoot, supportFile })
 
-      assert.strictEqual(warnings.length, 1)
-      assert.strictEqual(warnings[0].match(/ENOSPC during write/g).length, 2)
+      assert.strictEqual(errors.length, 1)
+      assert.strictEqual(errors[0].match(/ENOSPC during write/g).length, 2)
       assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
       assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
     })
@@ -270,7 +281,7 @@ describe('cypress config instrumentation', () => {
       fs.mkdirSync(supportDirectory, { recursive: true })
       fs.writeFileSync(supportFile, '// user support\n')
 
-      const { cypressConfig, warnings } = loadCypressConfig({
+      const { cypressConfig, errors } = loadCypressConfig({
         openSync (filePath, flags) {
           const descriptor = fs.openSync(filePath, flags)
           pathsByDescriptor.set(descriptor, filePath)
@@ -285,8 +296,8 @@ describe('cypress config instrumentation', () => {
       })
       injectSupportFile(cypressConfig, { projectRoot, supportFile })
 
-      assert.strictEqual(warnings.length, 1)
-      assert.strictEqual(warnings[0].match(/EIO during close/g).length, 2)
+      assert.strictEqual(errors.length, 1)
+      assert.strictEqual(errors[0].match(/EIO during close/g).length, 2)
       assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
       assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
     })
@@ -294,7 +305,7 @@ describe('cypress config instrumentation', () => {
     it('warns when generated support files cannot be removed', async () => {
       const projectRoot = createProjectRoot()
 
-      const { cypressConfig, warnings } = loadCypressConfig({
+      const { cypressConfig, errors, warnings } = loadCypressConfig({
         unlinkSync (filePath) {
           throw createFileError('EACCES', filePath, 'unlink')
         },
@@ -303,6 +314,7 @@ describe('cypress config instrumentation', () => {
 
       await handlers['after:run']({})
 
+      assert.deepStrictEqual(errors, [])
       assert.strictEqual(warnings.length, 2)
       assert.ok(warnings.every(warning => warning.includes('could not remove generated Cypress file')))
       assert.ok(warnings.every(warning => warning.includes('EACCES during unlink')))
@@ -346,7 +358,7 @@ describe('cypress config instrumentation', () => {
       fs.mkdirSync(configDirectory)
       fs.writeFileSync(configFile, 'module.exports = {}\n')
 
-      const { cypressConfig, warnings } = loadCypressConfig({
+      const { cypressConfig, errors, warnings } = loadCypressConfig({
         openSync (filePath) {
           throw createFileError('EROFS', filePath)
         },
@@ -355,6 +367,7 @@ describe('cypress config instrumentation', () => {
       const result = cypressConfig.wrapCliConfigFileOptions(options)
 
       assert.strictEqual(result.options, options)
+      assert.deepStrictEqual(errors, [])
       assert.strictEqual(warnings.length, 1)
       assert.match(warnings[0], /could not create the Cypress configuration wrapper/)
       assert.strictEqual(warnings[0].match(/EROFS during open/g).length, 2)
