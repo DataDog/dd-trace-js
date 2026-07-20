@@ -444,6 +444,9 @@ function wrapResolve (resolve) {
       } else {
         field = undefined
       }
+      if (field && infoPath.typename === undefined) {
+        cacheFieldByPath(rootCtx, infoPath, field)
+      }
     }
     const isFirst = !field
 
@@ -477,6 +480,9 @@ function wrapResolve (resolve) {
             .set(parentTypeFields.parentTypeName, parentTypeFields)
             .set(parentTypeName, field)
           collapsedField.parentTypeFields = fieldsByParentType
+        }
+        if (infoPath.typename === undefined) {
+          cacheFieldByPath(rootCtx, infoPath, field)
         }
       } else {
         rootCtx.fields.set(fieldKey, field)
@@ -627,6 +633,17 @@ function buildCachedPathString (path, cache, collapse) {
   return pathString
 }
 
+/**
+ * @param {{ hasFieldsByPath?: boolean, fields: Map<string|object, object> }} rootCtx
+ * @param {object} path
+ * @param {object} field
+ */
+function cacheFieldByPath (rootCtx, path, field) {
+  // Concrete info path objects cannot collide with collapsed path string keys.
+  rootCtx.hasFieldsByPath = true
+  rootCtx.fields.set(path, field)
+}
+
 // Depth filtering directly on the linked-list node — no array allocation needed.
 // config.depth < 0 means no limit. Only selection-set segments (string keys)
 // count toward depth; list indices are execution artifacts and are transparent.
@@ -652,7 +669,14 @@ function getParentField (rootCtx, field) {
     const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
     const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) {
-      if (curr.typename === undefined || innerField.parentTypeName === curr.typename) return innerField
+      if (curr.typename === undefined) {
+        if (rootCtx.hasFieldsByPath) {
+          const fieldByPath = rootCtx.fields.get(curr)
+          if (fieldByPath) return fieldByPath
+        }
+        return innerField
+      }
+      if (innerField.parentTypeName === curr.typename) return innerField
 
       const parentTypeFields = innerField.parentTypeFields
       if (parentTypeFields.parentTypeName === undefined) return parentTypeFields.get(curr.typename)

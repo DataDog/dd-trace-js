@@ -1207,16 +1207,14 @@ describe('Plugin', () => {
               'RobotProfile.value',
             ])
 
-            if (semver.satisfies(graphqlVersion, '>=15.0.0')) {
-              const spans = sort(traces[0])
-              for (const name of names) {
-                const profile = spans.find(span => span.meta['graphql.field.coordinates'] === `${name}.profile`)
-                const value = spans.find(span =>
-                  span.meta['graphql.field.coordinates'] === `${name}Profile.value`)
-                assert.ok(profile, `expected ${name}.profile span`)
-                assert.ok(value, `expected ${name}Profile.value span`)
-                assert.strictEqual(value.parent_id.toString(), profile.span_id.toString())
-              }
+            const spans = sort(traces[0])
+            for (const name of names) {
+              const profile = spans.find(span => span.meta['graphql.field.coordinates'] === `${name}.profile`)
+              const value = spans.find(span =>
+                span.meta['graphql.field.coordinates'] === `${name}Profile.value`)
+              assert.ok(profile, `expected ${name}.profile span`)
+              assert.ok(value, `expected ${name}Profile.value span`)
+              assert.strictEqual(value.parent_id.toString(), profile.span_id.toString())
             }
           }
 
