@@ -42,6 +42,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { replaceFile } = require('./replace-file')
+
 const LINE_SENTINEL = '// dd-trace-js patch v1: record firstColumn for the line-zeroing guard'
 const APPLY_SENTINEL = '// dd-trace-js patch v1: zero lines covered from first non-whitespace column'
 const PATCH_MARKER = '// dd-trace-js patch'
@@ -136,10 +138,8 @@ for (const marker of requiredMarkers) {
  * @param {string} replacement
  */
 function applyPatch (relTarget, sentinel, re, original, replacement) {
-  let targetFile
-  try {
-    targetFile = require.resolve(relTarget, { paths: [repoRoot] })
-  } catch {
+  const targetFile = path.join(repoRoot, 'node_modules', relTarget)
+  if (!fs.existsSync(targetFile)) {
     log(`skipping: ${relTarget} is not installed yet`)
     return false
   }
@@ -170,7 +170,7 @@ function applyPatch (relTarget, sentinel, re, original, replacement) {
     return false
   }
 
-  fs.writeFileSync(targetFile, source.replace(current, replacement))
+  replaceFile(targetFile, source.replace(current, replacement))
   log(`patched ${relativeTarget}`)
   return true
 }
