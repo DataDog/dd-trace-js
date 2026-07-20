@@ -4,6 +4,7 @@ const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
+const { createFinalizationRegistry, createWeakRef } = require('../../dd-trace/src/util')
 const { storage } = require('../../datadog-core')
 
 /**
@@ -19,7 +20,7 @@ const { storage } = require('../../datadog-core')
 const messageToContext = new WeakMap() // Message -> context (auto-cleanup on GC)
 const ackIdToMessage = new Map() // ackId -> WeakRef<Message> (needs cleanup)
 
-const ackMapCleanup = new FinalizationRegistry((ackId) => {
+const ackMapCleanup = createFinalizationRegistry((ackId) => {
   ackIdToMessage.delete(ackId) // Remove orphaned ackId when Message is GC'd
 })
 
@@ -41,7 +42,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
       if (currentStore) {
         messageToContext.set(message, currentStore)
-        ackIdToMessage.set(ackId, new WeakRef(message))
+        ackIdToMessage.set(ackId, createWeakRef(message))
         ackMapCleanup.register(message, ackId, message)
       }
     })
