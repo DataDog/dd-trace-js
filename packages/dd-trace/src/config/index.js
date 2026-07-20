@@ -340,13 +340,9 @@ class Config extends ConfigBase {
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
-      // Never apply a sensitive configuration (e.g. DD_API_KEY) via remote config, regardless
-      // of what the backend is expected to filter out before it reaches the tracer.
-      // TODO(config-at-runtime): also drop restart-required configs once
-      // supported-configurations.json carries that metadata — no such flag exists yet, so
-      // nothing filters them today.
       const filtered = {}
       for (const [key, value] of Object.entries(options)) {
+        // TODO(config-at-runtime): also drop restart-required configs
         if (sensitiveConfigurations.has(key)) {
           log.warn('Ignoring remote config for sensitive configuration %s', key)
           continue
@@ -354,7 +350,7 @@ class Config extends ConfigBase {
         filtered[key] = value
       }
 
-      // Filters out configs this tracer version doesn't recognize, same as for real env vars
+      // Use getEnvironmentVariables to filter out configs this tracer version doesn't recognize
       this.#applyEnvs(getEnvironmentVariables(filtered, true), 'remote_config')
     }
 

@@ -39,8 +39,6 @@ module.exports = {
   ASM_EXTENDED_DATA_COLLECTION: 1n << 44n,
   APM_TRACING_MULTICONFIG: 1n << 45n,
   FFE_FLAG_CONFIGURATION_RULES: 1n << 46n,
-  // TODO: bit 49 per ddoghq/dd-source#20088 (CapabilitySDKConfiguration), which is open but not
-  // yet merged. Do not merge/ship until that PR lands in the backend source of truth.
   SDK_CONFIGURATION: 1n << 49n,
   /*
     DO NOT ADD ARBITRARY CAPABILITIES IN YOUR CODE
