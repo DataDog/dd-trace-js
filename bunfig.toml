@@ -7,8 +7,8 @@ linker = "hoisted"
 # registry before it lands in our installs.
 minimumReleaseAge = 259200
 
-# Bun 1.3.1 only matches exact package names; our publishing pipeline is the
-# trust boundary for these packages.
+# Bun only matches exact package names; our publishing pipeline is the trust
+# boundary for these packages.
 minimumReleaseAgeExcludes = [
   "@datadog/datadog-ci",
   "@datadog/flagging-core",
