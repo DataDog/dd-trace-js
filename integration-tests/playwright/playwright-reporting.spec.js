@@ -343,7 +343,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('failure screenshots', () => {
-      const screenshotModes = ['only-on-failure']
+      const screenshotModes = ['on', 'only-on-failure']
       if (version === latest || satisfies(version, '>=1.49.0')) {
         screenshotModes.push('on-first-failure')
       }
