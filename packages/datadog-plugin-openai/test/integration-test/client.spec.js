@@ -16,7 +16,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // limit v4 tests while the IITM issue is resolved or a workaround is introduced
   // this is only relevant for `openai` >=4.0 <=4.1
@@ -37,8 +36,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'OpenAI', undefined, 'openai')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'OpenAI',
+      packageName: 'openai',
+      defaultExport: true,
+      namedExports: ['OpenAI'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -46,7 +49,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

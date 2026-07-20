@@ -49,10 +49,19 @@ function Hook (modules, hookOptions, onrequire) {
   this._patched = Object.create(null)
   const patched = new WeakMap()
 
+  /**
+   * @param {object|Function} moduleExports
+   * @param {string} moduleName
+   * @param {string|undefined} moduleBaseDir
+   * @param {string|undefined} moduleVersion
+   * @param {boolean} isIitm
+   */
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
+    const defaultExport = moduleExports.default
+    let defaultExportAliases
     let defaultWrapResult
 
     const wrappedOnrequire = (moduleExports, ...args) => {
@@ -78,16 +87,27 @@ function Hook (modules, hookOptions, onrequire) {
 
     if (
       isIitm &&
-      moduleExports.default &&
-      (typeof moduleExports.default === 'object' ||
-      typeof moduleExports.default === 'function')
+      defaultExport &&
+      (typeof defaultExport === 'object' ||
+      typeof defaultExport === 'function')
     ) {
-      defaultWrapResult = wrappedOnrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultExportAliases = []
+      for (const exportName of Object.keys(moduleExports)) {
+        if (exportName !== 'default' && moduleExports[exportName] === defaultExport) {
+          defaultExportAliases.push(exportName)
+        }
+      }
+      defaultWrapResult = wrappedOnrequire(defaultExport, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
     const newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
-    if (defaultWrapResult) newExports.default = defaultWrapResult
+    if (defaultWrapResult && defaultExportAliases) {
+      newExports.default = defaultWrapResult
+      for (const exportName of defaultExportAliases) {
+        newExports[exportName] = defaultWrapResult
+      }
+    }
 
     this._patched[filename] = true
 

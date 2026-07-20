@@ -353,6 +353,7 @@
 /integration-tests/coverage-fixtures/ @DataDog/lang-platform-js
 /integration-tests/crashtracking/ @DataDog/lang-platform-js
 /integration-tests/helpers/ @DataDog/lang-platform-js
+/integration-tests/import-variants.spec.js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/memory-leak/ @DataDog/lang-platform-js
