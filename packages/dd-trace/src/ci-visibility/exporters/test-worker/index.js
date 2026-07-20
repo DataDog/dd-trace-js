@@ -8,17 +8,12 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
-  PLAYWRIGHT_WORKER_SCREENSHOT_REQUEST,
-  PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
 } = require('../../../plugins/util/test')
 const getConfig = require('../../../config')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const Writer = require('./writer')
-
-let screenshotRequestId = 0
-const SCREENSHOT_RESPONSE_TIMEOUT_MS = 5000
 
 function getInterprocessTraceCode () {
   const { DD_PLAYWRIGHT_WORKER, DD_VITEST_WORKER } = getConfig()
@@ -105,68 +100,6 @@ class TestWorkerCiVisibilityExporter {
 
   exportDiLogs (testEnvironmentMetadata, logMessage) {
     this._logsWriter.append({ testEnvironmentMetadata, logMessage })
-  }
-
-  /**
-   * Returns whether this worker can request a Playwright test screenshot upload.
-   *
-   * @returns {boolean}
-   */
-  canUploadTestScreenshots () {
-    const { DD_PLAYWRIGHT_WORKER, testOptimization } = getConfig()
-    return Boolean(DD_PLAYWRIGHT_WORKER && testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
-  }
-
-  /**
-   * Requests a screenshot upload from the Playwright runner process.
-   *
-   * @param {object} options - Screenshot upload options
-   * @param {string} options.filePath - Path to the screenshot file
-   * @param {string} options.traceId - Test trace id used as the screenshot key
-   * @param {string} options.idempotencyKey - Stable per-artifact key
-   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
-   * @param {(error: Error|undefined, uploaded: boolean) => void} callback - Completion callback
-   * @returns {void}
-   */
-  uploadTestScreenshot (options, callback) {
-    if (!this.canUploadTestScreenshots() || !process.send) {
-      callback(undefined, false)
-      return
-    }
-
-    const requestId = ++screenshotRequestId
-    let isComplete = false
-    const finish = (error, uploaded) => {
-      if (isComplete) return
-      isComplete = true
-      clearTimeout(timeoutId)
-      process.removeListener('message', onMessage)
-      callback(error, uploaded)
-    }
-    const onMessage = (message) => {
-      if (message?.type !== PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE || message.requestId !== requestId) {
-        return
-      }
-      const error = message.error ? new Error(message.error) : undefined
-      finish(error, message.uploaded === true)
-    }
-    process.on('message', onMessage)
-    const timeoutId = setTimeout(() => {
-      finish(new Error('Timed out waiting for the Playwright screenshot upload response'), true)
-    }, SCREENSHOT_RESPONSE_TIMEOUT_MS)
-    timeoutId.unref?.()
-
-    try {
-      process.send({
-        type: PLAYWRIGHT_WORKER_SCREENSHOT_REQUEST,
-        requestId,
-        options,
-      }, error => {
-        if (error) finish(error, true)
-      })
-    } catch (error) {
-      finish(error, true)
-    }
   }
 
   /**

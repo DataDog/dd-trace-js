@@ -86,6 +86,16 @@ describe('test screenshot helpers', () => {
     const { SCREENSHOT_UPLOAD_RESULT_ERROR, SCREENSHOT_UPLOAD_RESULT_UPLOADED } = screenshotHelpers
     const testSpan = { setTag: sinon.spy() }
 
+    assert.strictEqual(
+      screenshotHelpers.getScreenshotUploadTag(SCREENSHOT_UPLOAD_RESULT_UPLOADED),
+      TEST_FAILURE_SCREENSHOT_UPLOADED
+    )
+    assert.strictEqual(
+      screenshotHelpers.getScreenshotUploadTag(SCREENSHOT_UPLOAD_RESULT_ERROR),
+      TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR
+    )
+    assert.strictEqual(screenshotHelpers.getScreenshotUploadTag(undefined), undefined)
+
     screenshotHelpers.setScreenshotUploadTags(testSpan, SCREENSHOT_UPLOAD_RESULT_UPLOADED)
     screenshotHelpers.setScreenshotUploadTags(testSpan, SCREENSHOT_UPLOAD_RESULT_ERROR)
 

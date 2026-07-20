@@ -12,8 +12,6 @@ const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
-  PLAYWRIGHT_WORKER_SCREENSHOT_REQUEST,
-  PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   getEfdRetryCount,
@@ -47,7 +45,6 @@ const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
-const workerScreenshotCh = channel('ci:playwright:worker:screenshot')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
@@ -118,6 +115,7 @@ const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
+const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 
@@ -892,7 +890,6 @@ function testEndHandler ({
       testFinishCh.publish({
         testStatus,
         steps: testResult?.steps || [],
-        attachments: testResult?.attachments || [],
         isRetry: testResult?.retry > 0,
         error,
         extraTags: annotationTags,
@@ -1064,6 +1061,10 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
     )
     const testResult = test.results.at(-1)
+    if (testStatus === 'fail' && testResult?.attachments?.length) {
+      worker[kDdPlaywrightFailureScreenshots] ??= []
+      worker[kDdPlaywrightFailureScreenshots].push(testResult.attachments)
+    }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
@@ -1759,30 +1760,6 @@ function prepareProcessHostStartRunner (processHost) {
   }
 }
 
-/**
- * Sends a screenshot upload outcome back to a Playwright worker.
- *
- * @param {import('node:child_process').ChildProcess} workerProcess - Playwright worker process
- * @param {number} requestId - Screenshot request identifier
- * @param {Error|undefined} error - Upload error
- * @param {boolean} uploaded - Whether the runner attempted the upload
- * @returns {void}
- */
-function sendScreenshotUploadResult (workerProcess, requestId, error, uploaded) {
-  if (!workerProcess.connected) return
-
-  try {
-    workerProcess.send({
-      type: PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
-      requestId,
-      error: error?.message,
-      uploaded,
-    }, () => {})
-  } catch {
-    // The worker may have exited before the upload completed.
-  }
-}
-
 function finishProcessHostStartRunner (processHost) {
   if (!processHost.process) {
     return
@@ -1798,23 +1775,12 @@ function finishProcessHostStartRunner (processHost) {
       sendDdPropertiesToWorkerWhenAvailable(processHost.process, message.testId)
       return
     }
-    if (message?.type === PLAYWRIGHT_WORKER_SCREENSHOT_REQUEST) {
-      const { requestId, options } = message
-      if (!workerScreenshotCh.hasSubscribers) {
-        sendScreenshotUploadResult(processHost.process, requestId, undefined, false)
-        return
-      }
-      workerScreenshotCh.publish({
-        ...options,
-        onDone: (error, uploaded) => {
-          sendScreenshotUploadResult(processHost.process, requestId, error, uploaded)
-        },
-      })
-      return
-    }
     // These messages are [code, payload]. The payload is test data
     if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
-      workerReportCh.publish(message[1])
+      workerReportCh.publish({
+        serializedTraces: message[1],
+        screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
+      })
     }
   })
 }
@@ -2008,7 +1974,7 @@ function instrumentWorkerMainMethods (workerMain) {
     })
     await res
 
-    const { status, error, annotations, attachments, retry, testId } = testInfo
+    const { status, error, annotations, retry, testId } = testInfo
     const testEfdKey = getTestEfdKey(test)
     const isEfdManagedTest = isTestEfdManaged(test)
     if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
@@ -2077,7 +2043,6 @@ function instrumentWorkerMainMethods (workerMain) {
     testFinishCh.publish({
       testStatus: STATUS_TO_TEST_STATUS[status],
       steps: steps.filter(step => step.testId === testId),
-      attachments,
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,

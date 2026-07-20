@@ -18,8 +18,6 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
-  PLAYWRIGHT_WORKER_SCREENSHOT_REQUEST,
-  PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
 } = require('../../../../src/plugins/util/test')
 
@@ -195,11 +193,9 @@ describe('CI Visibility Test Worker Exporter', () => {
   context('when the process is a playwright worker', () => {
     beforeEach(() => {
       process.env.DD_PLAYWRIGHT_WORKER = '1'
-      process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
     })
     afterEach(() => {
       delete process.env.DD_PLAYWRIGHT_WORKER
-      delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
     })
 
     it('can export traces', () => {
@@ -219,144 +215,6 @@ describe('CI Visibility Test Worker Exporter', () => {
       playwrightWorkerExporter.export(trace)
       playwrightWorkerExporter.flush()
       sinon.assert.notCalled(send)
-    })
-
-    it('requests screenshot uploads from the runner process', () => {
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-      const options = {
-        filePath: '/tmp/test-failed-1.png',
-        traceId: '123',
-        idempotencyKey: '123:test-failed-1.png',
-        capturedAtMs: 1_700_000_000_000,
-      }
-
-      playwrightWorkerExporter.uploadTestScreenshot(options, callback)
-
-      const [request] = send.firstCall.args
-      assert.strictEqual(request.type, PLAYWRIGHT_WORKER_SCREENSHOT_REQUEST)
-      assert.deepStrictEqual(request.options, options)
-      sinon.assert.notCalled(callback)
-
-      process.emit('message', {
-        type: PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
-        requestId: request.requestId,
-        uploaded: true,
-      })
-
-      sinon.assert.calledOnceWithExactly(callback, undefined, true)
-    })
-
-    it('ignores screenshot responses for other requests', () => {
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-
-      playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-      const [request] = send.firstCall.args
-      process.emit('message', {
-        type: PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
-        requestId: request.requestId + 1,
-        uploaded: true,
-      })
-      sinon.assert.notCalled(callback)
-
-      process.emit('message', {
-        type: PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
-        requestId: request.requestId,
-        uploaded: true,
-      })
-      sinon.assert.calledOnceWithExactly(callback, undefined, true)
-    })
-
-    it('reports when the runner cannot upload screenshots', () => {
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-
-      playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-      const [request] = send.firstCall.args
-      process.emit('message', {
-        type: PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
-        requestId: request.requestId,
-        uploaded: false,
-      })
-
-      sinon.assert.calledOnceWithExactly(callback, undefined, false)
-    })
-
-    it('reports screenshot upload errors from the runner process', () => {
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-
-      playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-      const [request] = send.firstCall.args
-      process.emit('message', {
-        type: PLAYWRIGHT_WORKER_SCREENSHOT_RESPONSE,
-        requestId: request.requestId,
-        error: 'upload failed',
-        uploaded: true,
-      })
-
-      sinon.assert.calledOnce(callback)
-      assert.match(callback.firstCall.args[0].message, /upload failed/)
-      assert.strictEqual(callback.firstCall.args[1], true)
-    })
-
-    it('times out screenshot upload requests without a runner response', () => {
-      const clock = sinon.useFakeTimers()
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-      const initialMessageListenerCount = process.listenerCount('message')
-
-      try {
-        playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-        clock.tick(4999)
-        sinon.assert.notCalled(callback)
-        clock.tick(1)
-
-        sinon.assert.calledOnce(callback)
-        assert.match(callback.firstCall.args[0].message, /Timed out waiting for the Playwright screenshot upload response/)
-        assert.strictEqual(callback.firstCall.args[1], true)
-        assert.strictEqual(process.listenerCount('message'), initialMessageListenerCount)
-      } finally {
-        clock.restore()
-      }
-    })
-
-    it('does not request screenshot uploads without an IPC channel', () => {
-      delete process.send
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-
-      playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-      sinon.assert.calledOnceWithExactly(callback, undefined, false)
-      sinon.assert.notCalled(send)
-    })
-
-    it('reports asynchronous IPC send errors', () => {
-      const sendError = new Error('send failed')
-      process.send = sinon.stub().callsFake((message, callback) => callback(sendError))
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-
-      playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-      sinon.assert.calledOnceWithExactly(callback, sendError, true)
-    })
-
-    it('reports synchronous IPC send errors', () => {
-      const sendError = new Error('send failed')
-      process.send = sinon.stub().throws(sendError)
-      const playwrightWorkerExporter = new TestWorkerCiVisibilityExporter()
-      const callback = sinon.spy()
-
-      playwrightWorkerExporter.uploadTestScreenshot({ filePath: '/tmp/test-failed-1.png' }, callback)
-
-      sinon.assert.calledOnceWithExactly(callback, sendError, true)
     })
   })
 

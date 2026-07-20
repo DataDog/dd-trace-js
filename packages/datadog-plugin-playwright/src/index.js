@@ -11,7 +11,7 @@ const {
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
   getScreenshotCapturedAtMs,
   getScreenshotUploadResult,
-  setScreenshotUploadTags,
+  getScreenshotUploadTag,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
 
 const {
@@ -268,9 +268,10 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:worker:report', (serializedTraces) => {
+    this.addSub('ci:playwright:worker:report', ({ serializedTraces, screenshots }) => {
       const traces = JSON.parse(serializedTraces)
       const formattedTraces = []
+      let formattedTestSpan
 
       for (const trace of traces) {
         const formattedTrace = []
@@ -285,6 +286,7 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_HAS_DYNAMIC_NAME] = 'true'
           }
           if (span.name === 'playwright.test') {
+            formattedTestSpan = formattedSpan
             // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
             // so we don't need this re-serialization logic. This can be passed just once, since they're unique
@@ -319,18 +321,36 @@ class PlaywrightPlugin extends CiPlugin {
         formattedTraces.push(formattedTrace)
       }
 
-      for (const trace of formattedTraces) {
-        this.tracer._exporter.export(trace)
+      const exportTraces = () => {
+        for (const trace of formattedTraces) {
+          this.tracer._exporter.export(trace)
+        }
       }
-    })
 
-    this.addSub('ci:playwright:worker:screenshot', ({ onDone, ...options }) => {
-      const exporter = this.tracer._exporter
-      if (!exporter?.canUploadTestScreenshots?.() || !exporter.uploadTestScreenshot) {
-        onDone(undefined, false)
+      if (!formattedTestSpan || !screenshots) {
+        exportTraces()
         return
       }
-      exporter.uploadTestScreenshot(options, error => onDone(error, true))
+
+      this.pendingTestFinishes++
+      const uploadStarted = this.uploadTestScreenshots({
+        screenshots,
+        traceId: formattedTestSpan.trace_id.toString(10),
+      }, (screenshotUploadResult) => {
+        const screenshotUploadTag = getScreenshotUploadTag(screenshotUploadResult)
+        if (screenshotUploadTag) {
+          formattedTestSpan.meta[screenshotUploadTag] = 'true'
+        }
+        exportTraces()
+        this.pendingTestFinishes--
+        if (this.pendingTestFinishes === 0 && this.finishSession) {
+          this.finishSession()
+        }
+      })
+      if (uploadStarted) return
+
+      this.pendingTestFinishes--
+      exportTraces()
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
@@ -372,7 +392,6 @@ class PlaywrightPlugin extends CiPlugin {
       span,
       testStatus,
       steps,
-      attachments,
       error,
       extraTags,
       isNew,
@@ -394,7 +413,6 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       if (!span) return
 
-      const finishTime = span._getTime()
       const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
 
       span.setTag(TEST_STATUS, testStatus)
@@ -481,45 +499,25 @@ class PlaywrightPlugin extends CiPlugin {
         this.numFailedTests++
       }
 
-      const finishTestSpan = (screenshotUploadResult) => {
-        setScreenshotUploadTags(span, screenshotUploadResult)
-        this.telemetry.ciVisEvent(
-          TELEMETRY_EVENT_FINISHED,
-          'test',
-          {
-            hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
-            isNew,
-            isRum: isRUMActive,
-            browserDriver: 'playwright',
-            isQuarantined,
-            isDisabled,
-            isModified,
-          }
-        )
-        span.finish(finishTime)
-
-        finishAllTraceSpans(span)
-        if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-          this.tracer._exporter.flush(onDone)
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        {
+          hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
+          isNew,
+          isRum: isRUMActive,
+          browserDriver: 'playwright',
+          isQuarantined,
+          isDisabled,
+          isModified,
         }
-      }
+      )
+      span.finish()
 
-      if (testStatus === 'fail') {
-        this.pendingTestFinishes++
-        const uploadStarted = this.uploadTestScreenshots({
-          screenshots: attachments,
-          traceId: span.context().toTraceId(),
-        }, (screenshotUploadResult) => {
-          finishTestSpan(screenshotUploadResult)
-          this.pendingTestFinishes--
-          if (this.pendingTestFinishes === 0 && this.finishSession) {
-            this.finishSession()
-          }
-        })
-        if (uploadStarted) return
-        this.pendingTestFinishes--
+      finishAllTraceSpans(span)
+      if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
+        this.tracer._exporter.flush(onDone)
       }
-      finishTestSpan()
     })
 
     this.addSub('ci:playwright:test:skip', ({

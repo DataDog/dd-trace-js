@@ -54,6 +54,21 @@ function getScreenshotUploadResult (uploadResults) {
 }
 
 /**
+ * Returns the test tag that represents an aggregate screenshot upload outcome.
+ *
+ * @param {string|undefined} uploadResult - Aggregate screenshot upload result
+ * @returns {string|undefined} Screenshot upload result tag
+ */
+function getScreenshotUploadTag (uploadResult) {
+  if (uploadResult === SCREENSHOT_UPLOAD_RESULT_ERROR) {
+    return TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR
+  }
+  if (uploadResult === SCREENSHOT_UPLOAD_RESULT_UPLOADED) {
+    return TEST_FAILURE_SCREENSHOT_UPLOADED
+  }
+}
+
+/**
  * Tags a test span with the aggregate screenshot upload outcome.
  *
  * @param {object} testSpan - Test span to tag
@@ -61,11 +76,8 @@ function getScreenshotUploadResult (uploadResults) {
  * @returns {void}
  */
 function setScreenshotUploadTags (testSpan, uploadResult) {
-  if (uploadResult === SCREENSHOT_UPLOAD_RESULT_ERROR) {
-    testSpan.setTag(TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR, 'true')
-  } else if (uploadResult === SCREENSHOT_UPLOAD_RESULT_UPLOADED) {
-    testSpan.setTag(TEST_FAILURE_SCREENSHOT_UPLOADED, 'true')
-  }
+  const uploadTag = getScreenshotUploadTag(uploadResult)
+  if (uploadTag) testSpan.setTag(uploadTag, 'true')
 }
 
 module.exports = {
@@ -73,5 +85,6 @@ module.exports = {
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
   getScreenshotCapturedAtMs,
   getScreenshotUploadResult,
+  getScreenshotUploadTag,
   setScreenshotUploadTags,
 }
