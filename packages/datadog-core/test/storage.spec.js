@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { executionAsyncResource } = require('async_hooks')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('../../dd-trace/test/setup/core')
 const { storage } = require('../src/storage')
@@ -85,6 +86,63 @@ describe('storage', () => {
   it('should report no store once entered with undefined', () => {
     testStorage.enterWith({ span: 'x' })
     testStorage.enterWith(undefined)
+
+    assert.strictEqual(testStorage.getStore(), undefined)
+  })
+})
+
+describe('storage with a partial AsyncLocalStorage (e.g. Cloudflare Workers)', () => {
+  // Mirrors workerd: `run()`/`getStore()` are implemented natively, but
+  // `enterWith()`/`disable()` throw, which crashes the module-load ACF probe.
+  class PartialAsyncLocalStorage {
+    #store
+
+    run (store, fn, ...args) {
+      const prior = this.#store
+      this.#store = store
+      try {
+        return fn(...args)
+      } finally {
+        this.#store = prior
+      }
+    }
+
+    getStore () {
+      return this.#store
+    }
+
+    enterWith () {
+      throw new Error('not implemented')
+    }
+
+    disable () {
+      throw new Error('not implemented')
+    }
+  }
+
+  const requireStorage = () => proxyquire.noPreserveCache()('../src/storage', {
+    async_hooks: { AsyncLocalStorage: PartialAsyncLocalStorage },
+  })
+
+  it('should not throw when required', () => {
+    requireStorage()
+  })
+
+  it('should treat the runtime as ACF-active', () => {
+    const { isACFActive } = requireStorage()
+
+    assert.strictEqual(isACFActive, true)
+  })
+
+  it('should run and get a store via the native path, without the WeakMap fallback', () => {
+    // Would throw here if the pre-ACF fallback drove enterWith() manually.
+    const { storage: partialStorage } = requireStorage()
+    const testStorage = partialStorage('partial')
+    const store = { span: 'native' }
+
+    testStorage.run(store, () => {
+      assert.strictEqual(testStorage.getStore(), store)
+    })
 
     assert.strictEqual(testStorage.getStore(), undefined)
   })

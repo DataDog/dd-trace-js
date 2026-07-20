@@ -46,10 +46,17 @@ class DatadogStorage extends AsyncLocalStorage {
 // `enterWith`, without ACF `run` does not.
 const isACFActive = (() => {
   let active = false
-  const als = new AsyncLocalStorage()
-  als.enterWith = () => { active = true }
-  als.run(1, () => {})
-  als.disable()
+  try {
+    const als = new AsyncLocalStorage()
+    als.enterWith = () => { active = true }
+    als.run(1, () => {})
+    als.disable()
+  } catch {
+    // Runtimes with a partial ALS (e.g. Cloudflare Workers: enterWith/disable
+    // unimplemented) behave like ACF — the value lives in the context frame,
+    // not the resource — so use native run/getStore and skip the pre-ACF path.
+    return true
+  }
   return active
 })()
 
