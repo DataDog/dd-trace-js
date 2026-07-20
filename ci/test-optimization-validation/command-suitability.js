@@ -101,6 +101,10 @@ function isProducedBySetup (framework, localPath) {
   return false
 }
 
+/**
+ * @param {{ usesShell?: boolean, argv?: string[] }} command
+ * @param {string} repositoryRoot
+ */
 function getRepositoryYarnError (command, repositoryRoot) {
   if (command.usesShell || path.basename(command.argv?.[0] || '') !== 'yarn') return
 
@@ -112,7 +116,7 @@ function getRepositoryYarnError (command, repositoryRoot) {
       .sort()
   } catch {}
   if (releases?.length > 0) {
-    const release = path.posix.join('.yarn', 'releases', releases[releases.length - 1])
+    const release = path.posix.join('.yarn', 'releases', releases.at(-1))
     return `uses bare "yarn", but this repository pins ${release}. Use the structured command ` +
       `argv [process.execPath, "${release}", ...] so validation does not depend on an ambient Yarn shim.`
   }
