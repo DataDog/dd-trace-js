@@ -3157,6 +3157,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(coverageReport.eventFile.name, 'event')
           assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
           assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+          assert.deepStrictEqual(
+            coverageReport.eventFile.content['report.flags'],
+            ['type:unit-tests', 'jvm-21', 'type:unit-tests']
+          )
           assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
           assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
         })
@@ -3172,6 +3176,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
             DD_GIT_COMMIT_SHA: gitCommitSha,
             DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+            DD_CODE_COVERAGE_FLAGS: ' type:unit-tests, ,jvm-21,type:unit-tests, ',
           },
         }
       )

@@ -13,6 +13,7 @@ const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
+const { parsers } = require('../../config/parsers')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -41,6 +42,7 @@ function getIsTestSessionTrace (trace) {
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
+const MAX_COVERAGE_REPORT_FLAGS = 32
 
 function appendLogTag (tags, key, value) {
   if (value !== undefined) {
@@ -79,6 +81,16 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageBuffer = []
     this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
     this._isTestOptimizationCacheOnly = options.cacheOnly === true
+    const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
+    if (coverageReportFlags?.length > MAX_COVERAGE_REPORT_FLAGS) {
+      log.warn(
+        'Maximum of %d coverage report flags allowed, but %d flags were provided. Omitting coverage report flags.',
+        MAX_COVERAGE_REPORT_FLAGS,
+        coverageReportFlags.length
+      )
+    } else if (coverageReportFlags?.length) {
+      this._coverageReportFlags = [...coverageReportFlags]
+    }
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
@@ -512,7 +524,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} options.filePath - Path to the coverage report file
    * @param {string} options.format - Format of the coverage report
    * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
-   * @param {Function} callback - Callback function (err)
+   * @param {(error: Error|null) => void} callback - Callback function
    */
   uploadCoverageReport ({ filePath, format, testEnvironmentMetadata }, callback) {
     if (!this._codeCoverageReportUrl) {
@@ -522,6 +534,7 @@ class CiVisibilityExporter extends BufferingExporter {
     uploadCoverageReportRequest({
       filePath,
       format,
+      flags: this._coverageReportFlags,
       testEnvironmentMetadata,
       url: this._codeCoverageReportUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
