@@ -52,4 +52,22 @@ describe('Hook', () => {
     assert.strictEqual(namespace.named, wrapped)
     assert.strictEqual(wrapped.default, wrapped)
   })
+
+  it('does not inspect named ESM exports when the default export is unchanged', () => {
+    const original = sinon.stub()
+    const ownKeys = sinon.stub().returns(['default', 'named'])
+    const namespace = new Proxy({
+      default: original,
+      named: original,
+    }, { ownKeys })
+    const onrequire = sinon.stub()
+    onrequire.withArgs(original).returns(original)
+    onrequire.withArgs(namespace).returns(namespace)
+
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'test-package', '/test-package'), namespace)
+    sinon.assert.notCalled(ownKeys)
+  })
 })

@@ -90,13 +90,15 @@ function Hook (modules, hookOptions, onrequire) {
       (typeof defaultExport === 'object' ||
       typeof defaultExport === 'function')
     ) {
-      defaultExportAliases = []
-      for (const exportName of Object.keys(moduleExports)) {
-        if (exportName !== 'default' && moduleExports[exportName] === defaultExport) {
-          defaultExportAliases.push(exportName)
+      defaultWrapResult = wrappedOnrequire(defaultExport, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      if (defaultWrapResult && defaultWrapResult !== defaultExport) {
+        defaultExportAliases = []
+        for (const exportName of Object.keys(moduleExports)) {
+          if (exportName !== 'default' && moduleExports[exportName] === defaultExport) {
+            defaultExportAliases.push(exportName)
+          }
         }
       }
-      defaultWrapResult = wrappedOnrequire(defaultExport, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
     const newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
