@@ -52,6 +52,8 @@ const latest = 'latest'
 const { oldest } = require('./versions')
 const versions = [oldest, latest]
 const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
+const SCREENSHOT_CAPTURE_DISABLED_WARNING =
+  'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -346,7 +348,12 @@ versions.forEach((version) => {
         screenshotModes.push('on-first-failure')
       }
 
-      function runWithFailureScreenshots (receiver, run, screenshotMode = 'only-on-failure') {
+      function runWithFailureScreenshots (
+        receiver,
+        run,
+        screenshotMode = 'only-on-failure',
+        isScreenshotUploadEnabled = true
+      ) {
         let testOutput = ''
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -357,7 +364,9 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
-              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled ? 'true' : undefined,
+              DD_TRACE_DEBUG: 'true',
+              DD_TRACE_LOG_LEVEL: 'warn',
             },
           }
         )
@@ -421,6 +430,45 @@ versions.forEach((version) => {
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
           assert.strictEqual(exitCode, 1)
+          assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING))
+        })
+      }
+
+      for (const isScreenshotUploadEnabled of [true, false]) {
+        const testName = isScreenshotUploadEnabled
+          ? 'warns when screenshot upload is enabled but screenshot capture is off'
+          : 'does not warn when screenshot upload is disabled'
+
+        it(testName, async (receiver, run) => {
+          const { proc, getTestOutput } = runWithFailureScreenshots(
+            receiver,
+            run,
+            'off',
+            isScreenshotUploadEnabled
+          )
+          const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+              const failedTest = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+              assert.strictEqual(mediaPayloads.length, 0)
+            },
+            { hardTimeout: 60000 }
+          )
+
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+          assert.strictEqual(exitCode, 1)
+          const warningCount = getTestOutput().split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1
+          assert.strictEqual(warningCount, isScreenshotUploadEnabled ? 1 : 0, getTestOutput())
         })
       }
 

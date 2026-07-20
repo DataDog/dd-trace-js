@@ -5,6 +5,7 @@ const { basename } = require('node:path')
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const getConfig = require('../../dd-trace/src/config')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -95,6 +96,17 @@ class PlaywrightPlugin extends CiPlugin {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
       const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
       onDone(isModified)
+    })
+
+    this.addSub('ci:playwright:session:start', ({ isFailureScreenshotEnabled }) => {
+      if (getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED &&
+        !isFailureScreenshotEnabled) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.',
+          'Set Playwright use.screenshot to "only-on-failure", "on-first-failure", or "on".'
+        )
+      }
     })
 
     this.addSub('ci:playwright:session:finish', ({

@@ -504,6 +504,23 @@ function getProjectsFromRunner (runner, configArg) {
   })
 }
 
+/**
+ * Returns whether at least one Playwright project captures automatic screenshots for failed tests.
+ *
+ * @param {Array<object>} projects - Playwright projects with resolved use options
+ * @returns {boolean} Whether failure screenshot capture is enabled
+ */
+function isFailureScreenshotCaptureEnabled (projects) {
+  for (const project of projects) {
+    const screenshot = project.use?.screenshot
+    const mode = typeof screenshot === 'object' && screenshot !== null ? screenshot.mode : screenshot
+    if (mode === 'on' || mode === 'only-on-failure' || mode === 'on-first-failure') {
+      return true
+    }
+  }
+  return false
+}
+
 function getProjectsFromDispatcher (dispatcher) {
   const bundledConfig = dispatcher._testRun?.config?.config?.projects
   if (bundledConfig) {
@@ -1149,9 +1166,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     let onDone
 
     rootDir = getRootDir(this, config)
+    const projects = getProjectsFromRunner(this, config)
+    const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
-    testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
+    testSessionStartCh.publish({
+      command,
+      frameworkVersion: playwrightVersion,
+      rootDir,
+      isFailureScreenshotEnabled,
+    })
 
     try {
       const { err, libraryConfig } = await getChannelPromise(
@@ -1242,8 +1266,6 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         log.error('Playwright impacted tests error', err)
       }
     }
-
-    const projects = getProjectsFromRunner(this, config)
 
     // ATR and `--retries` are now compatible with Test Management.
     // Test Management tests have their retries set to 0 at the test level,
