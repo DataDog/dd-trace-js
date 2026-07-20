@@ -6,6 +6,9 @@ const assert = require('node:assert/strict')
 
 const { execFileSync, execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
+const http = require('node:http')
+const path = require('node:path')
+
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
