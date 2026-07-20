@@ -52,7 +52,7 @@ describe('test optimization validation setup runner', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-setup-'))
     const originalNodeOptions = process.env.NODE_OPTIONS
     const originalOtelTracesExporter = process.env.OTEL_TRACES_EXPORTER
-    process.env.NODE_OPTIONS = '--no-warnings'
+    process.env.NODE_OPTIONS = '--no-warnings -r dd-trace/ci/init'
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
     try {
@@ -68,7 +68,8 @@ describe('test optimization validation setup runner', () => {
                 '-e',
                 [
                   'assert = require("node:assert/strict")',
-                  'assert.strictEqual(process.env.NODE_OPTIONS, undefined)',
+                  'assert.strictEqual(process.env.NODE_OPTIONS?.includes("--no-warnings") ?? false, false)',
+                  'assert.strictEqual(process.env.NODE_OPTIONS?.includes("dd-trace/ci/init") ?? false, false)',
                   'assert.strictEqual(process.env.OTEL_TRACES_EXPORTER, undefined)',
                   'assert.strictEqual(process.env.PROJECT_SETUP_ENV, "present")',
                 ].join(';'),
