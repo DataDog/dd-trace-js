@@ -272,6 +272,56 @@ describe('init.js', () => {
 
   testInjectionScenarios('require', 'init.js', false)
   testRuntimeVersionChecks('require', 'init.js')
+
+  describe('PM2 cluster mode', () => {
+    useEnv({ NODE_OPTIONS: '--require dd-trace/init' })
+
+    afterEach(() => {
+      delete process.env.pm2_env
+    })
+
+    function checkEnv (expectedValues) {
+      return testFile('init/pm2-env.js', out => {
+        const env = JSON.parse(out.trim())
+        for (const [key, value] of Object.entries(expectedValues)) {
+          assert.strictEqual(env[key], value, `expected env.${key} to equal ${value}`)
+        }
+      }, [], '')
+    }
+
+    it('applies all env vars from pm2_env blob to process.env', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-svc', DD_ENV: 'pm2-env', MY_APP_VAR: 'hello' })
+      return checkEnv({ DD_SERVICE: 'pm2-svc', DD_ENV: 'pm2-env', MY_APP_VAR: 'hello' })
+    })
+
+    it('coerces non-string values to strings', () => {
+      process.env.pm2_env = JSON.stringify({ DD_TRACE_SAMPLE_RATE: 0.5 })
+      return checkEnv({ DD_TRACE_SAMPLE_RATE: '0.5' })
+    })
+
+    it('skips keys with null values', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    it('does not crash on malformed pm2_env JSON', () => {
+      process.env.pm2_env = 'not-valid-json'
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    it('does nothing when pm2_env is absent', () => {
+      return checkEnv({ DD_SERVICE: undefined })
+    })
+
+    describe('when env vars are already set', () => {
+      useEnv({ DD_SERVICE: 'original-service', MY_APP_VAR: 'original' })
+
+      it('overwrites existing env vars with pm2_env values', () => {
+        process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service', MY_APP_VAR: 'pm2-value' })
+        return checkEnv({ DD_SERVICE: 'pm2-service', MY_APP_VAR: 'pm2-value' })
+      })
+    })
+  })
 })
 
 // ESM is not supportable prior to Node.js 14.13.1 on the 14.x line,
