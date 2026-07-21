@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
-const { EventEmitter } = require('node:events')
+const { EventEmitter, once } = require('node:events')
 const path = require('node:path')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 
@@ -473,13 +473,14 @@ describe('test visibility with dynamic instrumentation', () => {
     })
   })
 
-  it('serializes removal with pending setup and cancels its queued replacement', async () => {
+  it('serializes probe replacement, cancels queued setup, and releases removed state', async () => {
     const worker = new EventEmitter()
     worker.unref = sinon.stub()
     const Worker = sinon.stub().returns(worker)
     const randomUUID = sinon.stub()
     randomUUID.onFirstCall().returns('probe-1')
     randomUUID.onSecondCall().returns('probe-2')
+    randomUUID.onThirdCall().returns('drain-1')
     const createDynamicInstrumentation = proxyquire('../../../src/ci-visibility/dynamic-instrumentation', {
       worker_threads: {
         Worker,
@@ -496,12 +497,14 @@ describe('test visibility with dynamic instrumentation', () => {
     const dynamicInstrumentation = createDynamicInstrumentation({})
     const setPostMessage = sinon.spy(dynamicInstrumentation.breakpointSetChannel.port2, 'postMessage')
     const removePostMessage = sinon.spy(dynamicInstrumentation.breakpointRemoveChannel.port2, 'postMessage')
+    const onHitFirstProbe = sinon.spy()
 
     const [firstProbeId, firstSetPromise] = dynamicInstrumentation.addLineProbe(
       { file: 'test.js', line: 23 },
-      sinon.stub()
+      onHitFirstProbe
     )
     const firstRemovePromise = dynamicInstrumentation.removeProbe(firstProbeId)
+    assert.strictEqual(dynamicInstrumentation.removeProbe(firstProbeId), firstRemovePromise)
     const [secondProbeId, secondSetPromise] = dynamicInstrumentation.addLineProbe(
       { file: 'test.js', line: 23 },
       sinon.stub()
@@ -525,8 +528,20 @@ describe('test visibility with dynamic instrumentation', () => {
     sinon.assert.calledOnce(setPostMessage)
     sinon.assert.calledOnceWithExactly(removePostMessage, firstProbeId)
 
+    const firstProbeSnapshot = { probe: { id: firstProbeId } }
+    dynamicInstrumentation.breakpointHitChannel.port1.postMessage({ snapshot: firstProbeSnapshot })
+    await setImmediatePromise()
+    sinon.assert.calledOnceWithExactly(onHitFirstProbe, { snapshot: firstProbeSnapshot })
+
+    const drainRequestPromise = once(dynamicInstrumentation.breakpointHitChannel.port1, 'message')
     dynamicInstrumentation.breakpointRemoveChannel.port1.postMessage(firstProbeId)
+    const [{ drainRequestId }] = await drainRequestPromise
+    dynamicInstrumentation.breakpointHitChannel.port1.postMessage({ drainRequestId })
     await firstRemovePromise
+
+    dynamicInstrumentation.breakpointHitChannel.port1.postMessage({ snapshot: firstProbeSnapshot })
+    await setImmediatePromise()
+    sinon.assert.calledOnce(onHitFirstProbe)
 
     dynamicInstrumentation.breakpointSetChannel.port1.close()
     dynamicInstrumentation.breakpointSetChannel.port2.close()
