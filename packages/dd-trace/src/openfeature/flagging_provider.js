@@ -1,14 +1,13 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const requireOptionalPeer = require('../../../datadog-instrumentations/src/helpers/require-optional-peer')
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 
-const { DatadogNodeServerProvider } = requireOptionalPeer('@datadog/openfeature-node-server')
+const { DatadogNodeServerProvider } = require('./require-provider')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.

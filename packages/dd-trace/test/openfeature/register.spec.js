@@ -38,7 +38,6 @@ describe('OpenFeature register', () => {
       enable: sinon.spy(),
     }
     flaggingProviderConstructions = 0
->>>>>>> af80e4e288 (feat(openfeature): support agentless feature flag configuration)
 
     delete require.cache[require.resolve('../../src/openfeature/register')]
     proxyquire('../../src/openfeature/register', {
