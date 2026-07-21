@@ -58,7 +58,12 @@ function buildCiCommandCandidate (framework) {
 
 function formatCiCommand (command) {
   if (typeof command === 'string') return command
-  if (command && typeof command === 'object') return serializeDisplayCommand(command)
+  if (!command || typeof command !== 'object') return
+  if (typeof command.displayCommand === 'string' || Array.isArray(command.argv) ||
+    (command.usesShell === true && typeof command.shellCommand === 'string')) {
+    return serializeDisplayCommand(command)
+  }
+  return command
 }
 
 function buildCiEnvSummary (ciWiring, command) {

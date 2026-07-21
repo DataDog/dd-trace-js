@@ -27,7 +27,7 @@ const JEST_OPTIONS_WITH_VALUE = new Set([
   '--testEnvironment',
   '--testRegex',
 ])
-const JEST_ROOT_DIR_PATTERN = /\brootDir\s*:\s*(['"])([^'"]+)\1/
+const JEST_ROOT_DIR_PATTERN = /(?:\brootDir\b|"rootDir"|'rootDir')\s*:\s*(['"])([^'"]+)\1/
 const COMMON_NODE_EXPORT_CONDITIONS = new Set(['default', 'module-sync', 'node', 'node-addons'])
 const INLINE_TYPE_IMPORT_PATTERN = /^import\s*\{([^}]*)\}\s*from\b/
 const INLINE_TYPE_EXPORT_PATTERN = /^export\s*\{([^}]*)\}\s*from\b/

@@ -1736,6 +1736,27 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('applies a quoted Jest rootDir when checking generated paths', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-quoted-jest-root-plan-'))
+    const configFile = path.join(root, 'jest.config.js')
+    const generatedFile = path.join(root, 'src', '__tests__', 'dd-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile)
+    framework.project.configFiles = [configFile]
+    fs.writeFileSync(configFile, [
+      'module.exports = {',
+      '  "rootDir": "src",',
+      '  testMatch: ["<rootDir>/__tests__/*.js"],',
+      '}',
+      '',
+    ].join('\n'))
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('ignores commented Jest testRegex rules', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-commented-jest-regex-plan-'))
     const configFile = path.join(root, 'jest.config.js')

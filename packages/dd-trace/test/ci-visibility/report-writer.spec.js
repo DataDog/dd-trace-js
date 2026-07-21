@@ -7,6 +7,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const { buildCiCommandCandidate } = require('../../../../ci/test-optimization-validation/ci-command-candidate')
 const { buildCiRemediation } = require('../../../../ci/test-optimization-validation/ci-remediation')
 const {
   writePendingReport,
@@ -21,6 +22,21 @@ function readMarkdownJsonSection (markdown, title) {
 }
 
 describe('test optimization validation report writer', () => {
+  it('preserves non-command CI metadata without trying to execute or format it', () => {
+    const command = { run: 'npm test' }
+    const candidate = buildCiCommandCandidate({
+      ciWiring: {
+        command,
+        provider: 'github-actions',
+        replayability: 'not_replayable',
+      },
+    })
+
+    assert.strictEqual(candidate.command, command)
+    assert.strictEqual(candidate.originalCommand, command)
+    assert.strictEqual(candidate.validationReplayCommand, undefined)
+  })
+
   it('records an incomplete run before live validation starts', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
