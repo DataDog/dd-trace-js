@@ -180,27 +180,21 @@ describe('Plugin', () => {
             const consumption = new EventEmitter()
             try {
               await consumer.run({
-                eachMessage: async () => {
-                  try {
-                    const checkpoint = recordCheckpointSpy.lastCall.args[0]
-                    assert.ok(
-                      checkpoint.edgeTags.includes('direction:in'),
-                      `Available tags: ${inspect(checkpoint.edgeTags)}`
-                    )
-                    assert.ok(
-                      Object.hasOwn(checkpoint, 'payloadSize'),
-                      `Available keys: ${inspect(Object.keys(checkpoint))}`
-                    )
-                    consumption.emit('complete')
-                  } catch (error) {
-                    consumption.emit('error', error)
-                  }
-                },
+                eachMessage: async () => consumption.emit('complete', recordCheckpointSpy.lastCall?.args[0]),
               })
-              await Promise.all([
+              const [[checkpoint]] = await Promise.all([
                 once(consumption, 'complete'),
                 sendMessages(kafka, testTopic, messages),
               ])
+              assert.ok(checkpoint, 'Expected a consume checkpoint')
+              assert.ok(
+                checkpoint.edgeTags.includes('direction:in'),
+                `Available tags: ${inspect(checkpoint.edgeTags)}`
+              )
+              assert.ok(
+                Object.hasOwn(checkpoint, 'payloadSize'),
+                `Available keys: ${inspect(Object.keys(checkpoint))}`
+              )
             } finally {
               recordCheckpointSpy.restore()
             }
