@@ -50,11 +50,13 @@ function request (data, options, callback) {
   }
 
   // Never put the Datadog API key on a cleartext connection to a non-loopback host; that would
-  // expose it on the wire. Loopback (local agent, dev proxy, tests) is exempt. Strip the key
+  // expose it on the wire. Loopback (local agent, dev proxy, tests) and explicit operator-owned
+  // endpoints are exempt. Strip the key
   // rather than drop the request: the agent proxies telemetry with its own key, while an https
   // intake URL is required to authenticate agentless traffic.
   const hasApiKey = options.headers['dd-api-key'] !== undefined || options.headers['DD-API-KEY'] !== undefined
-  if (hasApiKey && options.protocol === 'http:' && !isLoopbackHost(options.hostname)) {
+  const insecureApiKey = options.protocol === 'http:' && !isLoopbackHost(options.hostname)
+  if (hasApiKey && insecureApiKey && !options.allowInsecureApiKey) {
     log.error(
       'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
       options.hostname
