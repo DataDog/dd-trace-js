@@ -1878,6 +1878,43 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('unescapes string-valued Jest testRegex rules', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-string-jest-regex-plan-'))
+    const configFile = path.join(root, 'jest.config.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project.configFiles = [configFile]
+    fs.writeFileSync(configFile, "module.exports = { testRegex: '.*\\\\.test(?:-[^.]+)?\\\\.js$' }\n")
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects generated Jest tests outside the configured rootDir', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-root-plan-'))
+    const configFile = path.join(root, 'jest.config.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project.configFiles = [configFile]
+    fs.writeFileSync(configFile, [
+      'module.exports = {',
+      '  rootDir: "src",',
+      '  testMatch: ["<rootDir>/**/*.test.js"],',
+      '}',
+      '',
+    ].join('\n'))
+
+    try {
+      assert.throws(
+        () => formatFrameworkPlan(root, framework),
+        new RegExp(`temporary test path .* outside rootDir ${escapeRegExp(path.join(root, 'src'))}`, 's')
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a pnpm script separator that reaches Jest arguments', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-pnpm-forwarding-'))
     const command = {
@@ -1998,6 +2035,26 @@ describe('test optimization validator-owned execution phases', () => {
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
       }), /typecheck-enabled Vitest config.*count each generated test twice/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores commented and string Vitest typecheck examples', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-typecheck-example-plan-'))
+    const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.ts')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    setGeneratedTestFramework(framework, 'vitest')
+    framework.generatedTestStrategy.fileExtension = '.test.ts'
+    fs.writeFileSync(path.join(root, 'vitest.config.ts'), [
+      '// typecheck: { enabled: true },',
+      'const example = "typecheck: { enabled: true }"',
+      'export default { test: {} }',
+      '',
+    ].join('\n'))
+
+    try {
+      formatFrameworkPlan(root, framework)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

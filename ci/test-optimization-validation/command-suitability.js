@@ -12,6 +12,8 @@ const MAX_STATIC_CONFIG_PATTERNS = 32
 const MAX_STATIC_CONFIG_PATTERN_BYTES = 256
 const MAX_LOCAL_IMPORT_DEPTH = 4
 const MAX_LOCAL_IMPORT_FILES = 24
+const HEX_PATTERN = /^[0-9a-fA-F]+$/
+const JAVASCRIPT_SIMPLE_ESCAPES = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', 0: '\0' }
 const JEST_LOCAL_PATH_PATTERN = /(['"])(<rootDir>\/[^'"\r\n]+)\1/g
 const JEST_LITERAL_REGEX_PATTERN =
   /^\s*(?:(["'])([^"'\r\n]{1,256})\1|\/((?:\\.|[^/\r\n]){1,256})\/[dgimsuvy]*)/
@@ -36,8 +38,6 @@ const INLINE_TYPE_EXPORT_PATTERN = /^export\s*\{([^}]*)\}\s*from\b/
 const TYPE_ONLY_IMPORT_PATTERN = /^import\s+type\b/
 const TYPE_ONLY_EXPORT_PATTERN = /^export\s+type\b/
 const TEST_FILE_BASENAME_PATTERN = /^(?:(?:test|spec)|.+[._-](?:test|spec))\.[cm]?[jt]sx?$/
-const TYPECHECK_ENABLED_PATTERN =
-  /(?:\btypecheck\b|['"]typecheck['"])\s*:\s*\{[\s\S]{0,2000}?(?:\benabled\b|['"]enabled['"])\s*:\s*true/
 const VITEST_CONFIG_FILENAMES = [
   'vitest.config.js',
   'vitest.config.mjs',
@@ -631,10 +631,16 @@ function getPackageScriptExpansion (command, repositoryRoot) {
   }
   if (!['npm', 'pnpm', 'yarn'].includes(packageManager)) return
 
-  const scriptIndex = argv[runIndex] === 'run'
+  const invocation = argv[runIndex]
+  const scriptIndex = invocation === 'run' || (packageManager === 'npm' && invocation === 'run-script')
     ? runIndex + 1
-    : ['pnpm', 'yarn'].includes(packageManager) ? runIndex : -1
-  const scriptName = argv[scriptIndex]
+    : ['pnpm', 'yarn'].includes(packageManager) ||
+      (packageManager === 'npm' && ['test', 't', 'tst', 'start', 'stop', 'restart'].includes(invocation))
+        ? runIndex
+        : -1
+  const scriptName = packageManager === 'npm' && ['t', 'tst'].includes(argv[scriptIndex])
+    ? 'test'
+    : argv[scriptIndex]
   if (typeof scriptName !== 'string') return
   const packageJsonSource = readRepositoryConfig(path.join(command.cwd, 'package.json'), repositoryRoot)
   if (!packageJsonSource) return
@@ -646,7 +652,8 @@ function getPackageScriptExpansion (command, repositoryRoot) {
   }
   const script = packageJson.scripts?.[scriptName]
   if (typeof script !== 'string' || script.length > MAX_CONFIG_BYTES) return
-  const forwardedArgs = argv.slice(scriptIndex + 1)
+  let forwardedArgs = argv.slice(scriptIndex + 1)
+  if (packageManager === 'npm' && forwardedArgs[0] === '--') forwardedArgs = forwardedArgs.slice(1)
   return {
     effectiveCommand: [script, ...forwardedArgs].join(' '),
     forwardedArgs,
@@ -669,7 +676,10 @@ function getJestGeneratedPathError (command, framework, repositoryRoot) {
 
   for (const file of framework.generatedTestStrategy?.files || []) {
     const relative = path.relative(rules.rootDir, file.path).split(path.sep).join('/')
-    if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) continue
+    if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) {
+      return `uses temporary test path ${file.path}, which is outside rootDir ${rules.rootDir} from ` +
+        `${rules.source}. Choose a temporary path inside the selected Jest rootDir before asking for approval.`
+    }
     const absolute = file.path.split(path.sep).join('/')
     if (rules.testMatch.length > 0 && !rules.testMatch.some(pattern => {
       return matchesGlob(relative, pattern.replaceAll('<rootDir>/', '')) ||
@@ -830,9 +840,45 @@ function getLiteralRegexPatterns (source, property) {
   visitLiteralProperties(source, property, valueOffset => {
     if (patterns.length === MAX_STATIC_CONFIG_PATTERNS) return
     const match = JEST_LITERAL_REGEX_PATTERN.exec(source.slice(valueOffset))
-    if (match) patterns.push(match[2] || match[3])
+    if (!match) return
+    const pattern = match[2] === undefined ? match[3] : unescapeJavaScriptString(match[2])
+    if (pattern !== undefined) patterns.push(pattern)
   })
   return patterns
+}
+
+/**
+ * Decodes one bounded JavaScript string literal body without executing configuration code.
+ *
+ * @param {string} value raw string literal body
+ * @returns {string|undefined} decoded string
+ */
+function unescapeJavaScriptString (value) {
+  let decoded = ''
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]
+    if (character.charCodeAt(0) !== 92) {
+      decoded += character
+      continue
+    }
+
+    const escaped = value[++index]
+    if (escaped === undefined) return
+    if (JAVASCRIPT_SIMPLE_ESCAPES[escaped] !== undefined) {
+      decoded += JAVASCRIPT_SIMPLE_ESCAPES[escaped]
+      continue
+    }
+    if (escaped === 'x' || escaped === 'u') {
+      const length = escaped === 'x' ? 2 : 4
+      const hex = value.slice(index + 1, index + 1 + length)
+      if (hex.length !== length || !HEX_PATTERN.test(hex)) return
+      decoded += String.fromCharCode(Number.parseInt(hex, 16))
+      index += length
+      continue
+    }
+    decoded += escaped
+  }
+  return decoded
 }
 
 /**
@@ -840,19 +886,20 @@ function getLiteralRegexPatterns (source, property) {
  *
  * @param {string} source JavaScript config source
  * @param {string} property property name
- * @param {(valueOffset: number) => void} visitor property value visitor
+ * @param {(valueOffset: number, depth: number) => void} visitor property value visitor
+ * @param {number} [objectStart] containing object start
  * @returns {void}
  */
-function visitLiteralProperties (source, property, visitor) {
-  visitConfigSource(source, ({ index }) => {
+function visitLiteralProperties (source, property, visitor, objectStart = -1) {
+  visitConfigSource(source, ({ index, depth }) => {
     if (!isPropertyAt(source, index, property)) return
     const propertyEnd = index + property.length
     const match = /^\s*:/.exec(source.slice(propertyEnd))
-    if (match) visitor(propertyEnd + match[0].length)
-  }, -1, ({ index, quote, end }) => {
+    if (match) visitor(propertyEnd + match[0].length, depth)
+  }, objectStart, ({ index, quote, end, depth }) => {
     if (quote === '`' || source.slice(index + 1, end) !== property) return
     const match = /^\s*:/.exec(source.slice(end + 1))
-    if (match) visitor(end + 1 + match[0].length)
+    if (match) visitor(end + 1 + match[0].length, depth)
   })
 }
 
@@ -977,20 +1024,19 @@ function getLiteralTestConfigPatterns (config, property) {
 
 function getLiteralObjectStarts (config, property) {
   const starts = []
-  visitConfigSource(config, ({ index }) => {
-    if (!isPropertyAt(config, index, property)) return
-    const match = new RegExp(String.raw`^${property}\s*:\s*\{`).exec(config.slice(index))
-    if (match) starts.push(index + match[0].lastIndexOf('{'))
+  visitLiteralProperties(config, property, valueOffset => {
+    const match = /^\s*\{/.exec(config.slice(valueOffset))
+    if (match) starts.push(valueOffset + match[0].lastIndexOf('{'))
   })
   return starts
 }
 
 function getDirectLiteralArrayPatterns (config, objectStart, property) {
   let patterns = []
-  visitConfigSource(config, ({ index, depth }) => {
-    if (patterns.length > 0 || depth !== 1 || !isPropertyAt(config, index, property)) return
-    const match = new RegExp(String.raw`^${property}\s*:\s*\[`).exec(config.slice(index))
-    if (match) patterns = readLiteralStringArray(config, index + match[0].length)
+  visitLiteralProperties(config, property, (valueOffset, depth) => {
+    if (patterns.length > 0 || depth !== 1) return
+    const match = /^\s*\[/.exec(config.slice(valueOffset))
+    if (match) patterns = readLiteralStringArray(config, valueOffset + match[0].length)
   }, objectStart)
   return patterns
 }
@@ -1084,7 +1130,7 @@ function visitConfigSource (config, visitor, objectStart = -1, stringVisitor) {
           if (config[end] === character || config[end] === '\r' || config[end] === '\n') break
           end++
         }
-        if (config[end] === character) stringVisitor({ index, quote: character, end })
+        if (config[end] === character) stringVisitor({ index, quote: character, end, depth })
       }
       quote = character
       continue
@@ -1241,7 +1287,16 @@ function getRepositoryFile (filename, repositoryRoot) {
 
 function configEnablesTypecheck (filename, repositoryRoot) {
   const config = readRepositoryConfig(filename, repositoryRoot)
-  return config ? TYPECHECK_ENABLED_PATTERN.test(config) : false
+  if (!config) return false
+
+  for (const objectStart of getLiteralObjectStarts(config, 'typecheck')) {
+    let enabled = false
+    visitLiteralProperties(config, 'enabled', (valueOffset, depth) => {
+      if (depth === 1 && /^\s*true\b/.test(config.slice(valueOffset))) enabled = true
+    }, objectStart)
+    if (enabled) return true
+  }
+  return false
 }
 
 function readRepositoryConfig (filename, repositoryRoot) {

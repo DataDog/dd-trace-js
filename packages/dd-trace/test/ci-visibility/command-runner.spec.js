@@ -925,25 +925,32 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('resolves nyc output from an expanded package script and its own cwd', () => {
-    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
-    const packageDirectory = path.join(repositoryRoot, 'packages', 'example')
-    fs.mkdirSync(packageDirectory, { recursive: true })
-    fs.writeFileSync(path.join(repositoryRoot, 'package.json'), JSON.stringify({
-      scripts: {
-        test: 'nyc --temp-dir raw-coverage --cwd packages/example mocha',
-      },
-    }))
+  for (const argv of [
+    ['npm', 'run', 'test'],
+    ['npm', 'run-script', 'test'],
+    ['npm', 'test'],
+    ['npm', 't'],
+    ['npm', 'tst'],
+  ]) {
+    it(`resolves nyc output from expanded package script ${argv.join(' ')}`, () => {
+      const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+      const packageDirectory = path.join(repositoryRoot, 'packages', 'example')
+      fs.mkdirSync(packageDirectory, { recursive: true })
+      fs.writeFileSync(path.join(repositoryRoot, 'package.json'), JSON.stringify({
+        scripts: {
+          test: 'nyc --temp-dir raw-coverage --cwd packages/example mocha',
+        },
+      }))
 
-    try {
-      assert.deepStrictEqual(getCommandOutputPaths({
-        cwd: repositoryRoot,
-        argv: ['npm', 'run', 'test'],
-      }), [path.join(packageDirectory, 'raw-coverage')])
-    } finally {
-      fs.rmSync(repositoryRoot, { recursive: true, force: true })
-    }
-  })
+      try {
+        assert.deepStrictEqual(getCommandOutputPaths({ cwd: repositoryRoot, argv }), [
+          path.join(packageDirectory, 'raw-coverage'),
+        ])
+      } finally {
+        fs.rmSync(repositoryRoot, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('fails closed when a command replaces an output parent before cleanup', async function () {
     if (process.platform === 'win32') this.skip()
