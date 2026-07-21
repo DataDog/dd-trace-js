@@ -63,7 +63,7 @@ else
   fi
 fi
 
-npm run services
+yarn services
 
 echo -e $YELLOW
 echo -e "You are now in a sub-shell (i.e. a dev environment) for the dd-trace plugin '$plugin_name'."

@@ -285,7 +285,7 @@ See [Testing](testing.md) for complete templates.
 **ESM integration tests** — `packages/datadog-plugin-<name>/test/integration-test/`
 
 ```bash
-# CI command (preferred) — handles dependency installation via `npm run services`
+# CI command (preferred) — handles dependency installation via yarn services
 PLUGINS="<name>" npm run test:plugins:ci
 ```
 

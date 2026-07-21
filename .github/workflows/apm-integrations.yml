@@ -1082,7 +1082,7 @@ jobs:
           sudo sh -c "echo /opt/oracle/instantclient_19_28 > /etc/ld.so.conf.d/oracle-instantclient.conf"
           sudo ldconfig
       - run: yarn config set ignore-engines true
-      - run: npm run services
+      - run: yarn services --ignore-engines
       - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs

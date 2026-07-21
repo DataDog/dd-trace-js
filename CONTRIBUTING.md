@@ -423,7 +423,7 @@ Instead, you can follow this procedure for the plugin you want to run tests for:
 
 1. Check the CI config in `.github/workflows/*.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
 2. Run the appropriate docker-compose command to start the required services. For example, for the `amqplib` plugin, you would run: `docker compose up -d rabbitmq`.
-3. Run `npm run services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
+3. Run `yarn services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
 4. Now, you can run `npm run test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
 
 To wrap that all up into a simple few lines of shell commands, here is all of the above, for the `amqplib` plugin:
@@ -434,7 +434,7 @@ export SERVICES="rabbitmq" # retrieved from .github/workflows/apm-integrations.y
 export PLUGINS="amqplib" # retrieved from .github/workflows/apm-integrations.yml
 
 docker compose up -d $SERVICES
-npm run services
+yarn services
 
 npm run test:plugins # This one actually runs the tests. Can be run many times.
 ```

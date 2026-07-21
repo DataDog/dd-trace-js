@@ -10,12 +10,13 @@
 
 **Package manager policy:**
 
-- Use **yarn only for installing dependencies**:
+- Use **yarn only for installing dependencies and services**:
   - `yarn add`
   - `yarn install`
+  - `yarn services`
 - Use **npm for running scripts and other commands**: `npm run <script>`
 - In this repo, **everything else** (tests, lint, build, etc.) should use **npm**, not yarn.
-- Use `npm run services` to set up test service/plugin dependencies.
+- `yarn services` is the only non-install yarn command: it sets up test service/plugin dependencies.
 
 ## Project Overview
 
@@ -89,7 +90,7 @@ To run a single test file directly:
 ```bash
 export SERVICES="rabbitmq" PLUGINS="amqplib"
 docker compose up -d $SERVICES
-npm run services && npm run test:plugins
+yarn services && npm run test:plugins
 ```
 
 **ARM64 incompatible:** `aerospike`, `couchbase`, `grpc`, `oracledb`
