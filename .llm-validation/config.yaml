@@ -2,25 +2,43 @@
 model: claude-opus-4-8
 runs: 3
 
-# CLAUDE.md loads AGENTS.md, so changes to either file can alter the effective instruction set.
+# The instruction files this repo monitors (candidate = the PR's copy, baseline = master's). Repo-relative.
+# This is the single source of truth for validation and the CI trigger. CLAUDE.md loads AGENTS.md; the APM
+# integration skill and the references exercised by its benchmark load on demand.
 instruction_files:
   - AGENTS.md
   - CLAUDE.md
+  - .agents/skills/apm-integrations/SKILL.md
+  - .agents/skills/apm-integrations/references/new-integration-guide.md
+  - .agents/skills/apm-integrations/references/orchestrion.md
+  - .agents/skills/apm-integrations/references/reference-plugins.md
+  - .agents/skills/apm-integrations/references/testing.md
 
-default_level: minimum
+# Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
+# Production default: `gate` — a curated, high-signal set where the monitored instructions are the source of the
+# right answer, with one or more cases per monitored file plus one advisory control case. It uses eight runs for
+# tight confidence intervals; `files:` targeting narrows it to the instruction files that changed. Use `full` for
+# an on-demand sweep of the whole suite; `minimum` is the cheap development/fallback preset.
+default_level: gate
 presets:
-  minimum:
-    cases: ["dd-trace-js-package-manager-001", "dd-trace-js-plugin-tests-002"]
-    runs: 4
-  medium:
-    max_cases: 5
-    runs: 3
-  full:
+  gate: # Curated per-PR gate: highest-signal content cases plus one control case.
+    cases:
+      - dd-trace-js-package-manager-001
+      - dd-trace-js-plugin-tests-002
+      - dd-trace-js-new-configuration-003
+      - dd-trace-js-test-boundaries-004
+      - dd-trace-js-new-cache-integration-005
+      - dd-trace-js-control-http-propagation-007
+    runs: 8 # 16 pairwise comparisons for a tighter confidence interval.
+  minimum: # One AGENTS.md case and one skill case.
+    cases: ["dd-trace-js-package-manager-001", "dd-trace-js-new-cache-integration-005"]
+    runs: 4 # 8 pairwise comparisons.
+  full: # Whole suite.
     runs: 3
 
-# Block only confident regressions; noisy results remain advisory.
+# A case blocks on a confident regression by default; mark it `only_warn: true` to make it advisory.
 policy:
   noise_threshold: 1.0
-  pairwise_win_floor: 0.45
-  blocking_fail_floor: 0.45
-  blocking_fail_ci_upper: 0.55
+  pairwise_win_floor: 0.45     # A candidate pairwise majority loss is a regression.
+  blocking_fail_floor: 0.45    # Any majority loss can fail when it is sufficiently confident.
+  blocking_fail_ci_upper: 0.55 # Wide-confidence-interval losses warn instead of blocking.
