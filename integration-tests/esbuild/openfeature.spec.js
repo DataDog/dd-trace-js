@@ -23,7 +23,7 @@ esbuildVersions.forEach((version) => {
       execSync(`rm -rf ${path.join(cwd, 'bun.lock')}`, { cwd })
       execSync('npm install -g yarn', { cwd })
 
-      execSync('yarn', { cwd })
+      execSync('yarn --ignore-engines', { cwd })
     })
 
     beforeEach(async () => {
