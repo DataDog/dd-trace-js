@@ -1,8 +1,34 @@
 'use strict'
 
-// Playwright 1.60 bundles several former hook targets into local classes/functions.
-// Keep these rewrites limited to private bundled internals that addHook cannot wrap.
+// Playwright keeps several hook targets in private local classes/functions.
+// Keep these rewrites limited to bundled internals that addHook cannot wrap.
 module.exports = [
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.38.0 <1.51.0',
+      filePath: 'lib/index.js',
+    },
+    functionQuery: {
+      className: 'ArtifactsRecorder',
+      methodName: '_createScreenshotAttachmentPath',
+      kind: 'Sync',
+    },
+    channelName: 'ArtifactsRecorder_createScreenshotAttachmentPath',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.51.0',
+      filePath: 'lib/index.js',
+    },
+    functionQuery: {
+      className: 'SnapshotRecorder',
+      methodName: '_createAttachmentPath',
+      kind: 'Sync',
+    },
+    channelName: 'SnapshotRecorder_createAttachmentPath',
+  },
   {
     module: {
       name: 'playwright',

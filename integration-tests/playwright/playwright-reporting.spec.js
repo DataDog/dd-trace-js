@@ -494,6 +494,22 @@ versions.forEach((version) => {
         assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING))
       })
 
+      it('does not warn when the active transport can upload screenshots', async (receiver, run) => {
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          true,
+          getCiVisEvpProxyConfig(receiver.port)
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 1)
+        assert.ok(!getTestOutput().includes(SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING), getTestOutput())
+        assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING), getTestOutput())
+      })
+
       it('excludes screenshot upload time from the failed test duration', async (receiver, run) => {
         receiver.setMediaResponseDelay(500)
         const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)

@@ -18,5 +18,13 @@ test('uploads only the automatic failure screenshot', async ({ page }, testInfo)
     contentType: 'image/png',
   })
 
+  const injectedScreenshotPath = testInfo.outputPath('test-failed-98.png')
+  await page.screenshot({ path: injectedScreenshotPath })
+  testInfo.attachments.push({
+    name: 'screenshot',
+    path: injectedScreenshotPath,
+    contentType: 'image/png',
+  })
+
   expect(true).toBe(false)
 })
