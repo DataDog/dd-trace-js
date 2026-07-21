@@ -269,7 +269,7 @@ Add to `.github/workflows/apm-integrations.yml`:
       with:
         version: ${{ matrix.node-version }}
     - uses: ./.github/actions/install
-    - run: yarn test:plugins:ci
+    - run: npm run test:plugins:ci
   strategy:
     matrix:
       node-version: [18, 22]

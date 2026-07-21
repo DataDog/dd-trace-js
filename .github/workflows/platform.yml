@@ -83,7 +83,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: yarn test:integration:bun
+      - run: npm run test:integration:bun
       - uses: ./.github/actions/upload-junit-artifacts
         if: always()
         with:
@@ -97,9 +97,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:core:ci
+      - run: npm run test:core:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:core:ci
+      - run: npm run test:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
@@ -138,7 +138,7 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:coverage
+      - run: npm run test:integration:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: platform-integration-${{ matrix.version }}
@@ -164,7 +164,7 @@ jobs:
       - uses: ./.github/actions/install
       # Disable core dumps since crashtracking tests intentionally abort
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:crashtracking
+      - run: npm run test:integration:crashtracking
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -178,7 +178,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:trace:guardrails:ci
+      - run: npm run test:trace:guardrails:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
@@ -238,9 +238,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:shimmer:ci
+      - run: npm run test:shimmer:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:shimmer:ci
+      - run: npm run test:shimmer:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
