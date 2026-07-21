@@ -51,7 +51,7 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     return { ok: true, preflight }
   }
 
-  const commandFailure = getCommandBlocker(result)
+  const commandFailure = getCommandBlocker(result, { testsRan: observedTestCount > 0 })
   const diagnosis = commandFailure?.summary || getPreflightFailureDiagnosis({
     maxTestCount,
     observedTestCount,

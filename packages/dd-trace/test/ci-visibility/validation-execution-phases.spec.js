@@ -150,7 +150,7 @@ describe('test optimization validator-owned execution phases', () => {
         argv: [
           process.execPath,
           '-e',
-          'console.error("SyntaxError: expected true to equal false"); ' +
+          'console.error("Error: Cannot find module after the test started"); ' +
             'console.log("Tests: 1 failed, 1 total"); process.exit(1)',
         ],
       },
@@ -1363,13 +1363,40 @@ describe('test optimization validator-owned execution phases', () => {
     }))
     fs.writeFileSync(testFile, [
       "import type { Input } from 'type-only-project'",
+      "import { type InlineInput } from 'type-only-project/inline'",
       "export type { Output } from '../missing-types'",
+      "export { type InlineOutput } from '../also-missing-types'",
       'export const value = true',
       '',
     ].join('\n'))
 
     try {
       formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('checks runtime imports mixed with inline type specifiers', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-mixed-type-import-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.ts')
+    const packageJson = path.join(root, 'package.json')
+    const missingEntrypoint = path.join(root, 'dist', 'index.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'mixed-type-project',
+      exports: './dist/index.js',
+    }))
+    fs.writeFileSync(testFile, "import { type Input, runtimeValue } from 'mixed-type-project'\n")
+
+    try {
+      assert.throws(
+        () => formatFrameworkPlan(root, framework),
+        new RegExp(`entrypoint ${escapeRegExp(missingEntrypoint)} does not exist`)
+      )
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -1793,6 +1820,33 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
+  it('rejects a separator forwarded by Yarn script shorthand', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-shorthand-forwarding-'))
+    const command = {
+      cwd: root,
+      argv: ['yarn', 'test:lib', '--', '--runTestsByPath', 'test/unit-test.ts'],
+    }
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { 'test:lib': 'jest' } }))
+
+    try {
+      assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
+        effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
+        forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+        packageManager: 'yarn',
+        script: 'jest',
+        scriptName: 'test:lib',
+      })
+      assert.match(getCommandSuitabilityError({
+        command,
+        framework: { framework: 'jest', project: { root, configFiles: [] } },
+        label: 'the CI test command',
+        repositoryRoot: root,
+      }), /literal extra "--".*append focused runner arguments directly/s)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects generated Vitest runtime tests under a typecheck-enabled config', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-plan-'))
     const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.ts')
@@ -1801,7 +1855,7 @@ describe('test optimization validator-owned execution phases', () => {
     setGeneratedTestFramework(framework, 'vitest')
     framework.existingTestCommand.argv.push('--typecheck.enabled=false')
     framework.generatedTestStrategy.fileExtension = '.test.ts'
-    fs.writeFileSync(configFile, 'export default { test: { typecheck: { enabled: true } } }\n')
+    fs.writeFileSync(configFile, 'export default { test: { "typecheck": { "enabled": true } } }\n')
     for (const scenario of framework.generatedTestStrategy.scenarios) {
       scenario.runCommand = {
         cwd: root,

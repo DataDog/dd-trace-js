@@ -13,9 +13,11 @@ const WATCHMAN_PATTERN = /\bwatchman\b/i
  * @param {object} result command result
  * @param {string} [result.stdout] captured stdout
  * @param {string} [result.stderr] captured stderr
+ * @param {object} [options] classification options
+ * @param {boolean} [options.testsRan] whether reliable test output was observed
  * @returns {object|undefined} structured blocker diagnosis
  */
-function getCommandBlocker (result) {
+function getCommandBlocker (result, options = {}) {
   const output = `${result.stdout || ''}\n${result.stderr || ''}`
   const yarnVersions = output.match(
     /defines "packageManager": "(yarn@[^"]+)"[\s\S]*?current global version of Yarn is ([0-9][0-9.]*)\./i
@@ -76,7 +78,7 @@ function getCommandBlocker (result) {
     }
   }
 
-  if (result.exitCode !== 0 && MODULE_OR_TRANSFORM_PATTERN.test(output)) {
+  if (result.exitCode !== 0 && options.testsRan !== true && MODULE_OR_TRANSFORM_PATTERN.test(output)) {
     return {
       kind: 'project-command-initialization-failed',
       summary: 'The selected project test command failed during module resolution, transformation, or runner ' +

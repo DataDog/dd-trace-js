@@ -29,7 +29,12 @@ const JEST_OPTIONS_WITH_VALUE = new Set([
 ])
 const JEST_ROOT_DIR_PATTERN = /\brootDir\s*:\s*(['"])([^'"]+)\1/
 const COMMON_NODE_EXPORT_CONDITIONS = new Set(['default', 'module-sync', 'node', 'node-addons'])
-const TYPECHECK_ENABLED_PATTERN = /typecheck\s*:\s*\{[\s\S]{0,2000}?enabled\s*:\s*true/
+const INLINE_TYPE_IMPORT_PATTERN = /^import\s*\{([^}]*)\}\s*from\b/
+const INLINE_TYPE_EXPORT_PATTERN = /^export\s*\{([^}]*)\}\s*from\b/
+const TYPE_ONLY_IMPORT_PATTERN = /^import\s+type\b/
+const TYPE_ONLY_EXPORT_PATTERN = /^export\s+type\b/
+const TYPECHECK_ENABLED_PATTERN =
+  /(?:\btypecheck\b|['"]typecheck['"])\s*:\s*\{[\s\S]{0,2000}?(?:\benabled\b|['"]enabled['"])\s*:\s*true/
 const VITEST_CONFIG_FILENAMES = [
   'vitest.config.js',
   'vitest.config.mjs',
@@ -374,13 +379,13 @@ function getStaticModuleReferences (source) {
     } else if (isTokenAt(source, index, 'import')) {
       condition = 'import'
       const statement = source.slice(index, index + 1024)
-      if (/^import\s+type\b/.test(statement)) return
+      if (isTypeOnlyModuleStatement(statement, 'import')) return
       match = /^import\s*(?:\(\s*)?(['"])([^'"\r\n]{1,512})\1/.exec(statement) ||
         /^import\s+[^;]{0,900}?\bfrom\s*(['"])([^'"\r\n]{1,512})\1/.exec(statement)
     } else if (isTokenAt(source, index, 'export')) {
       condition = 'import'
       const statement = source.slice(index, index + 1024)
-      if (/^export\s+type\b/.test(statement)) return
+      if (isTypeOnlyModuleStatement(statement, 'export')) return
       match = /^export\s+[*{][^;]{0,900}?\bfrom\s*(['"])([^'"\r\n]{1,512})\1/.exec(statement)
     }
     if (!match) return
@@ -390,6 +395,30 @@ function getStaticModuleReferences (source) {
     }
   })
   return references
+}
+
+/**
+ * Identifies an import or export whose entire clause is erased by TypeScript.
+ *
+ * @param {string} statement bounded module statement
+ * @param {'import'|'export'} keyword module statement keyword
+ * @returns {boolean} whether every imported or exported binding is type-only
+ */
+function isTypeOnlyModuleStatement (statement, keyword) {
+  const typeOnlyPattern = keyword === 'import' ? TYPE_ONLY_IMPORT_PATTERN : TYPE_ONLY_EXPORT_PATTERN
+  if (typeOnlyPattern.test(statement)) return true
+  const inlineTypePattern = keyword === 'import' ? INLINE_TYPE_IMPORT_PATTERN : INLINE_TYPE_EXPORT_PATTERN
+  const match = inlineTypePattern.exec(statement)
+  if (!match) return false
+
+  let found = false
+  for (const specifier of match[1].split(',')) {
+    const value = specifier.trim()
+    if (!value) continue
+    found = true
+    if (!/^type\b/.test(value)) return false
+  }
+  return found
 }
 
 /**
@@ -585,9 +614,12 @@ function getPackageScriptExpansion (command, repositoryRoot) {
     packageManager = 'yarn'
     runIndex = 2
   }
-  if (!['npm', 'pnpm', 'yarn'].includes(packageManager) || argv[runIndex] !== 'run') return
+  if (!['npm', 'pnpm', 'yarn'].includes(packageManager)) return
 
-  const scriptName = argv[runIndex + 1]
+  const scriptIndex = argv[runIndex] === 'run'
+    ? runIndex + 1
+    : packageManager === 'yarn' ? runIndex : -1
+  const scriptName = argv[scriptIndex]
   if (typeof scriptName !== 'string') return
   const packageJsonSource = readRepositoryConfig(path.join(command.cwd, 'package.json'), repositoryRoot)
   if (!packageJsonSource) return
@@ -599,7 +631,7 @@ function getPackageScriptExpansion (command, repositoryRoot) {
   }
   const script = packageJson.scripts?.[scriptName]
   if (typeof script !== 'string' || script.length > MAX_CONFIG_BYTES) return
-  let forwardedArgs = argv.slice(runIndex + 2)
+  let forwardedArgs = argv.slice(scriptIndex + 1)
   if (packageManager === 'pnpm' && forwardedArgs[0] === '--') forwardedArgs = forwardedArgs.slice(1)
   return {
     effectiveCommand: [script, ...forwardedArgs].join(' '),
