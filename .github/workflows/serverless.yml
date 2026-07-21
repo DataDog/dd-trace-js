@@ -29,13 +29,13 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:lambda:ci
+      - run: npm run test:lambda:ci
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
@@ -109,7 +109,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
