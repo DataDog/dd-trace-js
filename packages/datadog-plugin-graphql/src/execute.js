@@ -314,6 +314,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       type: 'graphql',
       startTime,
       meta: {
+        'graphql.field.coordinates': `${field.parentTypeName}.${fieldName}`,
         'graphql.field.name': fieldName,
         'graphql.field.path': collapsedKey,
         'graphql.field.type': baseTypeName,
@@ -431,13 +432,29 @@ function wrapResolve (resolve) {
     }
 
     const fieldKey = config.collapse ? pathString : infoPath
+    const parentTypeName = info.parentType.name
     let field = rootCtx.fields.get(fieldKey)
+    const collapsedField = field
+    if (config.collapse && field !== undefined && field.parentTypeName !== parentTypeName) {
+      const parentTypeFields = field.parentTypeFields
+      if (parentTypeFields?.parentTypeName === undefined) {
+        field = parentTypeFields?.get(parentTypeName)
+      } else if (parentTypeFields.parentTypeName === parentTypeName) {
+        field = parentTypeFields
+      } else {
+        field = undefined
+      }
+      if (field && infoPath.typename === undefined) {
+        cacheFieldByPath(rootCtx, infoPath, field)
+      }
+    }
     const isFirst = !field
 
     if (isFirst) {
       field = {
         fieldNode: info.fieldNodes?.[0],
         fieldName: info.fieldName,
+        parentTypeName,
         returnType: info.returnType,
         baseTypeName: getBaseTypeName(info.returnType),
         variableValues: info.variableValues,
@@ -451,7 +468,25 @@ function wrapResolve (resolve) {
         parentStore: null,
         currentStore: null,
       }
-      rootCtx.fields.set(fieldKey, field)
+      if (config.collapse && collapsedField) {
+        const parentTypeFields = collapsedField.parentTypeFields
+        if (parentTypeFields === undefined) {
+          collapsedField.parentTypeFields = field
+        } else if (parentTypeFields.parentTypeName === undefined) {
+          parentTypeFields.set(parentTypeName, field)
+        } else {
+          const fieldsByParentType = new Map()
+            .set(collapsedField.parentTypeName, collapsedField)
+            .set(parentTypeFields.parentTypeName, parentTypeFields)
+            .set(parentTypeName, field)
+          collapsedField.parentTypeFields = fieldsByParentType
+        }
+        if (infoPath.typename === undefined) {
+          cacheFieldByPath(rootCtx, infoPath, field)
+        }
+      } else {
+        rootCtx.fields.set(fieldKey, field)
+      }
     }
 
     // Collapsed siblings still publish updateField (master's contract: one
@@ -598,6 +633,20 @@ function buildCachedPathString (path, cache, collapse) {
   return pathString
 }
 
+/**
+ * @param {{ hasFieldsByPath?: boolean, fields: Map<string|object, object> }} rootCtx
+ * @param {object} path
+ * @param {object} field
+ */
+function cacheFieldByPath (rootCtx, path, field) {
+  // Leaf fields cannot parent resolver spans, so their concrete paths are never read.
+  if (field.fieldNode?.selectionSet === undefined) return
+
+  // Concrete info path objects cannot collide with collapsed path string keys.
+  rootCtx.hasFieldsByPath = true
+  rootCtx.fields.set(path, field)
+}
+
 // Depth filtering directly on the linked-list node — no array allocation needed.
 // config.depth < 0 means no limit. Only selection-set segments (string keys)
 // count toward depth; list indices are execution artifacts and are transparent.
@@ -622,7 +671,20 @@ function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
     const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
     const innerField = rootCtx.fields.get(fieldKey)
-    if (innerField) return innerField
+    if (innerField) {
+      if (curr.typename === undefined) {
+        if (rootCtx.hasFieldsByPath) {
+          const fieldByPath = rootCtx.fields.get(curr)
+          if (fieldByPath) return fieldByPath
+        }
+        return innerField
+      }
+      if (innerField.parentTypeName === curr.typename) return innerField
+
+      const parentTypeFields = innerField.parentTypeFields
+      if (parentTypeFields.parentTypeName === undefined) return parentTypeFields.get(curr.typename)
+      return parentTypeFields
+    }
   }
 
   return null
