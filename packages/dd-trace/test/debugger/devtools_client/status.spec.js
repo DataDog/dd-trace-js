@@ -166,6 +166,22 @@ describe('diagnostic message http requests', function () {
       },
     }))
   })
+
+  it('should re-emit a status deduped before an identity refresh, after the refresh is observed', function () {
+    statusproxy.ackReceived({ id: 'foo', version: 0 })
+    sinon.assert.calledOnce(jsonBuffer.write)
+
+    // Deduped: same type/probeId/version as above.
+    statusproxy.ackReceived({ id: 'foo', version: 0 })
+    sinon.assert.calledOnce(jsonBuffer.write)
+
+    // Simulates a MicroVM clone resume: the dedup cache from before the resume must not
+    // suppress the clone re-reporting the same probe/type/version under its new identity.
+    configStub.runtimeId = 'refreshed-runtime-id'
+
+    statusproxy.ackReceived({ id: 'foo', version: 0 })
+    sinon.assert.calledTwice(jsonBuffer.write)
+  })
 })
 
 function formatAsDiagnosticsEvent ({ probeId, version, status, exception }) {

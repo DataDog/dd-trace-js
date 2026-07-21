@@ -71,11 +71,17 @@ class DogStatsDClient {
   /**
    * Recomputes the cached tags and tag-prefix string (mirrors the constructor) so a later
    * `config.tags` change (e.g. a MicroVM clone resume) is reflected without recreating the client.
+   * Drops any buffered-but-unsent lines: `distribution()` (and a mid-write overflow in `_write()`)
+   * serialize lines synchronously ahead of the next scheduled `flush()`, so anything already
+   * written has the previous tags baked in and would ship stale identity if kept.
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
     this._tags = tags
     this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+    this._queue = []
+    this._buffer = ''
+    this._offset = 0
   }
 
   increment (stat, value, tags) {

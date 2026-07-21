@@ -38,7 +38,7 @@ class RemoteConfig {
     })
 
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    const tags = repositoryUrl
+    const buildTags = () => repositoryUrl
       ? {
           ...config.tags,
           [GIT_REPOSITORY_URL]: repositoryUrl,
@@ -84,7 +84,9 @@ class RemoteConfig {
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          // Rebuilt on each read so a later `config.tags` change (e.g. `refreshClientId()` on a
+          // MicroVM clone resume) is reflected, instead of serializing a stale snapshot.
+          get tags () { return Object.entries(buildTags()).map((pair) => pair.join(':')) },
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
