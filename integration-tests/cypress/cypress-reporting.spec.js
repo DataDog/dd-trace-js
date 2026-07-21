@@ -222,40 +222,10 @@ moduleTypes.forEach(({
       ])
     })
 
-    for (const failure of ['throw', 'reject']) {
-      it(`does not fail tests when the RUM correlation cookie ${failure}s`, async () => {
-        let testOutput = ''
-        const specToRun = 'cypress/e2e/rum-cookie-failure.cy.js'
-        const command = version === '6.7.0'
-          ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
-          : testCommand
-
-        childProcess = exec(
-          command,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              CYPRESS_BASE_URL: webAppBaseUrl,
-              CYPRESS_RUM_COOKIE_FAILURE: failure,
-              SPEC_PATTERN: specToRun,
-            },
-          }
-        )
-        childProcess.stdout?.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr?.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-
-        const [exitCode] = await once(childProcess, 'exit')
-
-        assert.strictEqual(exitCode, 0, testOutput)
-      })
-    }
-
-    it('does not fail tests when cy.now is unavailable', async () => {
+    /**
+     * @param {Record<string, string>} env
+     */
+    async function runRumCookieFailureTest (env) {
       let testOutput = ''
       const specToRun = 'cypress/e2e/rum-cookie-failure.cy.js'
       const command = version === '6.7.0'
@@ -269,8 +239,8 @@ moduleTypes.forEach(({
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             CYPRESS_BASE_URL: webAppBaseUrl,
-            CYPRESS_MISSING_CY_NOW: 'true',
             SPEC_PATTERN: specToRun,
+            ...env,
           },
         }
       )
@@ -284,7 +254,26 @@ moduleTypes.forEach(({
       const [exitCode] = await once(childProcess, 'exit')
 
       assert.strictEqual(exitCode, 0, testOutput)
+    }
+
+    for (const failure of ['throw', 'reject']) {
+      it(`does not fail tests when the RUM correlation cookie ${failure}s`, async () => {
+        await runRumCookieFailureTest({ CYPRESS_RUM_COOKIE_FAILURE: failure })
+      })
+    }
+
+    it('does not fail tests when cy.now is unavailable', async () => {
+      await runRumCookieFailureTest({ CYPRESS_MISSING_CY_NOW: 'true' })
     })
+
+    if (type === 'commonJS' && version === 'latest') {
+      it('does not fail tests when reporting a RUM correlation error throws', async () => {
+        await runRumCookieFailureTest({
+          CYPRESS_RUM_COOKIE_FAILURE: 'reject',
+          CYPRESS_RUM_LOG_FAILURE: 'true',
+        })
+      })
+    }
 
     if (type === 'commonJS' && version !== '6.7.0') {
       it('removes a stale RUM cookie when its replacement rejects', async () => {

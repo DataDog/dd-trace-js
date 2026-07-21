@@ -28,4 +28,16 @@ if (Cypress.env('MISSING_CY_NOW')) {
   cy.now = undefined
   Cypress.env('DD_RUM_COOKIE_NOW_MISSING', true)
 }
+if (Cypress.env('RUM_LOG_FAILURE')) {
+  const log = Cypress.log.bind(Cypress)
+  /**
+   * @param {{ name?: string }} options
+   */
+  Cypress.log = (options) => {
+    if (options.name === 'dd-trace') {
+      throw new Error('RUM correlation error logging threw')
+    }
+    return log(options)
+  }
+}
 require('dd-trace/ci/cypress/support')

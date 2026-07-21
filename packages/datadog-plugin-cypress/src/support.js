@@ -1,9 +1,7 @@
 'use strict'
 
-const {
-  RUM_TEST_EXECUTION_ID_COOKIE_NAME: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
-} = require('../../dd-trace/src/ci-visibility/rum')
 let rumFlushWaitMillis = 500
+let rumTestExecutionIdCookieName
 
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
@@ -132,15 +130,21 @@ function runBeforeEachTask (test) {
 }
 
 /**
+ * @param {string} message
  * @param {unknown} error
  * @returns {false}
  */
-function handleRumCorrelationCookieError (error) {
-  Cypress.log({
-    name: 'dd-trace',
-    message: 'Could not set the RUM correlation cookie',
-    consoleProps: () => ({ Error: error }),
-  })
+function logRumCorrelationCookieError (message, error) {
+  try {
+    Cypress.log({
+      name: 'dd-trace',
+      message,
+      consoleProps: () => ({ Error: error }),
+    })
+  } catch (loggingError) {
+    // eslint-disable-next-line no-console
+    console.error(message, error, loggingError)
+  }
   return false
 }
 
@@ -148,13 +152,16 @@ function handleRumCorrelationCookieError (error) {
  * @param {unknown} error
  * @returns {false}
  */
+function handleRumCorrelationCookieError (error) {
+  return logRumCorrelationCookieError('Could not set the RUM correlation cookie', error)
+}
+
+/**
+ * @param {unknown} error
+ * @returns {false}
+ */
 function handleRumCorrelationCookieCleanupError (error) {
-  Cypress.log({
-    name: 'dd-trace',
-    message: 'Could not clear the previous RUM correlation cookie',
-    consoleProps: () => ({ Error: error }),
-  })
-  return false
+  return logRumCorrelationCookieError('Could not clear the previous RUM correlation cookie', error)
 }
 
 /**
@@ -169,13 +176,13 @@ function setRumCorrelationCookie (traceId) {
   let clearCookiePromise = Cypress.Promise.resolve()
   if (!isTestIsolationEnabled) {
     clearCookiePromise = Cypress.Promise.try(() => {
-      return cy.now('clearCookie', DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, { log: false })
+      return cy.now('clearCookie', rumTestExecutionIdCookieName, { log: false })
     }).then(undefined, handleRumCorrelationCookieCleanupError)
   }
 
   return clearCookiePromise.then(() => {
     return Cypress.Promise.try(() => {
-      return cy.now('setCookie', DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId, { log: false })
+      return cy.now('setCookie', rumTestExecutionIdCookieName, traceId, { log: false })
     })
   }).then(() => true, handleRumCorrelationCookieError)
 }
@@ -426,6 +433,7 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
       }
