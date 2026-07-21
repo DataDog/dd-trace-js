@@ -144,6 +144,30 @@ describe('AgentlessExporter', () => {
 
       assert.strictEqual(writerOptions.metadata.runtimeID, 'new-uuid')
     })
+
+    it('should reflect an env updated on config after construction', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = {
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      }
+
+      exporter = new Exporter(config)
+
+      config.env = 'staging'
+
+      assert.strictEqual(writerOptions.metadata.env, 'staging')
+    })
   })
 
   describe('export', () => {
