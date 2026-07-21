@@ -3,6 +3,7 @@
 const dgram = require('dgram')
 const isIP = require('net').isIP
 
+const { channel } = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const request = require('./exporters/common/request')
 const log = require('./log')
@@ -17,6 +18,26 @@ const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
 const TYPE_HISTOGRAM = 'h'
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// The Custom Metrics client (see `proxy.js`'s lazily-constructed `dogstatsd` property) has no
+// start()/stop() hook for identity-refresh to subscribe/unsubscribe around, so it registers
+// itself here instead. Runtime-metrics clients use an explicit subscribe/unsubscribe tied to
+// their own start()/stop() (see `runtime_metrics/client.js`). Entries are held as WeakRefs so a
+// CustomMetrics instance becoming unreachable doesn't keep its client/config alive forever.
+const customMetricsClients = new Set()
+
+identityRefreshChannel.subscribe(() => {
+  for (const ref of customMetricsClients) {
+    const entry = ref.deref()
+    if (entry === undefined) {
+      customMetricsClients.delete(ref)
+      continue
+    }
+    entry.client.updateTags(DogStatsDClient.generateClientConfig(entry.config).tags)
+  }
+})
 
 /**
  * @import { DogStatsD } from "../../../index.d.ts"
@@ -45,6 +66,22 @@ class DogStatsDClient {
     this._offset = 0
     this._udp4 = this._socket('udp4')
     this._udp6 = this._socket('udp6')
+  }
+
+  /**
+   * Recomputes the cached tags and tag-prefix string (mirrors the constructor) so a later
+   * `config.tags` change (e.g. a MicroVM clone resume) is reflected without recreating the client.
+   * Drops any buffered-but-unsent lines: `distribution()` (and a mid-write overflow in `_write()`)
+   * serialize lines synchronously ahead of the next scheduled `flush()`, so anything already
+   * written has the previous tags baked in and would ship stale identity if kept.
+   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   */
+  updateTags (tags) {
+    this._tags = tags
+    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+    this._queue = []
+    this._buffer = ''
+    this._offset = 0
   }
 
   increment (stat, value, tags) {
@@ -212,6 +249,13 @@ class MetricsAggregationClient {
     this.reset()
   }
 
+  /**
+   * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
+   */
+  updateTags (tags) {
+    this._client.updateTags(tags)
+  }
+
   flush () {
     this._captureCounters()
     this._captureGauges()
@@ -360,9 +404,14 @@ class MetricsAggregationClient {
  */
 class CustomMetrics {
   #client
+  // Keeps the registry entry alive for exactly as long as this instance is reachable.
+  #registryEntry
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
-    this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    const dogStatsDClient = new DogStatsDClient(clientConfig)
+    this.#client = new MetricsAggregationClient(dogStatsDClient)
+    this.#registryEntry = { client: dogStatsDClient, config }
+    customMetricsClients.add(new WeakRef(this.#registryEntry))
 
     const flush = this.flush.bind(this)
 

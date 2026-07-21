@@ -449,6 +449,43 @@ describe('Tracer', () => {
     })
   })
 
+  describe('identity refresh channel', () => {
+    const { channel } = require('dc-polyfill')
+    const identityRefreshChannel = channel('datadog:identity:refresh')
+
+    let storeConfigStub
+    let PatchedTracer
+
+    beforeEach(() => {
+      storeConfigStub = sinon.stub().returns({ handle: 'refreshed' })
+      PatchedTracer = proxyquire('../src/tracer', {
+        './tracer_metadata': storeConfigStub,
+      })
+    })
+
+    it('should call refreshMetadata when the identity-refresh channel fires', () => {
+      const t = new PatchedTracer(config)
+      storeConfigStub.resetHistory()
+
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnceWithExactly(storeConfigStub, config)
+      assert.strictEqual(t._inmem_cfg.handle, 'refreshed')
+    })
+
+    it('should only react via the most recently constructed tracer', () => {
+      const first = new PatchedTracer(config)
+      const second = new PatchedTracer(config)
+      const firstRefreshMetadata = sinon.spy(first, 'refreshMetadata')
+      const secondRefreshMetadata = sinon.spy(second, 'refreshMetadata')
+
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.notCalled(firstRefreshMetadata)
+      sinon.assert.calledOnceWithExactly(secondRefreshMetadata, config)
+    })
+  })
+
   describe('service discovery warning', () => {
     const WARNING = 'Could not store tracer configuration for service discovery'
     const log = require('../src/log')

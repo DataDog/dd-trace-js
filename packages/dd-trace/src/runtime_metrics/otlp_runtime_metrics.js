@@ -5,7 +5,7 @@ const process = require('node:process')
 const { performance, monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks')
 const { metrics } = require('@opentelemetry/api')
 const log = require('../log')
-const { createMetricsClient } = require('./client')
+const { createMetricsClient, subscribeToIdentityRefresh } = require('./client')
 
 const METER_NAME = 'datadog.runtime_metrics'
 
@@ -53,6 +53,7 @@ const registeredBatchCallbacks = []
 // equivalent; keep a DogStatsD client so OTLP-path customers don't lose them.
 let client = null
 let flushInterval = null
+let unsubscribeIdentityRefresh = null
 
 module.exports = {
   /**
@@ -62,6 +63,7 @@ module.exports = {
     this.stop()
 
     client = createMetricsClient(config)
+    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
     flushInterval = setInterval(() => {
       client.flush()
     }, config.DD_RUNTIME_METRICS_FLUSH_INTERVAL ?? 10_000)
@@ -221,6 +223,8 @@ module.exports = {
       clearInterval(flushInterval)
       flushInterval = null
     }
+    unsubscribeIdentityRefresh?.()
+    unsubscribeIdentityRefresh = null
     client = null
   },
 

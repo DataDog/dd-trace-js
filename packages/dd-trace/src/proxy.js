@@ -333,7 +333,6 @@ class Tracer extends NoopProxy {
   #refreshIdentity (config) {
     const { channel } = require('dc-polyfill')
     channel('datadog:identity:update').publish(config)
-    this._tracer.refreshMetadata(config)
   }
 
   /**

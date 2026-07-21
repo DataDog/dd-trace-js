@@ -17,7 +17,6 @@ module.exports = {
 
 const ddsource = 'dd_debugger'
 const service = config.service
-const runtimeId = config.runtimeId
 
 const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 
@@ -26,6 +25,8 @@ const jsonBuffer = new JSONBuffer({
   timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
   onFlush,
 })
+
+let lastSeenRuntimeId = config.runtimeId
 
 const STATUSES = {
   RECEIVED: 'RECEIVED',
@@ -110,12 +111,22 @@ function statusPayload (probeId, probeVersion, status) {
     ddsource,
     service,
     debugger: {
-      diagnostics: { probeId, runtimeId, probeVersion, status },
+      // Read live: `config` can be updated after module load via `updateConfig()`
+      // (e.g. a MicroVM clone resume regenerating the runtime-id).
+      diagnostics: { probeId, runtimeId: config.runtimeId, probeVersion, status },
     },
   }
 }
 
 function onlyUniqueUpdates (type, id, version, fn) {
+  // `config.runtimeId` changing means a MicroVM clone resumed with a new identity. Without this,
+  // a probe status already deduped under the old identity would be silently suppressed if the
+  // clone re-reports the same type/probeId/version under its new one.
+  if (config.runtimeId !== lastSeenRuntimeId) {
+    lastSeenRuntimeId = config.runtimeId
+    cache.clear()
+  }
+
   const key = `${type}-${id}-${version}`
   if (cache.has(key)) return
   fn()

@@ -40,11 +40,13 @@ class AgentlessExporter {
 
     const metadata = {
       hostname: os.hostname(),
-      env: config.env,
       languageName: 'nodejs',
       languageVersion: process.version,
       tracerVersion,
-      runtimeID: config.tags?.['runtime-id'],
+      // Read live off `config` (instead of copying the value) so a later change
+      // (e.g. a MicroVM clone resume) is picked up by the next `JSON.stringify` in the encoder.
+      get env () { return config.env },
+      get runtimeID () { return config.tags?.['runtime-id'] },
       ...(entityId ? { containerID: entityId } : {}),
     }
 

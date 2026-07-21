@@ -1152,7 +1152,6 @@ describe('TracerProxy', () => {
 
       sinon.assert.calledWith(diagnosticsChannelMock.channel, 'datadog:identity:update')
       sinon.assert.calledOnce(channelMock.publish)
-      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
@@ -1182,24 +1181,13 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
     })
 
-    it('should publish datadog:identity:update before calling tracer.refreshMetadata', () => {
-      microProxy.init()
-
-      const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
-
-      assert.ok(channelMock.publish.calledBefore(tracer.refreshMetadata))
-    })
-
     it('should call refreshIdentity from resetRuntimeId when initialized and env var set', () => {
       microProxy.init()
       channelMock.publish.resetHistory()
-      tracer.refreshMetadata.resetHistory()
 
       microProxy.resetRuntimeId()
 
       sinon.assert.calledOnce(channelMock.publish)
-      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should be a no-op from resetRuntimeId when not initialized', () => {
@@ -1209,14 +1197,13 @@ describe('TracerProxy', () => {
       sinon.assert.notCalled(channelMock.publish)
     })
 
-    it('should still publish and call the noop tracer when the real tracer was never constructed', () => {
+    it('should still publish when the real tracer was never constructed', () => {
       // simulate init() having run with tracing disabled, so #updateTracing never replaced the noop tracer
       microProxy._initialized = true
 
       microProxy.resetRuntimeId()
 
       sinon.assert.calledOnce(channelMock.publish)
-      sinon.assert.calledOnce(noop.refreshMetadata)
     })
 
     it('should be a no-op from resetRuntimeId when env var not set', () => {

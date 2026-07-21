@@ -852,6 +852,20 @@ describe('RemoteConfig', () => {
 
       config.tags['runtime-id'] = 'runtimeId'
     })
+
+    it('should reflect config.tags changes immediately via client_tracer.tags getter', () => {
+      config.tags['_dd.rc.client_id'] = 'old-client-id'
+      assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:old-client-id',
+      ])
+
+      config.tags['_dd.rc.client_id'] = 'refreshed-client-id'
+      assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:refreshed-client-id',
+      ])
+    })
   })
 
   describe('refreshClientId', () => {
@@ -892,6 +906,32 @@ describe('RemoteConfig', () => {
       RemoteConfigWithId.refreshClientId(config)
 
       assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
+    })
+
+    it('should rebuild client_tracer.tags to reflect the refreshed _dd.rc.client_id', () => {
+      // client_tracer.tags is a live getter (like state.client.id) — the existing instance
+      // reflects the refreshed _dd.rc.client_id without being recreated, instead of serializing
+      // a snapshot built once at construction time.
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old-client-id' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      const rcInstance = new RemoteConfigWithId(rcConfig)
+      assert.deepStrictEqual(rcInstance.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:old-client-id',
+      ])
+
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.deepStrictEqual(rcInstance.state.client.client_tracer.tags, [
+        'runtime-id:runtimeId',
+        '_dd.rc.client_id:new-client-id-uuid',
+      ])
     })
 
     it('should set clientId to the value returned by uuid', () => {

@@ -69,11 +69,11 @@ function truncateTestLevelMetadataTags (tags) {
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
-  constructor (writer, { runtimeId, service, env }) {
+  constructor (writer, { tags }) {
     super(writer, INTAKE_SOFT_LIMIT)
-    this.runtimeId = runtimeId
-    this.service = service
-    this.env = env
+    // Holds a reference to the live `tags` object (instead of copying `env`/`runtime-id` out of it)
+    // so a later change (e.g. a MicroVM clone resume) is picked up at flush time.
+    this.tags = tags
 
     // Used to keep track of the number of encoded events to update the
     // length of `payload.events` when calling `makePayload`
@@ -406,11 +406,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       events: [],
     }
 
-    if (this.env) {
-      payload.metadata['*'].env = this.env
+    if (this.tags?.env) {
+      payload.metadata['*'].env = this.tags.env
     }
-    if (this.runtimeId) {
-      payload.metadata['*']['runtime-id'] = this.runtimeId
+    const runtimeId = this.tags?.['runtime-id']
+    if (runtimeId) {
+      payload.metadata['*']['runtime-id'] = runtimeId
     }
 
     bytes.writeMapPrefix(Object.keys(payload).length)
