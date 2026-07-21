@@ -69,6 +69,7 @@
 /benchmark/sirun/plugin-ws/ @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
+/index.electron.js @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
@@ -79,6 +80,7 @@
 /packages/datadog-webpack/ @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
+/packages/dd-trace/index.electron.js @DataDog/apm-idm-js
 /packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
@@ -163,6 +165,7 @@
 /integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-auto-esm.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-component.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-double-run.js @DataDog/ci-app-libraries
 /integration-tests/cypress-double-run.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
@@ -174,11 +177,13 @@
 /integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-support-file-false.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-typescript.config.ts @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.ts @DataDog/ci-app-libraries
+/integration-tests/vite.config.mjs @DataDog/ci-app-libraries
 
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
@@ -286,6 +291,7 @@
 # CI
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
+/.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/sdlc-security
@@ -304,6 +310,7 @@
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/apm-idm-js
+/.github/workflows/release.yml @DataDog/lang-platform-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
 /.github/workflows/openfeature.yml @DataDog/feature-flagging-and-experimentation-sdk
@@ -360,6 +367,8 @@
 /packages/datadog-core/ @DataDog/lang-platform-js
 /packages/datadog-shimmer/ @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
+/packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
+/packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js

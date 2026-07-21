@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, refineRequestSpan } = require('./utils')
+const { extractErrorIntoSpanEvent, isApolloHealthCheck, refineRequestSpan } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -15,6 +15,16 @@ class GraphQLValidatePlugin extends TracingPlugin {
   bindStart (ctx) {
     // validate(schema, documentAST, rules, options, typeInfo)
     const document = ctx.arguments?.[1]
+
+    // Verify the marked document in case the caller transformed its AST after parsing.
+    if (document &&
+        GraphQLParsePlugin.healthCheckDocuments.has(document) &&
+        document.definitions?.length === 1 &&
+        isApolloHealthCheck(document.definitions[0])) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
     const source = this.config.source && document && docSource
 
@@ -52,11 +62,11 @@ class GraphQLValidatePlugin extends TracingPlugin {
   }
 
   end (ctx) {
+    if (ctx.ddSkipped) return ctx.parentStore
+
     const document = ctx.ddDocument
     const errors = ctx.result
     const span = ctx?.currentStore?.span || this.activeSpan
-
-    this.config.hooks.validate(span, document, errors)
 
     if (errors?.length) {
       span.setTag('error', errors[0])
@@ -64,6 +74,8 @@ class GraphQLValidatePlugin extends TracingPlugin {
         extractErrorIntoSpanEvent(this.config, span, err)
       }
     }
+
+    this.config.hooks.validate(span, document, errors)
 
     span.finish()
 

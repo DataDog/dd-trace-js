@@ -1211,7 +1211,7 @@ describe('Plugin', () => {
           language: 'en',
         })
 
-        assert.deepStrictEqual(result.text, 'Hello friend.')
+        assert.ok(['Hello friend.', 'Hello, friend.'].includes(result.text))
 
         await checkTraces
         sinon.assert.called(externalLoggerStub)

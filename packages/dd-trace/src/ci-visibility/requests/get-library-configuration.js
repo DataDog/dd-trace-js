@@ -26,7 +26,7 @@ function parseJsonResponse (rawJson) {
 function parseLibraryConfigurationResponse (rawJson, config = getConfig(), options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateSettingsResponse(parsedResponse)
+    validateSettingsResponse(parsedResponse, options)
   }
   const {
     code_coverage: isCodeCoverageEnabled,
@@ -49,7 +49,7 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     requireGit,
     isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
     earlyFlakeDetectionNumRetries:
-      earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
+      earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] ?? DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
     earlyFlakeDetectionSlowTestRetries:
       earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
     earlyFlakeDetectionFaultyThreshold:
@@ -73,6 +73,13 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
   if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
     settings.isSuitesSkippingEnabled = true
     log.debug('Dangerously set test skipping to true')
+  }
+  if (
+    settings.isCoverageReportUploadEnabled &&
+    !config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
+  ) {
+    settings.isCoverageReportUploadEnabled = false
+    log.debug('Code coverage report upload was disabled by the environment variable')
   }
 
   return settings

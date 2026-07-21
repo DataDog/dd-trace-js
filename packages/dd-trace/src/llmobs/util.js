@@ -362,9 +362,41 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
+// Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to `audio/wav` when the
+// format is missing. Provider-specific overrides (e.g. OpenAI's mp3 -> audio/mpeg) are passed in
+// via `mimeTypeLookup` so this stays provider-agnostic. A non-string `format` is treated as missing
+// so a malformed auto-instrumented payload can't throw and disable the plugin.
+/**
+ * @param {string} fmt
+ * @param {Record<string, string>} [mimeTypeLookup]
+ * @returns {string}
+ */
+function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
+  fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''
+  if (!fmt) return 'audio/wav'
+  return mimeTypeLookup[fmt] ?? `audio/${fmt}`
+}
+
+// Builds an audio part from raw audio bytes (base64-encoded) or an existing base64 string. Only
+// Buffer/Uint8Array inputs are base64-encoded; any other shape is passed through so a malformed
+// auto-instrumented payload can't throw (the tagger soft-skips a non-string `content`).
+/**
+ * @param {Buffer | Uint8Array | string} data
+ * @param {string} mimeType
+ * @returns {{ mimeType: string, content: string }}
+ */
+function formatAudioPart (data, mimeType) {
+  const content = Buffer.isBuffer(data) || ArrayBuffer.isView(data)
+    ? Buffer.from(data).toString('base64')
+    : data
+  return { mimeType, content }
+}
+
 module.exports = {
+  audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  formatAudioPart,
   validateCostTags,
   validateKind,
   getFunctionArguments,

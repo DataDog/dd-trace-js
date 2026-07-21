@@ -180,7 +180,7 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
 
 function getConfiguredEfdRetryCount () {
   const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  return maxSlowTestRetryCount || earlyFlakeDetectionNumRetries
+  return maxSlowTestRetryCount ?? earlyFlakeDetectionNumRetries
 }
 
 function publishWorkerEfdRetryCount (pickle, retryCount) {
@@ -1036,7 +1036,9 @@ function testCaseHook (TestCaseRunner, version) {
 // Valid for old and new cucumber versions
 function getCucumberOptions (adapterOrCoordinator) {
   if (adapterOrCoordinator.adapter) {
-    return adapterOrCoordinator.adapter.worker?.options || adapterOrCoordinator.adapter.options
+    return adapterOrCoordinator.adapter.worker?.options ||
+      adapterOrCoordinator.adapter.executor?.options ||
+      adapterOrCoordinator.adapter.options
   }
   return adapterOrCoordinator.options
 }
@@ -1178,7 +1180,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const success = await start.apply(this, arguments)
+    const result = await start.apply(this, arguments)
+    const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
     let untestedCoverage
     if (getCodeCoverageCh.hasSubscribers) {
@@ -1228,7 +1231,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
-    return success
+    return result
   }
 }
 
@@ -1433,13 +1436,14 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
   }
 }
 
-function patchCucumberWorkerRunTestCase (workerPackage, isWorker) {
-  const workerPrototype = workerPackage?.Worker?.prototype
-  if (!workerPrototype || patchedCucumberWorkers.has(workerPrototype)) return
+function patchCucumberWorkerRunTestCase (runtimeExecutorPackage, isWorker) {
+  const runtimeExecutorPrototype =
+    runtimeExecutorPackage?.Worker?.prototype || runtimeExecutorPackage?.Executor?.prototype
+  if (!runtimeExecutorPrototype || patchedCucumberWorkers.has(runtimeExecutorPrototype)) return
 
-  patchedCucumberWorkers.add(workerPrototype)
+  patchedCucumberWorkers.add(runtimeExecutorPrototype)
   shimmer.wrap(
-    workerPrototype,
+    runtimeExecutorPrototype,
     'runTestCase',
     runTestCase => getWrappedRunTestCase(runTestCase, true, isWorker)
   )
@@ -1571,13 +1575,23 @@ addHook({
 // `getWrappedRunTestCase` does two things:
 // - generates suite start and finish events in the main process,
 // - handles EFD in both the main process and the worker process.
+// Shimmer is required because this wrapper may invoke the original test case multiple times and mutate runtime options.
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
+  versions: ['>=11.0.0 <13.2.0'],
   file: 'lib/runtime/worker.js',
 }, (workerPackage) => {
   patchCucumberWorkerRunTestCase(workerPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
   return workerPackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=13.2.0'],
+  file: 'lib/runtime/executor.js',
+}, (executorPackage) => {
+  patchCucumberWorkerRunTestCase(executorPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
+  return executorPackage
 })
 
 // `getWrappedStart` generates session start and finish events

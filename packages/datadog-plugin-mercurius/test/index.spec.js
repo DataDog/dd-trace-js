@@ -31,6 +31,7 @@ describe('Plugin', () => {
         type Query {
           hello(name: String): String
           fail: String
+          failWithExtensions: String
         }
       `
 
@@ -38,6 +39,10 @@ describe('Plugin', () => {
         Query: {
           hello: (_, { name }) => `Hello, ${name || 'world'}!`,
           fail: () => { throw new Error('resolver boom') },
+          failWithExtensions: () => {
+            const mercurius = require(`../../../versions/mercurius@${version}`).get()
+            throw new mercurius.ErrorWithProps('resolver boom', { code: 'BOOM', extra: 'ignored' })
+          },
         },
       }
 
@@ -107,6 +112,51 @@ describe('Plugin', () => {
         }, { spanResourceMatch: /MyQuery/ })
 
         return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+      })
+
+      it('skips only the exact Apollo health-check on cold and JIT paths', async () => {
+        const healthCheck = 'query __ApolloServiceHealthCheck__ { __typename }'
+        const sentinel = 'query __ApolloServiceHealthCheck__ { hello }'
+        const graphqlSpans = new Map()
+        /**
+         * @param {Array<Array<{ name: string }>>} traces
+         */
+        const collect = traces => {
+          for (const trace of traces) {
+            for (const span of trace) {
+              if (span.name.startsWith('graphql.')) {
+                graphqlSpans.set(span.name, (graphqlSpans.get(span.name) ?? 0) + 1)
+              }
+            }
+          }
+        }
+        agent.subscribe(collect)
+
+        try {
+          const assertion = agent.assertSomeTraces(() => {
+            assert.strictEqual(graphqlSpans.get(expectedSchema.server.opName), 1,
+              'only the sentinel may emit a graphql.request span')
+            assert.strictEqual(graphqlSpans.get('graphql.parse'), 1,
+              'only the sentinel may emit a graphql.parse span')
+            assert.strictEqual(graphqlSpans.get('graphql.validate'), 1,
+              'only the sentinel may emit a graphql.validate span')
+            assert.strictEqual(graphqlSpans.get('graphql.execute'), 1,
+              'only the sentinel may emit a graphql.execute span')
+            assert.strictEqual(graphqlSpans.get('graphql.resolve'), 1,
+              'only the sentinel may emit a graphql.resolve span')
+          }, { spanResourceMatch: /__ApolloServiceHealthCheck__/ })
+
+          await Promise.all([
+            assertion,
+            (async () => {
+              await axios.post(`http://localhost:${port}/graphql`, { query: healthCheck })
+              await axios.post(`http://localhost:${port}/graphql`, { query: healthCheck })
+              await axios.post(`http://localhost:${port}/graphql`, { query: sentinel })
+            })(),
+          ])
+        } finally {
+          agent.unsubscribe(collect)
+        }
       })
 
       it('parents graphql.execute under graphql.request and shares its resource', () => {
@@ -370,6 +420,59 @@ describe('Plugin', () => {
           }, { spanResourceMatch: /NoSource/ })
 
           return Promise.all([assertion, axios.post(`http://localhost:${plainPort}/graphql`, { query })])
+        })
+      })
+
+      describe('with configured error extensions', () => {
+        let extApp
+        let extPort
+
+        before(async function () {
+          this.timeout(20000)
+
+          require('../../dd-trace')
+          await agent.load(['graphql', 'fastify', 'http'], [{ errorExtensions: ['code'] }, {}, { client: false }])
+
+          const resolvedMercurius = require(`../../../versions/mercurius@${version}`).version()
+          const fastifyKey = semver.satisfies(resolvedMercurius, '>=15') ? '5' : '4'
+          const Fastify = require(`../../../versions/fastify@${fastifyKey}`).get()
+          const mercurius = require(`../../../versions/mercurius@${version}`).get()
+
+          extApp = Fastify()
+          extApp.register(mercurius, { schema, resolvers })
+          await extApp.ready()
+          await extApp.listen({ port: 0 })
+          extPort = extApp.server.address().port
+        })
+
+        after(async () => {
+          await extApp?.close()
+          await agent.close({ ritmReset: false })
+        })
+
+        it('copies the configured error extension onto the request span error event', () => {
+          // The graphql.request span is the only top-level span mercurius always
+          // produces, so its error event has to honor the graphql plugin's
+          // `errorExtensions` config the same way the execute/validate spans do —
+          // it reads the plugin config, not the global tracer config.
+          const query = 'query ExtQuery { failWithExtensions }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+            assert.ok(request, 'expected a graphql.request span')
+            assert.strictEqual(request.error, 1)
+
+            const spanEvents = agent.unformatSpanEvents(request)
+            assert.strictEqual(spanEvents.length, 1)
+            assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+            assert.strictEqual(spanEvents[0].attributes['extensions.code'], 'BOOM')
+            assert.ok(
+              !Object.hasOwn(spanEvents[0].attributes, 'extensions.extra'),
+              'only configured extensions are copied'
+            )
+          }, { spanResourceMatch: /ExtQuery/ })
+
+          return Promise.all([assertion, axios.post(`http://localhost:${extPort}/graphql`, { query })])
         })
       })
 

@@ -297,8 +297,87 @@ const parsers = {
   },
 }
 
+const programmaticTypeCoercions = {
+  /**
+   * @param {unknown} value
+   */
+  BOOLEAN (value) {
+    if (typeof value === 'boolean') {
+      return value
+    }
+    if (typeof value === 'string') {
+      return parsers.BOOLEAN(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  INT (value) {
+    if (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') {
+      return parsers.INT(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  DECIMAL (value) {
+    if (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') {
+      return parsers.DECIMAL(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  STRING (value) {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)) {
+      return String(value)
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  FUNCTION (value) {
+    if (typeof value === 'function') {
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  ARRAY (value) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') {
+          return
+        }
+      }
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  MAP (value) {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      return value
+    }
+  },
+  /**
+   * @param {unknown} value
+   */
+  JSON (value) {
+    if (typeof value === 'object' && value !== null) {
+      return value
+    }
+  },
+}
+
 module.exports = {
   parsers,
+  programmaticTypeCoercions,
   transformers,
   telemetryTransformers,
   setWarnInvalidValue,

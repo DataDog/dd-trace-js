@@ -1,7 +1,24 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { extractErrorIntoSpanEvent, getCachedRequestOperation } = require('./utils')
+const { extractErrorIntoSpanEvent, getCachedRequestOperation, isApolloHealthCheckSource } = require('./utils')
+
+/**
+ * @typedef {object} GraphQLRequestStore
+ * @property {import('../../dd-trace/src/opentracing/span')} [span]
+ * @property {import('../../dd-trace/src/opentracing/span')} [graphqlRequestSpan]
+ * @property {string} [graphqlRequestOperationName]
+ * @property {unknown} [graphqlRequestSource]
+ */
+
+/**
+ * @typedef {object} GraphQLRequestContext
+ * @property {unknown[]} [arguments]
+ * @property {GraphQLRequestStore} [currentStore]
+ * @property {GraphQLRequestStore} [parentStore]
+ * @property {boolean} [ddSkipped]
+ * @property {{ errors?: import('graphql').GraphQLError[] }} [result]
+ */
 
 // Top-level GraphQL request span for drivers that funnel every operation
 // through a single entry point but parse/validate/execute internally (mercurius
@@ -25,9 +42,18 @@ class GraphQLRequestPlugin extends TracingPlugin {
   static kind = 'server'
   static prefix = 'tracing:orchestrion:mercurius:apm:graphql:request'
 
+  /**
+   * @param {GraphQLRequestContext} ctx
+   */
   bindStart (ctx) {
     // fastifyGraphQl(source, context, variables, operationName)
     const source = ctx.arguments?.[0]
+
+    if (isApolloHealthCheckSource(source)) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     const operationName = ctx.arguments?.[3]
 
     // `source` is the request text on the common path, but mercurius also
@@ -72,7 +98,12 @@ class GraphQLRequestPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
+  /**
+   * @param {GraphQLRequestContext} ctx
+   */
   asyncEnd (ctx) {
+    if (ctx.ddSkipped) return ctx.parentStore
+
     /* istanbul ignore next: currentStore is populated for the request lifecycle; activeSpan is base-plugin fallback. */
     const span = ctx?.currentStore?.span || this.activeSpan
     /* istanbul ignore if: startSpan always populates currentStore for the request lifecycle. */
@@ -82,7 +113,7 @@ class GraphQLRequestPlugin extends TracingPlugin {
     if (result?.errors?.length) {
       span.setTag('error', result.errors[0])
       for (const error of result.errors) {
-        extractErrorIntoSpanEvent(this._tracerConfig, span, error)
+        extractErrorIntoSpanEvent(this.config, span, error)
       }
     }
 

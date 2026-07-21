@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     outputs:
       needs_update: ${{ steps.check.outputs.needs_update }}
       is_bot_same_repo: ${{ steps.check.outputs.is_bot_same_repo }}
@@ -19,6 +20,13 @@ jobs:
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
+      - name: Get GitHub Token via dd-octo-sts
+        id: generate-token
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        with:
+          scope: DataDog/dd-trace-js
+          policy: self.check-licenses
+
       - name: Check out PR branch
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -58,7 +66,7 @@ jobs:
 
       - name: Regenerate LICENSE-3rdparty.csv
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           dd-license-attribution generate-sbom-csv \
             --use-mirrors=mirrors.json \

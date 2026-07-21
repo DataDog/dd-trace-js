@@ -8,6 +8,7 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const { getConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
+const { hasTraceSourcePropagationTag } = require('../../standalone/tracesource')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { DD_MAJOR } = require('../../../../../version')
 
@@ -119,22 +120,35 @@ class TextMapPropagator {
     return this.#baggageTagKeysSet
   }
 
+  /**
+   * @param {DatadogSpanContext | null | undefined} spanContext
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
+   */
   inject (spanContext, carrier) {
-    if (!carrier) return
-    this._injectBaggageItems(spanContext, carrier)
-    if (!spanContext) return
+    if (carrier === null) return
+    let injectedCarrier = this._injectBaggageItems(spanContext, carrier)
+    if (!spanContext) return injectedCarrier
 
-    this._injectDatadog(spanContext, carrier)
-    this._injectB3MultipleHeaders(spanContext, carrier)
-    this._injectB3SingleHeader(spanContext, carrier)
-    this._injectTraceparent(spanContext, carrier)
-
-    if (injectCh.hasSubscribers) {
-      injectCh.publish({ spanContext, carrier })
+    const injectTraceContext = this._config.apmTracingEnabled !== false ||
+      hasTraceSourcePropagationTag(spanContext._trace.tags)
+    if (injectTraceContext) {
+      injectedCarrier = this._injectDatadog(spanContext, injectedCarrier ?? carrier) ?? injectedCarrier
+      injectedCarrier = this._injectB3MultipleHeaders(spanContext, injectedCarrier ?? carrier) ?? injectedCarrier
+      injectedCarrier = this._injectB3SingleHeader(spanContext, injectedCarrier ?? carrier) ?? injectedCarrier
     }
+    injectedCarrier = this
+      ._injectTraceparent(spanContext, injectedCarrier ?? carrier, injectTraceContext) ?? injectedCarrier
+
+    if (injectedCarrier === undefined) return
+
+    carrier = injectedCarrier
+    if (injectCh.hasSubscribers) injectCh.publish({ spanContext, carrier })
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
+
+    return carrier
   }
 
   extract (carrier) {
@@ -156,15 +170,23 @@ class TextMapPropagator {
     return spanContext
   }
 
+  /**
+   * @param {DatadogSpanContext} spanContext
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
+   */
   _injectDatadog (spanContext, carrier) {
     if (!this._hasPropagationStyle('inject', 'datadog')) return
 
+    carrier ??= {}
     carrier[traceKey] = spanContext.toTraceId()
     carrier[spanKey] = spanContext.toSpanId()
 
     this._injectOrigin(spanContext, carrier)
     this._injectSamplingPriority(spanContext, carrier)
     this._injectTags(spanContext, carrier)
+
+    return carrier
   }
 
   _injectOrigin (spanContext, carrier) {
@@ -183,7 +205,13 @@ class TextMapPropagator {
     }
   }
 
+  /**
+   * @param {DatadogSpanContext | null | undefined} spanContext
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
+   */
   _injectBaggageItems (spanContext, carrier) {
+    let injectedCarrier
     if (this._config.legacyBaggageEnabled) {
       const baggageItems = spanContext?._baggageItems
       if (baggageItems) {
@@ -202,7 +230,8 @@ class TextMapPropagator {
           if (invalidHeaderValueCharExpr.test(headerValue)) {
             headerValue = encodeURIComponent(headerValue)
           }
-          carrier[headerName] = headerValue
+          injectedCarrier ??= carrier ?? {}
+          injectedCarrier[headerName] = headerValue
         }
       }
     }
@@ -213,7 +242,6 @@ class TextMapPropagator {
       let byteCounter = 0
 
       const baggageItems = getAllBaggageItems()
-      if (!baggageItems) return
       for (const key of Object.keys(baggageItems)) {
         const baggageKey = key.trim()
         if (!baggageTokenExpr.test(baggageKey)) continue
@@ -242,10 +270,13 @@ class TextMapPropagator {
 
       baggage = baggage.slice(0, -1)
       if (baggage) {
-        carrier.baggage = baggage
+        injectedCarrier ??= carrier ?? {}
+        injectedCarrier.baggage = baggage
         tracerMetrics.count('context_header_style.injected', ['header_style:baggage']).inc()
       }
     }
+
+    return injectedCarrier
   }
 
   _injectTags (spanContext, carrier) {
@@ -278,12 +309,18 @@ class TextMapPropagator {
     }
   }
 
+  /**
+   * @param {DatadogSpanContext} spanContext
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
+   */
   _injectB3MultipleHeaders (spanContext, carrier) {
     // v5 also accepts the legacy `'b3'` spelling for multi; v6 routes `'b3'` to single-header.
     const hasB3multi = this._hasPropagationStyle('inject', 'b3multi') ||
       (DD_MAJOR < 6 && this._hasPropagationStyle('inject', 'b3'))
     if (!hasB3multi) return
 
+    carrier ??= {}
     carrier[b3TraceKey] = spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
     carrier[b3SpanKey] = spanContext._spanId.toString(16)
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
@@ -295,14 +332,22 @@ class TextMapPropagator {
     if (spanContext._parentId) {
       carrier[b3ParentKey] = spanContext._parentId.toString(16)
     }
+
+    return carrier
   }
 
+  /**
+   * @param {DatadogSpanContext} spanContext
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
+   */
   _injectB3SingleHeader (spanContext, carrier) {
     // v6 keeps `'b3 single header'` as a back-compat alias for callers that bypass parser normalisation.
     const hasB3SingleHeader = this._hasPropagationStyle('inject', 'b3 single header') ||
       (DD_MAJOR >= 6 && this._hasPropagationStyle('inject', 'b3'))
     if (!hasB3SingleHeader) return
 
+    carrier ??= {}
     const traceId = spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
     const spanId = spanContext._spanId.toString(16)
     const sampled = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
@@ -311,11 +356,30 @@ class TextMapPropagator {
     if (spanContext._parentId) {
       carrier[b3HeaderKey] += '-' + spanContext._parentId.toString(16)
     }
+
+    return carrier
   }
 
-  _injectTraceparent (spanContext, carrier) {
+  /**
+   * @param {DatadogSpanContext} spanContext
+   * @param {Record<string, string> | undefined} carrier
+   * @param {boolean} injectTraceContext
+   * @returns {Record<string, string> | undefined}
+   */
+  _injectTraceparent (spanContext, carrier, injectTraceContext) {
     if (!this._hasPropagationStyle('inject', 'tracecontext')) return
 
+    if (!injectTraceContext) {
+      const tracestate = TraceState.fromString(spanContext._tracestate?.toString())
+      tracestate.delete('dd')
+      const header = tracestate.toString()
+      if (!header) return
+      carrier ??= {}
+      carrier.tracestate = header
+      return carrier
+    }
+
+    carrier ??= {}
     const {
       _sampling: { priority, mechanism },
       _tracestate: ts = new TraceState(),
@@ -363,6 +427,8 @@ class TextMapPropagator {
     })
 
     carrier.tracestate = ts.toString()
+
+    return carrier
   }
 
   _hasPropagationStyle (mode, name) {

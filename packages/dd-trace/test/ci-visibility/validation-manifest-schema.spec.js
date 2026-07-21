@@ -1,0 +1,777 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const jsonSchema = require('../../../../ci/test-optimization-validation-manifest.schema.json')
+const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
+const {
+  MAX_FRAMEWORKS,
+  MAX_VALIDATION_ERRORS,
+  validateManifest,
+} = require('../../../../ci/test-optimization-validation/manifest-schema')
+
+describe('test optimization validation manifest schema', () => {
+  it('requires at least one framework entry', () => {
+    const manifest = getManifest()
+    manifest.frameworks = []
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks must include at least one framework entry.',
+    ])
+    assert.strictEqual(jsonSchema.properties.frameworks.minItems, 1)
+  })
+
+  it('requires unique framework ids', () => {
+    const manifest = getManifest()
+    manifest.frameworks.push({ ...manifest.frameworks[0] })
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[1].id must be unique; duplicate "mocha:root".',
+    ])
+  })
+
+  it('accepts the last framework entry and rejects the first excessive entry', () => {
+    const manifest = getManifest()
+    manifest.frameworks = Array.from({ length: MAX_FRAMEWORKS }, (_, index) => ({
+      ...manifest.frameworks[0],
+      id: `mocha:project-${index}`,
+      project: { ...manifest.frameworks[0].project },
+      existingTestCommand: { ...manifest.frameworks[0].existingTestCommand },
+      preflight: { ...manifest.frameworks[0].preflight },
+      ciWiring: { ...manifest.frameworks[0].ciWiring },
+    }))
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+
+    manifest.frameworks.push({ ...manifest.frameworks[0], id: 'mocha:excessive' })
+    assert.match(validateManifest(manifest)[0], new RegExp(`at most ${MAX_FRAMEWORKS} entries`))
+  })
+
+  it('bounds validation errors and rendered invalid-manifest output', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-manifest-bounds-'))
+    const manifestPath = path.join(repositoryRoot, 'dd-test-optimization-validation-manifest.json')
+    const manifest = {
+      schemaVersion: '1.0',
+      repository: { root: repositoryRoot },
+      environment: {},
+      frameworks: Array.from({ length: MAX_FRAMEWORKS }, () => null),
+    }
+
+    try {
+      const errors = validateManifest(manifest)
+      assert.strictEqual(errors.length, MAX_VALIDATION_ERRORS)
+      assert.match(errors.at(-1), /additional validation error\(s\) omitted/)
+
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest))
+      assert.throws(() => loadManifest(manifestPath), error => {
+        assert.match(error.message, /additional validation error\(s\) omitted/)
+        assert(Buffer.byteLength(error.message) < 20 * 1024)
+        return true
+      })
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('reports malformed repeated structures without throwing during path validation', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].project.configFiles = {}
+    manifest.frameworks[0].setup = { commands: {} }
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'planned',
+      files: {},
+      scenarios: {},
+      cleanupPaths: {},
+    }
+
+    const errors = validateManifest(manifest)
+
+    assert(errors.some(error => /project\.configFiles must be an array/.test(error)))
+    assert(errors.some(error => /setup\.commands must be an array/.test(error)))
+    assert(errors.some(error => /generatedTestStrategy\.files must be an array/.test(error)))
+    assert(errors.some(error => /generatedTestStrategy\.scenarios must be an array/.test(error)))
+  })
+
+  it('rejects excessive manifest nesting before JSON parsing', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-manifest-depth-'))
+    const manifestPath = path.join(repositoryRoot, 'dd-test-optimization-validation-manifest.json')
+
+    try {
+      fs.writeFileSync(manifestPath, '['.repeat(65))
+      assert.throws(() => loadManifest(manifestPath), /nesting exceeds 64/)
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('requires runnable entries to include preflight evidence', () => {
+    const manifest = getManifest()
+    delete manifest.frameworks[0].preflight
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].preflight must be an object.',
+    ])
+  })
+
+  it('requires a bounded representative test count', () => {
+    const manifest = getManifest()
+    delete manifest.frameworks[0].preflight.maxTestCount
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].preflight.maxTestCount must be a positive integer.',
+    ])
+
+    manifest.frameworks[0].preflight.maxTestCount = 1001
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].preflight.maxTestCount must not exceed 1000.',
+    ])
+
+    manifest.frameworks[0].preflight.maxTestCount = 1000
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('requires non-runnable entries to explain why they cannot run', () => {
+    const manifest = getManifest({
+      status: 'requires_manual_setup',
+      notes: [],
+    })
+    delete manifest.frameworks[0].existingTestCommand
+    delete manifest.frameworks[0].preflight
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].notes must include a reason when status is requires_manual_setup.',
+    ])
+  })
+
+  it('requires generated paths and identity files to be absolute', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].project.packageJson = 'package.json'
+    manifest.frameworks[0].project.configFiles = ['mocha.config.js']
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'verified',
+      testDirectory: 'test',
+      files: [
+        {
+          path: 'test/generated.test.js',
+          contentLines: ['it("passes", function () {})', 1],
+        },
+      ],
+      scenarios: [
+        {
+          id: 'basic-pass',
+          runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(0),
+          testIdentities: [
+            {
+              name: 'passes',
+              file: 'test/generated.test.js',
+            },
+          ],
+        },
+        {
+          id: 'atr-fail-once',
+          runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(1),
+        },
+        {
+          id: 'test-management-target',
+          runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(0),
+          testIdentities: [],
+        },
+      ],
+      cleanupPaths: ['test/generated.test.js'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].project.packageJson must be an absolute path when present.',
+      'frameworks[0].project.configFiles[0] must be an absolute path.',
+      'frameworks[0].generatedTestStrategy.files[0].path must be an absolute path.',
+      'frameworks[0].generatedTestStrategy.files[0].contentLines[1] must be a string.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities[0].file must be an absolute path ' +
+        'when present.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities must be a non-empty array when ' +
+        'generatedTestStrategy is planned or verified.',
+      'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities must be a non-empty array when ' +
+        'generatedTestStrategy is planned or verified.',
+      'frameworks[0].generatedTestStrategy.testDirectory must be an absolute path when present.',
+      'frameworks[0].generatedTestStrategy.cleanupPaths[0] must be an absolute path.',
+    ])
+  })
+
+  it('keeps command and repository evidence paths inside repository.root', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].project.packageJson = '/outside/package.json'
+    manifest.frameworks[0].existingTestCommand.cwd = '/outside'
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      replayability: 'replayable',
+      reason: 'Replay selected.',
+      provider: 'github-actions',
+      configFile: '/outside/workflow.yml',
+      job: 'test',
+      step: 'Run tests',
+      whySelected: 'Selected by discovery.',
+      workingDirectory: '/outside',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/outside',
+      argv: ['npm', 'test'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].project.packageJson must be inside repository.root.',
+      'frameworks[0].existingTestCommand.cwd must be inside repository.root.',
+      'frameworks[0].ciWiringCommand.cwd must be inside repository.root.',
+      'frameworks[0].ciWiring.configFile must be inside repository.root.',
+      'frameworks[0].ciWiring.workingDirectory must be inside repository.root.',
+    ])
+  })
+
+  it('publishes absolute-path constraints for path fields in the JSON schema', () => {
+    const absolutePathRef = { $ref: '#/$defs/absolutePathString' }
+    const nullableAbsolutePath = {
+      anyOf: [
+        absolutePathRef,
+        { type: 'null' },
+      ],
+    }
+
+    assert.deepStrictEqual(jsonSchema.$defs.repository.properties.root, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.project.properties.root, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.project.properties.packageJson, nullableAbsolutePath)
+    assert.deepStrictEqual(jsonSchema.$defs.project.properties.configFiles.items, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.command.properties.cwd, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.command.properties.outputPaths.items, absolutePathRef)
+    assert.strictEqual(jsonSchema.$defs.framework.properties.forcedLocalCommand, false)
+    assert.deepStrictEqual(jsonSchema.$defs.preflight.properties.maxTestCount, {
+      type: 'integer',
+      minimum: 1,
+      maximum: 1000,
+    })
+    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.testDirectory, nullableAbsolutePath)
+    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.cleanupPaths.items, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.generatedFile.properties.path, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.properties.file, nullableAbsolutePath)
+  })
+
+  it('publishes runtime conditional requirements in the JSON schema', () => {
+    const frameworkAllOf = jsonSchema.$defs.framework.allOf
+    const commandAllOf = jsonSchema.$defs.command.allOf
+    const ciWiringAllOf = jsonSchema.$defs.ciWiring.allOf
+    const initializationAllOf = jsonSchema.$defs.ciWiring.properties.initialization.allOf
+
+    assert.ok(frameworkAllOf.some(condition => {
+      return condition.if?.properties?.status?.enum?.includes('requires_manual_setup') &&
+        condition.then?.required?.includes('notes') &&
+        condition.then?.properties?.notes?.minItems === 1
+    }))
+    assert.ok(commandAllOf.some(condition => {
+      return condition.if?.properties?.usesShell?.const === true &&
+        condition.if?.required?.includes('usesShell') &&
+        condition.then?.required?.includes('shellCommand')
+    }))
+    assert.ok(commandAllOf.some(condition => {
+      return condition.if?.required?.includes('shell') &&
+        condition.then?.required?.includes('usesShell') &&
+        condition.then?.properties?.usesShell?.const === true
+    }))
+    assert.ok(frameworkAllOf.some(condition => {
+      return condition.if?.properties?.ciWiring?.properties?.replayability?.const === 'replayable' &&
+        condition.then?.required?.includes('ciWiringCommand')
+    }))
+    assert.ok(ciWiringAllOf.some(condition => {
+      return condition.if?.properties?.replayability?.const === 'not_replayable' &&
+        condition.then?.properties?.status?.enum?.includes('unknown') &&
+        condition.then?.properties?.status?.enum?.includes('skip')
+    }))
+    assert.ok(initializationAllOf.some(condition => {
+      return condition.if?.properties?.status?.enum?.includes('not_configured') &&
+        condition.then?.properties?.evidence?.minItems === 1
+    }))
+    assert.deepStrictEqual(jsonSchema.$defs.expectedWithoutDatadog.required, [
+      'exitCode',
+      'observedTestCount',
+    ])
+  })
+
+  it('requires verified generated strategies to include every validation scenario', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'verified',
+      files: [
+        {
+          path: '/repo/test/dd-test-optimization-validation.test.js',
+          contentLines: ['it("passes", function () {})'],
+        },
+      ],
+      scenarios: [
+        {
+          id: 'basic-pass',
+          runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(0),
+        },
+      ],
+      cleanupPaths: ['/repo/test/dd-test-optimization-validation.test.js'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].generatedTestStrategy.scenarios must include generated scenario "atr-fail-once" ' +
+        'when status is planned or verified.',
+      'frameworks[0].generatedTestStrategy.scenarios must include generated scenario "test-management-target" ' +
+        'when status is planned or verified.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities must be a non-empty array when ' +
+        'generatedTestStrategy is planned or verified.',
+    ])
+  })
+
+  it('allows proposed generated strategies without test identities', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'The selected runner cannot focus generated tests yet.',
+      scenarios: [
+        {
+          id: 'basic-pass',
+          runCommand: getCommand(),
+        },
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('rejects generated file and cleanup path collisions across frameworks', () => {
+    const manifest = getManifest()
+    const generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'The generated scenarios are still being prepared.',
+      files: [{
+        path: '/repo/test/dd-test-optimization-validation.test.js',
+        contentLines: ['it("passes", function () {})'],
+      }],
+      cleanupPaths: ['/repo/test/dd-test-optimization-validation.test.js'],
+    }
+    manifest.frameworks[0].generatedTestStrategy = generatedTestStrategy
+    manifest.frameworks.push({
+      ...manifest.frameworks[0],
+      id: 'jest:root',
+      framework: 'jest',
+      project: { ...manifest.frameworks[0].project },
+      existingTestCommand: { ...manifest.frameworks[0].existingTestCommand },
+      preflight: { ...manifest.frameworks[0].preflight },
+      ciWiring: { ...manifest.frameworks[0].ciWiring },
+      generatedTestStrategy: {
+        ...generatedTestStrategy,
+        files: generatedTestStrategy.files.map(file => ({ ...file })),
+        cleanupPaths: [...generatedTestStrategy.cleanupPaths],
+      },
+    })
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[1].generatedTestStrategy path "/repo/test/dd-test-optimization-validation.test.js" conflicts ' +
+        'with frameworks[0].generatedTestStrategy. Generated files and cleanup paths must be unique across ' +
+        'framework entries.',
+    ])
+  })
+
+  it('rejects generated source that can conceal secrets or terminal controls', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'The generated scenarios are still being prepared.',
+      files: [
+        {
+          path: '/repo/test/dd-test-optimization-validation.test.js',
+          contentLines: ['API_KEY="hidden-value" npm test'],
+        },
+        {
+          path: '/repo/test/dd-test-optimization-validation-control.test.js',
+          contentLines: ['safe\u001b[2Jhidden'],
+        },
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].generatedTestStrategy.files[0].contentLines must contain only synthetic source and no ' +
+        'secret-like values.',
+      'frameworks[0].generatedTestStrategy.files[1].contentLines must use one printable source line per ' +
+        'contentLines entry.',
+    ])
+  })
+
+  it('requires runnable frameworks to classify CI wiring explicitly', () => {
+    const manifest = getManifest()
+    delete manifest.frameworks[0].ciWiring
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring must be an object.',
+    ])
+  })
+
+  it('requires replayable failed CI wiring to include its command', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = {
+      status: 'fail',
+      replayability: 'replayable',
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiringCommand is required when frameworks[0].ciWiring.replayability is replayable.',
+    ])
+  })
+
+  it('requires verified generated commands to isolate one scenario with the expected exit code', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'verified',
+      files: [],
+      cleanupPaths: [],
+      scenarios: [
+        getGeneratedScenario('basic-pass', 1, 3),
+        getGeneratedScenario('atr-fail-once', 0, 3),
+        getGeneratedScenario('test-management-target', 0, 3),
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].generatedTestStrategy.scenarios[0].expectedWithoutDatadog.exitCode must be 0 for basic-pass.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].expectedWithoutDatadog.observedTestCount must be 1 so ' +
+        'the command isolates this scenario.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].expectedWithoutDatadog.exitCode must be 1 for ' +
+        'atr-fail-once.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].expectedWithoutDatadog.observedTestCount must be 1 so ' +
+        'the command isolates this scenario.',
+      'frameworks[0].generatedTestStrategy.scenarios[2].expectedWithoutDatadog.observedTestCount must be 1 so ' +
+        'the command isolates this scenario.',
+    ])
+  })
+
+  it('accepts complete generated strategies that the validator will verify', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'planned',
+      files: [],
+      cleanupPaths: [],
+      scenarios: [
+        getGeneratedScenario('basic-pass', 0, 1),
+        getGeneratedScenario('atr-fail-once', 1, 1),
+        getGeneratedScenario('test-management-target', 0, 1),
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('requires generated test identities with usable names', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'planned',
+      files: [],
+      cleanupPaths: [],
+      scenarios: [
+        getGeneratedScenario('basic-pass', 0, 1),
+        getGeneratedScenario('atr-fail-once', 1, 1),
+        getGeneratedScenario('test-management-target', 0, 1),
+      ],
+    }
+    manifest.frameworks[0].generatedTestStrategy.scenarios[0].testIdentities = [{ file: '/repo/test.js' }]
+    manifest.frameworks[0].generatedTestStrategy.scenarios[1].testIdentities = [{ name: 123, suite: 456 }]
+    manifest.frameworks[0].generatedTestStrategy.scenarios[2].testIdentities = [null]
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities[0].name must be a non-empty string.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities[0].name must be a non-empty string.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities[0].suite must be a string or null when ' +
+        'present.',
+      'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities[0] must be an object.',
+    ])
+    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.required, ['name'])
+    assert.strictEqual(jsonSchema.$defs.testIdentity.properties.name.minLength, 1)
+  })
+
+  it('requires CI command metadata and matching working directories', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      replayability: 'replayable',
+      reason: 'Replayable command selected.',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/repo/packages/app',
+      argv: ['npm', 'test'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.provider must be a non-empty string.',
+      'frameworks[0].ciWiring.configFile must be a non-empty string.',
+      'frameworks[0].ciWiring.job must be a non-empty string.',
+      'frameworks[0].ciWiring.step must be a non-empty string.',
+      'frameworks[0].ciWiring.whySelected must be a non-empty string.',
+      'frameworks[0].ciWiring.configFile must be an absolute path.',
+      'frameworks[0].ciWiring.workingDirectory must be an absolute path.',
+      'frameworks[0].ciWiringCommand.cwd must match frameworks[0].ciWiring.workingDirectory.',
+    ])
+  })
+
+  it('requires validator-controlled commands to be free of Datadog initialization', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.env = {
+      DD_API_KEY: 'placeholder',
+      NODE_OPTIONS: '--max-old-space-size=4096 -r dd-trace/ci/init',
+    }
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'Scenario selection is not complete.',
+      scenarios: [{
+        id: 'basic-pass',
+        runCommand: {
+          ...getCommand(),
+          env: { NODE_OPTIONS: '-r dd-trace/ci/init' },
+        },
+      }],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand.env.DD_API_KEY must not configure Datadog initialization for local ' +
+        'validation.',
+      'frameworks[0].existingTestCommand.env.NODE_OPTIONS must not configure Datadog initialization for local ' +
+        'validation.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].runCommand.env.NODE_OPTIONS must not configure Datadog ' +
+        'initialization for local validation.',
+    ])
+  })
+
+  it('rejects inline Datadog initialization from validator-controlled commands', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.argv = [
+      'env',
+      'NODE_OPTIONS=-r dd-trace/ci/init',
+      'npm',
+      'test',
+    ]
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'Scenario selection is not complete.',
+      scenarios: [{
+        id: 'basic-pass',
+        runCommand: {
+          ...getCommand(),
+          argv: ['node', '-r', 'dd-trace/ci/init', 'node_modules/.bin/mocha'],
+        },
+      }],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand contains an inline dd-trace preload and must be Datadog-clean for local ' +
+        'validation. Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].runCommand contains an inline dd-trace preload and must be ' +
+        'Datadog-clean for local validation. Remove the inline initialization; preserve exact CI initialization ' +
+        'only in ciWiringCommand.',
+    ])
+  })
+
+  it('preserves inline Datadog initialization in the exact CI wiring replay', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      replayability: 'replayable',
+      reason: 'Replay selected.',
+      provider: 'github-actions',
+      configFile: '/repo/.github/workflows/test.yml',
+      job: 'test',
+      step: 'Run tests',
+      whySelected: 'Selected by discovery.',
+      workingDirectory: '/repo',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/repo',
+      argv: ['env', 'NODE_OPTIONS=-r dd-trace/ci/init', 'npm', 'test'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('requires inline secret-like command values to move into the env object', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.argv = ['npm', 'test', '--token', 'hidden-token']
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand.argv must not contain inline secret-like values. Put safe placeholders ' +
+        'in env.',
+    ])
+  })
+
+  it('rejects undeclared command fields that could change execution invisibly', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.displayCommand = 'npm test'
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand.displayCommand is not an allowed command field.',
+    ])
+    assert.strictEqual(jsonSchema.$defs.command.additionalProperties, false)
+  })
+
+  it('allows an explicit executable for shell commands', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand = {
+      cwd: '/repo',
+      usesShell: true,
+      shell: '/bin/bash',
+      shellCommand: 'npm test',
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+    assert.deepStrictEqual(jsonSchema.$defs.command.properties.shell, {
+      $ref: '#/$defs/executableString',
+    })
+  })
+
+  it('rejects ambiguous command types, environment names, and excessive timeouts', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.usesShell = 'false'
+    manifest.frameworks[0].existingTestCommand.required = 'yes'
+    manifest.frameworks[0].existingTestCommand.env = {
+      'BAD\nNAME': 'value',
+      SAFE_NAME: 123,
+    }
+    manifest.frameworks[0].existingTestCommand.timeoutMs = 1_800_001
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand.usesShell must be a boolean when present.',
+      'frameworks[0].existingTestCommand.required must be a boolean when present.',
+      'frameworks[0].existingTestCommand.shellCommand must be a non-empty string.',
+      'frameworks[0].existingTestCommand.env contains invalid variable name "BAD\\nNAME".',
+      'frameworks[0].existingTestCommand.env.SAFE_NAME must be a string.',
+      'frameworks[0].existingTestCommand.timeoutMs must not exceed 1800000 ms.',
+    ])
+  })
+
+  it('allows only a fixed dummy value for secret-like command environment variables', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      replayability: 'replayable',
+      reason: 'Replay selected.',
+      provider: 'github-actions',
+      configFile: '/repo/.github/workflows/test.yml',
+      job: 'test',
+      step: 'Run tests',
+      whySelected: 'Selected by discovery.',
+      workingDirectory: '/repo',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/repo',
+      argv: ['npm', 'test'],
+      env: { DD_API_KEY: 'real-secret-must-not-run' },
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiringCommand.env.DD_API_KEY must use the safe placeholder ' +
+        '"dd-validation-placeholder".',
+    ])
+
+    manifest.frameworks[0].ciWiringCommand.env.DD_API_KEY = 'dd-validation-placeholder'
+    manifest.frameworks[0].ciWiringCommand.env.HAS_BUILDPULSE_SECRETS = 'false'
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('rejects invisible and control characters in executable paths and values', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand = {
+      cwd: '/repo/hidden\uFE0F-directory',
+      argv: ['n\uFE0Fpm', 'test'],
+      env: { SAFE_NAME: 'before\u2060after' },
+    }
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      replayability: 'replayable',
+      reason: 'Replay selected.',
+      provider: 'github-actions',
+      configFile: '/repo/.github/workflows/test.yml',
+      job: 'test',
+      step: 'Run tests',
+      whySelected: 'Selected by discovery.',
+      workingDirectory: '/repo',
+      shell: 'bash\u001B',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/repo',
+      usesShell: true,
+      shellCommand: 'npm test',
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand.cwd must not contain invisible or control characters.',
+      'frameworks[0].existingTestCommand.argv must not contain invisible or control characters.',
+      'frameworks[0].existingTestCommand.env.SAFE_NAME must not contain invisible or control characters.',
+      'frameworks[0].ciWiring.shell must not contain invisible or control characters.',
+    ])
+  })
+})
+
+function getManifest (frameworkOverrides = {}) {
+  const root = '/repo'
+  return {
+    schemaVersion: '1.0',
+    repository: {
+      root,
+    },
+    environment: {},
+    frameworks: [
+      {
+        id: 'mocha:root',
+        framework: 'mocha',
+        status: 'runnable',
+        project: {
+          root,
+          packageJson: path.join(root, 'package.json'),
+          configFiles: [],
+        },
+        existingTestCommand: getCommand(),
+        preflight: {
+          ran: true,
+          exitCode: 0,
+          maxTestCount: 50,
+        },
+        ciWiring: {
+          status: 'unknown',
+          replayability: 'not_replayable',
+          replayBlocker: 'No replayable CI command was identified.',
+          reason: 'No replayable CI command was identified.',
+        },
+        notes: [],
+        ...frameworkOverrides,
+      },
+    ],
+  }
+}
+
+function getGeneratedScenario (id, exitCode, observedTestCount) {
+  return {
+    id,
+    runCommand: getCommand(),
+    expectedWithoutDatadog: {
+      exitCode,
+      observedTestCount,
+    },
+    testIdentities: [{ name: id, file: `/repo/test/${id}.test.js` }],
+  }
+}
+
+function getExpectedOutcome (exitCode) {
+  return {
+    exitCode,
+    observedTestCount: 1,
+  }
+}
+
+function getCommand () {
+  return {
+    cwd: '/repo',
+    argv: ['npm', 'test'],
+  }
+}

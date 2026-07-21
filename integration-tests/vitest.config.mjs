@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite'
 
+let defineVitestConfig = defineConfig
+
 class CustomSequencer {
   async shard (files) {
     return files
@@ -48,6 +50,10 @@ if (process.env.CUSTOM_SEQUENCER) {
   config.test.sequence = {
     sequencer: CustomSequencer,
   }
+}
+
+if (process.env.VITEST_RUNNER) {
+  config.test.runner = process.env.VITEST_RUNNER
 }
 
 if (process.env.PROJECT_POOL_CONFIG) {
@@ -108,4 +114,19 @@ if (process.env.COVERAGE_PROVIDER) {
   }
 }
 
-export default defineConfig(config)
+if (process.env.CLOUDFLARE_WORKERS_POOL) {
+  const { defineWorkersConfig } = await import('@cloudflare/vitest-pool-workers/config')
+
+  defineVitestConfig = defineWorkersConfig
+  config.test.poolOptions = {
+    ...config.test.poolOptions,
+    workers: {
+      ...config.test.poolOptions?.workers,
+      miniflare: {
+        compatibilityDate: '2025-01-01',
+      },
+    },
+  }
+}
+
+export default defineVitestConfig(config)
