@@ -840,9 +840,10 @@
         "implementation": "A",
         "type": "string",
         "default": "agentless",
-        "description": "Experimental: Select where Feature Flagging loads Universal Flag Configuration. Supported values are agentless and remote_config.",
+        "allowed": "agentless|remote_config|offline",
+        "description": "Experimental: Select where Feature Flagging loads Universal Flag Configuration. Supported values are agentless and remote_config; offline is reserved and currently unsupported.",
         "namespace": "featureFlags",
-        "transform": "normalizeFeatureFlagsConfigurationSource"
+        "transform": "toLowerCase"
       }
     ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL": [

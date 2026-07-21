@@ -100,10 +100,6 @@ const transformers = {
     }
     return configValue
   },
-  normalizeFeatureFlagsConfigurationSource (value) {
-    const source = String(value).trim().toLowerCase()
-    return source || undefined
-  },
   /**
    * Parses DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ('on' | 'off' | 'gzip[-1..9]' | 'zstd[-1..22]')
    * into the codec and level the profiler uploads with. The value's shape is already range-checked

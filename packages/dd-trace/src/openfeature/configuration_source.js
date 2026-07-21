@@ -22,8 +22,12 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled || source !== 'agentless') {
+  if (!enabled || source === 'remote_config') {
     return
+  }
+
+  if (source !== 'agentless') {
+    throw new Error(`Unsupported Feature Flagging configuration source: ${source}`)
   }
 
   try {
