@@ -128,6 +128,21 @@ describe('agentless-ci-visibility-encode', () => {
     assert.strictEqual(secondDecoded.metadata['*']['runtime-id'], 'refreshed-id')
   })
 
+  it('should encode env from tags, reflecting a mutation made after construction', () => {
+    const tags = { env: 'initial-env' }
+    const localEncoder = new AgentlessCiVisibilityEncoder(writer, { tags })
+
+    localEncoder.encode(trace)
+    const firstDecoded = msgpack.decode(localEncoder.makePayload(), { useBigInt64: true })
+    assert.strictEqual(firstDecoded.metadata['*'].env, 'initial-env')
+
+    tags.env = 'refreshed-env'
+
+    localEncoder.encode(trace)
+    const secondDecoded = msgpack.decode(localEncoder.makePayload(), { useBigInt64: true })
+    assert.strictEqual(secondDecoded.metadata['*'].env, 'refreshed-env')
+  })
+
   it('should report its count', () => {
     assert.strictEqual(encoder.count(), 0)
 
