@@ -48,6 +48,10 @@ identityRefreshChannel.subscribe(() => {
 class DogStatsDClient {
   #lookup
   #tagsPrefix
+  #tags
+  #queue
+  #buffer
+  #offset
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -61,11 +65,11 @@ class DogStatsDClient {
     this._host = options.host
     this._family = isIP(this._host)
     this._port = options.port
-    this._tags = options.tags
-    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
-    this._queue = []
-    this._buffer = ''
-    this._offset = 0
+    this.#tags = options.tags
+    this.#tagsPrefix = this.#tags?.length ? `|#${this.#tags.join(',')}` : ''
+    this.#queue = []
+    this.#buffer = ''
+    this.#offset = 0
     this._udp4 = this._socket('udp4')
     this._udp6 = this._socket('udp6')
   }
@@ -73,11 +77,17 @@ class DogStatsDClient {
   /**
    * Recomputes the cached tags and tag-prefix string (mirrors the constructor) so a later
    * `config.tags` change (e.g. a MicroVM clone resume) is reflected without recreating the client.
+   * Drops any buffered-but-unsent lines: `distribution()` (and a mid-write overflow in `_write()`)
+   * serialize lines synchronously ahead of the next scheduled `flush()`, so anything already
+   * written has the previous tags baked in and would ship stale identity if kept.
    * @param {string[]} tags - DogStatsD-formatted tags (e.g. `['key:value']`)
    */
   updateTags (tags) {
-    this._tags = tags
-    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
+    this.#tags = tags
+    this.#tagsPrefix = this.#tags?.length ? `|#${this.#tags.join(',')}` : ''
+    this.#queue = []
+    this.#buffer = ''
+    this.#offset = 0
   }
 
   increment (stat, value, tags) {
@@ -107,7 +117,7 @@ class DogStatsDClient {
 
     log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
-    this._queue = []
+    this.#queue = []
 
     if (this._httpOptions) {
       this._sendHttp(queue)
@@ -178,22 +188,22 @@ class DogStatsDClient {
   _write (message) {
     const offset = Buffer.byteLength(message)
 
-    if (this._offset + offset > MAX_BUFFER_SIZE) {
+    if (this.#offset + offset > MAX_BUFFER_SIZE) {
       this._enqueue()
     }
 
-    this._offset += offset
-    this._buffer += message
+    this.#offset += offset
+    this.#buffer += message
   }
 
   _enqueue () {
-    if (this._offset > 0) {
-      this._queue.push(Buffer.from(this._buffer))
-      this._buffer = ''
-      this._offset = 0
+    if (this.#offset > 0) {
+      this.#queue.push(Buffer.from(this.#buffer))
+      this.#buffer = ''
+      this.#offset = 0
     }
 
-    return this._queue
+    return this.#queue
   }
 
   _socket (type) {

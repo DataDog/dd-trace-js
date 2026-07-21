@@ -26,6 +26,8 @@ const jsonBuffer = new JSONBuffer({
   onFlush,
 })
 
+let lastSeenRuntimeId = config.runtimeId
+
 const STATUSES = {
   RECEIVED: 'RECEIVED',
   INSTALLED: 'INSTALLED',
@@ -117,6 +119,14 @@ function statusPayload (probeId, probeVersion, status) {
 }
 
 function onlyUniqueUpdates (type, id, version, fn) {
+  // `config.runtimeId` changing means a MicroVM clone resumed with a new identity. Without this,
+  // a probe status already deduped under the old identity would be silently suppressed if the
+  // clone re-reports the same type/probeId/version under its new one.
+  if (config.runtimeId !== lastSeenRuntimeId) {
+    lastSeenRuntimeId = config.runtimeId
+    cache.clear()
+  }
+
   const key = `${type}-${id}-${version}`
   if (cache.has(key)) return
   fn()
