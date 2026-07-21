@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setTimeout } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
@@ -32,6 +33,9 @@ describe('Plugin', () => {
             password: 'password',
           })
           bucket = cluster.bucket('datadog-test')
+          if (semver.gte(version, '4.0.0')) {
+            await waitForBucketConnection(cluster, couchbase)
+          }
           collection = bucket.defaultCollection()
         })
 
@@ -181,3 +185,26 @@ describe('Plugin', () => {
     })
   })
 })
+
+/**
+ * Couchbase 4.x resolves connect before bucket() finishes opening its KV connection.
+ *
+ * @param {{
+ *   ping(options: { serviceTypes: string[] }): Promise<{ services: Record<string, Array<{ state: number }>> }>
+ * }} cluster
+ * @param {{ ServiceType: { KeyValue: string }, PingState: { Ok: number } }} couchbase
+ */
+async function waitForBucketConnection (cluster, couchbase) {
+  const deadline = Date.now() + 8_000
+  while (Date.now() < deadline) {
+    const { services } = await cluster.ping({
+      serviceTypes: [couchbase.ServiceType.KeyValue],
+    })
+    const endpoints = services[couchbase.ServiceType.KeyValue] ?? []
+    for (const { state } of endpoints) {
+      if (state === couchbase.PingState.Ok) return
+    }
+    await setTimeout(10)
+  }
+  throw new Error('Couchbase KV connection did not become ready')
+}

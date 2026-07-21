@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { randomUUID } = require('crypto')
+const { randomUUID } = require('node:crypto')
+const { EventEmitter, once } = require('node:events')
 const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
@@ -176,16 +177,33 @@ describe('Plugin', () => {
               DataStreamsProcessor.prototype.recordCheckpoint.restore()
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-            await sendMessages(kafka, testTopic, messages)
-            await consumer.run({
-              eachMessage: async () => {
-                assert.ok(
-                  Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
-                  `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
-                )
-                recordCheckpointSpy.restore()
-              },
-            })
+            const consumption = new EventEmitter()
+            try {
+              await consumer.run({
+                eachMessage: async () => {
+                  try {
+                    const checkpoint = recordCheckpointSpy.lastCall.args[0]
+                    assert.ok(
+                      checkpoint.edgeTags.includes('direction:in'),
+                      `Available tags: ${inspect(checkpoint.edgeTags)}`
+                    )
+                    assert.ok(
+                      Object.hasOwn(checkpoint, 'payloadSize'),
+                      `Available keys: ${inspect(Object.keys(checkpoint))}`
+                    )
+                    consumption.emit('complete')
+                  } catch (error) {
+                    consumption.emit('error', error)
+                  }
+                },
+              })
+              await Promise.all([
+                once(consumption, 'complete'),
+                sendMessages(kafka, testTopic, messages),
+              ])
+            } finally {
+              recordCheckpointSpy.restore()
+            }
           })
         })
 
