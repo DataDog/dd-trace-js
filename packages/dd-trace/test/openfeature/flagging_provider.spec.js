@@ -16,6 +16,7 @@ describe('FlaggingProvider', () => {
   let mockChannel
   let log
   let channelStub
+  let configurationSource
   let mockEvalMetricsHook
   let mockEvalMetricsHookClass
   let mockSpanEnrichmentHook
@@ -46,6 +47,9 @@ describe('FlaggingProvider', () => {
     }
 
     channelStub = sinon.stub().returns(mockChannel)
+    configurationSource = {
+      create: sinon.stub(),
+    }
 
     log = {
       debug: sinon.spy(),
@@ -69,19 +73,13 @@ describe('FlaggingProvider', () => {
         channel: channelStub,
       },
       '../log': log,
+      './configuration_source': configurationSource,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
     })
   })
 
   describe('constructor', () => {
-    it('should initialize with tracer and config', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-
-      assert.strictEqual(provider._tracer, mockTracer)
-      assert.strictEqual(provider._config, mockConfig)
-    })
-
     it('should create exposure channel', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
@@ -94,36 +92,6 @@ describe('FlaggingProvider', () => {
 
       assert.ok(provider)
       sinon.assert.calledWith(log.debug, '%s created with timeout: %dms', 'FlaggingProvider', 30000)
-    })
-  })
-
-  describe('_setConfiguration', () => {
-    it('should call setConfiguration when method exists', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-      const setConfigSpy = sinon.spy(provider, 'setConfiguration')
-      const ufc = { flags: { 'test-flag': {} } }
-
-      provider._setConfiguration(ufc)
-
-      sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
-      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
-    })
-
-    it('should handle null/undefined configuration gracefully', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-
-      provider._setConfiguration(null)
-      provider._setConfiguration(undefined)
-    })
-
-    it('should not throw when setConfiguration is not a function', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-      provider.setConfiguration = null // Remove the method
-
-      provider._setConfiguration({ flags: {} })
-
-      // Should still log the debug message
-      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
     })
   })
 
@@ -200,6 +168,41 @@ describe('FlaggingProvider', () => {
       provider.onClose()
 
       sinon.assert.notCalled(mockSpanEnrichmentHook.destroy)
+    })
+
+    it('stops the attached configuration source', () => {
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      configurationSource.create.returns(source)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(source.start)
+      sinon.assert.calledOnce(source.stop)
+    })
+
+    it('applies source configurations through the provider boundary', () => {
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      configurationSource.create.returns(source)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const ufc = { flags: {} }
+      const applyConfiguration = configurationSource.create.firstCall.args[1]
+
+      applyConfiguration(ufc)
+
+      assert.strictEqual(provider.getConfiguration(), ufc)
+    })
+
+    it('closes owned resources only once', () => {
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      configurationSource.create.returns(source)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+      provider.onClose()
+
+      sinon.assert.calledOnce(source.stop)
+      sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
     })
   })
 

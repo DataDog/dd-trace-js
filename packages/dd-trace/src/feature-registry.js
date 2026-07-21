@@ -1,12 +1,19 @@
 'use strict'
 
 /**
+ * @typedef {{ enable: (config: import('./config/config-base')) => void, disable: () => void }} FeatureModule
+ * @typedef {new (tracer: import('./tracer'), config: import('./config/config-base')) => object} FeatureProvider
+ */
+
+/**
  * @typedef {object} Feature
  * @property {string} name
  * @property {object} noop
- * @property {() => object} factory
- * @property {Function} [remoteConfig]
- * @property {Function} [enable]
+ * @property {() => FeatureModule} factory
+ * @property {(config: import('./config/config-base')) => boolean} isEnabled
+ * @property {() => FeatureProvider} provider
+ * @property {(rc: import('./remote_config'), config: import('./config/config-base'),
+ *   proxy: import('./proxy')) => void} [remoteConfig]
  */
 
 /** @type {{ [name: string]: Feature }} */
