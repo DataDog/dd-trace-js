@@ -1,8 +1,18 @@
 'use strict'
 
+const { basename } = require('node:path')
+
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const getConfig = require('../../dd-trace/src/config')
+const {
+  SCREENSHOT_UPLOAD_RESULT_ERROR,
+  SCREENSHOT_UPLOAD_RESULT_UPLOADED,
+  getScreenshotCapturedAtMs,
+  getScreenshotUploadResult,
+  getScreenshotUploadTag,
+} = require('../../dd-trace/src/ci-visibility/test-screenshot')
 
 const {
   finishAllTraceSpans,
@@ -51,6 +61,21 @@ const {
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
+const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
+
+/**
+ * Returns whether an attachment is an automatic Playwright failure screenshot.
+ *
+ * @param {object} attachment - Playwright test attachment
+ * @returns {boolean}
+ */
+function isPlaywrightFailureScreenshot (attachment) {
+  return attachment?.name === 'screenshot' &&
+    attachment.contentType === 'image/png' &&
+    typeof attachment.path === 'string' &&
+    PLAYWRIGHT_FAILURE_SCREENSHOT_RE.test(basename(attachment.path))
+}
+
 class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
 
@@ -60,6 +85,8 @@ class PlaywrightPlugin extends CiPlugin {
     this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
+    this.pendingTestFinishes = 0
+    this.finishSession = undefined
 
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
@@ -71,6 +98,30 @@ class PlaywrightPlugin extends CiPlugin {
       onDone(isModified)
     })
 
+    this.addSub('ci:playwright:session:start', ({ isFailureScreenshotEnabled }) => {
+      if (!getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) return
+
+      if (!isFailureScreenshotEnabled) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.',
+          'Set Playwright use.screenshot to "only-on-failure", "on-first-failure", or "on".'
+        )
+      }
+    })
+
+    this.addSub('ci:playwright:session:configuration', ({ isFailureScreenshotEnabled }) => {
+      if (!getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED || !isFailureScreenshotEnabled) return
+
+      if (!this.tracer._exporter?.canUploadTestScreenshots?.()) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported',
+          'by the active Test Optimization transport.'
+        )
+      }
+    })
+
     this.addSub('ci:playwright:session:finish', ({
       status,
       isEarlyFlakeDetectionEnabled,
@@ -78,42 +129,51 @@ class PlaywrightPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       onDone,
     }) => {
-      this.testModuleSpan.setTag(TEST_STATUS, status)
-      this.testSessionSpan.setTag(TEST_STATUS, status)
+      const finishSession = () => {
+        this.testModuleSpan.setTag(TEST_STATUS, status)
+        this.testSessionSpan.setTag(TEST_STATUS, status)
 
-      if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
-      }
-      if (isEarlyFlakeDetectionFaulty) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
-      }
-      if (status === 'fail' && this.numFailedSuites > 0) {
-        let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
-        if (this.numFailedTests > 0) {
-          errorMessage += ` Tests failed: ${this.numFailedTests}`
+        if (isEarlyFlakeDetectionEnabled) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
-        const error = new Error(errorMessage)
-        this.testModuleSpan.setTag('error', error)
-        this.testSessionSpan.setTag('error', error)
+        if (isEarlyFlakeDetectionFaulty) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+        }
+        if (status === 'fail' && this.numFailedSuites > 0) {
+          let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
+          if (this.numFailedTests > 0) {
+            errorMessage += ` Tests failed: ${this.numFailedTests}`
+          }
+          const error = new Error(errorMessage)
+          this.testModuleSpan.setTag('error', error)
+          this.testSessionSpan.setTag('error', error)
+        }
+
+        if (isTestManagementTestsEnabled) {
+          this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+        }
+
+        this.testModuleSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
+        this.testSessionSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+        finishAllTraceSpans(this.testSessionSpan)
+        this.telemetry.count(TELEMETRY_TEST_SESSION, {
+          provider: this.ciProviderName,
+          autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        })
+        appClosingTelemetry()
+        this.tracer._exporter.flush(onDone)
+        this.numFailedTests = 0
+        this.numFailedSuites = 0
+        this.finishSession = undefined
       }
 
-      if (isTestManagementTestsEnabled) {
-        this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      if (this.pendingTestFinishes > 0) {
+        this.finishSession = finishSession
+      } else {
+        finishSession()
       }
-
-      this.testModuleSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
-      this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
-      finishAllTraceSpans(this.testSessionSpan)
-      this.telemetry.count(TELEMETRY_TEST_SESSION, {
-        provider: this.ciProviderName,
-        autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
-      })
-      appClosingTelemetry()
-      this.tracer._exporter.flush(onDone)
-      this.numFailedTests = 0
-      this.numFailedSuites = 0
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
@@ -211,9 +271,10 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:worker:report', (serializedTraces) => {
+    this.addSub('ci:playwright:worker:report', ({ serializedTraces, screenshots }) => {
       const traces = JSON.parse(serializedTraces)
       const formattedTraces = []
+      let formattedTestSpan
 
       for (const trace of traces) {
         const formattedTrace = []
@@ -228,6 +289,7 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_HAS_DYNAMIC_NAME] = 'true'
           }
           if (span.name === 'playwright.test') {
+            formattedTestSpan = formattedSpan
             // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
             // so we don't need this re-serialization logic. This can be passed just once, since they're unique
@@ -262,9 +324,36 @@ class PlaywrightPlugin extends CiPlugin {
         formattedTraces.push(formattedTrace)
       }
 
-      for (const trace of formattedTraces) {
-        this.tracer._exporter.export(trace)
+      const exportTraces = () => {
+        for (const trace of formattedTraces) {
+          this.tracer._exporter.export(trace)
+        }
       }
+
+      if (!formattedTestSpan || !screenshots) {
+        exportTraces()
+        return
+      }
+
+      this.pendingTestFinishes++
+      const uploadStarted = this.uploadTestScreenshots({
+        screenshots,
+        traceId: formattedTestSpan.trace_id.toString(10),
+      }, (screenshotUploadResult) => {
+        const screenshotUploadTag = getScreenshotUploadTag(screenshotUploadResult)
+        if (screenshotUploadTag) {
+          formattedTestSpan.meta[screenshotUploadTag] = 'true'
+        }
+        exportTraces()
+        this.pendingTestFinishes--
+        if (this.pendingTestFinishes === 0 && this.finishSession) {
+          this.finishSession()
+        }
+      })
+      if (uploadStarted) return
+
+      this.pendingTestFinishes--
+      exportTraces()
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
@@ -478,6 +567,56 @@ class PlaywrightPlugin extends CiPlugin {
 
       span.finish()
     })
+  }
+
+  /**
+   * Uploads automatic failure screenshots for a Playwright test attempt.
+   *
+   * @param {object} options - Upload options
+   * @param {Array<object>} options.screenshots - Playwright test attachments
+   * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {(result: string|undefined) => void} onDone - Completion callback
+   * @returns {boolean} Whether at least one upload was started
+   */
+  uploadTestScreenshots ({ screenshots, traceId }, onDone) {
+    const exporter = this.tracer?._exporter
+    if (!Array.isArray(screenshots) || !screenshots.length ||
+      !exporter?.canUploadTestScreenshots?.() ||
+      !exporter.uploadTestScreenshot) {
+      return false
+    }
+
+    const screenshotPaths = new Set()
+    for (const screenshot of screenshots) {
+      if (isPlaywrightFailureScreenshot(screenshot)) {
+        screenshotPaths.add(screenshot.path)
+      }
+    }
+    if (!screenshotPaths.size) return false
+
+    const uploadResults = new Array(screenshotPaths.size)
+    let pendingUploads = screenshotPaths.size
+    let index = 0
+    for (const filePath of screenshotPaths) {
+      const resultIndex = index++
+      exporter.uploadTestScreenshot({
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:${basename(filePath)}`,
+        capturedAtMs: getScreenshotCapturedAtMs(filePath, filePath),
+      }, (error, uploaded = true) => {
+        if (uploaded) {
+          uploadResults[resultIndex] = error
+            ? SCREENSHOT_UPLOAD_RESULT_ERROR
+            : SCREENSHOT_UPLOAD_RESULT_UPLOADED
+        }
+        pendingUploads--
+        if (pendingUploads === 0) {
+          onDone(getScreenshotUploadResult(uploadResults))
+        }
+      })
+    }
+    return true
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)

@@ -40,6 +40,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -50,6 +52,10 @@ const latest = 'latest'
 const { oldest } = require('./versions')
 const versions = [oldest, latest]
 const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
+const SCREENSHOT_CAPTURE_DISABLED_WARNING =
+  'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.'
+const SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING =
+  'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -335,6 +341,232 @@ versions.forEach((version) => {
           )
           await Promise.all([eventsPromise, once(proc, 'exit')])
         })
+      })
+    })
+
+    contextNewVersions('failure screenshots', () => {
+      const screenshotModes = ['on', 'only-on-failure']
+      if (version === latest || satisfies(version, '>=1.49.0')) {
+        screenshotModes.push('on-first-failure')
+      }
+      let screenshotRunId = 0
+
+      function runWithFailureScreenshots (
+        receiver,
+        run,
+        screenshotMode = 'only-on-failure',
+        isScreenshotUploadEnabled = true,
+        testOptimizationConfig = getCiVisAgentlessConfig(receiver.port)
+      ) {
+        let testOutput = ''
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...testOptimizationConfig,
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
+              PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-screenshots-${++screenshotRunId}`,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled ? 'true' : undefined,
+              DD_TRACE_DEBUG: 'true',
+              DD_TRACE_LOG_LEVEL: 'warn',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        return { proc, getTestOutput: () => testOutput }
+      }
+
+      for (const screenshotMode of screenshotModes) {
+        it(`uploads only automatic failure screenshots with screenshot: '${screenshotMode}'`, async (receiver, run) => {
+          const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run, screenshotMode)
+          const payloadsPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              proc,
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testOutput = getTestOutput()
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+                assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+                assert.strictEqual(
+                  mediaPayloads.length,
+                  1,
+                  `only the automatic screenshot should upload\n${testOutput}`
+                )
+
+                const [screenshotPayload] = mediaPayloads
+                const expectedTraceId = failedTest.content.trace_id.toString()
+                assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+                assert.strictEqual(screenshotPayload.media.contentType, 'image/png')
+                assert.strictEqual(screenshotPayload.headers['dd-api-key'], '1')
+                assert.strictEqual(
+                  screenshotPayload.url.split('?')[0],
+                  `/api/v2/ci/test-runs/${expectedTraceId}/media`
+                )
+
+                const [idempotencyTraceId, encodedFilename] = screenshotPayload.media.idempotencyKey.split(':')
+                assert.strictEqual(idempotencyTraceId, expectedTraceId)
+                assert.match(Buffer.from(encodedFilename, 'hex').toString('utf8'), /^test-failed-\d+\.png$/)
+
+                const capturedAt = Number(screenshotPayload.media.capturedAt)
+                assert.ok(Number.isInteger(capturedAt) && capturedAt > 0)
+                assert.deepStrictEqual(
+                  [...screenshotPayload.media.content.subarray(0, 8)],
+                  [137, 80, 78, 71, 13, 10, 26, 10]
+                )
+              },
+              { hardTimeout: 60000 }
+            )
+            .catch((error) => {
+              error.message += `\nPlaywright output:\n${getTestOutput()}`
+              throw error
+            })
+
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+          assert.strictEqual(exitCode, 1)
+          assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING))
+        })
+      }
+
+      for (const isScreenshotUploadEnabled of [true, false]) {
+        const testName = isScreenshotUploadEnabled
+          ? 'warns when screenshot upload is enabled but screenshot capture is off'
+          : 'does not warn when screenshot upload is disabled'
+
+        it(testName, async (receiver, run) => {
+          const { proc, getTestOutput } = runWithFailureScreenshots(
+            receiver,
+            run,
+            'off',
+            isScreenshotUploadEnabled
+          )
+          const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+              const failedTest = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+              assert.strictEqual(mediaPayloads.length, 0)
+            },
+            { hardTimeout: 60000 }
+          )
+
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+          assert.strictEqual(exitCode, 1)
+          const warningCount = getTestOutput().split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1
+          assert.strictEqual(warningCount, isScreenshotUploadEnabled ? 1 : 0, getTestOutput())
+        })
+      }
+
+      it('warns when the active transport cannot upload screenshots', async (receiver, run) => {
+        receiver.setInfoResponse({ endpoints: [] })
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          true,
+          getCiVisEvpProxyConfig(receiver.port)
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 1)
+        const warningCount = getTestOutput().split(SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING).length - 1
+        assert.strictEqual(warningCount, 1, getTestOutput())
+        assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING))
+      })
+
+      it('does not warn when the active transport can upload screenshots', async (receiver, run) => {
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          true,
+          getCiVisEvpProxyConfig(receiver.port)
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 1)
+        assert.ok(!getTestOutput().includes(SCREENSHOT_UPLOAD_UNSUPPORTED_WARNING), getTestOutput())
+        assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING), getTestOutput())
+      })
+
+      it('excludes screenshot upload time from the failed test duration', async (receiver, run) => {
+        receiver.setMediaResponseDelay(500)
+        const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+            assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+            assert.strictEqual(mediaPayloads.length, 1)
+            const [screenshotPayload] = mediaPayloads
+            const testEndTimeMs = (Number(failedTest.content.start) + Number(failedTest.content.duration)) / 1e6
+            assert.ok(
+              testEndTimeMs <= screenshotPayload.media.receivedAtMs + 100,
+              `test span should finish before the screenshot upload starts\n${getTestOutput()}`
+            )
+          },
+          { hardTimeout: 60000 }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it('reports upload errors without changing the Playwright result', async (receiver, run) => {
+        receiver.setMediaResponseStatusCode(500)
+        const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run)
+        const payloadsPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            proc,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const failedTest = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+
+              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+              assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            },
+            { hardTimeout: 60000 }
+          )
+          .catch((error) => {
+            error.message += `\nPlaywright output:\n${getTestOutput()}`
+            throw error
+          })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
       })
     })
 
