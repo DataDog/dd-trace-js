@@ -25,6 +25,9 @@ const log = require('../../dd-trace/src/log')
 const {
   getValueFromEnvSources,
 } = require('../../dd-trace/src/config/helper')
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME: RUM_COOKIE_NAME,
+} = require('../../dd-trace/src/ci-visibility/rum')
 const { DD_MAJOR } = require('../../../version')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
@@ -1862,23 +1865,64 @@ addHook({
 })
 
 async function handlePageGoto (page) {
-  try {
-    if (page && typeof page.evaluate === 'function') {
-      const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(detectRum)
-      if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
-        log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
-      }
+  if (!testPageGotoCh.hasSubscribers || !page || typeof page.evaluate !== 'function') {
+    return
+  }
 
-      if (isRumActive) {
-        testPageGotoCh.publish({
-          isRumActive,
-          page,
-        })
-      }
-    }
-  } catch (e) {
-    // ignore errors such as redirects, context destroyed, etc
-    log.error('goto hook error', e)
+  let rumState
+  try {
+    rumState = await page.evaluate(detectRum)
+  } catch (error) {
+    // Redirects and closed contexts can make page evaluation fail after a successful navigation.
+    log.error('Playwright RUM detection error', error)
+    return
+  }
+
+  if (!rumState) {
+    return
+  }
+
+  const { isRumInstrumented, isRumActive, rumSamplingRate } = rumState
+  if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+    log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
+  }
+  if (!isRumActive) {
+    return
+  }
+
+  let browserVersion
+  try {
+    browserVersion = page.context().browser()?.version()
+  } catch (error) {
+    log.error('Playwright browser metadata error', error)
+  }
+
+  const context = {
+    isRumActive,
+    browserVersion,
+    testExecutionId: undefined,
+  }
+  try {
+    testPageGotoCh.publish(context)
+  } catch (error) {
+    log.error('Playwright RUM correlation channel error', error)
+    return
+  }
+
+  if (!context.testExecutionId) {
+    return
+  }
+
+  try {
+    const domain = new URL(page.url()).hostname
+    await page.context().addCookies([{
+      name: RUM_COOKIE_NAME,
+      value: context.testExecutionId,
+      domain,
+      path: '/',
+    }])
+  } catch (error) {
+    log.error('Playwright RUM correlation cookie error', error)
   }
 }
 
@@ -2006,10 +2050,11 @@ function instrumentWorkerMainMethods (workerMain) {
                   if (url) {
                     const domain = new URL(url).hostname
                     await page.context().addCookies([{
-                      name: 'datadog-ci-visibility-test-execution-id',
+                      name: RUM_COOKIE_NAME,
                       value: '',
                       domain,
                       path: '/',
+                      expires: 0,
                     }])
                   } else {
                     log.error('RUM is active but page.url() is not available')
