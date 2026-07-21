@@ -135,7 +135,7 @@ function removeInlineArgvNodeOptions (argv) {
 function removeInlineShellNodeOptions (source) {
   const nodeOptions = []
   const command = String(source || '').replaceAll(
-    /(\bexport\s+)?NODE_OPTIONS\s*=\s*("[^"]*"|'[^']*'|[^\s;&|]+)(?:\s*;)?/gi,
+    /(\bexport\s+)?NODE_OPTIONS\s*=\s*("[^"]*"|'[^']*'|[^\s;&|]+)(?:\s*(?:;|&&))?/gi,
     (assignment, _export, value) => {
       nodeOptions.push(removeDatadogNodeOptions(unquote(value)))
       return ''

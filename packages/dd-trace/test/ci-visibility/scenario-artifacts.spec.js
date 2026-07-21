@@ -545,7 +545,7 @@ describe('test optimization validation scenario artifacts', () => {
     }
   })
 
-  it('preserves shell non-Datadog NODE_OPTIONS while adding the initialization probe preload', async function () {
+  it('preserves shell non-Datadog NODE_OPTIONS and chaining in the initialization probe', async function () {
     if (process.platform === 'win32') this.skip()
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-shell-'))
@@ -559,7 +559,7 @@ describe('test optimization validation scenario artifacts', () => {
           cwd: out,
           usesShell: true,
           shell: '/bin/sh',
-          shellCommand: `export NODE_OPTIONS='-r ${requiredPreload}'; ${JSON.stringify(process.execPath)} -e ''`,
+          shellCommand: `export NODE_OPTIONS='-r ${requiredPreload}' && ${JSON.stringify(process.execPath)} -e ''`,
         },
         framework: { id: 'vitest:probe', framework: 'vitest' },
         outDir: out,

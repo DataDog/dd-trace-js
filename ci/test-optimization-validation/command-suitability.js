@@ -13,6 +13,8 @@ const MAX_STATIC_CONFIG_PATTERN_BYTES = 256
 const MAX_LOCAL_IMPORT_DEPTH = 4
 const MAX_LOCAL_IMPORT_FILES = 24
 const JEST_LOCAL_PATH_PATTERN = /(['"])(<rootDir>\/[^'"\r\n]+)\1/g
+const JEST_LITERAL_REGEX_PATTERN =
+  /^\s*(?:(["'])([^"'\r\n]{1,256})\1|\/((?:\\.|[^/\r\n]){1,256})\/[dgimsuvy]*)/
 const JEST_OPTIONS_WITH_VALUE = new Set([
   '-c',
   '--config',
@@ -587,7 +589,7 @@ function isProducedBySetup (framework, localPath) {
 }
 
 /**
- * Rejects Yarn separators that become a literal runner argument.
+ * Rejects package-manager separators that become a literal runner argument.
  *
  * @param {object} command structured command
  * @param {string} repositoryRoot repository root
@@ -595,7 +597,7 @@ function isProducedBySetup (framework, localPath) {
  */
 function getPackageScriptForwardingError (command, repositoryRoot) {
   const expansion = getPackageScriptExpansion(command, repositoryRoot)
-  if (!expansion || expansion.packageManager !== 'yarn') return
+  if (!expansion || !['pnpm', 'yarn'].includes(expansion.packageManager)) return
   if (expansion.forwardedArgs[0] !== '--') return
 
   return `expands package script ${JSON.stringify(expansion.scriptName)} to ` +
@@ -642,8 +644,7 @@ function getPackageScriptExpansion (command, repositoryRoot) {
   }
   const script = packageJson.scripts?.[scriptName]
   if (typeof script !== 'string' || script.length > MAX_CONFIG_BYTES) return
-  let forwardedArgs = argv.slice(scriptIndex + 1)
-  if (packageManager === 'pnpm' && forwardedArgs[0] === '--') forwardedArgs = forwardedArgs.slice(1)
+  const forwardedArgs = argv.slice(scriptIndex + 1)
   return {
     effectiveCommand: [script, ...forwardedArgs].join(' '),
     forwardedArgs,
@@ -804,11 +805,10 @@ function getBoundedStringArray (value) {
  */
 function getLiteralPropertyArrayPatterns (source, property) {
   const candidates = []
-  visitConfigSource(source, ({ index }) => {
-    if (!isPropertyAt(source, index, property)) return
-    const match = new RegExp(String.raw`^${property}\s*:\s*\[`).exec(source.slice(index))
+  visitLiteralProperties(source, property, valueOffset => {
+    const match = /^\s*\[/.exec(source.slice(valueOffset))
     if (!match) return
-    const patterns = readLiteralStringArray(source, index + match[0].length)
+    const patterns = readLiteralStringArray(source, valueOffset + match[0].length)
     if (patterns.length > 0) candidates.push(patterns)
   })
   if (candidates.length === 0) return []
@@ -824,17 +824,34 @@ function getLiteralPropertyArrayPatterns (source, property) {
  * @returns {string[]} literal regular-expression sources
  */
 function getLiteralRegexPatterns (source, property) {
-  source = maskJavaScriptComments(source)
   const patterns = []
-  const expression = new RegExp(
-    String.raw`\b${property}\s*:\s*(?:(["'])([^"'\r\n]{1,256})\1|\/((?:\\.|[^/\r\n]){1,256})\/[dgimsuvy]*)`,
-    'g'
-  )
-  for (const match of source.matchAll(expression)) {
-    patterns.push(match[2] || match[3])
-    if (patterns.length === MAX_STATIC_CONFIG_PATTERNS) break
-  }
+  visitLiteralProperties(source, property, valueOffset => {
+    if (patterns.length === MAX_STATIC_CONFIG_PATTERNS) return
+    const match = JEST_LITERAL_REGEX_PATTERN.exec(source.slice(valueOffset))
+    if (match) patterns.push(match[2] || match[3])
+  })
   return patterns
+}
+
+/**
+ * Visits literal object properties while skipping comments and string contents.
+ *
+ * @param {string} source JavaScript config source
+ * @param {string} property property name
+ * @param {(valueOffset: number) => void} visitor property value visitor
+ * @returns {void}
+ */
+function visitLiteralProperties (source, property, visitor) {
+  visitConfigSource(source, ({ index }) => {
+    if (!isPropertyAt(source, index, property)) return
+    const propertyEnd = index + property.length
+    const match = /^\s*:/.exec(source.slice(propertyEnd))
+    if (match) visitor(propertyEnd + match[0].length)
+  }, -1, ({ index, quote, end }) => {
+    if (quote === '`' || source.slice(index + 1, end) !== property) return
+    const match = /^\s*:/.exec(source.slice(end + 1))
+    if (match) visitor(end + 1 + match[0].length)
+  })
 }
 
 /**
@@ -1015,7 +1032,7 @@ function readLiteralStringArray (config, offset) {
   return closed && !quote ? patterns : []
 }
 
-function visitConfigSource (config, visitor, objectStart = -1) {
+function visitConfigSource (config, visitor, objectStart = -1, stringVisitor) {
   let blockComment = false
   let depth = objectStart === -1 ? 0 : 1
   let lineComment = false
@@ -1055,6 +1072,18 @@ function visitConfigSource (config, visitor, objectStart = -1) {
       continue
     }
     if (character === '"' || character === '\'' || character === '`') {
+      if (stringVisitor) {
+        let end = index + 1
+        while (end < config.length) {
+          if (config[end].charCodeAt(0) === 92) {
+            end += 2
+            continue
+          }
+          if (config[end] === character || config[end] === '\r' || config[end] === '\n') break
+          end++
+        }
+        if (config[end] === character) stringVisitor({ index, quote: character, end })
+      }
       quote = character
       continue
     }

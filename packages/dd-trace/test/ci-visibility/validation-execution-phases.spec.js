@@ -1704,7 +1704,10 @@ describe('test optimization validator-owned execution phases', () => {
   for (const [property, value] of [
     ['testMatch', '["**/*-test.js"]'],
     ['testRegex', '"-test\\\\.js$"'],
+    ['"testMatch"', '["**/*-test.js"]'],
+    ["'testRegex'", '/-test\\.js$/'],
   ]) {
+    const propertyName = property.replaceAll(/['"]/g, '')
     it(`rejects generated Jest tests outside literal ${property} rules`, () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-path-plan-'))
       const configFile = path.join(root, 'jest.config.js')
@@ -1720,7 +1723,7 @@ describe('test optimization validator-owned execution phases', () => {
             frameworks: [framework],
           },
           out: path.join(root, 'results'),
-        }), new RegExp(`does not match the literal Jest ${property} patterns`))
+        }), new RegExp(`does not match the literal Jest ${propertyName} patterns`))
       } finally {
         fs.rmSync(root, { recursive: true, force: true })
       }
@@ -1829,7 +1832,25 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('allows a pnpm script separator that is stripped before Jest arguments', () => {
+  it('ignores Jest regex examples inside string literals', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-string-jest-regex-plan-'))
+    const configFile = path.join(root, 'jest.config.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project.configFiles = [configFile]
+    fs.writeFileSync(configFile, [
+      'const example = "testRegex: /-test\\\\.js$/"',
+      'module.exports = { testMatch: ["**/*.js"] }',
+      '',
+    ].join('\n'))
+
+    try {
+      formatFrameworkPlan(root, framework)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a pnpm script separator that reaches Jest arguments', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-pnpm-forwarding-'))
     const command = {
       cwd: root,
@@ -1839,25 +1860,25 @@ describe('test optimization validator-owned execution phases', () => {
 
     try {
       assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
-        effectiveCommand: 'jest --runTestsByPath test/unit-test.ts',
-        forwardedArgs: ['--runTestsByPath', 'test/unit-test.ts'],
+        effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
+        forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
         packageManager: 'pnpm',
         script: 'jest',
         scriptName: 'test:lib',
       })
-      assert.strictEqual(getCommandSuitabilityError({
+      assert.match(getCommandSuitabilityError({
         command,
         framework: { framework: 'jest', project: { root, configFiles: [] } },
         label: 'the CI test command',
         repositoryRoot: root,
-      }), undefined)
+      }), /literal extra "--".*append focused runner arguments directly/s)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
   for (const packageManager of ['pnpm', 'yarn']) {
-    it(`${packageManager === 'pnpm' ? 'allows' : 'rejects'} a Corepack ${packageManager} script separator`, () => {
+    it(`rejects a Corepack ${packageManager} script separator`, () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-corepack-forwarding-'))
       const command = {
         cwd: root,
@@ -1866,9 +1887,7 @@ describe('test optimization validator-owned execution phases', () => {
       fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { 'test:lib': 'jest' } }))
 
       try {
-        const forwardedArgs = packageManager === 'pnpm'
-          ? ['--runTestsByPath', 'test/unit-test.ts']
-          : ['--', '--runTestsByPath', 'test/unit-test.ts']
+        const forwardedArgs = ['--', '--runTestsByPath', 'test/unit-test.ts']
         assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
           effectiveCommand: ['jest', ...forwardedArgs].join(' '),
           forwardedArgs,
@@ -1882,11 +1901,7 @@ describe('test optimization validator-owned execution phases', () => {
           label: 'the CI test command',
           repositoryRoot: root,
         })
-        if (packageManager === 'pnpm') {
-          assert.strictEqual(error, undefined)
-        } else {
-          assert.match(error, /literal extra "--".*append focused runner arguments directly/s)
-        }
+        assert.match(error, /literal extra "--".*append focused runner arguments directly/s)
       } finally {
         fs.rmSync(root, { recursive: true, force: true })
       }
