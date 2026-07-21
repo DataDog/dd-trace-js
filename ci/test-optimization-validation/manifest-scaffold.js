@@ -754,6 +754,8 @@ function getRunnerOwnershipConflict (filename, root, framework) {
   } catch {
     return 'candidate could not be read safely'
   }
+  const code = maskJavaScriptNonCode(source)
+  source = maskJavaScriptComments(source)
   const conflicts = {
     jest: [
       [/(?:from\s+|require\s*\(\s*)['"]vitest['"]/, 'imports Vitest'],
@@ -766,7 +768,23 @@ function getRunnerOwnershipConflict (filename, root, framework) {
       [/(?:from\s+|require\s*\(\s*)['"](?:@jest\/globals|node:test)['"]/, 'imports another runner'],
     ],
   }[framework] || []
-  return conflicts.find(([pattern]) => pattern.test(source))?.[1]
+  return conflicts.find(([pattern]) => hasJavaScriptCodeMatch(source, code, pattern))?.[1]
+}
+
+/**
+ * Checks whether a source pattern starts in executable code rather than a comment or string.
+ *
+ * @param {string} source source with comments masked
+ * @param {string} code source with comments and strings masked
+ * @param {RegExp} pattern candidate source pattern
+ * @returns {boolean} whether the pattern starts in executable code
+ */
+function hasJavaScriptCodeMatch (source, code, pattern) {
+  const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`)
+  for (const match of source.matchAll(globalPattern)) {
+    if (code[match.index] !== ' ') return true
+  }
+  return false
 }
 
 /**

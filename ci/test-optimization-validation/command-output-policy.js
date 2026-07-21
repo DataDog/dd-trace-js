@@ -4,6 +4,28 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const deferredCleanups = new WeakMap()
+const NYC_OPTIONS_WITH_VALUE = new Set([
+  '--branches',
+  '--cache-dir',
+  '--cwd',
+  '--exclude',
+  '--extension',
+  '--functions',
+  '--ignore-class-methods',
+  '--include',
+  '--lines',
+  '--nycrc-path',
+  '--parser-plugins',
+  '--report-dir',
+  '--reporter',
+  '--require',
+  '--statements',
+  '-e',
+  '-i',
+  '-n',
+  '-r',
+  '-x',
+])
 
 /**
  * Returns command-created paths that must be declared and removed after validation.
@@ -209,6 +231,7 @@ function getNycTempDirectory (tokens) {
     const inline = /^(?:--temp-dir|-t)=(.+)$/.exec(token)
     if (inline) return inline[1]
     if ((token === '--temp-dir' || token === '-t') && tokens[index + 1]) return String(tokens[index + 1])
+    if (NYC_OPTIONS_WITH_VALUE.has(token)) index++
   }
 
   return '.nyc_output'

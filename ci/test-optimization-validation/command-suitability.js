@@ -186,8 +186,11 @@ function getSelectedTestFile (command, projectRoot, repositoryRoot) {
       continue
     }
     if (typeof value === 'string' && value.startsWith('-')) continue
-    if (typeof value !== 'string' || !/(?:test|spec)\.[cm]?[jt]sx?$/.test(value)) continue
+    if (typeof value !== 'string') continue
     const filename = path.resolve(command.cwd || projectRoot, value)
+    const inTestsDirectory = path.relative(projectRoot, filename).split(path.sep).includes('__tests__')
+    if (!/(?:test|spec)\.[cm]?[jt]sx?$/.test(value) &&
+      !(inTestsDirectory && /\.[cm]?[jt]sx?$/.test(value))) continue
     if (!isPathInside(repositoryRoot, filename)) continue
     try {
       const stat = fs.lstatSync(filename)
@@ -227,9 +230,44 @@ function getPackageEntryTargets (packageJson, specifier, condition) {
       collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, targets, condition)
     }
   } else {
-    collectRuntimeExportTargets(packageJson.exports?.[subpath], targets, condition)
+    const exportMatch = getPackageSubpathExport(packageJson.exports, subpath)
+    if (exportMatch) {
+      collectRuntimeExportTargets(exportMatch.value, targets, condition, exportMatch.wildcard)
+    }
   }
   return [...new Set(targets)]
+}
+
+/**
+ * Selects the most specific exact or wildcard package subpath export.
+ *
+ * @param {unknown} packageExports package exports map
+ * @param {string} subpath requested package subpath
+ * @returns {{value: unknown, wildcard?: string}|undefined} matching export and wildcard substitution
+ */
+function getPackageSubpathExport (packageExports, subpath) {
+  if (!packageExports || typeof packageExports !== 'object' || Array.isArray(packageExports)) return
+  if (Object.hasOwn(packageExports, subpath)) return { value: packageExports[subpath] }
+
+  let selected
+  for (const [key, value] of Object.entries(packageExports).slice(0, 32)) {
+    const wildcardIndex = key.indexOf('*')
+    if (wildcardIndex === -1 || key.includes('*', wildcardIndex + 1)) continue
+    const prefix = key.slice(0, wildcardIndex)
+    const suffix = key.slice(wildcardIndex + 1)
+    if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix) || subpath.length < prefix.length + suffix.length) {
+      continue
+    }
+    if (selected && (prefix.length < selected.prefixLength ||
+      (prefix.length === selected.prefixLength && key.length <= selected.keyLength))) continue
+    selected = {
+      keyLength: key.length,
+      prefixLength: prefix.length,
+      value,
+      wildcard: subpath.slice(prefix.length, subpath.length - suffix.length),
+    }
+  }
+  return selected && { value: selected.value, wildcard: selected.wildcard }
 }
 
 /**
@@ -238,25 +276,26 @@ function getPackageEntryTargets (packageJson, specifier, condition) {
  * @param {unknown} value package export value
  * @param {string[]} targets collected package targets
  * @param {'import'|'require'} condition runtime module condition
+ * @param {string} [wildcard] wildcard subpath substitution
  * @param {number} [depth] current nesting depth
  * @returns {void}
  */
-function collectRuntimeExportTargets (value, targets, condition, depth = 0) {
+function collectRuntimeExportTargets (value, targets, condition, wildcard, depth = 0) {
   if (targets.length >= 32 || depth > 6) return
   if (typeof value === 'string') {
-    targets.push(value)
+    targets.push(wildcard === undefined ? value : value.replaceAll('*', wildcard))
     return
   }
   if (!value || typeof value !== 'object') return
   if (Array.isArray(value)) {
     for (const nested of value.slice(0, 32)) {
-      collectRuntimeExportTargets(nested, targets, condition, depth + 1)
+      collectRuntimeExportTargets(nested, targets, condition, wildcard, depth + 1)
     }
     return
   }
   for (const [exportCondition, nested] of Object.entries(value).slice(0, 32)) {
     if (exportCondition === condition || COMMON_NODE_EXPORT_CONDITIONS.has(exportCondition)) {
-      collectRuntimeExportTargets(nested, targets, condition, depth + 1)
+      collectRuntimeExportTargets(nested, targets, condition, wildcard, depth + 1)
       break
     }
   }
@@ -690,8 +729,9 @@ function getJestConfigFile (command, repositoryRoot) {
   const argv = command.argv || []
   for (let index = 0; index < argv.length; index++) {
     let filename
-    if (argv[index] === '--config' && argv[index + 1]) filename = argv[index + 1]
+    if ((argv[index] === '--config' || argv[index] === '-c') && argv[index + 1]) filename = argv[index + 1]
     if (argv[index].startsWith('--config=')) filename = argv[index].slice('--config='.length)
+    if (argv[index].startsWith('-c=')) filename = argv[index].slice('-c='.length)
     if (!filename) continue
     const configFile = path.resolve(command.cwd, filename)
     return isRepositoryFile(configFile, repositoryRoot) ? configFile : undefined

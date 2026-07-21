@@ -789,6 +789,40 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('ignores runner imports in comments and unrelated strings', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-runner-comments-'))
+    const runnerRoot = path.join(root, 'node_modules', 'jest')
+    const representative = path.join(root, 'test', 'unit.test.js')
+    fs.mkdirSync(runnerRoot, { recursive: true })
+    fs.mkdirSync(path.dirname(representative))
+    fs.writeFileSync(path.join(runnerRoot, 'bin.js'), '')
+    fs.writeFileSync(path.join(runnerRoot, 'package.json'), JSON.stringify({
+      name: 'jest',
+      version: '29.7.0',
+      bin: { jest: 'bin.js' },
+    }))
+    fs.writeFileSync(representative, [
+      "// import { test } from 'vitest'",
+      'const fixture = "require(\'node:test\')"',
+      "test('unit', () => fixture)",
+      '',
+    ].join('\n'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      name: 'jest-runner-comments-project',
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'jest' },
+    }))
+
+    try {
+      const framework = createManifestScaffold({ root }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.ok(framework.existingTestCommand.argv.includes(representative))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('prefers a process-local Jest test and preserves its dash-test collection convention', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-manifest-scaffold-listener-rank-'))
     const runnerRoot = path.join(root, 'node_modules', 'jest')

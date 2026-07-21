@@ -1245,7 +1245,7 @@ describe('test optimization validator-owned execution phases', () => {
 
   it('requires one usable self-package entrypoint before approving a self-importing test', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-self-import-plan-'))
-    const testFile = path.join(root, 'test', 'unit.test.js')
+    const testFile = path.join(root, '__tests__', 'unit.js')
     const sourceEntrypoint = path.join(root, 'src', 'index.js')
     const packageJson = path.join(root, 'package.json')
     const framework = getPlannedFramework(
@@ -1412,6 +1412,32 @@ describe('test optimization validator-owned execution phases', () => {
       }
     })
   }
+
+  it('requires wildcard self-package exports to exist', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-wildcard-export-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const packageJson = path.join(root, 'package.json')
+    const entrypoint = path.join(root, 'dist', 'feature.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'wildcard-export-project',
+      exports: { './*': './dist/*.js' },
+    }))
+    fs.writeFileSync(testFile, "require('wildcard-export-project/feature')\n")
+
+    try {
+      const formatPlan = () => formatFrameworkPlan(root, framework)
+      assert.throws(formatPlan, new RegExp(`entrypoint ${escapeRegExp(entrypoint)} does not exist`))
+      fs.mkdirSync(path.dirname(entrypoint), { recursive: true })
+      fs.writeFileSync(entrypoint, 'module.exports = true\n')
+      formatPlan()
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 
   it('checks the selected test instead of a Jest option value', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-jest-option-path-plan-'))
@@ -1622,15 +1648,15 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
-  it('uses an explicit Jest config before package.json collection rules', () => {
+  it('uses an explicit Jest -c config before package.json collection rules', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-explicit-jest-config-plan-'))
     const configFile = path.join(root, 'jest.validation.config.js')
     const packageJson = path.join(root, 'package.json')
     const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
     framework.project.packageJson = packageJson
-    framework.project.configFiles = [configFile]
+    framework.project.configFiles = []
     for (const scenario of framework.generatedTestStrategy.scenarios) {
-      scenario.runCommand.argv.push('--config', configFile)
+      scenario.runCommand.argv.push('-c', configFile)
     }
     fs.writeFileSync(packageJson, JSON.stringify({ jest: { testMatch: ['**/*-test.js'] } }))
     fs.writeFileSync(configFile, 'module.exports = { testMatch: ["**/*.js"] }\n')
