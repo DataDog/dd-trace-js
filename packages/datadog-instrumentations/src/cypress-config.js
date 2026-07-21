@@ -510,8 +510,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       } else {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
-          manualPlugin.afterScreenshotHandler =
-            userAfterScreenshotHandlers[userAfterScreenshotHandlers.length - 1]
+          manualPlugin.afterScreenshotHandler = userAfterScreenshotHandlers.at(-1)
         }
         on(event, handler)
       }
