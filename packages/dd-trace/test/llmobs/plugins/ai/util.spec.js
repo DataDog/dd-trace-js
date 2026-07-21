@@ -41,6 +41,30 @@ describe('AI SDK LLMObs utilities', () => {
       assert.strictEqual(getToolCallResultContent({ result: undefined }), UNSUPPORTED_TOOL_RESULT)
     })
 
+    it('prefers defined output over legacy results', () => {
+      assert.strictEqual(
+        getToolCallResultContent({
+          output: { type: 'text', value: '' },
+          result: 'legacy result',
+        }),
+        ''
+      )
+      assert.strictEqual(
+        getToolCallResultContent({
+          output: null,
+          result: 'legacy result',
+        }),
+        UNPARSABLE_TOOL_RESULT
+      )
+      assert.strictEqual(
+        getToolCallResultContent({
+          output: undefined,
+          result: 'legacy result',
+        }),
+        'legacy result'
+      )
+    })
+
     it('concatenates text and summarizes rich content without serializing payloads', () => {
       const content = [
         { type: 'text', text: 'before' },
