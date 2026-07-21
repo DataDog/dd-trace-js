@@ -1,6 +1,5 @@
 'use strict'
 
-const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const request = require('../exporters/common/request')
 const log = require('../log')
 
@@ -78,7 +77,8 @@ let agentTelemetry = true
  */
 function getHeaders (config, application, reqType) {
   const headers = {
-    ...getClientLibraryHeaders(application.language_name, application.tracer_version),
+    'DD-Client-Library-Language': application.language_name,
+    'DD-Client-Library-Version': application.tracer_version,
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType,

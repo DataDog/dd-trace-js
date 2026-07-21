@@ -82,6 +82,17 @@ describe('OpenFeature configuration source', () => {
     )
   })
 
+  for (const baseUrl of ['http://localhost:8080', 'http://127.1.2.3:8080', 'http://[::1]:8080']) {
+    it(`allows the loopback endpoint ${baseUrl}`, () => {
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = baseUrl
+
+      assert.strictEqual(
+        createSourceConfig().endpoint.toString(),
+        `${baseUrl}/api/v2/feature-flagging/config/rules-based/server`
+      )
+    })
+  }
+
   it('preserves an exact configured path and query', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
       'https://example.com/custom/ufc?tenant=one'
@@ -145,8 +156,23 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
-  it('rejects malformed endpoints without enabling a source', () => {
-    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'not a URL'
+  it('rejects cleartext non-loopback endpoints', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'http://flags.example.test'
+
+    const source = configurationSource.create(config, sinon.spy())
+
+    assert.strictEqual(source, undefined)
+    sinon.assert.calledOnceWithMatch(
+      log.error,
+      'Unable to configure Feature Flagging configuration source',
+      sinon.match.instanceOf(Error)
+    )
+    sinon.assert.notCalled(AgentlessConfigurationSource)
+  })
+
+  it('rejects malformed endpoints without logging their sensitive value', () => {
+    const sentinel = 'sensitive-value'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = `https://${sentinel} value`
 
     const source = configurationSource.create(config, sinon.spy())
 
@@ -157,6 +183,8 @@ describe('OpenFeature configuration source', () => {
     )
     assert.strictEqual(source, undefined)
     sinon.assert.notCalled(AgentlessConfigurationSource)
+    assert.doesNotMatch(log.error.firstCall.args[1].message, new RegExp(sentinel))
+    assert.strictEqual(log.error.firstCall.args[1].cause, undefined)
   })
 
   it('requires an API key without enabling a source', () => {

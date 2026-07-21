@@ -413,6 +413,16 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(openfeature.enable)
       })
 
+      it('does not enable OpenFeature when provider construction fails', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        OpenFeatureProvider.throws(new Error('provider unavailable'))
+
+        proxy.init()
+
+        assert.throws(() => proxy.openfeature, /provider unavailable/)
+        sinon.assert.notCalled(openfeature.enable)
+      })
+
       it('should setup FFE_FLAGS product handler when openfeature provider is enabled', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
@@ -424,6 +434,21 @@ describe('TracerProxy', () => {
         handlers.get('FFE_FLAGS')('apply', flagConfig)
 
         sinon.assert.calledWith(openfeatureProvider.setConfiguration, flagConfig)
+      })
+
+      it('applies FFE_FLAGS while tracing is disabled', () => {
+        config.DD_TRACE_ENABLED = false
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+        proxy.init()
+
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', flagConfig)
+
+        sinon.assert.notCalled(DatadogTracer)
+        sinon.assert.calledOnce(OpenFeatureProvider)
+        sinon.assert.calledOnceWithExactly(openfeatureProvider.setConfiguration, flagConfig)
       })
 
       it('should not setup FFE_FLAGS Remote Config when Feature Flags are disabled', () => {
@@ -467,7 +492,7 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(boundProvider.setConfiguration, flagConfig)
       })
 
-      it('should re-enable OpenFeature without replacing its provider when remote config re-enables tracing', () => {
+      it('keeps OpenFeature active while tracing is disabled and re-enabled', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
@@ -483,8 +508,8 @@ describe('TracerProxy', () => {
 
         assert.strictEqual(proxy.openfeature, provider)
         sinon.assert.calledOnce(OpenFeatureProvider)
-        sinon.assert.calledTwice(openfeature.enable)
-        sinon.assert.calledOnce(openfeature.disable)
+        sinon.assert.calledOnce(openfeature.enable)
+        sinon.assert.notCalled(openfeature.disable)
       })
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {

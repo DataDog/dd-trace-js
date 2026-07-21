@@ -1,5 +1,6 @@
 'use strict'
 
+const { isLoopbackHost } = require('../exporters/common/url')
 const log = require('../log')
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
@@ -66,12 +67,15 @@ function endpoint (config, configuredBaseUrl) {
   let url
   try {
     url = new URL(configured)
-  } catch (error) {
-    throw new Error(`Invalid Feature Flagging agentless URL: ${configured}`, { cause: error })
+  } catch {
+    throw new Error('Invalid Feature Flagging agentless URL')
   }
 
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('Feature Flagging agentless URL must use HTTP or HTTPS')
+  }
+  if (url.protocol === 'http:' && !isLoopbackHost(url.hostname)) {
+    throw new Error('Feature Flagging agentless URL must use HTTPS unless it targets loopback')
   }
 
   if (url.pathname === '' || url.pathname === '/') {

@@ -311,21 +311,15 @@ class Tracer extends NoopProxy {
     const states = this.#featureStates ??= {}
     const state = states[feature.name] ?? FEATURE_STATE_NOOP
 
-    if (state === FEATURE_STATE_ACTIVE) {
-      this._modules[feature.name].enable(config)
-      return
-    }
-
-    if (state === FEATURE_STATE_LAZY) return
+    if (state === FEATURE_STATE_ACTIVE || state === FEATURE_STATE_LAZY) return
     states[feature.name] = FEATURE_STATE_LAZY
 
     Reflect.defineProperty(this, feature.name, {
       get: () => {
-        this._modules[feature.name].enable(config)
-
         const Provider = feature.provider()
         const provider = new Provider(this._tracer, config)
 
+        this._modules[feature.name].enable(config)
         Reflect.defineProperty(this, feature.name, {
           value: provider,
           configurable: true,
@@ -364,9 +358,6 @@ class Tracer extends NoopProxy {
         }
         this._tracingInitialized = true
       }
-      for (const feature of Object.values(features)) {
-        if (feature.isEnabled(config)) this.#enableFeature(feature, config)
-      }
       if (config.experimental?.aiguard?.enabled) {
         this._modules.aiguard.enable(this._tracer, config)
       }
@@ -379,9 +370,10 @@ class Tracer extends NoopProxy {
       this._modules.aiguard.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
-      for (const feature of Object.values(features)) {
-        this._modules[feature.name].disable()
-      }
+    }
+
+    for (const feature of Object.values(features)) {
+      if (feature.isEnabled(config)) this.#enableFeature(feature, config)
     }
 
     if (this._tracingInitialized) {

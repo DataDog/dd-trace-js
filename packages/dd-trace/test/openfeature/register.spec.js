@@ -69,6 +69,7 @@ describe('OpenFeature register', () => {
       const tracer = require(${JSON.stringify(packagePath)})
       tracer.init()
       const modules = [
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/exporters/common/client-library-headers'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/index'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/writers/exposures'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/flagging_provider'))}),
@@ -83,19 +84,22 @@ describe('OpenFeature register', () => {
     `
     for (const featureFlagsEnabled of ['false', 'true']) {
       for (const remoteConfigurationEnabled of ['false', 'true']) {
-        const result = spawnSync(process.execPath, ['-e', script], {
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            DD_FEATURE_FLAGS_ENABLED: featureFlagsEnabled,
-            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-            DD_REMOTE_CONFIGURATION_ENABLED: remoteConfigurationEnabled,
-            DD_TRACE_STARTUP_LOGS: 'false',
-          },
-        })
+        for (const tracingEnabled of ['false', 'true']) {
+          const result = spawnSync(process.execPath, ['-e', script], {
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              DD_FEATURE_FLAGS_ENABLED: featureFlagsEnabled,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_REMOTE_CONFIGURATION_ENABLED: remoteConfigurationEnabled,
+              DD_TRACE_ENABLED: tracingEnabled,
+              DD_TRACE_STARTUP_LOGS: 'false',
+            },
+          })
 
-        assert.strictEqual(result.status, 0, result.stderr)
-        assert.deepStrictEqual(JSON.parse(result.stdout), Array(9).fill(false))
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.deepStrictEqual(JSON.parse(result.stdout), Array(10).fill(false))
+        }
       }
     }
   })
@@ -115,6 +119,7 @@ describe('OpenFeature register', () => {
     feature.remoteConfig(rc, config, proxy)
 
     sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, true)
+    assert.strictEqual(openfeatureRemoteConfig.enable.firstCall.args[1](), proxy.openfeature)
   })
 
   it('does not install Remote Config delivery when disabled', () => {

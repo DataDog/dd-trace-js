@@ -276,21 +276,31 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledOnce(log.error)
   })
 
-  it('does not expose malformed payload string values in logs', async () => {
-    responses.push({
-      statusCode: 200,
-      body: responseBody({
-        createdAt: 'secret-created-at',
-        environment: { name: 'secret-environment' },
-        flags: {},
-      }),
-    })
+  it('does not expose malformed payload data in logs', async () => {
+    responses.push(
+      {
+        statusCode: 200,
+        body: '{"secret-json-value":',
+      },
+      {
+        statusCode: 200,
+        body: responseBody({
+          createdAt: 'secret-created-at',
+          environment: { name: 'secret-environment' },
+          flags: {},
+          'secret-property-name': 'secret-property-value',
+        }),
+      }
+    )
 
     source().start()
     await flush()
+    await tick(30_000)
 
-    const message = log.error.firstCall.args[1]
-    assert.doesNotMatch(message, /secret/)
+    sinon.assert.calledOnceWithExactly(
+      log.error,
+      'Feature Flagging agentless endpoint returned malformed UFC payload'
+    )
   })
 
   it('does not advance the ETag after an application failure and logs it once', async () => {
@@ -366,14 +376,18 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
   })
 
-  it('warns once after repeated retryable failures exhaust all attempts', async () => {
+  it('warns once per failure category', async () => {
     responses.push(
+      { statusCode: 500 },
+      { statusCode: 502 },
+      { statusCode: 503 },
       { statusCode: 500 },
       { statusCode: 502 },
       { statusCode: 503 },
       { error: new Error('first') },
       { error: new Error('second') },
-      { error: new Error('third') }
+      { error: new Error('third') },
+      { statusCode: 401 }
     )
 
     source().start()
@@ -383,13 +397,25 @@ describe('AgentlessConfigurationSource', () => {
     await tick(30_000)
     await tick(5000)
     await tick(10_000)
+    await tick(30_000)
+    await tick(5000)
+    await tick(10_000)
+    await tick(30_000)
 
-    sinon.assert.calledOnceWithExactly(
-      log.warn,
+    assert.deepStrictEqual(log.warn.firstCall.args, [
       'Feature Flagging agentless endpoint returned HTTP %d after %d attempts',
       503,
-      3
-    )
+      3,
+    ])
+    assert.deepStrictEqual(log.warn.secondCall.args, [
+      'Feature Flagging agentless request failed after %d attempts: %s',
+      3,
+      'third',
+    ])
+    assert.deepStrictEqual(log.warn.thirdCall.args, [
+      'Feature Flagging agentless endpoint returned HTTP %d; verify DD_API_KEY is configured and valid',
+      401,
+    ])
   })
 
   it('warns after retryable request failures exhaust all attempts', async () => {

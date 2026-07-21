@@ -3,7 +3,6 @@
 /* eslint-disable no-await-in-loop -- Polls and retries must remain sequential. */
 
 const { setTimeout: sleep } = require('node:timers/promises')
-const { inspect } = require('node:util')
 
 const request = require('../exporters/common/request')
 const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
@@ -51,9 +50,10 @@ class AgentlessConfigurationSource {
   /** @type {string | undefined} */
   #etag
 
-  #malformedPayloadLogged = false
+  /** @type {Set<string>} */
+  #failureWarnings = new Set()
 
-  #pollFailureLogged = false
+  #malformedPayloadLogged = false
 
   /**
    * @param {AgentlessSourceConfig} config
@@ -117,7 +117,7 @@ class AgentlessConfigurationSource {
 
       const retryable = response.statusCode === undefined || isRetryableStatus(response.statusCode)
       if (!retryable) {
-        this.#apply(abortController, response)
+        this.#apply(response)
         return
       }
 
@@ -174,11 +174,10 @@ class AgentlessConfigurationSource {
   }
 
   /**
-   * @param {AbortController} abortController
    * @param {PollResponse} response
    * @returns {void}
    */
-  #apply (abortController, response) {
+  #apply (response) {
     const statusCode = response.statusCode
     if (statusCode === 304) return
 
@@ -192,10 +191,10 @@ class AgentlessConfigurationSource {
     let configuration
     try {
       configuration = parseConfiguration(response.body)
-    } catch (error) {
+    } catch {
       if (!this.#malformedPayloadLogged) {
         this.#malformedPayloadLogged = true
-        log.error('Feature Flagging agentless endpoint returned malformed UFC payload: %s', errorMessage(error))
+        log.error('Feature Flagging agentless endpoint returned malformed UFC payload')
       }
       return
     }
@@ -222,8 +221,11 @@ class AgentlessConfigurationSource {
    * @returns {void}
    */
   #warnFailure (statusCode, error, attempts) {
-    if (this.#pollFailureLogged) return
-    this.#pollFailureLogged = true
+    const category = statusCode === 401 || statusCode === 403
+      ? 'authentication'
+      : statusCode ? 'http' : 'request'
+    if (this.#failureWarnings.has(category)) return
+    this.#failureWarnings.add(category)
 
     if (statusCode === 401 || statusCode === 403) {
       log.warn(
@@ -272,11 +274,7 @@ function parseConfiguration (body) {
       !attributes.flags ||
       typeof attributes.flags !== 'object' ||
       Array.isArray(attributes.flags)) {
-    throw new Error(
-      `Expected a Universal Flag Configuration v1 object; received ${
-        inspect(attributes, { depth: 0, maxStringLength: 0 })
-      }`
-    )
+    throw new Error('Expected a Universal Flag Configuration v1 object')
   }
 
   return attributes
