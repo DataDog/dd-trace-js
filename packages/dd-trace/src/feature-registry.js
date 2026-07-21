@@ -5,8 +5,9 @@
  * @property {string} name
  * @property {object} noop
  * @property {() => object} factory
+ * @property {(config: import('./config/config-base')) => boolean} isEnabled
+ * @property {() => Function} provider
  * @property {Function} [remoteConfig]
- * @property {Function} [enable]
  */
 
 /** @type {{ [name: string]: Feature }} */

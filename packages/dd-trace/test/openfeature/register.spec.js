@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
 
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -11,25 +13,20 @@ require('../setup/core')
 describe('OpenFeature register', () => {
   let config
   let feature
-  let flaggingProviderConstructions
-  let lazyProxy
+  let FlaggingProvider
   let openfeatureModule
   let openfeatureRemoteConfig
   let proxy
   let registerFeature
-  let tracer
 
   function NoopFlaggingProvider () {}
 
-  function FlaggingProvider (...args) {
-    flaggingProviderConstructions++
-    this.args = args
-  }
-
   beforeEach(() => {
-    registerFeature = sinon.spy(registeredFeature => {
+    /** @param {object} registeredFeature */
+    const register = (registeredFeature) => {
       feature = registeredFeature
-    })
+    }
+    registerFeature = sinon.spy(register)
     openfeatureModule = {
       enable: sinon.spy(),
       disable: sinon.spy(),
@@ -37,7 +34,7 @@ describe('OpenFeature register', () => {
     openfeatureRemoteConfig = {
       enable: sinon.spy(),
     }
-    flaggingProviderConstructions = 0
+    FlaggingProvider = function () {}
 
     delete require.cache[require.resolve('../../src/openfeature/register')]
     proxyquire('../../src/openfeature/register', {
@@ -54,68 +51,61 @@ describe('OpenFeature register', () => {
         DD_FEATURE_FLAGS_ENABLED: true,
       },
     }
-    tracer = {}
-    proxy = {
-      openfeature: feature.noop,
-      _modules: {
-        openfeature: {
-          enable: sinon.spy(),
-        },
-      },
-    }
-    lazyProxy = sinon.spy((target, property, getClass, ...args) => {
-      const RealClass = getClass()
-      target[property] = new RealClass(...args)
-    })
+    proxy = { openfeature: feature.noop }
   })
 
-  it('registers the OpenFeature feature', () => {
+  it('registers the OpenFeature feature boundaries', () => {
     sinon.assert.calledOnce(registerFeature)
 
     assert.strictEqual(feature.name, 'openfeature')
     assert.ok(feature.noop instanceof NoopFlaggingProvider)
     assert.strictEqual(feature.factory(), openfeatureModule)
+    assert.strictEqual(feature.provider(), FlaggingProvider)
   })
 
-  it('does not initialize Feature Flags until application code accesses the provider', () => {
-    feature.enable(config, tracer, proxy, lazyProxy)
+  it('does not load active OpenFeature modules before application access', () => {
+    const packagePath = path.join(__dirname, '../..')
+    const script = `
+      const tracer = require(${JSON.stringify(packagePath)})
+      tracer.init()
+      const modules = [
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/index'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/writers/exposures'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/flagging_provider'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/require-provider'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/configuration_source'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/agentless_configuration_source'))}),
+        require.resolve('@datadog/openfeature-node-server'),
+        require.resolve('@openfeature/server-sdk'),
+        require.resolve('@openfeature/core')
+      ]
+      process.stdout.write(JSON.stringify(modules.map(module => require.cache[module] !== undefined)))
+    `
+    for (const featureFlagsEnabled of ['false', 'true']) {
+      for (const remoteConfigurationEnabled of ['false', 'true']) {
+        const result = spawnSync(process.execPath, ['-e', script], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            DD_FEATURE_FLAGS_ENABLED: featureFlagsEnabled,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: remoteConfigurationEnabled,
+            DD_TRACE_STARTUP_LOGS: 'false',
+          },
+        })
 
-    assert.strictEqual(flaggingProviderConstructions, 0)
-    sinon.assert.notCalled(proxy._modules.openfeature.enable)
-    sinon.assert.notCalled(lazyProxy)
-
-    const provider = proxy.openfeature
-
-    assert.strictEqual(flaggingProviderConstructions, 1)
-    assert.ok(provider instanceof FlaggingProvider)
-    assert.deepStrictEqual(provider.args, [tracer, config])
-    sinon.assert.calledOnceWithExactly(proxy._modules.openfeature.enable, config)
+        assert.strictEqual(result.status, 0, result.stderr)
+        assert.deepStrictEqual(JSON.parse(result.stdout), Array(9).fill(false))
+      }
+    }
   })
 
-  it('keeps an existing flagging provider on repeated enable calls', () => {
-    feature.enable(config, tracer, proxy, lazyProxy)
-    feature.enable(config, tracer, proxy, lazyProxy)
-    assert.strictEqual(flaggingProviderConstructions, 0)
-    sinon.assert.notCalled(proxy._modules.openfeature.enable)
+  it('selects the provider from the calculated Feature Flags state', () => {
+    assert.strictEqual(feature.isEnabled(config), true)
 
-    const provider = proxy.openfeature
-    feature.enable(config, tracer, proxy, lazyProxy)
-
-    assert.strictEqual(flaggingProviderConstructions, 1)
-    sinon.assert.calledTwice(proxy._modules.openfeature.enable)
-    sinon.assert.notCalled(lazyProxy)
-    assert.strictEqual(proxy.openfeature, provider)
-  })
-
-  it('does not define the flagging provider when disabled', () => {
     config.featureFlags.DD_FEATURE_FLAGS_ENABLED = false
 
-    feature.enable(config, tracer, proxy, lazyProxy)
-
-    assert.strictEqual(flaggingProviderConstructions, 0)
-    sinon.assert.notCalled(proxy._modules.openfeature.enable)
-    sinon.assert.notCalled(lazyProxy)
-    assert.strictEqual(proxy.openfeature, feature.noop)
+    assert.strictEqual(feature.isEnabled(config), false)
   })
 
   it('installs Remote Config delivery when selected', () => {

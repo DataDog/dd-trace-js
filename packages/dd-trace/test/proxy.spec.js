@@ -273,32 +273,19 @@ describe('TracerProxy', () => {
     const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
     const noopOpenfeature = {}
 
-    /**
-     * @param {object} proxy
-     * @returns {boolean}
-     */
-    function hasOpenfeatureProvider (proxy) {
-      const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
-
-      return descriptor?.value !== undefined && descriptor.value !== noopOpenfeature
-    }
-
     featureRegistry.registerFeature({
       name: 'openfeature',
       noop: noopOpenfeature,
       factory: () => openfeature,
+      provider: () => OpenFeatureProvider,
+      /** @param {object} config */
+      isEnabled (config) {
+        return config.featureFlags.DD_FEATURE_FLAGS_ENABLED
+      },
       remoteConfig (rc, config, proxy) {
         const subscribe = config.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
           config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'remote_config'
         openfeatureRcEnable(rc, () => proxy.openfeature, subscribe)
-      },
-      enable (config, tracer, proxy, lazyProxy) {
-        if (config.featureFlags.DD_FEATURE_FLAGS_ENABLED) {
-          proxy._modules.openfeature.enable(config)
-          if (!hasOpenfeatureProvider(proxy)) {
-            lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
-          }
-        }
       },
     })
 
@@ -413,6 +400,17 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_CONFIG')('unapply', conf)
 
         sinon.assert.called(flare.disable)
+      })
+
+      it('does not load OpenFeature before application access', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+
+        proxy.init()
+
+        const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
+        assert.strictEqual(typeof descriptor.get, 'function')
+        sinon.assert.notCalled(OpenFeatureProvider)
+        sinon.assert.notCalled(openfeature.enable)
       })
 
       it('should setup FFE_FLAGS product handler when openfeature provider is enabled', () => {

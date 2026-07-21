@@ -4,9 +4,11 @@ const assert = require('node:assert/strict')
 const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
 const path = require('node:path')
+const zlib = require('node:zlib')
 const { after, before, describe, it } = require('mocha')
 
 const { ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
+const { VERSION } = require('../../version')
 const { FakeAgent, sandboxCwd, spawnProc, stopProc, useSandbox } = require('../helpers')
 
 const AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
@@ -54,13 +56,13 @@ const CONFIGURATION = {
   },
 }
 
-const AGENTLESS_RESPONSE = JSON.stringify({
+const AGENTLESS_RESPONSE = zlib.gzipSync(JSON.stringify({
   data: {
     id: RC_CONFIG_ID,
     type: 'universal-flag-configuration',
     attributes: CONFIGURATION,
   },
-})
+}))
 
 /** @typedef {'absent'|'true'|'false'} BooleanSetting */
 /** @typedef {'agentless'|'remote_config'|'disabled'} Delivery */
@@ -348,7 +350,10 @@ function assertDeliveryTraffic (testCase) {
     assert.ok(rcRequests.every(withoutFfeProduct), testCase.label)
     for (const request of cdnRequests) {
       assert.strictEqual(request.url, `${AGENTLESS_PATH}?case=${testCase.identifier}`, testCase.label)
+      assert.strictEqual(request.headers['accept-encoding'], 'gzip', testCase.label)
       assert.strictEqual(request.headers['dd-api-key'], 'integration-api-key', testCase.label)
+      assert.strictEqual(request.headers['dd-client-library-language'], 'nodejs', testCase.label)
+      assert.strictEqual(request.headers['dd-client-library-version'], VERSION, testCase.label)
     }
     return
   }
@@ -549,6 +554,7 @@ function handleBackendRequest (request, response) {
   })
   response.writeHead(200, {
     Connection: 'close',
+    'Content-Encoding': 'gzip',
     'Content-Type': 'application/json',
   })
   response.end(AGENTLESS_RESPONSE)

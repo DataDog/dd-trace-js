@@ -42,9 +42,8 @@ function isLoopbackHost (hostname) {
 /**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
- * @param {(error: Error|null, result?: string|import('node:http').IncomingMessage|null,
- *   statusCode?: number, headers?: import('node:http').IncomingHttpHeaders) => void} callback
- * @returns {import('node:http').ClientRequest | undefined}
+ * @param {(error: Error|null, result?: string|null, statusCode?: number,
+ *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
  */
 function request (data, options, callback) {
   if (!options.headers) {
@@ -98,7 +97,6 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  const streamResponse = options.responseType === 'stream'
   let dataArray = data
 
   if (!Array.isArray(data)) {
@@ -116,12 +114,6 @@ function request (data, options, callback) {
    */
   const onResponse = (res, finalize) => {
     markEndpointReached(options)
-
-    if (streamResponse) {
-      res.setTimeout(timeout)
-      callback(null, res, res.statusCode, res.headers)
-      return
-    }
 
     const chunks = []
 
@@ -176,40 +168,30 @@ function request (data, options, callback) {
   // Retries always run via setTimeout so the AsyncLocalStorage store survives
   // the gap before socket.connect(); ALS.run() does not call ALS.enterWith()
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
-  /**
-   * @param {number} attemptIndex
-   * @returns {import('node:http').ClientRequest | undefined}
-   */
+  /** @param {number} attemptIndex */
   const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
-      callback(null)
-      return
+      return callback(null)
     }
 
     activeBufferSize += options.headers['Content-Length'] ?? 0
 
-    return legacyStorage.run({ noop: true }, () => {
+    legacyStorage.run({ noop: true }, () => {
       let finished = false
-      let responseReceived = false
       const finalize = () => {
         if (finished) return
         finished = true
         activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
-      const req = client.request(options, (res) => {
-        responseReceived = true
-        onResponse(res, finalize)
-      })
+      const req = client.request(options, (res) => onResponse(res, finalize))
 
       req.once('close', finalize)
       req.once('timeout', finalize)
 
       req.once('error', error => {
         finalize()
-        if (streamResponse && responseReceived) return
-
         if (options.retry !== false &&
             attemptIndex < getMaxAttempts(options) &&
             isRetriableNetworkError(error)) {
@@ -236,12 +218,10 @@ function request (data, options, callback) {
 
       for (const buffer of dataArray) req.write(buffer)
       req.end()
-
-      return req
     })
   }
 
-  return attempt(1)
+  attempt(1)
 }
 
 function byteLength (data) {

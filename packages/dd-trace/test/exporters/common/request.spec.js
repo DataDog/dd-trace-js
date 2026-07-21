@@ -110,39 +110,6 @@ describe('request', function () {
       })
   })
 
-  it('streams raw responses and returns the cancellable request', (done) => {
-    nock('http://test:123')
-      .get('/path')
-      .reply(404, ['first', 'second'], {
-        etag: '"raw"',
-      })
-
-    const clientRequest = request(Buffer.from(''), {
-      protocol: 'http:',
-      hostname: 'test',
-      port: 123,
-      path: '/path',
-      method: 'GET',
-      responseType: 'stream',
-      retry: false,
-    }, (error, response, statusCode, headers) => {
-      const chunks = []
-
-      clientRequest.emit('error', new Error('late response error'))
-      response.on('data', chunk => chunks.push(chunk))
-      response.on('end', () => {
-        assert.ifError(error)
-        assert.strictEqual(statusCode, 404)
-        assert.strictEqual(headers.etag, '"raw"')
-        assert.strictEqual(Buffer.concat(chunks).toString(), '["first","second"]')
-        sinon.assert.calledOnceWithMatch(runInNoopContext, { noop: true }, sinon.match.func)
-        done()
-      })
-    })
-
-    assert.strictEqual(typeof clientRequest.destroy, 'function')
-  })
-
   it('does not retry when retries are disabled', (done) => {
     maxAttempts = 5
     const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
@@ -163,24 +130,39 @@ describe('request', function () {
     })
   })
 
-  it('allows callers to cancel a raw response request', (done) => {
+  it('allows callers to cancel a request with an AbortSignal', async () => {
     nock('http://localhost:80')
       .get('/path')
       .delayConnection(1000)
       .reply(200, 'OK')
 
-    const cancellation = new Error('cancelled')
-    const clientRequest = request(Buffer.from(''), {
-      path: '/path',
-      method: 'GET',
-      responseType: 'stream',
-      retry: false,
-    }, (error) => {
-      assert.strictEqual(error, cancellation)
-      done()
-    })
+    const abortController = new AbortController()
+    /**
+     * @param {() => void} resolve
+     * @param {(error: Error) => void} reject
+     */
+    const execute = (resolve, reject) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
 
-    clientRequest.destroy(cancellation)
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'GET',
+        retry: false,
+        signal: abortController.signal,
+      }, onResponse)
+    }
+    const completed = new Promise(execute)
+
+    abortController.abort()
+
+    await assert.rejects(completed, { code: 'ABORT_ERR' })
   })
 
   it('should handle an http error', done => {

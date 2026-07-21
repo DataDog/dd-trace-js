@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { Readable } = require('node:stream')
 const zlib = require('node:zlib')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -54,7 +53,7 @@ describe('AgentlessConfigurationSource', () => {
       apiKey: 'test-api-key',
     }
     log = {
-      debug: sinon.spy(),
+      error: sinon.spy(),
       warn: sinon.spy(),
     }
     random = sinon.stub(Math, 'random').returns(0.5)
@@ -62,34 +61,45 @@ describe('AgentlessConfigurationSource', () => {
     responses = []
     sources = []
 
-    request = sinon.spy((data, options, callback) => {
+    /**
+     * @param {string} data
+     * @param {{ signal?: AbortSignal }} options
+     * @param {Function} callback
+     */
+    const sendRequest = (data, options, callback) => {
       const response = responses.shift()
-      let responseStream
-      const activeRequest = {
-        destroy: sinon.spy(() => {
-          if (responseStream) {
-            responseStream.destroy(new Error('cancelled'))
-          } else if (response?.pending && !response.ignoreDestroy) {
-            queueMicrotask(() => callback(new Error('cancelled')))
-          }
-        }),
+      const requestRecord = {
+        aborted: false,
+        callback,
+        data,
+        options,
       }
-      const requestRecord = { activeRequest, callback, data, options }
       requests.push(requestRecord)
+
+      /**
+       * @returns {void}
+       */
+      const abort = () => {
+        requestRecord.aborted = true
+        if (response?.pending && !response.ignoreAbort) {
+          const error = Object.assign(new Error('cancelled'), { name: 'AbortError' })
+          queueMicrotask(() => callback(error))
+        }
+      }
+      options.signal?.addEventListener('abort', abort, { once: true })
 
       if (response && !response.pending) {
         queueMicrotask(() => {
-          if (response.error) {
-            callback(response.error)
-          } else {
-            responseStream = createResponseStream(response)
-            callback(null, responseStream)
-          }
+          callback(
+            response.error ?? null,
+            response.body,
+            response.statusCode,
+            response.headers
+          )
         })
       }
-
-      return activeRequest
-    })
+    }
+    request = sinon.spy(sendRequest)
 
     AgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
       '../exporters/common/request': request,
@@ -103,33 +113,6 @@ describe('AgentlessConfigurationSource', () => {
     clock?.restore()
     nock.cleanAll()
   })
-
-  /**
-   * @param {object} response
-   */
-  function createResponseStream (response) {
-    const chunks = response.bodyChunks || [response.body || '']
-    let pushed = false
-
-    const responseStream = new Readable({
-      read () {
-        if (pushed) return
-        pushed = true
-        response.onRead?.()
-        for (const chunk of chunks) {
-          this.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-        }
-        if (response.bodyError) {
-          this.destroy(response.bodyError)
-        } else if (!response.bodyPending) {
-          this.push(null)
-        }
-      },
-    })
-    responseStream.statusCode = response.statusCode
-    responseStream.headers = response.headers || {}
-    return responseStream
-  }
 
   function source () {
     const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration)
@@ -154,16 +137,14 @@ describe('AgentlessConfigurationSource', () => {
       { statusCode: 200, headers: { etag: ['  W/"ufc-v1"  '] }, body: responseBody() },
       { statusCode: 304 }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
 
     sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
     assert.strictEqual(requests[0].data, '')
     assert.strictEqual(requests[0].options.url, config.endpoint)
     assert.strictEqual(requests[0].options.method, 'GET')
-    assert.strictEqual(requests[0].options.responseType, 'stream')
     assert.strictEqual(requests[0].options.retry, false)
     assert.strictEqual(requests[0].options.timeout, 2000)
     assert.strictEqual(requests[0].options.headers['DD-API-KEY'], 'test-api-key')
@@ -184,9 +165,8 @@ describe('AgentlessConfigurationSource', () => {
       { statusCode: 200, body: responseBody() },
       { statusCode: 304 }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
     await tick(30_000)
     await tick(30_000)
@@ -196,9 +176,10 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledTwice(applyConfiguration)
   })
 
-  it('streams and applies a response through the shared request transport', async () => {
+  it('buffers, decompresses, and applies a response through the shared request transport', async () => {
     clock.restore()
     clock = undefined
+    const body = zlib.gzipSync(responseBody())
     nock('http://127.0.0.1:8080', {
       reqheaders: {
         'accept-encoding': 'gzip',
@@ -206,7 +187,10 @@ describe('AgentlessConfigurationSource', () => {
       },
     })
       .get('/api/v2/feature-flagging/config/rules-based/server')
-      .reply(200, responseBody(), { etag: '"real-path"' })
+      .reply(200, body, {
+        'content-encoding': 'gzip',
+        etag: '"real-path"',
+      })
 
     let resolveConfiguration
     const applied = new Promise(resolve => {
@@ -215,9 +199,7 @@ describe('AgentlessConfigurationSource', () => {
     const RealAgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
       '../log': log,
     })
-    const configurationSource = new RealAgentlessConfigurationSource(config, configuration => {
-      resolveConfiguration(configuration)
-    })
+    const configurationSource = new RealAgentlessConfigurationSource(config, resolveConfiguration)
     sources.push(configurationSource)
 
     configurationSource.start()
@@ -226,81 +208,9 @@ describe('AgentlessConfigurationSource', () => {
     assert.ok(nock.isDone())
   })
 
-  it('selects only data type and attributes without a payload-size cap', async () => {
-    const expected = {
-      ...VALID_UFC,
-      flags: {
-        large: {
-          description: 'accepted',
-        },
-      },
-    }
-    responses.push({
-      statusCode: 200,
-      body: JSON.stringify({
-        ignored: 'x'.repeat(5 * 1024 * 1024 + 1),
-        data: {
-          ignored: { nested: 'value' },
-          attributes: expected,
-          type: 'universal-flag-configuration',
-        },
-      }),
-    })
-
-    source().start()
-    await flush()
-
-    sinon.assert.calledOnceWithExactly(applyConfiguration, expected)
-  })
-
-  it('matches JSON.parse object order and duplicate-key last-wins behavior', async () => {
-    const expected = {
-      environment: { name: 'last' },
-      createdAt: '2026-07-21T00:00:00.000Z',
-      flags: { enabled: { enabled: true } },
-    }
-    const body = '{"data":{"attributes":{"createdAt":"first"},"type":"wrong",' +
-      `"type":"universal-flag-configuration","attributes":${JSON.stringify(expected)}}}`
-    responses.push({ statusCode: 200, body })
-
-    source().start()
-    await flush()
-
-    sinon.assert.calledOnce(applyConfiguration)
-    const configuration = applyConfiguration.firstCall.args[0]
-    assert.deepStrictEqual(configuration, expected)
-    assert.deepStrictEqual(Object.keys(configuration), Object.keys(expected))
-  })
-
-  it('treats duplicate data members with JSON.parse last-wins behavior', async () => {
-    responses.push({
-      statusCode: 200,
-      body: `{"data":${JSON.stringify({
-        type: 'universal-flag-configuration',
-        attributes: VALID_UFC,
-      })},"data":{"attributes":${JSON.stringify(VALID_UFC)}}}`,
-    })
-
-    source().start()
-    await flush()
-
-    sinon.assert.notCalled(applyConfiguration)
-    sinon.assert.calledOnce(log.debug)
-  })
-
-  it('rejects a primitive data member', async () => {
-    responses.push({ statusCode: 200, body: '{"data":"invalid"}' })
-
-    source().start()
-    await flush()
-
-    sinon.assert.notCalled(applyConfiguration)
-    sinon.assert.calledOnce(log.debug)
-  })
-
-  it('preserves __proto__ as an own property like JSON.parse', async () => {
-    const body = '{"data":{"type":"universal-flag-configuration","attributes":' +
-      '{"createdAt":"2026-01-01T00:00:00.000Z","environment":{"name":"test"},' +
+  it('matches JSON.parse duplicate-key and __proto__ behavior', async () => {
+    const body = '{"data":{"type":"wrong","type":"universal-flag-configuration","attributes":' +
+      '{"createdAt":"2026-01-01T00:00:00.000Z","format":"SERVER","environment":{"name":"test"},' +
       '"flags":{"__proto__":{"enabled":true}}}}}'
     const expected = JSON.parse(body).data.attributes
     responses.push({ statusCode: 200, body })
@@ -308,56 +218,31 @@ describe('AgentlessConfigurationSource', () => {
     source().start()
     await flush()
 
-    sinon.assert.calledOnce(applyConfiguration)
-    const configuration = applyConfiguration.firstCall.args[0]
-    assert.deepStrictEqual(configuration, expected)
-    assert.strictEqual(Object.hasOwn(configuration.flags, '__proto__'), true)
-    assert.strictEqual(Object.getPrototypeOf(configuration.flags), Object.prototype)
+    sinon.assert.calledOnceWithExactly(applyConfiguration, expected)
+    assert.strictEqual(Object.hasOwn(applyConfiguration.firstCall.args[0].flags, '__proto__'), true)
     assert.strictEqual(Object.prototype.enabled, undefined)
   })
 
-  it('parses split UTF-8 and escaped JSON names and values', async () => {
-    const expected = {
-      createdAt: '2026-01-01T00:00:00.000Z',
-      environment: { name: 'café 🚀' },
-      flags: { escaped: { description: 'line\nbreak' } },
-    }
-    const body = '{"data":{"type":"universal-flag-configur\\u0061tion",' +
-      `"attr\\u0069butes":${JSON.stringify(expected)}}}`
-    const buffer = Buffer.from(body)
-    const rocketByte = buffer.indexOf(Buffer.from('🚀'))
-    responses.push({
-      statusCode: 200,
-      bodyChunks: [
-        buffer.subarray(0, rocketByte + 1),
-        buffer.subarray(rocketByte + 1, rocketByte + 3),
-        buffer.subarray(rocketByte + 3),
-      ],
-    })
-
-    source().start()
-    await flush()
-
-    sinon.assert.calledOnceWithExactly(applyConfiguration, expected)
-  })
-
-  it('preserves last-known-good state after malformed and truncated JSON', async () => {
+  it('preserves last-known-good state and logs malformed responses once', async () => {
     responses.push(
       { statusCode: 200, headers: { etag: '"good"' }, body: responseBody() },
       { statusCode: 200, headers: { etag: '"bad"' }, body: `${responseBody()} trailing` },
-      { statusCode: 200, headers: { etag: '"bad"' }, body: '{"data":{"type":' },
+      {
+        statusCode: 200,
+        headers: { etag: '"bad"' },
+        body: responseBody({ ...VALID_UFC, format: undefined }),
+      },
       { statusCode: 304 }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
     await tick(30_000)
     await tick(30_000)
     await tick(30_000)
 
     sinon.assert.calledOnce(applyConfiguration)
-    sinon.assert.calledTwice(log.debug)
+    sinon.assert.calledOnce(log.error)
     assert.strictEqual(requests[3].options.headers['If-None-Match'], '"good"')
   })
 
@@ -369,12 +254,7 @@ describe('AgentlessConfigurationSource', () => {
       },
       {
         statusCode: 200,
-        body: JSON.stringify({
-          data: {
-            type: 'universal-flag-configuration',
-            attributes: { ...VALID_UFC, environment: [] },
-          },
-        }),
+        body: responseBody({ ...VALID_UFC, environment: [] }),
       },
       {
         statusCode: 200,
@@ -386,80 +266,52 @@ describe('AgentlessConfigurationSource', () => {
         }),
       }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
     await tick(30_000)
     await tick(30_000)
 
     sinon.assert.notCalled(applyConfiguration)
-    sinon.assert.calledThrice(log.debug)
+    sinon.assert.calledOnce(log.error)
   })
 
-  it('decompresses gzip responses before parsing', async () => {
+  it('does not expose malformed payload string values in logs', async () => {
     responses.push({
       statusCode: 200,
-      headers: { 'content-encoding': ['GZip'] },
-      body: zlib.gzipSync(responseBody()),
+      body: responseBody({
+        createdAt: 'secret-created-at',
+        environment: { name: 'secret-environment' },
+        flags: {},
+      }),
     })
 
     source().start()
     await flush()
 
-    sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
+    const message = log.error.firstCall.args[1]
+    assert.doesNotMatch(message, /secret/)
   })
 
-  it('preserves last-known-good state after gzip and response read errors', async () => {
-    responses.push(
-      { statusCode: 200, headers: { etag: '"good"' }, body: responseBody() },
-      {
-        statusCode: 200,
-        headers: { etag: '"bad"', 'content-encoding': 'gzip' },
-        body: 'not gzip',
-      },
-      {
-        statusCode: 200,
-        headers: { etag: '"bad"' },
-        bodyError: new Error('read failed'),
-      },
-      { statusCode: 304 }
-    )
-    const configurationSource = source()
-
-    configurationSource.start()
-    await flush()
-    await tick(30_000)
-    await tick(30_000)
-    await tick(30_000)
-
-    sinon.assert.calledOnce(applyConfiguration)
-    sinon.assert.calledTwice(log.debug)
-    sinon.assert.calledOnceWithExactly(
-      log.warn,
-      'Feature Flagging agentless request failed: %s',
-      'Feature Flagging agentless gzip response could not be decompressed'
-    )
-    assert.strictEqual(requests[3].options.headers['If-None-Match'], '"good"')
-  })
-
-  it('does not advance the ETag after an application failure', async () => {
+  it('does not advance the ETag after an application failure and logs it once', async () => {
     applyConfiguration.onSecondCall().throws(new Error('listener failed'))
+    applyConfiguration.onThirdCall().throws(new Error('listener failed again'))
     responses.push(
       { statusCode: 200, headers: { etag: '"good"' }, body: responseBody() },
       { statusCode: 200, headers: { etag: '"failed"' }, body: responseBody() },
+      { statusCode: 200, headers: { etag: '"failed-again"' }, body: responseBody() },
       { statusCode: 304 }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
     await tick(30_000)
     await tick(30_000)
+    await tick(30_000)
 
-    sinon.assert.calledTwice(applyConfiguration)
-    sinon.assert.calledOnce(log.debug)
-    assert.strictEqual(requests[2].options.headers['If-None-Match'], '"good"')
+    sinon.assert.calledThrice(applyConfiguration)
+    sinon.assert.calledOnce(log.warn)
+    assert.strictEqual(requests[3].options.headers['If-None-Match'], '"good"')
   })
 
   it('retries timeout, rate-limit, and server statuses with bounded delays', async () => {
@@ -468,9 +320,8 @@ describe('AgentlessConfigurationSource', () => {
       { statusCode: 429 },
       { statusCode: 200, body: responseBody() }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
     await tick(4999)
     assert.strictEqual(requests.length, 1)
@@ -490,9 +341,8 @@ describe('AgentlessConfigurationSource', () => {
       { error: Object.assign(new Error('reset'), { code: 'ECONNRESET' }) },
       { statusCode: 200, body: responseBody() }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
     await tick(5000)
     await tick(10_000)
@@ -504,12 +354,11 @@ describe('AgentlessConfigurationSource', () => {
 
   it('retries when the shared transport cannot send the request', async () => {
     responses.push(
-      { pending: true },
+      {},
       { statusCode: 200, body: responseBody() }
     )
 
     source().start()
-    requests[0].callback(null)
     await flush()
     await tick(5000)
 
@@ -517,15 +366,21 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
   })
 
-  it('warns after retryable failures exhaust all attempts', async () => {
+  it('warns once after repeated retryable failures exhaust all attempts', async () => {
     responses.push(
       { statusCode: 500 },
       { statusCode: 502 },
-      { statusCode: 503 }
+      { statusCode: 503 },
+      { error: new Error('first') },
+      { error: new Error('second') },
+      { error: new Error('third') }
     )
 
     source().start()
     await flush()
+    await tick(5000)
+    await tick(10_000)
+    await tick(30_000)
     await tick(5000)
     await tick(10_000)
 
@@ -537,11 +392,11 @@ describe('AgentlessConfigurationSource', () => {
     )
   })
 
-  it('warns after network failures exhaust all attempts', async () => {
+  it('warns after retryable request failures exhaust all attempts', async () => {
     responses.push(
       { error: new Error('first') },
       { error: new Error('second') },
-      { error: new Error('third') }
+      {}
     )
 
     source().start()
@@ -553,7 +408,36 @@ describe('AgentlessConfigurationSource', () => {
       log.warn,
       'Feature Flagging agentless request failed after %d attempts: %s',
       3,
-      'Feature Flagging agentless request failed'
+      'request was not sent'
+    )
+  })
+
+  it('stops a failed polling loop and allows a later start', async () => {
+    const sleep = sinon.stub()
+    sleep.onFirstCall().rejects(new Error('timer failed'))
+    sleep.onSecondCall().returns(new Promise(() => {}))
+    responses.push(
+      { statusCode: 200, body: responseBody() },
+      { statusCode: 200, body: responseBody() }
+    )
+    const TimerFailureSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
+      'node:timers/promises': { setTimeout: sleep },
+      '../exporters/common/request': request,
+      '../log': log,
+    })
+    const configurationSource = new TimerFailureSource(config, applyConfiguration)
+    sources.push(configurationSource)
+
+    configurationSource.start()
+    await flush()
+    configurationSource.start()
+    await flush()
+
+    sinon.assert.calledTwice(applyConfiguration)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Feature Flagging agentless request failed: %s',
+      'timer failed'
     )
   })
 
@@ -562,11 +446,9 @@ describe('AgentlessConfigurationSource', () => {
       { statusCode: 401 },
       { statusCode: 404 }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await flush()
-    await tick(15_000)
 
     assert.strictEqual(requests.length, 1)
     sinon.assert.calledOnceWithExactly(
@@ -575,22 +457,11 @@ describe('AgentlessConfigurationSource', () => {
       401
     )
 
-    await tick(15_000)
+    await tick(30_000)
 
     assert.strictEqual(requests.length, 2)
     sinon.assert.calledOnce(log.warn)
     sinon.assert.notCalled(applyConfiguration)
-  })
-
-  it('rate-limits repeated authentication warnings', async () => {
-    for (let i = 0; i < 11; i++) responses.push({ statusCode: i % 2 ? 403 : 401 })
-
-    source().start()
-    await flush()
-    for (let i = 0; i < 10; i++) await tick(30_000)
-
-    assert.strictEqual(requests.length, 11)
-    sinon.assert.calledTwice(log.warn)
   })
 
   it('uses fixed-delay polling after a request completes', async () => {
@@ -598,16 +469,12 @@ describe('AgentlessConfigurationSource', () => {
       { pending: true },
       { statusCode: 200, body: responseBody() }
     )
-    const configurationSource = source()
 
-    configurationSource.start()
+    source().start()
     await tick(30_000)
     assert.strictEqual(requests.length, 1)
 
-    requests[0].callback(null, createResponseStream({
-      statusCode: 200,
-      body: responseBody(),
-    }), 200, {})
+    requests[0].callback(null, responseBody(), 200, {})
     await flush()
     await tick(29_999)
     assert.strictEqual(requests.length, 1)
@@ -627,63 +494,51 @@ describe('AgentlessConfigurationSource', () => {
 
     assert.strictEqual(requests.length, 1)
 
-    requests[0].callback(null, createResponseStream({
-      statusCode: 200,
-      body: responseBody(),
-    }), 200, {})
+    requests[0].callback(null, responseBody(), 200, {})
     await flush()
     configurationSource.start()
 
     assert.strictEqual(requests.length, 1)
   })
 
-  it('stops and cancels an active request', async () => {
-    responses.push({ pending: true })
+  it('stops an active request and ignores its response', async () => {
+    responses.push({ pending: true, ignoreAbort: true })
     const configurationSource = source()
 
     configurationSource.start()
     configurationSource.stop()
-    configurationSource.stop()
-    configurationSource.start()
-    await tick(60_000)
-
-    sinon.assert.calledOnce(requests[0].activeRequest.destroy)
-    assert.strictEqual(requests.length, 1)
-  })
-
-  it('stops and cancels an active response stream', async () => {
-    responses.push({
-      statusCode: 200,
-      body: '{"data":',
-      bodyPending: true,
-    })
-    const configurationSource = source()
-
-    configurationSource.start()
-    await flush()
-    configurationSource.stop()
+    requests[0].callback(null, responseBody(), 200, {})
     await flush()
 
-    sinon.assert.calledOnce(requests[0].activeRequest.destroy)
+    assert.strictEqual(requests[0].aborted, true)
     sinon.assert.notCalled(applyConfiguration)
   })
 
-  it('ignores a response that arrives while stopping', async () => {
-    responses.push({ pending: true, ignoreDestroy: true })
+  it('restarts after stop without accepting the previous request', async () => {
+    const oldConfiguration = { ...VALID_UFC, environment: { name: 'old' } }
+    const newConfiguration = { ...VALID_UFC, environment: { name: 'new' } }
+    responses.push(
+      { pending: true, ignoreAbort: true },
+      { statusCode: 200, headers: { etag: '"new"' }, body: responseBody(newConfiguration) },
+      { statusCode: 304 }
+    )
     const configurationSource = source()
 
     configurationSource.start()
     configurationSource.stop()
-    requests[0].callback(null, createResponseStream({
-      statusCode: 200,
-      body: responseBody(),
-    }), 200, {})
+    configurationSource.start()
+    requests[0].callback(null, responseBody(oldConfiguration), 200, {})
     await flush()
 
-    sinon.assert.notCalled(applyConfiguration)
+    assert.strictEqual(requests.length, 2)
+    sinon.assert.calledOnceWithExactly(applyConfiguration, newConfiguration)
+
+    await tick(30_000)
+
+    assert.strictEqual(requests[2].options.headers['If-None-Match'], '"new"')
   })
 
-  it('stops a pending retry delay', async () => {
+  it('stops a pending retry delay and can restart', async () => {
     responses.push(
       { error: Object.assign(new Error('reset'), { code: 'ECONNRESET' }) },
       { statusCode: 200, body: responseBody() }
@@ -693,9 +548,10 @@ describe('AgentlessConfigurationSource', () => {
     configurationSource.start()
     await flush()
     configurationSource.stop()
-    await tick(60_000)
+    configurationSource.start()
+    await flush()
 
-    assert.strictEqual(requests.length, 1)
-    sinon.assert.notCalled(applyConfiguration)
+    assert.strictEqual(requests.length, 2)
+    sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
   })
 })

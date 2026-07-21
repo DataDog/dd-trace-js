@@ -38,6 +38,9 @@ const OFFLINE_VALIDATION_EXPORTERS = new Set([
   'playwright_worker',
   'vitest_worker',
 ])
+const FEATURE_STATE_NOOP = 0
+const FEATURE_STATE_LAZY = 1
+const FEATURE_STATE_ACTIVE = 2
 
 class LazyModule {
   constructor (provider) {
@@ -87,6 +90,9 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
+  /** @type {Record<string, number> | undefined} */
+  #featureStates
+
   constructor () {
     super()
 
@@ -298,6 +304,42 @@ class Tracer extends NoopProxy {
   }
 
   /**
+   * @param {(typeof features)[string]} feature
+   * @param {import('./config/config-base')} config
+   */
+  #enableFeature (feature, config) {
+    const states = this.#featureStates ??= {}
+    const state = states[feature.name] ?? FEATURE_STATE_NOOP
+
+    if (state === FEATURE_STATE_ACTIVE) {
+      this._modules[feature.name].enable(config)
+      return
+    }
+
+    if (state === FEATURE_STATE_LAZY) return
+    states[feature.name] = FEATURE_STATE_LAZY
+
+    Reflect.defineProperty(this, feature.name, {
+      get: () => {
+        this._modules[feature.name].enable(config)
+
+        const Provider = feature.provider()
+        const provider = new Provider(this._tracer, config)
+
+        Reflect.defineProperty(this, feature.name, {
+          value: provider,
+          configurable: true,
+          enumerable: true,
+        })
+        states[feature.name] = FEATURE_STATE_ACTIVE
+        return provider
+      },
+      configurable: true,
+      enumerable: true,
+    })
+  }
+
+  /**
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateTracing (config) {
@@ -323,7 +365,7 @@ class Tracer extends NoopProxy {
         this._tracingInitialized = true
       }
       for (const feature of Object.values(features)) {
-        feature.enable?.(config, this._tracer, this, lazyProxy)
+        if (feature.isEnabled(config)) this.#enableFeature(feature, config)
       }
       if (config.experimental?.aiguard?.enabled) {
         this._modules.aiguard.enable(this._tracer, config)

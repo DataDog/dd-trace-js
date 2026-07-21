@@ -31,10 +31,7 @@ const exclude = new Set([
 const difference = new Set([...include].filter(x => !exclude.has(x)))
 
 module.exports = {
-  entry: {
-    ...Object.fromEntries(difference.entries()),
-    'stream-json': join(__dirname, 'stream-json.js'),
-  },
+  entry: Object.fromEntries(difference.entries()),
   target: 'node',
   mode: 'production',
   // Using `hidden` removes the URL comment from source files since we don't
