@@ -165,8 +165,8 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install
 
-      - name: Run yarn dependencies:dedupe
-        run: yarn dependencies:dedupe
+      - name: Run npm run dependencies:dedupe
+        run: npm run dependencies:dedupe
 
       - name: Prepare yarn.lock update (same-repo PRs only; restricted paths)
         id: diff
@@ -181,11 +181,11 @@ jobs:
           fail_message() { cat <<'EOF'
           ❌ The yarn.lock file needs deduplication!
 
-          The yarn dedupe command has modified your yarn.lock file.
+          The dedupe command has modified your yarn.lock file.
           This means there were duplicate dependencies that could be optimized.
 
           To fix this issue:
-          1. Run 'yarn dependencies:dedupe' locally
+          1. Run 'npm run dependencies:dedupe' locally
           2. Commit the updated yarn.lock file
           3. Push your changes
 
