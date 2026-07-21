@@ -32,7 +32,7 @@
     "@babel/core": "7.29.0",
     "@babel/preset-typescript": "7.28.5",
     "@confluentinc/kafka-javascript": "1.10.0",
-    "@cucumber/cucumber": "13.1.0",
+    "@cucumber/cucumber": "13.2.0",
     "@datadog/openfeature-node-server": "2.0.0",
     "@elastic/elasticsearch": "9.4.0",
     "@elastic/transport": "9.3.5",
