@@ -473,7 +473,7 @@ describe('test visibility with dynamic instrumentation', () => {
     })
   })
 
-  it('waits for probe removal before reinstalling the same location', async () => {
+  it('serializes removal with pending setup and cancels its queued replacement', async () => {
     const worker = new EventEmitter()
     worker.unref = sinon.stub()
     const Worker = sinon.stub().returns(worker)
@@ -501,29 +501,32 @@ describe('test visibility with dynamic instrumentation', () => {
       { file: 'test.js', line: 23 },
       sinon.stub()
     )
-    dynamicInstrumentation.breakpointSetChannel.port1.postMessage(firstProbeId)
-    await firstSetPromise
-
-    const removePromise = dynamicInstrumentation.removeProbe(firstProbeId)
+    const firstRemovePromise = dynamicInstrumentation.removeProbe(firstProbeId)
     const [secondProbeId, secondSetPromise] = dynamicInstrumentation.addLineProbe(
       { file: 'test.js', line: 23 },
       sinon.stub()
     )
+    const secondRemovePromise = dynamicInstrumentation.removeProbe(secondProbeId)
+
+    sinon.assert.calledOnce(setPostMessage)
+    sinon.assert.notCalled(removePostMessage)
+
+    await Promise.all([
+      secondSetPromise,
+      secondRemovePromise,
+      dynamicInstrumentation.removeProbe(secondProbeId),
+      dynamicInstrumentation.removeProbe(),
+    ])
+
+    dynamicInstrumentation.breakpointSetChannel.port1.postMessage(firstProbeId)
+    await firstSetPromise
+    await setImmediatePromise()
 
     sinon.assert.calledOnce(setPostMessage)
     sinon.assert.calledOnceWithExactly(removePostMessage, firstProbeId)
 
     dynamicInstrumentation.breakpointRemoveChannel.port1.postMessage(firstProbeId)
-    await removePromise
-    await setImmediatePromise()
-
-    assert.deepStrictEqual(setPostMessage.args, [
-      [{ id: firstProbeId, file: 'test.js', line: 23 }],
-      [{ id: secondProbeId, file: 'test.js', line: 23 }],
-    ])
-
-    dynamicInstrumentation.breakpointSetChannel.port1.postMessage(secondProbeId)
-    await secondSetPromise
+    await firstRemovePromise
 
     dynamicInstrumentation.breakpointSetChannel.port1.close()
     dynamicInstrumentation.breakpointSetChannel.port2.close()
