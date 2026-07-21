@@ -29,6 +29,7 @@ const {
   responseBody,
   responseWriteHead,
   responseSetHeader,
+  informationalResponse,
   routerParam,
   fastifyResponseChannel,
   fastifyPathParams,
@@ -98,7 +99,8 @@ function enable (_config) {
     responseBody.subscribe(onResponseBody)
     fastifyResponseChannel.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
-    responseSetHeader.subscribe(onResponseSetHeader)
+    responseSetHeader.subscribe(onResponseOperation)
+    informationalResponse.subscribe(onResponseOperation)
     stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
     stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
     stripeConstructEvent.subscribe(onStripeConstructEvent)
@@ -403,7 +405,7 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   handleResults(results?.actions, req, res, rootSpan, abortController)
 }
 
-function onResponseSetHeader ({ res, abortController }) {
+function onResponseOperation ({ res, abortController }) {
   if (isBlocked(res)) {
     abortController?.abort()
   }
@@ -547,7 +549,8 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (fastifyResponseChannel.hasSubscribers) fastifyResponseChannel.unsubscribe(onResponseBody)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
-  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
+  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseOperation)
+  if (informationalResponse.hasSubscribers) informationalResponse.unsubscribe(onResponseOperation)
   if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
   if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)

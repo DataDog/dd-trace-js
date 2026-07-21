@@ -14,14 +14,20 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-function getOpenaiVersion (realVersion) {
+/**
+ * @param {string} realVersion
+ */
+function getOpenaiRange (realVersion) {
+  if (semifies(realVersion, '>=7.0.0')) {
+    return '^4.0.0'
+  }
   if (semifies(realVersion, '>=6.0.0')) {
-    return '3.0.0'
+    return '^3.0.0'
   }
   if (semifies(realVersion, '>=5.0.0')) {
-    return '2.0.0'
+    return '^2.0.0'
   }
-  return '1.3.23'
+  return '^1.3.23'
 }
 
 describe('esm', () => {
@@ -32,8 +38,8 @@ describe('esm', () => {
   withVersions('ai', 'ai', (version, _, realVersion) => {
     useSandbox([
       `ai@${version}`,
-      `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
-      'zod@3.25.75',
+      `@ai-sdk/openai@${getOpenaiRange(realVersion)}`,
+      'zod@^3.25.76',
     ], false, [
       './packages/datadog-plugin-ai/test/integration-test/*',
     ])

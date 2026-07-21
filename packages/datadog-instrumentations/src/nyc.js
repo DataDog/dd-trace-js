@@ -84,8 +84,6 @@ addHook({
             onDone: resolve,
           })
         })
-      }).catch(() => {
-        // Ignore errors - report generation failed
       })
     }
 

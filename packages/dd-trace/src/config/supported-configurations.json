@@ -470,6 +470,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
       {
         "implementation": "A",
@@ -491,6 +499,15 @@
         "implementation": "B",
         "type": "boolean",
         "default": "true",
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "allowed": "0|[1-9][0-9]*",
+        "default": null,
         "namespace": "testOptimization"
       }
     ],
@@ -590,6 +607,14 @@
       }
     ],
     "DD_CIVISIBILITY_TEST_SESSION_ID": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CODE_COVERAGE_FLAGS": [
       {
         "implementation": "A",
         "type": "string",

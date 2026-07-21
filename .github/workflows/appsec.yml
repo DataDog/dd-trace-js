@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
@@ -48,13 +48,13 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
@@ -74,7 +74,7 @@ jobs:
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:ci
+      - run: npm run test:appsec:ci
       - uses: ./.github/actions/node-crash-report
         if: failure()
       - uses: ./.github/actions/coverage
@@ -107,9 +107,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
@@ -138,9 +138,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
@@ -169,9 +169,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
@@ -191,9 +191,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
@@ -213,9 +213,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
@@ -235,9 +235,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
@@ -263,9 +263,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
@@ -291,9 +291,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
@@ -312,13 +312,13 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/active-lts
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
@@ -362,7 +362,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean || matrix.range }}
@@ -382,9 +382,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
@@ -408,7 +408,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:appsec:coverage
+      - run: npm run test:integration:appsec:coverage
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-integration-${{ matrix.version }}
@@ -427,9 +427,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
@@ -448,9 +448,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
@@ -470,9 +470,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
@@ -510,9 +510,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
@@ -531,9 +531,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:appsec:plugins:ci
+      - run: npm run test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-stripe

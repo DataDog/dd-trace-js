@@ -5,7 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, getOperation, getSignature } = require('./utils')
+const { extractErrorIntoSpanEvent, getOperation, getSignature, isApolloHealthCheck } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -26,11 +26,23 @@ const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
-const patchedTypes = new WeakSet()
+
+// Visited types per caller-owned schema. The walk reaches union members and
+// interface implementations through the schema (`getTypes`/`getPossibleTypes`),
+// so it differs per schema: a global guard would stop the second schema at any
+// type the first already walked and leave its own implementations unwrapped.
+// `patchedResolvers` keeps wrapping idempotent, so re-walking a shared type is
+// safe and this set only terminates cycles.
+const walkedTypes = new WeakMap()
 
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
 let depthDisabled = false
+
+// Initial key for the per-operation variables-filter cache. A unique sentinel
+// so the first #filterVariables call never falsely matches, even when the
+// operation's variableValues is undefined.
+const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
 
 class AbortError extends Error {
   constructor (message) {
@@ -111,6 +123,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation?.name?.value
     const source = this.config.source && docSource
 
+    // Apollo Server may execute a cached document without parsing it first.
+    // Match the full gateway operation here so caller-owned AST transformations
+    // cannot suppress execute/resolver AppSec and IAST channels.
+    if (name === '__ApolloServiceHealthCheck__' &&
+        document.definitions.length === 1 &&
+        isApolloHealthCheck(operation)) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     ctx.collapse = this.config.collapse
 
     const signature = getSignature(document, name, type, this.config.signature)
@@ -165,9 +187,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const schema = args.schema
     if (schema) {
-      wrapFields(schema._queryType)
-      wrapFields(schema._mutationType)
-      wrapFields(schema._subscriptionType)
+      wrapFields(schema._queryType, schema)
+      wrapFields(schema._mutationType, schema)
+      wrapFields(schema._subscriptionType, schema)
     }
 
     const rootCtx = {
@@ -175,10 +197,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
       config: this.config,
       fields: new Map(),
       pathCache: new Map(),
-      collapsedPathCache: this.config.collapse ? { byPath: new Map(), byParent: new Map() } : undefined,
       abortController,
       executeSpan: span,
       plugin: this,
+      // graphql.resolve variable tags: memoize the filtered result for the
+      // last-seen variableValues object (see #filterVariables).
+      filteredVariablesKey: NO_VARIABLES_CACHED,
+      filteredVariables: undefined,
     }
     ctx.ddRootCtx = rootCtx
     if (isWeakMapKey(contextValue)) {
@@ -202,9 +227,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (!span) return
 
     // Synchronous execute() throw (e.g. execute(null, doc)) — error handler
-    // already tagged the span, just finish it.
+    // already tagged the span.
     if (ctx.error) {
-      this.#drain(ctx, span)
+      if (ctx.ddAborted) {
+        span.finish()
+      } else {
+        this.#finishSpan(ctx, span)
+      }
       return ctx.parentStore
     }
 
@@ -213,10 +242,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (typeof result?.then === 'function') {
       result.then(
         (res) => this.#finishSpan(ctx, span, res),
-        (err) => {
-          span.setTag('error', err)
-          this.#drain(ctx, span)
-        }
+        (err) => this.#finishSpan(ctx, span, undefined, err)
       )
     } else {
       this.#finishSpan(ctx, span, result)
@@ -235,8 +261,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
   }
 
-  #finishSpan (ctx, span, res) {
-    this.config.hooks.execute(span, ctx.ddArgs, res)
+  /**
+   * @param {object} ctx
+   * @param {import('../../dd-trace/src/opentracing/span')} span
+   * @param {import('graphql').ExecutionResult} [res]
+   * @param {unknown} [error]
+   */
+  #finishSpan (ctx, span, res, error) {
+    if (error !== undefined) {
+      span.setTag('error', error)
+    }
 
     if (res?.errors?.length) {
       span.setTag('error', res.errors[0])
@@ -245,17 +279,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    this.#drain(ctx, span)
-  }
-
-  #drain (ctx, span) {
-    span.finish()
     if (ctx.ddContextValue) {
       contexts.delete(ctx.ddContextValue)
     }
     if (ctx.ddInstrumentedArgs) {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
+
+    this.config.hooks.execute(span, ctx.ddArgs, res)
+
+    span.finish()
   }
 
   // Public — called from wrapResolve (free function, crosses class boundary).
@@ -291,7 +324,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     field.span = span
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(variableValues)
+      const variables = this.#filterVariables(rootCtx, variableValues)
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
           const name = arg.value.name.value
@@ -301,6 +334,27 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     return span
+  }
+
+  // Memoize the user variables filter against the last-seen variableValues
+  // object. graphql hands every resolver in one execute the same coerced
+  // variableValues object, so all arg-bearing fields hit the identity fast
+  // path and the filter runs once per operation. A nested execute() sharing
+  // the same object contextValue reuses the outer rootCtx but carries its own
+  // variableValues; comparing by identity recomputes for it (and any later
+  // fields on that inner object reuse the slot), so each field's tags stay
+  // correct. A single slot beats a WeakMap here: no per-operation allocation,
+  // and the common single-object case is a bare `===` (see the microbenchmark
+  // numbers in the commit body).
+  #filterVariables (rootCtx, variableValues) {
+    if (rootCtx.filteredVariablesKey === variableValues) {
+      return rootCtx.filteredVariables
+    }
+
+    const filtered = this.config.variables(variableValues)
+    rootCtx.filteredVariablesKey = variableValues
+    rootCtx.filteredVariables = filtered
+    return filtered
   }
 
   // Public — called from wrapResolve. endTime reflects when the resolver
@@ -376,7 +430,7 @@ function wrapResolve (resolve) {
       return resolve.apply(this, arguments)
     }
 
-    const fieldKey = config.collapse ? buildCachedCollapsedPath(infoPath, rootCtx.collapsedPathCache) : infoPath
+    const fieldKey = config.collapse ? pathString : infoPath
     let field = rootCtx.fields.get(fieldKey)
     const isFirst = !field
 
@@ -389,7 +443,6 @@ function wrapResolve (resolve) {
         variableValues: info.variableValues,
         args,
         infoPath,
-        fieldKey,
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
@@ -432,15 +485,44 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function wrapFields (type) {
-  if (!type?._fields || patchedTypes.has(type)) return
+function wrapFields (type, schema) {
+  if (!type || !markWalked(schema, type)) return
 
-  patchedTypes.add(type)
+  const tag = type[Symbol.toStringTag]
 
-  for (const field of Object.values(type._fields)) {
-    wrapFieldResolve(field)
-    wrapFieldType(field)
+  // Union types (e.g. Apollo Federation's `_Entity`) hold their members on
+  // `_types`, not `_fields`. Their member object types are reachable only here,
+  // so descend into each to wrap the entity resolvers a `_entities` query runs.
+  if (tag === 'GraphQLUnionType') {
+    for (const member of type.getTypes()) wrapFields(member, schema)
+    return
   }
+
+  if (type._fields) {
+    for (const field of Object.values(type._fields)) {
+      wrapFieldResolve(field)
+      wrapFieldType(field, schema)
+    }
+  }
+
+  // Interface implementations carry their own resolvers and are reachable only
+  // through `getPossibleTypes`; an interface return type alone never wraps them.
+  if (schema && tag === 'GraphQLInterfaceType') {
+    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
+  }
+}
+
+// Marks the guard on entry so recursive types (a field looping back to its own
+// type, an interface an implementation returns) terminate the walk.
+function markWalked (schema, type) {
+  let walked = walkedTypes.get(schema)
+  if (walked === undefined) {
+    walked = new WeakSet()
+    walkedTypes.set(schema, walked)
+  }
+  if (walked.has(type)) return false
+  walked.add(type)
+  return true
 }
 
 function wrapFieldResolve (field) {
@@ -448,13 +530,13 @@ function wrapFieldResolve (field) {
   field.resolve = wrapResolve(field.resolve)
 }
 
-function wrapFieldType (field) {
+function wrapFieldType (field, schema) {
   if (!field?.type) return
 
   let unwrapped = field.type
   while (unwrapped.ofType) unwrapped = unwrapped.ofType
 
-  wrapFields(unwrapped)
+  wrapFields(unwrapped, schema)
 }
 
 // Runs the resolver inside `store`, including any code after an internal
@@ -516,33 +598,6 @@ function buildCachedPathString (path, cache, collapse) {
   return pathString
 }
 
-function buildCachedCollapsedPath (path, cache) {
-  if (!path) return
-
-  const cached = cache.byPath.get(path)
-  if (cached !== undefined) return cached
-
-  const segment = typeof path.key === 'string' ? path.key : '*'
-  const prev = path.prev === undefined
-    ? undefined
-    : buildCachedCollapsedPath(path.prev, cache)
-
-  let siblings = cache.byParent.get(prev)
-  if (siblings === undefined) {
-    siblings = new Map()
-    cache.byParent.set(prev, siblings)
-  }
-
-  let collapsedPath = siblings.get(segment)
-  if (collapsedPath === undefined) {
-    collapsedPath = { key: segment, prev }
-    siblings.set(segment, collapsedPath)
-  }
-
-  cache.byPath.set(path, collapsedPath)
-  return collapsedPath
-}
-
 // Depth filtering directly on the linked-list node — no array allocation needed.
 // config.depth < 0 means no limit. Only selection-set segments (string keys)
 // count toward depth; list indices are execution artifacts and are transparent.
@@ -564,8 +619,9 @@ function shouldInstrumentNode (config, path) {
 }
 
 function getParentField (rootCtx, field) {
-  for (let curr = field.fieldKey?.prev; curr; curr = curr.prev) {
-    const innerField = rootCtx.fields.get(curr)
+  for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
+    const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
+    const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) return innerField
   }
 

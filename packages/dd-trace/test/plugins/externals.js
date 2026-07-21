@@ -23,19 +23,19 @@ module.exports = {
     },
     {
       name: '@ai-sdk/openai',
-      versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.3.23', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: '@ai-sdk/amazon-bedrock',
-      versions: ['^3.0.0', '>=4.0.0'],
+      versions: ['^3.0.0', '^4.0.0', '>=5.0.0'],
     },
     {
       name: '@ai-sdk/anthropic',
-      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.0.0', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: '@ai-sdk/google',
-      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+      versions: ['^1.0.0', '^2.0.0', '^3.0.0', '>=4.0.0'],
     },
     {
       name: 'zod',
@@ -163,7 +163,12 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '6', '>=7'],
+      versions: ['>=3.3 <5', '5', '6'],
+    },
+    {
+      name: 'mongodb',
+      versions: ['>=7'],
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -195,7 +200,12 @@ module.exports = {
     },
     {
       name: 'mongodb',
-      versions: ['5', '>=6'],
+      versions: ['5', '6'],
+    },
+    {
+      name: 'mongodb',
+      versions: ['>=7'],
+      node: '>=20.19.0',
     },
   ],
   mysql2: [
@@ -219,7 +229,13 @@ module.exports = {
     },
     {
       name: '@fastify/cookie',
+      versions: ['>=6 <11.1.0'],
+      node: '<22',
+    },
+    {
+      name: '@fastify/cookie',
       versions: ['>=6'],
+      node: '>=22',
     },
     {
       name: '@fastify/multipart',

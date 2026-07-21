@@ -7,6 +7,7 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   SESSION_ID,
+  SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
   INPUT_VALUE,
@@ -35,6 +36,7 @@ const {
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
+  PROPAGATED_SESSION_ID_KEY,
   DEFAULT_PROMPT_NAME,
   INTERNAL_CONTEXT_VARIABLE_KEYS,
   INTERNAL_QUERY_VARIABLE_KEYS,
@@ -139,7 +141,11 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
+    const traceTags = span.context()._trace.tags
+    sessionId = sessionId ||
+      registry.get(parent)?.[SESSION_ID] ||
+      traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||
+      traceTags[PROPAGATED_SESSION_ID_KEY]
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
@@ -612,6 +618,65 @@ class LLMObsTagger {
     return filteredToolResults
   }
 
+  // Validates audio segments on a message and emits the snake_case wire shape
+  // `{ mime_type, content | attachment_key }`. Mirrors dd-trace-py's
+  // `_extract_audio_part`: a part requires `mimeType` and exactly one of
+  // `content` (inline base64) or `attachmentKey` (backend-offloaded).
+  #filterAudioParts (audioParts) {
+    if (!Array.isArray(audioParts)) {
+      audioParts = [audioParts]
+    }
+
+    const filteredAudioParts = []
+    for (const audioPart of audioParts) {
+      if (audioPart == null || typeof audioPart !== 'object') {
+        this.#handleFailure('Audio part must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { mimeType, content, attachmentKey } = audioPart
+
+      if (typeof mimeType !== 'string' || !mimeType) {
+        this.#handleFailure('Audio part mimeType must be a non-empty string.', 'invalid_io_messages')
+        continue
+      }
+
+      if (content == null && attachmentKey == null) {
+        this.#handleFailure("Audio part must have either 'content' or 'attachmentKey'.", 'invalid_io_messages')
+        continue
+      }
+
+      if (content != null && attachmentKey != null) {
+        this.#handleFailure(
+          "Audio part must have only one of 'content' or 'attachmentKey', not both.", 'invalid_io_messages'
+        )
+        continue
+      }
+
+      const audioPartObj = { mime_type: mimeType }
+
+      // Exactly one of content / attachmentKey is set here (guarded above). Validate its type
+      // explicitly so the failure carries the `invalid_io_messages` tag for telemetry, instead
+      // of routing through `#tagConditionalString` which omits it.
+      if (content == null) {
+        if (typeof attachmentKey !== 'string') {
+          this.#handleFailure('Audio part attachmentKey must be a string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.attachment_key = attachmentKey
+      } else {
+        if (typeof content !== 'string') {
+          this.#handleFailure('Audio part content must be a base64-encoded string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.content = content
+      }
+
+      filteredAudioParts.push(audioPartObj)
+    }
+    return filteredAudioParts
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -638,6 +703,7 @@ class LLMObsTagger {
         toolCalls,
         toolResults,
         toolId,
+        audioParts,
       } = message
       const messageObj = {}
 
@@ -668,6 +734,14 @@ class LLMObsTagger {
 
         if (filteredToolResults.length) {
           messageObj.tool_results = filteredToolResults
+        }
+      }
+
+      if (audioParts != null) {
+        const filteredAudioParts = this.#filterAudioParts(audioParts)
+
+        if (filteredAudioParts.length) {
+          messageObj.audio_parts = filteredAudioParts
         }
       }
 
@@ -752,6 +826,18 @@ class LLMObsTagger {
 
     const tagsCarrier = registry.get(span)
     tagsCarrier[key] = value
+
+    // The first session set in a trace becomes the trace-level default, stored on the trace-shared
+    // tags so later spans (incl. those under a session-less parent) inherit it in-process.
+    // Established here, the single choke point for session writes, so sessions post-populated by
+    // integrations after span start also seed it. First-writer wins, so an explicit session still
+    // overrides locally. Cross-service injection is handled centrally in `handleLLMObsInjection`.
+    if (key === SESSION_ID && value) {
+      const traceTags = span.context()._trace.tags
+      if (traceTags[SESSION_ID_TRACE_DEFAULT_KEY] === undefined) {
+        traceTags[SESSION_ID_TRACE_DEFAULT_KEY] = value
+      }
+    }
   }
 }
 
