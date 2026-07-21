@@ -25,6 +25,7 @@ esbuild.build({
     'better-sqlite3',
     'sqlite3',
     'mysql',
+    'mariadb',
     'oracledb',
     'pg-query-stream',
     'tedious',
