@@ -6,6 +6,7 @@ const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+const { getToolCallResultContent } = require('../../../../src/llmobs/plugins/ai/util')
 
 const { NODE_MAJOR } = require('../../../../../../version')
 
@@ -18,6 +19,14 @@ const {
   MOCK_NUMBER,
   MOCK_OBJECT,
 } = require('../../util')
+const {
+  createToolResultModelV1,
+  createToolResultModelV2,
+  createToolResultModelV3,
+} = require('./tool-result-model')
+
+const UNPARSABLE_TOOL_RESULT = '[Unparsable Tool Result]'
+const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2 <7.0.0' : '>=4.0.0 <7.0.0'
@@ -78,6 +87,107 @@ const MOCK_TELEMETRY_METADATA = {
   organizationId: 'orgAbc123',
   conversationId: 'convAbc123',
 }
+
+const TOOL_RESULT_SCENARIOS = [
+  {
+    name: 'multipart content',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'content',
+      value: [
+        { type: 'text', text: 'before' },
+        { type: 'media', mediaType: 'image/png', data: 'private-image-data' },
+        { type: 'media', mediaType: 'application/pdf', data: 'private-file-data' },
+        { type: 'file-data', mediaType: 'application/pdf', data: 'private-file-data' },
+        { type: 'file-id', fileId: 'private-file-id' },
+        { type: 'image-data', mediaType: 'image/png', data: 'private-image-data' },
+        { type: 'image-file-id', fileId: 'private-image-id' },
+        { type: 'custom', providerOptions: { secret: 'provider-data' } },
+        { type: 'text', text: 'after' },
+      ],
+    }),
+    expectedContent: 'before[Image][File][File][File][Image][Image][Custom Content]after',
+  },
+  {
+    name: 'text',
+    execute: () => 'result',
+    expectedContent: 'result',
+  },
+  {
+    name: 'JSON',
+    execute: () => ({ answer: 42 }),
+    expectedContent: '{"answer":42}',
+  },
+  {
+    name: 'error text',
+    execute: () => {
+      throw new Error('tool failure')
+    },
+    expectedContent: 'tool failure',
+  },
+  {
+    name: 'error JSON',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'error-json',
+      value: { message: 'tool failure' },
+    }),
+    expectedContent: '{"message":"tool failure"}',
+  },
+  {
+    name: 'empty multipart content',
+    execute: () => 'result',
+    createModelOutput: () => ({ type: 'content', value: [] }),
+    expectedContent: '',
+  },
+  {
+    name: 'denied execution',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'execution-denied',
+      reason: 'Approval rejected',
+    }),
+    expectedContent: 'Approval rejected',
+  },
+  {
+    name: 'denied execution without a reason',
+    execute: () => 'result',
+    createModelOutput: () => ({ type: 'execution-denied' }),
+    expectedContent: '[Tool Execution Denied]',
+  },
+  {
+    name: 'malformed multipart content',
+    execute: () => 'result',
+    createModelOutput: () => ({
+      type: 'content',
+      value: [{ type: 'unknown' }],
+    }),
+    expectedContent: UNPARSABLE_TOOL_RESULT,
+  },
+]
+
+const LEGACY_TOOL_RESULT_SCENARIOS = [
+  {
+    name: 'empty legacy result',
+    execute: () => '',
+    expectedContent: '',
+  },
+  {
+    name: 'zero legacy result',
+    execute: () => 0,
+    expectedContent: '0',
+  },
+  {
+    name: 'false legacy result',
+    execute: () => false,
+    expectedContent: 'false',
+  },
+  {
+    name: 'null legacy result',
+    execute: () => null,
+    expectedContent: 'null',
+  },
+]
 
 describe('Plugin', () => {
   useEnv({
@@ -1073,6 +1183,176 @@ describe('Plugin', () => {
           tags: { ml_app: 'test', integration: 'ai' },
         })
       })
+    })
+  })
+
+  describe('tool result formatting', () => {
+    withVersions('ai', 'ai', range, (version, _, realVersion) => {
+      let ai
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+      })
+
+      /**
+       * @param {{
+       *   execute: () => unknown,
+       *   createModelOutput?: () => unknown,
+       *   expectedContent: string
+       * }} scenario
+       */
+      async function assertToolResult (scenario) {
+        const isLegacy = semifies(realVersion, '<5.0.0')
+        const schema = ai.jsonSchema({
+          type: 'object',
+          properties: {},
+        })
+        let model
+        let tool
+        if (isLegacy) {
+          model = createToolResultModelV1()
+          tool = ai.tool({
+            id: 'testTool',
+            parameters: schema,
+            execute: scenario.execute,
+          })
+        } else {
+          model = semifies(realVersion, '>=6.0.0')
+            ? createToolResultModelV3()
+            : createToolResultModelV2()
+          tool = ai.tool({
+            inputSchema: schema,
+            execute: scenario.execute,
+            toModelOutput: scenario.createModelOutput,
+          })
+        }
+
+        const options = {
+          model,
+          prompt: 'Run the test tool',
+          tools: isLegacy ? [tool] : { testTool: tool },
+        }
+        if (isLegacy) {
+          options.maxSteps = 2
+        } else {
+          options.stopWhen = ai.stepCountIs(2)
+        }
+
+        await ai.generateText(options)
+
+        const { apmSpans, llmobsSpans } = await getEvents(4)
+        let finalModelSpan
+        let finalModelApmSpan
+        let workflowSpan
+        for (const span of llmobsSpans) {
+          if (span.name === 'doGenerate') {
+            finalModelSpan = span
+          } else if (span.name === 'generateText') {
+            workflowSpan = span
+          }
+        }
+        for (const span of apmSpans) {
+          if (span.name === 'ai.generateText.doGenerate') finalModelApmSpan = span
+        }
+
+        assertLlmObsSpanEvent(finalModelSpan, {
+          span: finalModelApmSpan,
+          parentId: workflowSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'test',
+          modelProvider: 'test',
+          name: 'doGenerate',
+          inputMessages: [
+            { content: 'Run the test tool', role: 'user' },
+            {
+              content: '',
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: 'call-1',
+                name: 'testTool',
+                arguments: {},
+                type: 'function',
+              }],
+            },
+            {
+              content: scenario.expectedContent,
+              role: 'tool',
+              tool_id: 'call-1',
+            },
+          ],
+          outputMessages: [{ content: 'done', role: 'assistant' }],
+          metrics: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      }
+
+      const scenarios = semifies(realVersion, '<5.0.0')
+        ? LEGACY_TOOL_RESULT_SCENARIOS
+        : TOOL_RESULT_SCENARIOS
+      for (const scenario of scenarios) {
+        it(`formats ${scenario.name} produced by the AI SDK`, async () => {
+          await assertToolResult(scenario)
+        })
+      }
+    })
+
+    it('falls back for values rejected before model invocation', () => {
+      const circular = {}
+      circular.self = circular
+
+      const malformedOutputs = [
+        null,
+        'text',
+        { type: 'text' },
+        { type: 'text', value: 42 },
+        { type: 'json', value: undefined },
+        { type: 'json', value: Symbol('result') },
+        { type: 'json', value: 1n },
+        { type: 'json', value: circular },
+        { type: 'content', value: {} },
+        { type: 'content', value: [null] },
+        { type: 'content', value: [{ type: 'text' }] },
+        { type: 'content', value: [{ type: 'media' }] },
+        { type: 'execution-denied', reason: {} },
+        { type: 'unknown', value: 'result' },
+      ]
+
+      for (const output of malformedOutputs) {
+        assert.strictEqual(
+          getToolCallResultContent({ output }),
+          UNPARSABLE_TOOL_RESULT
+        )
+      }
+
+      assert.strictEqual(getToolCallResultContent(), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent(null), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent('result'), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent({}), UNSUPPORTED_TOOL_RESULT)
+    })
+
+    it('does not throw for external objects rejected before model invocation', () => {
+      const throwingContent = new Proxy({}, {
+        get () {
+          throw new Error('unexpected content access')
+        },
+      })
+      const throwingOutput = new Proxy({}, {
+        get () {
+          throw new Error('unexpected output access')
+        },
+      })
+      const throwingParts = new Proxy([], {
+        get () {
+          throw new Error('unexpected content part access')
+        },
+      })
+
+      assert.strictEqual(getToolCallResultContent(throwingContent), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(getToolCallResultContent({ output: throwingOutput }), UNPARSABLE_TOOL_RESULT)
+      assert.strictEqual(
+        getToolCallResultContent({ output: { type: 'content', value: throwingParts } }),
+        UNPARSABLE_TOOL_RESULT
+      )
     })
   })
 
