@@ -69,6 +69,13 @@ class LLMObs extends NoopLLMObs {
     return this.#experiments
   }
 
+  /**
+   * Drops the lazily-created experiments facade after LLMObs availability changes.
+   */
+  #resetExperiments () {
+    this.#experiments = undefined
+  }
+
   createDataset (name, descriptionOrOptions) {
     return this.experiments.createDataset(name, descriptionOrOptions)
   }
@@ -107,6 +114,7 @@ class LLMObs extends NoopLLMObs {
     this._config.llmobs.DD_LLMOBS_ENABLED = true
     this._config.llmobs.mlApp = options.mlApp
     this._config.llmobs.agentlessEnabled = options.agentlessEnabled
+    this.#resetExperiments()
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -126,6 +134,7 @@ class LLMObs extends NoopLLMObs {
     logger.debug('Disabling LLMObs')
 
     this._config.llmobs.DD_LLMOBS_ENABLED = false
+    this.#resetExperiments()
 
     // disable writers and channel subscribers
     this._llmobsModule.disable()
