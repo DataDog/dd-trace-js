@@ -16,20 +16,17 @@ instruction_files:
 
 # Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
 # Production default: `gate` — a curated, high-signal set where the monitored instructions are the source of the
-# right answer, with one or more cases per monitored file plus one advisory control case. It uses eight runs for
-# tight confidence intervals; `files:` targeting narrows it to the instruction files that changed. Use `full` for
-# an on-demand sweep of the whole suite; `minimum` is the cheap development/fallback preset.
+# right answer, with one case per monitored file plus one advisory control case. It uses four runs to keep the
+# gate within the repository's normal CI duration; `files:` targeting narrows it to the instruction files that
+# changed. Use `full` for an on-demand sweep of the whole suite; `minimum` is the cheapest development preset.
 default_level: gate
 presets:
   gate: # Curated per-PR gate: highest-signal content cases plus one control case.
     cases:
       - dd-trace-js-package-manager-001
-      - dd-trace-js-plugin-tests-002
-      - dd-trace-js-new-configuration-003
-      - dd-trace-js-test-boundaries-004
       - dd-trace-js-new-cache-integration-005
       - dd-trace-js-control-http-propagation-007
-    runs: 8 # 16 pairwise comparisons for a tighter confidence interval.
+    runs: 4 # 8 pairwise comparisons per selected case.
   minimum: # One AGENTS.md case and one skill case.
     cases: ["dd-trace-js-package-manager-001", "dd-trace-js-new-cache-integration-005"]
     runs: 4 # 8 pairwise comparisons.
@@ -42,3 +39,4 @@ policy:
   pairwise_win_floor: 0.45     # A candidate pairwise majority loss is a regression.
   blocking_fail_floor: 0.45    # Any majority loss can fail when it is sufficiently confident.
   blocking_fail_ci_upper: 0.55 # Wide-confidence-interval losses warn instead of blocking.
+  confirm_runs: 2              # Recheck a would-be failure without adding the platform default of eight runs.

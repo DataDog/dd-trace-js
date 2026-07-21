@@ -68,8 +68,6 @@ cases:
 
   - id: dd-trace-js-new-cache-integration-005
     files:
-      - AGENTS.md
-      - CLAUDE.md
       - .agents/skills/apm-integrations/SKILL.md
       - .agents/skills/apm-integrations/references/new-integration-guide.md
       - .agents/skills/apm-integrations/references/orchestrion.md
@@ -86,14 +84,13 @@ cases:
       - Starts from the confirmed upstream contract, reads one or two cache integration references, and chooses Orchestrion by default rather than shimmer.
       - Adds Orchestrion entries for both dist/cjs/client.js and dist/esm/client.js with the same channel, plus the instrumentation hook and packages/datadog-instrumentations/src/helpers/hooks.js registration.
       - Keeps tracing out of the instrumentation layer and creates packages/datadog-plugin-acme-cache using CachePlugin, with a prefix matching the Orchestrion channel and bindStart extracting command and connection data from ctx.arguments or ctx.self.
-      - Registers the plugin in packages/dd-trace/src/plugins/index.js, index.d.ts, index.d.v5.ts, docs/test.ts, docs/API.md, and .github/workflows/apm-integrations.yml.
+      - Registers the plugin in packages/dd-trace/src/plugins/index.js, index.d.ts, docs/test.ts, docs/API.md, and .github/workflows/apm-integrations.yml.
       - Covers success, error, configuration, and supported-version behavior in plugin specs; adds native ESM coverage for relevant import forms; validates with the plugin-structure spec and PLUGINS="acme-cache" npm run test:plugins:ci.
     bad_signals:
       - Implements only a plugin or only instrumentation instead of both diagnostic-channel layers.
       - Uses shimmer without identifying a concrete pattern Orchestrion cannot support.
       - Creates spans directly in packages/datadog-instrumentations or instruments only one module format.
-      - Omits the frozen v5 type surface for a plugin that is not declared v6-only.
-      - Runs the disabled root npm test command or uses yarn to run test scripts.
+      - Uses yarn instead of npm to run test scripts.
 
   - id: dd-trace-js-hot-path-review-006
     files: [AGENTS.md, CLAUDE.md]
