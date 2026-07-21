@@ -8,6 +8,9 @@ let compileToRegexp
 /** @type {((pattern: string) => { tokens: object[] } | undefined) | undefined} */
 let parseTokens
 
+/** @type {((route: string) => ((url: string) => object | undefined) | undefined) | undefined} */
+let makeMatcher
+
 addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
   // 0.1.x and 6.x: `module.exports = (path, ...) => RegExp`.
   // 7.x: `module.exports = { pathToRegexp(path, ...) => RegExp }`.
@@ -54,6 +57,39 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
+  // Capture path-to-regexp 8.x's `match()` (Express 5). AppSec route normalization runs the
+  // framework's own matcher to resolve which optional params a request matched, instead of
+  // re-implementing matching. Probe it and adopt only the v8 shape (`match(path)(url)` → an object
+  // with a `params` map), so an older major loaded later can't clobber the working v8 adapter.
+  if (typeof moduleExports?.match === 'function') {
+    const match = moduleExports.match
+    let probe
+    try {
+      probe = match('/')('/')
+    } catch {
+      // not a usable matcher
+    }
+    if (probe?.params) {
+      makeMatcher = route => {
+        let matcher
+        try {
+          matcher = match(route)
+        } catch {
+          return
+        }
+        return url => {
+          let result
+          try {
+            result = matcher(url)
+          } catch {
+            return
+          }
+          return result ? result.params : undefined
+        }
+      }
+    }
+  }
+
   return moduleExports
 })
 
@@ -78,4 +114,14 @@ function getParse () {
   return parseTokens
 }
 
-module.exports = { getCompileToRegexp, getParse }
+/**
+ * Returns the host's path-to-regexp 8.x `match` adapter: a factory `route => (url => params)` that
+ * compiles a route once and returns a matcher yielding the captured params (or undefined on no
+ * match / unusable route). `undefined` when the host has not loaded an 8.x path-to-regexp.
+ * @returns {((route: string) => ((url: string) => object | undefined) | undefined) | undefined}
+ */
+function getMatch () {
+  return makeMatcher
+}
+
+module.exports = { getCompileToRegexp, getParse, getMatch }

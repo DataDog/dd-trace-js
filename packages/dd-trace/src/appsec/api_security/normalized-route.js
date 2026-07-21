@@ -2,49 +2,33 @@
 
 const { HTTP_ROUTE } = require('../../../../../ext/tags')
 const web = require('../../plugins/util/web')
-const { getParse } = require('../../../../datadog-instrumentations/src/path-to-regexp')
+const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
 
 /**
  * Normalize an HTTP route to the RFC-1103 _dd.appsec.normalized_route format.
  *
- * Rules applied:
- *   1. Starts with /; trailing slash only if the route was declared with one.
- *   2. No empty elements (consecutive slashes are collapsed).
- *   3. Static segments: only [A-Za-z0-9.-~_]; other chars are percent-encoded (UTF-8).
- *   4. Dynamic params: {name}. Param names may contain any char except /?#+{} (those are
- *      URL-encoded; + is the reserved combining marker). Shadowed duplicate names (an earlier
- *      occurrence of a name Express keeps only the last of) get a paramN placeholder,
- *      declaration-ordered, skipping any N that collides with a surviving name. Names end up unique.
- *   5. One URL segment = one atomic element. Multiple params in one segment combine as {a+b}.
- *      A catch-all is a single terminal element.
- *   6. Optional path elements (Express 5 `{/:id}`, optional static groups, optional catch-alls)
- *      are resolved per-request against the matched URL path, which also handles mergeParams=false
- *      sub-routers where parent params are absent from req.params.
+ * Rules: (1) starts with /, trailing slash only if declared; (2) no empty elements; (3) static
+ * segments keep [A-Za-z0-9.-~_], other chars percent-encoded (UTF-8); (4) dynamic params render as
+ * {name} (chars /?#+{} encoded, + reserved), shadowed duplicate names become paramN; (5) one URL
+ * segment = one element, multiple params combine as {a+b}, a catch-all is a single terminal element;
+ * (6) optional param elements are resolved per request against the matched URL.
  *
- * Design:
- *   The route string is parsed ONCE by path-to-regexp's own `parse()` (Express 5 / path-to-regexp
- *   v8), whose token tree is adapted into segment templates (tokensToSegments + compileRoute) and
- *   cached in routeCache keyed on the raw route string. Reusing the framework parser avoids
- *   re-implementing (and drifting from) path-to-regexp's grammar. Express 4 ships path-to-regexp
- *   0.x, which has no `parse()`; there we omit the tag (return null).
- *
- *   For routes with no optional elements the normalized string is precomputed; for optional
- *   routes the per-request presence is resolved (from the URL, or req.params as a fallback) and
- *   the rendered output is cached per presence bitmask.
+ * Design: Express 5 / path-to-regexp v8 only. The route is parsed once by path-to-regexp's `parse()`
+ * (token tree → segment templates, cached per route string). Per-request presence of optional
+ * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. Static-
+ * only optional groups (no param to capture) are omitted (return null). Express 4 ships 0.x (no
+ * `parse()`) → no tag.
  */
 
-// Cap on optional groups per route. Keeps the presence bitmask within 32 bits, bounds the
-// backtracking matcher, and caps the per-route variant cache at 2^N entries (4096 at N=12).
-// Routes beyond this are omitted (return null) rather than mis-normalized.
+// Cap on optional groups per route: keeps the presence bitmask within 32 bits and the per-route
+// variant cache at 2^N. Routes beyond this are omitted rather than mis-normalized.
 const MAX_OPTIONAL_GROUPS = 12
 
-// Upper bound on matcher steps per presence resolution; protects the request hot path from
-// pathological backtracking. On exceedance the URL match aborts and we fall back to req.params.
-const MAX_MATCH_STEPS = 10_000
-
 // Per-route compiled-entry cache, keyed on the raw route string. Bounded by the app's declared
-// route patterns (never attacker-controlled URLs), so it retains for the process lifetime.
+// routes (never attacker URLs), so it retains for the process lifetime.
 const routeCache = new Map()
+
+const EMPTY_SET = new Set()
 
 /**
  * @typedef {{ type: 'slash', group: number }
@@ -52,35 +36,23 @@ const routeCache = new Map()
  *   | { type: 'param', name: string, group: number }
  *   | { type: 'wildcard', name: string, group: number }} RouteToken
  *
- * `group` is the id of the innermost enclosing optional `{...}` group (0 = top-level, always
- * present). A slash token also carries the group of its enclosing braces.
+ * `group` is the id of the innermost enclosing optional `{...}` group (0 = top-level, always present).
  *
- * `wildcardIndex` is the index of the segment's terminal wildcard token, or -1 (set at compile).
- * `matcher` (the per-segment URL regex + presence markers) is compiled lazily and cached here.
- * @typedef {{ group: number, tokens: RouteToken[], wildcardIndex: number,
- *   matcher?: { regex: RegExp, presence: { id: number, name: string }[] } }} RouteSegment
+ * @typedef {{ group: number, tokens: RouteToken[] }} RouteSegment
  *
- * @typedef {{ type: 'text', value: string }
- *   | { type: 'param', name: string }
- *   | { type: 'wildcard', name: string }
- *   | { type: 'group', tokens: PathToRegexpToken[] }} PathToRegexpToken
+ * @typedef {{ type: 'text', value: string } | { type: 'param', name: string }
+ *   | { type: 'wildcard', name: string } | { type: 'group', tokens: PathToRegexpToken[] }} PathToRegexpToken
  *
- * @typedef {{
- *   segments: RouteSegment[],
- *   groupParent: Map<number, number>,
- *   optionalGroups: number[],
- *   trailingSlash: boolean,
- *   precomputed: string | null,
- *   variants?: Map<number, string>
- * }} CompiledRoute
+ * @typedef {{ segments: RouteSegment[], groupParent: Map<number, number>, optionalGroups: number[],
+ *   trailingSlash: boolean, precomputed: string | null,
+ *   matcher: ((url: string) => object | undefined) | null,
+ *   variants?: Map<number, string> }} CompiledRoute
  */
 
 /**
- * Convert path-to-regexp's nested token tree into our flat segment model. Text tokens are split
- * on '/' into slash + static tokens; each `{...}` group token is assigned a fresh optional-group
- * id (parent tracked in groupParent), and its inner tokens inherit that id. Tokens are then split
- * into segments at slash boundaries. A trailing empty top-level segment denotes a declared
- * trailing slash.
+ * Convert path-to-regexp's nested token tree into a flat segment model. Text tokens split on '/'
+ * into slash + static tokens; each `{...}` group gets a fresh id (parent tracked in groupParent),
+ * its inner tokens inherit it. A trailing empty top-level segment denotes a declared trailing slash.
  * @param {PathToRegexpToken[]} ptTokens
  * @returns {{ segments: RouteSegment[], groupParent: Map<number, number>, trailingSlash: boolean }}
  */
@@ -127,12 +99,10 @@ function tokensToSegments (ptTokens) {
   if (cur) segments.push(cur)
 
   let trailingSlash = false
-  if (segments.length > 0) {
-    const last = segments[segments.length - 1]
-    if (last.tokens.length === 0 && last.group === 0) {
-      trailingSlash = true
-      segments.pop()
-    }
+  const last = segments[segments.length - 1]
+  if (last && last.tokens.length === 0 && last.group === 0) {
+    trailingSlash = true
+    segments.pop()
   }
 
   return { segments, groupParent, trailingSlash }
@@ -142,80 +112,46 @@ function tokensToSegments (ptTokens) {
  * Compile a raw route string into a CompiledRoute, or null when unsupported.
  * @param {string} route
  * @param {(pattern: string) => { tokens: PathToRegexpToken[] } | undefined} parse
+ * @param {(route: string) => ((url: string) => object | undefined) | undefined} makeMatcher
  * @returns {CompiledRoute | null}
  */
-function compileRoute (route, parse) {
-  // `parse` (the getParse adapter) returns undefined on a parser throw or an unexpected shape, so
-  // it never throws here.
+function compileRoute (route, parse, makeMatcher) {
   const parsed = parse(route)
   if (!Array.isArray(parsed?.tokens)) return null
 
   const { segments, groupParent, trailingSlash } = tokensToSegments(parsed.tokens)
 
-  // An optional (non-top-level) empty segment is a slash inside a group ('/users{/}',
-  // '/items{/:id/}'); we can't represent a per-request optional trailing slash, so omit.
+  // An optional (non-top-level) empty segment is a slash inside a group ('/users{/}'); the optional
+  // slash can't be represented, so omit.
   for (const seg of segments) {
     if (seg.tokens.length === 0 && seg.group !== 0) return null
   }
 
-  // Drop empty (collapsed `//`) segments.
   const cleaned = segments.filter(s => s.tokens.length > 0)
 
-  // Root route "/" (and any all-empty route) → single "/" element.
+  // Root "/" (and any all-empty route) → single "/" element.
   if (cleaned.length === 0) {
-    return { segments: [], groupParent: new Map(), optionalGroups: [], trailingSlash: false, precomputed: '/' }
-  }
-
-  // A catch-all must be terminal: any non-empty segment after the one containing a wildcard can't
-  // be represented (the catch-all consumes the rest). Omit rather than emit a misleading route.
-  for (let s = 0; s < cleaned.length - 1; s++) {
-    if (cleaned[s].tokens.some(t => t.type === 'wildcard')) return null
-  }
-
-  // Reject single-segment shapes the delimiter-agnostic per-segment matcher can't resolve like
-  // path-to-regexp does: a non-terminal wildcard in a segment ('/files/*path.:ext', '/*a-*b') and a
-  // param/wildcard inside an intra-segment optional group ('/:a{.:b}c', '/:a{.:b}-*rest'). Static
-  // intra-segment optional groups — any number ('/a{b}{c}') — are literal, so the marker matcher
-  // resolves them exactly.
-  for (const seg of cleaned) {
-    seg.wildcardIndex = -1
-    let prevDynamic = false
-    for (let k = 0; k < seg.tokens.length; k++) {
-      const t = seg.tokens[k]
-      const dynamic = t.type === 'param' || t.type === 'wildcard'
-      // Two adjacent dynamic tokens with no static between them ('/:a:b', '/:a*rest') — path-to-regexp
-      // rejects this at compile ("missing text before …"), so Express never registers it.
-      if (dynamic && prevDynamic) return null
-      prevDynamic = dynamic
-      if (t.type === 'wildcard') {
-        if (k !== seg.tokens.length - 1) return null
-        seg.wildcardIndex = k
-      }
-      if (dynamic && isStrictDescendant(t.group, seg.group, groupParent)) return null
+    return {
+      segments: [],
+      groupParent: new Map(),
+      optionalGroups: [],
+      trailingSlash: false,
+      precomputed: '/',
+      matcher: null,
     }
   }
 
-  // An optional group that spans more than one URL segment ('{/:a/:b}', '{b/:c}{/:d}') is atomic in
-  // path-to-regexp (all its segments present or all absent), but our matcher toggles them
-  // independently and a sibling optional can steal one; omit rather than mis-assign. A group
-  // "appears" in a segment as the segment's group or as any of its tokens' groups.
-  const groupFirstSegment = new Map()
+  // A catch-all must be the last token of the last segment (rule 5, terminal). Anything after it
+  // ('/files/*p.:ext', '/*a/*b', '/*a/edit') can't be one atomic element.
   for (let s = 0; s < cleaned.length; s++) {
-    const seg = cleaned[s]
-    const groupsHere = new Set()
-    if (seg.group !== 0) groupsHere.add(seg.group)
-    for (const t of seg.tokens) if (t.group !== 0) groupsHere.add(t.group)
-    for (const g of groupsHere) {
-      const first = groupFirstSegment.get(g)
-      if (first !== undefined && first !== s) return null
-      groupFirstSegment.set(g, s)
+    const toks = cleaned[s].tokens
+    for (let k = 0; k < toks.length; k++) {
+      if (toks[k].type === 'wildcard' && (s !== cleaned.length - 1 || k !== toks.length - 1)) return null
     }
   }
 
-  // Collapse "structural-only" optional groups — a `{...}` that wraps only nested group(s) and has
-  // no segment/token of its own (e.g. the outer braces in '/a{{/b}}'). Such a wrapper adds nesting
-  // but no content, and the matcher can never mark it present from the URL. Reparent each
-  // represented group to its nearest represented ancestor and drop the empty wrappers.
+  // Collapse structural-only groups ('/a{{/b}}'): reparent each represented group to its nearest
+  // represented ancestor.
   const represented = new Set()
   for (const seg of cleaned) {
     if (seg.group !== 0) represented.add(seg.group)
@@ -228,21 +164,32 @@ function compileRoute (route, parse) {
     effectiveParent.set(g, p === undefined ? 0 : p)
   }
 
-  const optionalGroups = [...represented].sort((a, b) => a - b)
-
-  // A wildcard preceded by tokens in its segment ('v*rest', 'p{q}*rest') can't be presence-resolved
-  // consistently with path-to-regexp once the route also has optional groups (the backtracking
-  // matcher would run); omit rather than mis-assign. Without optional groups the route is
-  // precomputed and the matcher never runs, so a prefixed wildcard alone is fine.
-  if (optionalGroups.length > 0) {
-    for (const seg of cleaned) {
-      if (seg.wildcardIndex > 0) return null
+  // Presence comes from path-to-regexp's captured params. A duplicate param name collapses to one
+  // key in match()'s output, so it can't tell which occurrence a request filled — only a uniquely
+  // named param/wildcard can prove its group present. Mark every group on such a token's ancestor
+  // chain detectable, then reject any optional group that isn't (static-only, or shadowed-name).
+  const nameCount = new Map()
+  for (const seg of cleaned) {
+    for (const t of seg.tokens) {
+      if (t.type !== 'static') nameCount.set(t.name, (nameCount.get(t.name) ?? 0) + 1)
     }
   }
+  const detectable = new Set()
+  for (const seg of cleaned) {
+    for (const t of seg.tokens) {
+      if (t.type === 'static' || nameCount.get(t.name) !== 1) continue
+      let g = t.group
+      while (g !== 0 && !detectable.has(g)) {
+        detectable.add(g)
+        g = groupParent.get(g)
+      }
+    }
+  }
+  for (const g of represented) {
+    if (!detectable.has(g)) return null
+  }
 
-  // Guard against pathological routes: too many optional groups makes the presence bitmask
-  // (1 << i) overflow 32 bits and the backtracking matcher blow up. Omit rather than risk a
-  // wrong (aliased) cached result or an event-loop stall.
+  const optionalGroups = [...represented].sort((a, b) => a - b)
   if (optionalGroups.length > MAX_OPTIONAL_GROUPS) return null
 
   const compiled = {
@@ -251,16 +198,21 @@ function compileRoute (route, parse) {
     optionalGroups,
     trailingSlash,
     precomputed: null,
+    matcher: null,
   }
 
-  // No optional groups → the normalized output is fixed; precompute it once.
+  // No optional groups → fixed output, computed once.
   if (optionalGroups.length === 0) {
     compiled.precomputed = renderRoute(compiled, EMPTY_SET)
+    return compiled
   }
+
+  // Otherwise resolve presence per request with path-to-regexp's own matcher (built once here).
+  const matcher = makeMatcher(route)
+  if (matcher === undefined) return null
+  compiled.matcher = matcher
   return compiled
 }
-
-const EMPTY_SET = new Set()
 
 /**
  * True when group `g` (and its whole ancestor chain) is present. Group 0 is always present.
@@ -278,25 +230,8 @@ function groupActive (g, groupParent, present) {
 }
 
 /**
- * True when group `g` is a strict descendant of `ancestor` (i.e. nested more deeply inside it).
- * @param {number} g
- * @param {number} ancestor
- * @param {Map<number, number>} groupParent
- * @returns {boolean}
- */
-function isStrictDescendant (g, ancestor, groupParent) {
-  let p = groupParent.get(g)
-  while (p !== undefined) {
-    if (p === ancestor) return true
-    if (p === 0) return false
-    p = groupParent.get(p)
-  }
-  return false
-}
-
-/**
- * URL-encode characters outside the RFC-1103 static-constant alphabet [A-Za-z0-9.-~_].
- * The 'u' flag iterates whole codepoints so surrogate pairs encode as correct multi-byte UTF-8.
+ * URL-encode chars outside the RFC-1103 static alphabet [A-Za-z0-9.-~_]. The 'u' flag iterates whole
+ * codepoints so surrogate pairs encode as correct multi-byte UTF-8.
  * @param {string} str
  * @returns {string}
  */
@@ -330,22 +265,17 @@ function encodeParamName (name) {
 function renderRoute (compiled, present) {
   const { segments, groupParent } = compiled
 
-  // Pass 1: collect the present dynamic tokens (param/wildcard) in declaration order. A dynamic
-  // token never sits in a deeper group than its segment (the compile guard rejects that), so an
-  // active segment group implies the token is active — only static tokens need the per-token check.
+  // Pass 1: present dynamic tokens (param/wildcard) in declaration order.
   const dyn = []
   for (const seg of segments) {
     if (!groupActive(seg.group, groupParent, present)) continue
     for (const t of seg.tokens) {
-      if (t.type !== 'static') dyn.push(t)
+      if (t.type !== 'static' && groupActive(t.group, groupParent, present)) dyn.push(t)
     }
   }
 
-  // Pass 2: resolve names. Uniqueness is computed on ENCODED names (the form that appears in the
-  // output), so two distinct raw names that encode identically don't collide. A token keeps its
-  // name iff it is the LAST occurrence of that encoded name (the value Express keeps in
-  // req.params); earlier duplicates become paramN placeholders, skipping any N equal to a
-  // surviving name. (Every dyn token has a name — v8 rejects unnamed params/wildcards.)
+  // Pass 2: resolve names on their ENCODED form. A token keeps its name iff it is the last present
+  // occurrence of that encoded name; earlier duplicates become paramN (skipping surviving names).
   const encodedNames = new Array(dyn.length)
   const lastIndexByName = new Map()
   for (let idx = 0; idx < dyn.length; idx++) {
@@ -354,9 +284,7 @@ function renderRoute (compiled, present) {
   }
   const used = new Set()
   for (let idx = 0; idx < dyn.length; idx++) {
-    if (lastIndexByName.get(encodedNames[idx]) === idx) {
-      used.add(encodedNames[idx])
-    }
+    if (lastIndexByName.get(encodedNames[idx]) === idx) used.add(encodedNames[idx])
   }
   const resolvedNames = new Array(dyn.length)
   let counter = 1
@@ -371,7 +299,7 @@ function renderRoute (compiled, present) {
     }
   }
 
-  // Pass 3: build each segment string (same present-token iteration order as pass 1).
+  // Pass 3: build each segment string (same present-token order as pass 1).
   const out = []
   let dynPtr = 0
   for (const seg of segments) {
@@ -384,18 +312,14 @@ function renderRoute (compiled, present) {
       if (!groupActive(t.group, groupParent, present)) continue
       if (t.type === 'static') {
         staticText += t.text
-      } else if (t.type === 'wildcard') {
-        isCatchAll = true
-        paramNames.push(resolvedNames[dynPtr++])
       } else {
+        if (t.type === 'wildcard') isCatchAll = true
         paramNames.push(resolvedNames[dynPtr++])
       }
     }
 
     if (isCatchAll) {
-      // Catch-all is terminal (rule 5). A static prefix is subsumed into the single element, but
-      // any preceding dynamic params in the same segment are combined with it via '+'.
-      out.push(`{${paramNames.join('+')}}`)
+      out.push(`{${paramNames.join('+')}}`) // terminal catch-all; static prefix subsumed (rule 5)
     } else if (paramNames.length === 0) {
       if (staticText !== '') out.push(encodeStaticSegment(staticText))
     } else if (paramNames.length === 1) {
@@ -410,179 +334,19 @@ function renderRoute (compiled, present) {
 }
 
 /**
- * Build (and cache) a regex that matches a single URL segment against a route segment, plus the
- * list of intra-segment optional group ids (each has a named marker capture in the regex).
- *
- * Tokens at the segment's base group are mandatory; tokens in a deeper (optional) group are
- * wrapped in an optional non-capturing group with a named marker capture (?<_ddgN>) so we can
- * detect whether that group matched by name (robust to capture-index shifts).
- *
- * @param {RouteSegment} seg
- * @param {Map<number, number>} groupParent
- * @returns {{ regex: RegExp, presence: { id: number, name: string }[] }}
- */
-function getSegmentMatcher (seg, groupParent) {
-  if (seg.matcher !== undefined) return seg.matcher
-
-  let pattern = ''
-  const presence = []
-  let openGroup = 0 // currently-open intra-optional group id (0 = none)
-
-  for (const t of seg.tokens) {
-    // A token is an intra-segment optional only when its group is nested strictly deeper than
-    // the segment's group; same-group or ancestor-group tokens are mandatory within the segment.
-    const intraOptional = isStrictDescendant(t.group, seg.group, groupParent)
-
-    // Close an open intra-optional group when we leave it.
-    if (openGroup !== 0 && t.group !== openGroup) {
-      pattern += ')?'
-      openGroup = 0
-    }
-    // Open an intra-optional group with a NAMED marker capture. A named group is read by name
-    // (m.groups), so it is immune to capture-index shifts.
-    if (intraOptional && openGroup === 0) {
-      const name = markerName(t.group)
-      pattern += `(?:(?<${name}>)` // empty marker: defined iff this group matched
-      presence.push({ id: t.group, name })
-      openGroup = t.group
-    }
-
-    // Match the literal route text — that is what Express/path-to-regexp match against the raw URL
-    // (encoding is only for the rendered output). Params use a generic lazy single-segment matcher;
-    // wildcard segments never reach here (matchSegmentHere routes them to the catch-all branch).
-    pattern += t.type === 'static' ? escapeRegex(t.text) : '[^/]+?'
-  }
-  if (openGroup !== 0) pattern += ')?'
-
-  // Case-insensitive: Express routing is case-insensitive by default; the normalized output still
-  // preserves the route's declared case. The pattern is built only from escapeRegex output, the
-  // fixed '[^/]+?', and numeric marker names, so RegExp construction cannot throw.
-  seg.matcher = { regex: new RegExp('^' + pattern + '$', 'i'), presence }
-  return seg.matcher
-}
-
-function escapeRegex (str) {
-  return str.replaceAll(/[-[\]{}()*+?.,\\^$|#\s]/g, String.raw`\$&`)
-}
-
-/**
- * Regex named-group identifier for an optional group's presence marker.
- * @param {number} groupId
- * @returns {string}
- */
-function markerName (groupId) {
-  return `_ddg${groupId}`
-}
-
-/**
- * Resolve which optional groups are present by matching the route segments against the URL
- * path segments. Matching is greedy present-first, mirroring path-to-regexp v8's left-to-right
- * assignment — so the resolved presence matches what Express itself matched.
- * @param {CompiledRoute} compiled
- * @param {string[]} urlSegs
- * @returns {{ present: Set<number> | null, aborted: boolean }}
- */
-function resolvePresenceFromUrl (compiled, urlSegs) {
-  const present = new Set()
-  matchStepsRemaining = MAX_MATCH_STEPS
-  const matched = matchSegments(compiled, 0, urlSegs, 0, present)
-  return { present: matched ? present : null, aborted: matchStepsRemaining < 0 }
-}
-
-// Step budget for the current matchSegments traversal. Safe as module state because presence
-// resolution is synchronous and non-reentrant (each request resolves fully before the next).
-let matchStepsRemaining = MAX_MATCH_STEPS
-
-/**
- * Backtracking matcher: try to match segments[si..] against urlSegs[ui..], recording present
- * optional groups in `present`. Each optional segment is tried present-first, then absent.
- * @param {CompiledRoute} compiled
- * @param {number} si
- * @param {string[]} urlSegs
- * @param {number} ui
- * @param {Set<number>} present
- * @returns {boolean}
- */
-function matchSegments (compiled, si, urlSegs, ui, present) {
-  if (--matchStepsRemaining < 0) return false // budget exhausted → abort (caller falls back to params)
-  const { segments, groupParent } = compiled
-  if (si === segments.length) return ui === urlSegs.length
-
-  const seg = segments[si]
-  const optional = seg.group !== 0
-  const parentPresent = seg.group === 0 || groupActive(groupParent.get(seg.group), groupParent, present)
-
-  // Optional segment whose parent group is absent can only be absent too.
-  if (optional && !parentPresent) {
-    return matchSegments(compiled, si + 1, urlSegs, ui, present)
-  }
-
-  if (optional) {
-    present.add(seg.group)
-    if (matchSegmentHere(compiled, si, urlSegs, ui, present)) return true
-    present.delete(seg.group)
-    return matchSegments(compiled, si + 1, urlSegs, ui, present) // try absent
-  }
-
-  return matchSegmentHere(compiled, si, urlSegs, ui, present)
-}
-
-/**
- * Match a single (now-present) segment against urlSegs[ui], then continue. Records intra-segment
- * optional groups, and handles catch-all segments (consume the remaining URL).
- * @returns {boolean}
- */
-function matchSegmentHere (compiled, si, urlSegs, ui, present) {
-  const { segments } = compiled
-  const seg = segments[si]
-  const wIdx = seg.wildcardIndex
-
-  if (wIdx !== -1) {
-    // Only bare wildcard segments reach the matcher: a prefixed wildcard ('v*rest') coexisting with
-    // optional groups is rejected at compile, and without optional groups the route is precomputed.
-    const wildcard = seg.tokens[wIdx]
-    // A wildcard needs at least one URL segment. Zero left → this segment can't match: an optional
-    // catch-all backtracks to absent, and a required one (path-to-regexp requires >=1) fails.
-    if (ui >= urlSegs.length) return false
-    if (wildcard.group !== 0) present.add(wildcard.group)
-    return matchSegments(compiled, si + 1, urlSegs, urlSegs.length, present)
-  }
-
-  if (ui >= urlSegs.length) return false
-  const { regex, presence } = getSegmentMatcher(seg, compiled.groupParent)
-  const m = regex.exec(urlSegs[ui])
-  if (!m) return false
-
-  // Fast path: segment has no intra-segment optional groups → no presence to record/roll back.
-  if (presence.length === 0) return matchSegments(compiled, si + 1, urlSegs, ui + 1, present)
-
-  const added = []
-  for (const entry of presence) {
-    if (m.groups?.[entry.name] !== undefined) {
-      present.add(entry.id)
-      added.push(entry.id)
-    }
-  }
-  if (matchSegments(compiled, si + 1, urlSegs, ui + 1, present)) return true
-  for (const g of added) present.delete(g)
-  return false
-}
-
-/**
- * Best-effort presence from req.params: an optional group is present iff one of its param
- * tokens has a defined own-property value in params. Static-only optional groups can't be
- * determined this way and are treated as absent. Marks ancestor groups present too.
+ * Which optional groups are present, from a captured/params object: an optional group is present iff
+ * one of its param tokens has a defined own-property value. Marks ancestor groups present too.
  * @param {CompiledRoute} compiled
  * @param {object | null | undefined} params
  * @returns {Set<number>}
  */
-function resolvePresenceFromParams (compiled, params) {
+function resolvePresence (compiled, params) {
   const present = new Set()
   if (params == null) return present
   const { segments, groupParent } = compiled
   for (const seg of segments) {
     for (const t of seg.tokens) {
-      if (t.group === 0 || t.name == null) continue
+      if (t.group === 0 || t.type === 'static') continue
       if (Object.hasOwn(params, t.name) && params[t.name] !== undefined) {
         let g = t.group
         while (g !== 0 && !present.has(g)) {
@@ -596,7 +360,7 @@ function resolvePresenceFromParams (compiled, params) {
 }
 
 /**
- * Compute a stable bitmask key for a present-group set (group ids are small, route-local).
+ * Stable bitmask key for a present-group set (group ids are small, route-local).
  * @param {number[]} optionalGroups
  * @param {Set<number>} present
  * @returns {number}
@@ -610,68 +374,35 @@ function presenceBitmask (optionalGroups, present) {
 }
 
 /**
- * Split a URL path into its non-empty segments in a single pass (no intermediate `filter`).
- * Empty segments from consecutive slashes are dropped; a malformed URL with interior '//' can
- * therefore resolve an optional group slightly differently from path-to-regexp — an accepted
- * edge, since such URLs are not produced by normal routing.
- * @param {string} urlPath
- * @returns {string[]}
+ * Normalize an Express route string. Express 5 only: `parse`/`makeMatcher` are path-to-regexp v8's
+ * `parse()` and a `match()` factory; returns null when either is unavailable (Express 4).
+ * @param {string} route - route string (the http.route value)
+ * @param {object|null|undefined} params - req.params (fallback when the URL doesn't match)
+ * @param {string|undefined} urlPath - request URL (query stripped here)
+ * @param {(pattern: string) => { tokens: PathToRegexpToken[] } | undefined} parse
+ * @param {(route: string) => ((url: string) => object | undefined) | undefined} makeMatcher
+ * @returns {string|null}
  */
-function splitPathSegments (urlPath) {
-  const segments = []
-  let start = 0
-  for (let i = 0; i <= urlPath.length; i++) {
-    if (i === urlPath.length || urlPath[i] === '/') {
-      if (i > start) segments.push(urlPath.slice(start, i))
-      start = i + 1
-    }
-  }
-  return segments
-}
-
-/**
- * Normalize an Express route string to the RFC-1103 _dd.appsec.normalized_route format.
- * Express 5 only: `parse` is path-to-regexp v8's `parse()`. Returns null when `parse` is
- * unavailable (Express 4 ships path-to-regexp 0.x, which has no `parse()`).
- *
- * @param {string} route - Express route string (e.g. the value of the http.route span tag)
- * @param {object|null|undefined} params - req.params from the matched request
- * @param {string|undefined} urlPath - URL path (any query string is stripped here); used to
- *   resolve optional elements (and to recover parent params dropped by mergeParams=false routers)
- * @param {((pattern: string) => { tokens: PathToRegexpToken[] } | undefined) | undefined} parse
- * @returns {string|null} Normalized route, or null when normalization is not possible
- */
-function normalizeRouteExpress (route, params, urlPath, parse) {
+function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher) {
   if (typeof route !== 'string' || !route) return null
-  if (typeof parse !== 'function') return null
+  if (typeof parse !== 'function' || typeof makeMatcher !== 'function') return null
 
   let entry = routeCache.get(route)
   if (entry === undefined) {
-    entry = compileRoute(route, parse)
+    entry = compileRoute(route, parse, makeMatcher)
     routeCache.set(route, entry)
   }
   if (entry === null) return null
-
-  // No optional groups → fixed result (computed once at compile time).
   if (entry.precomputed !== null) return entry.precomputed
 
-  // Resolve which optional groups are present. The URL is authoritative — it correctly handles
-  // mergeParams=false sub-routers (where a parent param is missing from req.params) and routes
-  // that reuse a param name across groups. On step-budget abort or a clean URL/route mismatch we
-  // fall back to a params-only resolution.
-  let present
+  // Presence from path-to-regexp's matcher on the request URL (authoritative — handles
+  // mergeParams=false sub-routers); fall back to req.params when there is no URL or it doesn't match.
+  let matched
   if (urlPath) {
-    // Strip the query string here (lazily): only this optional-route branch needs it, not the
-    // precomputed fast path above.
     const qIdx = urlPath.indexOf('?')
-    const urlSegs = splitPathSegments(qIdx === -1 ? urlPath : urlPath.slice(0, qIdx))
-    const { present: urlPresent, aborted } = resolvePresenceFromUrl(entry, urlSegs)
-    present = (aborted || urlPresent === null)
-      ? resolvePresenceFromParams(entry, params)
-      : urlPresent
-  } else {
-    present = resolvePresenceFromParams(entry, params)
+    matched = entry.matcher(qIdx === -1 ? urlPath : urlPath.slice(0, qIdx))
   }
+  const present = resolvePresence(entry, matched ?? params)
 
   const mask = presenceBitmask(entry.optionalGroups, present)
   if (entry.variants === undefined) entry.variants = new Map()
@@ -684,11 +415,9 @@ function normalizeRouteExpress (route, params, urlPath, parse) {
 }
 
 /**
- * Normalize an HTTP route from a request to the RFC-1103 _dd.appsec.normalized_route format.
- * Reads the framework from the span component tag and dispatches to the framework normalizer.
- *
- * @param {object} req - the incoming request object
- * @returns {string|null} Normalized route, or null when normalization is not possible
+ * Normalize an HTTP route from a request. Reads the framework from the span component tag.
+ * @param {object} req
+ * @returns {string|null}
  */
 function normalizeRoute (req) {
   const spanContext = web.root(req)?.context()
@@ -697,16 +426,14 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      // v8 `parse()` exists only in Express 5 (v4 ships 0.x); getParse() is undefined there → no tag.
-      // It's process-global (last-loaded): a mixed v4+v8 process could tag v4 routes the v8 grammar
-      // also accepts, but those normalize identically, so the output stays correct.
+      // path-to-regexp v8 `parse`/`match` exist only in Express 5 (v4 ships 0.x) → no tag otherwise.
       const parse = getParse()
-      if (parse === undefined) return null
-      // Reuse the http.route tag set by web.setRouteOrEndpointTag (called just before this hook)
-      // instead of re-deriving it from context.paths. It is undefined for the empty (root) route,
-      // which yields null here — matching http.route's own omission for that case.
+      const makeMatcher = getMatch()
+      if (parse === undefined || makeMatcher === undefined) return null
+      // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook; undefined
+      // for the empty (root) route → null, matching http.route's own omission there.
       const route = spanContext.getTag(HTTP_ROUTE)
-      return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse)
+      return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse, makeMatcher)
     }
     default:
       return null

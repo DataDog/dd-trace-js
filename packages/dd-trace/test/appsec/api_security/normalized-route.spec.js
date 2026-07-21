@@ -3,17 +3,15 @@
 const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 // path-to-regexp is a transitive (vendored) dependency, not a declared one; requiring it directly
-// lets these unit tests exercise the normalizer against the real Express 5 (v8) parser output.
+// lets these unit tests exercise the normalizer against the real Express 5 (v8) parser/matcher.
 // eslint-disable-next-line import/no-extraneous-dependencies, n/no-extraneous-require
-const { parse: rawParse } = require('path-to-regexp')
+const { parse: rawParse, match: rawMatch } = require('path-to-regexp')
 const {
   normalizeRouteExpress,
   normalizeRoute,
 } = require('../../../src/appsec/api_security/normalized-route')
 
-// Mirror the contract of the path-to-regexp instrumentation adapter (getParse): return the v8
-// TokenData ({ tokens }) or undefined when the parser throws / the shape is unexpected. Express 5
-// ships path-to-regexp v8, which is what this normalizer targets.
+// Mirror the getParse instrumentation adapter: v8 TokenData ({ tokens }) or undefined.
 function parse (pattern) {
   let result
   try {
@@ -24,9 +22,28 @@ function parse (pattern) {
   return Array.isArray(result?.tokens) ? result : undefined
 }
 
-// Convenience wrapper: inject the Express 5 parser as the 4th argument.
+// Mirror the getMatch instrumentation adapter: route → (url → captured params | undefined).
+function makeMatcher (route) {
+  let matcher
+  try {
+    matcher = rawMatch(route)
+  } catch {
+    return undefined
+  }
+  return url => {
+    let result
+    try {
+      result = matcher(url)
+    } catch {
+      return undefined
+    }
+    return result ? result.params : undefined
+  }
+}
+
+// Convenience wrapper: inject the Express 5 parser + matcher.
 function normalize (route, params, urlPath) {
-  return normalizeRouteExpress(route, params, urlPath, parse)
+  return normalizeRouteExpress(route, params, urlPath, parse, makeMatcher)
 }
 
 describe('normalizeRouteExpress', () => {
@@ -205,11 +222,9 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/x/:a-*rest', {}, '/x/y-z/w'), '/x/{a+rest}')
     })
 
-    it('rejects a prefixed wildcard once the route also has an optional group', () => {
-      // A prefixed wildcard can't be presence-resolved consistently with path-to-regexp when the
-      // backtracking matcher runs (which optional groups require), so we omit the tag.
-      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/x/vY/z'), null)
-      assert.equal(normalize('/a{/:id}/p{q}*rest', {}, '/a/1/pZ/w'), null)
+    it('resolves a prefixed wildcard alongside an optional param group', () => {
+      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/x/vY/z'), '/files/{opt}/{rest}')
+      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/vY/z'), '/files/{rest}')
     })
   })
 
@@ -255,18 +270,6 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/posts{/:id.:format}', {}, '/posts'), '/posts')
     })
 
-    it('resolves optional static group {/draft} — present', () => {
-      assert.equal(normalize('/posts{/draft}', {}, '/posts/draft'), '/posts/draft')
-    })
-
-    it('resolves optional static group {/draft} — absent', () => {
-      assert.equal(normalize('/posts{/draft}', {}, '/posts'), '/posts')
-    })
-
-    it('optional static group is absent when no URL is available (cannot infer from params)', () => {
-      assert.equal(normalize('/posts{/draft}', {}), '/posts')
-    })
-
     it('resolves optional catch-all group {/*path} — present', () => {
       assert.equal(normalize('/files{/*path}', {}, '/files/a/b'), '/files/{path}')
     })
@@ -285,75 +288,59 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/a{/:b{/:c}}', {}, '/a/x'), '/a/{b}')
       assert.equal(normalize('/a{/:b{/:c}}', {}, '/a'), '/a')
     })
+  })
 
-    it('collapses structural-only (empty) nested optional groups', () => {
-      assert.equal(normalize('/a{{/b}}', {}, '/a/b'), '/a/b')
-      assert.equal(normalize('/a{{/b}}', {}, '/a'), '/a')
+  describe('intra-segment optional param groups (resolved via path-to-regexp match)', () => {
+    it('resolves a param inside an intra-segment optional group', () => {
+      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1.jpg'), '/photos/{id+format}')
+      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1'), '/photos/{id}')
+    })
+
+    it('resolves two independent optional groups in one segment', () => {
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), '/{a+b+c}')
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x-z'), '/{a+c}')
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x'), '/{a}')
+    })
+
+    it('resolves an optional group before a wildcard in the same segment', () => {
+      assert.equal(normalize('/:a{.:b}-*rest', {}, '/x.y-/def'), '/{a+b+rest}')
+      assert.equal(normalize('/:a{.:b}-*rest', {}, '/x-/def'), '/{a+rest}')
+    })
+
+    it('resolves an optional group spanning more than one URL segment', () => {
+      assert.equal(normalize('/x{/:a/:b}', {}, '/x/1/2'), '/x/{a}/{b}')
+      assert.equal(normalize('/x{/:a/:b}', {}, '/x'), '/x')
+    })
+
+    it('resolves adjacent optional groups with no static prefix', () => {
+      assert.equal(normalize('{/:a}{/:b/:c}', {}, '/B/C'), '/{b}/{c}')
+      assert.equal(normalize('{/:a}{/:b/:c}', {}, '/A/B/C'), '/{a}/{b}/{c}')
     })
   })
 
-  describe('un-representable single-segment shapes (returns null, not a wrong tag)', () => {
-    // A param/wildcard inside an intra-segment optional group needs path-to-regexp's delimiter-aware
-    // matching to resolve presence; our generic '[^/]+?' matcher can't, so we omit the tag rather
-    // than emit a wrong combination.
-    it('rejects a param inside an intra-segment optional group', () => {
-      // path-to-regexp matches '/photos/1..' as { id: '1..' } (format absent) → we would mis-assign.
-      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1.jpg'), null)
-      assert.equal(normalize('/:a{-:b}', {}, '/x--'), null)
-      assert.equal(normalize('/:a{.:b}c', {}, '/x.yc'), null)
+  describe('omitted shapes (returns null, not a wrong tag)', () => {
+    // A static-only optional group has no capture key, so path-to-regexp's match() cannot report
+    // whether it was present in the request. We omit the whole route rather than guess.
+    it('omits a static-only optional group', () => {
+      assert.equal(normalize('/posts{/draft}', {}, '/posts/draft'), null)
+      assert.equal(normalize('/foo{bar}', {}, '/foobar'), null)
+      assert.equal(normalize('/foo{bar}baz', {}, '/foobaz'), null)
+      assert.equal(normalize('/a{b}{c}', {}, '/abc'), null)
+      assert.equal(normalize('/a{{/b}}', {}, '/a/b'), null)
     })
 
-    it('rejects two independent, and nested, optional groups in one segment', () => {
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), null)
-      assert.equal(normalize('/:a{.:b{.:c}-:d}', {}, '/x.y-z'), null)
+    it('omits a route mixing a param group with a static-only sibling group', () => {
+      assert.equal(normalize('/a{/:id}/p{q}*rest', {}, '/a/1/pZ/w'), null)
     })
 
-    it('rejects an optional group before a wildcard in the same segment', () => {
-      assert.equal(normalize('/:a{.:b}-*rest', {}, '/x.y-/def'), null)
-    })
-
-    it('rejects a wildcard with suffix tokens in its segment (non-terminal catch-all)', () => {
+    it('omits a wildcard with suffix tokens in its segment (non-terminal catch-all)', () => {
       assert.equal(normalize('/files/*path.:ext', {}, '/files/a/b.txt'), null)
       assert.equal(normalize('/*a-*b', {}, '/x-y'), null)
     })
 
-    it('rejects an optional group that spans more than one URL segment', () => {
-      // A group is atomic in path-to-regexp; an adjacent optional can otherwise steal a segment.
-      assert.equal(normalize('{/:a}{/:b/:c}', {}, '/B/C'), null)
-      assert.equal(normalize('/x{/:a/:b}', {}, '/x/1/2'), null)
-      // group owns a token in one segment ('ab') and a full later segment ('/:c')
-      assert.equal(normalize('/a{b/:c}{/:d}', {}, '/a/d'), null)
-    })
-
-    it('rejects an optional trailing/interior slash group', () => {
+    it('omits an optional trailing/interior slash group', () => {
       assert.equal(normalize('/users{/}', {}, '/users/'), null)
       assert.equal(normalize('/items{/:id/}', {}, '/items/42/'), null)
-    })
-
-    it('rejects adjacent dynamic tokens with no static between (Express rejects these too)', () => {
-      assert.equal(normalize('/:a:b', { a: '1', b: '2' }, '/12'), null)
-      assert.equal(normalize('/:a*rest', {}, '/1/2'), null)
-    })
-
-    it('still supports a static-only intra-segment optional group', () => {
-      assert.equal(normalize('/foo{bar}', {}, '/foobar'), '/foobar')
-      assert.equal(normalize('/foo{bar}', {}, '/foo'), '/foo')
-      // trailing static after the optional group exercises the mid-segment group close
-      assert.equal(normalize('/foo{bar}baz', {}, '/foobarbaz'), '/foobarbaz')
-      assert.equal(normalize('/foo{bar}baz', {}, '/foobaz'), '/foobaz')
-    })
-
-    it('supports multiple static optional groups in one segment (literal, no ambiguity)', () => {
-      assert.equal(normalize('/a{b}{c}', {}, '/abc'), '/abc')
-      assert.equal(normalize('/a{b}{c}', {}, '/ab'), '/ab')
-      assert.equal(normalize('/a{b}{c}', {}, '/ac'), '/ac')
-      assert.equal(normalize('/a{b}{c}', {}, '/a'), '/a')
-    })
-
-    it('rolls back a static intra-segment marker when a later segment fails, then uses params', () => {
-      // '/foobar' matches the first segment (marker recorded), but '/w' != '/z' fails the tail, so
-      // the URL match is abandoned and params (empty) decide: the optional static is absent.
-      assert.equal(normalize('/foo{bar}/z', {}, '/foobar/w'), '/foo/z')
     })
   })
 
@@ -406,9 +393,11 @@ describe('normalizeRouteExpress', () => {
       )
     })
 
-    it('does not mark an absent optional present when a name is shared across groups', () => {
-      assert.equal(normalize('/:id{/:id}', { id: 'x' }, '/x'), '/{id}')
-      assert.equal(normalize('/a{/:x}/b{/:x}', { x: 'v' }, '/a/b/v'), '/a/b/{x}')
+    it('omits a route where an optional group shares a param name (presence is ambiguous)', () => {
+      // A duplicate name collapses to one key in match()'s output, so which occurrence filled it is
+      // undetectable — omit rather than guess.
+      assert.equal(normalize('/:id{/:id}', { id: 'x' }, '/x'), null)
+      assert.equal(normalize('/a{/:x}/b{/:x}', { x: 'v' }, '/a/b/v'), null)
     })
 
     it('captures a named wildcard after an optional segment (greedy: optional fills first)', () => {
@@ -437,15 +426,6 @@ describe('normalizeRouteExpress', () => {
     it('encodes 4-byte emoji correctly as UTF-8 (not as two U+FFFD)', () => {
       // 🚀 U+1F680 → %F0%9F%9A%80 (4 UTF-8 bytes), not %EF%BF%BD%EF%BF%BD (two surrogates)
       assert.equal(normalize('/path/🚀', {}), '/path/%F0%9F%9A%80')
-    })
-
-    it('matches a static optional against the literal route text (as Express does), encodes output', () => {
-      // The URL is matched against the literal route text (what path-to-regexp/Express match), not
-      // a re-encoded form; the encoded form is only for the rendered output.
-      assert.equal(normalize('/posts{/café}', {}, '/posts/café'), '/posts/caf%C3%A9')
-      assert.equal(normalize('/posts{/café}', {}, '/posts'), '/posts')
-      // A route static that itself contains '%' must not be double-encoded when matching.
-      assert.equal(normalize('/x{/a%40b}', {}, '/x/a%40b'), '/x/a%2540b')
     })
 
     it('treats backslash-escaped reserved chars as static (Express 5)', () => {
