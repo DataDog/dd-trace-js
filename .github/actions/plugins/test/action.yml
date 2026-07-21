@@ -73,8 +73,8 @@ runs:
           *) echo "Unsupported test agent log order: $LOG_ORDER" >&2; exit 1 ;;
         esac
         if [ "$NODE_SET" = standard ] &&
-           [ "$NODE_FLOOR" != oldest-maintenance-lts ] &&
-           [ "$NODE_FLOOR" != newest-maintenance-lts ]; then
+          [ "$NODE_FLOOR" != oldest-maintenance-lts ] &&
+          [ "$NODE_FLOOR" != newest-maintenance-lts ]; then
           echo "Unsupported Node floor: $NODE_FLOOR" >&2
           exit 1
         fi
