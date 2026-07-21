@@ -64,33 +64,24 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.source, commonJSSource)
   })
 
-  it('rewrites CommonJS only when enabled for the sync loader', () => {
+  it('rewrites CommonJS in the sync loader', () => {
     const url = createAiModuleUrl()
-    const unchanged = loadSync(
+    const rewritten = loadSync(
       url,
       { format: 'commonjs' },
       () => ({ format: 'commonjs', source: commonJSSource })
     )
-    const rewritten = loadSync(
-      url,
-      { format: 'commonjs' },
-      () => ({ format: 'commonjs', source: commonJSSource }),
-      true
-    )
     const rewrittenFromContext = loadSync(
       url,
       { format: 'commonjs' },
-      () => ({ source: commonJSSource }),
-      true
+      () => ({ source: commonJSSource })
     )
     const rewrittenWithPreamble = loadSync(
       url,
       { format: 'commonjs' },
-      () => ({ format: 'commonjs', source: decoratedCommonJSSource }),
-      true
+      () => ({ format: 'commonjs', source: decoratedCommonJSSource })
     )
 
-    assert.strictEqual(unchanged.source, commonJSSource)
     assertCommonJSRewritten(rewritten.source)
     assertCommonJSRewritten(rewrittenFromContext.source)
     assertCommonJSRewritten(rewrittenWithPreamble.source)

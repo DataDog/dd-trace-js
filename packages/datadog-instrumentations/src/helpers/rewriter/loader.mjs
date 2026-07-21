@@ -2,26 +2,27 @@ import { rewrite } from './index.js'
 
 async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
-
-  return rewriteResult(result, url, context)
-}
-
-function loadSync (url, context, nextLoad, rewriteCommonJS = false) {
-  const result = nextLoad(url, context)
-
-  return rewriteResult(result, url, context, rewriteCommonJS)
-}
-
-function rewriteResult (result, url, context, rewriteCommonJS = false) {
   const format = result.format || context.format
 
   // The asynchronous loader keeps using Module._compile for CommonJS until all
   // supported runtimes can use synchronous hooks.
-  if (!rewriteCommonJS && format === 'commonjs') return result
+  if (format === 'commonjs') return result
+
+  return rewriteResult(result, url, context)
+}
+
+function loadSync (url, context, nextLoad) {
+  const result = nextLoad(url, context)
+
+  return rewriteResult(result, url, context)
+}
+
+function rewriteResult (result, url, context) {
+  const format = result.format || context.format
 
   const { source } = result
   let hashbang
-  if (rewriteCommonJS && format === 'commonjs' && typeof source === 'string' && source.startsWith('#!')) {
+  if (format === 'commonjs' && typeof source === 'string' && source.startsWith('#!')) {
     hashbang = source.split('\n', 1)[0]
   }
 

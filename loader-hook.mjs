@@ -111,7 +111,7 @@ function load (url, context, nextLoad) {
 function loadSync (url, context, nextLoad) {
   return rewriterLoader.loadSync(url, context, (url, context) => {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
-  }, true)
+  })
 }
 
 function getSyncImportInTheMiddleHook () {
