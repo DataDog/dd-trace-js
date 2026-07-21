@@ -3,8 +3,8 @@ model: claude-opus-4-8
 runs: 3
 
 # The instruction files this repo monitors (candidate = the PR's copy, baseline = master's). Repo-relative.
-# This is the single source of truth for validation and the CI trigger. CLAUDE.md loads AGENTS.md; the APM
-# integration skill and the references exercised by its benchmark load on demand.
+# This is the single source of truth for validation and the CI trigger. CLAUDE.md loads AGENTS.md; the broadly
+# applicable APM integration skill and the references exercised by its benchmark load on demand.
 instruction_files:
   - AGENTS.md
   - CLAUDE.md
@@ -16,7 +16,7 @@ instruction_files:
 
 # Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
 # Production default: `gate` — a curated, high-signal set where the monitored instructions are the source of the
-# right answer, with one case per monitored file plus one advisory control case. It uses four runs to keep the
+# right answer, with one case per monitored file plus one advisory control case. It uses three runs to keep the
 # gate within the repository's normal CI duration; `files:` targeting narrows it to the instruction files that
 # changed. Use `full` for an on-demand sweep of the whole suite; `minimum` is the cheapest development preset.
 default_level: gate
@@ -26,10 +26,12 @@ presets:
       - dd-trace-js-package-manager-001
       - dd-trace-js-new-cache-integration-005
       - dd-trace-js-control-http-propagation-007
-    runs: 4 # 8 pairwise comparisons per selected case.
-  minimum: # One AGENTS.md case and one skill case.
-    cases: ["dd-trace-js-package-manager-001", "dd-trace-js-new-cache-integration-005"]
-    runs: 4 # 8 pairwise comparisons.
+    runs: 3 # 6 pairwise comparisons per selected case.
+  minimum: # One content case for each always-loaded or on-demand instruction source.
+    cases:
+      - dd-trace-js-package-manager-001
+      - dd-trace-js-new-cache-integration-005
+    runs: 3 # 6 pairwise comparisons.
   full: # Whole suite.
     runs: 3
 
