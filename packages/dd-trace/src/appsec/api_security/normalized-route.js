@@ -20,12 +20,11 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  * `parse()`) → no tag.
  */
 
-// Cap on optional groups per route: keeps the presence bitmask within 32 bits and the per-route
-// variant cache at 2^N. Routes beyond this are omitted rather than mis-normalized.
+// Keeps the presence bitmask within 32 bits; routes beyond this are omitted.
 const MAX_OPTIONAL_GROUPS = 12
 
-// Per-route compiled-entry cache, keyed on the raw route string. Bounded by the app's declared
-// routes (never attacker URLs), so it retains for the process lifetime.
+// Keyed on the raw route string — bounded by declared routes (never attacker URLs), so it retains
+// for the process lifetime.
 const routeCache = new Map()
 
 const EMPTY_SET = new Set()
@@ -121,15 +120,13 @@ function compileRoute (route, parse, makeMatcher) {
 
   const { segments, groupParent, trailingSlash } = tokensToSegments(parsed.tokens)
 
-  // An optional (non-top-level) empty segment is a slash inside a group ('/users{/}'); the optional
-  // slash can't be represented, so omit.
+  // An optional empty segment is a slash inside a group ('/users{/}') — can't be represented.
   for (const seg of segments) {
     if (seg.tokens.length === 0 && seg.group !== 0) return null
   }
 
   const cleaned = segments.filter(s => s.tokens.length > 0)
 
-  // Root "/" (and any all-empty route) → single "/" element.
   if (cleaned.length === 0) {
     return {
       segments: [],
@@ -141,8 +138,7 @@ function compileRoute (route, parse, makeMatcher) {
     }
   }
 
-  // A catch-all must be the last token of the last segment (rule 5, terminal). Anything after it
-  // ('/files/*p.:ext', '/*a/*b', '/*a/edit') can't be one atomic element.
+  // A catch-all must be the last token of the last segment (rule 5, terminal).
   for (let s = 0; s < cleaned.length; s++) {
     const toks = cleaned[s].tokens
     for (let k = 0; k < toks.length; k++) {
@@ -150,8 +146,7 @@ function compileRoute (route, parse, makeMatcher) {
     }
   }
 
-  // Collapse structural-only groups ('/a{{/b}}'): reparent each represented group to its nearest
-  // represented ancestor.
+  // Collapse structural-only groups ('/a{{/b}}'): reparent each group to its nearest represented one.
   const represented = new Set()
   for (const seg of cleaned) {
     if (seg.group !== 0) represented.add(seg.group)
@@ -164,10 +159,9 @@ function compileRoute (route, parse, makeMatcher) {
     effectiveParent.set(g, p === undefined ? 0 : p)
   }
 
-  // Presence comes from path-to-regexp's captured params. A duplicate param name collapses to one
-  // key in match()'s output, so it can't tell which occurrence a request filled — only a uniquely
-  // named param/wildcard can prove its group present. Mark every group on such a token's ancestor
-  // chain detectable, then reject any optional group that isn't (static-only, or shadowed-name).
+  // Presence comes from match()'s captured params, so a group is detectable only via a uniquely
+  // named param/wildcard (a duplicate name collapses to one key; a static-only group has none).
+  // Mark such a token's whole ancestor chain detectable, then reject any group that isn't.
   const nameCount = new Map()
   for (const seg of cleaned) {
     for (const t of seg.tokens) {
@@ -207,7 +201,6 @@ function compileRoute (route, parse, makeMatcher) {
     return compiled
   }
 
-  // Otherwise resolve presence per request with path-to-regexp's own matcher (built once here).
   const matcher = makeMatcher(route)
   if (matcher === undefined) return null
   compiled.matcher = matcher
@@ -274,8 +267,8 @@ function renderRoute (compiled, present) {
     }
   }
 
-  // Pass 2: resolve names on their ENCODED form. A token keeps its name iff it is the last present
-  // occurrence of that encoded name; earlier duplicates become paramN (skipping surviving names).
+  // Pass 2: a token keeps its (encoded) name iff it is the last present occurrence of that name;
+  // earlier duplicates become paramN (skipping surviving names).
   const encodedNames = new Array(dyn.length)
   const lastIndexByName = new Map()
   for (let idx = 0; idx < dyn.length; idx++) {
@@ -395,8 +388,8 @@ function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher) {
   if (entry === null) return null
   if (entry.precomputed !== null) return entry.precomputed
 
-  // Presence from path-to-regexp's matcher on the request URL (authoritative — handles
-  // mergeParams=false sub-routers); fall back to req.params when there is no URL or it doesn't match.
+  // The matched URL is authoritative (handles mergeParams=false sub-routers); fall back to
+  // req.params when there is no URL or it doesn't match.
   let matched
   if (urlPath) {
     const qIdx = urlPath.indexOf('?')
@@ -426,12 +419,11 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      // path-to-regexp v8 `parse`/`match` exist only in Express 5 (v4 ships 0.x) → no tag otherwise.
+      // v8 `parse`/`match` exist only in Express 5 (v4 ships 0.x) → no tag otherwise.
       const parse = getParse()
       const makeMatcher = getMatch()
       if (parse === undefined || makeMatcher === undefined) return null
-      // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook; undefined
-      // for the empty (root) route → null, matching http.route's own omission there.
+      // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook.
       const route = spanContext.getTag(HTTP_ROUTE)
       return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse, makeMatcher)
     }
@@ -442,7 +434,6 @@ function normalizeRoute (req) {
 
 module.exports = {
   normalizeRoute,
-  // exported for unit testing (the framework-agnostic core; the dispatcher is covered end-to-end
-  // by the express plugin integration spec)
+  // exported for unit testing (framework-agnostic core)
   normalizeRouteExpress,
 }

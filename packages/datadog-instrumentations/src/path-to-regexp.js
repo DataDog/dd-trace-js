@@ -32,10 +32,8 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
-  // Capture only path-to-regexp 8.x's `parse()` (Express 5). Probe it once with a known pattern and
-  // adopt it only if it returns the v8 TokenData shape ({ tokens: [...] }). This keeps a later-loaded
-  // older major (6.x/7.x `parse()` returns a bare array) from overwriting a working v8 adapter and
-  // silently disabling normalization.
+  // Capture path-to-regexp 8.x's `parse()` (Express 5). Probe the shape ({ tokens: [...] }) so a
+  // later-loaded older major (6.x/7.x returns a bare array) can't clobber the working v8 adapter.
   if (typeof moduleExports?.parse === 'function') {
     const parse = moduleExports.parse
     let probe
@@ -57,10 +55,8 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
-  // Capture path-to-regexp 8.x's `match()` (Express 5). AppSec route normalization runs the
-  // framework's own matcher to resolve which optional params a request matched, instead of
-  // re-implementing matching. Probe it and adopt only the v8 shape (`match(path)(url)` → an object
-  // with a `params` map), so an older major loaded later can't clobber the working v8 adapter.
+  // Capture path-to-regexp 8.x's `match()` (Express 5), used to resolve which optional params a
+  // request matched. Probe the v8 shape (`match(path)(url)` → { params }) as for parse() above.
   if (typeof moduleExports?.match === 'function') {
     const match = moduleExports.match
     let probe
