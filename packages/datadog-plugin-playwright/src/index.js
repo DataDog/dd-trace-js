@@ -19,8 +19,8 @@ const {
   getTestSuiteCommonTags,
   getTestSuitePath,
   isModifiedTest,
+  setRumTestCorrelation,
   TEST_BROWSER_NAME,
-  TEST_BROWSER_VERSION,
   TEST_CODE_OWNERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -238,36 +238,10 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:playwright:test:page-goto', ({
-      isRumActive,
-      page,
-    }) => {
-      const store = storage('legacy').getStore()
-      const span = store && store.span
-      if (!span) {
+    this.addSub('ci:playwright:test:page-goto', (ctx) => {
+      const activeSpan = storage('legacy').getStore()?.span
+      if (!setRumTestCorrelation(ctx, activeSpan)) {
         log.error('ci:playwright:test:page-goto: test span not found')
-        return
-      }
-
-      if (isRumActive) {
-        span.setTag(TEST_IS_RUM_ACTIVE, 'true')
-
-        if (page) {
-          const browserVersion = page.context().browser().version()
-
-          if (browserVersion) {
-            span.setTag(TEST_BROWSER_VERSION, browserVersion)
-          }
-
-          const url = page.url()
-          const domain = new URL(url).hostname
-          page.context().addCookies([{
-            name: 'datadog-ci-visibility-test-execution-id',
-            value: span.context().toTraceId(),
-            domain,
-            path: '/',
-          }])
-        }
       }
     })
 
