@@ -229,6 +229,13 @@ describe('tagger', () => {
         assert.strictEqual(Tagger.tagMap.get(span), undefined)
       })
 
+      it('creates a custom trace id', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'workflow' })
+        const llmobsTraceId = Tagger.tagMap.get(span)['_ml_obs.trace_id']
+        assert.ok(llmobsTraceId)
+        assert.notEqual(llmobsTraceId, span.context().toTraceId(true))
+      })
+
       describe('sampling', () => {
         it('records a SAMPLED decision and the rate on a root span when sampleRate is 1', () => {
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
