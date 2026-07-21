@@ -26,6 +26,10 @@ const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
 )
 
+if (disabledInstrumentations.has('nitro')) {
+  disabledInstrumentations.add('h3')
+}
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // Globals

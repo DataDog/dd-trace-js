@@ -110,6 +110,10 @@ const web = {
       opName: () => 'next.request',
       serviceName: identityService,
     },
+    nitro: {
+      opName: () => 'nitro.server.request',
+      serviceName: identityService,
+    },
   },
 }
 

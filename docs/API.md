@@ -84,6 +84,7 @@ tracer.use('pg', {
 <h5 id="nats"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="nitro"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
 <h5 id="opensearch"></h5>
@@ -168,6 +169,7 @@ tracer.use('pg', {
 * [nats](./interfaces/export_.plugins.nats.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
+* [nitro](./interfaces/export_.plugins.nitro.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)
 * [openai](./interfaces/export_.plugins.openai.html)
 * [opensearch](./interfaces/export_.plugins.opensearch.html)
