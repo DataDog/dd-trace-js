@@ -109,29 +109,9 @@ function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
-  if (isCommonJSLoad(context)) {
-    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
-  }
-
   return rewriterLoader.loadSync(url, context, (url, context) => {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
-  })
-}
-
-function isCommonJSLoad (context) {
-  if (context.format) return context.format === 'commonjs'
-
-  // Sync hooks report CommonJS require() dependency loads with a `require`
-  // condition but no format. If a format is present, trust it instead: ESM
-  // loaded through require() reports `format: 'module'` and still needs rewrite.
-  const conditions = context.conditions
-  if (!conditions) return false
-
-  for (let i = 0; i < conditions.length; i++) {
-    if (conditions[i] === 'require') return true
-  }
-
-  return false
+  }, true)
 }
 
 function getSyncImportInTheMiddleHook () {

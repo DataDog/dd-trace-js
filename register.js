@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
+const syncSourceRewritingSymbol = Symbol.for('dd-trace.loader.sync-source-rewriting')
 let isSyncLoaderRegistered = false
 
 if (shouldRegisterSyncLoaderHooks()) {
@@ -16,6 +17,11 @@ if (shouldRegisterSyncLoaderHooks()) {
     ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
     if (registerSyncLoaderHooks) {
       isSyncLoaderRegistered = registerSyncLoaderHooks()
+      if (isSyncLoaderRegistered) {
+        // Capability checks alone are insufficient: the CommonJS compile fallback
+        // can only be disabled after the synchronous hooks are actually installed.
+        globalThis[syncSourceRewritingSymbol] = true
+      }
     }
   } catch (error) {
     syncRegistrationError = error
