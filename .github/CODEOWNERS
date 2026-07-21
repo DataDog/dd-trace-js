@@ -311,6 +311,7 @@
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
 /docs/bun.lock @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/release.yml @DataDog/lang-platform-js
