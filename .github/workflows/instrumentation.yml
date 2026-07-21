@@ -465,16 +465,6 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-playwright:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    env:
-      PLUGINS: playwright
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/instrumentations/test
-
   instrumentation-pg:
     runs-on: ubuntu-latest
     permissions:
@@ -520,16 +510,6 @@ jobs:
       id-token: write
     env:
       PLUGINS: q
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/instrumentations/test
-
-  instrumentation-selenium:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    env:
-      PLUGINS: selenium
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
