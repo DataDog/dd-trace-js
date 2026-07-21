@@ -11,6 +11,7 @@ const {
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
+  TRACE_ID,
 } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -345,7 +346,7 @@ class LLMObs extends NoopLLMObs {
     }
     try {
       return {
-        traceId: span.context().toTraceId(true),
+        traceId: LLMObsTagger.tagMap.get(span)[TRACE_ID],
         spanId: span.context().toSpanId(),
       }
     } catch {
