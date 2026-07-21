@@ -1290,6 +1290,35 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('skips the Vitest runner path when checking the selected test', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-runner-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const packageJson = path.join(root, 'package.json')
+    const missingEntrypoint = path.join(root, 'dist', 'index.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    setGeneratedTestFramework(framework, 'vitest')
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, path.join(root, 'node_modules', 'vitest', 'vitest.mjs'), 'run', testFile],
+    }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'vitest-runner-project',
+      exports: './dist/index.js',
+    }))
+    fs.writeFileSync(testFile, "require('vitest-runner-project')\n")
+
+    try {
+      assert.throws(
+        () => formatFrameworkPlan(root, framework),
+        new RegExp(`entrypoint ${escapeRegExp(missingEntrypoint)} does not exist`)
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('ignores non-runtime package export conditions when checking self imports', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-runtime-export-plan-'))
     const testFile = path.join(root, 'test', 'unit.test.js')
@@ -1458,6 +1487,29 @@ describe('test optimization validator-owned execution phases', () => {
     try {
       const formatPlan = () => formatFrameworkPlan(root, framework)
       assert.throws(formatPlan, new RegExp(`entrypoint ${escapeRegExp(entrypoint)} does not exist`))
+      fs.mkdirSync(path.dirname(entrypoint), { recursive: true })
+      fs.writeFileSync(entrypoint, 'module.exports = true\n')
+      formatPlan()
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('requires legacy self-package subpaths without an exports map to exist', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-legacy-subpath-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const packageJson = path.join(root, 'package.json')
+    const entrypoint = path.join(root, 'dist', 'index.js')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({ name: 'legacy-subpath-project' }))
+    fs.writeFileSync(testFile, "require('legacy-subpath-project/dist/index')\n")
+
+    try {
+      const formatPlan = () => formatFrameworkPlan(root, framework)
+      assert.throws(formatPlan, /imports its own package subpath .*entrypoint .* does not exist/s)
       fs.mkdirSync(path.dirname(entrypoint), { recursive: true })
       fs.writeFileSync(entrypoint, 'module.exports = true\n')
       formatPlan()

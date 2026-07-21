@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { getPackageScriptExpansion } = require('./command-suitability')
+
 const deferredCleanups = new WeakMap()
 const NYC_OPTIONS_WITH_VALUE = new Set([
   '--branches',
@@ -35,9 +37,14 @@ const NYC_OPTIONS_WITH_VALUE = new Set([
  */
 function getCommandOutputPaths (command) {
   const paths = new Set((command.outputPaths || []).map(outputPath => path.resolve(command.cwd, outputPath)))
-  const tokens = command.usesShell ? tokenizeShell(command.shellCommand) : command.argv || []
-  for (const coverageDirectory of getCoverageDirectories(tokens)) {
-    paths.add(path.resolve(command.cwd, coverageDirectory))
+  const commandTokens = command.usesShell ? tokenizeShell(command.shellCommand) : command.argv || []
+  const tokenSets = [commandTokens]
+  const packageScriptExpansion = getPackageScriptExpansion(command, command.cwd)
+  if (packageScriptExpansion) tokenSets.push(tokenizeShell(packageScriptExpansion.effectiveCommand))
+  for (const tokens of tokenSets) {
+    for (const coverageDirectory of getCoverageDirectories(tokens, command.cwd)) {
+      paths.add(path.resolve(command.cwd, coverageDirectory))
+    }
   }
   return [...paths]
 }
@@ -190,7 +197,7 @@ function pathExists (filename) {
   }
 }
 
-function getCoverageDirectories (tokens) {
+function getCoverageDirectories (tokens, commandCwd) {
   const directories = new Set()
   let coverageEnabled = false
   let coverageDirectoryConfigured = false
@@ -208,7 +215,7 @@ function getCoverageDirectories (tokens) {
       coverageDirectoryConfigured = true
     }
   }
-  const nycTempDirectory = getNycTempDirectory(tokens)
+  const nycTempDirectory = getNycTempDirectory(tokens, commandCwd)
   if (nycTempDirectory) directories.add(nycTempDirectory)
   if (coverageEnabled && !coverageDirectoryConfigured) directories.add('coverage')
   directories.delete(undefined)
@@ -219,22 +226,40 @@ function getCoverageDirectories (tokens) {
  * Returns nyc's temp directory without interpreting wrapped-runner options.
  *
  * @param {string[]} tokens command tokens
+ * @param {string} commandCwd command working directory
  * @returns {string|undefined} configured or default nyc temp directory
  */
-function getNycTempDirectory (tokens) {
+function getNycTempDirectory (tokens, commandCwd) {
   const nycIndex = tokens.findIndex(token => path.basename(String(token)).replace(/\.cmd$/i, '') === 'nyc')
   if (nycIndex === -1) return
 
+  let nycCwd = commandCwd
+  let tempDirectory = '.nyc_output'
   for (let index = nycIndex + 1; index < tokens.length; index++) {
     const token = String(tokens[index])
     if (token === '--' || !token.startsWith('-')) break
     const inline = /^(?:--temp-dir|-t)=(.+)$/.exec(token)
-    if (inline) return inline[1]
-    if ((token === '--temp-dir' || token === '-t') && tokens[index + 1]) return String(tokens[index + 1])
+    if (inline) {
+      tempDirectory = inline[1]
+      continue
+    }
+    if ((token === '--temp-dir' || token === '-t') && tokens[index + 1]) {
+      tempDirectory = String(tokens[++index])
+      continue
+    }
+    const inlineCwd = /^--cwd=(.+)$/.exec(token)
+    if (inlineCwd) {
+      nycCwd = path.resolve(commandCwd, inlineCwd[1])
+      continue
+    }
+    if (token === '--cwd' && tokens[index + 1]) {
+      nycCwd = path.resolve(commandCwd, String(tokens[++index]))
+      continue
+    }
     if (NYC_OPTIONS_WITH_VALUE.has(token)) index++
   }
 
-  return '.nyc_output'
+  return path.resolve(nycCwd, tempDirectory)
 }
 
 function tokenizeShell (source) {

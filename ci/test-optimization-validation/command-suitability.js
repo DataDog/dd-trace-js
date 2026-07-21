@@ -33,6 +33,7 @@ const INLINE_TYPE_IMPORT_PATTERN = /^import\s*\{([^}]*)\}\s*from\b/
 const INLINE_TYPE_EXPORT_PATTERN = /^export\s*\{([^}]*)\}\s*from\b/
 const TYPE_ONLY_IMPORT_PATTERN = /^import\s+type\b/
 const TYPE_ONLY_EXPORT_PATTERN = /^export\s+type\b/
+const TEST_FILE_BASENAME_PATTERN = /^(?:(?:test|spec)|.+[._-](?:test|spec))\.[cm]?[jt]sx?$/
 const TYPECHECK_ENABLED_PATTERN =
   /(?:\btypecheck\b|['"]typecheck['"])\s*:\s*\{[\s\S]{0,2000}?(?:\benabled\b|['"]enabled['"])\s*:\s*true/
 const VITEST_CONFIG_FILENAMES = [
@@ -128,7 +129,15 @@ function getMissingSelfPackageBuildError (command, framework, repositoryRoot) {
       const { condition, specifier } = reference
       const exportTargets = getPackageEntryTargets(packageJson, specifier, condition)
       if (exportTargets.length === 0) continue
-      const entrypoints = exportTargets.map(target => path.resolve(path.dirname(packageJsonPath), target))
+      const entrypoints = []
+      for (const target of exportTargets) {
+        const entrypoint = path.resolve(path.dirname(packageJsonPath), target)
+        if (packageJson.exports === undefined && specifier !== packageJson.name) {
+          entrypoints.push(...getLocalModuleCandidates(entrypoint))
+        } else {
+          entrypoints.push(entrypoint)
+        }
+      }
       const usableEntrypoints = entrypoints.filter(entrypoint => {
         return isPathInside(repositoryRoot, entrypoint) &&
           (isRepositoryFile(entrypoint, repositoryRoot) || isProducedBySetup(framework, entrypoint))
@@ -194,7 +203,7 @@ function getSelectedTestFile (command, projectRoot, repositoryRoot) {
     if (typeof value !== 'string') continue
     const filename = path.resolve(command.cwd || projectRoot, value)
     const inTestsDirectory = path.relative(projectRoot, filename).split(path.sep).includes('__tests__')
-    if (!/(?:test|spec)\.[cm]?[jt]sx?$/.test(value) &&
+    if (!TEST_FILE_BASENAME_PATTERN.test(path.basename(value)) &&
       !(inTestsDirectory && /\.[cm]?[jt]sx?$/.test(value))) continue
     if (!isPathInside(repositoryRoot, filename)) continue
     try {
@@ -234,6 +243,8 @@ function getPackageEntryTargets (packageJson, specifier, condition) {
     } else {
       collectRuntimeExportTargets(packageJson.exports?.['.'] ?? packageJson.exports, targets, condition)
     }
+  } else if (packageJson.exports === undefined) {
+    targets.push(subpath)
   } else {
     const exportMatch = getPackageSubpathExport(packageJson.exports, subpath)
     if (exportMatch) {

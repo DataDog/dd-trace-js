@@ -10,6 +10,7 @@ const { PassThrough } = require('node:stream')
 
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
+const { getCommandOutputPaths } = require('../../../../ci/test-optimization-validation/command-output-policy')
 const {
   buildCiWiringEnv,
   buildDatadogEnv,
@@ -919,6 +920,26 @@ describe('test optimization validation command runner', () => {
         outputPath: path.join(repositoryRoot, '.nyc_output'),
         action: 'removed',
       }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves nyc output from an expanded package script and its own cwd', () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const packageDirectory = path.join(repositoryRoot, 'packages', 'example')
+    fs.mkdirSync(packageDirectory, { recursive: true })
+    fs.writeFileSync(path.join(repositoryRoot, 'package.json'), JSON.stringify({
+      scripts: {
+        test: 'nyc --temp-dir raw-coverage --cwd packages/example mocha',
+      },
+    }))
+
+    try {
+      assert.deepStrictEqual(getCommandOutputPaths({
+        cwd: repositoryRoot,
+        argv: ['npm', 'run', 'test'],
+      }), [path.join(packageDirectory, 'raw-coverage')])
     } finally {
       fs.rmSync(repositoryRoot, { recursive: true, force: true })
     }
