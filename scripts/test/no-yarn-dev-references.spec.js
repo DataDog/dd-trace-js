@@ -139,11 +139,13 @@ describe('no yarn dev references', function () {
     })
   })
 
-  it('bootstraps pinned Bun inside the checkout when it is absent from PATH', async () => {
+  it('bootstraps pinned Bun when PATH does not contain the pinned version', async () => {
     const { bun: bunVersion } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
       .devDependencies
     const bootstrapDirectory = path.join(repoRoot, 'node_modules', '.cache', `bun-${bunVersion}`)
     const backupDirectory = `${bootstrapDirectory}.backup-${process.pid}`
+    const commandDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-fake-bun-'))
+    const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun'
     const originalNpmExecPath = process.env.npm_execpath
     const originalPath = process.env.PATH
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
@@ -154,7 +156,8 @@ describe('no yarn dev references', function () {
       }
       const globalNpmRoot = execFileSync(npm, ['root', '--global'], { encoding: 'utf8' }).trim()
       process.env.npm_execpath = path.join(globalNpmRoot, 'npm', 'bin', 'npm-cli.js')
-      process.env.PATH = [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter)
+      fs.linkSync(process.execPath, path.join(commandDirectory, bunCommand))
+      process.env.PATH = [commandDirectory, originalPath].filter(Boolean).join(path.delimiter)
       const bunBinary = getBunBinary()
 
       assert.strictEqual(await Promise.resolve(bunBinary), path.join(
@@ -178,6 +181,7 @@ describe('no yarn dev references', function () {
         process.env.npm_execpath = originalNpmExecPath
       }
       process.env.PATH = originalPath
+      fs.rmSync(commandDirectory, { recursive: true, force: true })
       fs.rmSync(bootstrapDirectory, { recursive: true, force: true })
       if (fs.existsSync(backupDirectory)) {
         fs.renameSync(backupDirectory, bootstrapDirectory)
@@ -190,6 +194,8 @@ describe('no yarn dev references', function () {
       .devDependencies
     const bootstrapDirectory = path.join(repoRoot, 'node_modules', '.cache', `bun-${bunVersion}`)
     const backupDirectory = `${bootstrapDirectory}.backup-${process.pid}`
+    const commandDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-fake-bun-'))
+    const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun'
     const fakeNpm = path.join(os.tmpdir(), `dd-fake-npm-${process.pid}.js`)
     const originalNpmExecPath = process.env.npm_execpath
     const originalPath = process.env.PATH
@@ -199,8 +205,9 @@ describe('no yarn dev references', function () {
         fs.renameSync(bootstrapDirectory, backupDirectory)
       }
       fs.writeFileSync(fakeNpm, '')
+      fs.linkSync(process.execPath, path.join(commandDirectory, bunCommand))
       process.env.npm_execpath = fakeNpm
-      process.env.PATH = [path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter)
+      process.env.PATH = [commandDirectory, originalPath].filter(Boolean).join(path.delimiter)
 
       assert.throws(() => getBunBinary(), /Could not install Bun/)
     } finally {
@@ -211,6 +218,7 @@ describe('no yarn dev references', function () {
       }
       process.env.PATH = originalPath
       fs.rmSync(fakeNpm, { force: true })
+      fs.rmSync(commandDirectory, { recursive: true, force: true })
       fs.rmSync(bootstrapDirectory, { recursive: true, force: true })
       if (fs.existsSync(backupDirectory)) {
         fs.renameSync(backupDirectory, bootstrapDirectory)
