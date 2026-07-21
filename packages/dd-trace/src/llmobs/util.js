@@ -8,6 +8,10 @@ const {
   SPAN_KINDS,
 } = require('./constants/tags')
 
+const DECIMAL_TRACE_ID_REGEX = /^\d+$/
+const HEX_TRACE_ID_REGEX = /^[0-9a-f]{32}$/i
+const MAX_UINT_64 = (1n << 64n) - 1n
+
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
 // looking for the first non-ASCII char; if there is none, hand the input
 // straight back. Otherwise pick up the slow path from the byte that needed
@@ -313,7 +317,7 @@ function safeJsonParse (value, fallback) {
 // LLMObs root and hoists the gen_ai ancestors under it, inverting the trace.
 /**
  * @param {import('../opentracing/span')} span
- * @param {{ includeParentId?: boolean, llmobsTraceId: string }} [opts]
+ * @param {{ includeParentId?: boolean, llmobsTraceId?: string }} [opts]
  */
 function writeBridgeTags (span, { includeParentId = true, llmobsTraceId } = {}) {
   const traceTags = span?.context?.()._trace?.tags
@@ -363,6 +367,11 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
+/**
+ * Generate a 128-bit LLMObs trace ID with the span start time encoded in its high bits.
+ * @param {number} startTime
+ * @returns {string}
+ */
 function generateLlmObsTraceId (startTime) {
   const identifier = id()
   const traceIdHigh = Math.floor(startTime / 1000)
@@ -373,9 +382,42 @@ function generateLlmObsTraceId (startTime) {
   return identifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
 }
 
+/**
+ * Convert an internally stored hexadecimal LLMObs trace ID to its distributed wire representation.
+ * @param {string | undefined} traceId
+ * @returns {string | undefined}
+ */
+function llmObsTraceIdToWire (traceId) {
+  if (!traceId) return
+  if (!HEX_TRACE_ID_REGEX.test(traceId)) return traceId
+
+  return BigInt(`0x${traceId}`).toString(10)
+}
+
+/**
+ * Normalize a distributed LLMObs trace ID to the representation expected by LLMObs span events.
+ * @param {string | undefined} traceId
+ * @returns {string | undefined}
+ */
+function normalizeLlmObsTraceId (traceId) {
+  if (!traceId) return
+
+  if (HEX_TRACE_ID_REGEX.test(traceId) && (traceId[0] === '0' || !DECIMAL_TRACE_ID_REGEX.test(traceId))) {
+    return traceId
+  }
+
+  if (!DECIMAL_TRACE_ID_REGEX.test(traceId)) return traceId
+
+  const identifier = BigInt(traceId)
+  return identifier > MAX_UINT_64 ? identifier.toString(16).padStart(32, '0') : traceId
+}
+
 module.exports = {
   encodeUnicode,
   findGenAIAncestorSpanId,
+  generateLlmObsTraceId,
+  llmObsTraceIdToWire,
+  normalizeLlmObsTraceId,
   validateCostTags,
   validateKind,
   getFunctionArguments,
@@ -383,5 +425,4 @@ module.exports = {
   spanHasError,
   writeBridgeTags,
   validateToolDefinitions,
-  generateLlmObsTraceId,
 }

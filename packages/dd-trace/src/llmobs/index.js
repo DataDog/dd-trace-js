@@ -27,6 +27,7 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
+const { llmObsTraceIdToWire } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -139,9 +140,12 @@ function handleLLMObsInjection ({ carrier }) {
     mlObsSpanTags?.[SESSION_ID] ??
     parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
     parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
-  const llmobsTraceId = mlObsSpanTags?.[TRACE_ID] ?? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
+  const llmobsTraceId = mlObsSpanTags?.[TRACE_ID]
+  const propagatedTraceId = llmobsTraceId === undefined
+    ? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
+    : llmObsTraceIdToWire(llmobsTraceId)
 
-  if (!parentId && !mlApp && samplingDecision == null && !sessionId && !llmobsTraceId) return
+  if (!parentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
@@ -152,7 +156,7 @@ function handleLLMObsInjection ({ carrier }) {
   if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
-  if (llmobsTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${llmobsTraceId}`
+  if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
   if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
 

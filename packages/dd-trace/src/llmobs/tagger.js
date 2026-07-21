@@ -61,6 +61,7 @@ const {
   writeBridgeTags,
   validateToolDefinitions,
   generateLlmObsTraceId,
+  normalizeLlmObsTraceId,
 } = require('./util')
 
 // global registry of LLMObs spans
@@ -138,7 +139,7 @@ class LLMObsTagger {
 
     const llmobsTraceId =
       registry.get(parent)?.[TRACE_ID] ??
-      traceTags[PROPAGATED_TRACE_ID_KEY] ??
+      normalizeLlmObsTraceId(traceTags[PROPAGATED_TRACE_ID_KEY]) ??
       generateLlmObsTraceId(span._startTime)
     this._setTag(span, TRACE_ID, llmobsTraceId)
 

@@ -222,6 +222,8 @@ describe('end to end sdk integration tests', () => {
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
       assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'test')
+      assert.equal(llmobsSpans[0].trace_id, llmobsSpans[1].trace_id)
+      assert.match(llmobsSpans[0].trace_id, /^[0-9a-f]{32}$/)
     })
 
     it('injects the local mlApp', async () => {

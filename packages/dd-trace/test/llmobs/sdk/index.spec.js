@@ -1767,10 +1767,12 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
+      const wireTraceId = BigInt(`0x${traceId}`).toString(10)
+
       assert.strictEqual(
         carrier['x-datadog-tags'],
         // eslint-disable-next-line @stylistic/max-len
-        `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1,_dd.p.llmobs_trace_id=${traceId}`
+        `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1,_dd.p.llmobs_trace_id=${wireTraceId}`
       )
     })
   })

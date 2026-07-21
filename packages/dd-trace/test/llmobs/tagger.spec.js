@@ -6,7 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-const { writeBridgeTags, findGenAIAncestorSpanId } = require('../../src/llmobs/util')
+const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 function unserializableObject () {
@@ -44,9 +44,10 @@ describe('tagger', () => {
     // existing tests get the "no gen_ai ancestor" branch; individual tests
     // can call `.returns(id)` on the stub to exercise suppression.
     util = {
-      generateTraceId: sinon.stub().returns('0123'),
+      generateLlmObsTraceId: sinon.stub().returns('0123456789abcdef0123456789abcdef'),
       writeBridgeTags,
       findGenAIAncestorSpanId: sinon.stub().returns(null),
+      normalizeLlmObsTraceId,
     }
 
     logger = {
@@ -199,15 +200,14 @@ describe('tagger', () => {
       })
 
       it('uses the propagated trace id if provided', () => {
+        spanContext._trace.tags['_dd.p.llmobs_trace_id'] = '141393847380800662846519802803680448779'
+
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-        assertObjectContains(Tagger.tagMap.get(span), {
-          '_ml_obs.meta.span.kind': 'llm',
-          '_ml_obs.meta.ml_app': 'my-default-ml-app',
-          '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.sample_rate': '1',
-          '_ml_obs.sampling_decision': '1',
-        })
+        assert.strictEqual(
+          Tagger.tagMap.get(span)['_ml_obs.trace_id'],
+          '6a5f76e7000000001973227978d8110b'
+        )
       })
 
       it('uses the propagated parent id if provided', () => {
@@ -232,7 +232,7 @@ describe('tagger', () => {
       it('creates a custom trace id', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
         const llmobsTraceId = Tagger.tagMap.get(span)['_ml_obs.trace_id']
-        assert.ok(llmobsTraceId)
+        assert.strictEqual(llmobsTraceId, '0123456789abcdef0123456789abcdef')
         assert.notEqual(llmobsTraceId, span.context().toTraceId(true))
       })
 
@@ -458,9 +458,10 @@ describe('tagger', () => {
             RealTagger = proxyquire('../../src/llmobs/tagger', {
               '../log': { warn () {} },
               './util': {
-                generateTraceId: sinon.stub().returns('0123'),
+                generateLlmObsTraceId: sinon.stub().returns('0123456789abcdef0123456789abcdef'),
                 writeBridgeTags,
                 findGenAIAncestorSpanId,
+                normalizeLlmObsTraceId,
               },
             })
             realTagger = new RealTagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test-app' } })
