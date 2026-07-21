@@ -1247,6 +1247,25 @@ describe('TracerProxy', () => {
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
     })
 
+    it('should publish datadog:identity:update before datadog:identity:refresh', () => {
+      // Core identity producers (id/config/remote_config) self-subscribe to identity:update and
+      // must finish reseeding before identity:refresh notifies downstream cache-holders
+      // (dogstatsd, otel metrics, debugger); otherwise those subsystems would refresh from the
+      // pre-reseed identity.
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+      const channelNames = diagnosticsChannelMock.channel.getCalls().map(call => call.args[0])
+      const updateIndex = channelNames.indexOf('datadog:identity:update')
+      const refreshIndex = channelNames.indexOf('datadog:identity:refresh')
+
+      assert.notStrictEqual(updateIndex, -1)
+      assert.notStrictEqual(refreshIndex, -1)
+      assert.ok(updateIndex < refreshIndex)
+    })
+
     it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
       microProxy.init()
 
@@ -1272,6 +1291,107 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
+    })
+  })
+
+  describe('MicroVM identity refresh (real modules)', () => {
+    let RealConfig
+    let RealRemoteConfig
+    let udp4Send
+    let origEnv
+    let MicroVmProxy
+    let microProxy
+    let capturedConfig
+
+    beforeEach(() => {
+      origEnv = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
+
+      // Real (not proxied) config/remote_config/dogstatsd modules, so this test proves the
+      // actual production wiring — not that mocks were called correctly.
+      RealConfig = proxyquire.noPreserveCache()('../src/config', {})
+      RealRemoteConfig = proxyquire.noPreserveCache()('../src/remote_config', {})
+
+      udp4Send = sinon.spy()
+      const udp4 = { send: udp4Send, on: sinon.stub(), unref: sinon.stub() }
+      udp4.on.returns(udp4)
+      udp4.unref.returns(udp4)
+      const dgram = { createSocket: sinon.stub().returns(udp4) }
+      const dns = { lookup: sinon.stub().callsFake((hostname, callback) => callback(null, hostname, 4)) }
+      const RealCustomMetrics = proxyquire.noPreserveCache()('../src/dogstatsd', { dgram }).CustomMetrics
+
+      capturedConfig = null
+      const CapturingConfig = (...args) => {
+        capturedConfig = RealConfig(...args)
+        capturedConfig.lookup = dns.lookup
+        capturedConfig.runtimeMetricsRuntimeId = true
+        // Force the UDP send path so this test can observe the outgoing packet directly,
+        // instead of going through the HTTP-proxy-to-agent path config.url otherwise selects.
+        capturedConfig.url = undefined
+        return capturedConfig
+      }
+
+      MicroVmProxy = proxyquire('../src/proxy', {
+        './tracer': DatadogTracer,
+        './noop/proxy': NoopProxy,
+        './config': CapturingConfig,
+        './plugin_manager': PluginManager,
+        './runtime_metrics': runtimeMetrics,
+        './log': log,
+        './profiler': profiler,
+        './appsec': appsec,
+        './appsec/iast': iast,
+        './telemetry': telemetry,
+        './remote_config': RemoteConfig,
+        './aiguard/sdk': AIGuardSdk,
+        './appsec/sdk': AppsecSdk,
+        './dogstatsd': { CustomMetrics: RealCustomMetrics },
+        './noop/dogstatsd': NoopDogStatsDClient,
+        './flare': flare,
+        './openfeature': openfeature,
+        './openfeature/flagging_provider': OpenFeatureProvider,
+        // dc-polyfill intentionally NOT mocked — this test exercises the real shared channel.
+      })
+
+      microProxy = new MicroVmProxy()
+    })
+
+    afterEach(() => {
+      if (origEnv === undefined) {
+        delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+      } else {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = origEnv
+      }
+    })
+
+    it('refreshes config, remote config, and dogstatsd tags together on a real /run trigger', () => {
+      microProxy.init()
+
+      // Constructed independently from the same real remote_config module proxy.js uses
+      // internally — refreshClientId() mutates module-scoped state shared by every instance.
+      const rc = new RealRemoteConfig(capturedConfig)
+      const originalRuntimeId = capturedConfig.tags['runtime-id']
+      const originalClientId = rc.state.client.id
+
+      const customMetrics = microProxy.dogstatsd
+
+      const { channel } = require('dc-polyfill')
+      channel('http.server.request.start').publish({
+        request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' },
+      })
+
+      assert.notStrictEqual(capturedConfig.tags['runtime-id'], originalRuntimeId)
+      assert.notStrictEqual(rc.state.client.id, originalClientId)
+
+      customMetrics.gauge('test.metric', 1)
+      customMetrics.flush()
+
+      sinon.assert.called(udp4Send)
+      const payload = udp4Send.firstCall.args[0].toString()
+      assert.ok(
+        payload.includes(`runtime-id:${capturedConfig.tags['runtime-id']}`),
+        `expected refreshed runtime-id in payload, got: ${payload}`
+      )
     })
   })
 })
