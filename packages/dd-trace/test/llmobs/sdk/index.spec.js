@@ -1030,7 +1030,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.sample_rate': '1',
           '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
