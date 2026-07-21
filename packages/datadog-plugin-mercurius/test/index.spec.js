@@ -315,6 +315,7 @@ describe('Plugin', () => {
           assert.ok(resolve, 'expected a graphql.resolve span even when JIT-compiled')
           assert.strictEqual(execute.parent_id.toString(), request.span_id.toString())
           assert.strictEqual(resolve.parent_id.toString(), execute.span_id.toString())
+          assert.strictEqual(resolve.meta['graphql.field.coordinates'], 'Query.hello')
           assertObjectContains(request, {
             error: 0,
             meta: {

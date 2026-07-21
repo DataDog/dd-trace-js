@@ -14,9 +14,27 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
+const GRAPHQL_JIT_PATH_SERIALIZER = parse(`
+  function serializeResponsePath (path) {
+    if (!path) return 'undefined'
+    if (path.type === 'meta') return serializeResponsePath(path.prev)
+
+    const concreteType = path.prev?.type === 'meta' ? path.prev : undefined
+    const previousPath = concreteType === undefined ? path.prev : concreteType.prev
+    const literalValue = \`"\${path.key}"\`
+    const typename = concreteType === undefined ? '' : \`,
+      typename: "\${concreteType.key}"\`
+    return \`{
+      key: \${path.type === 'literal' ? literalValue : path.key},
+      prev: \${serializeResponsePath(previousPath)}\${typename}
+    }\`
+  }
+`).body[0].body
+
 module.exports = {
   configureGraphqlJitCompileObject,
   configureGraphqlJitExecute,
+  preserveGraphqlJitPathType,
   waitForAsyncEnd,
 }
 
@@ -101,6 +119,14 @@ function configureGraphqlJitExecute (_state, node) {
       throw __apm$abortError
     }
   `).body)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function preserveGraphqlJitPathType (_state, node) {
+  node.body = clone(GRAPHQL_JIT_PATH_SERIALIZER)
 }
 
 /**

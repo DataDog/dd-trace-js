@@ -10,6 +10,7 @@ const BUILD_COMPILATION_CONTEXT = 'FunctionDeclaration[id.name="buildCompilation
   '[params.0.name="schema"][params.1.name="document"][params.2.name="options"][params.3.name="operationName"]'
 const COMPILE_OBJECT_TYPE = 'FunctionDeclaration[id.name="compileObjectType"]' +
   '[params.0.name="context"][params.8.name="alwaysDefer"]'
+const SERIALIZE_RESPONSE_PATH = 'FunctionDeclaration[id.name="serializeResponsePath"][params.0.name="path"]'
 
 /**
  * @typedef {{
@@ -39,6 +40,11 @@ function addInstrumentations (instrumentations, versionRange, filePath) {
       module: moduleDefinition,
       astQuery: COMPILE_OBJECT_TYPE,
       transform: 'configureGraphqlJitCompileObject',
+    },
+    {
+      module: moduleDefinition,
+      astQuery: SERIALIZE_RESPONSE_PATH,
+      transform: 'preserveGraphqlJitPathType',
     },
     {
       module: moduleDefinition,

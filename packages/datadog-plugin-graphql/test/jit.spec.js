@@ -109,6 +109,84 @@ describe('Plugin', () => {
       })
     }
 
+    /**
+     * @param {{ __typename: string }} value
+     * @returns {string}
+     */
+    function resolveType (value) {
+      return value.__typename
+    }
+
+    /**
+     * @returns {import('graphql').GraphQLSchema}
+     */
+    function buildCoordinateSchema () {
+      const Profile = new graphql.GraphQLInterfaceType({
+        name: 'Profile',
+        fields: {
+          value: { type: graphql.GraphQLString },
+        },
+        resolveType,
+      })
+      const Named = new graphql.GraphQLInterfaceType({
+        name: 'Named',
+        fields: {
+          profile: { type: Profile },
+        },
+        resolveType,
+      })
+      const HumanProfile = new graphql.GraphQLObjectType({
+        name: 'HumanProfile',
+        interfaces: [Profile],
+        fields: {
+          value: { type: graphql.GraphQLString },
+        },
+      })
+      const PetProfile = new graphql.GraphQLObjectType({
+        name: 'PetProfile',
+        interfaces: [Profile],
+        fields: {
+          value: { type: graphql.GraphQLString },
+        },
+      })
+      const Human = new graphql.GraphQLObjectType({
+        name: 'Human',
+        interfaces: [Named],
+        fields: {
+          profile: { type: Profile },
+        },
+      })
+      const Pet = new graphql.GraphQLObjectType({
+        name: 'Pet',
+        interfaces: [Named],
+        fields: {
+          profile: { type: Profile },
+        },
+      })
+
+      return new graphql.GraphQLSchema({
+        query: new graphql.GraphQLObjectType({
+          name: 'Query',
+          fields: {
+            results: {
+              type: new graphql.GraphQLList(Named),
+              resolve: () => [
+                {
+                  __typename: 'Human',
+                  profile: { __typename: 'HumanProfile', value: 'person' },
+                },
+                {
+                  __typename: 'Pet',
+                  profile: { __typename: 'PetProfile', value: 'animal' },
+                },
+              ],
+            },
+          },
+        }),
+        types: [Human, Pet, HumanProfile, PetProfile],
+      })
+    }
+
     withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
       before(() => {
         return agent.load('graphql', { variables: ['id', 'name'] })
@@ -183,6 +261,42 @@ describe('Plugin', () => {
           (async () => query({ defaultHello: 'default world' }, {}, {}))(),
         ])
         assert.deepStrictEqual(result.data, { defaultHello: 'default world' })
+      })
+
+      it('keeps collapsed abstract fields distinct and correctly parented by schema coordinate', async () => {
+        const { query } = compileQuery(
+          buildCoordinateSchema(),
+          graphql.parse('query Coordinates { results { profile { value } } }')
+        )
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+          const coordinates = spans.map(span => span.meta['graphql.field.coordinates']).sort()
+          assert.deepStrictEqual(coordinates, [
+            'Human.profile',
+            'HumanProfile.value',
+            'Pet.profile',
+            'PetProfile.value',
+            'Query.results',
+          ])
+
+          for (const name of ['Human', 'Pet']) {
+            const profile = spans.find(span => span.meta['graphql.field.coordinates'] === `${name}.profile`)
+            const value = spans.find(span => span.meta['graphql.field.coordinates'] === `${name}Profile.value`)
+            assert.strictEqual(value.parent_id.toString(), profile.span_id.toString())
+          }
+        }, { spanResourceMatch: /Coordinates/ })
+
+        const [, result] = await Promise.all([
+          assertion,
+          (async () => query({}, {}, {}))(),
+        ])
+        assert.deepStrictEqual(result.data, {
+          results: [
+            { profile: { value: 'person' } },
+            { profile: { value: 'animal' } },
+          ],
+        })
       })
 
       it('keeps compiler failures isolated from later compilations', async () => {

@@ -8,6 +8,7 @@ const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-trans
 const {
   configureGraphqlJitCompileObject,
   configureGraphqlJitExecute,
+  preserveGraphqlJitPathType,
   waitForAsyncEnd,
 } = require('./transforms')
 const instrumentations = require('./instrumentations')
@@ -41,6 +42,7 @@ for (const matcher of [matcherCjs, matcherEsm]) {
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
+  matcher.addTransform('preserveGraphqlJitPathType', preserveGraphqlJitPathType)
 }
 
 // Keep the marker split: source-map scanners can read a contiguous token in
