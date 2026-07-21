@@ -870,7 +870,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "2",
+        "default": "5",
         "description": "Experimental: Set the agentless Feature Flagging UFC request timeout in seconds.",
         "allowed": "[1-9]\\d*",
         "namespace": "featureFlags"

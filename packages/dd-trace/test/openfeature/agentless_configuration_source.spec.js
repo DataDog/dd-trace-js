@@ -90,6 +90,7 @@ describe('AgentlessConfigurationSource', () => {
 
       if (response && !response.pending) {
         queueMicrotask(() => {
+          options.signal?.removeEventListener('abort', abort)
           callback(
             response.error ?? null,
             response.body,

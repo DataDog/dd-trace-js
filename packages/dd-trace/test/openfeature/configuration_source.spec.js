@@ -21,7 +21,7 @@ describe('OpenFeature configuration source', () => {
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
-        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
       },
       site: 'datadoghq.com',
       env: 'my env',
@@ -53,7 +53,7 @@ describe('OpenFeature configuration source', () => {
     )
     assert.strictEqual(resolved.apiKey, 'test-api-key')
     assert.strictEqual(resolved.pollIntervalMs, 30_000)
-    assert.strictEqual(resolved.requestTimeoutMs, 2000)
+    assert.strictEqual(resolved.requestTimeoutMs, 5000)
   })
 
   it('derives the staging UFC CDN endpoint from DD_SITE', () => {
@@ -123,7 +123,7 @@ describe('OpenFeature configuration source', () => {
         endpoint: resolved.endpoint,
         apiKey: 'test-api-key',
         pollIntervalMs: 30_000,
-        requestTimeoutMs: 2000,
+        requestTimeoutMs: 5000,
       }),
       applyConfiguration
     )

@@ -27,11 +27,17 @@ let client
  * @param {'access'|'evaluate'|'trace'} message.command
  * @param {string} [message.spanName]
  * @param {string} [message.url]
+ * @param {boolean} [message.waitForReady]
  */
 async function handleMessage (message) {
   try {
     if (message.command === 'access') {
-      OpenFeature.setProvider(tracer.openfeature)
+      const provider = tracer.openfeature
+      if (message.waitForReady) {
+        await OpenFeature.setProviderAndWait(provider)
+      } else {
+        OpenFeature.setProvider(provider)
+      }
       client = OpenFeature.getClient()
       send({ accessed: true })
       return

@@ -5093,7 +5093,7 @@ rules:
       sinon.assert.notCalled(log.error)
     })
 
-    it('defaults agentless delivery to cross-SDK timings', () => {
+    it('defaults agentless delivery timings', () => {
       const config = getConfig()
 
       assertObjectContains(config, {
@@ -5101,7 +5101,7 @@ rules:
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
-          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
         },
       })
     })
@@ -5143,7 +5143,7 @@ rules:
       )
       assert.strictEqual(
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
-        2
+        5
       )
       sinon.assert.calledTwice(log.warn)
     })
@@ -5169,7 +5169,7 @@ rules:
       )
       assert.strictEqual(
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
-        2
+        5
       )
       for (const name of [
         'configurationSource',

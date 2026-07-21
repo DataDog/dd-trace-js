@@ -231,17 +231,21 @@ async function runCase (testCase) {
 
     const remoteConfigStartIndex = requestsFor(remoteConfigRequests, testCase.service).length
     accessedCases.add(testCase.identifier)
+    const accessCommand = {
+      command: 'access',
+      waitForReady: testCase.expected !== 'disabled',
+    }
 
     if (testCase.expected === 'agentless') {
       await Promise.all([
         waitForObservation(agentlessRequests, testCase.identifier, 'agentless', hasObservation),
-        sendCommand(proc, { command: 'access' }),
+        sendCommand(proc, accessCommand),
       ])
     } else {
-      await sendCommand(proc, { command: 'access' })
+      await sendCommand(proc, accessCommand)
     }
 
-    const details = await evaluateUntilSettled(proc, testCase)
+    const { details } = await sendCommand(proc, { command: 'evaluate' })
     assertEvaluation(testCase, details)
 
     await waitForObservation(
@@ -297,20 +301,6 @@ async function traceDeliberateRequest (proc, testCase) {
     if (isAgentlessHttpSpan(span)) selfTraces.push(span)
   }
   assert.deepStrictEqual(selfTraces, [], testCase.label)
-}
-
-/**
- * @param {import('node:child_process').ChildProcess} proc
- * @param {ConfigurationCase} testCase
- */
-async function evaluateUntilSettled (proc, testCase) {
-  const attempts = testCase.expected === 'disabled' ? 1 : 10
-  let details
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    ({ details } = await sendCommand(proc, { command: 'evaluate' }))
-    if (details.value === EXPECTED_VALUE) break
-  }
-  return details
 }
 
 /**
@@ -410,6 +400,7 @@ function setBooleanEnvironment (env, name, setting) {
  * @param {'access'|'evaluate'|'trace'} command.command
  * @param {string} [command.spanName]
  * @param {string} [command.url]
+ * @param {boolean} [command.waitForReady]
  */
 async function sendCommand (proc, command) {
   const controller = new AbortController()
