@@ -1,6 +1,20 @@
 'use strict'
 
+const net = require('node:net')
+
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
+
+/**
+ * @param {string} hostname
+ * @returns {boolean}
+ */
+function isLoopbackHost (hostname) {
+  // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
+  return hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    (hostname.startsWith('127.') && net.isIPv4(hostname))
+}
 
 /**
  * Convert an agent/intake URL into Node http(s) request options.
@@ -31,4 +45,4 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
-module.exports = { parseUrl }
+module.exports = { isLoopbackHost, parseUrl }
