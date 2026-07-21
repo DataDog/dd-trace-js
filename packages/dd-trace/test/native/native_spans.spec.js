@@ -11,6 +11,17 @@ function readU64LE (view, offset) {
   return view.getBigUint64(offset, true)
 }
 
+// Simulate WebAssembly.Memory.grow() for tests: the new buffer preserves the
+// old bytes, but JS views must be refreshed because future writes need to land
+// in wasmMemory.buffer, not the stale pre-growth buffer.
+function simulateWasmMemoryGrow (wasmMemory) {
+  const oldBytes = new Uint8Array(wasmMemory.buffer)
+  const newBuffer = new ArrayBuffer(oldBytes.byteLength + 64 * 1024)
+  new Uint8Array(newBuffer).set(oldBytes)
+  wasmMemory.buffer = newBuffer
+  return newBuffer
+}
+
 describe('NativeSpansInterface', () => {
   let NativeSpansInterface
   let nativeSpans
@@ -254,6 +265,18 @@ describe('NativeSpansInterface', () => {
 
       sinon.assert.called(mockState.flushChangeQueue)
     })
+
+    it('refreshes queue views when stringTableInsertOne grows memory during queueOp', () => {
+      const oldBuffer = fakeWasmMemory.buffer
+      mockState.stringTableInsertOne.callsFake(() => simulateWasmMemoryGrow(fakeWasmMemory))
+
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'growth-name')
+
+      assert.strictEqual(new DataView(oldBuffer).getUint16(8, true), 0)
+      assert.notStrictEqual(nativeSpans._cqbView.buffer, oldBuffer)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), OpCode.SetName)
+    })
   })
 
   describe('flushChangeQueue', () => {
@@ -264,6 +287,23 @@ describe('NativeSpansInterface', () => {
       sinon.assert.calledOnce(mockState.flushChangeQueue)
       assert.strictEqual(nativeSpans._cqbIndex, 8)
       assert.strictEqual(nativeSpans._cqbCount, 0)
+    })
+
+    it('resets the current WASM buffer when memory grows after queueing before flush', () => {
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      const oldBuffer = fakeWasmMemory.buffer
+      const grownBuffer = simulateWasmMemoryGrow(fakeWasmMemory)
+
+      mockState.flushChangeQueue.callsFake(() => {
+        const grownView = new DataView(grownBuffer)
+        assert.strictEqual(readU64LE(grownView, 0), 1n)
+        assert.strictEqual(grownView.getUint16(8, true), OpCode.SetName)
+      })
+
+      nativeSpans.flushChangeQueue()
+
+      assert.strictEqual(readU64LE(new DataView(grownBuffer), 0), 0n)
+      assert.strictEqual(readU64LE(new DataView(oldBuffer), 0), 1n)
     })
 
     it('should not call native if no operations queued', () => {
@@ -288,6 +328,22 @@ describe('NativeSpansInterface', () => {
       nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
 
       assert.throws(() => nativeSpans.flushChangeQueue(), /unexpected wasm fault/)
+    })
+
+    it('resets the current WASM buffer when native flush grows memory then throws', () => {
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      const oldBuffer = fakeWasmMemory.buffer
+      let grownBuffer
+      mockState.flushChangeQueue = sinon.stub().callsFake(() => {
+        grownBuffer = simulateWasmMemoryGrow(fakeWasmMemory)
+        throw new Error('unexpected wasm fault')
+      })
+
+      assert.throws(() => nativeSpans.flushChangeQueue(), /unexpected wasm fault/)
+
+      assert.strictEqual(readU64LE(new DataView(grownBuffer), 0), 0n)
+      assert.strictEqual(readU64LE(new DataView(oldBuffer), 0), 1n)
+      assert.strictEqual(nativeSpans._cqbView.buffer, grownBuffer)
     })
   })
 
@@ -337,6 +393,19 @@ describe('NativeSpansInterface', () => {
       await nativeSpans.flushSpans(spanIds, false)
 
       assert.ok(nativeSpans._flushBuffer.length >= spanIds.length * 8)
+    })
+
+    it('refreshes queue views when prepareChunk grows memory during flushSpans', async () => {
+      const oldBuffer = fakeWasmMemory.buffer
+      mockState.prepareChunk.callsFake(() => {
+        simulateWasmMemoryGrow(fakeWasmMemory)
+        return true
+      })
+
+      await nativeSpans.flushSpans([spanId], true)
+
+      assert.notStrictEqual(nativeSpans._cqbView.buffer, oldBuffer)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
     })
 
     it('should reset queue state when prepareChunk throws', async () => {
@@ -731,6 +800,23 @@ describe('NativeSpansInterface', () => {
       // Op header is [opcode u16 LE][span_id u64 LE]; opcode sits at offset 8.
       assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 13)
     })
+
+    it('refreshes queue views at entry when memory grew before a cached-name create', () => {
+      const traceId = Buffer.alloc(8)
+      const parentId = Buffer.alloc(8)
+      nativeSpans.getStringId('cached-op')
+      nativeSpans.resetChangeQueue()
+      const oldBuffer = fakeWasmMemory.buffer
+      const oldView = nativeSpans._cqbView
+      simulateWasmMemoryGrow(fakeWasmMemory)
+
+      nativeSpans.queueCreateSpan(spanId, traceId, 0, parentId, 'cached-op', 1500)
+
+      assert.strictEqual(new DataView(oldBuffer).getUint16(8, true), 0)
+      assert.notStrictEqual(nativeSpans._cqbView, oldView)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 13)
+    })
   })
 
   describe('queueBatchMeta / queueBatchMetrics', () => {
@@ -784,6 +870,37 @@ describe('NativeSpansInterface', () => {
       assert.ok(nativeSpans._stringMap.has('m1'))
       assert.ok(nativeSpans._stringMap.has('m2'))
     })
+
+    it('refreshes queue views at entry for cached flat meta batches after memory growth', () => {
+      for (const str of ['k1', 'v1', 'k2', 'v2']) nativeSpans.getStringId(str)
+      nativeSpans.resetChangeQueue()
+      const oldBuffer = fakeWasmMemory.buffer
+      const oldView = nativeSpans._cqbView
+      simulateWasmMemoryGrow(fakeWasmMemory)
+
+      nativeSpans.queueBatchMetaFlat(spanId, ['k1', 'v1', 'k2', 'v2'])
+
+      assert.strictEqual(new DataView(oldBuffer).getUint16(8, true), 0)
+      assert.notStrictEqual(nativeSpans._cqbView, oldView)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 15)
+    })
+
+    it('refreshes queue views at entry for cached flat metric batches after memory growth', () => {
+      nativeSpans.getStringId('m1')
+      nativeSpans.getStringId('m2')
+      nativeSpans.resetChangeQueue()
+      const oldBuffer = fakeWasmMemory.buffer
+      const oldView = nativeSpans._cqbView
+      simulateWasmMemoryGrow(fakeWasmMemory)
+
+      nativeSpans.queueBatchMetricsFlat(spanId, ['m1', 1.5, 'm2', 2.5])
+
+      assert.strictEqual(new DataView(oldBuffer).getUint16(8, true), 0)
+      assert.notStrictEqual(nativeSpans._cqbView, oldView)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 16)
+    })
   })
 
   describe('setMetaStruct', () => {
@@ -823,6 +940,18 @@ describe('NativeSpansInterface', () => {
       const expectedId = (2n ** 64n) - 1n
       sinon.assert.calledOnceWithExactly(mockState.setMetaStruct, expectedId, 'appsec', bytes)
     })
+
+    it('refreshes queue views when setMetaStruct grows memory', () => {
+      const oldBuffer = fakeWasmMemory.buffer
+      mockState.setMetaStruct.callsFake(() => simulateWasmMemoryGrow(fakeWasmMemory))
+      const handle = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
+      const bytes = new Uint8Array([0x81, 0xa1, 0x61, 0x01])
+
+      nativeSpans.setMetaStruct(handle, 'appsec', bytes)
+
+      assert.notStrictEqual(nativeSpans._cqbView.buffer, oldBuffer)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
+    })
   })
 
   describe('addSpanEvent', () => {
@@ -834,6 +963,18 @@ describe('NativeSpansInterface', () => {
       nativeSpans.addSpanEvent(handle, 'exception', 123n, attrs)
       sinon.assert.called(mockState.flushChangeQueue)
       sinon.assert.calledOnceWithExactly(mockState.addSpanEvent, 2n, 'exception', 123n, attrs)
+    })
+
+    it('refreshes queue views when addSpanEvent grows memory', () => {
+      const oldBuffer = fakeWasmMemory.buffer
+      mockState.addSpanEvent.callsFake(() => simulateWasmMemoryGrow(fakeWasmMemory))
+      const handle = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
+      const attrs = new Uint8Array([0, 0, 0, 0])
+
+      nativeSpans.addSpanEvent(handle, 'exception', 123n, attrs)
+
+      assert.notStrictEqual(nativeSpans._cqbView.buffer, oldBuffer)
+      assert.strictEqual(nativeSpans._cqbView.buffer, fakeWasmMemory.buffer)
     })
   })
 })
