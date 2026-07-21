@@ -11,7 +11,7 @@ test('does not upload programmatic screenshots', async ({ page }, testInfo) => {
 test('uploads only the automatic failure screenshot', async ({ page }, testInfo) => {
   await page.goto(process.env.PW_BASE_URL)
 
-  const manualScreenshotPath = testInfo.outputPath('manual-screenshot.png')
+  const manualScreenshotPath = testInfo.outputPath('test-failed-99.png')
   await page.screenshot({ path: manualScreenshotPath })
   await testInfo.attach('screenshot', {
     path: manualScreenshotPath,
