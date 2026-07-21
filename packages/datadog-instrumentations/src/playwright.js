@@ -33,6 +33,7 @@ const testFinishCh = channel('ci:playwright:test:finish')
 const testSkipCh = channel('ci:playwright:test:skip')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
+const testSessionConfigurationCh = channel('ci:playwright:session:configuration')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
@@ -51,6 +52,9 @@ const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
 const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatcher_createWorker')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
+const artifactsRecorderScreenshotPathCh =
+  tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
+const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
 const testToCtx = new WeakMap()
@@ -61,6 +65,8 @@ const testsToTestStatuses = new Map()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const DD_PROPERTIES_TIMEOUT = 5000
+const isFailureScreenshotUploadEnabled =
+  getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 
 let applyRepeatEachIndex = null
 
@@ -115,8 +121,21 @@ const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
+const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
+const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
+const automaticFailureScreenshotPaths = new Set()
+
+/**
+ * Returns whether Playwright's internal screenshot recorder created an attachment.
+ *
+ * @param {object} attachment - Playwright attachment payload
+ * @returns {boolean}
+ */
+function isAutomaticFailureScreenshotAttachment (attachment) {
+  return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
+}
 
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.playwright
@@ -499,6 +518,23 @@ function getProjectsFromRunner (runner, configArg) {
     }
     return project
   })
+}
+
+/**
+ * Returns whether at least one Playwright project captures automatic screenshots for failed tests.
+ *
+ * @param {Array<object>} projects - Playwright projects with resolved use options
+ * @returns {boolean} Whether failure screenshot capture is enabled
+ */
+function isFailureScreenshotCaptureEnabled (projects) {
+  for (const project of projects) {
+    const screenshot = project.use?.screenshot
+    const mode = typeof screenshot === 'object' && screenshot !== null ? screenshot.mode : screenshot
+    if (mode === 'on' || mode === 'only-on-failure' || mode === 'on-first-failure') {
+      return true
+    }
+  }
+  return false
 }
 
 function getProjectsFromDispatcher (dispatcher) {
@@ -993,6 +1029,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
 
   const projects = getProjectsFromDispatcher(dispatcher)
   sessionProjects = projects
+  const automaticFailureScreenshotPathsByTestId = new Map()
 
   if (disabledTestIds.size && !worker[kDdPlaywrightWorkerHostInstrumented] &&
       typeof worker.runTestGroup === 'function') {
@@ -1021,6 +1058,16 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     const shouldCreateTestSpan = test.expectedStatus === 'skipped'
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
+  worker.on('attach', ({ testId, path, _ddIsAutomaticFailureScreenshot }) => {
+    if (!_ddIsAutomaticFailureScreenshot) return
+
+    let screenshotPaths = automaticFailureScreenshotPathsByTestId.get(testId)
+    if (!screenshotPaths) {
+      screenshotPaths = new Set()
+      automaticFailureScreenshotPathsByTestId.set(testId, screenshotPaths)
+    }
+    screenshotPaths.add(path)
+  })
   worker.on('testEnd', ({ testId, status, errors, annotations }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
@@ -1043,6 +1090,20 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
     )
     const testResult = test.results.at(-1)
+    const automaticFailureScreenshotPaths = automaticFailureScreenshotPathsByTestId.get(testId)
+    automaticFailureScreenshotPathsByTestId.delete(testId)
+    if (testStatus === 'fail' && automaticFailureScreenshotPaths?.size && testResult?.attachments?.length) {
+      const screenshots = []
+      for (const attachment of testResult.attachments) {
+        if (automaticFailureScreenshotPaths.has(attachment.path)) {
+          screenshots.push(attachment)
+        }
+      }
+      if (screenshots.length) {
+        worker[kDdPlaywrightFailureScreenshots] ??= []
+        worker[kDdPlaywrightFailureScreenshots].push(screenshots)
+      }
+    }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
@@ -1145,9 +1206,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     let onDone
 
     rootDir = getRootDir(this, config)
+    const projects = getProjectsFromRunner(this, config)
+    const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
-    testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
+    testSessionStartCh.publish({
+      command,
+      frameworkVersion: playwrightVersion,
+      rootDir,
+      isFailureScreenshotEnabled,
+    })
 
     try {
       const { err, libraryConfig } = await getChannelPromise(
@@ -1173,6 +1241,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       isImpactedTestsEnabled = false
       log.error('Playwright session start error', e)
     }
+
+    testSessionConfigurationCh.publish({ isFailureScreenshotEnabled })
 
     const isTestOptimizationSupported = satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)
     const shouldGetKnownTests = isKnownTestsEnabled && isTestOptimizationSupported
@@ -1238,8 +1308,6 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         log.error('Playwright impacted tests error', err)
       }
     }
-
-    const projects = getProjectsFromRunner(this, config)
 
     // ATR and `--retries` are now compatible with Test Management.
     // Test Management tests have their retries set to 0 at the test level,
@@ -1438,6 +1506,23 @@ pageGotoCh.subscribe({
     ctx.asyncEndPromise = handlePageGoto(ctx.self)
   },
 })
+
+/**
+ * Records a path created by Playwright's automatic screenshot recorder.
+ *
+ * @param {object} ctx - Orchestrion context
+ * @returns {void}
+ */
+function recordAutomaticFailureScreenshotPath (ctx) {
+  if (isFailureScreenshotUploadEnabled &&
+    typeof ctx.result === 'string' &&
+    PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE.test(ctx.result)) {
+    automaticFailureScreenshotPaths.add(ctx.result)
+  }
+}
+
+artifactsRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
+snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
   addHook({
@@ -1750,7 +1835,10 @@ function finishProcessHostStartRunner (processHost) {
     }
     // These messages are [code, payload]. The payload is test data
     if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
-      workerReportCh.publish(message[1])
+      workerReportCh.publish({
+        serializedTraces: message[1],
+        screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
+      })
     }
   })
 }
@@ -2042,7 +2130,9 @@ function instrumentWorkerMainMethods (workerMain) {
   // We reproduce what happens in `Dispatcher#_onStepBegin` and `Dispatcher#_onStepEnd`,
   // since `startTime` and `duration` are not available directly in the worker process
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
-    if (event === 'stepBegin') {
+    if (event === 'testBegin' || event === 'testEnd') {
+      automaticFailureScreenshotPaths.clear()
+    } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
         title: payload.title,
@@ -2058,6 +2148,8 @@ function instrumentWorkerMainMethods (workerMain) {
         duration: payload.wallTime - stepInfo.startTime,
         error: payload.error,
       })
+    } else if (event === 'attach' && isAutomaticFailureScreenshotAttachment(payload)) {
+      payload._ddIsAutomaticFailureScreenshot = true
     }
     return dispatchEvent.apply(this, arguments)
   })
