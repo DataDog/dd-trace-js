@@ -82,10 +82,10 @@ describe('OpenFeature register', () => {
     assert.strictEqual(feature.factory(), openfeatureModule)
   })
 
-  it('does not construct the flagging provider until application code accesses it', () => {
+  it('does not initialize the module or construct the flagging provider until application code accesses it', () => {
     feature.enable(config, tracer, proxy, lazyProxy)
 
-    sinon.assert.calledOnceWithExactly(proxy._modules.openfeature.enable, config)
+    sinon.assert.notCalled(proxy._modules.openfeature.enable)
     sinon.assert.notCalled(lazyProxy)
     sinon.assert.notCalled(configurationSource.enable)
     assert.strictEqual(typeof Reflect.getOwnPropertyDescriptor(proxy, 'openfeature').get, 'function')
@@ -94,18 +94,20 @@ describe('OpenFeature register', () => {
 
     assert.ok(provider instanceof FlaggingProvider)
     assert.deepStrictEqual(provider.args, [tracer, config])
+    sinon.assert.calledOnceWithExactly(proxy._modules.openfeature.enable, config)
     sinon.assert.calledOnceWithExactly(configurationSource.enable, config, sinon.match.func)
   })
 
   it('keeps an existing flagging provider on repeated enable calls', () => {
     feature.enable(config, tracer, proxy, lazyProxy)
     feature.enable(config, tracer, proxy, lazyProxy)
+    sinon.assert.notCalled(proxy._modules.openfeature.enable)
     sinon.assert.notCalled(configurationSource.enable)
 
     const provider = proxy.openfeature
     feature.enable(config, tracer, proxy, lazyProxy)
 
-    sinon.assert.calledThrice(proxy._modules.openfeature.enable)
+    sinon.assert.calledTwice(proxy._modules.openfeature.enable)
     sinon.assert.notCalled(lazyProxy)
     sinon.assert.calledOnce(configurationSource.enable)
     assert.strictEqual(proxy.openfeature, provider)

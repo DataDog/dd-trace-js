@@ -15,6 +15,16 @@ function hasFlaggingProvider (proxy) {
 }
 
 /**
+ * @param {import('../proxy')} proxy
+ * @returns {boolean}
+ */
+function hasConstructedFlaggingProvider (proxy) {
+  const descriptor = Reflect.getOwnPropertyDescriptor(proxy, 'openfeature')
+
+  return descriptor?.value !== undefined && descriptor.value !== noop
+}
+
+/**
  * Exposes the provider without constructing it until application code reads it.
  * The generic tracer lazy proxy is eager outside serverless environments, while
  * agentless delivery must remain silent until the application uses OpenFeature.
@@ -27,6 +37,8 @@ function hasFlaggingProvider (proxy) {
 function defineFlaggingProvider (proxy, tracer, config, configurationSource) {
   Reflect.defineProperty(proxy, 'openfeature', {
     get () {
+      proxy._modules.openfeature.enable(config)
+
       const FlaggingProvider = require('./flagging_provider')
       const provider = new FlaggingProvider(tracer, config)
 
@@ -73,9 +85,10 @@ registerFeature({
     const configurationSource = require('./configuration_source')
     if (!configurationSource.isEnabled(config)) return
 
-    proxy._modules.openfeature.enable(config)
     if (!hasFlaggingProvider(proxy)) {
       defineFlaggingProvider(proxy, tracer, config, configurationSource)
+    } else if (hasConstructedFlaggingProvider(proxy)) {
+      proxy._modules.openfeature.enable(config)
     }
   },
 })
