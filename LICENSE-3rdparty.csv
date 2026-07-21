@@ -82,6 +82,8 @@
 "shell-quote","https://github.com/ljharb/shell-quote","['MIT']","['James Halliday']"
 "source-map","https://github.com/mozilla/source-map","['BSD-3-Clause']","['Nick Fitzgerald']"
 "spark-md5","https://github.com/satazor/js-spark-md5","['(WTFPL OR MIT)']","['André Cruz']"
+"stream-chain","https://github.com/uhop/stream-chain","['BSD-3-Clause']","['Eugene Lazutkin']"
+"stream-json","https://github.com/uhop/stream-json","['BSD-3-Clause']","['Eugene Lazutkin']"
 "tlhunter-sorted-set","https://github.com/tlhunter/node-sorted-set","['MIT']","['Thomas Hunter II']"
 "tslib","https://github.com/microsoft/tslib","['0BSD']","['Microsoft Corp.']"
 "ttl-set","https://github.com/watson/ttl-set","['MIT']","['Thomas Watson']"

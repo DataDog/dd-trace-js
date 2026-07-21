@@ -6,7 +6,7 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-const net = require('net')
+const net = require('node:net')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
@@ -29,6 +29,7 @@ let activeBufferSize = 0
 
 /**
  * @param {string} hostname Host as resolved by {@link parseUrl}; IPv6 is unbracketed (`::1`).
+ * @returns {boolean}
  */
 function isLoopbackHost (hostname) {
   // The 127.0.0.0/8 block is loopback, but only when the host is an actual IPv4 literal: a
@@ -41,7 +42,9 @@ function isLoopbackHost (hostname) {
 /**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
- * @param {(error: Error|null, result: string, statusCode: number) => void} callback
+ * @param {(error: Error|null, result?: string|import('node:http').IncomingMessage|null,
+ *   statusCode?: number, headers?: import('node:http').IncomingHttpHeaders) => void} callback
+ * @returns {import('node:http').ClientRequest | undefined}
  */
 function request (data, options, callback) {
   if (!options.headers) {
@@ -95,6 +98,7 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
+  const streamResponse = options.responseType === 'stream'
   let dataArray = data
 
   if (!Array.isArray(data)) {
@@ -106,8 +110,18 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
+  /**
+   * @param {import('node:http').IncomingMessage} res
+   * @param {() => void} finalize
+   */
   const onResponse = (res, finalize) => {
     markEndpointReached(options)
+
+    if (streamResponse) {
+      res.setTimeout(timeout)
+      callback(null, res, res.statusCode, res.headers)
+      return
+    }
 
     const chunks = []
 
@@ -162,30 +176,43 @@ function request (data, options, callback) {
   // Retries always run via setTimeout so the AsyncLocalStorage store survives
   // the gap before socket.connect(); ALS.run() does not call ALS.enterWith()
   // outside AsyncContextFrame, so a synchronous re-entry would lose the store.
+  /**
+   * @param {number} attemptIndex
+   * @returns {import('node:http').ClientRequest | undefined}
+   */
   const attempt = attemptIndex => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
-      return callback(null)
+      callback(null)
+      return
     }
 
     activeBufferSize += options.headers['Content-Length'] ?? 0
 
-    legacyStorage.run({ noop: true }, () => {
+    return legacyStorage.run({ noop: true }, () => {
       let finished = false
+      let responseReceived = false
       const finalize = () => {
         if (finished) return
         finished = true
         activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
-      const req = client.request(options, (res) => onResponse(res, finalize))
+      const req = client.request(options, (res) => {
+        responseReceived = true
+        onResponse(res, finalize)
+      })
 
       req.once('close', finalize)
       req.once('timeout', finalize)
 
       req.once('error', error => {
         finalize()
-        if (attemptIndex < getMaxAttempts(options) && isRetriableNetworkError(error)) {
+        if (streamResponse && responseReceived) return
+
+        if (options.retry !== false &&
+            attemptIndex < getMaxAttempts(options) &&
+            isRetriableNetworkError(error)) {
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
@@ -209,10 +236,12 @@ function request (data, options, callback) {
 
       for (const buffer of dataArray) req.write(buffer)
       req.end()
+
+      return req
     })
   }
 
-  attempt(1)
+  return attempt(1)
 }
 
 function byteLength (data) {

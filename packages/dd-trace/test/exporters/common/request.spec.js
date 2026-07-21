@@ -44,6 +44,7 @@ describe('request', function () {
   let docker
   let maxAttempts
   let retryStubs
+  let runInNoopContext
 
   beforeEach(() => {
     log = {
@@ -64,7 +65,11 @@ describe('request', function () {
       getMaxAttempts: sinon.fake(() => maxAttempts),
       markEndpointReached: sinon.fake(),
     }
+    runInNoopContext = sinon.spy((_store, callback) => callback())
     request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
       './docker': docker,
       '../../log': log,
       './retry': {
@@ -103,6 +108,79 @@ describe('request', function () {
         assert.strictEqual(res, 'OK')
         done(err)
       })
+  })
+
+  it('streams raw responses and returns the cancellable request', (done) => {
+    nock('http://test:123')
+      .get('/path')
+      .reply(404, ['first', 'second'], {
+        etag: '"raw"',
+      })
+
+    const clientRequest = request(Buffer.from(''), {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'GET',
+      responseType: 'stream',
+      retry: false,
+    }, (error, response, statusCode, headers) => {
+      const chunks = []
+
+      clientRequest.emit('error', new Error('late response error'))
+      response.on('data', chunk => chunks.push(chunk))
+      response.on('end', () => {
+        assert.ifError(error)
+        assert.strictEqual(statusCode, 404)
+        assert.strictEqual(headers.etag, '"raw"')
+        assert.strictEqual(Buffer.concat(chunks).toString(), '["first","second"]')
+        sinon.assert.calledOnceWithMatch(runInNoopContext, { noop: true }, sinon.match.func)
+        done()
+      })
+    })
+
+    assert.strictEqual(typeof clientRequest.destroy, 'function')
+  })
+
+  it('does not retry when retries are disabled', (done) => {
+    maxAttempts = 5
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
+    nock('http://localhost:80')
+      .get('/path')
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'GET',
+      retry: false,
+    }, (requestError) => {
+      assert.strictEqual(requestError, error)
+      sinon.assert.notCalled(retryStubs.getMaxAttempts)
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
+    })
+  })
+
+  it('allows callers to cancel a raw response request', (done) => {
+    nock('http://localhost:80')
+      .get('/path')
+      .delayConnection(1000)
+      .reply(200, 'OK')
+
+    const cancellation = new Error('cancelled')
+    const clientRequest = request(Buffer.from(''), {
+      path: '/path',
+      method: 'GET',
+      responseType: 'stream',
+      retry: false,
+    }, (error) => {
+      assert.strictEqual(error, cancellation)
+      done()
+    })
+
+    clientRequest.destroy(cancellation)
   })
 
   it('should handle an http error', done => {

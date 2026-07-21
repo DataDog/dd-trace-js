@@ -86,7 +86,7 @@ describe('OpenFeature agentless configuration integration', () => {
       cwd,
       env: {
         DD_API_KEY: 'integration-api-key',
-        DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+        DD_FEATURE_FLAGS_ENABLED: 'true',
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: backendUrl,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: '5',
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: '1',

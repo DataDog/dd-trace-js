@@ -1,11 +1,12 @@
 'use strict'
 
-const net = require('node:net')
-const { storage } = require('../../../datadog-core')
+const { pipeline } = require('node:stream')
+const { createGunzip } = require('node:zlib')
+
+const { parser, pick, streamValues } = require('../../../../vendor/dist/stream-json')
+const request = require('../exporters/common/request')
 const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const log = require('../log')
-
-const legacyStorage = storage('legacy')
 
 const MAX_ATTEMPTS = 3
 const FIRST_RETRY_MIN_MS = 2000
@@ -15,241 +16,401 @@ const SECOND_RETRY_MAX_MS = 30_000
 const RETRY_JITTER = 0.2
 const FAILURE_WARNING_INTERVAL_MS = 5 * 60 * 1000
 
+/**
+ * @typedef {object} AgentlessSourceConfig
+ * @property {URL} endpoint
+ * @property {number} pollIntervalMs
+ * @property {number} requestTimeoutMs
+ * @property {string} apiKey
+ */
+
+/**
+ * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
+ */
+
+/**
+ * @typedef {object} PollResponse
+ * @property {number} statusCode
+ * @property {string | undefined} etag
+ * @property {UniversalFlagConfiguration | undefined} configuration
+ */
+
+class RetryableRequestError extends Error {}
+class MalformedPayloadError extends Error {}
+class ResponseReadError extends Error {}
+
 class AgentlessConfigurationSource {
+  /** @type {import('node:http').ClientRequest | undefined} */
+  #activeRequest
+
+  /** @type {(configuration: UniversalFlagConfiguration) => void} */
+  #applyConfiguration
+
+  #closed = false
+
+  /** @type {AgentlessSourceConfig} */
+  #config
+
+  /** @type {string | undefined} */
+  #etag
+
+  #lastFailureWarning = -Infinity
+
+  /** @type {(() => void) | undefined} */
+  #resumeRetry
+
+  #started = false
+
+  /** @type {NodeJS.Timeout | undefined} */
+  #timer
+
   /**
-   * @param {object} config - Resolved agentless settings.
-   * @param {Function} applyConfiguration - Applies a parsed UFC configuration.
-   * @param {object} [options] - Runtime dependencies.
+   * @param {AgentlessSourceConfig} config
+   * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
    */
-  constructor (config, applyConfiguration, options = {}) {
-    this._config = config
-    this._applyConfiguration = applyConfiguration
-    this._fetch = options.fetch || fetch
-    this._apiKey = config.apiKey && canSendApiKey(config.endpoint) ? config.apiKey : undefined
-    this._random = options.random || Math.random
-    this._now = options.now || Date.now
-    this._setTimeout = options.setTimeout || setTimeout
-    this._clearTimeout = options.clearTimeout || clearTimeout
-    this._started = false
-    this._closed = false
-    this._pollInFlight = false
-    this._etag = undefined
-    this._timer = undefined
-    this._activeRequest = undefined
-    this._lastFailureWarning = -Infinity
+  constructor (config, applyConfiguration) {
+    this.#config = config
+    this.#applyConfiguration = applyConfiguration
   }
 
   /**
-   * Starts fixed-delay polling. Repeated calls are idempotent.
-   *
    * @returns {void}
    */
   start () {
-    if (this._started || this._closed) return
-    this._started = true
-    this.pollOnce(() => {})
+    if (this.#closed || this.#started) return
+    this.#started = true
+    this.#poll()
   }
 
   /**
-   * Stops polling and aborts an active request. Repeated calls are idempotent.
-   *
    * @returns {void}
    */
   stop () {
-    if (this._closed) return
-    this._closed = true
-    this._started = false
-    if (this._timer) {
-      this._clearTimeout(this._timer)
-      this._timer = undefined
+    if (this.#closed) return
+    this.#closed = true
+
+    if (this.#timer) {
+      clearTimeout(this.#timer)
+      this.#timer = undefined
     }
-    this._activeRequest?.abort()
-    this._activeRequest = undefined
+
+    const resumeRetry = this.#resumeRetry
+    this.#resumeRetry = undefined
+    resumeRetry?.()
+
+    this.#activeRequest?.destroy()
+    this.#activeRequest = undefined
   }
 
   /**
-   * Performs one poll, including bounded retries. Concurrent calls are skipped.
-   *
-   * @param {Function} callback - Receives the poll outcome.
    * @returns {void}
    */
-  pollOnce (callback) {
-    if (this._closed) {
-      callback(null, { stopped: true })
-      return
-    }
-    if (this._pollInFlight) {
-      callback(null, { skipped: true })
-      return
-    }
-
-    this._pollInFlight = true
-    this._attempt(1, (error, result) => {
-      this._pollInFlight = false
-      if (error && !this._closed) {
-        log.debug('Feature Flagging agentless poll failed', error)
-      }
-      callback(error, result)
-      if (this._started && !this._closed) {
-        this._timer = this._setTimeout(() => {
-          this._timer = undefined
-          this.pollOnce(() => {})
-        }, this._config.pollIntervalMs)
-        this._timer.unref?.()
-      }
-    })
+  #poll () {
+    this.#attempt(1).then(
+      this.#finishPoll.bind(this, undefined),
+      this.#finishPoll.bind(this)
+    )
   }
 
   /**
-   * Executes one request attempt and schedules a retry when appropriate.
-   *
-   * @param {number} attempt - One-based attempt number.
-   * @param {Function} callback - Receives the final poll outcome.
+   * @param {Error | undefined} error
    * @returns {void}
    */
-  _attempt (attempt, callback) {
-    this._request((error, response) => {
-      if (this._closed) {
-        callback(null, { stopped: true })
-        return
+  #finishPoll (error) {
+    if (error && !this.#closed) {
+      if (error instanceof MalformedPayloadError) {
+        log.debug('Feature Flagging agentless endpoint returned malformed UFC payload: %s', error.message)
+      } else {
+        log.debug('Feature Flagging agentless poll failed: %s', error.message)
+        if (error instanceof ResponseReadError) this.#warnFailure(undefined, error, 1)
       }
+    }
 
-      const retryable = error?.retryable || isRetryableStatus(response?.statusCode)
-      if (retryable && attempt < MAX_ATTEMPTS) {
-        const delay = retryDelay(this._config.pollIntervalMs, attempt, this._random())
-        this._timer = this._setTimeout(() => {
-          this._timer = undefined
-          this._attempt(attempt + 1, callback)
-        }, delay)
-        this._timer.unref?.()
-        return
-      }
-
-      if (retryable) this._warnFailure(response?.statusCode, error)
-
-      if (error) {
-        callback(error)
-        return
-      }
-      callback(null, this._apply(response))
-    })
+    if (!this.#closed) {
+      this.#timer = setTimeout(() => {
+        this.#timer = undefined
+        this.#poll()
+      }, this.#config.pollIntervalMs)
+      this.#timer.unref?.()
+    }
   }
 
   /**
-   * Sends one HTTP request to the agentless endpoint.
-   *
-   * @param {Function} callback - Receives a request error or buffered response.
-   * @returns {void}
+   * @param {number} attempt
+   * @returns {Promise<object>}
    */
-  _request (callback) {
+  #attempt (attempt) {
+    return this.#request().then(
+      this.#handleResponse.bind(this, attempt),
+      this.#handleError.bind(this, attempt)
+    )
+  }
+
+  /**
+   * @param {number} attempt
+   * @param {PollResponse} response
+   * @returns {object | Promise<object>}
+   */
+  #handleResponse (attempt, response) {
+    if (this.#closed) return { stopped: true }
+
+    if (isRetryableStatus(response.statusCode)) {
+      if (attempt < MAX_ATTEMPTS) return this.#waitAndRetry(attempt)
+      this.#warnFailure(response.statusCode, undefined, attempt)
+    }
+
+    return this.#apply(response)
+  }
+
+  /**
+   * @param {number} attempt
+   * @param {Error} error
+   * @returns {object | Promise<object>}
+   */
+  #handleError (attempt, error) {
+    if (this.#closed) return { stopped: true }
+
+    if (error instanceof RetryableRequestError) {
+      if (attempt < MAX_ATTEMPTS) return this.#waitAndRetry(attempt)
+      this.#warnFailure(undefined, error, attempt)
+    }
+
+    throw error
+  }
+
+  /**
+   * @param {number} attempt
+   * @returns {Promise<object>}
+   */
+  #waitAndRetry (attempt) {
+    const delay = retryDelay(this.#config.pollIntervalMs, attempt, Math.random())
+
+    /**
+     * @param {() => void} resolve
+     */
+    const wait = (resolve) => {
+      this.#resumeRetry = resolve
+      this.#timer = setTimeout(() => {
+        this.#timer = undefined
+        this.#resumeRetry = undefined
+        resolve()
+      }, delay)
+      this.#timer.unref?.()
+    }
+
+    return new Promise(wait).then(
+      this.#continueAttempt.bind(this, attempt + 1)
+    )
+  }
+
+  /**
+   * @param {number} attempt
+   * @returns {object | Promise<object>}
+   */
+  #continueAttempt (attempt) {
+    return this.#closed ? { stopped: true } : this.#attempt(attempt)
+  }
+
+  /**
+   * @returns {Promise<PollResponse>}
+   */
+  #request () {
     const headers = {
       ...getClientLibraryHeaders(),
       'Accept-Encoding': 'gzip',
+      'DD-API-KEY': this.#config.apiKey,
     }
-    if (this._apiKey) headers['DD-API-KEY'] = this._apiKey
-    if (this._etag) headers['If-None-Match'] = this._etag
+    if (this.#etag) headers['If-None-Match'] = this.#etag
 
-    const controller = new AbortController()
-    const timeout = this._setTimeout(() => {
-      const error = new Error(
-        `Feature Flagging agentless request timed out after ${this._config.requestTimeoutMs}ms`
-      )
-      controller.abort(error)
-      finish(requestError(error))
-    }, this._config.requestTimeoutMs)
-    timeout.unref?.()
-
-    let settled = false
-    const finish = (error, response) => {
-      if (settled) return
-      settled = true
-      this._clearTimeout(timeout)
-      if (this._activeRequest === controller) this._activeRequest = undefined
-      callback(error, response)
-    }
-
-    this._activeRequest = controller
-    legacyStorage.run({ noop: true }, () => {
-      // TODO: Give the polling source an explicitly reusable connection once
-      // transport ownership is designed and covered by system tests.
-      this._fetch(this._config.endpoint, {
-        method: 'GET',
-        headers,
-        redirect: 'manual',
-        signal: controller.signal,
-      }).then(response => {
-        const result = {
-          statusCode: response.status,
-          etag: response.headers.get('etag') ?? undefined,
-          body: '',
-        }
-        if (response.status !== 200) {
-          response.body?.cancel?.().catch(() => {})
-          finish(null, result)
+    /**
+     * @param {(response: PollResponse) => void} resolve
+     * @param {(error: Error) => void} reject
+     */
+    const execute = (resolve, reject) => {
+      /**
+       * @param {Error | null} error
+       * @param {import('node:http').IncomingMessage | null | undefined} response
+       */
+      const onResponse = (error, response) => {
+        if (error) {
+          this.#activeRequest = undefined
+          reject(new RetryableRequestError('Feature Flagging agentless request failed', { cause: error }))
           return
         }
-        response.text().then(body => {
-          result.body = body
-          finish(null, result)
-        }, error => {
-          const message = response.headers.get('content-encoding')?.toLowerCase() === 'gzip'
-            ? 'Feature Flagging agentless gzip response could not be decompressed'
-            : 'Feature Flagging agentless response body could not be read'
-          finish(new Error(message, { cause: error }))
+
+        if (!response) {
+          this.#activeRequest = undefined
+          reject(new RetryableRequestError('Feature Flagging agentless request was not sent'))
+          return
+        }
+
+        const { headers: responseHeaders, statusCode } = response
+        const etag = responseHeaders.etag
+        const result = {
+          statusCode,
+          etag: Array.isArray(etag) ? etag[0] : etag,
+          configuration: undefined,
+        }
+
+        if (statusCode !== 200) {
+          this.#activeRequest = undefined
+          response.destroy()
+          resolve(result)
+          return
+        }
+
+        this.#parseResponse(response, responseHeaders['content-encoding'], (parseError, configuration) => {
+          this.#activeRequest = undefined
+          if (parseError) {
+            reject(parseError)
+          } else {
+            result.configuration = configuration
+            resolve(result)
+          }
         })
-      }, error => finish(requestError(error)))
-    })
+      }
+
+      this.#activeRequest = request('', {
+        url: this.#config.endpoint,
+        method: 'GET',
+        headers,
+        responseType: 'stream',
+        retry: false,
+        timeout: this.#config.requestTimeoutMs,
+      }, onResponse)
+    }
+
+    return new Promise(execute)
   }
 
   /**
-   * Applies a successful response while preserving last-known-good state on
-   * every failure path.
-   *
-   * @param {object} response - Buffered HTTP response.
-   * @returns {object} Poll outcome.
+   * @param {import('node:http').IncomingMessage} response
+   * @param {string | string[] | undefined} contentEncoding
+   * @param {(error: Error | null, configuration?: UniversalFlagConfiguration) => void} callback
+   * @returns {void}
    */
-  _apply (response) {
+  #parseResponse (response, contentEncoding, callback) {
+    let attributes
+    let resourceType
+    let responseError
+    let gzipError
+
+    /**
+     * @param {{ value: unknown }} entry
+     */
+    const collectConfiguration = (entry) => {
+      if (entry.value && typeof entry.value === 'object' && !Array.isArray(entry.value)) {
+        resourceType = entry.value.type
+        attributes = entry.value.attributes
+      } else {
+        resourceType = undefined
+        attributes = undefined
+      }
+    }
+
+    /**
+     * @param {Error} error
+     */
+    const rememberResponseError = (error) => {
+      responseError = error
+    }
+
+    /**
+     * @param {Error} error
+     */
+    const rememberGzipError = (error) => {
+      gzipError = error
+    }
+
+    /**
+     * @param {Error | null | undefined} error
+     */
+    const finish = (error) => {
+      if (error) {
+        if (gzipError) {
+          callback(new ResponseReadError(
+            'Feature Flagging agentless gzip response could not be decompressed',
+            { cause: gzipError }
+          ))
+        } else if (responseError) {
+          callback(new ResponseReadError(
+            'Feature Flagging agentless response body could not be read',
+            { cause: responseError }
+          ))
+        } else {
+          callback(new MalformedPayloadError(
+            'Feature Flagging agentless response was malformed',
+            { cause: error }
+          ))
+        }
+        return
+      }
+
+      try {
+        callback(null, validateConfiguration(resourceType, attributes))
+      } catch (validationError) {
+        callback(new MalformedPayloadError(
+          'Feature Flagging agentless response was not a valid UFC resource',
+          { cause: validationError }
+        ))
+      }
+    }
+
+    const jsonParser = parser()
+    const configurationPicker = pick({ filter: 'data' })
+    const configurationValues = streamValues({ reviver: preservePrototypeKey })
+    const streams = [response]
+
+    response.once('error', rememberResponseError)
+    const encoding = Array.isArray(contentEncoding) ? contentEncoding[0] : contentEncoding
+    if (encoding?.toLowerCase() === 'gzip') {
+      const gunzip = createGunzip()
+      gunzip.once('error', rememberGzipError)
+      streams.push(gunzip)
+    }
+    streams.push(jsonParser, configurationPicker, configurationValues)
+
+    configurationValues.on('data', collectConfiguration)
+    pipeline(...streams, finish)
+  }
+
+  /**
+   * @param {PollResponse} response
+   * @returns {object}
+   */
+  #apply (response) {
     const status = response.statusCode
     if (status === 304) return { notModified: true }
 
     if (status === 401 || status === 403) {
-      this._warnFailure(status)
+      this.#warnFailure(status, undefined, 1)
       return { rejected: true, statusCode: status }
     }
 
     if (status !== 200) return { rejected: true, statusCode: status }
 
-    let configuration
     try {
-      configuration = parseConfiguration(response.body)
+      this.#applyConfiguration(response.configuration)
     } catch (error) {
-      log.debug('Feature Flagging agentless endpoint returned malformed UFC payload', error)
-      return { rejected: true, malformed: true }
-    }
-
-    try {
-      this._applyConfiguration(configuration)
-    } catch (error) {
-      log.debug('Feature Flagging agentless UFC payload could not be applied', error)
+      log.debug('Feature Flagging agentless UFC payload could not be applied: %s', error.message)
       return { rejected: true, applicationFailed: true }
     }
 
     const etag = response.etag?.trim()
-    this._etag = etag || undefined
+    this.#etag = etag || undefined
     return { applied: true }
   }
 
   /**
-   * Emits a rate-limited warning for authentication or exhausted transient failures.
-   *
-   * @param {number | undefined} statusCode - Final HTTP status, when available.
-   * @param {Error | undefined} error - Final network error, when available.
+   * @param {number | undefined} statusCode
+   * @param {Error | undefined} error
+   * @param {number} attempts
    * @returns {void}
    */
-  _warnFailure (statusCode, error) {
-    const now = this._now()
-    if (now - this._lastFailureWarning < FAILURE_WARNING_INTERVAL_MS) return
-    this._lastFailureWarning = now
+  #warnFailure (statusCode, error, attempts) {
+    const now = Date.now()
+    if (now - this.#lastFailureWarning < FAILURE_WARNING_INTERVAL_MS) return
+    this.#lastFailureWarning = now
 
     if (statusCode === 401 || statusCode === 403) {
       log.warn(
@@ -257,107 +418,73 @@ class AgentlessConfigurationSource {
         statusCode
       )
     } else if (statusCode) {
-      log.warn('Feature Flagging agentless endpoint returned HTTP %d after %d attempts', statusCode, MAX_ATTEMPTS)
+      log.warn('Feature Flagging agentless endpoint returned HTTP %d after %d attempts', statusCode, attempts)
+    } else if (attempts > 1) {
+      log.warn('Feature Flagging agentless request failed after %d attempts: %s', attempts, error.message)
     } else {
-      log.warn('Feature Flagging agentless request failed after %d attempts', MAX_ATTEMPTS, error)
+      log.warn('Feature Flagging agentless request failed: %s', error.message)
     }
   }
 }
 
 /**
- * Parses enough of the UFC envelope to reject malformed or unrelated JSON
- * before it can replace the last-known-good configuration.
- *
- * @param {string} body - HTTP response body.
- * @returns {object} Parsed UFC configuration.
+ * @param {unknown} resourceType
+ * @param {unknown} attributes
+ * @returns {UniversalFlagConfiguration}
  */
-function parseConfiguration (body) {
-  const parsed = JSON.parse(body)
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-      !parsed.data || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) {
-    throw new Error('Expected a JSON:API Universal Flag Configuration response')
-  }
-  if (parsed.data.type !== 'universal-flag-configuration') {
+function validateConfiguration (resourceType, attributes) {
+  if (resourceType !== 'universal-flag-configuration') {
     throw new Error('Expected a JSON:API Universal Flag Configuration resource')
   }
-  const configuration = parsed.data.attributes
 
-  if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration) ||
-      typeof configuration.createdAt !== 'string' ||
-      (configuration.format !== undefined && typeof configuration.format !== 'string') ||
-      !configuration.environment || typeof configuration.environment !== 'object' ||
-      Array.isArray(configuration.environment) ||
-      typeof configuration.environment.name !== 'string' ||
-      !configuration.flags || typeof configuration.flags !== 'object' || Array.isArray(configuration.flags)) {
-    const keys = configuration && typeof configuration === 'object'
-      ? Object.keys(configuration).join(',')
-      : typeof configuration
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes) ||
+      typeof attributes.createdAt !== 'string' ||
+      (attributes.format !== undefined && typeof attributes.format !== 'string') ||
+      !attributes.environment || typeof attributes.environment !== 'object' ||
+      Array.isArray(attributes.environment) ||
+      typeof attributes.environment.name !== 'string' ||
+      !attributes.flags || typeof attributes.flags !== 'object' || Array.isArray(attributes.flags)) {
+    const keys = attributes && typeof attributes === 'object'
+      ? Object.keys(attributes).join(',')
+      : typeof attributes
     throw new Error(`Expected a Universal Flag Configuration v1 object; received ${keys}`)
   }
-  return configuration
+
+  return attributes
 }
 
 /**
- * Wraps a network error and marks it retryable.
- *
- * @param {Error} cause - Network error.
- * @returns {Error} Retryable error.
+ * @this {Record<string, unknown>}
+ * @param {string} key
+ * @param {unknown} value
  */
-function requestError (cause) {
-  const error = new Error('Feature Flagging agentless request failed', { cause })
-  error.retryable = true
-  return error
+function preservePrototypeKey (key, value) {
+  if (key === '__proto__') {
+    Object.defineProperty(this, key, {
+      configurable: true,
+      enumerable: true,
+      value,
+      writable: true,
+    })
+    return
+  }
+
+  return value
 }
 
 /**
- * Keeps API keys off cleartext non-loopback connections while allowing local
- * controlled endpoints used by tests and development.
- *
- * @param {URL} endpoint - Agentless endpoint.
- * @returns {boolean} Whether an API key may be attached.
- */
-function canSendApiKey (endpoint) {
-  if (endpoint.protocol !== 'http:' || isControlledLocalHost(endpoint.hostname)) return true
-  log.error(
-    'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https Feature Flagging URL.',
-    endpoint.hostname
-  )
-  return false
-}
-
-/**
- * Keeps the cleartext exception local to controlled Feature Flagging test and
- * development endpoints instead of changing authentication for all exporters.
- *
- * @param {string} hostname - Parsed endpoint hostname.
- * @returns {boolean} Whether the hostname is a controlled local target.
- */
-function isControlledLocalHost (hostname) {
-  return hostname === 'localhost' ||
-    hostname === 'host.docker.internal' ||
-    hostname === '::1' ||
-    hostname === '[::1]' ||
-    (hostname.startsWith('127.') && net.isIPv4(hostname))
-}
-
-/**
- * Reports whether an HTTP response should be retried.
- *
- * @param {number | undefined} status - HTTP status.
- * @returns {boolean} Whether the status is transient.
+ * @param {number | undefined} status
+ * @returns {boolean}
  */
 function isRetryableStatus (status) {
   return status === 408 || status === 429 || (status >= 500 && status <= 599)
 }
 
 /**
- * Computes the Java-compatible bounded retry delay with plus or minus 20%
- * jitter.
- *
- * @param {number} pollIntervalMs - Poll interval.
- * @param {number} attempt - Failed attempt number, one or two.
- * @param {number} random - Random value in the half-open interval [0, 1).
- * @returns {number} Retry delay in milliseconds.
+ * @param {number} pollIntervalMs
+ * @param {number} attempt
+ * @param {number} random
+ * @returns {number}
  */
 function retryDelay (pollIntervalMs, attempt, random) {
   const base = attempt === 1
@@ -367,12 +494,10 @@ function retryDelay (pollIntervalMs, attempt, random) {
 }
 
 /**
- * Clamps a value to an inclusive range.
- *
- * @param {number} value - Input value.
- * @param {number} minimum - Inclusive minimum.
- * @param {number} maximum - Inclusive maximum.
- * @returns {number} Clamped value.
+ * @param {number} value
+ * @param {number} minimum
+ * @param {number} maximum
+ * @returns {number}
  */
 function clamp (value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value))

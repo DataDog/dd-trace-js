@@ -16,10 +16,13 @@ describe('OpenFeature configuration source', () => {
   beforeEach(() => {
     config = {
       DD_API_KEY: 'test-api-key',
-      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
-      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
-      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
-      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
+      featureFlags: {
+        DD_FEATURE_FLAGS_ENABLED: true,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 2,
+      },
       site: 'datadoghq.com',
       env: 'my env',
     }
@@ -35,17 +38,14 @@ describe('OpenFeature configuration source', () => {
     })
   })
 
-  for (const value of [undefined, null, '', '   ', ' AgEnTlEsS ']) {
-    it(`normalizes ${JSON.stringify(value)} to the default agentless source`, () => {
-      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
-
-      assert.strictEqual(configurationSource.resolve(config).mode, 'agentless')
-    })
+  function createSourceConfig () {
+    configurationSource.create(config, sinon.spy())
+    return AgentlessConfigurationSource.firstCall.args[0]
   }
 
   it('defaults to the Datadog UFC CDN endpoint and includes the environment', () => {
     config.DD_SITE = 'raw-env-key.invalid'
-    const resolved = configurationSource.resolve(config)
+    const resolved = createSourceConfig()
 
     assert.strictEqual(
       resolved.endpoint.toString(),
@@ -61,15 +61,21 @@ describe('OpenFeature configuration source', () => {
     config.env = 'staging'
 
     assert.strictEqual(
-      configurationSource.resolve(config).endpoint.toString(),
+      createSourceConfig().endpoint.toString(),
       'https://ufc-server.ff-cdn.datad0g.com/api/v2/feature-flagging/config/rules-based/server?dd_env=staging'
     )
   })
 
-  it('appends the standard path to a configured origin', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'http://127.0.0.1:8080/'
+  it('caps the polling interval at one hour', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 4 * 60 * 60
 
-    const resolved = configurationSource.resolve(config)
+    assert.strictEqual(createSourceConfig().pollIntervalMs, 60 * 60 * 1000)
+  })
+
+  it('appends the standard path to a configured origin', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'http://127.0.0.1:8080/'
+
+    const resolved = createSourceConfig()
     assert.strictEqual(
       resolved.endpoint.toString(),
       'http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'
@@ -77,26 +83,22 @@ describe('OpenFeature configuration source', () => {
   })
 
   it('preserves an exact configured path and query', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'https://example.com/custom/ufc?tenant=one'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://example.com/custom/ufc?tenant=one'
 
     assert.strictEqual(
-      configurationSource.resolve(config).endpoint.toString(),
+      createSourceConfig().endpoint.toString(),
       'https://example.com/custom/ufc?tenant=one'
     )
   })
 
-  it('derives the managed GovCloud endpoint without hard-coding availability', () => {
+  it('derives and creates the managed GovCloud endpoint without hard-coding availability', () => {
     config.site = 'DDOG-GOV.COM'
     config.env = 'prod'
-    const provider = {
-      _setConfiguration: sinon.spy(),
-      _setConfigurationSource: sinon.spy(),
-    }
-    const configuration = { flags: {} }
+    const applyConfiguration = sinon.spy()
 
-    const resolved = configurationSource.resolve(config)
-    configurationSource.enable(config, () => provider)
-    AgentlessConfigurationSource.firstCall.args[1](configuration)
+    const source = configurationSource.create(config, applyConfiguration)
+    const resolved = AgentlessConfigurationSource.firstCall.args[0]
 
     assert.strictEqual(
       resolved.endpoint.toString(),
@@ -104,94 +106,90 @@ describe('OpenFeature configuration source', () => {
     )
     sinon.assert.calledOnce(AgentlessConfigurationSource)
     sinon.assert.calledWithNew(AgentlessConfigurationSource)
-    sinon.assert.calledOnceWithExactly(provider._setConfiguration, configuration)
-    sinon.assert.calledOnce(provider._setConfigurationSource)
+    sinon.assert.calledOnceWithExactly(
+      AgentlessConfigurationSource,
+      sinon.match({
+        endpoint: resolved.endpoint,
+        apiKey: 'test-api-key',
+        pollIntervalMs: 30_000,
+        requestTimeoutMs: 2000,
+      }),
+      applyConfiguration
+    )
+    assert.ok(source instanceof AgentlessConfigurationSource)
     sinon.assert.notCalled(log.warn)
   })
 
   it('allows an operator-owned agentless endpoint on GovCloud', () => {
     config.site = 'ddog-gov.com'
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
       'https://flags.example.test/custom/ufc?tenant=test'
 
-    const resolved = configurationSource.resolve(config)
+    const resolved = createSourceConfig()
 
     assert.strictEqual(resolved.endpoint.toString(), 'https://flags.example.test/custom/ufc?tenant=test')
     sinon.assert.notCalled(log.warn)
   })
 
   it('rejects non-HTTP endpoints', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'file:///tmp/ufc.json'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'file:///tmp/ufc.json'
 
-    assert.throws(
-      () => configurationSource.resolve(config),
-      /must use HTTP or HTTPS/
+    const source = configurationSource.create(config, sinon.spy())
+
+    assert.strictEqual(source, undefined)
+    sinon.assert.calledOnceWithMatch(
+      log.error,
+      'Unable to configure Feature Flagging configuration source',
+      sinon.match.instanceOf(Error)
     )
+    sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
   it('rejects malformed endpoints without enabling a source', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'not a URL'
-    const provider = { _setConfigurationSource: sinon.spy() }
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'not a URL'
 
-    assert.throws(
-      () => configurationSource.resolve(config),
-      /Invalid Feature Flagging agentless URL: not a URL/
-    )
-    configurationSource.enable(config, () => provider)
+    const source = configurationSource.create(config, sinon.spy())
 
     sinon.assert.calledOnceWithMatch(
       log.error,
       'Unable to configure Feature Flagging configuration source',
       sinon.match.instanceOf(Error)
     )
-    sinon.assert.notCalled(provider._setConfigurationSource)
+    assert.strictEqual(source, undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
-  it('recognizes explicit Remote Config without resolving agentless settings', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = ' REMOTE_CONFIG '
+  it('requires an API key without enabling a source', () => {
+    delete config.DD_API_KEY
+
+    const source = configurationSource.create(config, sinon.spy())
+
+    sinon.assert.calledOnceWithMatch(
+      log.error,
+      'Unable to configure Feature Flagging configuration source',
+      sinon.match.instanceOf(Error)
+    )
+    assert.strictEqual(source, undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
+  })
+
+  it('does not create an agentless source for Remote Config delivery', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
     delete config.site
 
-    assert.deepStrictEqual(configurationSource.resolve(config), { mode: 'remote_config' })
-    assert.strictEqual(configurationSource.isRemoteConfig(config), true)
+    const source = configurationSource.create(config, sinon.spy())
+
+    assert.strictEqual(source, undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
-  for (const value of ['offline', 'other']) {
-    it(`fails closed for the unsupported ${value} source`, () => {
-      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = value
+  it('does not create an agentless source when Feature Flags are disabled', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_ENABLED = false
+    delete config.site
 
-      assert.throws(() => configurationSource.resolve(config), /Unsupported Feature Flagging configuration source/)
-      assert.strictEqual(configurationSource.isRemoteConfig(config), false)
-      sinon.assert.calledOnce(log.error)
-    })
-  }
+    const source = configurationSource.create(config, sinon.spy())
 
-  it('falls back to positive timing defaults with warnings', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 0
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = -1
-
-    assert.strictEqual(configurationSource.isRemoteConfig(config), false)
-    sinon.assert.notCalled(log.warn)
-
-    const resolved = configurationSource.resolve(config)
-
-    assert.strictEqual(resolved.pollIntervalMs, 30_000)
-    assert.strictEqual(resolved.requestTimeoutMs, 2000)
-    sinon.assert.calledTwice(log.warn)
-  })
-
-  it('caps the polling interval at one hour', () => {
-    config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 4 * 60 * 60
-
-    const resolved = configurationSource.resolve(config)
-
-    assert.strictEqual(resolved.pollIntervalMs, 60 * 60 * 1000)
-    sinon.assert.calledOnceWithExactly(
-      log.warn,
-      'Feature Flagging agentless %s %s exceeds the maximum of %ss; using %ss',
-      'poll interval',
-      4 * 60 * 60,
-      60 * 60,
-      60 * 60
-    )
+    assert.strictEqual(source, undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 })

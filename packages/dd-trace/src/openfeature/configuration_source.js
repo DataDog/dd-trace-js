@@ -2,76 +2,45 @@
 
 const log = require('../log')
 
-const CONFIGURATION_SOURCE_AGENTLESS = 'agentless'
-const CONFIGURATION_SOURCE_REMOTE_CONFIG = 'remote_config'
-
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
-const DEFAULT_POLL_INTERVAL_SECONDS = 30
-const DEFAULT_REQUEST_TIMEOUT_SECONDS = 2
 const MAX_POLL_INTERVAL_SECONDS = 60 * 60
 
 /**
- * Resolves Feature Flagging configuration-source settings.
- *
- * @param {import('../config/config-base')} config - Tracer configuration.
- * @returns {object} Resolved source settings.
+ * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
  */
-function resolve (config) {
-  const mode = resolveMode(config)
-
-  if (mode === CONFIGURATION_SOURCE_REMOTE_CONFIG) {
-    return { mode }
-  }
-
-  return {
-    mode,
-    endpoint: endpoint(config, config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL),
-    pollIntervalMs: positiveMillisecondsFromSeconds(
-      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
-      DEFAULT_POLL_INTERVAL_SECONDS,
-      'poll interval',
-      MAX_POLL_INTERVAL_SECONDS
-    ),
-    requestTimeoutMs: positiveMillisecondsFromSeconds(
-      config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
-      DEFAULT_REQUEST_TIMEOUT_SECONDS,
-      'request timeout'
-    ),
-    apiKey: config.DD_API_KEY,
-  }
-}
 
 /**
- * Reports whether the explicit Remote Config source is selected.
- *
- * Invalid source values fail closed and do not enable Remote Config delivery.
- *
- * @param {import('../config/config-base')} config - Tracer configuration.
- * @returns {boolean} Whether Remote Config should own UFC delivery.
+ * @param {import('../config/config-base')} config
+ * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
  */
-function isRemoteConfig (config) {
+function create (config, applyConfiguration) {
+  const {
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: source,
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: baseUrl,
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: pollIntervalSeconds,
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: requestTimeoutSeconds,
+    DD_FEATURE_FLAGS_ENABLED: enabled,
+  } = config.featureFlags
+
+  if (!enabled || source !== 'agentless') {
+    return
+  }
+
   try {
-    return resolveMode(config) === CONFIGURATION_SOURCE_REMOTE_CONFIG
+    if (!config.DD_API_KEY) {
+      throw new Error('DD_API_KEY is required for Feature Flagging agentless delivery')
+    }
+
+    const AgentlessConfigurationSource = require('./agentless_configuration_source')
+    return new AgentlessConfigurationSource({
+      endpoint: endpoint(config, baseUrl),
+      pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
+      requestTimeoutMs: requestTimeoutSeconds * 1000,
+      apiKey: config.DD_API_KEY,
+    }, applyConfiguration)
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)
-    return false
   }
-}
-
-/**
- * Normalizes and validates source selection without resolving agentless
- * endpoint or timing configuration.
- *
- * @param {import('../config/config-base')} config - Tracer configuration.
- * @returns {string} Selected configuration-source mode.
- */
-function resolveMode (config) {
-  const value = config.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
-  const mode = String(value ?? '').trim().toLowerCase() || CONFIGURATION_SOURCE_AGENTLESS
-  if (mode !== CONFIGURATION_SOURCE_AGENTLESS && mode !== CONFIGURATION_SOURCE_REMOTE_CONFIG) {
-    throw new Error(`Unsupported Feature Flagging configuration source: ${mode}`)
-  }
-  return mode
 }
 
 /**
@@ -89,7 +58,7 @@ function endpoint (config, configuredBaseUrl) {
   const configured = configuredBaseUrl?.trim()
 
   if (!configured) {
-    const url = new URL(`https://ufc-server.ff-cdn.${String(config.site).toLowerCase()}${DEFAULT_AGENTLESS_PATH}`)
+    const url = new URL(`https://ufc-server.ff-cdn.${config.site.toLowerCase()}${DEFAULT_AGENTLESS_PATH}`)
     if (config.env) url.searchParams.set('dd_env', config.env)
     return url
   }
@@ -112,41 +81,6 @@ function endpoint (config, configuredBaseUrl) {
   return url
 }
 
-/**
- * Converts a positive number of seconds to milliseconds, falling back for
- * invalid or non-positive values.
- *
- * @param {unknown} value - Configured seconds.
- * @param {number} fallbackSeconds - Default seconds.
- * @param {string} setting - Human-readable setting name.
- * @param {number} [maximumSeconds] - Optional inclusive maximum.
- * @returns {number} Positive milliseconds.
- */
-function positiveMillisecondsFromSeconds (value, fallbackSeconds, setting, maximumSeconds) {
-  const seconds = Number(value)
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    log.warn(
-      'Invalid Feature Flagging agentless %s: %s. The value must be positive; using %ss',
-      setting,
-      value,
-      fallbackSeconds
-    )
-    return fallbackSeconds * 1000
-  }
-  if (maximumSeconds !== undefined && seconds > maximumSeconds) {
-    log.warn(
-      'Feature Flagging agentless %s %s exceeds the maximum of %ss; using %ss',
-      setting,
-      value,
-      maximumSeconds,
-      maximumSeconds
-    )
-    return maximumSeconds * 1000
-  }
-  return Math.max(1, Math.round(seconds * 1000))
-}
-
 module.exports = {
-  isRemoteConfig,
-  resolve,
+  create,
 }

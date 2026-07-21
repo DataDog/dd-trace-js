@@ -11,8 +11,10 @@ require('../setup/core')
 describe('OpenFeature register', () => {
   let config
   let feature
+  let flaggingProviderConstructions
   let lazyProxy
   let openfeatureModule
+  let openfeatureRemoteConfig
   let proxy
   let registerFeature
   let tracer
@@ -20,6 +22,7 @@ describe('OpenFeature register', () => {
   function NoopFlaggingProvider () {}
 
   function FlaggingProvider (...args) {
+    flaggingProviderConstructions++
     this.args = args
   }
 
@@ -31,20 +34,25 @@ describe('OpenFeature register', () => {
       enable: sinon.spy(),
       disable: sinon.spy(),
     }
+    openfeatureRemoteConfig = {
+      enable: sinon.spy(),
+    }
+    flaggingProviderConstructions = 0
+>>>>>>> af80e4e288 (feat(openfeature): support agentless feature flag configuration)
 
     delete require.cache[require.resolve('../../src/openfeature/register')]
     proxyquire('../../src/openfeature/register', {
       '../feature-registry': { registerFeature },
       './flagging_provider': FlaggingProvider,
+      './remote_config': openfeatureRemoteConfig,
       './index': openfeatureModule,
       './noop': NoopFlaggingProvider,
     })
 
     config = {
-      experimental: {
-        flaggingProvider: {
-          enabled: true,
-        },
+      featureFlags: {
+        DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+        DD_FEATURE_FLAGS_ENABLED: true,
       },
     }
     tracer = {}
@@ -70,33 +78,70 @@ describe('OpenFeature register', () => {
     assert.strictEqual(feature.factory(), openfeatureModule)
   })
 
-  it('defines the flagging provider when enabled', () => {
+  it('does not initialize Feature Flags until application code accesses the provider', () => {
     feature.enable(config, tracer, proxy, lazyProxy)
 
+    assert.strictEqual(flaggingProviderConstructions, 0)
+    sinon.assert.notCalled(proxy._modules.openfeature.enable)
+    sinon.assert.notCalled(lazyProxy)
+
+    const provider = proxy.openfeature
+
+    assert.strictEqual(flaggingProviderConstructions, 1)
+    assert.ok(provider instanceof FlaggingProvider)
+    assert.deepStrictEqual(provider.args, [tracer, config])
     sinon.assert.calledOnceWithExactly(proxy._modules.openfeature.enable, config)
-    sinon.assert.calledOnce(lazyProxy)
-    assert.ok(proxy.openfeature instanceof FlaggingProvider)
-    assert.deepStrictEqual(proxy.openfeature.args, [tracer, config])
   })
 
   it('keeps an existing flagging provider on repeated enable calls', () => {
     feature.enable(config, tracer, proxy, lazyProxy)
-    const provider = proxy.openfeature
+    feature.enable(config, tracer, proxy, lazyProxy)
+    assert.strictEqual(flaggingProviderConstructions, 0)
+    sinon.assert.notCalled(proxy._modules.openfeature.enable)
 
+    const provider = proxy.openfeature
     feature.enable(config, tracer, proxy, lazyProxy)
 
+    assert.strictEqual(flaggingProviderConstructions, 1)
     sinon.assert.calledTwice(proxy._modules.openfeature.enable)
-    sinon.assert.calledOnce(lazyProxy)
+    sinon.assert.notCalled(lazyProxy)
     assert.strictEqual(proxy.openfeature, provider)
   })
 
   it('does not define the flagging provider when disabled', () => {
-    config.experimental.flaggingProvider.enabled = false
+    config.featureFlags.DD_FEATURE_FLAGS_ENABLED = false
 
     feature.enable(config, tracer, proxy, lazyProxy)
 
+    assert.strictEqual(flaggingProviderConstructions, 0)
     sinon.assert.notCalled(proxy._modules.openfeature.enable)
     sinon.assert.notCalled(lazyProxy)
     assert.strictEqual(proxy.openfeature, feature.noop)
+  })
+
+  it('installs Remote Config delivery when selected', () => {
+    const rc = {}
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+    feature.remoteConfig(rc, config, proxy)
+
+    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, true)
+  })
+
+  it('does not install Remote Config delivery when disabled', () => {
+    const rc = {}
+    config.featureFlags.DD_FEATURE_FLAGS_ENABLED = false
+
+    feature.remoteConfig(rc, config, proxy)
+
+    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, false)
+  })
+
+  it('does not install Remote Config delivery for the default agentless source', () => {
+    const rc = {}
+
+    feature.remoteConfig(rc, config, proxy)
+
+    sinon.assert.calledOnceWithExactly(openfeatureRemoteConfig.enable, rc, sinon.match.func, false)
   })
 })
