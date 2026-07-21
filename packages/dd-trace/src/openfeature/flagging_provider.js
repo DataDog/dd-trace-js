@@ -2,10 +2,12 @@
 
 const { channel } = require('dc-polyfill')
 const log = require('../log')
+const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
-const { DatadogNodeServerProvider } = require('./require-provider')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
+
+const { DatadogNodeServerProvider } = require('./require-provider')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -15,21 +17,19 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
 
+  /** @type {{ start: Function, stop: Function } | undefined} */
+  #configurationSource
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
-    // Call parent constructor with required options and timeout
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
-    this._tracer = tracer
-    this._config = config
-
-    // @ts-expect-error The upstream constructor always initializes its optional hooks property.
     this.hooks.push(new EvalMetricsHook(config))
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
@@ -43,6 +43,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.experimental.flaggingProvider.initializationTimeoutMs)
+
+    this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
+    this.#configurationSource?.start()
   }
 
   /**
@@ -50,22 +53,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
+    this.#configurationSource?.stop()
+    this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
-  }
-
-  /**
-   * Internal method to update flag configuration from Remote Config.
-   * This method is called automatically when Remote Config delivers UFC updates.
-   *
-   * @internal
-   * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} ufc
-   * - Universal Flag Configuration object
-   */
-  _setConfiguration (ufc) {
-    if (typeof this.setConfiguration === 'function') {
-      this.setConfiguration(ufc)
-    }
-    log.debug('%s provider configuration updated', this.constructor.name)
+    this.#spanEnrichmentHook = undefined
   }
 }
 
