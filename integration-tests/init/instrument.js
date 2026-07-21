@@ -17,8 +17,10 @@ const server = http.createServer((req, res) => {
       server.close()
       // eslint-disable-next-line no-console
       console.log(gotEvent)
-      // eslint-disable-next-line no-console
-      console.log('instrumentation source:', global._ddtrace._tracer._config.instrumentationSource)
+      if (global._ddtrace?._tracer) {
+        // eslint-disable-next-line no-console
+        console.log('instrumentation source:', global._ddtrace._tracer._config.instrumentationSource)
+      }
       process.exit()
     })
   })
