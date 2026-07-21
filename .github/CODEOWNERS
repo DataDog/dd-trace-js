@@ -594,7 +594,7 @@
 /.github/actions/datadog-ci/package.json @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/datadog-ci/yarn.lock @DataDog/lang-platform-js @dd-octo-sts
 /vendor/package.json @DataDog/lang-platform-js @dd-octo-sts
-/vendor/package-lock.json @DataDog/lang-platform-js @dd-octo-sts
+/vendor/bun.lock @DataDog/lang-platform-js @dd-octo-sts
 /packages/dd-trace/test/plugins/versions/package.json @DataDog/apm-idm-js @dd-octo-sts
 /integration-tests/esbuild/package.json @DataDog/apm-idm-js @dd-octo-sts
 /integration-tests/appsec/iast-esbuild-esm/package.json @DataDog/asm-js @dd-octo-sts
