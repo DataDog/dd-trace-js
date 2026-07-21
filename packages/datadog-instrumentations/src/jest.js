@@ -1858,13 +1858,39 @@ function resetSuiteSkippingRunState () {
   coverageBackfillFiles = undefined
 }
 
+function resetLibraryConfiguration () {
+  knownTests = {}
+  isCodeCoverageEnabled = false
+  isCoverageReportUploadEnabled = false
+  isItrEnabled = false
+  isSuitesSkippingEnabled = false
+  isEarlyFlakeDetectionEnabled = false
+  earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionFaultyThreshold = 30
+  isEarlyFlakeDetectionFaulty = false
+  isKnownTestsEnabled = false
+  isTestManagementTestsEnabled = false
+  testManagementTests = {}
+  testManagementAttemptToFixRetries = 0
+  isImpactedTestsEnabled = false
+  modifiedFiles = {}
+  repositoryRoot = undefined
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   if (!isItrEnabled || !isSuitesSkippingEnabled) return originalTests
 
-  const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
-  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
+  const repositoryRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
+  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, repositoryRoot, rootDir)
   hasFilteredSkippableSuites = true
-  log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
+  log.debug(
+    'Jest discovered %d suites; skipped %d using %d skippable candidates; %d suites will run.',
+    originalTests.length,
+    jestSuitesToRun.skippedSuites.length,
+    skippableSuites.length,
+    jestSuitesToRun.suitesToRun.length
+  )
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
@@ -1877,7 +1903,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
     ? getTestContexts(originalTests)
     : undefined
   coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
-    ? getCoverageBackfillFiles(skippableSuitesCoverage, suitePathRoot, getTestSuitePath)
+    ? getCoverageBackfillFiles(skippableSuitesCoverage, repositoryRoot, getTestSuitePath)
     : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
@@ -2205,11 +2231,13 @@ function getCliWrapper (isNewJestVersion) {
       resetSuiteSkippingRunState()
       hasFinishedTestSession = false
 
+      let shouldResetLibraryConfiguration = true
       try {
         const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
           frameworkVersion: jestVersion,
         })
         if (!err) {
+          shouldResetLibraryConfiguration = false
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
           isItrEnabled = libraryConfig.isItrEnabled
@@ -2225,6 +2253,10 @@ function getCliWrapper (isNewJestVersion) {
         }
       } catch (err) {
         log.error('Jest library configuration error', err)
+      } finally {
+        if (shouldResetLibraryConfiguration) {
+          resetLibraryConfiguration()
+        }
       }
 
       const {

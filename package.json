@@ -153,6 +153,8 @@
     "LICENSE.Apache",
     "LICENSE.BSD3",
     "loader-hook.mjs",
+    "openfeature.d.ts",
+    "openfeature.js",
     "packages/*/index.js",
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",
@@ -168,7 +170,7 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.11",
-    "import-in-the-middle": "^3.3.1",
+    "import-in-the-middle": "^3.3.2",
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {
@@ -196,6 +198,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.106",
     "@types/sinon": "^22.0.0",
+    "@vercel/nft": "^0.29.4",
     "axios": "^1.18.1",
     "benchmark": "^2.1.4",
     "body-parser": "^2.3.0",

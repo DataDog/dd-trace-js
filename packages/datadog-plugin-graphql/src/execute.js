@@ -197,7 +197,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       config: this.config,
       fields: new Map(),
       pathCache: new Map(),
-      collapsedPathCache: this.config.collapse ? { byPath: new Map(), byParent: new Map() } : undefined,
       abortController,
       executeSpan: span,
       plugin: this,
@@ -228,9 +227,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (!span) return
 
     // Synchronous execute() throw (e.g. execute(null, doc)) — error handler
-    // already tagged the span, just finish it.
+    // already tagged the span.
     if (ctx.error) {
-      this.#drain(ctx, span)
+      if (ctx.ddAborted) {
+        span.finish()
+      } else {
+        this.#finishSpan(ctx, span)
+      }
       return ctx.parentStore
     }
 
@@ -239,10 +242,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (typeof result?.then === 'function') {
       result.then(
         (res) => this.#finishSpan(ctx, span, res),
-        (err) => {
-          span.setTag('error', err)
-          this.#drain(ctx, span)
-        }
+        (err) => this.#finishSpan(ctx, span, undefined, err)
       )
     } else {
       this.#finishSpan(ctx, span, result)
@@ -261,8 +261,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
   }
 
-  #finishSpan (ctx, span, res) {
-    this.config.hooks.execute(span, ctx.ddArgs, res)
+  /**
+   * @param {object} ctx
+   * @param {import('../../dd-trace/src/opentracing/span')} span
+   * @param {import('graphql').ExecutionResult} [res]
+   * @param {unknown} [error]
+   */
+  #finishSpan (ctx, span, res, error) {
+    if (error !== undefined) {
+      span.setTag('error', error)
+    }
 
     if (res?.errors?.length) {
       span.setTag('error', res.errors[0])
@@ -271,17 +279,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    this.#drain(ctx, span)
-  }
-
-  #drain (ctx, span) {
-    span.finish()
     if (ctx.ddContextValue) {
       contexts.delete(ctx.ddContextValue)
     }
     if (ctx.ddInstrumentedArgs) {
       instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
+
+    this.config.hooks.execute(span, ctx.ddArgs, res)
+
+    span.finish()
   }
 
   // Public — called from wrapResolve (free function, crosses class boundary).
@@ -423,7 +430,7 @@ function wrapResolve (resolve) {
       return resolve.apply(this, arguments)
     }
 
-    const fieldKey = config.collapse ? buildCachedCollapsedPath(infoPath, rootCtx.collapsedPathCache) : infoPath
+    const fieldKey = config.collapse ? pathString : infoPath
     let field = rootCtx.fields.get(fieldKey)
     const isFirst = !field
 
@@ -436,7 +443,6 @@ function wrapResolve (resolve) {
         variableValues: info.variableValues,
         args,
         infoPath,
-        fieldKey,
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
@@ -592,33 +598,6 @@ function buildCachedPathString (path, cache, collapse) {
   return pathString
 }
 
-function buildCachedCollapsedPath (path, cache) {
-  if (!path) return
-
-  const cached = cache.byPath.get(path)
-  if (cached !== undefined) return cached
-
-  const segment = typeof path.key === 'string' ? path.key : '*'
-  const prev = path.prev === undefined
-    ? undefined
-    : buildCachedCollapsedPath(path.prev, cache)
-
-  let siblings = cache.byParent.get(prev)
-  if (siblings === undefined) {
-    siblings = new Map()
-    cache.byParent.set(prev, siblings)
-  }
-
-  let collapsedPath = siblings.get(segment)
-  if (collapsedPath === undefined) {
-    collapsedPath = { key: segment, prev }
-    siblings.set(segment, collapsedPath)
-  }
-
-  cache.byPath.set(path, collapsedPath)
-  return collapsedPath
-}
-
 // Depth filtering directly on the linked-list node — no array allocation needed.
 // config.depth < 0 means no limit. Only selection-set segments (string keys)
 // count toward depth; list indices are execution artifacts and are transparent.
@@ -640,8 +619,9 @@ function shouldInstrumentNode (config, path) {
 }
 
 function getParentField (rootCtx, field) {
-  for (let curr = field.fieldKey?.prev; curr; curr = curr.prev) {
-    const innerField = rootCtx.fields.get(curr)
+  for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
+    const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
+    const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) return innerField
   }
 

@@ -991,6 +991,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
+      { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_HEADER', value: null, origin: 'default' },
       { name: 'DD_CODE_ORIGIN_FOR_SPANS_ENABLED', value: true, origin: 'default' },
@@ -1036,6 +1037,7 @@ describe('Config', () => {
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED', value: true, origin: 'default' },
+      { name: 'DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', value: null, origin: 'default' },
       { name: 'DD_CIVISIBILITY_FLAKY_RETRY_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_ITR_ENABLED', value: true, origin: 'default' },
@@ -3276,7 +3278,7 @@ describe('Config', () => {
       this.skip()
       return
     }
-    const tempDir = mkdtempSync(path.join(process.cwd(), 'dd-trace-span-sampling-rules-'))
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-span-sampling-rules-'))
     const rulesPath = path.join(tempDir, 'span-sampling-rules.json')
     writeFileSync(rulesPath, '{"sample_rate":')
 
@@ -3518,10 +3520,13 @@ describe('Config', () => {
   context('ci visibility config', () => {
     let options = {}
     beforeEach(() => {
+      delete process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
+      delete process.env.DD_CODE_COVERAGE_FLAGS
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
@@ -3543,6 +3548,27 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, false)
+      })
+      it('should enable code coverage report upload by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, true)
+      })
+      it('should disable code coverage report upload from the environment', () => {
+        process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, false)
+      })
+      it('should leave code coverage flags unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CODE_COVERAGE_FLAGS, undefined)
+      })
+      it('should read code coverage flags from the environment as a string', () => {
+        process.env.DD_CODE_COVERAGE_FLAGS = ' type:unit-tests, ,jvm-21,type:unit-tests, '
+        const config = getConfig(options)
+        assert.strictEqual(
+          config.testOptimization.DD_CODE_COVERAGE_FLAGS,
+          ' type:unit-tests, ,jvm-21,type:unit-tests, '
+        )
       })
       it('should activate ITR by default', () => {
         const config = getConfig(options)
@@ -3583,6 +3609,30 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, false)
+      })
+      it('should leave DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
+      })
+      it('should read DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT if present', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+      })
+      it('should allow zero DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT retries', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '0'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 0)
+      })
+      it('should round DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT down to an integer', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '2.9'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, 2)
+      })
+      it('should reject a negative DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', () => {
+        process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT = '-1'
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)

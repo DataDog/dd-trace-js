@@ -4,6 +4,7 @@ const NoopProxy = require('./noop/proxy')
 const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
+const { getEnvironmentVariable } = require('./config/helper')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
@@ -14,6 +15,7 @@ const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
 const processTags = require('./process-tags')
+const { isTrue } = require('./util')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -21,6 +23,21 @@ const {
   removeBaggageItem,
   removeAllBaggageItems,
 } = require('./baggage')
+
+const VALIDATION_MANIFEST_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE'
+const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
+const VALIDATION_OUTPUT_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR'
+const ORDINARY_TRACING_DISABLED_MESSAGE =
+  'Ordinary dd-trace application tracing initialization is disabled during offline Test Optimization validation. ' +
+  'The CI test process must initialize through dd-trace/ci/init.'
+const OFFLINE_VALIDATION_EXPORTERS = new Set([
+  'ci_validation',
+  'cucumber_worker',
+  'jest_worker',
+  'mocha_worker',
+  'playwright_worker',
+  'vitest_worker',
+])
 
 class LazyModule {
   constructor (provider) {
@@ -107,6 +124,11 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
+    if (isOfflineTestOptimizationValidation() && !isOfflineValidationExporter(options)) {
+      process.stderr.write(`${ORDINARY_TRACING_DISABLED_MESSAGE}\n`)
+      return this
+    }
+
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
@@ -131,7 +153,7 @@ class Tracer extends NoopProxy {
 
       telemetry.start(config, this._pluginManager)
 
-      if (config.dogstatsd) {
+      if (config.dogstatsd && !isOfflineTestOptimizationValidation()) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
@@ -351,13 +373,15 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
 
         if (config.experimental?.aiguard?.enabled) {
-          this._modules.aiguard.enable(this._tracer, config)
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
       for (const feature of Object.values(features)) {
         feature.enable?.(config, this._tracer, this, lazyProxy)
+      }
+      if (config.experimental?.aiguard?.enabled) {
+        this._modules.aiguard.enable(this._tracer, config)
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
@@ -451,6 +475,27 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
+}
+
+/**
+ * Checks the private filesystem-only Test Optimization validation mode.
+ *
+ * @returns {boolean} whether network-capable tracer side channels must stay disabled
+ */
+function isOfflineTestOptimizationValidation () {
+  return isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV)) &&
+    Boolean(getEnvironmentVariable(VALIDATION_MANIFEST_ENV)) &&
+    Boolean(getEnvironmentVariable(VALIDATION_OUTPUT_ENV))
+}
+
+/**
+ * Checks whether initialization selected a filesystem-only Test Optimization exporter.
+ *
+ * @param {import('../../../index').TracerOptions} [options] tracer initialization options
+ * @returns {boolean} whether the selected exporter is safe for offline validation
+ */
+function isOfflineValidationExporter (options) {
+  return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)
 }
 
 module.exports = Tracer
