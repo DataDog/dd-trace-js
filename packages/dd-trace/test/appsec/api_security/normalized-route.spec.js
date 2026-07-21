@@ -41,442 +41,196 @@ function makeMatcher (route) {
   }
 }
 
-// Convenience wrapper: inject the Express 5 parser + matcher.
 function normalize (route, params, urlPath) {
   return normalizeRouteExpress(route, params, urlPath, parse, makeMatcher)
 }
 
+// Register one test per case, named after its inputs so a failure names the exact route.
+function check (route, url, expected, params = {}) {
+  it(`${route}${url === undefined ? '' : ` on ${url}`} → ${expected}`, () => {
+    assert.equal(normalize(route, params, url), expected)
+  })
+}
+
 describe('normalizeRouteExpress', () => {
   describe('invalid / unsupported inputs', () => {
-    it('returns null for null', () => {
-      assert.equal(normalize(null, {}), null)
-    })
-
-    it('returns null for undefined', () => {
-      assert.equal(normalize(undefined, {}), null)
-    })
-
-    it('returns null for empty string', () => {
-      assert.equal(normalize('', {}), null)
-    })
-
-    it('returns null for non-string', () => {
-      assert.equal(normalize(42, {}), null)
-    })
+    check(null, undefined, null)
+    check(undefined, undefined, null)
+    check('', undefined, null)
+    check(42, undefined, null)
+    check('/users/:"unterminated', undefined, null) // parser throws
+    check('/users{/:id', undefined, null) // unbalanced group brace, parser throws
+    check('/path(\\.ext)?', undefined, null) // standalone parentheses, parser throws
 
     it('returns null when no parse function is provided (Express 4 / path-to-regexp 0.x)', () => {
       assert.equal(normalizeRouteExpress('/users/:id', {}, '/users/1', undefined), null)
-    })
-
-    it('returns null for unterminated quoted param name (parser throws)', () => {
-      assert.equal(normalize('/users/:"unterminated', {}), null)
-    })
-
-    it('returns null for unbalanced optional group brace (parser throws)', () => {
-      assert.equal(normalize('/users{/:id', {}), null)
-    })
-
-    it('returns null for standalone parentheses (parser throws)', () => {
-      assert.equal(normalize('/path(\\.ext)?', {}), null)
     })
   })
 
   describe('Express 4 syntax is unsupported (parser throws → null)', () => {
     // path-to-regexp v8 (Express 5) rejects the Express 4 grammar. A real Express 5 app cannot
     // register these routes, so omitting the tag is correct.
-    it('returns null for :id? optional-suffix param', () => {
-      assert.equal(normalize('/users/:id?', {}), null)
-    })
-
-    it('returns null for inline regex constraint :id(\\d+)', () => {
-      assert.equal(normalize('/users/:id(\\d+)', { id: '5' }), null)
-    })
-
-    it('returns null for unnamed wildcard *', () => {
-      assert.equal(normalize('/files/*', {}), null)
-    })
-
-    it('returns null for :name* / :name+ modifiers', () => {
-      assert.equal(normalize('/files/:path*', {}), null)
-      assert.equal(normalize('/files/:path+', {}), null)
-    })
-
-    it('returns null for a static-prefixed optional param v:major?', () => {
-      assert.equal(normalize('/api/v:major?/users', {}), null)
-    })
+    check('/users/:id?', undefined, null) // optional-suffix param
+    check('/users/:id(\\d+)', undefined, null, { id: '5' }) // inline regex constraint
+    check('/files/*', undefined, null) // unnamed wildcard
+    check('/files/:path*', undefined, null) // :name* modifier
+    check('/files/:path+', undefined, null) // :name+ modifier
+    check('/api/v:major?/users', undefined, null) // static-prefixed optional param
   })
 
   describe('root and trivial routes', () => {
-    it('returns "/" for root route', () => {
-      assert.equal(normalize('/', {}), '/')
-    })
-
-    it('preserves trailing slash when declared', () => {
-      assert.equal(normalize('/users/', {}), '/users/')
-    })
-
-    it('does not add trailing slash when not declared', () => {
-      assert.equal(normalize('/users', {}), '/users')
-    })
-
-    it('collapses empty (consecutive-slash) segments (rule 2)', () => {
-      assert.equal(normalize('/a//b', {}, '/a/b'), '/a/b')
-    })
+    check('/', undefined, '/')
+    check('/users/', undefined, '/users/') // trailing slash preserved when declared
+    check('/users', undefined, '/users')
+    check('/a//b', '/a/b', '/a/b') // consecutive-slash empty segment collapsed (rule 2)
   })
 
   describe('static routes', () => {
-    it('preserves plain ASCII static segments', () => {
-      assert.equal(normalize('/api/v1/users', {}), '/api/v1/users')
-    })
-
-    it('preserves dots and dashes in static segments', () => {
-      assert.equal(normalize('/api/v2.0/some-path', {}), '/api/v2.0/some-path')
-    })
-
-    it('URL-encodes characters outside the allowed static set', () => {
-      assert.equal(normalize('/api/hello world', {}), '/api/hello%20world')
-    })
-
-    it('URL-encodes special chars in static segments', () => {
-      assert.equal(normalize('/path/foo@bar', {}), '/path/foo%40bar')
-    })
+    check('/api/v1/users', undefined, '/api/v1/users')
+    check('/api/v2.0/some-path', undefined, '/api/v2.0/some-path') // dots and dashes kept
+    check('/api/hello world', undefined, '/api/hello%20world')
+    check('/path/foo@bar', undefined, '/path/foo%40bar')
   })
 
   describe('required named params', () => {
-    it('normalizes a single required param', () => {
-      assert.equal(normalize('/users/:id', { id: '123' }), '/users/{id}')
-    })
-
-    it('normalizes multiple required params in separate segments', () => {
-      assert.equal(
-        normalize('/users/:userId/posts/:postId', { userId: '1', postId: '2' }),
-        '/users/{userId}/posts/{postId}'
-      )
-    })
-
-    it('normalizes static and dynamic segments mixed', () => {
-      assert.equal(normalize('/api/v1/users/:id', { id: '42' }), '/api/v1/users/{id}')
-    })
-
-    it('works when params is null (required params still included)', () => {
-      assert.equal(normalize('/users/:id', null), '/users/{id}')
-    })
-
-    it('supports $ and Unicode characters in param names', () => {
-      assert.equal(normalize('/:$foo', { $foo: 'x' }, '/x'), '/{$foo}')
-      assert.equal(normalize('/:café', { café: 'x' }, '/x'), '/{café}')
-    })
+    check('/users/:id', undefined, '/users/{id}', { id: '123' })
+    check('/users/:userId/posts/:postId', undefined, '/users/{userId}/posts/{postId}',
+      { userId: '1', postId: '2' })
+    check('/api/v1/users/:id', undefined, '/api/v1/users/{id}', { id: '42' })
+    check('/users/:id', undefined, '/users/{id}', null) // params null → required params still included
+    check('/:$foo', '/x', '/{$foo}', { $foo: 'x' }) // $ allowed in param names
+    check('/:café', '/x', '/{café}', { café: 'x' }) // Unicode allowed in param names
   })
 
   describe('multi-param segments (rule 5)', () => {
-    it('combines two required params in one segment with "+"', () => {
-      assert.equal(
-        normalize('/photos/:id.:format', { id: '1', format: 'jpg' }),
-        '/photos/{id+format}'
-      )
-    })
-
-    it('combines three params in one segment', () => {
-      assert.equal(
-        normalize('/v/:major.:minor.:patch', { major: '1', minor: '2', patch: '3' }),
-        '/v/{major+minor+patch}'
-      )
-    })
-
-    it('single param with surrounding static text becomes just the param (rule 5)', () => {
-      assert.equal(normalize('/users/user-:id', { id: '5' }), '/users/{id}')
-    })
+    check('/photos/:id.:format', undefined, '/photos/{id+format}', { id: '1', format: 'jpg' })
+    check('/v/:major.:minor.:patch', undefined, '/v/{major+minor+patch}',
+      { major: '1', minor: '2', patch: '3' })
+    check('/users/user-:id', undefined, '/users/{id}', { id: '5' }) // static text around one param dropped
   })
 
   describe('Express 5 named wildcard (*name)', () => {
-    it('normalizes /*splat to /{splat}', () => {
-      assert.equal(normalize('/*splat', { splat: 'anything' }), '/{splat}')
-    })
-
-    it('normalizes /prefix/*rest', () => {
-      assert.equal(normalize('/files/*rest', { rest: 'a/b/c' }), '/files/{rest}')
-    })
-
-    it('avoids paramN collision with existing named params', () => {
-      assert.equal(normalize('/:param1/:param2/*', { param1: 'x', param2: 'y' }), null) // unnamed * throws
-      assert.equal(
-        normalize('/:param1/:param2/*rest', { param1: 'x', param2: 'y', rest: 'z' }),
-        '/{param1}/{param2}/{rest}'
-      )
-    })
+    check('/*splat', undefined, '/{splat}', { splat: 'anything' })
+    check('/files/*rest', undefined, '/files/{rest}', { rest: 'a/b/c' })
+    check('/:param1/:param2/*', undefined, null, { param1: 'x', param2: 'y' }) // unnamed * throws
+    check('/:param1/:param2/*rest', undefined, '/{param1}/{param2}/{rest}',
+      { param1: 'x', param2: 'y', rest: 'z' }) // paramN collision avoided
   })
 
   describe('non-terminal catch-all (returns null)', () => {
-    it('returns null for non-terminal *name wildcard', () => {
-      assert.equal(normalize('/*splat/edit', {}), null)
-    })
-
-    it('returns null for a non-terminal optional catch-all group', () => {
-      assert.equal(normalize('/x{/*rest}/tail', {}, '/x/a/tail'), null)
-    })
+    check('/*splat/edit', undefined, null)
+    check('/x{/*rest}/tail', '/x/a/tail', null)
   })
 
   describe('wildcard with a prefix in its segment', () => {
-    it('normalizes a prefixed wildcard when the route has no optional groups (precomputed)', () => {
-      assert.equal(normalize('/files/v*rest', {}, '/files/vY/z'), '/files/{rest}')
-      assert.equal(normalize('/x/:a-*rest', {}, '/x/y-z/w'), '/x/{a+rest}')
-    })
-
-    it('resolves a prefixed wildcard alongside an optional param group', () => {
-      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/x/vY/z'), '/files/{opt}/{rest}')
-      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/vY/z'), '/files/{rest}')
-    })
+    check('/files/v*rest', '/files/vY/z', '/files/{rest}') // no optional groups → precomputed
+    check('/x/:a-*rest', '/x/y-z/w', '/x/{a+rest}')
+    check('/files{/:opt}/v*rest', '/files/x/vY/z', '/files/{opt}/{rest}') // alongside an optional group
+    check('/files{/:opt}/v*rest', '/files/vY/z', '/files/{rest}')
   })
 
-  describe('mount-prefixed routes (sub-routers)', () => {
-    it('includes mount prefix in normalized route', () => {
-      assert.equal(normalize('/app/users/:id', { id: '5' }), '/app/users/{id}')
-    })
-  })
-
-  describe('combined cases', () => {
-    it('Express 5: mixed static + named param + named wildcard', () => {
-      assert.equal(
-        normalize('/api/:version/*path', { version: 'v2', path: 'a/b' }),
-        '/api/{version}/{path}'
-      )
-    })
-
-    it('preserves trailing slash with params', () => {
-      assert.equal(normalize('/users/:id/', { id: '1' }), '/users/{id}/')
-    })
+  describe('mount-prefixed routes and combined cases', () => {
+    check('/app/users/:id', undefined, '/app/users/{id}', { id: '5' })
+    check('/api/:version/*path', undefined, '/api/{version}/{path}', { version: 'v2', path: 'a/b' })
+    check('/users/:id/', undefined, '/users/{id}/', { id: '1' }) // trailing slash with params
   })
 
   describe('Express 5 {/:param} optional-group syntax', () => {
-    it('normalizes {/:id} — param present via URL extraction', () => {
-      assert.equal(normalize('/items{/:id}', {}, '/items/42'), '/items/{id}')
-    })
-
-    it('normalizes {/:id} — param absent via URL extraction', () => {
-      assert.equal(normalize('/items{/:id}', {}, '/items'), '/items')
-    })
-
-    it('normalizes {/:id} with param in req.params', () => {
-      assert.equal(normalize('/items{/:id}', { id: '42' }), '/items/{id}')
-    })
-
-    it('normalizes middle optional segment {/:version}', () => {
-      assert.equal(normalize('/api{/:version}/users', {}, '/api/v1/users'), '/api/{version}/users')
-      assert.equal(normalize('/api{/:version}/users', {}, '/api/users'), '/api/users')
-    })
-
-    it('normalizes {/:id.:format} multi-param optional segment', () => {
-      assert.equal(normalize('/posts{/:id.:format}', {}, '/posts/1.json'), '/posts/{id+format}')
-      assert.equal(normalize('/posts{/:id.:format}', {}, '/posts'), '/posts')
-    })
-
-    it('resolves optional catch-all group {/*path} — present', () => {
-      assert.equal(normalize('/files{/*path}', {}, '/files/a/b'), '/files/{path}')
-    })
-
-    it('resolves optional catch-all group {/*path} — absent', () => {
-      assert.equal(normalize('/files{/*path}', {}, '/files'), '/files')
-    })
-
-    it('resolves quoted param name {/:"user-id"} (hyphen allowed in name)', () => {
-      assert.equal(normalize('/users{/:"user-id"}', {}, '/users/42'), '/users/{user-id}')
-      assert.equal(normalize('/users{/:"user-id"}', {}, '/users'), '/users')
-    })
-
-    it('resolves nested optional groups {/:b{/:c}}', () => {
-      assert.equal(normalize('/a{/:b{/:c}}', {}, '/a/x/y'), '/a/{b}/{c}')
-      assert.equal(normalize('/a{/:b{/:c}}', {}, '/a/x'), '/a/{b}')
-      assert.equal(normalize('/a{/:b{/:c}}', {}, '/a'), '/a')
-    })
+    check('/items{/:id}', '/items/42', '/items/{id}')
+    check('/items{/:id}', '/items', '/items')
+    check('/items{/:id}', undefined, '/items/{id}', { id: '42' }) // resolved from req.params
+    check('/api{/:version}/users', '/api/v1/users', '/api/{version}/users') // middle optional segment
+    check('/api{/:version}/users', '/api/users', '/api/users')
+    check('/posts{/:id.:format}', '/posts/1.json', '/posts/{id+format}') // multi-param optional segment
+    check('/posts{/:id.:format}', '/posts', '/posts')
+    check('/files{/*path}', '/files/a/b', '/files/{path}') // optional catch-all
+    check('/files{/*path}', '/files', '/files')
+    check('/users{/:"user-id"}', '/users/42', '/users/{user-id}') // quoted name, hyphen allowed
+    check('/users{/:"user-id"}', '/users', '/users')
+    check('/a{/:b{/:c}}', '/a/x/y', '/a/{b}/{c}') // nested optional groups
+    check('/a{/:b{/:c}}', '/a/x', '/a/{b}')
+    check('/a{/:b{/:c}}', '/a', '/a')
   })
 
-  describe('intra-segment optional param groups (resolved via path-to-regexp match)', () => {
-    it('resolves a param inside an intra-segment optional group', () => {
-      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1.jpg'), '/photos/{id+format}')
-      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1'), '/photos/{id}')
-    })
-
-    it('resolves two independent optional groups in one segment', () => {
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), '/{a+b+c}')
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x-z'), '/{a+c}')
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x'), '/{a}')
-    })
-
-    it('resolves an optional group before a wildcard in the same segment', () => {
-      assert.equal(normalize('/:a{.:b}-*rest', {}, '/x.y-/def'), '/{a+b+rest}')
-      assert.equal(normalize('/:a{.:b}-*rest', {}, '/x-/def'), '/{a+rest}')
-    })
-
-    it('resolves an optional group spanning more than one URL segment', () => {
-      assert.equal(normalize('/x{/:a/:b}', {}, '/x/1/2'), '/x/{a}/{b}')
-      assert.equal(normalize('/x{/:a/:b}', {}, '/x'), '/x')
-    })
-
-    it('resolves adjacent optional groups with no static prefix', () => {
-      assert.equal(normalize('{/:a}{/:b/:c}', {}, '/B/C'), '/{b}/{c}')
-      assert.equal(normalize('{/:a}{/:b/:c}', {}, '/A/B/C'), '/{a}/{b}/{c}')
-    })
+  describe('intra-segment / multi-segment optional param groups (resolved via match)', () => {
+    check('/photos/:id{.:format}', '/photos/1.jpg', '/photos/{id+format}')
+    check('/photos/:id{.:format}', '/photos/1', '/photos/{id}')
+    check('/:a{.:b}{-:c}', '/x.y-z', '/{a+b+c}') // two independent optional groups
+    check('/:a{.:b}{-:c}', '/x-z', '/{a+c}')
+    check('/:a{.:b}{-:c}', '/x', '/{a}')
+    check('/:a{.:b}-*rest', '/x.y-/def', '/{a+b+rest}') // optional group before a wildcard
+    check('/:a{.:b}-*rest', '/x-/def', '/{a+rest}')
+    check('/x{/:a/:b}', '/x/1/2', '/x/{a}/{b}') // group spanning >1 URL segment
+    check('/x{/:a/:b}', '/x', '/x')
+    check('{/:a}{/:b/:c}', '/B/C', '/{b}/{c}') // adjacent optional groups, no static prefix
+    check('{/:a}{/:b/:c}', '/A/B/C', '/{a}/{b}/{c}')
   })
 
   describe('omitted shapes (returns null, not a wrong tag)', () => {
-    // A static-only optional group has no capture key, so path-to-regexp's match() cannot report
-    // whether it was present in the request. We omit the whole route rather than guess.
-    it('omits a static-only optional group', () => {
-      assert.equal(normalize('/posts{/draft}', {}, '/posts/draft'), null)
-      assert.equal(normalize('/foo{bar}', {}, '/foobar'), null)
-      assert.equal(normalize('/foo{bar}baz', {}, '/foobaz'), null)
-      assert.equal(normalize('/a{b}{c}', {}, '/abc'), null)
-      assert.equal(normalize('/a{{/b}}', {}, '/a/b'), null)
-    })
-
-    it('omits a route mixing a param group with a static-only sibling group', () => {
-      assert.equal(normalize('/a{/:id}/p{q}*rest', {}, '/a/1/pZ/w'), null)
-    })
-
-    it('omits a wildcard with suffix tokens in its segment (non-terminal catch-all)', () => {
-      assert.equal(normalize('/files/*path.:ext', {}, '/files/a/b.txt'), null)
-      assert.equal(normalize('/*a-*b', {}, '/x-y'), null)
-    })
-
-    it('omits an optional trailing/interior slash group', () => {
-      assert.equal(normalize('/users{/}', {}, '/users/'), null)
-      assert.equal(normalize('/items{/:id/}', {}, '/items/42/'), null)
-    })
+    // A static-only optional group has no capture key, so match() cannot report whether it was
+    // present in the request; a duplicate param name collapses to one key and is equally ambiguous.
+    check('/posts{/draft}', '/posts/draft', null) // static-only optional group
+    check('/foo{bar}', '/foobar', null)
+    check('/foo{bar}baz', '/foobaz', null)
+    check('/a{b}{c}', '/abc', null)
+    check('/a{{/b}}', '/a/b', null)
+    check('/a{/:id}/p{q}*rest', '/a/1/pZ/w', null) // param group mixed with a static-only sibling
+    check('/:id{/:id}', '/x', null, { id: 'x' }) // optional group shares a param name
+    check('/a{/:x}/b{/:x}', '/a/b/v', null, { x: 'v' })
+    check('/files/*path.:ext', '/files/a/b.txt', null) // non-terminal catch-all (suffix tokens)
+    check('/*a-*b', '/x-y', null)
+    check('/users{/}', '/users/', null) // optional trailing/interior slash group
+    check('/items{/:id/}', '/items/42/', null)
   })
 
   describe('URL-based optional resolution (mergeParams=false fix)', () => {
-    it('resolves present optional param from URL when absent from req.params', () => {
-      // app.use('/api{/:version}', router) without mergeParams — req.params = {} in sub-handler
-      assert.equal(normalize('/api{/:version}/users', {}, '/api/v1/users'), '/api/{version}/users')
-    })
-
-    it('resolves absent optional param from URL', () => {
-      assert.equal(normalize('/api{/:version}/users', {}, '/api/users'), '/api/users')
-    })
-
-    it('falls back to params when urlPath is not provided', () => {
-      // Without urlPath, empty params → optional treated as absent
-      assert.equal(normalize('/api{/:version}/users', {}), '/api/users')
-    })
-
-    it('falls back to params when URL does not match route', () => {
-      assert.equal(
-        normalize('/api{/:version}/users', { version: 'v2' }, '/completely/different/path'),
-        '/api/{version}/users'
-      )
-    })
-
-    it('resolves multiple optional params from URL — both present', () => {
-      assert.equal(normalize('/a{/:x}{/:y}/b', {}, '/a/1/2/b'), '/a/{x}/{y}/b')
-    })
-
-    it('resolves multiple optional params from URL — first present only', () => {
-      assert.equal(normalize('/a{/:x}{/:y}/b', {}, '/a/1/b'), '/a/{x}/b')
-    })
-
-    it('resolves multiple optional params from URL — none present', () => {
-      assert.equal(normalize('/a{/:x}{/:y}/b', {}, '/a/b'), '/a/b')
-    })
-
-    it('resolves multi-param segment params from URL', () => {
-      assert.equal(normalize('/photos/:id.:format', {}, '/photos/1.jpg'), '/photos/{id+format}')
-    })
-
-    it('req.params is still used when no urlPath and optional is present', () => {
-      assert.equal(normalize('/items{/:id}', { id: '5' }), '/items/{id}')
-    })
-
-    it('URL is authoritative: recovers a mergeParams-dropped parent optional param', () => {
-      assert.equal(
-        normalize('/api{/:version}/users{/:id}', { id: '42' }, '/api/v1/users/42'),
-        '/api/{version}/users/{id}'
-      )
-    })
-
-    it('omits a route where an optional group shares a param name (presence is ambiguous)', () => {
-      // A duplicate name collapses to one key in match()'s output, so which occurrence filled it is
-      // undetectable — omit rather than guess.
-      assert.equal(normalize('/:id{/:id}', { id: 'x' }, '/x'), null)
-      assert.equal(normalize('/a{/:x}/b{/:x}', { x: 'v' }, '/a/b/v'), null)
-    })
-
-    it('captures a named wildcard after an optional segment (greedy: optional fills first)', () => {
-      // path-to-regexp is greedy left-to-right: {/:id} takes the first URL segment, *rest the rest.
-      assert.equal(normalize('/files{/:id}/*rest', {}, '/files/x/y/z'), '/files/{id}/{rest}')
-    })
-
-    it('does not mark a preceding optional present when a required wildcard needs the last segment', () => {
-      // The required '*rest' needs >=1 segment, so '/files/x' assigns rest=x and id is absent —
-      // it must not shift x into {/:id} and let the wildcard match zero segments.
-      assert.equal(normalize('/files{/:id}/*rest', {}, '/files/x'), '/files/{rest}')
-    })
+    // The request URL — not req.params — drives presence, so sub-routers mounted without
+    // mergeParams (where req.params drops the parent's optional param) still resolve correctly.
+    check('/api{/:version}/users', undefined, '/api/users') // no URL, empty params → absent
+    check('/api{/:version}/users', '/completely/different/path', '/api/{version}/users',
+      { version: 'v2' }) // URL doesn't match → fall back to params
+    check('/a{/:x}{/:y}/b', '/a/1/2/b', '/a/{x}/{y}/b')
+    check('/a{/:x}{/:y}/b', '/a/1/b', '/a/{x}/b')
+    check('/a{/:x}{/:y}/b', '/a/b', '/a/b')
+    check('/api{/:version}/users{/:id}', '/api/v1/users/42', '/api/{version}/users/{id}',
+      { id: '42' }) // URL authoritative: recovers a mergeParams-dropped parent optional
+    check('/files{/:id}/*rest', '/files/x/y/z', '/files/{id}/{rest}') // greedy: optional fills first
+    // Required '*rest' needs >=1 segment, so '/files/x' assigns rest=x and id is absent — it must
+    // not shift x into {/:id} and let the wildcard match zero segments.
+    check('/files{/:id}/*rest', '/files/x', '/files/{rest}')
   })
 
   describe('static segment encoding (UTF-8 correctness)', () => {
-    it('encodes multi-byte UTF-8 characters correctly', () => {
-      // é (U+00E9) encodes to %C3%A9 in UTF-8, not %E9 (Latin-1)
-      assert.equal(normalize('/path/café', {}), '/path/caf%C3%A9')
-    })
-
-    it('encodes characters not in [A-Za-z0-9.-~_] via encodeURIComponent', () => {
-      assert.equal(normalize('/a/b c', {}), '/a/b%20c')
-      assert.equal(normalize('/a/b,c', {}), '/a/b%2Cc')
-    })
-
-    it('encodes 4-byte emoji correctly as UTF-8 (not as two U+FFFD)', () => {
-      // 🚀 U+1F680 → %F0%9F%9A%80 (4 UTF-8 bytes), not %EF%BF%BD%EF%BF%BD (two surrogates)
-      assert.equal(normalize('/path/🚀', {}), '/path/%F0%9F%9A%80')
-    })
-
-    it('treats backslash-escaped reserved chars as static (Express 5)', () => {
-      assert.equal(normalize('/file/\\{id\\}', {}, '/file/{id}'), '/file/%7Bid%7D')
-    })
+    check('/path/café', undefined, '/path/caf%C3%A9') // multi-byte UTF-8, not Latin-1 %E9
+    check('/a/b c', undefined, '/a/b%20c')
+    check('/a/b,c', undefined, '/a/b%2Cc')
+    check('/path/🚀', undefined, '/path/%F0%9F%9A%80') // 4-byte emoji, not two U+FFFD surrogates
+    check('/file/\\{id\\}', '/file/{id}', '/file/%7Bid%7D') // backslash-escaped reserved chars → static
   })
 
   describe('prototype property safety (:toString, :constructor)', () => {
-    it('treats :id{/:x} as absent when :x not in req.params (inherited props ignored)', () => {
-      // req.params = {} — Object.prototype.toString is inherited, not own → absent
-      assert.equal(normalize('/x{/:toString}', {}), '/x')
-      assert.equal(normalize('/x{/:constructor}', {}), '/x')
-    })
-
-    it('treats an optional param as present when explicitly in req.params', () => {
-      assert.equal(normalize('/x{/:toString}', { toString: 'val' }), '/x/{toString}')
-    })
+    check('/x{/:toString}', undefined, '/x') // inherited prop, not own → absent
+    check('/x{/:constructor}', undefined, '/x')
+    check('/x{/:toString}', undefined, '/x/{toString}', { toString: 'val' }) // own prop → present
   })
 
   describe('duplicate param names (shadowed occurrences become paramN)', () => {
-    it('keeps the name on the last occurrence; earlier one becomes param1', () => {
-      // Express keeps only the last value in req.params for a duplicated name, so earlier
-      // occurrences have no retrievable name and are treated as nameless (RFC rule 4).
-      assert.equal(normalize('/:id/:id', {}, '/x/y'), '/{param1}/{id}')
-    })
-
-    it('numbers multiple shadowed occurrences in declaration order', () => {
-      assert.equal(normalize('/:id/:id/:id', {}, '/x/y/z'), '/{param1}/{param2}/{id}')
-    })
-
-    it('skips paramN that collides with a surviving framework name', () => {
-      assert.equal(normalize('/:param1/:param1', {}, '/x/y'), '/{param2}/{param1}')
-    })
-
-    it('enforces name uniqueness on encoded names (no post-encode collision)', () => {
-      // ':"a/b"' and ':"a%2Fb"' both encode to a%2Fb → first must be shadowed to paramN.
-      assert.equal(normalize('/:"a/b"/:"a%2Fb"', {}, '/x/y'), '/{param1}/{a%2Fb}')
-    })
-
-    it('handles escaped quotes inside a quoted param name (" is allowed unencoded per rule 4)', () => {
-      assert.equal(normalize('/:"a\\"b"', { 'a"b': 'x' }, '/x'), '/{a"b}')
-    })
+    // Express keeps only the last value for a duplicated name, so earlier occurrences have no
+    // retrievable name and are numbered paramN in declaration order (RFC rule 4).
+    check('/:id/:id', '/x/y', '/{param1}/{id}')
+    check('/:id/:id/:id', '/x/y/z', '/{param1}/{param2}/{id}')
+    check('/:param1/:param1', '/x/y', '/{param2}/{param1}') // paramN skips a surviving framework name
+    check('/:"a/b"/:"a%2Fb"', '/x/y', '/{param1}/{a%2Fb}') // uniqueness enforced on encoded names
+    check('/:"a\\"b"', '/x', '/{a"b}', { 'a"b': 'x' }) // escaped quote in name; " allowed per rule 4
   })
 
   describe('performance / safety guards', () => {
-    it('returns null when a route has too many optional groups (bitmask/backtracking guard)', () => {
+    it('returns null when a route has too many optional groups (bitmask guard)', () => {
       const route = '/r' + Array.from({ length: 33 }, (_, i) => `{/s${i + 1}}`).join('')
       assert.equal(normalize(route, {}, '/r/s33'), null)
     })
 
-    it('does not blow up on many optional groups against a non-matching URL (step-budget bounded)', () => {
+    it('does not throw when the matcher regexp is too large to compile (params fallback)', () => {
       const route = '/' + Array.from({ length: 12 }, (_, i) => `{/:p${i}}`).join('') + '/zzz'
       const url = '/' + Array.from({ length: 12 }, () => 'x').join('/') + '/nomatch'
       const result = normalize(route, {}, url)
