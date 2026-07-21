@@ -188,7 +188,7 @@ function withNamingSchema (
  * @param {((callback: (error?: Error) => void) => unknown) | (() => Promise<unknown>)} spanGenerationFn
  * @param {string | (() => string)} service
  * @param {string} serviceSource
- * @param {{ component?: string, desc?: string }} [opts]
+ * @param {{ component?: string, desc?: string, resource?: string | (() => string) }} [opts]
  */
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
@@ -214,16 +214,18 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       let traceAssertion
 
       /**
-       * @param {Array<Array<{ trace_id: bigint, meta: Record<string, string> }>>} traces
+       * @param {Array<Array<{ trace_id: bigint, resource: string, meta: Record<string, string> }>>} traces
        */
       function assertPeerServiceSpan (traces) {
         const expectedService = typeof service === 'function' ? service() : service
+        const expectedResource = typeof opts.resource === 'function' ? opts.resource() : opts.resource
 
         for (const trace of traces) {
           for (const span of trace) {
             if (
               span.trace_id === traceId &&
               span.meta.component === component &&
+              (expectedResource === undefined || span.resource === expectedResource) &&
               span.meta['peer.service'] === expectedService &&
               span.meta['_dd.peer.service.source'] === serviceSource
             ) {

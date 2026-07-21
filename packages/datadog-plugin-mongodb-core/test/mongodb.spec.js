@@ -119,7 +119,11 @@ describe('Plugin', () => {
             () => collection.bulkWrite([{ insertOne: { document: { a: 1 } } }]),
             'test',
             'peer.service',
-            { component: 'mongodb', desc: 'with bulkWrite' }
+            {
+              component: 'mongodb',
+              desc: 'with bulkWrite',
+              resource: () => `bulkWrite test.${collectionName}`,
+            }
           )
 
           it('should do automatic instrumentation', done => {
