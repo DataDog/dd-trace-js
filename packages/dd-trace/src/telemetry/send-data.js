@@ -77,11 +77,11 @@ let agentTelemetry = true
  */
 function getHeaders (config, application, reqType) {
   const headers = {
+    'DD-Client-Library-Language': application.language_name,
+    'DD-Client-Library-Version': application.tracer_version,
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType,
-    'dd-client-library-language': application.language_name,
-    'dd-client-library-version': application.tracer_version,
     'dd-session-id': config.tags['runtime-id'],
   }
   if (config.DD_ROOT_JS_SESSION_ID) {
