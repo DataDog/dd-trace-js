@@ -1290,6 +1290,34 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('requires the first runtime target in a package export array', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-ordered-export-plan-'))
+    const testFile = path.join(root, 'test', 'unit.test.js')
+    const missingEntrypoint = path.join(root, 'dist', 'missing.js')
+    const laterEntrypoint = path.join(root, 'dist', 'index.js')
+    const packageJson = path.join(root, 'package.json')
+    const framework = getPlannedFramework(root, path.join(root, 'test', 'dd-validation.test.js'))
+    framework.project = { root, packageJson, configFiles: [] }
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, testFile] }
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.mkdirSync(path.dirname(laterEntrypoint), { recursive: true })
+    fs.writeFileSync(packageJson, JSON.stringify({
+      name: 'ordered-export-project',
+      exports: ['./dist/missing.js', './dist/index.js'],
+    }))
+    fs.writeFileSync(testFile, "require('ordered-export-project')\n")
+    fs.writeFileSync(laterEntrypoint, 'module.exports = true\n')
+
+    try {
+      const formatPlan = () => formatFrameworkPlan(root, framework)
+      assert.throws(formatPlan, new RegExp(`entrypoint ${escapeRegExp(missingEntrypoint)} does not exist`))
+      fs.writeFileSync(missingEntrypoint, 'module.exports = true\n')
+      formatPlan()
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('skips the Vitest runner path when checking the selected test', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-runner-plan-'))
     const testFile = path.join(root, 'test', 'unit.test.js')
@@ -1908,32 +1936,35 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
-  it('rejects a separator forwarded by Yarn script shorthand', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-shorthand-forwarding-'))
-    const command = {
-      cwd: root,
-      argv: ['yarn', 'test:lib', '--', '--runTestsByPath', 'test/unit-test.ts'],
-    }
-    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { 'test:lib': 'jest' } }))
+  for (const [packageManager, argv] of [
+    ['pnpm', ['pnpm', 'test:lib', '--', '--runTestsByPath', 'test/unit-test.ts']],
+    ['pnpm', ['corepack', 'pnpm', 'test:lib', '--', '--runTestsByPath', 'test/unit-test.ts']],
+    ['yarn', ['yarn', 'test:lib', '--', '--runTestsByPath', 'test/unit-test.ts']],
+  ]) {
+    it(`rejects a separator forwarded by ${argv.slice(0, -4).join(' ')} script shorthand`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-script-shorthand-forwarding-'))
+      const command = { cwd: root, argv }
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { 'test:lib': 'jest' } }))
 
-    try {
-      assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
-        effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
-        forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
-        packageManager: 'yarn',
-        script: 'jest',
-        scriptName: 'test:lib',
-      })
-      assert.match(getCommandSuitabilityError({
-        command,
-        framework: { framework: 'jest', project: { root, configFiles: [] } },
-        label: 'the CI test command',
-        repositoryRoot: root,
-      }), /literal extra "--".*append focused runner arguments directly/s)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
-  })
+      try {
+        assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
+          effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
+          forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+          packageManager,
+          script: 'jest',
+          scriptName: 'test:lib',
+        })
+        assert.match(getCommandSuitabilityError({
+          command,
+          framework: { framework: 'jest', project: { root, configFiles: [] } },
+          label: 'the CI test command',
+          repositoryRoot: root,
+        }), /literal extra "--".*append focused runner arguments directly/s)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('rejects generated Vitest runtime tests under a typecheck-enabled config', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-plan-'))

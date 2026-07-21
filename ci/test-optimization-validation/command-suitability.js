@@ -307,7 +307,9 @@ function collectRuntimeExportTargets (value, targets, condition, wildcard, depth
   if (!value || typeof value !== 'object') return
   if (Array.isArray(value)) {
     for (const nested of value.slice(0, 32)) {
+      const targetCount = targets.length
       collectRuntimeExportTargets(nested, targets, condition, wildcard, depth + 1)
+      if (targets.length > targetCount) break
     }
     return
   }
@@ -631,7 +633,7 @@ function getPackageScriptExpansion (command, repositoryRoot) {
 
   const scriptIndex = argv[runIndex] === 'run'
     ? runIndex + 1
-    : packageManager === 'yarn' ? runIndex : -1
+    : ['pnpm', 'yarn'].includes(packageManager) ? runIndex : -1
   const scriptName = argv[scriptIndex]
   if (typeof scriptName !== 'string') return
   const packageJsonSource = readRepositoryConfig(path.join(command.cwd, 'package.json'), repositoryRoot)
