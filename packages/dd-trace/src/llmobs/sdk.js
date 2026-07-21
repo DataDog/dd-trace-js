@@ -39,6 +39,7 @@ class LLMObs extends NoopLLMObs {
    * @type {import('./experiments').Experiments | undefined}
    */
   #experiments
+  #experimentsCacheKey
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
@@ -65,7 +66,21 @@ class LLMObs extends NoopLLMObs {
    * a clear message on use.
    */
   get experiments () {
-    this.#experiments ??= createExperiments(this._config)
+    const llmobsConfig = this._config.llmobs
+    const cacheKey = JSON.stringify([
+      llmobsConfig?.DD_LLMOBS_ENABLED,
+      llmobsConfig?.mlApp,
+      this._config.DD_API_KEY,
+      this._config.DD_APP_KEY,
+      this._config.service,
+      this._config.site,
+    ])
+
+    if (this.#experiments === undefined || this.#experimentsCacheKey !== cacheKey) {
+      this.#experiments = createExperiments(this._config)
+      this.#experimentsCacheKey = cacheKey
+    }
+
     return this.#experiments
   }
 
