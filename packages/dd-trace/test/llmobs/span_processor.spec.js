@@ -122,6 +122,202 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
+    it('attaches the llmobs payload to meta_struct instead of evp proxy for sampled apm traces', () => {
+      const apmTags = {}
+      const ensureSamplingPriority = sinon.stub()
+      span = {
+        _name: 'test',
+        _startTime: 0,
+        _duration: 1,
+        meta_struct: {
+          existing: { value: true },
+        },
+        context () {
+          return {
+            _tags: apmTags,
+            _sampling: { priority: 1 },
+            _ensureSamplingPriority: ensureSamplingPriority,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.model_name': 'myModel',
+        '_ml_obs.meta.model_provider': 'myProvider',
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.meta.input.value': 'hello',
+        '_ml_obs.meta.output.value': 'world',
+        '_ml_obs.llmobs_parent_id': '1234',
+        '_ml_obs.sample_rate': '1',
+        '_ml_obs.sampling_decision': '1',
+      })
+
+      writer._agentless = false
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      sinon.assert.calledOnce(ensureSamplingPriority)
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+      assert.deepStrictEqual(span.meta_struct, {
+        existing: { value: true },
+        _llmobs: {
+          trace_id: '123',
+          parent_id: '1234',
+          name: 'test',
+          ml_app: 'myApp',
+          tags: {
+            version: '',
+            env: '',
+            service: '',
+            source: 'integration',
+            ml_app: 'myApp',
+            'ddtrace.version': 'x.y.z',
+            error: '0',
+            language: 'javascript',
+          },
+          meta: {
+            span: { kind: 'llm' },
+            model_name: 'myModel',
+            model_provider: 'myprovider',
+            input: {
+              value: 'hello',
+            },
+            output: {
+              value: 'world',
+            },
+          },
+          metrics: {},
+          _dd: {
+            sample_rate: '1',
+            sampling_decision: '1',
+          },
+        },
+      })
+    })
+
+    it('keeps using evp proxy when the apm trace is predicted to be dropped', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 0 },
+            _ensureSamplingPriority: sinon.stub(),
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      writer._agentless = false
+      processor.process(span)
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('nests error fields when attaching the llmobs payload to meta_struct', () => {
+      span = {
+        context () {
+          return {
+            _tags: {
+              'error.message': 'error message',
+              'error.type': 'error type',
+              'error.stack': 'error stack',
+            },
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      writer._agentless = false
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct._llmobs.meta.error, {
+        message: 'error message',
+        type: 'error type',
+        stack: 'error stack',
+      })
+    })
+
+    it('keeps using the writer for agentless direct intake', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      writer._agentless = true
+      processor.process(span)
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('keeps using the writer for routed tenant submissions', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_dd.llmobs.routing.api_key': 'tenant-api-key',
+        '_dd.llmobs.routing.site': 'datadoghq.com',
+      })
+
+      writer._agentless = false
+      processor.process(span)
+
+      sinon.assert.calledOnceWithMatch(writer.append, sinon.match.object, {
+        apiKey: 'tenant-api-key',
+        site: 'datadoghq.com',
+      })
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {
