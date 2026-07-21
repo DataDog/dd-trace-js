@@ -73,21 +73,12 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - run: yarn config set ignore-engines true
-      - name: Install dependencies
-        uses: ./.github/actions/install
-      - name: Run tests
-        run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
-        with:
+          node-set: ${{ matrix.node-version }}
+          ignore-engines: 'true'
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   amqp10:
     runs-on: ubuntu-latest
@@ -107,7 +98,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   amqplib:
     runs-on: ubuntu-latest
@@ -123,7 +116,9 @@ jobs:
       SERVICES: rabbitmq
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   apollo:
     runs-on: ubuntu-latest
@@ -133,7 +128,9 @@ jobs:
       PLUGINS: apollo
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   avsc:
     runs-on: ubuntu-latest
@@ -144,7 +141,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   axios:
     runs-on: ubuntu-latest
@@ -154,10 +153,10 @@ jobs:
       PLUGINS: axios
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/upstream
-      # `plugins/upstream` only runs `test:plugins:upstream`, which is a non-glob suite runner;
-      # the in-tree `test/integration-test/*.spec.js` files would otherwise have no CI invocation
-      # whose glob expands to reach them.
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: upstream
+      # The upstream suite runner does not include the in-tree integration tests.
       - uses: ./.github/actions/plugins/integration-test
 
   body-parser:
@@ -168,7 +167,9 @@ jobs:
       PLUGINS: body-parser
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: upstream
       - uses: ./.github/actions/plugins/integration-test
 
   bullmq:
@@ -195,7 +196,9 @@ jobs:
       PLUGINS: bunyan
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   cassandra:
     runs-on: ubuntu-latest
@@ -221,22 +224,11 @@ jobs:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: all
           flags: apm-integrations-child-process
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   crypto:
     runs-on: ubuntu-latest
@@ -291,18 +283,11 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
-        with:
+          node-set: ${{ matrix.node-version }}
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   cookie-parser:
     runs-on: ubuntu-latest
@@ -373,7 +358,9 @@ jobs:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   dns:
     runs-on: ubuntu-latest
@@ -383,22 +370,11 @@ jobs:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: all
           flags: apm-integrations-dns
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -416,16 +392,11 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: latest
           flags: apm-integrations-elasticsearch
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   electron:
     runs-on: ubuntu-latest
@@ -480,12 +451,11 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: latest
           flags: apm-integrations-express
+          upload-junit: 'false'
 
   express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -555,7 +525,9 @@ jobs:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   grpc:
     runs-on: ubuntu-latest
@@ -609,18 +581,11 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
-        with:
+          node-set: ${{ matrix.node-version }}
           flags: apm-integrations-http-${{ matrix.node-version }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   http2:
     runs-on: ubuntu-latest
@@ -630,22 +595,11 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: all
           flags: apm-integrations-http2
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   kafkajs:
     strategy:
@@ -683,18 +637,11 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
-        with:
+          node-set: ${{ matrix.node-version }}
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   knex:
     runs-on: ubuntu-latest
@@ -714,7 +661,9 @@ jobs:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   ldapjs:
     runs-on: ubuntu-latest
@@ -959,22 +908,11 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/active-lts
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: all
           flags: apm-integrations-net
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   # TODO: fix performance issues and test more Node versions
 
@@ -982,9 +920,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - 18
-          - latest
         range:
           - "11.1.4"
           - "12.3.7"
@@ -1009,16 +944,11 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: latest
           flags: apm-integrations-next-${{ matrix.range_clean || matrix.range }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -1185,19 +1115,11 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - name: Run tests
-        run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
-        with:
+          node-set: ${{ matrix.node-version }}
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   process:
     runs-on: ubuntu-latest
@@ -1218,7 +1140,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   pug:
     runs-on: ubuntu-latest
@@ -1300,17 +1224,12 @@ jobs:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: oldest
+          testagent: start
           flags: apm-integrations-restify
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   rhea:
     runs-on: ubuntu-latest
@@ -1330,7 +1249,9 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
+      - uses: ./.github/actions/plugins/test
+        with:
+          suite: plugins-and-upstream
 
   router:
     runs-on: ubuntu-latest
@@ -1360,16 +1281,11 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          node-set: latest
           flags: apm-integrations-sharedb
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   tedious:
     runs-on: ubuntu-latest
@@ -1389,17 +1305,12 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-upstream
+          node-set: latest
           flags: apm-integrations-tedious
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   undici:
     runs-on: ubuntu-latest

@@ -1,0 +1,28 @@
+name: Run Plugin Test Suite
+description: Run the selected plugin test suite
+inputs:
+  suite:
+    description: 'Plugin test suite identifier.'
+    required: true
+runs:
+  using: composite
+  steps:
+    - if: ${{ inputs.suite == 'plugins' }}
+      run: yarn test:plugins:ci
+      shell: bash
+    - if: ${{ inputs.suite == 'upstream' }}
+      run: yarn test:plugins:upstream
+      shell: bash
+    - if: ${{ inputs.suite == 'plugins-and-upstream' }}
+      run: |
+        yarn test:plugins:ci
+        yarn test:plugins:upstream
+      shell: bash
+    - if: ${{ inputs.suite == 'llmobs' }}
+      run: yarn test:llmobs:plugins:ci
+      shell: bash
+    - if: ${{ inputs.suite == 'plugins-and-llmobs' }}
+      run: |
+        yarn test:plugins:ci
+        yarn test:llmobs:plugins:ci
+      shell: bash

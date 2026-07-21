@@ -61,25 +61,14 @@ jobs:
       PLUGINS: openai
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
-        with:
+          suite: plugins-and-llmobs
+          node-set: ${{ matrix.version }}
+          testagent: start-and-logs
           flags: llmobs-openai-${{ matrix.version }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}-${{ matrix.version }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}-${{ strategy.job-index }}
+          log-suffix: llmobs-${{ github.job }}-${{ matrix.version }}
+          artifact-id: ${{ github.job }}-${{ strategy.job-index }}
 
   langchain:
     runs-on: ubuntu-latest
@@ -89,27 +78,14 @@ jobs:
       PLUGINS: langchain
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-llmobs
+          node-floor: newest-maintenance-lts
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   bedrock:
     runs-on: ubuntu-latest
@@ -119,25 +95,13 @@ jobs:
       PLUGINS: aws-sdk
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: llmobs
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   vertex-ai:
     runs-on: ubuntu-latest
@@ -147,27 +111,13 @@ jobs:
       PLUGINS: google-cloud-vertexai
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-llmobs
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   ai:
     runs-on: ubuntu-latest
@@ -177,23 +127,14 @@ jobs:
       PLUGINS: ai
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-llmobs
+          node-set: latest
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   anthropic:
     runs-on: ubuntu-latest
@@ -203,27 +144,13 @@ jobs:
       PLUGINS: anthropic
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-llmobs
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   claude-agent-sdk:
     runs-on: ubuntu-latest
@@ -233,24 +160,15 @@ jobs:
       PLUGINS: claude-agent-sdk
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
       # The SDK is ESM-only. Tests use dynamic import() to load it.
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-llmobs
+          node-set: active
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   google-genai:
     runs-on: ubuntu-latest
@@ -260,27 +178,13 @@ jobs:
       PLUGINS: google-genai
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
+          suite: plugins-and-llmobs
+          testagent: start-and-logs
           flags: llmobs-${{ github.job }}
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/upload-junit-artifacts
-        if: "!cancelled()"
-        with:
-          id: ${{ github.job }}
+          log-suffix: llmobs-${{ github.job }}
+          artifact-id: ${{ github.job }}
 
   langgraph:
     runs-on: ubuntu-latest
