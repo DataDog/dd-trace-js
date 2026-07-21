@@ -20,12 +20,7 @@ function resolveDefault (defaultValue) {
  * https://openfeature.dev/docs/reference/concepts/provider/
  */
 class NoopFlaggingProvider {
-  /**
-   * @param {object} [noopTracer] - Optional noop tracer instance
-   */
-  constructor (noopTracer) {
-    this._tracer = noopTracer
-    this._config = {}
+  constructor () {
     this.metadata = { name: 'NoopFlaggingProvider' }
     this.status = 'NOT_READY'
     this.runsOn = 'server'
@@ -77,28 +72,6 @@ class NoopFlaggingProvider {
    */
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
     return resolveDefault(defaultValue)
-  }
-
-  /**
-   * @returns {object} Current configuration
-   */
-  getConfiguration () {
-    return this._config
-  }
-
-  /**
-   * @param {object} config - Configuration to set
-   */
-  setConfiguration (config) {
-    this._config = config
-  }
-
-  /**
-   * @internal
-   * @param {object} ufc - Universal Flag Configuration object
-   */
-  _setConfiguration (ufc) {
-    this.setConfiguration(ufc)
   }
 }
 
