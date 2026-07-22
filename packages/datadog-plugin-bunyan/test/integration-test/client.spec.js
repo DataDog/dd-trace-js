@@ -15,14 +15,17 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('bunyan', 'bunyan', version => {
     useSandbox([`'bunyan@${version}'`], false,
       ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'bunyan')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'bunyan',
+      packageName: 'bunyan',
+      defaultExport: true,
+      namedExports: ['createLogger'],
+      namedExportBinding: 'namespace',
     })
 
     beforeEach(async () => {
@@ -33,7 +36,7 @@ describe('esm', () => {
       await stopProc(proc)
       await agent.stop()
     })
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),

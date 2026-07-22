@@ -15,7 +15,6 @@ const {
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   useSandbox(['axios'], false, [
     './packages/datadog-plugin-axios/test/integration-test/*'])
@@ -24,8 +23,11 @@ describe('esm', () => {
     agent = await new FakeAgent().start()
   })
 
-  before(async function () {
-    variants = varySandbox('server.mjs', 'axios')
+  const variants = varySandbox('server.mjs', {
+    bindingName: 'axios',
+    packageName: 'axios',
+    defaultExport: true,
+    namedExports: [],
   })
 
   afterEach(async () => {
@@ -34,7 +36,7 @@ describe('esm', () => {
   })
 
   context('axios', () => {
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

@@ -19,13 +19,15 @@ describe('esm', () => {
   withVersions('express', 'express', version => {
     let agent
     let proc
-    let variants
 
     useSandbox([`'express@${version}'`], false,
       ['./packages/datadog-plugin-express/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'express')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'express',
+      packageName: 'express',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -36,7 +38,7 @@ describe('esm', () => {
       await stopProc(proc)
       await agent.stop()
     })
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
         it(`is instrumented loaded with ${variant}`, async () => {
           proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)

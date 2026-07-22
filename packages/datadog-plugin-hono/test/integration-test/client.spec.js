@@ -15,7 +15,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm integration test', () => {
   let agent
   let proc
-  let variants
 
   withVersions('hono', 'hono', (range, _moduleName_, version) => {
     useSandbox([`'hono@${range}'`, '@hono/node-server@1.15.0'], false,
@@ -25,8 +24,12 @@ describe('esm integration test', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'Hono', undefined, 'hono', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'Hono',
+      packageName: 'hono',
+      defaultExport: false,
+      namedExports: ['Hono'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -34,7 +37,7 @@ describe('esm integration test', () => {
       await agent.stop()
     })
 
-    for (const variant of ['destructure', 'star']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
           VERSION: version,
