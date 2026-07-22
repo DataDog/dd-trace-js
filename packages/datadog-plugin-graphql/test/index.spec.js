@@ -1030,6 +1030,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'friends:[Human]',
               meta: {
+                'graphql.field.coordinates': 'RootQueryType.friends',
                 'graphql.field.path': 'friends',
                 'graphql.field.type': 'Human',
               },
@@ -1040,6 +1041,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'name:String',
               meta: {
+                'graphql.field.coordinates': 'Human.name',
                 'graphql.field.path': 'friends.*.name',
                 'graphql.field.type': 'String',
               },
@@ -1050,6 +1052,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'pets:[Pet!]',
               meta: {
+                'graphql.field.coordinates': 'Human.pets',
                 'graphql.field.path': 'friends.*.pets',
                 'graphql.field.type': 'Pet',
               },
@@ -1060,6 +1063,7 @@ describe('Plugin', () => {
               name: 'graphql.resolve',
               resource: 'name:String',
               meta: {
+                'graphql.field.coordinates': 'Pet.name',
                 'graphql.field.path': 'friends.*.pets.*.name',
                 'graphql.field.type': 'String',
               },
@@ -1068,6 +1072,167 @@ describe('Plugin', () => {
           }, { spanResourceMatch: /friends:\[Human]/ })
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('keeps collapsed abstract list fields distinct by schema coordinate', () => {
+          /**
+           * @param {{ __typename: string }} value
+           */
+          function resolveType (value) {
+            return value.__typename
+          }
+
+          const Profile = new graphql.GraphQLInterfaceType({
+            name: 'Profile',
+            fields: {
+              value: { type: graphql.GraphQLString },
+            },
+            resolveType,
+          })
+          const Named = new graphql.GraphQLInterfaceType({
+            name: 'Named',
+            fields: {
+              name: { type: graphql.GraphQLString },
+              profile: { type: Profile },
+            },
+            resolveType,
+          })
+
+          /**
+           * @param {string} name
+           */
+          function makeProfileType (name) {
+            return new graphql.GraphQLObjectType({
+              name: `${name}Profile`,
+              interfaces: [Profile],
+              fields: {
+                value: { type: graphql.GraphQLString },
+              },
+            })
+          }
+
+          /**
+           * @param {string} name
+           */
+          function makeNamedType (name) {
+            return new graphql.GraphQLObjectType({
+              name,
+              interfaces: [Named],
+              fields: {
+                name: { type: graphql.GraphQLString },
+                profile: { type: Profile },
+              },
+            })
+          }
+
+          const names = ['Human', 'Pet', 'Robot', 'Alien']
+          const namedTypes = names.map(makeNamedType)
+          const profileTypes = names.map(makeProfileType)
+          const abstractSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                results: {
+                  type: new graphql.GraphQLList(Named),
+                  resolve: () => [
+                    {
+                      __typename: 'Human',
+                      name: 'alice',
+                      profile: { __typename: 'HumanProfile', value: 'person' },
+                    },
+                    {
+                      __typename: 'Pet',
+                      name: 'spot',
+                      profile: { __typename: 'PetProfile', value: 'animal' },
+                    },
+                    {
+                      __typename: 'Pet',
+                      name: 'fido',
+                      profile: { __typename: 'PetProfile', value: 'animal' },
+                    },
+                    {
+                      __typename: 'Robot',
+                      name: 'r2d2',
+                      profile: { __typename: 'RobotProfile', value: 'machine' },
+                    },
+                    {
+                      __typename: 'Alien',
+                      name: 'et',
+                      profile: { __typename: 'AlienProfile', value: 'visitor' },
+                    },
+                    {
+                      __typename: 'Pet',
+                      name: 'rex',
+                      profile: { __typename: 'PetProfile', value: 'animal' },
+                    },
+                    {
+                      __typename: 'Robot',
+                      name: 'c3po',
+                      profile: { __typename: 'RobotProfile', value: 'machine' },
+                    },
+                    {
+                      __typename: 'Human',
+                      name: 'bob',
+                      profile: { __typename: 'HumanProfile', value: 'person' },
+                    },
+                  ],
+                },
+              },
+            }),
+            types: [...namedTypes, ...profileTypes],
+          })
+
+          /**
+           * @param {Array<Array<{ name: string, meta: Record<string, string> }>>} traces
+           */
+          function assertCoordinates (traces) {
+            const coordinatesByPath = {
+              'results.*.name': [],
+              'results.*.profile': [],
+              'results.*.profile.value': [],
+            }
+            for (const span of sort(traces[0])) {
+              const coordinates = coordinatesByPath[span.meta['graphql.field.path']]
+              if (span.name === 'graphql.resolve' && coordinates) {
+                coordinates.push(span.meta['graphql.field.coordinates'])
+              }
+            }
+
+            assert.deepStrictEqual(coordinatesByPath['results.*.name'].sort(), [
+              'Alien.name',
+              'Human.name',
+              'Pet.name',
+              'Robot.name',
+            ])
+            assert.deepStrictEqual(coordinatesByPath['results.*.profile'].sort(), [
+              'Alien.profile',
+              'Human.profile',
+              'Pet.profile',
+              'Robot.profile',
+            ])
+            assert.deepStrictEqual(coordinatesByPath['results.*.profile.value'].sort(), [
+              'AlienProfile.value',
+              'HumanProfile.value',
+              'PetProfile.value',
+              'RobotProfile.value',
+            ])
+
+            const spans = sort(traces[0])
+            for (const name of names) {
+              const profile = spans.find(span => span.meta['graphql.field.coordinates'] === `${name}.profile`)
+              const value = spans.find(span =>
+                span.meta['graphql.field.coordinates'] === `${name}Profile.value`)
+              assert.ok(profile, `expected ${name}.profile span`)
+              assert.ok(value, `expected ${name}Profile.value span`)
+              assert.strictEqual(value.parent_id.toString(), profile.span_id.toString())
+            }
+          }
+
+          const assertion = agent.assertSomeTraces(assertCoordinates, { spanResourceMatch: /results:\[Named\]/ })
+          return Promise.all([
+            assertion,
+            graphql.graphql({ schema: abstractSchema, source: '{ results { name profile { value } } }' }),
+          ])
         })
 
         it('caches path strings across nested list-of-lists items', async () => {
@@ -2735,11 +2900,35 @@ describe('Plugin', () => {
       })
 
       describe('with hooks configuration', () => {
+        /**
+         * @param {import('../../dd-trace/src/opentracing/span')} span
+         * @param {object} context
+         * @param {import('graphql').ExecutionResult} [res]
+         */
+        function executeHook (span, context, res) {
+          if (res?.errors?.some(error => error.message === 'Expected failure')) {
+            span.setTag('error', false)
+          }
+
+          context.contextValue?.executeHook?.()
+        }
+
+        /**
+         * @param {import('../../dd-trace/src/opentracing/span')} span
+         * @param {import('graphql').DocumentNode} document
+         * @param {readonly import('graphql').GraphQLError[]} [errors]
+         */
+        function validateHook (span, document, errors) {
+          if (errors?.length) {
+            span.setTag('error', false)
+          }
+        }
+
         const config = {
           hooks: {
-            execute: sinon.spy((span, context, res) => {}),
+            execute: sinon.spy(executeHook),
             parse: sinon.spy((span, document, operation) => {}),
-            validate: sinon.spy((span, document, error) => {}),
+            validate: sinon.spy(validateHook),
             resolve: sinon.spy((span, field) => {}),
           },
         }
@@ -2826,6 +3015,169 @@ describe('Plugin', () => {
           return Promise.all([assertion, action])
         })
 
+        it('should trace executions started by the execute hook', () => {
+          const localSchema = graphql.buildSchema('type Query { outer: String, nested: String }')
+          const outerDocument = graphql.parse('query Outer { outer }')
+          const nestedDocument = graphql.parse('query Nested { nested }')
+          const contextValue = {}
+
+          contextValue.executeHook = () => {
+            contextValue.executeHook = undefined
+            graphql.execute({
+              schema: localSchema,
+              document: nestedDocument,
+              contextValue,
+              rootValue: { nested: 'nested' },
+            })
+          }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            const executeSpans = spans.filter(span => span.name === expectedSchema.server.opName)
+
+            assert.strictEqual(executeSpans.length, 2)
+            assert.deepStrictEqual(
+              executeSpans.map(span => span.resource).sort(),
+              ['query Nested{nested}', 'query Outer{outer}']
+            )
+            sinon.assert.calledTwice(config.hooks.execute)
+          }, { spanResourceMatch: /Outer/ })
+
+          graphql.execute({
+            schema: localSchema,
+            document: outerDocument,
+            contextValue,
+            rootValue: { outer: 'outer' },
+          })
+
+          return assertion
+        })
+
+        it('should preserve an execute hook error override for synchronous results', () => {
+          const source = '{ expectedFailure }'
+          const document = graphql.parse(source)
+          const localSchema = graphql.buildSchema('type Query { expectedFailure: String }')
+          const rootValue = {
+            expectedFailure () {
+              throw new Error('Expected failure')
+            },
+          }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            const executeSpan = spans.find(span => span.name === expectedSchema.server.opName)
+
+            assert.ok(executeSpan, 'expected graphql.execute span')
+            assert.strictEqual(executeSpan.error, 0)
+            assert.strictEqual(executeSpan.meta[ERROR_TYPE], undefined)
+            assert.strictEqual(executeSpan.meta[ERROR_MESSAGE], undefined)
+            assert.strictEqual(executeSpan.meta[ERROR_STACK], undefined)
+
+            const spanEvents = agent.unformatSpanEvents(executeSpan)
+            assert.strictEqual(spanEvents.length, 1)
+            assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+            assert.strictEqual(spanEvents[0].attributes.message, 'Expected failure')
+          }, { spanResourceMatch: /expectedFailure/ })
+
+          return Promise.all([
+            assertion,
+            graphql.execute({ schema: localSchema, document, rootValue }),
+          ])
+        })
+
+        it('should preserve an execute hook error override for asynchronous results', () => {
+          const source = '{ expectedFailure }'
+          const document = graphql.parse(source)
+          const localSchema = graphql.buildSchema('type Query { expectedFailure: String }')
+          const rootValue = {
+            expectedFailure () {
+              return Promise.reject(new Error('Expected failure'))
+            },
+          }
+
+          return Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const executeSpan = spans.find(span => span.name === expectedSchema.server.opName)
+
+              assert.ok(executeSpan, 'expected graphql.execute span')
+              assert.strictEqual(executeSpan.error, 0)
+            }, { spanResourceMatch: /expectedFailure/ }),
+            graphql.execute({ schema: localSchema, document, rootValue }),
+          ])
+        })
+
+        it('should preserve the default error for unmatched execute errors', () => {
+          const source = '{ unexpectedFailure }'
+          const document = graphql.parse(source)
+          const localSchema = graphql.buildSchema('type Query { unexpectedFailure: String }')
+          const rootValue = {
+            unexpectedFailure () {
+              throw new Error('Unexpected failure')
+            },
+          }
+
+          return Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const executeSpan = spans.find(span => span.name === expectedSchema.server.opName)
+
+              assert.ok(executeSpan, 'expected graphql.execute span')
+              assert.strictEqual(executeSpan.error, 1)
+              assert.strictEqual(executeSpan.meta[ERROR_MESSAGE], 'Unexpected failure')
+            }, { spanResourceMatch: /unexpectedFailure/ }),
+            graphql.execute({ schema: localSchema, document, rootValue }),
+          ])
+        })
+
+        it('should run the execute hook for synchronous exceptions', () => {
+          const document = graphql.parse('{ hello }')
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[0].error, 1)
+            sinon.assert.calledOnce(config.hooks.execute)
+            assert.strictEqual(config.hooks.execute.firstCall.args[2], undefined)
+          })
+
+          assert.throws(() => graphql.execute(null, document))
+
+          return assertion
+        })
+
+        it('should run the execute hook for a rejected executor result', () => {
+          const document = graphql.parse('{ hello }')
+          const error = new Error('Executor rejected')
+          // Match the Sync orchestrion wrapper around @graphql-tools/executor while providing its rejected result.
+          const executeChannel = dc.tracingChannel(
+            'orchestrion:@graphql-tools/executor:apm:graphql:execute'
+          )
+          const context = {
+            arguments: [{ schema, document }],
+          }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[0].error, 1)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+            sinon.assert.calledOnce(config.hooks.execute)
+            assert.strictEqual(config.hooks.execute.firstCall.args[2], undefined)
+          }, { spanResourceMatch: /hello/ })
+
+          const execution = executeChannel.traceSync(() => Promise.reject(error), context)
+
+          return Promise.all([
+            assertion,
+            assert.rejects(execution, error),
+          ])
+        })
+
         it('should run the validate hook before graphql.validate span is finished', () => {
           const document = graphql.parse(source)
 
@@ -2847,6 +3199,29 @@ describe('Plugin', () => {
           })
 
           const errors = graphql.validate(schema, document)
+
+          return assertion
+        })
+
+        it('should preserve a validate hook error override', () => {
+          const document = graphql.parse('{ human { address } }')
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, 'graphql.validate')
+            assert.strictEqual(spans[0].error, 0)
+            assert.strictEqual(spans[0].meta[ERROR_TYPE], undefined)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], undefined)
+            assert.strictEqual(spans[0].meta[ERROR_STACK], undefined)
+
+            const spanEvents = agent.unformatSpanEvents(spans[0])
+            assert.strictEqual(spanEvents.length, 1)
+            assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+          })
+
+          graphql.validate(schema, document)
 
           return assertion
         })

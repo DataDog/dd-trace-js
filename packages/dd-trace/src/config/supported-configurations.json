@@ -835,6 +835,55 @@
         "default": "false"
       }
     ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "agentless",
+        "allowed": "agentless|remote_config",
+        "description": "Experimental: Select where Feature Flagging loads Universal Flag Configuration. Supported values are agentless and remote_config.",
+        "namespace": "featureFlags",
+        "transform": "toLowerCase"
+      }
+    ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "description": "Experimental: Override the agentless Feature Flagging UFC endpoint or base URL.",
+        "namespace": "featureFlags",
+        "sensitive": true
+      }
+    ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "30",
+        "description": "Experimental: Set the agentless Feature Flagging UFC polling interval in seconds, capped at one hour.",
+        "allowed": "[1-9]\\d*",
+        "namespace": "featureFlags"
+      }
+    ],
+    "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "5",
+        "description": "Experimental: Set the agentless Feature Flagging UFC request timeout in seconds.",
+        "allowed": "[1-9]\\d*",
+        "namespace": "featureFlags"
+      }
+    ],
+    "DD_FEATURE_FLAGS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "featureFlags"
+      }
+    ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
       {
         "implementation": "B",

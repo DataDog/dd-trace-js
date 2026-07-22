@@ -30,6 +30,7 @@ const {
   TEST_NAME,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_IS_RUM_ACTIVE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -37,7 +38,9 @@ const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
-const hookFile = 'dd-trace/loader-hook.mjs'
+const cypressVersionsSupportingNode18 = DD_MAJOR === 5
+  ? ['10.2.0', '12.0.0', '14.5.4']
+  : ['12.0.0', '14.5.4']
 
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
@@ -47,9 +50,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   if (DD_MAJOR >= 6) {
@@ -59,9 +62,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   return false
@@ -77,7 +80,7 @@ const moduleTypes = [
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+    testCommand: 'node ./cypress-esm-config.mjs',
   },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
@@ -174,6 +177,7 @@ moduleTypes.forEach(({
                 [TEST_SUITE]: 'cypress/e2e/basic-pass.js',
                 [TEST_FRAMEWORK]: 'cypress',
                 [TEST_TYPE]: 'browser',
+                [TEST_IS_RUM_ACTIVE]: 'true',
                 [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
                 customTag: 'customValue',
                 addTagsBeforeEach: 'customBeforeEach',
@@ -217,6 +221,89 @@ moduleTypes.forEach(({
         receiverPromise,
       ])
     })
+
+    /**
+     * @param {Record<string, string>} env
+     */
+    async function runRumCookieFailureTest (env) {
+      let testOutput = ''
+      const specToRun = 'cypress/e2e/rum-cookie-failure.cy.js'
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+            ...env,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      const [exitCode] = await once(childProcess, 'exit')
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    }
+
+    for (const failure of ['throw', 'reject']) {
+      it(`does not fail tests when the RUM correlation cookie ${failure}s`, async () => {
+        await runRumCookieFailureTest({ CYPRESS_RUM_COOKIE_FAILURE: failure })
+      })
+    }
+
+    it('does not fail tests when cy.now is unavailable', async () => {
+      await runRumCookieFailureTest({ CYPRESS_MISSING_CY_NOW: 'true' })
+    })
+
+    if (type === 'commonJS' && version === 'latest') {
+      it('does not fail tests when reporting a RUM correlation error throws', async () => {
+        await runRumCookieFailureTest({
+          CYPRESS_RUM_COOKIE_FAILURE: 'reject',
+          CYPRESS_RUM_LOG_FAILURE: 'true',
+        })
+      })
+    }
+
+    if (type === 'commonJS' && version !== '6.7.0') {
+      it('removes a stale RUM cookie when its replacement rejects', async () => {
+        let testOutput = ''
+        const specToRun = 'cypress/e2e/rum-cookie-stale.cy.js'
+
+        childProcess = exec(
+          `${testCommand} --config testIsolation=false`,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RUM_COOKIE_STALE_TEST: 'true',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+        childProcess.stdout?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        const [exitCode] = await once(childProcess, 'exit')
+
+        assert.strictEqual(exitCode, 0, testOutput)
+      })
+    }
 
     if (DD_MAJOR < 6 && version !== 'latest' && semver.lt(version, '12.0.0')) {
       it('logs a warning if using a deprecated version of cypress', async () => {

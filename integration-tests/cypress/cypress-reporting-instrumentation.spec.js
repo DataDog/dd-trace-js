@@ -1,13 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec, execSync } = require('node:child_process')
+const { exec, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { format } = require('node:util')
 
+const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
+const sinon = require('sinon')
 const {
   sandboxCwd,
   useSandbox,
@@ -46,9 +49,11 @@ const {
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
-const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
+const cypressVersionsSupportingNode18 = DD_MAJOR === 5
+  ? ['10.2.0', '12.0.0', '14.5.4']
+  : ['12.0.0', '14.5.4']
 
 function cleanupPrecompiledSourceLineDist (cwd) {
   fs.rmSync(path.join(cwd, CYPRESS_PRECOMPILED_SPEC_DIST_DIR), { recursive: true, force: true })
@@ -108,9 +113,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   if (DD_MAJOR >= 6) {
@@ -120,9 +125,9 @@ function shouldTestsRun (type) {
     if (NODE_MAJOR > 16) {
       // Cypress 15.0.0 has removed support for Node 18
       if (NODE_MAJOR <= 18) {
-        return version === '12.0.0' || version === '14.5.4'
+        return cypressVersionsSupportingNode18.includes(version)
       }
-      return version === '12.0.0' || version === '14.5.4' || version === 'latest'
+      return cypressVersionsSupportingNode18.includes(version) || version === 'latest'
     }
   }
   return false
@@ -138,7 +143,7 @@ const moduleTypes = [
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+    testCommand: 'node ./cypress-esm-config.mjs',
   },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
@@ -162,7 +167,17 @@ moduleTypes.forEach(({
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    const sandboxDependencies = [`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript']
+    if (type === 'commonJS' && version === 'latest') {
+      // These dependencies are only needed by the component/Vite regression test below.
+      sandboxDependencies.push(
+        '@vitejs/plugin-react@4.3.4',
+        'react@18.3.1',
+        'react-dom@18.3.1',
+        'vite@6.1.0'
+      )
+    }
+    useSandbox(sandboxDependencies, true)
 
     before(async function () {
       this.timeout(180_000)
@@ -262,7 +277,7 @@ moduleTypes.forEach(({
         .filter(line => !line.includes("require('dd-trace/ci/cypress/support')"))
         .join('\n')
 
-      const getSupportWrappers = () => fs.readdirSync(os.tmpdir())
+      const getSupportWrappers = () => fs.readdirSync(path.dirname(supportFilePath))
         .filter(filename => filename.startsWith('dd-cypress-support-'))
         .sort()
 
@@ -513,6 +528,7 @@ moduleTypes.forEach(({
     // the full citestcycle span hierarchy through the channel's _isInit=true branch.
     over10It('correctly chains hooks when auto-instrumentation and manual plugin are both active', async () => {
       const envVars = getCiVisAgentlessConfig(receiver.port)
+      let testOutput = ''
 
       const legacyConfigFile = type === 'esm'
         ? 'cypress-legacy-plugin.config.mjs'
@@ -525,10 +541,13 @@ moduleTypes.forEach(({
           env: {
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
+            CYPRESS_ENABLE_AFTER_SPEC_USER: '1',
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
         }
       )
+      childProcess.stdout?.on('data', (data) => { testOutput += data })
+      childProcess.stderr?.on('data', (data) => { testOutput += data })
 
       const receiverPromise = receiver
         .gatherPayloadsUntilChildExit(
@@ -556,10 +575,305 @@ moduleTypes.forEach(({
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
         receiverPromise,
       ])
 
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.match(testOutput, /\[custom:after:spec:manual\]/)
+    })
+
+    over10It(
+      'uses one tracer when auto-instrumentation and the manual plugin are different package copies',
+      async () => {
+        const externalPackageDir = path.join(cwd, 'external-tracer', 'node_modules', 'dd-trace')
+        fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
+        fs.mkdirSync(path.dirname(externalPackageDir), { recursive: true })
+        fs.cpSync(path.join(cwd, 'node_modules', 'dd-trace'), externalPackageDir, { recursive: true })
+
+        const legacyConfigFile = type === 'esm'
+          ? 'cypress-legacy-plugin.config.mjs'
+          : 'cypress-legacy-plugin.config.js'
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        let testOutput = ''
+
+        try {
+          childProcess = exec(
+            `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                NODE_OPTIONS: `-r ${path.join(externalPackageDir, 'ci', 'init')}`,
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (data) => { testOutput += data })
+          childProcess.stderr?.on('data', (data) => { testOutput += data })
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                assert.strictEqual(events.filter(event => event.type === 'test_session_end').length, 1)
+                assert.strictEqual(events.filter(event => event.type === 'test_module_end').length, 1)
+                assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+
+                const testEvents = events.filter(event => event.type === 'test')
+                assert.strictEqual(testEvents.length, 1)
+                assertObjectContains(testEvents[0].content, {
+                  meta: {
+                    [TEST_STATUS]: 'pass',
+                    [TEST_FRAMEWORK]: 'cypress',
+                  },
+                })
+              }, { hardTimeout: 60000 })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+          assert.doesNotMatch(testOutput, /Multiple attempts to register the following task/)
+        } finally {
+          fs.rmSync(path.dirname(path.dirname(externalPackageDir)), { recursive: true, force: true })
+        }
+      }
+    )
+
+    over10It('reports real test statuses when supportFile is false', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const getSupportWrappers = () => fs.readdirSync(cwd)
+        .filter(filename => filename.startsWith('dd-cypress-support-'))
+        .sort()
+      const supportWrappersBefore = getSupportWrappers()
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-support-file-false.config.js',
+        { cwd, env: envVars }
+      )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const testEvents = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+
+            assert.strictEqual(testEvents.length, 2)
+            const statuses = Object.fromEntries(testEvents.map(event => [
+              event.content.resource,
+              event.content.meta[TEST_STATUS],
+            ]))
+            assert.deepStrictEqual(statuses, {
+              'cypress/e2e/support-file-false.cy.js.support file false suite passes without a user support file':
+                'pass',
+              'cypress/e2e/support-file-false.cy.js.support file false suite skips without a user support file':
+                'skip',
+            })
+          }, { hardTimeout: 60000 })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.deepStrictEqual(getSupportWrappers(), supportWrappersBefore)
+    })
+
+    const readOnlyConfigIt = process.platform === 'win32' ? it.skip : over10It
+    readOnlyConfigIt('auto-instruments a plain-object config in a read-only directory', async () => {
+      const readOnlyConfigDir = path.join(cwd, 'read-only-config')
+      const configExtension = type === 'esm' ? '.mjs' : '.js'
+      const sourceConfig = path.join(cwd, `cypress-plain-object-auto.config${configExtension}`)
+      const readOnlyConfig = path.join(readOnlyConfigDir, `plain-object${configExtension}`)
+
+      fs.rmSync(readOnlyConfigDir, { recursive: true, force: true })
+      fs.mkdirSync(readOnlyConfigDir)
+      fs.copyFileSync(sourceConfig, readOnlyConfig)
+      fs.chmodSync(readOnlyConfigDir, 0o555)
+      const getConfigWrappers = () => fs.readdirSync(cwd)
+        .filter(filename => filename.startsWith('.dd-cypress-config-'))
+        .sort()
+      const configWrappersBefore = getConfigWrappers()
+
+      try {
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${readOnlyConfig}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
+          }
+        )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const testEvents = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+              const passedTest = testEvents.find(event =>
+                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+              )
+
+              assertObjectContains(passedTest?.content, {
+                meta: {
+                  [TEST_STATUS]: 'pass',
+                  [TEST_FRAMEWORK]: 'cypress',
+                },
+              })
+            }, { hardTimeout: 60000 })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        assert.deepStrictEqual(getConfigWrappers(), configWrappersBefore)
+      } finally {
+        fs.chmodSync(readOnlyConfigDir, 0o755)
+        fs.rmSync(readOnlyConfigDir, { recursive: true, force: true })
+      }
+    })
+
+    const readOnlyTypeScriptConfigIt = process.platform !== 'win32' &&
+      type === 'commonJS' && version === '14.5.4' && NODE_MAJOR > 18
+      ? it
+      : it.skip
+    readOnlyTypeScriptConfigIt(
+      'auto-instruments a TypeScript config when the writable fallback has a different module scope',
+      async () => {
+        const projectRoot = path.join(cwd, 'read-only-typescript-project')
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        const specDirectory = path.join(projectRoot, 'cypress', 'e2e')
+        fs.rmSync(projectRoot, { recursive: true, force: true })
+        fs.mkdirSync(configDirectory, { recursive: true })
+        fs.mkdirSync(specDirectory, { recursive: true })
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(configFile, [
+          'module.exports = {',
+          '  e2e: { specPattern: "cypress/e2e/basic-pass.js", supportFile: false },',
+          '  video: false,',
+          '  screenshotOnRunFailure: false,',
+          '}',
+          '',
+        ].join('\n'))
+        fs.copyFileSync(
+          path.join(cwd, 'cypress', 'e2e', 'basic-pass.js'),
+          path.join(specDirectory, 'basic-pass.js')
+        )
+        fs.chmodSync(configDirectory, 0o555)
+
+        const getGeneratedFiles = () => fs.readdirSync(projectRoot)
+          .filter(file => file.startsWith('.dd-cypress-config-') || file.startsWith('dd-cypress-support-'))
+          .sort()
+        const generatedFilesBefore = getGeneratedFiles()
+        let testOutput = ''
+
+        try {
+          childProcess = exec(
+            `./node_modules/.bin/cypress run --project ${projectRoot} --config-file ${configFile}`,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                CYPRESS_BASE_URL: webAppBaseUrl,
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (data) => { testOutput += data })
+          childProcess.stderr?.on('data', (data) => { testOutput += data })
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testEvents = payloads
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                const passedTest = testEvents.find(event =>
+                  event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+                )
+
+                assertObjectContains(passedTest?.content, {
+                  meta: {
+                    [TEST_STATUS]: 'pass',
+                    [TEST_FRAMEWORK]: 'cypress',
+                  },
+                })
+              }, { hardTimeout: 60000 })
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+          assert.deepStrictEqual(getGeneratedFiles(), generatedFilesBefore)
+        } finally {
+          fs.chmodSync(configDirectory, 0o755)
+          fs.rmSync(projectRoot, { recursive: true, force: true })
+        }
+      }
+    )
+
+    const componentIt = type === 'commonJS' && version === 'latest' ? it : it.skip
+    componentIt('auto-instruments component tests with the Vite dev server', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const supportDirectory = path.join(cwd, 'cypress', 'support')
+      const getSupportWrappers = () => fs.readdirSync(supportDirectory)
+        .filter(filename => filename.startsWith('dd-cypress-support-'))
+        .sort()
+      const supportWrappersBefore = getSupportWrappers()
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --component --config-file cypress-component.config.js',
+        { cwd, env: envVars }
+      )
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testEvents = events.filter(event => event.type === 'test')
+
+            assert.strictEqual(events.filter(event => event.type === 'test_session_end').length, 1)
+            assert.strictEqual(events.filter(event => event.type === 'test_module_end').length, 1)
+            assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
+            assert.strictEqual(testEvents.length, 1)
+            assertObjectContains(testEvents[0].content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          }, { hardTimeout: 60000 })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.deepStrictEqual(getSupportWrappers(), supportWrappersBefore)
     })
 
     // Exercises the manual plugin path without NODE_OPTIONS when users also register
@@ -1248,3 +1562,494 @@ moduleTypes.forEach(({
     })
   })
 })
+
+// These filesystem failure tests do not depend on a Cypress version. Run them in one existing
+// integration matrix cell instead of repeating them for every supported version and module type.
+if (requestedVersion === 'latest' &&
+  (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')) {
+  describe('cypress config instrumentation', () => {
+    const temporaryDirectories = []
+    let errors
+
+    beforeEach(() => {
+      errors = []
+      sinon.stub(console, 'error').callsFake((...args) => errors.push(format(...args)))
+    })
+
+    afterEach(() => {
+      sinon.restore()
+      for (const directory of temporaryDirectories.splice(0)) {
+        fs.rmSync(directory, { force: true, recursive: true })
+      }
+    })
+
+    /**
+     * @param {string} code filesystem error code
+     * @param {string} filePath affected path
+     * @param {string} [syscall] failed system call
+     * @returns {NodeJS.ErrnoException} filesystem error
+     */
+    function createFileError (code, filePath, syscall = 'open') {
+      return Object.assign(new Error(`${code}: ${syscall} ${filePath}`), {
+        code,
+        path: filePath,
+        syscall,
+      })
+    }
+
+    /**
+     * @returns {string} temporary Cypress project root
+     */
+    function createProjectRoot () {
+      const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-config-'))
+      temporaryDirectories.push(projectRoot)
+      return projectRoot
+    }
+
+    /**
+     * @param {object} [fsStub] filesystem overrides
+     * @param {() => string} [randomUUID] UUID generator
+     * @returns {{ cypressConfig: object, errors: string[], warnings: string[] }} loaded instrumentation and logs
+     */
+    function loadCypressConfig (fsStub, randomUUID) {
+      const warnings = []
+      let uuid = 0
+      const stubs = {
+        crypto: {
+          randomUUID: randomUUID || (() => `uuid-${++uuid}`),
+        },
+        '../../dd-trace/src/log': {
+          warn: (...args) => warnings.push(format(...args)),
+        },
+        './helpers/instrument': {
+          channel: () => ({ hasSubscribers: false, publish: () => {} }),
+        },
+      }
+
+      if (fsStub) stubs.fs = fsStub
+
+      return {
+        cypressConfig: proxyquire('../../packages/datadog-instrumentations/src/cypress-config', stubs),
+        errors,
+        warnings,
+      }
+    }
+
+    /**
+     * @param {object} cypressConfig Cypress config instrumentation
+     * @param {object} resolvedConfig resolved Cypress config
+     * @returns {{ handlers: Record<string, Function>, result: object }} registered handlers and returned config
+     */
+    function injectSupportFile (cypressConfig, resolvedConfig) {
+      const configFile = { e2e: {} }
+      const handlers = {}
+      cypressConfig.wrapConfig(configFile)
+
+      const result = configFile.e2e.setupNodeEvents((event, handler) => {
+        handlers[event] = handler
+      }, resolvedConfig)
+
+      return { handlers, result }
+    }
+
+    /**
+     * @param {string} directory directory to inspect
+     * @returns {string[]} generated Cypress files
+     */
+    function getGeneratedFiles (directory) {
+      return fs.readdirSync(directory)
+        .filter(file => file.startsWith('dd-cypress-support-') || file.startsWith('.dd-cypress-config-'))
+    }
+
+    /**
+     * @param {string} code error code raised after a partial write
+     * @param {(writeNumber: number) => boolean} [shouldFail] selects the write that fails
+     * @returns {object} filesystem stub
+     */
+    function createPartialWriteFailure (code, shouldFail = () => true) {
+      const pathsByDescriptor = new Map()
+      let writeNumber = 0
+
+      return {
+        openSync (filePath, flags) {
+          const descriptor = fs.openSync(filePath, flags)
+          pathsByDescriptor.set(descriptor, filePath)
+          return descriptor
+        },
+        writeFileSync (file, content, ...args) {
+          if (typeof file === 'number' && pathsByDescriptor.has(file)) {
+            writeNumber++
+            if (!shouldFail(writeNumber)) return fs.writeFileSync(file, content, ...args)
+
+            const filePath = pathsByDescriptor.get(file)
+            fs.writeFileSync(file, 'partial')
+            throw createFileError(code, filePath, 'write')
+          }
+          return fs.writeFileSync(file, content, ...args)
+        },
+        closeSync (descriptor) {
+          pathsByDescriptor.delete(descriptor)
+          return fs.closeSync(descriptor)
+        },
+      }
+    }
+
+    describe('support wrapper', () => {
+      it('falls back to the project root when the support directory is not writable', async () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === supportDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile }
+        const { handlers } = injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(path.dirname(resolvedConfig.supportFile), projectRoot)
+        assert.deepStrictEqual(warnings, [])
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+
+        await handlers['after:run']({})
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('removes generated support files when the config process exits without after:run', () => {
+        const projectRoot = createProjectRoot()
+        const generatedCountFile = path.join(projectRoot, 'generated-count')
+        const cypressConfigPath = require.resolve('../../packages/datadog-instrumentations/src/cypress-config')
+        const script = [
+          'const fs = require("node:fs")',
+          `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
+          `const projectRoot = ${JSON.stringify(projectRoot)}`,
+          'const config = { e2e: {} }',
+          'cypressConfig.wrapConfig(config)',
+          'config.e2e.setupNodeEvents(() => {}, { projectRoot, supportFile: false })',
+          'const generatedCount = fs.readdirSync(projectRoot)',
+          '  .filter(file => file.startsWith("dd-cypress-support-")).length',
+          `fs.writeFileSync(${JSON.stringify(generatedCountFile)}, String(generatedCount))`,
+          'process.exit(0)',
+        ].join('\n')
+
+        execFileSync(process.execPath, ['-e', script], {
+          env: { ...process.env, NODE_OPTIONS: '' },
+        })
+
+        assert.strictEqual(fs.readFileSync(generatedCountFile, 'utf8'), '2')
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('logs an error with every failed location when no directory is writable', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors, warnings } = loadCypressConfig({
+          openSync (filePath) {
+            throw createFileError('EROFS', filePath)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, supportFile)
+        assert.strictEqual(errors.length, 1)
+        assert.deepStrictEqual(warnings, [])
+        assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+        assert.strictEqual(errors[0].match(/EROFS during open/g).length, 2)
+        assert.match(errors[0], new RegExp(supportDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        assert.match(errors[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      })
+
+      it('logs an error when the original support file cannot be read', () => {
+        const projectRoot = createProjectRoot()
+        const supportFile = path.join(projectRoot, 'e2e.js')
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors } = loadCypressConfig({
+          readFileSync (filePath, ...args) {
+            if (filePath === supportFile) throw createFileError('EACCES', filePath, 'read')
+            return fs.readFileSync(filePath, ...args)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, supportFile)
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /^ERROR: Datadog could not read the Cypress support file/)
+        assert.match(errors[0], /EACCES during read/)
+      })
+
+      it('logs an error when the Datadog browser hooks cannot be read', () => {
+        const projectRoot = createProjectRoot()
+        const browserHooksPath = require.resolve('../../packages/datadog-plugin-cypress/src/support')
+
+        const { cypressConfig, errors } = loadCypressConfig({
+          readFileSync (filePath, ...args) {
+            if (filePath === browserHooksPath) throw createFileError('EACCES', filePath, 'read')
+            return fs.readFileSync(filePath, ...args)
+          },
+        })
+        const resolvedConfig = { projectRoot, supportFile: false }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, false)
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /^ERROR: Datadog could not read its Cypress browser support hooks/)
+        assert.match(errors[0], /EACCES during read/)
+      })
+
+      it('logs an error when no project directory is available for the support wrapper', () => {
+        const { cypressConfig, errors } = loadCypressConfig()
+        const resolvedConfig = { supportFile: false }
+        injectSupportFile(cypressConfig, resolvedConfig)
+
+        assert.strictEqual(resolvedConfig.supportFile, false)
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /^ERROR: Datadog could not create the Cypress support wrapper/)
+        assert.match(errors[0], /no project directory was available/)
+      })
+
+      it('removes partial support files when the filesystem runs out of space', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+        injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+        assert.strictEqual(errors.length, 1)
+        assert.match(errors[0], /ENOSPC during write/)
+        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('removes the browser hooks when writing the support wrapper fails', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const failWrapperWrites = writeNumber => writeNumber % 2 === 0
+        const { cypressConfig, errors } = loadCypressConfig(
+          createPartialWriteFailure('ENOSPC', failWrapperWrites)
+        )
+        injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+        assert.strictEqual(errors.length, 1)
+        assert.strictEqual(errors[0].match(/ENOSPC during write/g).length, 2)
+        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('removes partial support files when closing them fails', () => {
+        const projectRoot = createProjectRoot()
+        const supportDirectory = path.join(projectRoot, 'cypress', 'support')
+        const supportFile = path.join(supportDirectory, 'e2e.js')
+        const pathsByDescriptor = new Map()
+        fs.mkdirSync(supportDirectory, { recursive: true })
+        fs.writeFileSync(supportFile, '// user support\n')
+
+        const { cypressConfig, errors } = loadCypressConfig({
+          openSync (filePath, flags) {
+            const descriptor = fs.openSync(filePath, flags)
+            pathsByDescriptor.set(descriptor, filePath)
+            return descriptor
+          },
+          closeSync (descriptor) {
+            const filePath = pathsByDescriptor.get(descriptor)
+            pathsByDescriptor.delete(descriptor)
+            fs.closeSync(descriptor)
+            throw createFileError('EIO', filePath, 'close')
+          },
+        })
+        injectSupportFile(cypressConfig, { projectRoot, supportFile })
+
+        assert.strictEqual(errors.length, 1)
+        assert.strictEqual(errors[0].match(/EIO during close/g).length, 2)
+        assert.deepStrictEqual(getGeneratedFiles(supportDirectory), [])
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('warns when generated support files cannot be removed', async () => {
+        const projectRoot = createProjectRoot()
+
+        const { cypressConfig, errors, warnings } = loadCypressConfig({
+          unlinkSync (filePath) {
+            throw createFileError('EACCES', filePath, 'unlink')
+          },
+        })
+        const { handlers } = injectSupportFile(cypressConfig, { projectRoot, supportFile: false })
+
+        await handlers['after:run']({})
+
+        assert.deepStrictEqual(errors, [])
+        assert.strictEqual(warnings.length, 2)
+        assert.ok(warnings.every(warning => warning.includes('could not remove generated Cypress file')))
+        assert.ok(warnings.every(warning => warning.includes('EACCES during unlink')))
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 2)
+      })
+    })
+
+    describe('configuration wrapper', () => {
+      it('falls back to the project root when the config directory is not writable', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.js')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.deepStrictEqual(warnings, [])
+        assert.strictEqual(getGeneratedFiles(projectRoot).length, 1)
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('uses .cts when a CommonJS TypeScript config falls back into an ESM scope', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.strictEqual(path.extname(result.options.configFile), '.cts')
+        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /module\.exports/)
+        assert.deepStrictEqual(warnings, [])
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('uses .mts when an ESM TypeScript config falls back into a CommonJS scope', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.ts')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(path.join(projectRoot, 'package.json'), '{ "type": "commonjs" }')
+        fs.writeFileSync(path.join(configDirectory, 'package.json'), '{ "type": "module" }')
+        fs.writeFileSync(configFile, 'export default {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig({
+          openSync (filePath, flags) {
+            if (path.dirname(filePath) === configDirectory) {
+              throw createFileError('EACCES', filePath)
+            }
+            return fs.openSync(filePath, flags)
+          },
+        })
+        const result = cypressConfig.wrapCliConfigFileOptions({
+          configFile,
+          project: projectRoot,
+        })
+
+        assert.strictEqual(path.dirname(result.options.configFile), projectRoot)
+        assert.strictEqual(path.extname(result.options.configFile), '.mts')
+        assert.match(fs.readFileSync(result.options.configFile, 'utf8'), /export default/)
+        assert.deepStrictEqual(warnings, [])
+
+        result.cleanup()
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+
+      it('warns with every failed location when no directory is writable', () => {
+        const projectRoot = createProjectRoot()
+        const configDirectory = path.join(projectRoot, 'config')
+        const configFile = path.join(configDirectory, 'cypress.config.js')
+        fs.mkdirSync(configDirectory)
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, errors, warnings } = loadCypressConfig({
+          openSync (filePath) {
+            throw createFileError('EROFS', filePath)
+          },
+        })
+        const options = { configFile, project: projectRoot }
+        const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+        assert.strictEqual(result.options, options)
+        assert.deepStrictEqual(errors, [])
+        assert.strictEqual(warnings.length, 1)
+        assert.match(warnings[0], /could not create the Cypress configuration wrapper/)
+        assert.strictEqual(warnings[0].match(/EROFS during open/g).length, 2)
+        assert.match(warnings[0], new RegExp(configDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        assert.match(warnings[0], new RegExp(projectRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      })
+
+      it('does not overwrite an existing configuration wrapper', () => {
+        const projectRoot = createProjectRoot()
+        const configFile = path.join(projectRoot, 'cypress.config.js')
+        const existingWrapper = path.join(projectRoot, `.dd-cypress-config-${process.pid}-collision.cjs`)
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+        fs.writeFileSync(existingWrapper, 'existing content\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig(undefined, () => 'collision')
+        const options = { configFile, project: projectRoot }
+        const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+        assert.strictEqual(result.options, options)
+        assert.strictEqual(fs.readFileSync(existingWrapper, 'utf8'), 'existing content\n')
+        assert.strictEqual(warnings.length, 1)
+        assert.match(warnings[0], /EEXIST during open/)
+      })
+
+      it('removes a partial configuration wrapper when the filesystem runs out of space', () => {
+        const projectRoot = createProjectRoot()
+        const configFile = path.join(projectRoot, 'cypress.config.js')
+        fs.writeFileSync(configFile, 'module.exports = {}\n')
+
+        const { cypressConfig, warnings } = loadCypressConfig(createPartialWriteFailure('ENOSPC'))
+        const options = { configFile, project: projectRoot }
+        const result = cypressConfig.wrapCliConfigFileOptions(options)
+
+        assert.strictEqual(result.options, options)
+        assert.strictEqual(warnings.length, 1)
+        assert.match(warnings[0], /ENOSPC during write/)
+        assert.deepStrictEqual(getGeneratedFiles(projectRoot), [])
+      })
+    })
+  })
+}
