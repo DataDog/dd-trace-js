@@ -553,7 +553,6 @@ addHook({
 
     const runner = run.apply(this, args)
 
-    // eslint-disable-next-line unicorn/no-array-for-each
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
@@ -915,7 +914,6 @@ addHook({
         status = 'skip'
       } else {
         // has to check every test in the test file
-        // eslint-disable-next-line unicorn/no-array-for-each
         suitesInTestFile.forEach(suite => {
           suite.eachTest(test => {
             if (test.state === 'failed' || test.timedOut) {

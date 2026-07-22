@@ -24,7 +24,7 @@ class RouterPlugin extends WebPlugin {
       let childOf
       if (context !== undefined) {
         const middleware = context.middleware
-        childOf = middleware.length === 0 ? context.span : middleware[middleware.length - 1]
+        childOf = middleware.length === 0 ? context.span : middleware.at(-1)
       } else if (store) {
         childOf = store.span
       }
@@ -75,7 +75,7 @@ class RouterPlugin extends WebPlugin {
       const context = this.#contexts.get(req)
       if (!context) return
       const middleware = context.middleware
-      const span = middleware.length === 0 ? context.span : middleware[middleware.length - 1]
+      const span = middleware.length === 0 ? context.span : middleware.at(-1)
       if (!span) return
 
       span.setTag('error', error)
