@@ -13,6 +13,7 @@
  * @property {string} [namespace] Nests the canonical env name under this property path (e.g. `telemetry`).
  * @property {string} [transform]
  * @property {string} [allowed]
+ * @property {string} [description]
  * @property {string|boolean} [deprecated]
  * @property {boolean} [sensitive] Excludes the configuration value from configuration telemetry.
  */

@@ -2,24 +2,22 @@
 
 import * as Module from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { isMainThread } from 'node:worker_threads'
 
 import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 import { initialize as origInitialize, load as origLoad, resolve } from 'import-in-the-middle/hook.mjs'
-import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
-import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
-import configHelper from './packages/dd-trace/src/config/helper.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
-import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
 
 // This file must support Node.js 12.0.0 syntax
 
 const { builtinModules } = Module
-const regexpEscape = regexpEscapeModule.default
 const require = Module.createRequire(import.meta.url)
+// The query marks initialize.mjs's application-thread preload; loader workers use the full graph.
+const isInitializeMainThread = isMainThread && import.meta.url.endsWith('?initialize')
 let syncImportInTheMiddleHook
 
-// The config helper's named exports aren't visible to ESM; destructure the default.
-const { getValueFromEnvSources } = configHelper
+let getValueFromEnvSources
+let regexpEscape
 
 // Substrings of resolved URLs that import-in-the-middle must never wrap: re-export
 // shims and internal helper graphs that break when proxied, plus iitm's own files
@@ -32,15 +30,26 @@ export const iitmExclusionRegExp = /middle|langsmith|openai\/_shims|openai\/reso
 // against a regex metacharacter entering a package name.
 const includeModuleNames = new Set()
 let moduleNameAlternation = ''
-for (const moduleName of Object.keys(hooks)) {
-  // Relative hooks resolve outside node_modules and are not instrumented here.
-  if (isRelativeRequire(moduleName)) continue
-  includeModuleNames.add(moduleName)
-  // iitm matches a built-in by its node: specifier too, so mirror that and
-  // wrap `import 'node:crypto'` as well as `import 'crypto'`.
-  if (builtinModules.includes(moduleName)) includeModuleNames.add(`node:${moduleName}`)
-  if (moduleNameAlternation !== '') moduleNameAlternation += '|'
-  moduleNameAlternation += regexpEscape(moduleName)
+
+if (!isInitializeMainThread) {
+  const regexpEscapeModule = require('./vendor/dist/escape-string-regexp/index.js')
+  const hooks = require('./packages/datadog-instrumentations/src/helpers/hooks.js')
+  const configHelper = require('./packages/dd-trace/src/config/helper.js')
+  const { isRelativeRequire } = require('./packages/datadog-instrumentations/src/helpers/shared-utils.js')
+
+  regexpEscape = regexpEscapeModule.default
+  getValueFromEnvSources = configHelper.getValueFromEnvSources
+
+  for (const moduleName of Object.keys(hooks)) {
+    // Relative hooks resolve outside node_modules and are not instrumented here.
+    if (isRelativeRequire(moduleName)) continue
+    includeModuleNames.add(moduleName)
+    // iitm matches a built-in by its node: specifier too, so mirror that and
+    // wrap `import 'node:crypto'` as well as `import 'crypto'`.
+    if (builtinModules.includes(moduleName)) includeModuleNames.add(`node:${moduleName}`)
+    if (moduleNameAlternation !== '') moduleNameAlternation += '|'
+    moduleNameAlternation += regexpEscape(moduleName)
+  }
 }
 
 const nodeModulesIncludeSource = `node_modules/(?:${moduleNameAlternation})/(?!node_modules).+`
