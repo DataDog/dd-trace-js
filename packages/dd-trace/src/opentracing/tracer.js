@@ -23,8 +23,8 @@ const LogPropagator = require('./propagation/log')
 const SpanContext = require('./span_context')
 
 // Lazy-loaded so the libdatadog initialization cost is only paid the first
-// time the tracer is constructed. libdatadog is a required dependency, so
-// any load-time failure surfaces via `require('../native')` at module-load.
+// time native spans are selected. A missing optional libdatadog install still
+// fails through `require('../native')` instead of falling back silently.
 let nativeModule
 function getNativeModule () {
   if (nativeModule === undefined) {

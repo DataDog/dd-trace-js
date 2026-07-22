@@ -3,16 +3,11 @@
 /**
  * Native spans module loader.
  *
- * Provides access to the `@datadog/libdatadog` pipeline crate for native span
- * storage. `@datadog/libdatadog` is a required dependency: any failure to load
- * or initialize the pipeline propagates as a hard error so misconfigured
- * installs surface immediately rather than silently dropping spans.
- *
- * Pipeline loading is deferred to first use (lazy) so that simply importing
- * this module from a unit test (or from code that never actually instantiates
- * a tracer) does not require a working pipeline binary. The first call into
- * any of the lazy getters below will throw if libdatadog or the pipeline crate
- * cannot be loaded.
+ * Provides access to the optional `@datadog/libdatadog` pipeline crate for
+ * native span storage. Loading is deferred to first use so package managers
+ * can omit optional dependencies in constrained installs. If native spans are
+ * selected and `@datadog/libdatadog` is missing or corrupt, the native loader
+ * throws instead of silently falling back to JS spans.
  */
 
 const { storage } = require('../../../datadog-core')
