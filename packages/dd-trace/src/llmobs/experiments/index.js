@@ -109,9 +109,11 @@ function recordsFromCsv (csvPath, options) {
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
   #client
+  #llmobs
   #projectName
 
-  constructor (config) {
+  constructor (config, llmobs) {
+    this.#llmobs = llmobs
     this.#projectName = config.llmobs?.mlApp || config.service
     this.#client = new ExperimentsClient({
       apiKey: config.DD_API_KEY,
@@ -246,13 +248,13 @@ class Experiments {
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
   experiment (options) {
-    return new Experiment(this.#client, options)
+    return new Experiment(this.#client, options, this.#llmobs)
   }
 }
 
 // Factory used by the LLMObs SDK: returns a real Experiments instance when
 // enabled and credentialed, otherwise a no-op that explains what's missing.
-function createExperiments (config) {
+function createExperiments (config, llmobs) {
   if (!config.llmobs?.DD_LLMOBS_ENABLED) {
     return new NoopExperiments('LLM Observability is not enabled')
   }
@@ -268,7 +270,7 @@ function createExperiments (config) {
       'then retry'
     )
   }
-  return new Experiments(config)
+  return new Experiments(config, llmobs)
 }
 
 module.exports = { Experiments, createExperiments }

@@ -27,6 +27,14 @@ class NoopLLMObs {
     return this.experiments.pullDataset(name, options)
   }
 
+  experiment (options) {
+    return this.experiments.experiment(options)
+  }
+
+  asyncExperiment (options) {
+    return this.experiment(options)
+  }
+
   enable (options) {}
 
   disable () {}

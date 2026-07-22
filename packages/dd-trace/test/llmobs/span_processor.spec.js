@@ -122,6 +122,41 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
+    it('marks spans with experiment_id tags as experiment-scoped', () => {
+      span = {
+        _name: 'experiment-row',
+        _startTime: 0,
+        _duration: 1,
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'experiment',
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.meta.input.value': 'input',
+        '_ml_obs.meta.output.value': 'output',
+        '_ml_obs.tags': { experiment_id: 'exp-1', run_id: 'run-1' },
+        '_ml_obs.llmobs_parent_id': 'undefined',
+        '_ml_obs.sample_rate': '1',
+        '_ml_obs.sampling_decision': '1',
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assert.equal(payload._dd.scope, 'experiments')
+      assert.ok(payload.tags.includes('experiment_id:exp-1'))
+      assert.ok(payload.tags.includes('run_id:run-1'))
+    })
+
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {
