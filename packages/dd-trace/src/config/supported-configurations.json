@@ -206,6 +206,17 @@
         ]
       }
     ],
+    "DD_APPSEC_AGENTIC_ONBOARDING": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "appsec.agenticOnboarding"
+        ],
+        "default": "",
+        "description": "Set automatically by Datadog's agentic onboarding solution when it configures App & API Protection for a service. Reported verbatim in configuration telemetry only; it has no effect on tracer behavior."
+      }
+    ],
     "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
       {
         "implementation": "E",

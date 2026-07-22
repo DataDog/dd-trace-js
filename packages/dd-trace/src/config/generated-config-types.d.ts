@@ -6,6 +6,7 @@ export interface GeneratedConfig {
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   apmTracingEnabled: boolean;
   appsec: {
+    agenticOnboarding: string;
     blockedTemplateGraphql: string | undefined;
     blockedTemplateHtml: string | undefined;
     blockedTemplateJson: string | undefined;
@@ -620,6 +621,7 @@ export interface GeneratedEnvVarConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APM_TRACING_ENABLED: boolean;
   DD_APP_KEY: string | undefined;
+  DD_APPSEC_AGENTIC_ONBOARDING: string;
   DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: string;
   DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING: string;
   DD_APPSEC_COLLECT_ALL_HEADERS: boolean;
