@@ -3582,6 +3582,16 @@ declare namespace tracer {
       experiments: Experiments,
 
       /**
+       * Build an experiment to run over a dataset.
+       */
+      experiment (options: ExperimentOptions): Experiment
+
+      /**
+       * Alias for experiment(); run() is always asynchronous in Node.js.
+       */
+      asyncExperiment (options: ExperimentOptions): Experiment
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3742,7 +3752,8 @@ declare namespace tracer {
      */
     type ExperimentTask = (
       input: JSONType,
-      config: Record<string, JSONType>
+      config: Record<string, JSONType>,
+      metadata?: Record<string, JSONType>
     ) => JSONType | Promise<JSONType>
 
     /**
@@ -3754,6 +3765,17 @@ declare namespace tracer {
       output: JSONType,
       expectedOutput: JSONType
     ) => JSONType | Promise<JSONType>
+
+    /**
+     * Scores all rows in an experiment run and emits a summary metric.
+     */
+    type ExperimentSummaryEvaluator = (
+      inputs: any[],
+      outputs: any[],
+      expectedOutputs: any[],
+      evaluatorResults: Record<string, any[]>,
+      metadata?: Array<Record<string, any>>
+    ) => any | Promise<any>
 
     interface CreateDatasetOptions {
       description?: string
@@ -3769,11 +3791,22 @@ declare namespace tracer {
       name: string
       dataset: Dataset
       task: ExperimentTask
-      /** Evaluators keyed by metric label. */
-      evaluators?: Record<string, ExperimentEvaluator>
+      /** Evaluators keyed by metric label, or named functions. */
+      evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
+      /** Summary evaluators keyed by metric label, or named functions. */
+      summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
       description?: string
       config?: Record<string, JSONType>
       tags?: Record<string, string>
+    }
+
+    interface ExperimentRunOptions {
+      /** Maximum retries for task and evaluator failures. Default 0. */
+      maxRetries?: number
+      /** Delay before a retry, in milliseconds. Default 100 * (attempt + 1). */
+      retryDelay?: (attempt: number) => number
+      /** Reject on the first task/evaluator error instead of capturing it. Default false. */
+      raiseErrors?: boolean
     }
 
     interface PullDatasetOptions {
@@ -3801,9 +3834,20 @@ declare namespace tracer {
       evaluationErrors: Record<string, string>
     }
 
+    interface ExperimentRun {
+      runId: string
+      runIteration: number
+      rows: ExperimentResultRow[]
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+    }
+
     interface ExperimentResult {
       experimentId: string
       rows: ExperimentResultRow[]
+      /** Single-run summary evaluator results. */
+      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      /** Experiment runs. P0 Node experiments currently return one run. */
+      runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string
     }
@@ -3838,7 +3882,7 @@ declare namespace tracer {
       name (): string
       experimentId (): string | null
       url (): string | null
-      run (): Promise<ExperimentResult>
+      run (options?: ExperimentRunOptions): Promise<ExperimentResult>
     }
 
     interface Experiments {
@@ -4237,7 +4281,7 @@ declare namespace tracer {
     }
 
     /** @hidden */
-    type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
+    type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm' | 'experiment'
   }
 }
 

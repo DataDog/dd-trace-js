@@ -66,7 +66,7 @@ class LLMObs extends NoopLLMObs {
    * a clear message on use.
    */
   get experiments () {
-    this.#experiments ??= createExperiments(this._config)
+    this.#experiments ??= createExperiments(this._config, this)
     return this.#experiments
   }
 
@@ -75,6 +75,14 @@ class LLMObs extends NoopLLMObs {
    */
   #resetExperiments () {
     this.#experiments = undefined
+  }
+
+  experiment (options) {
+    return this.experiments.experiment(options)
+  }
+
+  asyncExperiment (options) {
+    return this.experiment(options)
   }
 
   enable (options = {}) {
@@ -290,7 +298,7 @@ class LLMObs extends NoopLLMObs {
 
       const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
 
-      if (inputData || outputData) {
+      if (inputData !== undefined || outputData !== undefined) {
         if (spanKind === 'llm') {
           this._tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {

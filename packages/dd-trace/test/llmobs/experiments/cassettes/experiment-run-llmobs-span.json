@@ -28,7 +28,7 @@
         "type": "datasets",
         "attributes": {
           "name": "demo",
-          "description": "desc"
+          "description": ""
         }
       }
     },
@@ -54,13 +54,8 @@
           "records": [
             {
               "input": { "q": "apple" },
-              "expected_output": "true",
+              "expected_output": "apple",
               "metadata": { "row": 0 }
-            },
-            {
-              "input": { "q": "car" },
-              "expected_output": "false",
-              "metadata": { "row": 1 }
             }
           ]
         }
@@ -71,12 +66,6 @@
       "data": [
         {
           "id": "rec-0",
-          "attributes": {
-            "valid_from_version": 2
-          }
-        },
-        {
-          "id": "rec-1",
           "attributes": {
             "valid_from_version": 2
           }
@@ -96,16 +85,13 @@
           "name": "exp-demo",
           "project_id": "proj",
           "dataset_id": "ds",
-          "description": "desc exp",
+          "description": "",
           "ensure_unique": true,
           "run_count": 1,
           "metadata": {
-            "tags": ["env:test"]
+            "tags": []
           },
-          "dataset_version": 2,
-          "config": {
-            "temperature": 0
-          }
+          "dataset_version": 2
         }
       }
     },

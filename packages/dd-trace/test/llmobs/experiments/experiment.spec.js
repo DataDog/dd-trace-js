@@ -38,11 +38,12 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
   it('runs an experiment with recorded control-plane responses', async () => {
     await withCassette('experiment-run-success.json', async () => {
-      const dataset = new Dataset(client(), 'demo', 'desc')
+      const c = client()
+      const dataset = new Dataset(c, 'demo', 'desc')
         .addRecord({ q: 'apple' }, 'true', { row: 0 })
         .addRecord({ q: 'car' }, 'false', { row: 1 })
 
-      const result = await new Experiment(client(), {
+      const result = await new Experiment(c, {
         name: 'exp-demo',
         description: 'desc exp',
         dataset,
@@ -63,10 +64,47 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       assert.equal(result.rows[0].evaluations.nonempty, true)
       assert.equal(result.rows[0].evaluations.len, 5)
       assert.equal(result.rows[0].evaluations.label, 'match')
+      assert.equal(result.runs.length, 1)
       assert.equal(dataset.id(), 'ds')
       assert.equal(dataset.version(), 2)
       assert.deepEqual(dataset.recordIds(), ['rec-0', 'rec-1'])
       assert.equal(dataset.url(), 'https://app.datadoghq.com/llm/datasets/ds')
+    })
+  })
+
+  it('runs task inside an LLMObs experiment span with recorded control-plane responses', async () => {
+    await withCassette('experiment-run-llmobs-span.json', async () => {
+      const c = client()
+      const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
+      const callsToLlmobs = []
+      const llmobs = {
+        enabled: true,
+        annotationContext: (options, fn) => {
+          callsToLlmobs.push(['annotationContext', options])
+          return fn()
+        },
+        trace: (options, fn) => {
+          callsToLlmobs.push(['trace', options])
+          return fn({ name: 'span' })
+        },
+        exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
+        annotate: (_span, options) => callsToLlmobs.push(['annotate', options]),
+        flush: () => callsToLlmobs.push(['flush']),
+      }
+
+      const result = await new Experiment(c, {
+        name: 'exp-demo',
+        dataset,
+        task: (input) => input.q,
+        evaluators: { ok: () => true },
+      }, llmobs).run()
+
+      assert.equal(callsToLlmobs[0][0], 'annotationContext')
+      assert.equal(callsToLlmobs[1][1].kind, 'experiment')
+      assert.equal(callsToLlmobs[1][1].name, 'task')
+      assert.equal(callsToLlmobs[2][1].tags.experiment_id, 'exp')
+      assert.equal(result.rows[0].spanId, '000000000000abcd')
+      assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
     })
   })
 
@@ -98,14 +136,25 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('validates required options', () => {
-    const dataset = new Dataset(client(), 'demo')
-    assert.throws(() => new Experiment(client(), { dataset, task: (input) => input }), /name/)
-    assert.throws(() => new Experiment(client(), { name: 'n', task: (input) => input }), /dataset/)
-    assert.throws(() => new Experiment(client(), { name: 'n', dataset }), /task/)
+    const c = client()
+    const dataset = new Dataset(c, 'demo')
+    assert.throws(() => new Experiment(c, { dataset, task: (input) => input }), /name/)
+    assert.throws(() => new Experiment(c, { name: 'n', task: (input) => input }), /dataset/)
+    assert.throws(() => new Experiment(c, { name: 'n', dataset }), /task/)
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, evaluators: { 'bad name': () => true } }),
+      /invalid/
+    )
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, summaryEvaluators: [true] }),
+      /summary evaluator must be a function/
+    )
   })
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
-    const dataset = new Dataset(client(), 'my-name', 'desc').addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+    const dataset = new Dataset(client(), 'my-name', 'desc')
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+      .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
     assert.equal(dataset.name(), 'my-name')
     assert.equal(dataset.id(), null)
     assert.equal(dataset.url(), null)
@@ -113,5 +162,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.input, 'in')
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
+    assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
+    assert.equal(dataset.records()[1].expectedOutput, 'expected')
+    assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
   })
 })
