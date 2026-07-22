@@ -59,7 +59,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             const { delta } = chunk
             if (!delta) continue
 
-            const lastBlock = response.content[response.content.length - 1]
+            const lastBlock = response.content.at(-1)
             if (!lastBlock) continue
 
             if (delta.type === 'thinking_delta') {
@@ -77,7 +77,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             break
           }
           case 'content_block_stop': {
-            const lastBlock = response.content[response.content.length - 1]
+            const lastBlock = response.content.at(-1)
             if (!lastBlock) break
             if (lastBlock.type === 'tool_use') {
               const input = lastBlock.input ?? '{}'
