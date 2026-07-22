@@ -145,7 +145,7 @@ describe('Plugin (ESM)', () => {
     let agent
     let proc
 
-    withVersions('graphql', 'graphql-jit', '0.8.5 || 0.8.8', (version, moduleName, resolvedVersion) => {
+    withVersions('graphql', 'graphql-jit', '0.8.5 || 0.8.7 || 0.8.8', (version, moduleName, resolvedVersion) => {
       useSandbox([`'graphql-jit@${resolvedVersion}'`, "'graphql@16.14.0'"], false, [
         './packages/datadog-plugin-graphql/test/esm-test/*'])
 

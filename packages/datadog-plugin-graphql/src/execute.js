@@ -1,5 +1,7 @@
 'use strict'
 
+const { types } = require('node:util')
+
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
@@ -46,6 +48,8 @@ const legacyStorage = storage('legacy')
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
+const JIT_FIELD_NAME = '__datadogGraphqlJitField'
+const promiseThen = Promise.prototype.then
 
 // AppSec/WAF abort gate. Published synchronously from bindStart with a
 // payload carrying the abortController; subscribers that call
@@ -60,7 +64,7 @@ const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
-const patchedJitResolvers = new WeakSet()
+const jitResolvers = new WeakMap()
 const originalResolvers = new WeakMap()
 
 // Visited types per caller-owned schema. The walk reaches union members and
@@ -107,6 +111,7 @@ function createRootContext (plugin, executeSpan, source, abortController, jitPla
     filteredVariables: undefined,
     hasIastSub: iastResolveCh.hasSubscribers,
     hasResolverSub: resolverStartCh.hasSubscribers,
+    hasUpdateFieldSub: updateFieldCh.hasSubscribers,
     variableValues,
   }
 
@@ -489,11 +494,16 @@ class GraphQLExecutePlugin extends TracingPlugin {
  * @param {boolean} [isJit]
  */
 function wrapResolve (resolve, isJit = false) {
-  const patched = isJit ? patchedJitResolvers : patchedResolvers
-  if (typeof resolve !== 'function' || patched.has(resolve)) return resolve
+  /* istanbul ignore if: every caller supplies a schema, execution, or JIT resolver function. */
+  if (typeof resolve !== 'function') return resolve
+  if (!isJit && patchedResolvers.has(resolve)) return resolve
 
   // Replace a schema wrapper with the execution-local JIT variant instead of nesting both.
   resolve = originalResolvers.get(resolve) ?? resolve
+  if (isJit) {
+    const jitResolver = jitResolvers.get(resolve)
+    if (jitResolver !== undefined) return jitResolver
+  }
 
   function resolveAsync (source, args, contextValue, info) {
     const hasIastSub = iastResolveCh.hasSubscribers
@@ -511,7 +521,7 @@ function wrapResolve (resolve, isJit = false) {
     if (!rootCtx) return resolve.apply(this, arguments)
 
     if (isJit) {
-      const jitField = info?.__ddTraceField
+      const jitField = info?.[JIT_FIELD_NAME]
       if (jitField) {
         return resolveJitField(resolve, this, arguments, args, info, rootCtx, jitField)
       }
@@ -552,7 +562,11 @@ function wrapResolve (resolve, isJit = false) {
       return resolve.apply(this, arguments)
     }
 
-    const fieldKey = config.collapse ? pathString : infoPath
+    // Compilations performed while tracing is disabled have no static JIT
+    // descriptor. Their resolver-info path nodes are recreated for each
+    // resolver, so use the stable path string to preserve span parenting.
+    const useStringKey = config.collapse || isJit
+    const fieldKey = useStringKey ? pathString : infoPath
     const parentTypeName = info.parentType.name
     let field = rootCtx.fields.get(fieldKey)
     const collapsedField = field
@@ -581,6 +595,7 @@ function wrapResolve (resolve, isJit = false) {
         variableValues: info.variableValues,
         args,
         infoPath,
+        jitPathKey: isJit,
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
@@ -621,7 +636,7 @@ function wrapResolve (resolve, isJit = false) {
         if (updateFieldCh.hasSubscribers) {
           updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
         }
-      })
+      }, isJit)
     }
 
     const executeSpan = rootCtx.executeSpan
@@ -634,10 +649,14 @@ function wrapResolve (resolve, isJit = false) {
       if (updateFieldCh.hasSubscribers) {
         updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
       }
-    })
+    }, isJit)
   }
 
-  patched.add(resolveAsync)
+  if (isJit) {
+    jitResolvers.set(resolve, resolveAsync)
+  } else {
+    patchedResolvers.add(resolveAsync)
+  }
   originalResolvers.set(resolveAsync, resolve)
   return resolveAsync
 }
@@ -647,7 +666,7 @@ function wrapResolve (resolve, isJit = false) {
  * @param {unknown} self
  * @param {IArguments} callArguments
  * @param {Record<string, unknown>} args
- * @param {import('graphql').GraphQLResolveInfo & { __ddTraceField: JitFieldDescriptor }} info
+ * @param {import('graphql').GraphQLResolveInfo & { __datadogGraphqlJitField: JitFieldDescriptor }} info
  * @param {object} rootCtx
  * @param {JitFieldDescriptor} descriptor
  * @returns {unknown}
@@ -682,11 +701,28 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
     return resolve.apply(self, callArguments)
   }
 
-  const fieldKey = `${descriptor.id}:${pathString}`
-  let field = config.collapse
-    ? rootCtx.jitFields[descriptor.id]
-    : rootCtx.jitFieldsByPath.get(fieldKey)
+  let fieldKey
+  let field
+  if (config.collapse) {
+    field = rootCtx.jitFields[descriptor.id]
+  } else {
+    fieldKey = `${descriptor.id}:${pathString}`
+    field = rootCtx.jitFieldsByPath.get(fieldKey)
+  }
   if (field) {
+    if (rootCtx.hasUpdateFieldSub) {
+      return callInAsyncScope(
+        resolve,
+        self,
+        callArguments,
+        rootCtx.abortController,
+        field.parentStore,
+        (error) => {
+          updateFieldCh.publish({ rootCtx, field, error, pathString })
+        },
+        true
+      )
+    }
     return resolve.apply(self, callArguments)
   }
 
@@ -734,8 +770,19 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
   const finishField = (error, result) => {
     const endTime = executeSpan._getTime()
     rootCtx.plugin.finishResolveSpan(span, field, error, result, endTime || startTime)
+    if (rootCtx.hasUpdateFieldSub) {
+      updateFieldCh.publish({ rootCtx, field, error, pathString })
+    }
   }
-  return callInAsyncScope(resolve, self, callArguments, rootCtx.abortController, field.currentStore, finishField)
+  return callInAsyncScope(
+    resolve,
+    self,
+    callArguments,
+    rootCtx.abortController,
+    field.currentStore,
+    finishField,
+    true
+  )
 }
 
 /**
@@ -792,34 +839,17 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
   } catch (error) {
     const endTime = executeSpan._getTime()
     rootCtx.plugin.finishResolveSpan(span, field, error, undefined, endTime || startTime)
+    if (rootCtx.hasUpdateFieldSub) {
+      updateFieldCh.publish({ rootCtx, field, error, pathString })
+    }
     throw error
-  }
-
-  if (typeof result?.then === 'function') {
-    return result.then(
-      /**
-       * @param {unknown} value
-       * @returns {unknown}
-       */
-      (value) => {
-        const endTime = executeSpan._getTime()
-        rootCtx.plugin.finishResolveSpan(span, field, undefined, value, endTime || startTime)
-        return value
-      },
-      /**
-       * @param {unknown} error
-       * @throws {unknown}
-       */
-      (error) => {
-        const endTime = executeSpan._getTime()
-        rootCtx.plugin.finishResolveSpan(span, field, error, undefined, endTime || startTime)
-        throw error
-      }
-    )
   }
 
   const endTime = executeSpan._getTime()
   rootCtx.plugin.finishResolveSpan(span, field, undefined, result, endTime || startTime)
+  if (rootCtx.hasUpdateFieldSub) {
+    updateFieldCh.publish({ rootCtx, field, error: null, pathString })
+  }
   return result
 }
 
@@ -854,9 +884,9 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
         resolverInfo: getResolverInfo(info, args),
       })
     }
-    if (rootCtx.abortController?.signal.aborted) {
-      throw new AbortError('Aborted')
-    }
+  }
+  if (rootCtx.abortController?.signal.aborted) {
+    throw new AbortError('Aborted')
   }
 
   const depth = rootCtx.config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth
@@ -870,6 +900,18 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
     : rootCtx.jitFieldsByPath.get(`${descriptorId}:${pathString}`)
   if (field === undefined) {
     return resolveJitDefault(rootCtx, descriptorId, source, path)
+  }
+  if (rootCtx.hasUpdateFieldSub) {
+    let result
+    try {
+      result = source?.[descriptor.fieldName]
+    } catch (error) {
+      updateFieldCh.publish({ rootCtx, field, error, pathString })
+      throw error
+    }
+
+    updateFieldCh.publish({ rootCtx, field, error: null, pathString })
+    return result
   }
   return source?.[descriptor.fieldName]
 }
@@ -935,27 +977,54 @@ function wrapFieldType (field, schema) {
   wrapFields(unwrapped, schema)
 }
 
-// Runs the resolver inside `store`, including any code after an internal
-// `await`. A `.then()` the caller attaches afterward runs outside `store`.
-function callInAsyncScope (fn, thisArg, args, abortController, store, cb) {
+/**
+ * Runs the resolver inside `store`, including any code after an internal
+ * `await`. A `.then()` the caller attaches afterward runs outside `store`.
+ *
+ * @param {GraphQLFieldResolver} fn
+ * @param {unknown} thisArg
+ * @param {IArguments} args
+ * @param {AbortController | undefined} abortController
+ * @param {object} store
+ * @param {(error: unknown, result?: unknown) => void} callback
+ * @param {boolean} [preserveResult]
+ * @returns {unknown}
+ */
+function callInAsyncScope (fn, thisArg, args, abortController, store, callback, preserveResult = false) {
   if (abortController?.signal.aborted) {
-    cb(null, null)
+    callback(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
     const result = legacyStorage.run(store, () => fn.apply(thisArg, args))
+    if (preserveResult) {
+      if (types.isPromise(result)) {
+        promiseThen.call(
+          result,
+          /** @param {unknown} resultValue */
+          resultValue => callback(null, resultValue),
+          /** @param {unknown} error */
+          error => callback(error)
+        )
+      } else {
+        callback(null, result)
+      }
+      return result
+    }
     if (typeof result?.then === 'function') {
       return result.then(
-        res => { cb(null, res); return res },
-        err => { cb(err); throw err }
+        /** @param {unknown} resultValue */
+        resultValue => { callback(null, resultValue); return resultValue },
+        /** @param {unknown} error */
+        error => { callback(error); throw error }
       )
     }
-    cb(null, result)
+    callback(null, result)
     return result
-  } catch (err) {
-    cb(err)
-    throw err
+  } catch (error) {
+    callback(error)
+    throw error
   }
 }
 
@@ -1030,7 +1099,7 @@ function shouldInstrumentNode (config, path) {
 
 function getParentField (rootCtx, field) {
   for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-    const fieldKey = rootCtx.config.collapse ? rootCtx.pathCache.get(curr) : curr
+    const fieldKey = rootCtx.config.collapse || field.jitPathKey ? rootCtx.pathCache.get(curr) : curr
     const innerField = rootCtx.fields.get(fieldKey)
     if (innerField) {
       if (curr.typename === undefined) {
@@ -1161,6 +1230,7 @@ function addVariableTags (config, span, variableValues) {
 }
 
 module.exports = GraphQLExecutePlugin
+module.exports.JIT_FIELD_NAME = JIT_FIELD_NAME
 module.exports.wrapJitResolve = wrapJitResolve
 module.exports.resolveJitDefault = resolveJitDefault
 module.exports.resolveJitDefaultInvocation = resolveJitDefaultInvocation

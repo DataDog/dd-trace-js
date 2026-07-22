@@ -297,6 +297,10 @@ module.exports = {
       name: 'graphql',
       versions: ['^15.2.0'],
     },
+    {
+      name: 'graphql-jit',
+      versions: ['0.8.4'],
+    },
   ],
   'apollo-server-core': [
     {

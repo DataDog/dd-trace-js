@@ -132,9 +132,6 @@ function configureGraphqlJitCompileObject (_state, node) {
   const includedConditions = query(resolverCondition.consequent, 'IfStatement[test.name="alwaysIncluded"]')
   let fastDefaultBody
   if (includedConditions.length === 1) {
-    const [includedCondition] = includedConditions
-    wrapDefaultFieldBody(includedCondition.consequent, 'always')
-    wrapDefaultFieldBody(includedCondition.alternate, 'conditional')
     fastDefaultBody = parse(`
       if (alwaysIncluded) {
         body(ddTraceInline)
@@ -148,7 +145,6 @@ function configureGraphqlJitCompileObject (_state, node) {
       0,
       'configureGraphqlJitCompileObject: ambiguous included condition'
     )
-    wrapDefaultFieldBody(resolverCondition.consequent, 'conditional')
     fastDefaultBody = parse(`
       body(\`? \${ddTraceInline} : undefined\`)
     `).body
@@ -214,29 +210,6 @@ function insertBeforeStatement (root, target, statements) {
     }
   }
   return false
-}
-
-/**
- * @param {import('estree').Node} node
- * @param {'always' | 'conditional'} mode
- */
-function wrapDefaultFieldBody (node, mode) {
-  const bodyCalls = query(node, 'CallExpression[callee.name="body"]')
-  assert.strictEqual(
-    bodyCalls.length,
-    1,
-    `configureGraphqlJitCompileObject: expected one ${mode} body call`
-  )
-
-  const [bodyCall] = bodyCalls
-  const original = bodyCall.arguments[0]
-  const replacement = parse(`
-    context.ddTraceRuntime
-      ? context.ddTraceRuntime.formatDefaultField(ddTraceInline, '${mode}', DD_ORIGINAL)
-      : DD_ORIGINAL
-  `).body[0].expression
-  replaceIdentifier(replacement, 'DD_ORIGINAL', original)
-  bodyCall.arguments[0] = replacement
 }
 
 /**
@@ -318,6 +291,15 @@ function configureGraphqlJitRuntime (_state, node) {
     ddTrace: compilationContext.ddTraceRuntime?.startExecution()
   })`).body[0].expression.properties
   contexts[0].properties.push(...properties)
+
+  const returns = query(node, 'ReturnStatement[argument.object.name="ret"]')
+  assert.strictEqual(returns.length, 1, 'configureGraphqlJitRuntime: compiled query return not found')
+  assert(
+    insertBeforeStatement(node.body, returns[0], parse(`
+      compilationContext.ddTraceRuntime?.getPlan(compilationContext)
+    `).body),
+    'configureGraphqlJitRuntime: could not finalize the plan'
+  )
 }
 
 /**

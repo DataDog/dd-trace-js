@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const GraphQLExecutePlugin = require('./execute')
 
-const { resolveJitDefault, resolveJitDefaultInvocation, wrapJitResolve } = GraphQLExecutePlugin
+const { JIT_FIELD_NAME, resolveJitDefault, resolveJitDefaultInvocation, wrapJitResolve } = GraphQLExecutePlugin
 
 /**
  * @typedef {import('graphql').ExecutionArgs} ExecutionArguments
@@ -25,7 +25,6 @@ const { resolveJitDefault, resolveJitDefaultInvocation, wrapJitResolve } = Graph
  *   parentPathKey?: string,
  *   parentTypeName: string,
  *   pathDepth: number,
- *   pathKey: string,
  *   resource: string,
  *   returnType: import('graphql').GraphQLOutputType,
  *   selectionDepth: number,
@@ -62,7 +61,6 @@ const jitRuntime = {
   canInlineDefault,
   compileDefaultField,
   createResolverInfoEnricher,
-  formatDefaultField,
   getPlan,
   resolveDefault: resolveJitDefault,
   resolveDefaultInvocation: resolveJitDefaultInvocation,
@@ -186,40 +184,26 @@ function compileDefaultField (
     __ddState && (
       __ddState.hasIastSub ||
       __ddState.hasResolverSub ||
-      !__ddState.config.collapse ||
-      __ddState.jitFields[${descriptor.id}] === undefined
+      (__ddState.config.depth !== 0 && (
+        __ddState.hasUpdateFieldSub ||
+        !__ddState.config.collapse ||
+        __ddState.jitFields[${descriptor.id}] === undefined
+      ))
     )
       ? __ddState.jitRuntime.resolveDefaultInvocation(
         __ddState,
         ${descriptor.id},
         ${parentPath},
-        __ddState.config.collapse ? undefined : ${runtimePath}
+        __ddState.config.collapse ? undefined : ${(
+          // codeql[js/bad-code-sanitization] Variable segments are generated identifiers; literals are JSON encoded.
+          runtimePath
+  )}
       )
-      : ${directRead}
+      : ${(
+        // codeql[js/bad-code-sanitization] The field is JSON encoded; origin segments are GraphQL Name tokens.
+        directRead
+  )}
   ))(__context.ddTrace)`
-}
-
-/**
- * @param {string | undefined} inlineField
- * @param {'always' | 'conditional'} mode
- * @param {string} originalField
- * @returns {string}
- */
-function formatDefaultField (inlineField, mode, originalField) {
-  if (!inlineField) return originalField
-
-  const safetyCheck = originalField.match(/(__validNode\d+)\s*=\s*true/)?.[1]
-  /* istanbul ignore if: the instrumentation selector pins graphql-jit's supported safety-check template. */
-  if (!safetyCheck) throw new Error('graphql-jit safety check not found')
-
-  const useResolver = '__context.ddTrace && ' +
-    '(__context.ddTrace.hasIastSub || __context.ddTrace.hasResolverSub)'
-  const included = `${useResolver}
-    ? (${safetyCheck} = true, null)
-    : (${safetyCheck} = false, ${inlineField})`
-
-  if (mode === 'always') return `(${included})`
-  return `? (${included}) : (${safetyCheck} = false, undefined)`
 }
 
 /** @returns {object | undefined} */
@@ -244,17 +228,65 @@ function createResolverInfoEnricher (context, responsePath, userEnricher) {
    */
   function enrichResolverInfo (input) {
     const enriched = userEnricher?.(input)
-    const userFields = enriched && typeof enriched === 'object' && !Array.isArray(enriched) ? enriched : {}
-    if (input.fieldNodes?.[0]?.name.value !== input.fieldName) return userFields
+    const userFields = enriched && typeof enriched === 'object' && !Array.isArray(enriched) ? enriched : undefined
+    if (input.fieldNodes?.[0]?.name.value !== input.fieldName) return userFields ?? {}
 
     const descriptor = getOrCreateDescriptor(context, responsePath, input)
-    return {
-      ...userFields,
-      __ddTraceField: descriptor,
-    }
+    if (userFields === undefined) return { [JIT_FIELD_NAME]: descriptor }
+    return addJitField(userFields, descriptor)
   }
 
   return enrichResolverInfo
+}
+
+/**
+ * Preserve the caller's enrichment object and its property access timing. graphql-jit
+ * enumerates it at compilation and reads each value when constructing resolve info.
+ *
+ * @param {object} userFields
+ * @param {JitFieldDescriptor} descriptor
+ * @returns {object}
+ */
+function addJitField (userFields, descriptor) {
+  return new Proxy(Object.create(null), {
+    /** @returns {(string | symbol)[]} */
+    ownKeys () {
+      const userKeys = Reflect.ownKeys(userFields)
+      const keys = []
+      for (const key of userKeys) {
+        if (key !== JIT_FIELD_NAME) keys.push(key)
+      }
+      keys.push(JIT_FIELD_NAME)
+      return keys
+    },
+    /**
+     * @param {object} _target
+     * @param {string | symbol} key
+     * @returns {PropertyDescriptor | undefined}
+     */
+    getOwnPropertyDescriptor (_target, key) {
+      if (key === JIT_FIELD_NAME) {
+        return {
+          configurable: true,
+          enumerable: true,
+          value: descriptor,
+          writable: false,
+        }
+      }
+
+      const property = Reflect.getOwnPropertyDescriptor(userFields, key)
+      return property && { ...property, configurable: true }
+    },
+    /**
+     * @param {object} _target
+     * @param {string | symbol} key
+     * @returns {unknown}
+     */
+    get (_target, key) {
+      if (key === JIT_FIELD_NAME) return descriptor
+      return Reflect.get(userFields, key, userFields)
+    },
+  })
 }
 
 /**
@@ -268,6 +300,7 @@ function getPlan (context) {
   const fieldsByPath = plan.fieldsByPath
   for (const field of plan.fields) {
     field.parentId = fieldsByPath?.get(field.parentPathKey)?.id
+    field.parentPathKey = undefined
   }
   plan.fieldsByPath = undefined
   plan.finalized = true
@@ -300,7 +333,6 @@ function getOrCreateDescriptor (context, responsePath, input) {
     parentPathKey: parentPath ? serializeCompilerPath(parentPath) : undefined,
     parentTypeName: input.parentType.name,
     pathDepth: getPathDepth(responsePath, true),
-    pathKey,
     resource: `${input.fieldName}:${input.returnType}`,
     returnType: input.returnType,
     selectionDepth: getPathDepth(responsePath, false),

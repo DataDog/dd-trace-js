@@ -9,7 +9,9 @@ const WRAP_QUERY = `${CREATE_BOUND_QUERY} ` +
 const BUILD_COMPILATION_CONTEXT = 'FunctionDeclaration[id.name="buildCompilationContext"]' +
   '[params.0.name="schema"][params.1.name="document"][params.2.name="options"][params.3.name="operationName"]'
 const COMPILE_OBJECT_TYPE = 'FunctionDeclaration[id.name="compileObjectType"]' +
-  '[params.0.name="context"][params.8.name="alwaysDefer"]'
+  '[params.0.name="context"][params.1.name="type"][params.2.name="fieldNodes"]' +
+  '[params.3.name="originPaths"][params.5.name="responsePath"][params.8.name="alwaysDefer"]' +
+  ':has(VariableDeclarator[id.name="field"])'
 const GET_EXECUTION_INFO = 'FunctionDeclaration[id.name="getExecutionInfo"]' +
   '[params.0.name="context"][params.5.name="responsePath"]'
 
