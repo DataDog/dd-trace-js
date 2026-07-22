@@ -239,7 +239,7 @@
     "source-map-support": "^0.5.21",
     "test-exclude": "^8.0.0",
     "tiktoken": "^1.0.21",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "v8-to-istanbul": "^9.0.0",
     "workerpool": "^10.0.3",
     "yaml": "^2.9.0",
