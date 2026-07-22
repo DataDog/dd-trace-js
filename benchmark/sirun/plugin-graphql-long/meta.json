@@ -15,21 +15,6 @@
     },
     "with-depth-and-collapse-off": {
       "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "OPERATIONS": "210" }
-    },
-    "jit-async": {
-      "run": "node jit.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node jit.js\"",
-      "env": { "JIT_SCENARIO": "async", "OPERATIONS": "800000" }
-    },
-    "jit-compile": {
-      "run": "node jit.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node jit.js\"",
-      "env": { "JIT_SCENARIO": "compile", "OPERATIONS": "60000" }
-    },
-    "jit-fanout": {
-      "run": "node jit.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node jit.js\"",
-      "env": { "JIT_SCENARIO": "fanout", "OPERATIONS": "250000" }
     }
   }
 }
