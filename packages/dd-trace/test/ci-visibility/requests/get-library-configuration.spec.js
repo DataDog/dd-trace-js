@@ -62,10 +62,14 @@ describe('get-library-configuration', () => {
         isItrEnabled: true,
         requireGit: false,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 4,
-        earlyFlakeDetectionSlowTestRetries: {
-          '5s': 4,
-          '10s': 3,
+        earlyFlakeDetectionRetryPolicy: {
+          durationRetryCounts: [
+            { durationLimitMs: 5000, retryCount: 4 },
+            { durationLimitMs: 10_000, retryCount: 3 },
+            { durationLimitMs: 30_000, retryCount: 0 },
+            { durationLimitMs: 300_000, retryCount: 0 },
+          ],
+          schedulingRetryCount: 4,
         },
         earlyFlakeDetectionFaultyThreshold: 12,
         isFlakyTestRetriesEnabled: true,
@@ -77,7 +81,8 @@ describe('get-library-configuration', () => {
         isCoverageReportUploadEnabled: true,
       })
       assert.strictEqual(Object.isFrozen(settings), true)
-      assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionSlowTestRetries), true)
+      assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionRetryPolicy), true)
+      assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionRetryPolicy.durationRetryCounts), true)
     })
 
     it('accepts bare settings attributes like the Ruby cache reader', () => {
@@ -153,7 +158,7 @@ describe('get-library-configuration', () => {
         })
 
         assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
-        assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionSlowTestRetries), true)
+        assert.strictEqual(Object.isFrozen(settings.earlyFlakeDetectionRetryPolicy), true)
       }
     })
 
@@ -172,8 +177,15 @@ describe('get-library-configuration', () => {
       })
 
       assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, true)
-      assert.strictEqual(settings.earlyFlakeDetectionNumRetries, 0)
-      assert.deepStrictEqual(settings.earlyFlakeDetectionSlowTestRetries, { '5s': 0 })
+      assert.deepStrictEqual(settings.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 0 },
+          { durationLimitMs: 10_000, retryCount: 0 },
+          { durationLimitMs: 30_000, retryCount: 0 },
+          { durationLimitMs: 300_000, retryCount: 0 },
+        ],
+        schedulingRetryCount: 0,
+      })
     })
 
     it('disables test management when its retry policy is malformed', () => {
@@ -214,7 +226,7 @@ describe('get-library-configuration', () => {
       })
 
       assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, true)
-      assert.strictEqual(settings.earlyFlakeDetectionNumRetries, 100)
+      assert.strictEqual(settings.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 100)
       assert.strictEqual(settings.isTestManagementEnabled, true)
       assert.strictEqual(settings.testManagementAttemptToFixRetries, 100)
     })
@@ -249,10 +261,10 @@ describe('get-library-configuration', () => {
         },
       })
 
-      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionNumRetries, 10)
-      assert.strictEqual(emptyRetryBudget.earlyFlakeDetectionNumRetries, 0)
-      assert.strictEqual(sparseRetryBudget.earlyFlakeDetectionNumRetries, 3)
-      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionNumRetries, 0)
+      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 10)
+      assert.strictEqual(emptyRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 0)
+      assert.strictEqual(sparseRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 3)
+      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 0)
     })
 
     it('validates complete cached settings attributes', () => {

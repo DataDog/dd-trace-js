@@ -3,7 +3,7 @@
 const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
-const { getEfdSchedulingRetryCount } = require('../efd-retry-policy')
+const { createEfdRetryPolicy } = require('../efd-retry-policy')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -22,16 +22,15 @@ const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = Object.freeze({
   '30s': 3,
   '5m': 2,
 })
-const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES =
-  getEfdSchedulingRetryCount(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
+const DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY =
+  createEfdRetryPolicy(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 const EARLY_FLAKE_DETECTION_RETRY_BUCKETS = Object.keys(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 
 /**
  * @typedef {object} EarlyFlakeDetectionSettings
  * @property {boolean} enabled
- * @property {number} numRetries
- * @property {Readonly<Record<string, number>>} slowTestRetries
+ * @property {import('../efd-retry-policy').EfdRetryPolicy} retryPolicy
  * @property {number} faultyThreshold
  */
 
@@ -92,20 +91,17 @@ function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
   if (!isRecord(value) || value.enabled !== true) {
     return {
       enabled: false,
-      numRetries: DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
-      slowTestRetries: DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
+      retryPolicy: DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY,
       faultyThreshold: DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
     }
   }
 
   let isValid = true
-  let numRetries = DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
-  let slowTestRetries = DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES
+  let retryPolicy = DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY
   if (Object.hasOwn(value, 'slow_test_retries')) {
     const parsedSlowTestRetries = parseSlowTestRetries(value.slow_test_retries)
     if (parsedSlowTestRetries) {
-      slowTestRetries = parsedSlowTestRetries
-      numRetries = getEfdSchedulingRetryCount(parsedSlowTestRetries)
+      retryPolicy = createEfdRetryPolicy(parsedSlowTestRetries)
     } else {
       isValid = false
     }
@@ -122,8 +118,7 @@ function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
 
   return {
     enabled: isKnownTestsEnabled && isValid,
-    numRetries,
-    slowTestRetries,
+    retryPolicy,
     faultyThreshold,
   }
 }
@@ -182,8 +177,7 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     isItrEnabled: attributes.itr_enabled === true,
     requireGit: attributes.require_git === true,
     isEarlyFlakeDetectionEnabled: earlyFlakeDetection.enabled,
-    earlyFlakeDetectionNumRetries: earlyFlakeDetection.numRetries,
-    earlyFlakeDetectionSlowTestRetries: earlyFlakeDetection.slowTestRetries,
+    earlyFlakeDetectionRetryPolicy: earlyFlakeDetection.retryPolicy,
     earlyFlakeDetectionFaultyThreshold: earlyFlakeDetection.faultyThreshold,
     isFlakyTestRetriesEnabled,
     isDiEnabled: attributes.di_enabled === true && isFlakyTestRetriesEnabled,

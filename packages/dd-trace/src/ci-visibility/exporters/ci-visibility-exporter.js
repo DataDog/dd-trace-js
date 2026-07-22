@@ -4,6 +4,7 @@ const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
+const { createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -321,21 +322,14 @@ class CiVisibilityExporter extends BufferingExporter {
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: configuredAttemptToFixRetries = 0,
       DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
     } = testOptimization
-    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
-    const configuredSlowTestRetries = remoteConfiguration.earlyFlakeDetectionSlowTestRetries ?? EMPTY_SETTINGS
-    const earlyFlakeDetectionSlowTestRetries = hasEarlyFlakeDetectionRetryCount
-      ? Object.freeze({
+    const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
+      ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? createEfdRetryPolicy()
+      : createEfdRetryPolicy({
         '5s': earlyFlakeDetectionRetryCount,
         '10s': earlyFlakeDetectionRetryCount,
         '30s': earlyFlakeDetectionRetryCount,
         '5m': earlyFlakeDetectionRetryCount,
       })
-      : Object.isFrozen(configuredSlowTestRetries)
-        ? configuredSlowTestRetries
-        : Object.freeze({ ...configuredSlowTestRetries })
-    const earlyFlakeDetectionNumRetries = hasEarlyFlakeDetectionRetryCount
-      ? earlyFlakeDetectionRetryCount
-      : remoteConfiguration.earlyFlakeDetectionNumRetries ?? 0
     const testManagementAttemptToFixRetries =
       remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
 
@@ -346,8 +340,7 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit: remoteConfiguration.requireGit === true,
       isEarlyFlakeDetectionEnabled:
         remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
-      earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
       isFlakyTestRetriesEnabled:
         remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,

@@ -9,7 +9,6 @@ const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestSuitePath,
   logAttemptToFixTestExecution,
   recordTestManagementExecution,
@@ -330,9 +329,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
-      earlyFlakeDetectionRetries: state.earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-      earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},

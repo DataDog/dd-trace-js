@@ -9,12 +9,17 @@ const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
 const {
+  createEfdRetryPolicy,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry: shouldSkipRetryIndex,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  getEfdRetryCount,
   recordTestManagementExecution,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -61,6 +66,7 @@ const artifactsRecorderScreenshotPathCh =
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
+const efdRetryPolicyByTest = new WeakMap()
 const testToCtx = new WeakMap()
 const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
@@ -71,6 +77,8 @@ const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WA
 const DD_PROPERTIES_TIMEOUT = 5000
 const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
+
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 let applyRepeatEachIndex = null
 
@@ -89,8 +97,7 @@ const STATUS_TO_TEST_STATUS = {
 let remainingTestsByFile = {}
 let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
-let earlyFlakeDetectionSlowTestRetries = {}
+let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let isEarlyFlakeDetectionFaulty = false
 let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
@@ -208,7 +215,7 @@ function getTestEfdKey (test) {
 
 function markEfdManagedTest (test) {
   test._ddIsEfdManagedTest = true
-  test._ddEfdSlowTestRetries = earlyFlakeDetectionSlowTestRetries
+  efdRetryPolicyByTest.set(test, earlyFlakeDetectionRetryPolicy)
   efdManagedTestKeys.add(getTestEfdKey(test))
 }
 
@@ -231,15 +238,20 @@ function registerEfdRetryTest (test) {
   })
 }
 
-function getTestEfdSlowTestRetries (test) {
-  return test._ddEfdSlowTestRetries || earlyFlakeDetectionSlowTestRetries
+/**
+ * @param {object} test
+ * @returns {import('../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy}
+ */
+function getTestEfdRetryPolicy (test) {
+  return efdRetryPolicyByTest.get(test) || earlyFlakeDetectionRetryPolicy
 }
 
 function isTestEfdManaged (test) {
   return !!test._ddIsEfdManagedTest || (
     (test._ddIsNew || test._ddIsModified) &&
     !test._ddIsAttemptToFix &&
-    isEarlyFlakeDetectionEnabled
+    isEarlyFlakeDetectionEnabled &&
+    hasEfdRetries(earlyFlakeDetectionRetryPolicy)
   )
 }
 
@@ -255,7 +267,8 @@ function getEfdRetryRepeatEachIndex (fileSuite, projectSuite, retryIndex, retryC
 }
 
 function getEfdRetryCountForTest (test) {
-  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ?? earlyFlakeDetectionNumRetries
+  return efdRetryCountByTestKey.get(getTestEfdKey(test)) ??
+    earlyFlakeDetectionRetryPolicy.schedulingRetryCount
 }
 
 function setEfdRetryCountForTest (test, retryCount) {
@@ -394,7 +407,7 @@ function shouldSkipEfdRetry (test) {
     return false
   }
   const retryCount = test._ddEfdRetryCount ?? efdRetryCountByTestKey.get(getTestEfdKey(test))
-  return retryCount !== undefined && test._ddEfdRetryIndex > retryCount
+  return shouldSkipRetryIndex(test._ddEfdRetryIndex, retryCount)
 }
 
 function getTestProperties (test) {
@@ -847,7 +860,7 @@ function testEndHandler ({
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime
-    const retryCount = getEfdRetryCount(duration, getTestEfdSlowTestRetries(test))
+    const retryCount = getEfdRetryCountForDuration(duration, getTestEfdRetryPolicy(test))
     setEfdRetryCountForTest(test, retryCount)
     if (retryCount === 0) {
       efdSlowAbortedTests.add(testEfdKey)
@@ -1262,8 +1275,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       if (!err) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-        earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+        earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
@@ -1768,7 +1780,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         '_ddIsEfdRetry',
         (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
       ],
-      earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
       (copiedTest, originalTest, retryIndex) => {
         markEfdRetryTest(copiedTest, retryIndex, originalTest)
         markEfdManagedTest(copiedTest)
@@ -1809,7 +1821,7 @@ function processRootSuite (createRootSuiteReturnValue) {
         fileSuitesWithNewTestsToProjects,
         isNewTest,
         ['_ddIsNew', '_ddIsEfdRetry'],
-        earlyFlakeDetectionNumRetries,
+        earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
         (copiedTest, originalTest, retryIndex) => {
           markEfdRetryTest(copiedTest, retryIndex, originalTest)
           markEfdManagedTest(copiedTest)
@@ -2115,9 +2127,9 @@ function instrumentWorkerMainMethods (workerMain) {
       const duration = test.results?.at(-1)?.duration > 0
         ? test.results.at(-1).duration
         : performance.now() - test._ddStartTime
-      const retryCount = getEfdRetryCount(
+      const retryCount = getEfdRetryCountForDuration(
         duration,
-        getTestEfdSlowTestRetries(test)
+        getTestEfdRetryPolicy(test)
       )
       setEfdRetryCountForTest(test, retryCount)
       if (retryCount === 0) {

@@ -3,7 +3,13 @@
 const fs = require('node:fs')
 
 const log = require('../../dd-trace/src/log')
+const {
+  createEfdRetryPolicy,
+  hasEfdRetries,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { channel } = require('./helpers/instrument')
+
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -113,8 +119,7 @@ function getProvidedContext () {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsDiEnabled,
       _ddTestPropertiesByFilepath: testPropertiesByFilepath,
-      _ddEarlyFlakeDetectionNumRetries: numRepeats,
-      _ddEarlyFlakeDetectionSlowTestRetries: slowTestRetries,
+      _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
@@ -133,13 +138,13 @@ function getProvidedContext () {
       _ddUnskippableSuites: unskippableSuites,
       _ddForcedToRunSuites: forcedToRunSuites,
     } = globalThis.__vitest_worker__.providedContext
+    const retryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
 
     return {
       isDiEnabled: _ddIsDiEnabled,
-      isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled && hasEfdRetries(retryPolicy),
       testPropertiesByFilepath,
-      numRepeats,
-      slowTestRetries: slowTestRetries ?? {},
+      earlyFlakeDetectionRetryPolicy: retryPolicy,
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
@@ -164,8 +169,7 @@ function getProvidedContext () {
       isDiEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
       testPropertiesByFilepath: {},
-      numRepeats: 0,
-      slowTestRetries: {},
+      earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
       isKnownTestsEnabled: false,
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,

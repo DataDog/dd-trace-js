@@ -15,6 +15,7 @@ const sinon = require('sinon')
 const MochaPlugin = require('../../datadog-plugin-mocha/src')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
+const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
@@ -305,8 +306,7 @@ describe('webdriverio instrumentation', () => {
       request.onDone({
         isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
-          earlyFlakeDetectionNumRetries: 5,
-          earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+          earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
           isCodeCoverageEnabled: true,
@@ -444,8 +444,7 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
         earlyFlakeDetectionFaultyThreshold: 30,
-        earlyFlakeDetectionNumRetries: 5,
-        earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+        earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
