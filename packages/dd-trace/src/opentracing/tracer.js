@@ -12,6 +12,7 @@ const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const NativeExporter = require('../exporters/native')
 const defaults = require('../config/defaults')
+const { getIsAWSLambda } = require('../serverless')
 const pkg = require('../../../../package.json')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
@@ -54,30 +55,37 @@ class DatadogTracer {
     // cannot ride the native (WASM) pipeline, so it runs on the JS span path:
     // plain JS spans, the JS span processor (span_format), and a CI-vis
     // exporter (agentless / agent-proxy / test-worker) selected by getExporter.
-    // Regular APM tracing uses the native pipeline below.
     // The electron APM exporter also rides the JS pipeline: it consumes
     // JS-formatted spans and publishes them over the electron diagnostic
     // channel instead of shipping to the agent, so it can't use native spans.
+    // AWS Lambda layers intentionally omit optional dependencies such as
+    // @datadog/libdatadog, so they keep using the legacy JS agent pipeline.
     const configuredExporter = config.experimental?.exporter
     const useElectronExporter = configuredExporter === exporters.ELECTRON
+    const useLambdaJsPipeline = getIsAWSLambda() && !config.isCiVisibility && !useElectronExporter
     const unsupportedApmExporter = configuredExporter &&
       configuredExporter !== exporters.AGENT &&
       !useElectronExporter &&
+      !useLambdaJsPipeline &&
       !config.isCiVisibility
 
-    if (config.isCiVisibility || useElectronExporter) {
+    if (config.isCiVisibility || useElectronExporter || useLambdaJsPipeline) {
       this._useJsSpans = true
       this._isCiVisibility = config.isCiVisibility === true
       const Exporter = useElectronExporter
         ? require('../exporters/electron')
-        : getExporter(configuredExporter)
+        : useLambdaJsPipeline
+          ? require('../exporters/agent')
+          : getExporter(configuredExporter)
       this._exporter = new Exporter(config, this._prioritySampler)
       this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config)
       this._url = this._exporter._url
 
       log.debug(useElectronExporter
         ? 'Electron exporter enabled (JS span pipeline)'
-        : 'CI Visibility mode enabled (JS span pipeline)')
+        : useLambdaJsPipeline
+          ? 'AWS Lambda environment detected (JS span pipeline)'
+          : 'CI Visibility mode enabled (JS span pipeline)')
     } else {
       if (unsupportedApmExporter) {
         log.warn(

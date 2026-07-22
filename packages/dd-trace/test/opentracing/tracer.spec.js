@@ -16,6 +16,7 @@ const Reference = opentracing.Reference
 
 describe('Tracer', () => {
   let Tracer
+  let loadTracer
   let tracer
   let NativeDatadogSpan
   let span
@@ -24,8 +25,12 @@ describe('Tracer', () => {
   let prioritySampler
   let NativeExporter
   let SpanProcessor
+  let JsSpanProcessor
   let processor
   let exporter
+  let jsProcessor
+  let agentExporter
+  let AgentExporter
   let nativeSpansInstance
   let NativeSpansInterface
   let spanContext
@@ -67,6 +72,17 @@ describe('Tracer', () => {
     }
     SpanProcessor = sinon.stub().returns(processor)
 
+    jsProcessor = {
+      process: sinon.spy(),
+    }
+    JsSpanProcessor = sinon.stub().returns(jsProcessor)
+
+    agentExporter = {
+      export: sinon.spy(),
+      _url: config?.url,
+    }
+    AgentExporter = sinon.stub().returns(agentExporter)
+
     nativeSpansInstance = {}
     NativeSpansInterface = sinon.stub().returns(nativeSpansInstance)
 
@@ -101,21 +117,25 @@ describe('Tracer', () => {
       debug: sinon.spy(),
     }
 
-    Tracer = proxyquire('../../src/opentracing/tracer', {
+    loadTracer = ({ isAWSLambda = false } = {}) => proxyquire('../../src/opentracing/tracer', {
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
       '../span_processor': SpanProcessor,
+      '../js_span_processor': JsSpanProcessor,
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
       './propagation/log': LogPropagator,
       '../log': log,
       '../exporters/native': NativeExporter,
+      '../exporters/agent': AgentExporter,
+      '../serverless': { getIsAWSLambda: () => isAWSLambda },
       '../native': {
         get NativeSpansInterface () { return NativeSpansInterface },
         get NativeDatadogSpan () { return NativeDatadogSpan },
       },
     })
+    Tracer = loadTracer()
   })
 
   it('should support recording', () => {
@@ -146,6 +166,20 @@ describe('Tracer', () => {
       'log'
     )
     sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
+  })
+
+  it('uses the JS agent pipeline in AWS Lambda environments', () => {
+    Tracer = loadTracer({ isAWSLambda: true })
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    assert.strictEqual(tracer._isCiVisibility, false)
+    sinon.assert.notCalled(NativeExporter)
+    sinon.assert.notCalled(NativeSpansInterface)
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config)
+    sinon.assert.calledWith(log.debug, 'AWS Lambda environment detected (JS span pipeline)')
   })
 
   it('treats the agent exporter as the native APM default', () => {

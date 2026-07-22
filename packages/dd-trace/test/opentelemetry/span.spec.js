@@ -18,6 +18,7 @@ const tracer = require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
+const DatadogSpan = require('../../src/opentracing/span')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
@@ -45,6 +46,22 @@ describe('OTel Span', () => {
     const context = span._ddSpan.context()
     assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
     assert.strictEqual(context._hostname, tracer._hostname)
+  })
+
+  it('should use plain Datadog spans when the tracer uses the JS span pipeline', () => {
+    const ddTracer = tracer._tracer
+    const originalUseJsSpans = ddTracer._useJsSpans
+    const originalNativeSpans = ddTracer._nativeSpans
+
+    ddTracer._useJsSpans = true
+    ddTracer._nativeSpans = undefined
+    try {
+      const span = makeSpan('name')
+      assert.strictEqual(span._ddSpan.constructor, DatadogSpan)
+    } finally {
+      ddTracer._useJsSpans = originalUseJsSpans
+      ddTracer._nativeSpans = originalNativeSpans
+    }
   })
 
   it('should apply global config tags (DD_TAGS / OTEL_RESOURCE_ATTRIBUTES) to bridged spans', () => {
