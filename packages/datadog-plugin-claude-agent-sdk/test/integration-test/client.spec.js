@@ -7,7 +7,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { describe, it, before, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const {
   FakeAgent,
   sandboxCwd,
@@ -19,16 +19,9 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-// claude-agent-sdk has no default export; base variant is destructure, star is explicit
-const IMPORT_DESTRUCTURE = "import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'"
-const IMPORT_STAR =
-  "import * as _sdk from '@anthropic-ai/claude-agent-sdk'; " +
-  'const { query, tool, createSdkMcpServer } = _sdk'
-
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('claude-agent-sdk', ['@anthropic-ai/claude-agent-sdk'], version => {
     useSandbox([
@@ -41,11 +34,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', {
-        star: IMPORT_STAR,
-        destructure: IMPORT_DESTRUCTURE,
-      }, undefined, undefined, true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: '_sdk',
+      packageName: '@anthropic-ai/claude-agent-sdk',
+      defaultExport: false,
+      namedExports: ['query', 'tool', 'createSdkMcpServer'],
+      namedExportBinding: 'destructure',
     })
 
     afterEach(async () => {
@@ -53,7 +47,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
