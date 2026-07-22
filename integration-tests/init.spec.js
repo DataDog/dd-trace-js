@@ -41,7 +41,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
   context('preferring app-dir dd-trace', () => {
     context('when dd-trace is not in the app dir', () => {
       const NODE_OPTIONS = `--no-warnings --${arg} ${path.join(__dirname, '..', filename)}`
-      useEnv({ NODE_OPTIONS })
+      useEnv({ DD_TEST_TRACER_ROOT: path.join(__dirname, '..'), NODE_OPTIONS })
 
       if (currentVersionIsSupported) {
         context('without DD_INJECTION_ENABLED', () => {
@@ -62,6 +62,11 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
         it('should not initialize instrumentation', () => testFile(instrFile, 'false\n', [], ''))
 
         it('should not initialize ESM instrumentation', () => testFile('init/instrument.mjs', 'false\n', [], ''))
+
+        if (arg === 'import') {
+          it('does not load loader internals after deferring to the app copy', () =>
+            testFile('init/loader-hook-loaded.js', 'false\n', [], ''))
+        }
       })
     })
 
@@ -93,11 +98,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 }
 
 function testRuntimeVersionChecks (arg, filename) {
-  const skipRuntimeVersionChecks = filename === 'initialize.mjs' &&
-    ['22.0.0', '24.0.0'].includes(process.versions.node)
-  const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
-
-  runtimeVersionContext('runtime version check', () => {
+  context('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
