@@ -52,7 +52,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: release-proposal
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.octo-sts.outputs.token }}
@@ -66,7 +66,7 @@ jobs:
         run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
+      - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
@@ -89,7 +89,7 @@ jobs:
                     GitHub's rebase limit is 100 — once reached, commits that don't fit
                     will be deferred to a subsequent release.
                     Consider cutting this release soon.
-      - uses: slackapi/slack-github-action@fc46ded2fc4d7f11bfa62864526f920cf1a1167d # v2.1.0
+      - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
