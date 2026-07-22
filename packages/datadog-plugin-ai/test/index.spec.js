@@ -256,6 +256,89 @@ describe('Plugin', () => {
         assert.ok(result.text, 'Expected result to be truthy')
       })
 
+      if (semifies(realVersion, '>=6.0.0')) {
+        it('delegates the complete span interface to the original span', async () => {
+          const calls = []
+          const context = { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 }
+          const originalError = new Error('model error')
+          class RecordingSpan {
+            // eslint-disable-next-line no-unused-private-class-members
+            #statusCode = 0
+
+            spanContext () { calls.push(['spanContext', this, []]); return context }
+            setAttribute (...args) { calls.push(['setAttribute', this, args]); return this }
+            setAttributes (...args) { calls.push(['setAttributes', this, args]); return this }
+            addEvent (...args) { calls.push(['addEvent', this, args]); return this }
+            addLink (...args) { calls.push(['addLink', this, args]); return this }
+            addLinks (...args) { calls.push(['addLinks', this, args]); return this }
+            setStatus (...args) { this.#statusCode = args[0].code; calls.push(['setStatus', this, args]); return this }
+            updateName (...args) { calls.push(['updateName', this, args]); return this }
+            end (...args) { calls.push(['end', this, args]) }
+            isRecording () { calls.push(['isRecording', this, []]); return true }
+            recordException (...args) { calls.push(['recordException', this, args]) }
+          }
+
+          const originalSpan = new RecordingSpan()
+          const tracer = {
+            startActiveSpan (...args) {
+              const fn = args[args.length - 1]
+              return fn(originalSpan)
+            },
+          }
+
+          await assert.rejects(
+            ai.generateText({
+              model: {
+                specificationVersion: 'v3',
+                provider: 'test',
+                modelId: 'test',
+                supportedUrls: {},
+                doGenerate () { return Promise.reject(originalError) },
+                doStream () { return Promise.reject(originalError) },
+              },
+              prompt: 'trigger an error',
+              maxRetries: 0,
+              experimental_telemetry: { isEnabled: true, tracer },
+            }),
+            error => error === originalError
+          )
+
+          calls.length = 0
+          const delegatedSpan = tracer.startActiveSpan('delegation-check', span => span)
+          const attributes = { key: 'value' }
+          const eventAttributes = { event: 'value' }
+          const exception = new Error('delegated error')
+          const link = { context }
+          const links = [link]
+
+          assert.strictEqual(delegatedSpan.spanContext(), context)
+          assert.strictEqual(delegatedSpan.setAttribute('key', 'value'), delegatedSpan)
+          assert.strictEqual(delegatedSpan.setAttributes(attributes), delegatedSpan)
+          assert.strictEqual(delegatedSpan.addEvent('event', eventAttributes, 123), delegatedSpan)
+          assert.strictEqual(delegatedSpan.addLink(link), delegatedSpan)
+          assert.strictEqual(delegatedSpan.addLinks(links), delegatedSpan)
+          assert.strictEqual(delegatedSpan.setStatus({ code: 1 }), delegatedSpan)
+          assert.strictEqual(delegatedSpan.updateName('renamed'), delegatedSpan)
+          assert.strictEqual(delegatedSpan.isRecording(), true)
+          assert.strictEqual(delegatedSpan.recordException(exception, 456), undefined)
+          delegatedSpan.end(123)
+
+          assert.deepStrictEqual(calls, [
+            ['spanContext', originalSpan, []],
+            ['setAttribute', originalSpan, ['key', 'value']],
+            ['setAttributes', originalSpan, [attributes]],
+            ['addEvent', originalSpan, ['event', eventAttributes, 123]],
+            ['addLink', originalSpan, [link]],
+            ['addLinks', originalSpan, [links]],
+            ['setStatus', originalSpan, [{ code: 1 }]],
+            ['updateName', originalSpan, ['renamed']],
+            ['isRecording', originalSpan, []],
+            ['recordException', originalSpan, [exception, 456]],
+            ['end', originalSpan, [123]],
+          ])
+        })
+      }
+
       it('should use the passed in `tracer`', async () => {
         const checkTraces = agent.assertSomeTraces(traces => {
           const generateTextSpan = traces[0][0]
