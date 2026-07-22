@@ -12,7 +12,7 @@
 <h1>Interface Appsec</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Appsec</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#eventtrackingv2">eventTrackingV2</a><span class="tsd-signature-symbol">:</span> <a href="EventTrackingV2.html" class="tsd-signature-type tsd-kind-interface">EventTrackingV2</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#blockrequest-1">blockRequest</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">req</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">IncomingMessage</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">res</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">OutgoingMessage</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">IncomingMessage</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isuserblocked-1">isUserBlocked</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">user</span><span class="tsd-signature-symbol">:</span> <a href="User.html" class="tsd-signature-type tsd-kind-interface">User</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setuser-1">setUser</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">user</span><span class="tsd-signature-symbol">:</span> <a href="User.html" class="tsd-signature-type tsd-kind-interface">User</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#trackcustomevent-1">trackCustomEvent</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">eventName</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">metadata</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#trackuserloginfailureevent-1">trackUserLoginFailureEvent</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">userId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">exists</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">metadata</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#trackuserloginsuccessevent-1">trackUserLoginSuccessEvent</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">user</span><span class="tsd-signature-symbol">:</span> <a href="User.html" class="tsd-signature-type tsd-kind-interface">User</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">metadata</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1555">index.d.ts:1555</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1555">index.d.ts:1555</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -38,7 +38,7 @@
 <h3 class="tsd-anchor-link" id="eventtrackingv2"><span>event<wbr/>Tracking<wbr/>V2</span><a href="#eventtrackingv2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">eventTrackingV2</span><span class="tsd-signature-symbol">:</span> <a href="EventTrackingV2.html" class="tsd-signature-type tsd-kind-interface">EventTrackingV2</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1617">index.d.ts:1617</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1617">index.d.ts:1617</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -64,7 +64,7 @@
 <p>This method is in beta and could change in the future</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1607">index.d.ts:1607</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1607">index.d.ts:1607</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="isuserblocked"><span>is<wbr/>User<wbr/>Blocked</span><a href="#isuserblocked" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -84,7 +84,7 @@ If no user is linked to the current trace, will link the passed user to it.</p>
 <p>This method is in beta and could change in the future</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1596">index.d.ts:1596</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1596">index.d.ts:1596</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setuser"><span>set<wbr/>User</span><a href="#setuser" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -102,7 +102,7 @@ If no user is linked to the current trace, will link the passed user to it.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1615">index.d.ts:1615</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1615">index.d.ts:1615</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="trackcustomevent"><span>track<wbr/>Custom<wbr/>Event</span><a href="#trackcustomevent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -123,7 +123,7 @@ If no user is linked to the current trace, will link the passed user to it.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1586">index.d.ts:1586</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1586">index.d.ts:1586</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="trackuserloginfailureevent"><span class="deprecated">track<wbr/>User<wbr/>Login<wbr/>Failure<wbr/>Event</span><a href="#trackuserloginfailureevent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -151,7 +151,7 @@ If no user is linked to the current trace, will link the passed user to it.</p>
 <h4 class="tsd-anchor-link" id="deprecated">Deprecated<a href="#deprecated" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>In favor of eventTrackingV2.trackUserLoginFailure</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1577">index.d.ts:1577</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1577">index.d.ts:1577</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="trackuserloginsuccessevent"><span class="deprecated">track<wbr/>User<wbr/>Login<wbr/>Success<wbr/>Event</span><a href="#trackuserloginsuccessevent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -176,7 +176,7 @@ If no user is linked to the current trace, will link the passed user to it.</p>
 <h4 class="tsd-anchor-link" id="deprecated-1">Deprecated<a href="#deprecated-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>In favor of eventTrackingV2.trackUserLoginSuccess</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1565">index.d.ts:1565</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1565">index.d.ts:1565</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

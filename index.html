@@ -315,6 +315,9 @@ is not provided, the function is bound to the span that is active when
 <h3 id="tracer-settings">Tracer settings</h3>
 <p>Options can be configured as a parameter to the <a href="./interfaces/tracer.html#init">init()</a> method or as environment variables. These are documented over on <a href="https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs">Configuring the Node.js Tracing Library</a>.</p>
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
+<p>Set <code>DD_CODE_COVERAGE_FLAGS</code> to a comma-separated list of flags to attach to uploaded code coverage
+reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
+accepted; if more are provided, the report is uploaded without flags.</p>
 <p>Set <code>DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT</code> to a non-negative integer to override the number of
 Early Flake Detection retries in every supported test-duration bucket. A value of <code>0</code> disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided

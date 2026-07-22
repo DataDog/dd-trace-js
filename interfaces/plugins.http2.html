@@ -20,7 +20,7 @@ options.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">http2</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#allowlist">allowlist</a><span class="tsd-signature-symbol">?:</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span><br/>        <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>)<br/>        <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span> <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>))<span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#blocklist">blocklist</a><span class="tsd-signature-symbol">?:</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span><br/>        <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>)<br/>        <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span> <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>))<span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#client">client</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Http2Client</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#enabled">enabled</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#enablepropagationwithamazonheaders">enablePropagationWithAmazonHeaders</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#filter">filter</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#headers">headers</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#measured">measured</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#querystringobfuscation">queryStringObfuscation</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#resourcerenamingenabled">resourceRenamingEnabled</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#server">server</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Http2Server</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#service">service</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#splitbydomain">splitByDomain</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#validatestatus">validateStatus</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">code</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2687">index.d.ts:2687</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2687">index.d.ts:2687</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -62,7 +62,7 @@ server the entry represents an inbound path (<code>/api/foo</code>).</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.allowlist</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1964">index.d.ts:1964</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1964">index.d.ts:1964</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="blocklist"><code class="tsd-tag">Optional</code><span>blocklist</span><a href="#blocklist" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">blocklist</span><span class="tsd-signature-symbol">?:</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">string</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span><br/>    <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>)<br/>    <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span> <span class="tsd-signature-symbol">|</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>))<span class="tsd-signature-symbol">[]</span></div>
@@ -80,14 +80,14 @@ server the entry represents an inbound path (<code>/api/foo</code>).</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.blocklist</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1976">index.d.ts:1976</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1976">index.d.ts:1976</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="client"><code class="tsd-tag">Optional</code><span>client</span><a href="#client" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">client</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Http2Client</span></div>
 <div class="tsd-comment tsd-typography"><p>Configuration for HTTP clients.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2691">index.d.ts:2691</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2691">index.d.ts:2691</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="enabled"><code class="tsd-tag">Optional</code><span>enabled</span><a href="#enabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">enabled</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -101,7 +101,7 @@ server the entry represents an inbound path (<code>/api/foo</code>).</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.enabled</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1933">index.d.ts:1933</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1933">index.d.ts:1933</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="enablepropagationwithamazonheaders"><code class="tsd-tag">Optional</code><span>enable<wbr/>Propagation<wbr/>With<wbr/>Amazon<wbr/>Headers</span><a href="#enablepropagationwithamazonheaders" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">enablePropagationWithAmazonHeaders</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -116,7 +116,7 @@ Disable this if you get AWS signature errors (HTTP 403).</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.enablePropagationWithAmazonHeaders</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2010">index.d.ts:2010</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2010">index.d.ts:2010</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="filter"><code class="tsd-tag">Optional</code><span>filter</span><a href="#filter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">filter</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">urlOrPath</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span></div>
@@ -141,7 +141,7 @@ If not provided, allowlist/blocklist logic will be used instead.</p>
 </li></ul></li></ul></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.filter</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1986">index.d.ts:1986</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1986">index.d.ts:1986</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="headers"><code class="tsd-tag">Optional</code><span>headers</span><a href="#headers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">headers</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
@@ -155,7 +155,7 @@ If not provided, allowlist/blocklist logic will be used instead.</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.headers</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1993">index.d.ts:1993</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1993">index.d.ts:1993</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="measured"><code class="tsd-tag">Optional</code><span>measured</span><a href="#measured" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">measured</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">}</span></div>
@@ -164,7 +164,7 @@ names as keys and booleans as values for more granular control.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from Http2Client.measured</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1919">index.d.ts:1919</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1919">index.d.ts:1919</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="querystringobfuscation"><code class="tsd-tag">Optional</code><span>query<wbr/>String<wbr/>Obfuscation</span><a href="#querystringobfuscation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">queryStringObfuscation</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">RegExp</span></div>
@@ -178,7 +178,7 @@ names as keys and booleans as values for more granular control.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from Http2Server.queryStringObfuscation</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2128">index.d.ts:2128</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2128">index.d.ts:2128</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="resourcerenamingenabled"><code class="tsd-tag">Optional</code><span>resource<wbr/>Renaming<wbr/>Enabled</span><a href="#resourcerenamingenabled" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">resourceRenamingEnabled</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -186,14 +186,14 @@ names as keys and booleans as values for more granular control.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from Http2Server.resourceRenamingEnabled</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2133">index.d.ts:2133</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2133">index.d.ts:2133</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="server"><code class="tsd-tag">Optional</code><span>server</span><a href="#server" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">server</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Http2Server</span></div>
 <div class="tsd-comment tsd-typography"><p>Configuration for HTTP servers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2696">index.d.ts:2696</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2696">index.d.ts:2696</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="service"><code class="tsd-tag">Optional</code><span>service</span><a href="#service" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">service</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">any</span></div>
@@ -201,7 +201,7 @@ names as keys and booleans as values for more granular control.</p>
 </div><aside class="tsd-sources">
 <p>Inherited from Http2Client.service</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L1928">index.d.ts:1928</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L1928">index.d.ts:1928</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="splitbydomain"><code class="tsd-tag">Optional</code><span>split<wbr/>By<wbr/>Domain</span><a href="#splitbydomain" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">splitByDomain</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
@@ -215,7 +215,7 @@ names as keys and booleans as values for more granular control.</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.splitByDomain</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2098">index.d.ts:2098</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2098">index.d.ts:2098</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-inherited">
 <h3 class="tsd-anchor-link" id="validatestatus"><code class="tsd-tag">Optional</code><span>validate<wbr/>Status</span><a href="#validatestatus" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">validateStatus</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">code</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span></div>
@@ -231,7 +231,7 @@ for errors.</p>
 </div></div><aside class="tsd-sources">
 <p>Inherited from Http2Client.validateStatus</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/af7a7059dfdacca62a57b0f8fc830a373c7bc61e/index.d.ts#L2107">index.d.ts:2107</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L2107">index.d.ts:2107</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
