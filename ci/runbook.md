@@ -7,21 +7,21 @@ eligible advanced features with temporary tests. It diagnoses and recommends cha
 ## Agent Contract
 
 1. Work only in the current repository and resolve its installed `dd-trace`; do not search sibling repositories, home
-   directories, package-manager stores, or unrelated `node_modules` trees.
+  directories, package-manager stores, or unrelated `node_modules` trees.
 2. Discovery is read-only. Do not install dependencies, start services, run tests, use the network, or request broader
-   permissions before the generated plan discloses an action and the customer approves it.
+  permissions before the generated plan discloses an action and the customer approves it.
 3. Record `git status --short` as the cleanup baseline, then run `--init-manifest` immediately. The bounded scaffold owns
-   normal CI, framework, configuration, and test discovery.
+  normal CI, framework, configuration, and test discovery.
 4. Treat the scaffold as a proposal. Inspect only the paths named by an explicit review request; do not repeat broad
-   repository discovery when it reports a complete proposal.
+  repository discovery when it reports a complete proposal.
 5. Run `--print-plan` after the manifest validates. It writes and prints one complete customer approval plan. Present
-   that complete plan in the next user-facing message; do not replace it with a summary or an invisible file reference.
+  that complete plan in the next user-facing message; do not replace it with a summary or an invisible file reference.
 6. Ask exactly once: `Approve executing exactly the plan above?` Use the platform's command-approval dialog instead of
-   a chat question when one is available without changing the command or permissions. Never use both for one plan.
+  a chat question when one is available without changing the command or permissions. Never use both for one plan.
 7. After approval, run only the checksum-bound command shown in the plan. The validator owns preflight, temporary tests,
-   offline fixtures, checks, artifacts, and cleanup.
+  offline fixtures, checks, artifacts, and cleanup.
 8. Report Basic Reporting, CI configuration, EFD, ATR, Test Management, blockers, cleanup, and the local report path.
-   Never apply a recommendation during validation.
+  Never apply a recommendation during validation.
 
 ## Safety and Privacy
 
