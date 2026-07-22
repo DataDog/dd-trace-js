@@ -83,6 +83,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
@@ -141,6 +143,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
       - run: node scripts/release/publish-electron.js --tag ${{ needs.setup.outputs.npm_tag }}
 
   docs:
@@ -196,6 +200,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
       - uses: ./.github/actions/install
       - id: pkg
         run: |
@@ -222,6 +228,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
       - uses: ./.github/actions/install
       - id: pkg
         run: |
