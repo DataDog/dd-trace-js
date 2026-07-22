@@ -1,12 +1,20 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const path = require('node:path')
+const { promisify } = require('node:util')
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const { before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
+
+const log = require('../../dd-trace/src/log')
 
 const messagesBeforeChannel = channel('dd-trace:anthropic:messages:before')
 const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
+const execFileAsync = promisify(execFile)
+const lifecycleRejectionFixture = path.join(__dirname, 'fixtures', 'anthropic-lifecycle-rejections.js')
 
 class FakeAPIPromise {
   /**
@@ -72,6 +80,22 @@ function subscribeWithHandler (channels, handler) {
 
 function lifecycleAbortError (message = 'blocked') {
   return Object.assign(new Error(message), { name: 'AIGuardAbortError' })
+}
+
+function createDeferred () {
+  let resolveDeferred
+  let rejectDeferred
+  const promise = new Promise(
+    /**
+     * @param {(value?: void | PromiseLike<void>) => void} resolve
+     * @param {(reason?: unknown) => void} reject
+     */
+    (resolve, reject) => {
+      resolveDeferred = resolve
+      rejectDeferred = reject
+    }
+  )
+  return { promise, reject: rejectDeferred, resolve: resolveDeferred }
 }
 
 function blockLifecycle (ctx, err) {
@@ -271,6 +295,39 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
+  it('finishes after a resolving before subscriber leaves', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const unsubscribe = subscribeWithHandler(
+      [messagesBeforeChannel],
+      /**
+       * @param {{ pending: Promise<void>[] }} ctx
+       */
+      ctx => {
+        ctx.pending.push(Promise.resolve())
+        unsubscribe()
+      }
+    )
+    const messages = new Messages()
+    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    messages._nextApiPromise = apiPromise
+
+    try {
+      assert.strictEqual(
+        await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse(),
+        apiPromise._rawResponse
+      )
+      assert.strictEqual(asyncEndCount, 1)
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribe()
+    }
+  })
+
   it('evaluates and finishes an unconsumed raw response without consuming it', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
@@ -311,10 +368,12 @@ describe('anthropic lifecycle instrumentation', () => {
     const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
 
     try {
-      const [firstResponse, secondResponse] = await Promise.all([
-        apiPromise.asResponse(),
-        apiPromise.asResponse(),
-      ])
+      const firstPromise = apiPromise.asResponse()
+      const secondPromise = apiPromise.asResponse()
+
+      assert.notStrictEqual(firstPromise, secondPromise)
+
+      const [firstResponse, secondResponse] = await Promise.all([firstPromise, secondPromise])
 
       assert.strictEqual(firstResponse, secondResponse)
       assert.strictEqual(calls.length, 2)
@@ -323,7 +382,38 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('finishes without a tracing error when cloning the raw response throws', async () => {
+  it('finishes a raw Node stream response without cloning it', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const { calls, unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
+    const messages = new Messages()
+    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const response = {
+      body: { pipe: sinon.spy() },
+      clone: sinon.spy(),
+    }
+    apiPromise._rawResponse = response
+    messages._nextApiPromise = apiPromise
+
+    try {
+      assert.strictEqual(
+        await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse(),
+        response
+      )
+      sinon.assert.notCalled(response.clone)
+      assert.strictEqual(calls.length, 0)
+      assert.strictEqual(asyncEndCount, 1)
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribe()
+    }
+  })
+
+  it('finishes without a tracing error when cloning or reading the raw response throws', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let errorCount = 0
@@ -333,18 +423,25 @@ describe('anthropic lifecycle instrumentation', () => {
     apmChannel.subscribe(apmHandlers)
 
     const { calls, unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
-    const messages = new Messages()
-    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
     const error = new Error('clone failed')
-    apiPromise._rawResponse.clone = () => { throw error }
-    messages._nextApiPromise = apiPromise
+    const cloneFailures = [
+      () => { throw error },
+      () => ({ json: () => { throw error } }),
+    ]
 
     try {
-      const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+      for (const clone of cloneFailures) {
+        const messages = new Messages()
+        const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+        apiPromise._rawResponse.clone = clone
+        messages._nextApiPromise = apiPromise
 
-      assert.strictEqual(response, apiPromise._rawResponse)
+        const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+
+        assert.strictEqual(response, apiPromise._rawResponse)
+      }
       assert.strictEqual(errorCount, 0)
-      assert.strictEqual(asyncEndCount, 1)
+      assert.strictEqual(asyncEndCount, cloneFailures.length)
       assert.strictEqual(calls.length, 0)
     } finally {
       apmChannel.unsubscribe(apmHandlers)
@@ -352,7 +449,7 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('finishes without a tracing error when reading the raw response clone rejects', async () => {
+  it('fails open for arbitrary raw response read rejections without logging their values', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let errorCount = 0
@@ -362,19 +459,203 @@ describe('anthropic lifecycle instrumentation', () => {
     apmChannel.subscribe(apmHandlers)
 
     const { calls, unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
-    const messages = new Messages()
-    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
-    const error = new Error('body failed')
-    apiPromise._rawResponse.clone = () => ({ json: () => Promise.reject(error) })
-    messages._nextApiPromise = apiPromise
+    const logError = sinon.stub(log, 'error')
+    const throwingMessage = {}
+    Object.defineProperty(throwingMessage, 'message', {
+      get () {
+        throw new Error('message getter should not run')
+      },
+    })
+    const rejections = [new Error('body failed'), undefined, null, 'sensitive response body', throwingMessage]
 
     try {
-      const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+      for (const rejection of rejections) {
+        const messages = new Messages()
+        const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+        apiPromise._rawResponse.clone = () => ({ json: () => Promise.reject(rejection) })
+        messages._nextApiPromise = apiPromise
 
-      assert.strictEqual(response, apiPromise._rawResponse)
+        const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+
+        assert.strictEqual(response, apiPromise._rawResponse)
+      }
       assert.strictEqual(errorCount, 0)
-      assert.strictEqual(asyncEndCount, 1)
+      assert.strictEqual(asyncEndCount, rejections.length)
       assert.strictEqual(calls.length, 0)
+      assert.strictEqual(logError.callCount, rejections.length)
+      for (const call of logError.getCalls()) {
+        assert.deepStrictEqual(call.args, ['Unable to evaluate Anthropic response body'])
+      }
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribe()
+      logError.restore()
+    }
+  })
+
+  it('lets a started parser own the span when raw evaluation fails', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let errorCount = 0
+    let asyncEndCount = 0
+    apmHandlers.error = () => { errorCount++ }
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const { unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
+    const settlementOrders = ['raw-first', 'parse-first']
+
+    try {
+      for (const settlementOrder of settlementOrders) {
+        const cloneStarted = createDeferred()
+        const cloneDeferred = createDeferred()
+        const parseDeferred = createDeferred()
+        const messages = new Messages()
+        const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+        const parseError = new SyntaxError('invalid response')
+        apiPromise.parse = () => parseDeferred.promise
+        apiPromise._rawResponse.clone = () => ({
+          json: () => {
+            cloneStarted.resolve()
+            return cloneDeferred.promise
+          },
+        })
+        messages._nextApiPromise = apiPromise
+        const instrumentedPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+        const responsePromise = instrumentedPromise.asResponse()
+
+        await cloneStarted.promise
+
+        const parsePromise = instrumentedPromise.parse()
+        const parseRejection = assert.rejects(parsePromise, parseError)
+
+        if (settlementOrder === 'raw-first') {
+          cloneDeferred.reject(new Error('clone failed'))
+          await responsePromise
+          parseDeferred.reject(parseError)
+        } else {
+          parseDeferred.reject(parseError)
+          await parseRejection
+          cloneDeferred.reject(new Error('clone failed'))
+        }
+
+        await Promise.all([responsePromise, parseRejection])
+      }
+
+      assert.strictEqual(errorCount, settlementOrders.length)
+      assert.strictEqual(asyncEndCount, settlementOrders.length)
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribe()
+    }
+  })
+
+  it('honors an after verdict published while raw evaluation is pending', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let errorCount = 0
+    let asyncEndCount = 0
+    apmHandlers.error = () => { errorCount++ }
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const error = lifecycleAbortError()
+    const afterPublished = createDeferred()
+    const unsubscribe = subscribeWithHandler(
+      [messagesAfterChannel],
+      /**
+       * @param {{ abortController: AbortController, pending: Promise<void>[] }} ctx
+       */
+      ctx => {
+        blockLifecycle(ctx, error)
+        afterPublished.resolve()
+      }
+    )
+    const cloneStarted = createDeferred()
+    const cloneDeferred = createDeferred()
+    const parseDeferred = createDeferred()
+    const messages = new Messages()
+    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    apiPromise.parse = () => parseDeferred.promise
+    apiPromise._rawResponse.clone = () => ({
+      json: () => {
+        cloneStarted.resolve()
+        return cloneDeferred.promise
+      },
+    })
+    messages._nextApiPromise = apiPromise
+    const instrumentedPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+    const responsePromise = instrumentedPromise.asResponse()
+
+    try {
+      await cloneStarted.promise
+
+      const parsePromise = instrumentedPromise.parse()
+      const parseRejection = assert.rejects(parsePromise, error)
+      parseDeferred.resolve(apiPromise._body)
+      await afterPublished.promise
+      cloneDeferred.reject(new Error('clone failed'))
+
+      await Promise.all([
+        parseRejection,
+        assert.rejects(responsePromise, error),
+      ])
+      assert.strictEqual(errorCount, 1)
+      assert.strictEqual(asyncEndCount, 1)
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribe()
+    }
+  })
+
+  it('honors a resolving after verdict when raw evaluation fails', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const afterPublished = createDeferred()
+    const unsubscribe = subscribeWithHandler(
+      [messagesAfterChannel],
+      /**
+       * @param {{ pending: Promise<void>[] }} ctx
+       */
+      ctx => {
+        ctx.pending.push(Promise.resolve())
+        afterPublished.resolve()
+      }
+    )
+    const cloneStarted = createDeferred()
+    const cloneDeferred = createDeferred()
+    const parseDeferred = createDeferred()
+    const body = { role: 'assistant', content: [] }
+    const messages = new Messages()
+    const apiPromise = new FakeAPIPromise(body)
+    apiPromise.parse = () => parseDeferred.promise
+    apiPromise._rawResponse.clone = () => ({
+      json: () => {
+        cloneStarted.resolve()
+        return cloneDeferred.promise
+      },
+    })
+    messages._nextApiPromise = apiPromise
+    const instrumentedPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+    const responsePromise = instrumentedPromise.asResponse()
+
+    try {
+      await cloneStarted.promise
+
+      const parsePromise = instrumentedPromise.parse()
+      parseDeferred.resolve(body)
+      await afterPublished.promise
+      cloneDeferred.reject(new Error('clone failed'))
+
+      const [parsed, response] = await Promise.all([parsePromise, responsePromise])
+
+      assert.strictEqual(parsed, body)
+      assert.strictEqual(response, apiPromise._rawResponse)
+      assert.strictEqual(asyncEndCount, 1)
     } finally {
       apmChannel.unsubscribe(apmHandlers)
       unsubscribe()
@@ -479,6 +760,43 @@ describe('anthropic lifecycle instrumentation', () => {
       () => messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).withResponse(),
       e => e === err
     ).finally(unsubscribe)
+  })
+
+  it('propagates after lifecycle rejection through withResponse()', async () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let afterCalls = 0
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const error = lifecycleAbortError()
+    const { unsubscribe: unsubscribeBefore } = subscribeAutoResolve([messagesBeforeChannel])
+    const unsubscribeAfter = subscribeWithHandler(
+      [messagesAfterChannel],
+      /**
+       * @param {{ abortController: AbortController, pending: Promise<void>[] }} ctx
+       */
+      ctx => {
+        afterCalls++
+        blockLifecycle(ctx, error)
+      }
+    )
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+
+    try {
+      await assert.rejects(
+        messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).withResponse(),
+        error
+      )
+      assert.strictEqual(afterCalls, 1)
+      assert.strictEqual(asyncEndCount, 1)
+    } finally {
+      apmChannel.unsubscribe(apmHandlers)
+      unsubscribeBefore()
+      unsubscribeAfter()
+    }
   })
 
   it('publishes asyncEnd exactly once when withResponse() and parse() are both called', () => {
@@ -637,7 +955,91 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('keeps raw response access independent when parse() rejects before the after lifecycle', async () => {
+  it('waits for a cached after verdict after its subscriber leaves', async () => {
+    const afterPublished = createDeferred()
+    const afterPending = createDeferred()
+    let calls = 0
+    const unsubscribe = subscribeWithHandler(
+      [messagesAfterChannel],
+      /**
+       * @param {{ pending: Promise<void>[] }} ctx
+       */
+      ctx => {
+        calls++
+        ctx.pending.push(afterPending.promise)
+        unsubscribe()
+        afterPublished.resolve()
+      }
+    )
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+    const parsePromise = apiPromise.parse()
+
+    try {
+      await afterPublished.promise
+      const responsePromise = apiPromise.asResponse()
+      afterPending.resolve()
+
+      const [, response] = await Promise.all([parsePromise, responsePromise])
+
+      assert.strictEqual(response, messages._nextApiPromise._rawResponse)
+      assert.strictEqual(calls, 1)
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('does not emit a duplicate unhandled rejection when a parse lifecycle block is caught', async () => {
+    await execFileAsync(process.execPath, [
+      '--unhandled-rejections=strict',
+      lifecycleRejectionFixture,
+      'caught-after-verdict',
+    ])
+  })
+
+  it('preserves an unhandled parse rejection when its result is ignored', async () => {
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        '--unhandled-rejections=strict',
+        lifecycleRejectionFixture,
+        'ignored-parse-error',
+      ]),
+      { code: 1 }
+    )
+  })
+
+  it('preserves an unhandled parse rejection when raw response access is handled', async () => {
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        '--unhandled-rejections=strict',
+        lifecycleRejectionFixture,
+        'ignored-parse-error-with-raw',
+      ]),
+      { code: 1 }
+    )
+  })
+
+  it('preserves an ignored raw lifecycle rejection across repeated calls', async () => {
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        '--unhandled-rejections=strict',
+        lifecycleRejectionFixture,
+        'ignored-first-raw',
+      ]),
+      { code: 1 }
+    )
+  })
+
+  it('does not wait for a pending parser before returning an evaluated raw response', async () => {
+    await execFileAsync(process.execPath, [
+      '--unhandled-rejections=strict',
+      lifecycleRejectionFixture,
+      'raw-with-pending-parse',
+    ])
+  })
+
+  it('evaluates the raw response independently when parse() rejects before the after lifecycle', async () => {
     const { calls, unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
     const messages = new Messages()
     const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
@@ -653,7 +1055,7 @@ describe('anthropic lifecycle instrumentation', () => {
       ])
 
       assert.strictEqual(response, apiPromise._rawResponse)
-      assert.strictEqual(calls.length, 0)
+      assert.strictEqual(calls.length, 1)
     } finally {
       unsubscribe()
     }

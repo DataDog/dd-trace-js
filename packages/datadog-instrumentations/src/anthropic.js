@@ -83,10 +83,9 @@ function wrapCreate (create) {
       }
 
       let afterVerdict
-      let asResponseResult
       let beforeVerdict
-      let parseLifecycleResult
       let parseResult
+      let rawResponseEvaluation
 
       function getBeforeVerdict () {
         if (!hasLifecycle || beforeVerdict) return beforeVerdict
@@ -138,71 +137,78 @@ function wrapCreate (create) {
             throw error
           })
 
-        if (hasLifecycle) {
-          const reuseAfterVerdict = () => afterVerdict
-          parseLifecycleResult = parseResult.then(reuseAfterVerdict, reuseAfterVerdict)
-        }
-
         return parseResult
       })
 
       // Gate `.asResponse()` callers on the before verdict so raw-response paths still block,
       // and inspect a clone so the caller's response stays unconsumed.
       shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
-        if (asResponseResult) return asResponseResult
-
         const responsePromise = origAsResponse.apply(this, asResponseArgs)
         const verdict = hasLifecycle ? getBeforeVerdict() : undefined
         const gated = verdict
           ? Promise.all([verdict, responsePromise]).then(([, response]) => response)
           : responsePromise
 
-        asResponseResult = gated
+        return gated
           .then(response => {
-            if (!stream && hasLifecycle && (parseLifecycleResult || messagesAfterChannel.hasSubscribers)) {
-              if (parseLifecycleResult) {
-                return parseLifecycleResult.then(() => response)
+            if (!stream && hasLifecycle) {
+              if (afterVerdict) {
+                return afterVerdict.then(() => response)
               }
 
-              let bodyPromise
-              try {
-                bodyPromise = response.clone().json()
-              } catch (error) {
-                return handleRawResponseEvaluationError(ctx, response, error)
+              if (rawResponseEvaluation) {
+                return rawResponseEvaluation
               }
 
-              return bodyPromise.then(
-                /**
-                 * @param {object} body
-                 */
-                body => {
-                  const verdict = getAfterVerdict(body)
-                  if (!verdict) {
-                    finish(ctx, body, null)
+              if (messagesAfterChannel.hasSubscribers) {
+                // node-fetch clones backpressure when the original branch is unread.
+                if (typeof response.body?.pipe === 'function') {
+                  if (!parseResult) finish(ctx)
+                  return response
+                }
+
+                let bodyPromise
+                try {
+                  bodyPromise = response.clone().json()
+                } catch {
+                  handleRawResponseEvaluationError(ctx, !parseResult)
+                  rawResponseEvaluation = Promise.resolve(response)
+                  return rawResponseEvaluation
+                }
+
+                rawResponseEvaluation = bodyPromise.then(
+                  /**
+                   * @param {object} body
+                   */
+                  body => {
+                    const verdict = getAfterVerdict(body)
+                    if (!verdict) {
+                      if (!parseResult) finish(ctx, body, null)
+                      return response
+                    }
+
+                    return verdict.then(() => {
+                      if (!parseResult) finish(ctx, body, null)
+                      return response
+                    })
+                  },
+                  () => {
+                    handleRawResponseEvaluationError(ctx, !parseResult && !afterVerdict)
+                    if (afterVerdict) return afterVerdict.then(() => response)
                     return response
                   }
-
-                  return verdict.then(() => {
-                    finish(ctx, body, null)
-                    return response
-                  })
-                },
-                /**
-                 * @param {Error} error
-                 */
-                error => handleRawResponseEvaluationError(ctx, response, error)
-              )
+                )
+                return rawResponseEvaluation
+              }
             }
 
-            if (!stream && !ctx.finished) finish(ctx, null, null)
+            if (!stream && !ctx.finished && !parseResult) finish(ctx, null, null)
             return response
           })
           .catch(error => {
             if (!ctx.finished) finish(ctx, null, error)
             throw error
           })
-
-        return asResponseResult
       })
 
       anthropicTracingChannel.end.publish(ctx)
@@ -214,14 +220,11 @@ function wrapCreate (create) {
 
 /**
  * @param {object} ctx
- * @param {object} response
- * @param {Error} error
- * @returns {object}
+ * @param {boolean} finishSpan
  */
-function handleRawResponseEvaluationError (ctx, response, error) {
-  log.error('Unable to evaluate Anthropic response body: %s', error.message)
-  finish(ctx)
-  return response
+function handleRawResponseEvaluationError (ctx, finishSpan) {
+  log.error('Unable to evaluate Anthropic response body')
+  if (finishSpan) finish(ctx)
 }
 
 function finish (ctx, result, error) {
