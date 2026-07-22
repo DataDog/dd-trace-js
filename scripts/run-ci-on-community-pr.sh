@@ -101,7 +101,7 @@ if [ -z "$EXISTING_TEMP_BRANCH" ]; then
     --head $TEMP_BRANCH \
     --draft \
     --label "semver-patch" \
-    --title "Temp: Run CI on community PR #$PR_ID" \
+    --title "chore: Run CI on community PR #$PR_ID" \
     --body "This is a temporary PR to allow running CI on the community PR #$PR_ID. It should be closed after CI has completed running."
 fi
 gh pr view $TEMP_BRANCH --web --repo DataDog/dd-trace-js
