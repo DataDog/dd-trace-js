@@ -175,17 +175,18 @@ withVersions('express', 'express', version => {
         })
       })
 
-      it('sets normalized route for Express 5 optional static group {/draft} — present', async () => {
+      // A static-only optional group is dropped (rendered absent), so both URLs give the same route.
+      it('drops a static-only optional group {/draft} — present', async () => {
         enableAppsecWithApiSecurity()
         await axios.get('/posts/draft')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.equal(span.meta['_dd.appsec.normalized_route'], '/posts/draft')
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/posts')
         })
       })
 
-      it('sets normalized route for Express 5 optional static group {/draft} — absent', async () => {
+      it('drops a static-only optional group {/draft} — absent', async () => {
         enableAppsecWithApiSecurity()
         await axios.get('/posts')
 

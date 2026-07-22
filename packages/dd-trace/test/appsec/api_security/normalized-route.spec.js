@@ -165,21 +165,25 @@ describe('normalizeRouteExpress', () => {
     check('{/:a}{/:b/:c}', '/A/B/C', '/{a}/{b}/{c}')
   })
 
+  describe('static-only optional groups are dropped (rendered absent)', () => {
+    // A static-only optional group carries no param for match() to resolve, so it renders as absent —
+    // a stable, minimal route rather than an omitted tag.
+    check('/posts{/draft}', '/posts/draft', '/posts')
+    check('/posts{/draft}', '/posts', '/posts')
+    check('/foo{bar}', '/foobar', '/foo')
+    check('/foo{bar}baz', '/foobaz', '/foobaz')
+    check('/a{b}{c}', '/abc', '/a')
+    check('/a{{/b}}', '/a/b', '/a')
+    check('/a{/:id}/p{q}*rest', '/a/1/pZ/w', '/a/{id}/{rest}') // static group dropped, param resolved
+    check('/users{/}', '/users/', '/users') // bare optional slash dropped
+    check('/items{/:id/}', '/items/42/', '/items/{id}') // optional trailing slash dropped, param kept
+  })
+
   describe('omitted shapes (returns null, not a wrong tag)', () => {
-    // A static-only optional group has no capture key, and a duplicate param name collapses to one
-    // key in match()'s output — both leave presence undetectable, so the whole route is omitted.
-    check('/posts{/draft}', '/posts/draft', null)
-    check('/foo{bar}', '/foobar', null)
-    check('/foo{bar}baz', '/foobaz', null)
-    check('/a{b}{c}', '/abc', null)
-    check('/a{{/b}}', '/a/b', null)
-    check('/a{/:id}/p{q}*rest', '/a/1/pZ/w', null)
-    check('/:id{/:id}', '/x', null, { id: 'x' })
+    check('/:id{/:id}', '/x', null, { id: 'x' }) // optional group shares a param name → ambiguous
     check('/a{/:x}/b{/:x}', '/a/b/v', null, { x: 'v' })
-    check('/files/*path.:ext', '/files/a/b.txt', null)
+    check('/files/*path.:ext', '/files/a/b.txt', null) // non-terminal catch-all
     check('/*a-*b', '/x-y', null)
-    check('/users{/}', '/users/', null)
-    check('/items{/:id/}', '/items/42/', null)
   })
 
   describe('URL-based optional resolution (mergeParams=false fix)', () => {
@@ -224,16 +228,16 @@ describe('normalizeRouteExpress', () => {
   })
 
   describe('performance / safety guards', () => {
-    it('returns null when a route has too many optional groups (bitmask guard)', () => {
-      const route = '/r' + Array.from({ length: 33 }, (_, i) => `{/s${i + 1}}`).join('')
-      assert.equal(normalize(route, {}, '/r/s33'), null)
+    const optionals = (n) => '/r' + Array.from({ length: n }, (_, i) => `{/:p${i}}`).join('')
+    const url = (n) => '/r' + '/x'.repeat(n)
+
+    it('resolves a route at the optional-group cap (8)', () => {
+      assert.equal(normalize(optionals(8), {}, url(8)), '/r/{p0}/{p1}/{p2}/{p3}/{p4}/{p5}/{p6}/{p7}')
     })
 
-    it('does not throw when the matcher regexp is too large to compile (params fallback)', () => {
-      const route = '/' + Array.from({ length: 12 }, (_, i) => `{/:p${i}}`).join('') + '/zzz'
-      const url = '/' + Array.from({ length: 12 }, () => 'x').join('/') + '/nomatch'
-      const result = normalize(route, {}, url)
-      assert.ok(result === null || typeof result === 'string')
+    // 9 > cap → omitted before a matcher (an exponential regexp) is ever built.
+    it('omits a route just over the optional-group cap (9)', () => {
+      assert.equal(normalize(optionals(9), {}, url(9)), null)
     })
   })
 

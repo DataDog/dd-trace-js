@@ -16,12 +16,13 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  * Design: Express 5 / path-to-regexp v8 only. The route is parsed once by path-to-regexp's `parse()`
  * (token tree → segment templates, cached per route string). Per-request presence of optional
  * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. Static-
- * only optional groups (no param to capture) are omitted (return null). Express 4 ships 0.x (no
+ * only optional groups (no param to capture) are dropped (rendered absent). Express 4 ships 0.x (no
  * `parse()`) → no tag.
  */
 
-// Keeps the presence bitmask within 32 bits; routes beyond this are omitted.
-const MAX_OPTIONAL_GROUPS = 12
+// path-to-regexp's match() builds a regexp that is exponential in the number of optional groups, so
+// cap the count we resolve per route; routes beyond this are omitted.
+const MAX_OPTIONAL_GROUPS = 8
 
 // Keyed on the raw route string — bounded by declared routes (never attacker URLs), so it retains
 // for the process lifetime.
@@ -120,11 +121,7 @@ function compileRoute (route, parse, makeMatcher) {
 
   const { segments, groupParent, trailingSlash } = tokensToSegments(parsed.tokens)
 
-  // An optional empty segment is a slash inside a group ('/users{/}') — can't be represented.
-  for (const seg of segments) {
-    if (seg.tokens.length === 0 && seg.group !== 0) return null
-  }
-
+  // Empty segments (a bare optional slash like '/users{/}', or '/a//b') carry no element; drop them.
   const cleaned = segments.filter(s => s.tokens.length > 0)
 
   if (cleaned.length === 0) {
@@ -159,31 +156,34 @@ function compileRoute (route, parse, makeMatcher) {
     effectiveParent.set(g, p === undefined ? 0 : p)
   }
 
-  // Presence comes from match()'s captured params, so a group is detectable only via a uniquely
-  // named param/wildcard (a duplicate name collapses to one key; a static-only group has none).
-  // Mark such a token's whole ancestor chain detectable, then reject any group that isn't.
+  // Group presence is read from match()'s params, so a group is resolvable only via a uniquely named
+  // param/wildcard (duplicate names collapse to one key). `paramGroups` = groups holding any param,
+  // `detectable` = those we can resolve. Omit the route if a param group is unresolvable (would
+  // mis-assign presence); a static-only group has no param, so it renders as absent (dropped).
   const nameCount = new Map()
   for (const seg of cleaned) {
     for (const t of seg.tokens) {
       if (t.type !== 'static') nameCount.set(t.name, (nameCount.get(t.name) ?? 0) + 1)
     }
   }
+  const paramGroups = new Set()
   const detectable = new Set()
   for (const seg of cleaned) {
     for (const t of seg.tokens) {
-      if (t.type === 'static' || nameCount.get(t.name) !== 1) continue
-      let g = t.group
-      while (g !== 0 && !detectable.has(g)) {
-        detectable.add(g)
-        g = groupParent.get(g)
+      if (t.type === 'static') continue
+      const unique = nameCount.get(t.name) === 1
+      for (let g = t.group; g !== 0; g = groupParent.get(g)) {
+        paramGroups.add(g)
+        if (unique) detectable.add(g)
       }
     }
   }
   for (const g of represented) {
-    if (!detectable.has(g)) return null
+    if (paramGroups.has(g) && !detectable.has(g)) return null
   }
 
-  const optionalGroups = [...represented].sort((a, b) => a - b)
+  // Only resolvable (param) groups become variants; static-only groups stay out and render absent.
+  const optionalGroups = [...represented].filter(g => detectable.has(g)).sort((a, b) => a - b)
   if (optionalGroups.length > MAX_OPTIONAL_GROUPS) return null
 
   const compiled = {
