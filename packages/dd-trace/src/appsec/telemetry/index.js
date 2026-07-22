@@ -12,6 +12,7 @@ const {
   trackRaspMetrics,
   trackRaspRuleMatch,
   trackRaspRuleSkipped,
+  incrementRaspDurationMetrics,
 } = require('./rasp')
 const {
   addWafRequestMetrics,
@@ -20,6 +21,7 @@ const {
   incrementWafUpdates,
   incrementWafConfigErrors,
   incrementWafRequests,
+  incrementWafDurationMetrics,
 } = require('./waf')
 
 const metricsStoreMap = new WeakMap()
@@ -142,6 +144,16 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
+function incrementRequestDurationMetrics (req) {
+  if (!req || !enabled) return
+
+  const store = getStore(req)
+  const requestMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
+
+  incrementWafDurationMetrics(requestMetrics)
+  incrementRaspDurationMetrics(requestMetrics)
+}
+
 function incrementMissingUserLoginMetric (framework, eventType) {
   if (!enabled) return
 
@@ -199,6 +211,7 @@ module.exports = {
   incrementWafUpdatesMetric,
   incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
+  incrementRequestDurationMetrics,
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
   incrementSdkEventMetric,
