@@ -210,10 +210,8 @@
       {
         "implementation": "A",
         "type": "string",
-        "configurationNames": [
-          "appsec.agenticOnboarding"
-        ],
         "default": "",
+        "namespace": "appsec",
         "description": "Set automatically by Datadog's agentic onboarding solution when it configures App & API Protection for a service. Reported verbatim in configuration telemetry only; it has no effect on tracer behavior."
       }
     ],

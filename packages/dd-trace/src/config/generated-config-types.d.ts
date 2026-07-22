@@ -6,7 +6,6 @@ export interface GeneratedConfig {
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   apmTracingEnabled: boolean;
   appsec: {
-    agenticOnboarding: string;
     blockedTemplateGraphql: string | undefined;
     blockedTemplateHtml: string | undefined;
     blockedTemplateJson: string | undefined;
@@ -17,6 +16,7 @@ export interface GeneratedConfig {
     DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
     DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
     DD_API_SECURITY_SAMPLE_DELAY: number;
+    DD_APPSEC_AGENTIC_ONBOARDING: string;
     DD_APPSEC_SCA_ENABLED: boolean | undefined;
     enabled: boolean | undefined;
     eventTracking: {

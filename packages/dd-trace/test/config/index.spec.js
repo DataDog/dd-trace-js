@@ -621,7 +621,7 @@ describe('Config', () => {
     it('should default to an empty string and report it with origin=default when unset', () => {
       const config = getConfig()
 
-      assert.strictEqual(config.appsec.agenticOnboarding, '')
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, '')
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
         { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: '', origin: 'default' },
       ])
@@ -632,7 +632,7 @@ describe('Config', () => {
 
       const config = getConfig()
 
-      assert.strictEqual(config.appsec.agenticOnboarding, 'true')
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'true')
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
         { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'true', origin: 'env_var' },
       ])
@@ -643,7 +643,7 @@ describe('Config', () => {
 
       const config = getConfig()
 
-      assert.strictEqual(config.appsec.agenticOnboarding, 'false')
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'false')
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
         { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'false', origin: 'env_var' },
       ])
