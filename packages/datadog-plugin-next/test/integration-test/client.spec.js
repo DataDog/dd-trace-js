@@ -27,7 +27,6 @@ const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // These next versions have a dependency which uses a deprecated node buffer and match versions tested with unit tests
   withVersions('next', 'next', min, (version, _, realVersion) => {
@@ -48,7 +47,13 @@ describe('esm', () => {
           NODE_OPTIONS: legacyOpenssl.trim(),
         },
       })
-      variants = varySandbox('server.mjs', 'next')
+    })
+
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'next',
+      packageName: 'next',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -60,7 +65,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init${legacyOpenssl}`,
