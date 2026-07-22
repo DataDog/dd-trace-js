@@ -8,28 +8,28 @@ the diagnosis. Never modify the project to make validation pass. Applying fixes 
 
 1. Work only in the current repository and resolve its installed `dd-trace`; do not search elsewhere.
 2. Discovery remains read-only. Do not install dependencies, start services, run tests, use the network, or request
-   broader permissions before the generated plan discloses that action and the customer approves it.
+    broader permissions before the generated plan discloses that action and the customer approves it.
 3. After resolving the installed package and recording the cleanup baseline, run `--init-manifest` immediately.
-   Do not enumerate CI workflows, packages, scripts, runner configs, or tests first; the bounded scaffold owns that
-   discovery and prints the exact next action. When it says its static CI conclusion is complete, do not open or edit
-   the manifest and do not inspect project files; proceed directly to `--print-plan`.
+    Do not enumerate CI workflows, packages, scripts, runner configs, or tests first; the bounded scaffold owns that
+    discovery and prints the exact next action. When it says its static CI conclusion is complete, do not open or edit
+    the manifest and do not inspect project files; proceed directly to `--print-plan`.
 4. Run `--print-plan` only after the manifest is valid. It prints one complete block between
-   `===== CUSTOMER APPROVAL PLAN =====` and `===== END CUSTOMER APPROVAL PLAN =====` and writes the same content to
-   `approval-summary.md`.
+    `===== CUSTOMER APPROVAL PLAN =====` and `===== END CUSTOMER APPROVAL PLAN =====` and writes the same content to
+    `approval-summary.md`.
 5. Successful `--print-plan` output ends discovery. Do not inspect more repository or validator files, revise scope,
-   run another command, or summarize the plan. The only permitted read is `approval-summary.md` when the printed block
-   is hidden or collapsed.
+    run another command, or summarize the plan. The only permitted read is `approval-summary.md` when the printed block
+    is hidden or collapsed.
 6. Tool output is not the next user-facing message, even when it is visible in the agent terminal. The next response
-   must begin with the opening delimiter and reproduce the complete block. If necessary, read `approval-summary.md`.
-   A response containing only `Awaiting approval`, `Approve the plan above`, a prose summary, or a file link is
-   invalid.
+    must begin with the opening delimiter and reproduce the complete block. If necessary, read `approval-summary.md`.
+    A response containing only `Awaiting approval`, `Approve the plan above`, a prose summary, or a file link is
+    invalid.
 7. End that same response with exactly one question: `Approve executing exactly the plan above?` Do not run another
-   command while waiting.
+    command while waiting.
 8. After approval, execute only the checksum-bound command shown in that plan. Do not infer or add install, build,
-   service, browser-download, database, or other setup commands. Report those prerequisites as project-setup blockers;
-   completing them is a separate, explicitly requested workflow followed by a fresh validation plan.
+    service, browser-download, database, or other setup commands. Report those prerequisites as project-setup blockers;
+    completing them is a separate, explicitly requested workflow followed by a fresh validation plan.
 9. Report Basic Reporting, the static CI configuration audit, EFD, ATR, Test Management, blockers, cleanup, and the
-   local report path. Never apply a recommended fix as part of validation.
+    local report path. Never apply a recommended fix as part of validation.
 
 ## Safety
 

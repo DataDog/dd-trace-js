@@ -1014,7 +1014,9 @@ function getExecutionSummary (runSummary) {
   const explanation = {
     completed: runSummary.validatorExitCode === 1
       ? 'The validator completed and found at least one confirmed actionable problem.'
-      : 'The validator completed its eligible approved checks.',
+      : runSummary.validatorExitCode === 2
+        ? 'The validator completed, but one or more selected checks remain incomplete.'
+        : 'The validator completed its eligible approved checks.',
     blocked: 'The validator was blocked by the execution environment before reaching a complete conclusion.',
     project_setup_required: 'The validator requires additional project setup before it can complete.',
     validator_error: 'The validator encountered an implementation or orchestration error.',
@@ -1298,7 +1300,8 @@ function getScenarioExecutionExplanation (result) {
 function getFrameworkVerdicts (results) {
   const liveResults = getLiveValidationResults(results)
   const frameworkResults = new Map()
-  for (const result of liveResults) {
+  for (const result of results) {
+    if (isDiagnosticOnlyResult(result) && result.evidence?.blockedByProjectSetup !== true) continue
     const entries = frameworkResults.get(result.frameworkId) || []
     entries.push(result)
     frameworkResults.set(result.frameworkId, entries)
@@ -1309,33 +1312,64 @@ function getFrameworkVerdicts (results) {
     const label = getResultFrameworkLabel(entries[0])
     const basic = entries.find(result => result.scenario === 'basic-reporting')
     const ciWiring = entries.find(result => result.scenario === CI_WIRING_SCENARIO)
+    const setupBlocker = entries.find(result => result.evidence?.blockedByProjectSetup === true) ||
+      (basic?.domain === 'project_setup' ? basic : undefined)
+    const advancedFailures = entries.filter(result => {
+      return ['efd', 'atr', 'test-management'].includes(result.scenario) && result.status === 'fail'
+    })
     const ciTarget = ciWiring?.evidence?.ciWiring?.job || ciWiring?.evidence?.ciWiring?.step ||
       ciWiring?.evidence?.ciCommandCandidate?.job || ciWiring?.evidence?.ciCommandCandidate?.step ||
       ciWiring?.evidence?.ciRemediation?.job || ciWiring?.evidence?.ciRemediation?.step ||
       /identified CI (?:test )?job/i.test(ciWiring?.diagnosis || '')
       ? 'identified CI job'
       : 'inspected CI configuration'
-    if (basic?.status === 'pass' && ciWiring?.status === 'fail') {
-      verdicts.push(`${label}: dd-trace successfully reports this test suite, but the ${ciTarget} does not ` +
-        'configure the required Test Optimization initialization or reporting transport.')
+    let verdict
+    if (setupBlocker) {
+      verdict = `${label}: local validation could not run because required project setup is unavailable. ` +
+        'No Test Optimization reporting conclusion was reached.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
+          'Optimization configuration.'
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration could not be verified completely.'
+      }
+    } else if (basic?.domain === 'execution_environment') {
+      verdict = `${label}: local validation was blocked by the execution environment. ` +
+        'No Test Optimization reporting conclusion was reached.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
+          'Optimization configuration.'
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration could not be verified completely.'
+      }
+    } else if (basic?.status === 'pass' && ciWiring?.status === 'fail') {
+      verdict = `${label}: dd-trace successfully reports this test suite, but the ${ciTarget} does not ` +
+        'configure the required Test Optimization initialization or reporting transport.'
     } else if (basic?.status === 'pass' && isIncompleteResult(ciWiring)) {
-      verdicts.push(ciWiring?.conclusion === 'configured_propagation_unverified'
+      verdict = ciWiring?.conclusion === 'configured_propagation_unverified'
         ? `${label}: dd-trace successfully reports this test suite. The ${ciTarget} contains the required ` +
           'configuration, but static analysis cannot prove that it reaches the final test process.'
         : `${label}: dd-trace successfully reports this test suite, but CI configuration could not be verified ` +
-          'completely.')
+          'completely.'
     } else if (basic?.status === 'pass' && ciWiring?.status === 'pass') {
-      verdicts.push(`${label}: this test suite reports successfully, including from the selected CI job.`)
+      verdict = `${label}: this test suite reports successfully, including from the selected CI job.`
     } else if (basic && basic.status !== 'pass') {
-      verdicts.push(ciWiring?.status === 'fail'
-        ? `${label}: no local Test Optimization conclusion was reached. Separately, static inspection confirmed ` +
-          `that the ${ciTarget} is missing required Test Optimization configuration.`
-        : `${label}: the selected tests did not report successfully, and CI configuration remains unverified.`)
+      verdict = ciWiring?.status === 'fail'
+        ? `${label}: the selected tests did not report when dd-trace was initialized directly. Separately, ` +
+          `static inspection confirmed that the ${ciTarget} is missing required Test Optimization configuration.`
+        : `${label}: the selected tests did not report successfully, and CI configuration remains unverified.`
     } else if (basic?.status === 'pass') {
-      verdicts.push(`${label}: this test suite reports successfully when dd-trace is initialized.`)
+      verdict = `${label}: this test suite reports successfully when dd-trace is initialized.`
     }
+    if (verdict && advancedFailures.length > 0) {
+      const checks = advancedFailures.map(result => formatScenarioName(result.scenario))
+      verdict += checks.length === 1
+        ? ` ${checks[0]} did not pass.`
+        : ` The following advanced checks did not pass: ${checks.join(', ')}.`
+    }
+    if (verdict) verdicts.push(verdict)
   }
-  if (liveResults.length === 0) {
+  if (verdicts.length === 0 && liveResults.length === 0) {
     verdicts.push('No live Test Optimization validation ran. This result is incomplete; no Basic Reporting, CI ' +
       'wiring, or advanced-feature conclusion was reached.')
   }

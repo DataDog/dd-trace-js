@@ -19,6 +19,8 @@ const MAX_LOCAL_TEST_CANDIDATES = 3
 const MAX_REPRESENTATIVE_TESTS = 150
 const MAX_CI_FILE_BYTES = 512 * 1024
 const MAX_CI_REVIEW_TARGETS = 3
+const JEST_RUNNER_CONFIG_EXTENSION_PATTERN = /\.[cm]?[jt]s$/
+const JEST_RUNNER_CONFIG_SUFFIX_PATTERN = /^[A-Za-z0-9_.-]+$/
 const CI_PATHS = [
   '.github/workflows',
   '.gitlab-ci.yml',
@@ -1356,7 +1358,7 @@ function findConfigFiles (root, framework, detectedCommand) {
 
   try {
     const runnerConfigs = fs.readdirSync(path.dirname(runner))
-      .filter(filename => /^config(?:[.-][A-Za-z0-9_-]+)*\.[cm]?[jt]s$/.test(filename))
+      .filter(isJestRunnerConfigFile)
       .sort((left, right) => {
         return Number(!/^config\.base\./.test(left)) - Number(!/^config\.base\./.test(right)) ||
           left.localeCompare(right)
@@ -1366,6 +1368,25 @@ function findConfigFiles (root, framework, detectedCommand) {
     configFiles.push(...runnerConfigs)
   } catch {}
   return [...new Set(configFiles)]
+}
+
+/**
+ * Reports whether a project-owned Jest runner file follows its config naming convention.
+ *
+ * @param {string} filename candidate filename
+ * @returns {boolean} whether the filename is a runner config
+ */
+function isJestRunnerConfigFile (filename) {
+  const extension = JEST_RUNNER_CONFIG_EXTENSION_PATTERN.exec(filename)?.[0]
+  if (!extension) return false
+
+  const basename = filename.slice(0, -extension.length)
+  if (basename === 'config') return true
+  if (!basename.startsWith('config')) return false
+
+  const suffix = basename.slice('config'.length)
+  if (suffix.length < 2 || !['.', '-'].includes(suffix[0])) return false
+  return JEST_RUNNER_CONFIG_SUFFIX_PATTERN.test(suffix) && !suffix.includes('..') && !suffix.endsWith('.')
 }
 
 /**

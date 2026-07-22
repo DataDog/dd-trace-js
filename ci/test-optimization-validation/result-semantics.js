@@ -12,13 +12,15 @@ function annotateResults (results) {
 function getExecutionStatus (results) {
   if (results.some(isValidatorError)) return 'validator_error'
 
-  const liveResults = results.filter(result => result.scenario !== 'all')
-  const allIncomplete = liveResults.length > 0 && liveResults.every(result => {
+  const conclusionResults = results.filter(result => {
+    return result.scenario !== 'all' || ['execution_environment', 'project_setup'].includes(result.domain)
+  })
+  const allIncomplete = conclusionResults.length > 0 && conclusionResults.every(result => {
     return result.domain === 'execution_environment' || ['not_checked', 'incomplete'].includes(result.conclusion)
   })
   if (!allIncomplete) return 'completed'
-  if (liveResults.some(result => result.domain === 'execution_environment')) return 'blocked'
-  if (liveResults.some(result => result.domain === 'project_setup')) return 'project_setup_required'
+  if (conclusionResults.some(result => result.domain === 'execution_environment')) return 'blocked'
+  if (conclusionResults.some(result => result.domain === 'project_setup')) return 'project_setup_required'
   return 'completed'
 }
 
@@ -44,9 +46,11 @@ function getConclusion (result) {
 }
 
 function getDomain (result) {
-  if (result.evidence?.blockedByExecutionEnvironment || result.status === 'blocked') return 'execution_environment'
+  if (result.evidence?.blockedByProjectSetup) return 'project_setup'
+  if (result.evidence?.blockedByExecutionEnvironment) return 'execution_environment'
   if (result.scenario === 'ci-wiring') return 'ci_configuration'
   if (result.evidence?.commandFailure || result.evidence?.staticDiagnosis) return 'project_setup'
+  if (result.status === 'blocked') return 'execution_environment'
   if (result.evidence?.validatorAdapterUnavailable || result.evidence?.manifestIncomplete ||
     result.frameworkId === 'validator' || result.frameworkId === 'validation-cleanup') return 'validator_adapter'
   return 'test_optimization'

@@ -752,6 +752,7 @@ describe('test optimization validation manifest scaffold', () => {
     const compilerTests = path.join(compilerRoot, 'src', '__tests__')
     const wrapper = path.join(root, 'scripts', 'jest', 'jest-cli.js')
     const config = path.join(root, 'scripts', 'jest', 'config.base.js')
+    const featureConfig = path.join(root, 'scripts', 'jest', 'config-feature_name.mjs')
     const representative = path.join(reactTests, 'ReactVersion-test.js')
 
     fs.mkdirSync(runnerRoot, { recursive: true })
@@ -772,6 +773,9 @@ describe('test optimization validation manifest scaffold', () => {
       '}',
       '',
     ].join('\n'))
+    fs.writeFileSync(featureConfig, 'export default {}\n')
+    fs.writeFileSync(path.join(path.dirname(wrapper), 'config-.js'), '')
+    fs.writeFileSync(path.join(path.dirname(wrapper), `config-${'-'.repeat(100)}.txt`), '')
     fs.writeFileSync(representative, 'test("version", () => {})\n')
     fs.writeFileSync(path.join(reactRoot, 'package.json'), JSON.stringify({ name: 'react' }))
     fs.writeFileSync(path.join(compilerTests, 'Compiler-test.js'), 'test("compiler", () => {})\n')
@@ -793,7 +797,7 @@ describe('test optimization validation manifest scaffold', () => {
       assert.deepStrictEqual(validateManifest(manifest), [])
       assert.strictEqual(framework.id, 'jest:react')
       assert.strictEqual(framework.project.root, root)
-      assert.strictEqual(framework.project.configFiles[0], config)
+      assert.deepStrictEqual(framework.project.configFiles, [config, featureConfig])
       assert.strictEqual(framework.localTestCandidates[0].sourceFile, representative)
       assert.deepStrictEqual(framework.existingTestCommand.argv.slice(0, 2), [process.execPath, wrapper])
       assert.ok(framework.generatedTestStrategy.files.every(file => file.path.startsWith(`${reactTests}${path.sep}`)))

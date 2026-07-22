@@ -918,6 +918,93 @@ describe('test optimization validation cli', () => {
       ['cucumber.js'],
     ])
   })
+
+  const decisionCases = [
+    {
+      name: 'returns an actionable result when reporting works but CI initialization is missing',
+      basicStatus: 'pass',
+      ciStatus: 'missing',
+      advancedStatuses: { efd: 'pass', atr: 'pass', 'test-management': 'pass' },
+      exitCode: 1,
+      results: ['basic-reporting:pass', 'ci-wiring:fail', 'efd:pass', 'atr:pass', 'test-management:pass'],
+      coverage: 'complete',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'keeps the CI finding conclusive when direct reporting fails',
+      basicStatus: 'fail',
+      ciStatus: 'missing',
+      advancedStatuses: {},
+      exitCode: 1,
+      results: ['basic-reporting:fail', 'ci-wiring:fail', 'efd:skip', 'atr:skip', 'test-management:skip'],
+      coverage: 'partial',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'returns incomplete when reporting works but configured CI propagation is unverified',
+      basicStatus: 'pass',
+      ciStatus: 'configured',
+      advancedStatuses: { efd: 'pass', atr: 'pass', 'test-management': 'pass' },
+      exitCode: 2,
+      results: ['basic-reporting:pass', 'ci-wiring:error', 'efd:pass', 'atr:pass', 'test-management:pass'],
+      coverage: 'partial',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'returns a confirmed failure when an advanced feature fails after reporting works',
+      basicStatus: 'pass',
+      ciStatus: 'configured',
+      advancedStatuses: { efd: 'pass', atr: 'fail', 'test-management': 'pass' },
+      exitCode: 1,
+      results: ['basic-reporting:pass', 'ci-wiring:error', 'efd:pass', 'atr:fail', 'test-management:pass'],
+      coverage: 'partial',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'reports required project setup as project setup rather than sandbox blocking',
+      setupBlocked: true,
+      ciStatus: 'unknown',
+      advancedStatuses: {},
+      exitCode: 2,
+      results: ['all:blocked'],
+      coverage: 'partial',
+      executionStatus: 'project_setup_required',
+    },
+    {
+      name: 'reports a sandbox-blocked preflight as an execution-environment blocker',
+      preflightBlocked: true,
+      ciStatus: 'unknown',
+      advancedStatuses: {},
+      exitCode: 2,
+      results: ['basic-reporting:blocked', 'ci-wiring:error', 'efd:skip', 'atr:skip', 'test-management:skip'],
+      coverage: 'partial',
+      executionStatus: 'blocked',
+    },
+  ]
+
+  for (const decisionCase of decisionCases) {
+    it(decisionCase.name, async () => {
+      const validation = await runCliFixture(
+        getDecisionCliStubs(decisionCase),
+        manifest => setDecisionCiWiring(manifest.frameworks[0], manifest.repository.root, decisionCase.ciStatus)
+      )
+
+      assert.strictEqual(validation.exitCode, decisionCase.exitCode)
+      assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`),
+        decisionCase.results)
+      assert.strictEqual(validation.runSummary.validationCoverage, decisionCase.coverage)
+      assert.strictEqual(
+        validation.runSummary.executionStatus,
+        decisionCase.executionStatus,
+        JSON.stringify(validation.results.map(result => ({
+          scenario: result.scenario,
+          status: result.status,
+          conclusion: result.conclusion,
+          domain: result.domain,
+        })))
+      )
+    })
+  }
 })
 
 /**
@@ -1049,6 +1136,96 @@ function getPassingScenarioResult (framework, scenario) {
     diagnosis: `${scenario} passed.`,
     evidence: {},
     artifacts: [],
+  }
+}
+
+function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, preflightBlocked, setupBlocked }) {
+  const stubs = {
+    './scenarios/basic-reporting': {
+      async runBasicReporting ({ framework }) {
+        return {
+          ...getPassingScenarioResult(framework, 'basic-reporting'),
+          status: basicStatus,
+          diagnosis: `Basic Reporting ${basicStatus}.`,
+        }
+      },
+    },
+  }
+  if (preflightBlocked) {
+    stubs['./preflight-runner'] = {
+      async runFrameworkPreflight ({ framework }) {
+        return {
+          ok: false,
+          failure: {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'blocked',
+            diagnosis: 'The execution environment blocked the selected test command.',
+            evidence: { blockedByExecutionEnvironment: true },
+            artifacts: [],
+          },
+        }
+      },
+    }
+  }
+  if (setupBlocked) {
+    stubs['./setup-runner'] = {
+      async runSetupCommands ({ framework }) {
+        return {
+          ok: false,
+          failure: {
+            frameworkId: framework.id,
+            scenario: 'all',
+            status: 'blocked',
+            diagnosis: 'Validation is blocked by required project setup.',
+            evidence: { blockedByProjectSetup: true, setupFailed: true },
+            artifacts: [],
+          },
+          outputCleanupHandles: [],
+        }
+      },
+    }
+  }
+  const modules = {
+    efd: './scenarios/early-flake-detection',
+    atr: './scenarios/auto-test-retries',
+    'test-management': './scenarios/test-management',
+  }
+  const methods = {
+    efd: 'runEarlyFlakeDetection',
+    atr: 'runAutoTestRetries',
+    'test-management': 'runTestManagement',
+  }
+
+  for (const [scenario, status] of Object.entries(advancedStatuses)) {
+    stubs[modules[scenario]] = {
+      async [methods[scenario]] ({ framework }) {
+        return {
+          ...getPassingScenarioResult(framework, scenario),
+          status,
+          diagnosis: `${scenario} ${status}.`,
+        }
+      },
+    }
+  }
+  return stubs
+}
+
+function setDecisionCiWiring (framework, root, status) {
+  if (status === 'missing') {
+    setStaticCiWiring(framework, root)
+    return
+  }
+  if (status !== 'configured') return
+  framework.ciWiring = {
+    provider: 'github-actions',
+    configFile: path.join(root, '.github', 'workflows', 'test.yml'),
+    job: 'test',
+    step: 'Run tests',
+    command: 'npm test',
+    initialization: { status: 'configured', evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'] },
+    stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
+    requiredSecretEnvVars: ['DD_API_KEY'],
   }
 }
 

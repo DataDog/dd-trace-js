@@ -9,6 +9,7 @@ const path = require('node:path')
 
 const { buildCiCommandCandidate } = require('../../../../ci/test-optimization-validation/ci-command-candidate')
 const { buildCiRemediation } = require('../../../../ci/test-optimization-validation/ci-remediation')
+const { annotateResults } = require('../../../../ci/test-optimization-validation/result-semantics')
 const {
   writePendingReport,
   writeReport,
@@ -1002,3 +1003,185 @@ describe('test optimization validation report writer', () => {
     }
   })
 })
+
+describe('test optimization validation customer outcome decision table', () => {
+  const decisionCases = [
+    {
+      name: 'reports working local instrumentation and missing CI configuration separately',
+      results: [
+        getDecisionResult('basic-reporting', 'pass'),
+        getDecisionResult('ci-wiring', 'fail', {
+          conclusion: 'confirmed_misconfigured',
+          domain: 'ci_configuration',
+          evidenceStrength: 'confirmed_static',
+          recommendation: 'Add Test Optimization initialization to the identified CI test job.',
+        }),
+        ...getDecisionAdvancedResults('pass'),
+      ],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
+      expected: [
+        /completed and found at least one confirmed actionable problem/,
+        /dd-trace successfully reports this test suite, but the inspected CI configuration does not configure/,
+        /Add Test Optimization initialization to the identified CI test job/,
+      ],
+      forbidden: [/CI ran tests/],
+    },
+    {
+      name: 'reports successful local instrumentation with unverified CI propagation as incomplete',
+      results: [
+        getDecisionResult('basic-reporting', 'pass'),
+        getDecisionResult('ci-wiring', 'error', {
+          conclusion: 'configured_propagation_unverified',
+          domain: 'ci_configuration',
+          evidenceStrength: 'inferred_static',
+        }),
+        ...getDecisionAdvancedResults('pass'),
+      ],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 2, validationCoverage: 'partial' },
+      expected: [
+        /completed, but one or more selected checks remain incomplete/,
+        /contains the required configuration, but static analysis cannot prove that it reaches the final test process/,
+      ],
+      forbidden: [/including from the selected CI job/],
+    },
+    {
+      name: 'keeps a local reporting failure separate from a missing CI configuration',
+      results: [
+        getDecisionResult('basic-reporting', 'fail'),
+        getDecisionResult('ci-wiring', 'fail', {
+          conclusion: 'confirmed_misconfigured',
+          domain: 'ci_configuration',
+          evidenceStrength: 'confirmed_static',
+        }),
+        ...getDecisionAdvancedResults('skip'),
+      ],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
+      expected: [
+        /selected tests did not report when dd-trace was initialized directly/,
+        /Separately, static inspection confirmed that the inspected CI configuration is missing/,
+      ],
+      forbidden: [/no local Test Optimization conclusion was reached/],
+    },
+    {
+      name: 'reports missing project setup without implying a sandbox or product failure',
+      results: [
+        getDecisionResult('basic-reporting', 'error', {
+          commandFailure: { kind: 'project-setup-failed' },
+          recommendation: 'Complete the required project build, then rerun validation.',
+        }),
+        getDecisionResult('ci-wiring', 'error', {
+          conclusion: 'incomplete',
+          domain: 'ci_configuration',
+          evidenceStrength: 'unknown',
+        }),
+      ],
+      runSummary: { executionStatus: 'project_setup_required', validatorExitCode: 2, validationCoverage: 'partial' },
+      expected: [
+        /requires additional project setup before it can complete/,
+        /local validation could not run because required project setup is unavailable/,
+        /No Test Optimization reporting conclusion was reached/,
+      ],
+      forbidden: [/blocked by the execution environment/, /did not report successfully/],
+    },
+    {
+      name: 'reports sandbox blocking without implying Test Optimization failed',
+      results: [
+        getDecisionResult('basic-reporting', 'blocked', { blockedByExecutionEnvironment: true }),
+        getDecisionResult('ci-wiring', 'error', {
+          conclusion: 'incomplete',
+          domain: 'ci_configuration',
+          evidenceStrength: 'unknown',
+        }),
+      ],
+      runSummary: { executionStatus: 'blocked', validatorExitCode: 2, validationCoverage: 'partial' },
+      expected: [
+        /blocked by the execution environment before reaching a complete conclusion/,
+        /local validation was blocked by the execution environment/,
+        /No Test Optimization reporting conclusion was reached/,
+      ],
+      forbidden: [/did not report successfully/],
+    },
+    {
+      name: 'surfaces an advanced-feature failure after Basic Reporting passes',
+      results: [
+        getDecisionResult('basic-reporting', 'pass'),
+        getDecisionResult('ci-wiring', 'error', {
+          conclusion: 'configured_propagation_unverified',
+          domain: 'ci_configuration',
+          evidenceStrength: 'inferred_static',
+        }),
+        getDecisionResult('atr', 'fail'),
+      ],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
+      expected: [
+        /dd-trace successfully reports this test suite/,
+        /Auto Test Retries did not pass/,
+      ],
+      forbidden: [/Every selected check reached a conclusive pass or fail result.*all passed/],
+    },
+  ]
+
+  for (const decisionCase of decisionCases) {
+    it(decisionCase.name, () => {
+      const { markdown, summary } = renderDecisionReport(decisionCase)
+      const output = `${summary}\n${markdown}`
+
+      for (const pattern of decisionCase.expected) assert.match(output, pattern)
+      for (const pattern of decisionCase.forbidden) assert.doesNotMatch(output, pattern)
+    })
+  }
+})
+
+function renderDecisionReport ({ results, runSummary }) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-decision-'))
+  const out = path.join(root, 'results')
+  const originalLog = console.log
+  const logs = []
+  const manifest = {
+    __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+    repository: { root },
+    frameworks: [{
+      id: 'vitest:root',
+      framework: 'vitest',
+      frameworkVersion: '4.1.0',
+      project: { name: 'example', root },
+    }],
+  }
+
+  fs.mkdirSync(out)
+  console.log = message => logs.push(message)
+  try {
+    writeReport({
+      manifest,
+      results: annotateResults(results),
+      out,
+      runSummary: { runCompleted: true, ...runSummary },
+    })
+    return {
+      markdown: fs.readFileSync(path.join(out, 'report.md'), 'utf8'),
+      summary: logs.join('\n'),
+    }
+  } finally {
+    console.log = originalLog
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+}
+
+function getDecisionResult (scenario, status, evidence = {}) {
+  return {
+    frameworkId: 'vitest:root',
+    scenario,
+    status,
+    diagnosis: `Fixture ${scenario} ${status}.`,
+    evidence,
+    artifacts: [],
+  }
+}
+
+function getDecisionAdvancedResults (status) {
+  return ['efd', 'atr', 'test-management'].map(scenario => getDecisionResult(scenario, status,
+    status === 'skip'
+      ? { featureEligibility: { eligible: false, blockedBy: 'basic-reporting' } }
+      : {}
+  ))
+}
