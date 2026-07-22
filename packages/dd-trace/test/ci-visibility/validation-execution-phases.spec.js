@@ -713,11 +713,12 @@ describe('test optimization validator-owned execution phases', () => {
         assert.strictEqual(actualDigest, file.sha256)
       }
       assert.match(plan, /Approval details: `results-atr\/approval\.json`/)
-      assert.match(plan, /approval-files\.sha256/)
       if (process.platform === 'win32') {
         assert.match(plan, /certutil -hashfile .*approval\.json"? SHA256/)
+        assert.doesNotMatch(plan, /approval-files\.sha256/)
       } else {
         assert.match(plan, /shasum -a 256 .*approval\.json/)
+        assert.match(plan, /approval-files\.sha256/)
       }
       assert.match(plan, new RegExp(`Expected SHA-256: \`${approvalDigest}\``))
       assert.ok(approvalMaterial.commands.length > 0)
