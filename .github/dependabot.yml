@@ -16,7 +16,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 5
+      default-days: 7
       exclude:
         - "@datadog/*"
     groups:
@@ -46,7 +46,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 5
+      default-days: 7
     labels:
       - dependabot
       - dependencies
@@ -76,7 +76,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 100
     cooldown:
-      default-days: 5
+      default-days: 7
       exclude:
         - "@datadog/*"
     versioning-strategy: "increase"
@@ -147,7 +147,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 100
     cooldown:
-      default-days: 5
+      default-days: 7
     labels:
       - dependabot
       - dependencies
@@ -201,7 +201,7 @@ updates:
     # single blocked group otherwise stalls every other group.
     open-pull-requests-limit: 10
     cooldown:
-      default-days: 3
+      default-days: 7
       exclude:
         - "@datadog/*"
     labels:
@@ -382,7 +382,7 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 1
     cooldown:
-      default-days: 3
+      default-days: 7
       exclude:
         - "@datadog/*"
     labels:
