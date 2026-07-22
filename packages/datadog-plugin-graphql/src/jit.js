@@ -26,8 +26,10 @@ const { resolveJitDefault, resolveJitDefaultInvocation, wrapJitResolve } = Graph
  *   parentTypeName: string,
  *   pathDepth: number,
  *   pathKey: string,
+ *   resource: string,
  *   returnType: import('graphql').GraphQLOutputType,
- *   selectionDepth: number
+ *   selectionDepth: number,
+ *   tags: Record<string, string | undefined>
  * }} JitFieldDescriptor
  * @typedef {{
  *   fields: JitFieldDescriptor[],
@@ -287,18 +289,27 @@ function getOrCreateDescriptor (context, responsePath, input) {
   let parentPath = responsePath.prev
   while (parentPath && parentPath.type !== 'literal') parentPath = parentPath.prev
 
+  const baseTypeName = getBaseTypeName(input.returnType)
+  const collapsedPath = getCollapsedPath(responsePath)
   const descriptor = {
     id: plan.fields.length,
-    baseTypeName: getBaseTypeName(input.returnType),
-    collapsedPath: getCollapsedPath(responsePath),
+    baseTypeName,
+    collapsedPath,
     fieldName: input.fieldName,
     fieldNode: input.fieldNodes?.[0],
     parentPathKey: parentPath ? serializeCompilerPath(parentPath) : undefined,
     parentTypeName: input.parentType.name,
     pathDepth: getPathDepth(responsePath, true),
     pathKey,
+    resource: `${input.fieldName}:${input.returnType}`,
     returnType: input.returnType,
     selectionDepth: getPathDepth(responsePath, false),
+    tags: {
+      'graphql.field.coordinates': `${input.parentType.name}.${input.fieldName}`,
+      'graphql.field.name': input.fieldName,
+      'graphql.field.path': collapsedPath,
+      'graphql.field.type': baseTypeName,
+    },
   }
 
   plan.fields.push(descriptor)

@@ -34,8 +34,10 @@ const {
  *   parentId?: number,
  *   parentTypeName: string,
  *   pathDepth: number,
+ *   resource: string,
  *   returnType: import('graphql').GraphQLOutputType,
- *   selectionDepth: number
+ *   selectionDepth: number,
+ *   tags: Record<string, string | undefined>
  * }} JitFieldDescriptor
  */
 
@@ -408,19 +410,20 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // ctx form: startSpan sets field.currentStore = { ...activeStore, span }
     // without entering it. Only the field's first resolver call runs in that
     // store (isFirst check in wrapResolve); siblings use field.parentStore.
+    const meta = field.tags ?? {
+      'graphql.field.coordinates': `${field.parentTypeName}.${fieldName}`,
+      'graphql.field.name': fieldName,
+      'graphql.field.path': collapsedKey,
+      'graphql.field.type': baseTypeName,
+      'graphql.source': source,
+    }
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
-      resource: `${fieldName}:${returnType}`,
+      resource: field.resource ?? `${fieldName}:${returnType}`,
       childOf,
       type: 'graphql',
       startTime,
-      meta: {
-        'graphql.field.coordinates': `${field.parentTypeName}.${fieldName}`,
-        'graphql.field.name': fieldName,
-        'graphql.field.path': collapsedKey,
-        'graphql.field.type': baseTypeName,
-        'graphql.source': source,
-      },
+      meta,
     }, field)
 
     field.span = span
@@ -698,9 +701,11 @@ function resolveJitField (resolve, self, callArguments, args, info, rootCtx, des
     infoPath: info.path,
     pathString,
     collapsedKey: pathString,
+    resource: descriptor.resource,
     span: null,
     parentStore: null,
     currentStore: null,
+    tags: config.collapse && !config.source ? descriptor.tags : undefined,
   }
   if (config.collapse) {
     rootCtx.jitFields[descriptor.id] = field
@@ -755,9 +760,11 @@ function resolveJitDefault (rootCtx, descriptorId, source, path) {
     infoPath: undefined,
     pathString,
     collapsedKey: pathString,
+    resource: descriptor.resource,
     span: null,
     parentStore: null,
     currentStore: null,
+    tags: rootCtx.config.collapse && !rootCtx.config.source ? descriptor.tags : undefined,
   }
   if (rootCtx.config.collapse) {
     rootCtx.jitFields[descriptorId] = field
