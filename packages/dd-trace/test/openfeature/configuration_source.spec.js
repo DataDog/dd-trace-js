@@ -52,6 +52,7 @@ describe('OpenFeature configuration source', () => {
       'https://ufc-server.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/server?dd_env=my+env'
     )
     assert.strictEqual(resolved.apiKey, 'test-api-key')
+    assert.strictEqual(resolved.allowInsecureApiKey, false)
     assert.strictEqual(resolved.pollIntervalMs, 30_000)
     assert.strictEqual(resolved.requestTimeoutMs, 5000)
   })
@@ -92,6 +93,18 @@ describe('OpenFeature configuration source', () => {
       )
     })
   }
+
+  it('allows a cleartext custom endpoint for local development and proxies', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'http://flags.dev.internal:8080'
+
+    const resolved = createSourceConfig()
+    assert.strictEqual(
+      resolved.endpoint.toString(),
+      'http://flags.dev.internal:8080/api/v2/feature-flagging/config/rules-based/server'
+    )
+    assert.strictEqual(resolved.allowInsecureApiKey, true)
+  })
 
   it('preserves an exact configured path and query', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
@@ -156,20 +169,6 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
-  it('rejects cleartext non-loopback endpoints', () => {
-    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'http://flags.example.test'
-
-    const source = configurationSource.create(config, sinon.spy())
-
-    assert.strictEqual(source, undefined)
-    sinon.assert.calledOnceWithMatch(
-      log.error,
-      'Unable to configure Feature Flagging configuration source',
-      sinon.match.instanceOf(Error)
-    )
-    sinon.assert.notCalled(AgentlessConfigurationSource)
-  })
-
   it('rejects malformed endpoints without logging their sensitive value', () => {
     const sentinel = 'sensitive-value'
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = `https://${sentinel} value`
@@ -187,7 +186,19 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(log.error.firstCall.args[1].cause, undefined)
   })
 
-  it('requires an API key without enabling a source', () => {
+  it('creates a source for a custom API without a Datadog API key', () => {
+    delete config.DD_API_KEY
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://flags.example.test/custom/ufc'
+
+    const source = configurationSource.create(config, sinon.spy())
+
+    assert.ok(source instanceof AgentlessConfigurationSource)
+    assert.strictEqual(AgentlessConfigurationSource.firstCall.args[0].apiKey, undefined)
+    sinon.assert.notCalled(log.error)
+  })
+
+  it('requires a Datadog API key for the default Datadog API', () => {
     delete config.DD_API_KEY
 
     const source = configurationSource.create(config, sinon.spy())
@@ -195,7 +206,7 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.calledOnceWithMatch(
       log.error,
       'Unable to configure Feature Flagging configuration source',
-      sinon.match.instanceOf(Error)
+      sinon.match.has('message', 'DD_API_KEY is required for the Datadog Feature Flagging API')
     )
     assert.strictEqual(source, undefined)
     sinon.assert.notCalled(AgentlessConfigurationSource)

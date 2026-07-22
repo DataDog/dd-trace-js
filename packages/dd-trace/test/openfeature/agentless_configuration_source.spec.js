@@ -48,6 +48,7 @@ describe('AgentlessConfigurationSource', () => {
     applyConfiguration = sinon.stub()
     config = {
       endpoint: new URL('http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'),
+      allowInsecureApiKey: true,
       pollIntervalMs: 30_000,
       requestTimeoutMs: 2000,
       apiKey: 'test-api-key',
@@ -146,6 +147,7 @@ describe('AgentlessConfigurationSource', () => {
     assert.strictEqual(requests[0].data, '')
     assert.strictEqual(requests[0].options.url, config.endpoint)
     assert.strictEqual(requests[0].options.method, 'GET')
+    assert.strictEqual(requests[0].options.allowInsecureApiKey, config.allowInsecureApiKey)
     assert.strictEqual(requests[0].options.retry, false)
     assert.strictEqual(requests[0].options.timeout, 2000)
     assert.strictEqual(requests[0].options.headers['DD-API-KEY'], 'test-api-key')
@@ -181,13 +183,14 @@ describe('AgentlessConfigurationSource', () => {
     clock.restore()
     clock = undefined
     const body = zlib.gzipSync(responseBody())
-    nock('http://127.0.0.1:8080', {
+    config.endpoint = new URL('http://flags.dev.internal:8080/custom/ufc')
+    nock('http://flags.dev.internal:8080', {
       reqheaders: {
         'accept-encoding': 'gzip',
         'dd-api-key': 'test-api-key',
       },
     })
-      .get('/api/v2/feature-flagging/config/rules-based/server')
+      .get('/custom/ufc')
       .reply(200, body, {
         'content-encoding': 'gzip',
         etag: '"real-path"',
@@ -488,6 +491,22 @@ describe('AgentlessConfigurationSource', () => {
 
     assert.strictEqual(requests.length, 2)
     sinon.assert.calledOnce(log.warn)
+    sinon.assert.notCalled(applyConfiguration)
+  })
+
+  it('omits a missing API key and reports the endpoint authentication failure', async () => {
+    delete config.apiKey
+    responses.push({ statusCode: 401 })
+
+    source().start()
+    await flush()
+
+    assert.strictEqual(Object.hasOwn(requests[0].options.headers, 'DD-API-KEY'), false)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Feature Flagging agentless endpoint returned HTTP %d; verify DD_API_KEY is configured and valid',
+      401
+    )
     sinon.assert.notCalled(applyConfiguration)
   })
 

@@ -18,9 +18,10 @@ const RETRY_JITTER = 0.2
 /**
  * @typedef {object} AgentlessSourceConfig
  * @property {URL} endpoint
+ * @property {boolean} allowInsecureApiKey
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
- * @property {string} apiKey
+ * @property {string | undefined} apiKey
  */
 
 /**
@@ -138,7 +139,7 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
-    headers['DD-API-KEY'] = this.#config.apiKey
+    if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     if (this.#etag) headers['If-None-Match'] = this.#etag
 
     /**
@@ -164,6 +165,8 @@ class AgentlessConfigurationSource {
         url: this.#config.endpoint,
         method: 'GET',
         headers,
+        // An explicit operator override may be a cleartext development or dogfooding proxy.
+        allowInsecureApiKey: this.#config.allowInsecureApiKey,
         retry: false,
         signal,
         timeout: this.#config.requestTimeoutMs,
