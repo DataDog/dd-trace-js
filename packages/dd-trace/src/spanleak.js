@@ -3,6 +3,7 @@
 /* eslint-disable no-console */
 
 const SortedSet = require('../../../vendor/dist/tlhunter-sorted-set')
+const { createWeakRef } = require('./util')
 
 const INTERVAL = 1000 // look for expired spans every 1s
 const LIFETIME = 60 * 1000 // all spans have a max lifetime of 1m
@@ -83,7 +84,7 @@ module.exports.addSpan = function (span) {
 
   const now = Date.now()
   const expiration = now + LIFETIME
-  const wrapped = new WeakRef(span)
+  const wrapped = createWeakRef(span) // without WeakRef, this pins the span until the scrubber's interval clears it
   spans.add(wrapped, expiration)
 }
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
+const { createWeakRef } = require('../util')
 
 const legacyStorage = storage('legacy')
 
@@ -19,7 +20,7 @@ const kReq = Symbol('dd-trace.appsec.req')
  * @returns {object}
  */
 function withRequest (store, req) {
-  return { ...store, [kReq]: new WeakRef(req) }
+  return { ...store, [kReq]: createWeakRef(req) }
 }
 
 /**

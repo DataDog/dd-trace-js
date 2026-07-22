@@ -9,6 +9,7 @@ const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
+const { createFinalizationRegistry } = require('../util')
 const { storage } = require('../../../datadog-core')
 const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
@@ -458,7 +459,7 @@ class DatadogSpan {
 }
 
 function createRegistry (type) {
-  return new global.FinalizationRegistry(name => {
+  return createFinalizationRegistry(name => {
     runtimeMetrics.decrement(`runtime.node.spans.${type}`)
     runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
   })

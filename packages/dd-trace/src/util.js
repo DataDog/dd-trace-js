@@ -32,6 +32,27 @@ function isError (value) {
   return Boolean(value?.message || value instanceof Error)
 }
 
+// Returns a real FinalizationRegistry, or a no-op stand-in on runtimes without it.
+/**
+ * @param {(heldValue: unknown) => void} callback
+ * @returns {FinalizationRegistry<unknown>|object}
+ */
+function createFinalizationRegistry (callback) {
+  return typeof FinalizationRegistry === 'function'
+    ? new FinalizationRegistry(callback)
+    : { register () {}, unregister () {} }
+}
+
+// Returns a real WeakRef, or a strong-reference stand-in with the same deref() shape.
+/**
+ * @template T
+ * @param {T} target
+ * @returns {WeakRef<T>|{ deref: () => T }}
+ */
+function createWeakRef (target) {
+  return typeof WeakRef === 'function' ? new WeakRef(target) : { deref: () => target }
+}
+
 // Matches a glob pattern to a given subject string
 function globMatch (pattern, subject) {
   if (typeof pattern === 'string') pattern = pattern.toLowerCase()
@@ -109,6 +130,8 @@ module.exports = {
   isTrue,
   isFalse,
   isError,
+  createFinalizationRegistry,
+  createWeakRef,
   globMatch,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,

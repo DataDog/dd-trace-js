@@ -679,4 +679,51 @@ describe('Span', () => {
       })
     })
   })
+
+  describe('when FinalizationRegistry is unavailable', () => {
+    let realFinalizationRegistry
+
+    beforeEach(() => {
+      realFinalizationRegistry = global.FinalizationRegistry
+      delete global.FinalizationRegistry
+    })
+
+    afterEach(() => {
+      global.FinalizationRegistry = realFinalizationRegistry
+    })
+
+    it('should not throw when the module is loaded', () => {
+      let caught
+      try {
+        proxyquire('../../src/opentracing/span', {
+          perf_hooks: { performance: { now } },
+          '../id': id,
+          '../tagger': tagger,
+        })
+      } catch (e) {
+        caught = e
+      }
+      assert.strictEqual(caught, undefined)
+    })
+
+    it('should fall back to a no-op registry so span counts do not throw', () => {
+      const NoRegistrySpan = proxyquire('../../src/opentracing/span', {
+        perf_hooks: { performance: { now } },
+        '../id': id,
+        '../tagger': tagger,
+      })
+      const spanCountsTracer = { _config: { ...getConfig(), DD_TRACE_EXPERIMENTAL_SPAN_COUNTS: true } }
+      const noRegistrySpan = new NoRegistrySpan(spanCountsTracer, processor, prioritySampler, {
+        operationName: 'operation',
+      })
+
+      let caught
+      try {
+        noRegistrySpan.finish()
+      } catch (e) {
+        caught = e
+      }
+      assert.strictEqual(caught, undefined)
+    })
+  })
 })
