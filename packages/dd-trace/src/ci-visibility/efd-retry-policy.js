@@ -8,45 +8,74 @@ const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
 ]
 
 /**
+ * @typedef {object} EfdDurationRetryCount
+ * @property {number} durationLimitMs
+ * @property {number} retryCount
+ */
+
+/**
+ * @typedef {object} EfdRetryPolicy
+ * @property {EfdDurationRetryCount[]} durationRetryCounts
+ * @property {number} schedulingRetryCount
+ */
+
+/**
  * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries
+ * @param {EfdRetryPolicy} retryPolicy
  * @returns {number}
  */
-function getEfdRetryCount (durationMs, slowTestRetries) {
-  for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
-    if (durationMs < limitMs) {
-      return slowTestRetries[key] ?? 0
+function getEfdRetryCountForDuration (durationMs, retryPolicy) {
+  for (const { durationLimitMs, retryCount } of retryPolicy.durationRetryCounts) {
+    if (durationMs < durationLimitMs) {
+      return retryCount
     }
   }
   return 0
 }
 
 /**
- * @param {Record<string, number> | undefined} slowTestRetries
- * @returns {number | undefined}
+ * @param {Record<string, number> | undefined} retriesByDuration
+ * @returns {EfdRetryPolicy}
  */
-function getMaxEfdRetryCount (slowTestRetries) {
-  let maxRetryCount
-  for (const { key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
-    const retryCount = slowTestRetries?.[key]
-    if (retryCount !== undefined && (maxRetryCount === undefined || retryCount > maxRetryCount)) {
-      maxRetryCount = retryCount
+function createEfdRetryPolicy (retriesByDuration = {}) {
+  const durationRetryCounts = []
+  let schedulingRetryCount = 0
+  for (const { limitMs: durationLimitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
+    const configuredRetryCount = retriesByDuration[key]
+    const retryCount = Number.isSafeInteger(configuredRetryCount) && configuredRetryCount >= 0
+      ? configuredRetryCount
+      : 0
+    durationRetryCounts.push({ durationLimitMs, retryCount })
+    if (retryCount > schedulingRetryCount) {
+      schedulingRetryCount = retryCount
     }
   }
-  return maxRetryCount
+  return {
+    durationRetryCounts,
+    schedulingRetryCount,
+  }
 }
 
 /**
- * @param {Record<string, number>} slowTestRetries
- * @returns {number}
+ * @param {EfdRetryPolicy | undefined} retryPolicy
+ * @returns {boolean}
  */
-function getEfdSchedulingRetryCount (slowTestRetries) {
-  return getMaxEfdRetryCount(slowTestRetries) ?? 0
+function hasEfdRetries (retryPolicy) {
+  return (retryPolicy?.schedulingRetryCount ?? 0) > 0
+}
+
+/**
+ * @param {number} retryIndex
+ * @param {number | undefined} retryCount
+ * @returns {boolean}
+ */
+function shouldSkipEfdRetry (retryIndex, retryCount) {
+  return retryCount !== undefined && retryIndex > retryCount
 }
 
 module.exports = {
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-  getEfdRetryCount,
-  getEfdSchedulingRetryCount,
-  getMaxEfdRetryCount,
+  createEfdRetryPolicy,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
 }

@@ -12,6 +12,12 @@ const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
+  createEfdRetryPolicy,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -30,7 +36,6 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
-  getEfdRetryCount,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   getTestOptimizationRequestResults,
@@ -96,6 +101,7 @@ const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESS
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 let skippableSuites = []
 let skippableSuitesCoverage = {}
@@ -111,7 +117,6 @@ let numSkippedSuites = 0
 let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionSlowTestRetries = {}
 let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
@@ -136,8 +141,10 @@ const originalTestFns = new WeakMap()
 const originalHookFns = new WeakMap()
 const concurrentHookContextQueues = new WeakMap()
 const concurrentHookFns = new WeakMap()
+const discardedEfdRetryTests = new WeakSet()
+const efdRetryMetadataByTest = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
-const newTestsTestStatuses = new Map()
+const efdTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkerChannels = new WeakMap()
 // New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
@@ -170,11 +177,37 @@ const handledJestEvents = new WeakSet()
  * @property {unknown} [concurrentTestThisArg]
  * @property {boolean} [isAttemptToFixRetry]
  * @property {boolean} [isEfdRetry]
+ * @property {EfdRetryDecision} [efdRetryDecision]
+ * @property {number} [efdRetryIndex]
  * @property {boolean} [isModified]
  * @property {(...args: unknown[]) => unknown} [serialTest]
  * @property {unknown} [serialTestThisArg]
  * @property {(...args: unknown[]) => unknown} [sourceTestFn]
  * @property {string} [testParameters]
+ */
+
+/**
+ * @typedef {object} JestRetryOptions
+ * @property {object} [concurrentTestState]
+ * @property {object} [describeBlock]
+ * @property {EfdRetryDecision} [efdRetryDecision]
+ * @property {object} jestEvent
+ * @property {object} state
+ * @property {boolean} [isModified]
+ * @property {number} retryCount
+ * @property {string} retryType
+ */
+
+/**
+ * @typedef {object} EfdRetryGate
+ * @property {Promise<boolean>} promise
+ * @property {(shouldRun: boolean) => void} resolve
+ */
+
+/**
+ * @typedef {object} EfdRetryDecision
+ * @property {EfdRetryGate[]} gates
+ * @property {number | undefined} retryCount
  */
 
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
@@ -462,6 +495,11 @@ function getWrappedCustomHandleTestEvent (handleTestEvent, datadogHandleTestEven
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
+    #deferredRetryTests
+    #earlyFlakeDetectionRetryPolicy
+    #efdRetryDecisionsByName
+    #efdRetryTestsByName
+
     constructor (config, context) {
       super(config, context)
       const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
@@ -501,9 +539,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.concurrentTestSourceFns = new WeakMap()
       this.wrappedConcurrentTestFunctions = new WeakSet()
       this.jestEachBind = undefined
+      this.#efdRetryDecisionsByName = new Map()
+      this.#efdRetryTestsByName = new Map()
+      this.#deferredRetryTests = []
+      this.#earlyFlakeDetectionRetryPolicy =
+        this.testEnvironmentOptions._ddEarlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
 
       if (this.isKnownTestsEnabled) {
-        earlyFlakeDetectionSlowTestRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionSlowTestRetries ?? {}
         try {
           this.knownTestsForThisSuite = this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
 
@@ -772,6 +814,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         frameworkVersion: jestVersion,
         isNew: isNewTest,
         isEfdRetry: options?.isEfdRetry === true,
+        efdRetryDecision: options?.efdRetryDecision,
+        efdRetryIndex: options?.efdRetryIndex,
         isAttemptToFix,
         isAttemptToFixRetry: options?.isAttemptToFixRetry === true,
         isJestRetry: false,
@@ -895,20 +939,35 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       const runTest = () => testFn.apply(thisArg, args)
-      if (!ctx.isAttemptToFixRetry && !ctx.isEfdRetry) {
-        ctx.isJestRetry = concurrentTestState.numExecutions > 0
-      }
-      concurrentTestState.numExecutions++
+      const runTestInContext = () => {
+        if (!ctx.isAttemptToFixRetry && !ctx.isEfdRetry) {
+          ctx.isJestRetry = concurrentTestState.numExecutions > 0
+        }
+        concurrentTestState.numExecutions++
 
-      if (ctx.currentStore) {
-        return testFnCh.runStores(ctx, runTest)
+        if (ctx.currentStore) {
+          return testFnCh.runStores(ctx, runTest)
+        }
+
+        let result
+        testStartCh.runStores(ctx, () => {
+          result = testFnCh.runStores(ctx, runTest)
+        })
+        return result
       }
 
-      let result
-      testStartCh.runStores(ctx, () => {
-        result = testFnCh.runStores(ctx, runTest)
+      const retryGate = ctx.efdRetryDecision?.gates[ctx.efdRetryIndex - 1]
+      if (!retryGate) {
+        return runTestInContext()
+      }
+
+      return retryGate.promise.then(shouldRun => {
+        if (!shouldRun) {
+          ctx.isDiscardedEfdRetry = true
+          return
+        }
+        return runTestInContext()
       })
-      return result
     }
 
     /**
@@ -1042,30 +1101,53 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return result
     }
 
-    // Generic function to handle test retries
+    /**
+     * Creates ordered execution gates for pre-registered concurrent EFD retries.
+     *
+     * @param {number} retryCount
+     * @returns {EfdRetryDecision}
+     */
+    createEfdRetryDecision (retryCount) {
+      const gates = []
+      for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
+        let resolveGate
+        const promise = new Promise(resolve => {
+          resolveGate = resolve
+        })
+        gates.push({ promise, resolve: resolveGate })
+      }
+      return { gates, retryCount: undefined }
+    }
+
+    /**
+     * Registers retry tests while Jest still accepts additions to the test tree.
+     *
+     * @param {JestRetryOptions} options
+     * @returns {void}
+     */
     retryTest ({
+      concurrentTestState: registeredConcurrentTestState,
+      efdRetryDecision,
       jestEvent,
-      forceSerial,
+      state,
+      isModified,
       retryCount,
       retryType,
     }) {
-      const { testName, fn, timeout } = jestEvent
+      const { testName, fn, mode, timeout } = jestEvent
       const isAttemptToFixRetry = retryType === 'Test Management (Attempt to Fix)'
       const isEfdRetry = retryType === 'Impacted tests' || retryType === 'Early flake detection'
-      for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
-        const concurrentTestState = this.concurrentTestStates.get(fn)
+      for (let retryIndex = 1; retryIndex <= retryCount; retryIndex++) {
+        const concurrentTestState = registeredConcurrentTestState || this.concurrentTestStates.get(fn)
+        let retryFn
         if (concurrentTestState) {
-          const test = forceSerial
-            ? concurrentTestState.serialTest
-            : (
-                concurrentTestState.concurrentTest ||
-                getOriginalConcurrentTest(this.global.test?.concurrent)
-              )
+          const test = concurrentTestState.concurrentTest ||
+            getOriginalConcurrentTest(this.global.test?.concurrent)
           if (typeof test !== 'function') {
             log.error('%s could not retry concurrent test because test is undefined', retryType)
             continue
           }
-          const retryFn = this.createConcurrentTestFn(
+          retryFn = this.createConcurrentTestFn(
             testName,
             concurrentTestState.testFn,
             undefined,
@@ -1073,22 +1155,87 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             {
               concurrentTest: concurrentTestState.concurrentTest,
               concurrentTestThisArg: concurrentTestState.concurrentTestThisArg,
+              efdRetryDecision,
+              efdRetryIndex: retryIndex,
               isAttemptToFixRetry,
               isEfdRetry,
-              isModified: concurrentTestState.ctx.isModified,
+              isModified: isModified ?? concurrentTestState.ctx.isModified,
               serialTest: concurrentTestState.serialTest,
               serialTestThisArg: concurrentTestState.serialTestThisArg,
               testParameters: concurrentTestState.ctx.testParameters,
             }
           )
-          const thisArg = forceSerial
-            ? concurrentTestState.serialTestThisArg
-            : concurrentTestState.concurrentTestThisArg
-          test.call(thisArg, testName, retryFn, timeout)
+          test.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
         } else if (this.global.test) {
-          this.global.test(testName, fn, timeout)
+          const test = mode === 'only' ? this.global.test.only : this.global.test
+          retryFn = isEfdRetry
+            ? shimmer.wrapFunction(fn, fn => function () {
+              return fn.apply(this, arguments)
+            })
+            : fn
+          test(testName, retryFn, timeout)
         } else {
           log.error('%s could not retry test because global.test is undefined', retryType)
+          continue
+        }
+
+        if (isEfdRetry) {
+          const retryTest = state.currentDescribeBlock?.children?.at(-1)
+          if (retryTest?.fn !== retryFn) {
+            log.error('%s could not retain its pre-registered Jest retry', retryType)
+            continue
+          }
+          efdRetryMetadataByTest.set(retryTest, { isModified: Boolean(isModified), retryIndex })
+          const retryTests = this.#efdRetryTestsByName.get(
+            this.getTestNameFromAddTestEvent(jestEvent, state)
+          )
+          if (retryTests) {
+            retryTests.push(retryTest)
+          } else {
+            this.#efdRetryTestsByName.set(
+              this.getTestNameFromAddTestEvent(jestEvent, state),
+              [retryTest]
+            )
+          }
+        }
+      }
+    }
+
+    /**
+     * Queues retry registration until Jest has inserted the original test node.
+     *
+     * @param {JestRetryOptions} retryOptions
+     * @returns {void}
+     */
+    deferRetryTest (retryOptions) {
+      retryOptions.describeBlock = retryOptions.state.currentDescribeBlock
+      this.#deferredRetryTests.push(retryOptions)
+    }
+
+    /**
+     * Registers queued retries before Jest handles the next circus event.
+     *
+     * @returns {void}
+     */
+    flushDeferredRetryTests () {
+      const deferredRetryTests = this.#deferredRetryTests
+      this.#deferredRetryTests = []
+
+      for (const retryOptions of deferredRetryTests) {
+        const { describeBlock, state } = retryOptions
+        if (state.hasStarted) {
+          log.error('%s could not register retries before Jest started', retryOptions.retryType)
+          continue
+        }
+
+        const currentDescribeBlock = state.currentDescribeBlock
+        state.currentDescribeBlock = describeBlock
+        try {
+          this.retryTest(retryOptions)
+        } catch (error) {
+          log.error('%s could not register retries', retryOptions.retryType, error)
+        } finally {
+          state.currentDescribeBlock = currentDescribeBlock
         }
       }
     }
@@ -1100,9 +1247,99 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return removeSeedSuffixFromTestName(testName)
     }
 
+    /**
+     * Classifies a newly registered test and pre-registers every retry Jest may need.
+     *
+     * @param {object} event
+     * @param {object} state
+     * @returns {void}
+     */
+    handleAddTestEvent (event, state) {
+      if (event.concurrent) {
+        this.hasConcurrentTests = true
+      }
+      if (event.failing) {
+        return
+      }
+
+      const testFullName = this.getTestNameFromAddTestEvent(event, state)
+      const isSkipped = event.mode === 'todo' || event.mode === 'skip'
+      const isAttemptToFix = this.isTestManagementTestsEnabled &&
+        this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
+      const isDisabled = this.isTestManagementTestsEnabled &&
+        this.testManagementTestsForThisSuite?.disabled?.includes(testFullName)
+      const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
+      const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
+        concurrentTestContexts?.at(-1)?.concurrentTestState
+
+      if (isAttemptToFix && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+        retriedTestsToNumAttempts.set(testFullName, 0)
+        testsToBeRetried.add(testFullName)
+        this.deferRetryTest({
+          concurrentTestState,
+          jestEvent: event,
+          state,
+          retryCount: testManagementAttemptToFixRetries,
+          retryType: 'Test Management (Attempt to Fix)',
+        })
+      }
+
+      const isModified = this.isImpactedTestsEnabled && (
+        concurrentTestState?.ctx?.isModified ||
+        this.isTestModified(event.asyncError, event.fn)
+      )
+      const isNew = this.isKnownTestsEnabled && !this.knownTestsForThisSuite.includes(testFullName)
+
+      if (isNew && !isSkipped) {
+        newTests.add(testFullName)
+        if (DYNAMIC_NAME_RE.test(testFullName)) {
+          // Populated directly for runInBand; for parallel workers the main process
+          // collects these from the TEST_HAS_DYNAMIC_NAME span tag via worker-report:trace.
+          newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
+        }
+      }
+
+      if (
+        isAttemptToFix ||
+        isDisabled ||
+        isSkipped ||
+        !this.isEarlyFlakeDetectionEnabled ||
+        !hasEfdRetries(this.#earlyFlakeDetectionRetryPolicy) ||
+        (!isNew && !isModified) ||
+        retriedTestsToNumAttempts.has(testFullName)
+      ) {
+        return
+      }
+
+      retriedTestsToNumAttempts.set(testFullName, 0)
+      testsToBeRetried.add(testFullName)
+      efdCandidates.add(testFullName)
+      const schedulingRetryCount = this.#earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+      const efdRetryDecision = concurrentTestState
+        ? this.createEfdRetryDecision(schedulingRetryCount)
+        : undefined
+      if (efdRetryDecision) {
+        this.#efdRetryDecisionsByName.set(testFullName, efdRetryDecision)
+      }
+      this.deferRetryTest({
+        concurrentTestState,
+        efdRetryDecision,
+        isModified,
+        jestEvent: event,
+        state,
+        retryCount: schedulingRetryCount,
+        retryType: isModified ? 'Impacted tests' : 'Early flake detection',
+      })
+    }
+
     async handleTestEvent (event, state) {
       if (isDatadogJestEventHandled(event)) return
       markDatadogJestEventHandled(event)
+
+      this.flushDeferredRetryTests()
+      if (event.name === 'add_test') {
+        this.handleAddTestEvent(event, state)
+      }
 
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
@@ -1160,7 +1397,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
-        let isModified = this.isTestModified(event.test.asyncError, event.test.fn)
+        const efdRetryMetadata = efdRetryMetadataByTest.get(event.test)
+        let isModified = efdRetryMetadata?.isModified ||
+          this.isTestModified(event.test.asyncError, event.test.fn)
         if (concurrentCtx?.isModified || concurrentTestState?.ctx?.isModified) {
           isModified = true
         }
@@ -1169,7 +1408,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isNewTest = newTests.has(testName)
         }
 
-        const willRunEfd = this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)
+        const willRunEfd = this.isEarlyFlakeDetectionEnabled &&
+          hasEfdRetries(this.#earlyFlakeDetectionRetryPolicy) &&
+          (isNewTest || isModified)
         event.test[ATR_RETRY_SUPPRESSION_FLAG] = Boolean(isAttemptToFix || willRunEfd)
 
         if (!isAttemptToFix && willRunEfd) {
@@ -1187,7 +1428,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.testParameters = testParameters
         ctx.frameworkVersion = jestVersion
         ctx.isNew = isNewTest
-        ctx.isEfdRetry = ctx.isEfdRetry || numEfdRetry > 0
+        ctx.isEfdRetry = ctx.isEfdRetry || efdRetryMetadata !== undefined || numEfdRetry > 0
+        ctx.efdRetryIndex = ctx.efdRetryIndex ?? efdRetryMetadata?.retryIndex
         ctx.isAttemptToFix = isAttemptToFix
         ctx.isAttemptToFixRetry = ctx.isAttemptToFixRetry || numOfAttemptsToFixRetries > 0
         ctx.isJestRetry = isJestRetry
@@ -1296,68 +1538,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
 
-      if (event.name === 'add_test') {
-        if (event.concurrent) {
-          this.hasConcurrentTests = true
-        }
-
-        if (event.failing) {
-          return
-        }
-
-        const testFullName = this.getTestNameFromAddTestEvent(event, state)
-        const isSkipped = event.mode === 'todo' || event.mode === 'skip'
-        const isAttemptToFix = this.isTestManagementTestsEnabled &&
-          this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
-        if (
-          isAttemptToFix &&
-          !isSkipped &&
-          !retriedTestsToNumAttempts.has(testFullName)
-        ) {
-          retriedTestsToNumAttempts.set(testFullName, 0)
-          testsToBeRetried.add(testFullName)
-          this.retryTest({
-            jestEvent: event,
-            retryCount: testManagementAttemptToFixRetries,
-            retryType: 'Test Management (Attempt to Fix)',
-          })
-        }
-        if (!isAttemptToFix && this.isImpactedTestsEnabled) {
-          const concurrentTestState = this.concurrentTestStates.get(event.fn)
-          const isModified = concurrentTestState?.ctx?.isModified ||
-            this.isTestModified(event.asyncError, event.fn)
-          if (
-            isModified &&
-            !isSkipped &&
-            !retriedTestsToNumAttempts.has(testFullName) &&
-            this.isEarlyFlakeDetectionEnabled
-          ) {
-            retriedTestsToNumAttempts.set(testFullName, 0)
-            testsToBeRetried.add(testFullName)
-            efdCandidates.add(testFullName)
-          }
-        }
-        if (!isAttemptToFix && this.isKnownTestsEnabled) {
-          const isNew = !this.knownTestsForThisSuite.includes(testFullName)
-          if (isNew && !isSkipped) {
-            newTests.add(testFullName)
-          }
-          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
-            if (DYNAMIC_NAME_RE.test(testFullName)) {
-              // Populated directly for runInBand; for parallel workers the main process
-              // collects these from the TEST_HAS_DYNAMIC_NAME span tag via worker-report:trace.
-              newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
-            }
-            retriedTestsToNumAttempts.set(testFullName, 0)
-            if (this.isEarlyFlakeDetectionEnabled) {
-              testsToBeRetried.add(testFullName)
-              efdCandidates.add(testFullName)
-              // Cloning is deferred to test_done after the first execution,
-              // when we know the duration and can choose the right retry count.
-            }
-          }
-        }
-      }
       if (event.name === 'test_done') {
         const originalError = event.test?.errors?.[0]
         let status = 'pass'
@@ -1367,6 +1547,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // restore in case it is retried
         if (originalTestFns.has(event.test)) {
           event.test.fn = originalTestFns.get(event.test)
+        }
+        const retryCtx = testContexts.get(event.test)
+        if (retryCtx?.isDiscardedEfdRetry) {
+          return
         }
         // If ATR retry is being suppressed for this test (due to EFD or Attempt to Fix taking precedence)
         // and the test has errors for this attempt, store the errors temporarily and clear them
@@ -1406,62 +1590,54 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
-        // EFD dynamic cloning: after the first execution, determine the retry count from the test's duration.
+        // The first execution selects how many pre-registered EFD retries remain runnable.
         if (
           this.isEarlyFlakeDetectionEnabled &&
-          this.isKnownTestsEnabled &&
           efdCandidates.has(testName) &&
           event.test.invocations === 1 &&
           !efdDeterminedRetries.has(testName)
         ) {
           const durationMs = event.test.duration ?? 0
-          const retryCount = getEfdRetryCount(durationMs, earlyFlakeDetectionSlowTestRetries)
+          const retryCount = getEfdRetryCountForDuration(durationMs, this.#earlyFlakeDetectionRetryPolicy)
           efdDeterminedRetries.set(testName, retryCount)
-          if (retryCount > 0) {
-            // Jest 24 points currentDescribeBlock at root here, while Jest 27+ rejects late additions.
-            const originalDescribeBlock = state.currentDescribeBlock
-            const originalHasStarted = state.hasStarted
-            state.currentDescribeBlock = event.test.parent ?? originalDescribeBlock
-            state.hasStarted = false
-            try {
-              this.retryTest({
-                forceSerial: true,
-                jestEvent: {
-                  testName: event.test.name,
-                  fn: event.test.fn,
-                  timeout: event.test.timeout,
-                },
-                retryCount,
-                retryType: 'Early flake detection',
-              })
-            } finally {
-              state.currentDescribeBlock = originalDescribeBlock
-              state.hasStarted = originalHasStarted
+          const retryTests = this.#efdRetryTestsByName.get(testName)
+          if (retryTests) {
+            for (const retryTest of retryTests) {
+              const retryIndex = efdRetryMetadataByTest.get(retryTest)?.retryIndex
+              if (shouldSkipEfdRetry(retryIndex, retryCount)) {
+                retryTest.mode = 'skip'
+                discardedEfdRetryTests.add(retryTest)
+              }
             }
-          } else {
+          }
+          const efdRetryDecision = this.#efdRetryDecisionsByName.get(testName)
+          if (efdRetryDecision) {
+            efdRetryDecision.retryCount = retryCount
+            for (let retryIndex = retryCount; retryIndex < efdRetryDecision.gates.length; retryIndex++) {
+              efdRetryDecision.gates[retryIndex].resolve(false)
+            }
+            if (retryCount > 0) {
+              efdRetryDecision.gates[0].resolve(true)
+            }
+          }
+          if (retryCount === 0) {
             efdSlowAbortedTests.add(testName)
           }
         }
 
-        let isEfdRetry = false
-        // We'll store the test statuses of the retries
-        if (this.isKnownTestsEnabled) {
-          const isNewTest = newTests.has(testName)
-          if (isNewTest) {
-            if (newTestsTestStatuses.has(testName)) {
-              newTestsTestStatuses.get(testName).push(status)
-              isEfdRetry = true
-            } else {
-              newTestsTestStatuses.set(testName, [status])
-            }
-            const testStatuses = newTestsTestStatuses.get(testName)
-            // Check if this is the last EFD retry.
-            // If it is, we'll set the failedAllTests flag to true if all the tests failed
-            const efdRetryCount = efdDeterminedRetries.get(testName) ?? 0
-            if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
-              testStatuses.every(status => status === 'fail')) {
-              failedAllTests = true
-            }
+        const isEfdRetry = retryCtx?.isEfdRetry === true ||
+          efdRetryMetadataByTest.has(event.test)
+        if (efdCandidates.has(testName)) {
+          if (efdTestStatuses.has(testName)) {
+            efdTestStatuses.get(testName).push(status)
+          } else {
+            efdTestStatuses.set(testName, [status])
+          }
+          const testStatuses = efdTestStatuses.get(testName)
+          const efdRetryCount = efdDeterminedRetries.get(testName) ?? 0
+          if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
+            testStatuses.every(status => status === 'fail')) {
+            failedAllTests = true
           }
         }
 
@@ -1508,7 +1684,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           !!ctx.isModified,
           isEfdRetry,
           isAttemptToFix,
-          numTestExecutions)
+          numTestExecutions,
+          ctx.efdRetryIndex)
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
@@ -1549,6 +1726,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (promises.isProbeReady) {
           await promises.isProbeReady
         }
+        if (
+          ctx.isEfdRetry &&
+          ctx.efdRetryIndex < ctx.efdRetryDecision?.retryCount
+        ) {
+          ctx.efdRetryDecision.gates[ctx.efdRetryIndex].resolve(true)
+        }
         if (ctx.concurrentTestState) {
           ctx.currentStore = undefined
         }
@@ -1581,9 +1764,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         retriedTestsToNumAttempts.clear()
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
+        this.#efdRetryDecisionsByName.clear()
+        this.#efdRetryTestsByName.clear()
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
+        if (discardedEfdRetryTests.has(event.test)) {
+          return
+        }
         const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {
@@ -1599,18 +1787,20 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
-    getEfdResult ({ testName, isNewTest, isModifiedTest, isEfdRetry, numberOfExecutedRetries }) {
+    getEfdResult ({ testName, isNewTest, isModifiedTest, isEfdRetry, efdRetryIndex }) {
       const isEfdEnabled = this.isEarlyFlakeDetectionEnabled
-      const isEfdActive = isEfdEnabled && (isNewTest || isModifiedTest)
+      const isEfdActive = isEfdEnabled &&
+        hasEfdRetries(this.#earlyFlakeDetectionRetryPolicy) &&
+        (isNewTest || isModifiedTest)
       const retryCount = efdDeterminedRetries.get(testName) ?? 0
       const isSlowAbort = efdSlowAbortedTests.has(testName)
-      const isLastEfdRetry = (isEfdRetry && numberOfExecutedRetries >= (retryCount + 1)) || isSlowAbort
+      const isLastEfdRetry = (isEfdRetry && efdRetryIndex === retryCount) || isSlowAbort
       const isFinalEfdTestExecution = isEfdActive && isLastEfdRetry
 
       let finalStatus
       if (isEfdActive && isFinalEfdTestExecution) {
         // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
-        const testStatuses = newTestsTestStatuses.get(testName)
+        const testStatuses = efdTestStatuses.get(testName)
         finalStatus = testStatuses && testStatuses.includes('pass') ? 'pass' : 'fail'
       }
 
@@ -1649,15 +1839,24 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return { isAttemptToFixEnabled, isFinalAttemptToFixExecution, finalStatus }
     }
 
-    getFinalStatus (testName, status, isNewTest, isModifiedTest, isEfdRetry, isAttemptToFix, numberOfTestInvocations) {
+    getFinalStatus (
+      testName,
+      status,
+      isNewTest,
+      isModifiedTest,
+      isEfdRetry,
+      isAttemptToFix,
+      numberOfTestInvocations,
+      efdRetryIndex
+    ) {
       const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
 
       const efdResult = this.getEfdResult({
+        efdRetryIndex,
         testName,
         isNewTest,
         isModifiedTest,
         isEfdRetry,
-        numberOfExecutedRetries,
       })
       const atrResult = this.getAtrResult({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations })
       const attemptToFixResult = this.getAttemptToFixResult({
@@ -1856,7 +2055,6 @@ function resetLibraryConfiguration () {
   isItrEnabled = false
   isSuitesSkippingEnabled = false
   isEarlyFlakeDetectionEnabled = false
-  earlyFlakeDetectionSlowTestRetries = {}
   earlyFlakeDetectionFaultyThreshold = 30
   isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
@@ -2233,7 +2431,6 @@ function getCliWrapper (isNewJestVersion) {
           isItrEnabled = libraryConfig.isItrEnabled
           isSuitesSkippingEnabled = isItrEnabled && libraryConfig.isSuitesSkippingEnabled
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-          earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
           earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
           isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
           isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -2371,7 +2568,7 @@ function getCliWrapper (isNewJestVersion) {
       /** @type {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} */
       let ignoredFailuresSummary
       if (isEarlyFlakeDetectionEnabled) {
-        for (const [testName, testStatuses] of newTestsTestStatuses) {
+        for (const [testName, testStatuses] of efdTestStatuses) {
           const { pass, fail } = getTestStats(testStatuses)
           if (pass > 0) { // as long as one passes, we'll consider the test passed
             numEfdFailedTestsToIgnore += fail
@@ -2853,7 +3050,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddItrCorrelationId',
   '_ddKnownTests',
   '_ddIsEarlyFlakeDetectionEnabled',
-  '_ddEarlyFlakeDetectionSlowTestRetries',
+  '_ddEarlyFlakeDetectionRetryPolicy',
   '_ddRepositoryRoot',
   '_ddTestCodeCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',

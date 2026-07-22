@@ -6,6 +6,7 @@ const { MessagePort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
@@ -50,11 +51,11 @@ const workerProcesses = new WeakSet()
 const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
-let earlyFlakeDetectionSlowTestRetries = {}
+let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
@@ -341,8 +342,7 @@ function resetLibraryConfig () {
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
-  earlyFlakeDetectionNumRetries = 0
-  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   isEarlyFlakeDetectionFaulty = false
   isDiEnabled = false
   isKnownTestsEnabled = false
@@ -355,8 +355,7 @@ function applyLibraryConfig (libraryConfig) {
   isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-  earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-  earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+  earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   isEarlyFlakeDetectionFaulty = false
   isDiEnabled = libraryConfig.isDiEnabled
   isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
@@ -369,8 +368,7 @@ function resetMainProcessProvidedContext (ctx) {
   setProvidedContext(ctx, {
     _ddIsDiEnabled: false,
     _ddIsEarlyFlakeDetectionEnabled: false,
-    _ddEarlyFlakeDetectionNumRetries: 0,
-    _ddEarlyFlakeDetectionSlowTestRetries: {},
+    _ddEarlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
@@ -510,8 +508,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
             setProvidedContext(ctx, {
               _ddIsKnownTestsEnabled: isKnownTestsEnabled,
               _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-              _ddEarlyFlakeDetectionNumRetries: earlyFlakeDetectionNumRetries,
-              _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
+              _ddEarlyFlakeDetectionRetryPolicy: earlyFlakeDetectionRetryPolicy,
             }, 'Could not send known tests to workers so Early Flake Detection will not work.')
           }
         }
@@ -603,8 +600,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
 function getNoWorkerInitState () {
   return {
     attemptToFixExecutions,
-    earlyFlakeDetectionNumRetries,
-    earlyFlakeDetectionSlowTestRetries,
+    earlyFlakeDetectionRetryPolicy,
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,

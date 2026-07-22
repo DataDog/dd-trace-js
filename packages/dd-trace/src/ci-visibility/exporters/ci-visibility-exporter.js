@@ -4,6 +4,7 @@ const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
+const { createEfdRetryPolicy } = require('../efd-retry-policy')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -318,8 +319,7 @@ class CiVisibilityExporter extends BufferingExporter {
       isItrEnabled,
       requireGit,
       isEarlyFlakeDetectionEnabled,
-      earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled,
       isDiEnabled,
@@ -333,6 +333,14 @@ class CiVisibilityExporter extends BufferingExporter {
     const earlyFlakeDetectionRetryCount =
       testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
     const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
+    const filteredEarlyFlakeDetectionRetryPolicy = hasEarlyFlakeDetectionRetryCount
+      ? createEfdRetryPolicy({
+        '5s': earlyFlakeDetectionRetryCount,
+        '10s': earlyFlakeDetectionRetryCount,
+        '30s': earlyFlakeDetectionRetryCount,
+        '5m': earlyFlakeDetectionRetryCount,
+      })
+      : earlyFlakeDetectionRetryPolicy
     return {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
@@ -340,16 +348,7 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled:
         isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
-      earlyFlakeDetectionNumRetries:
-        hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries: hasEarlyFlakeDetectionRetryCount
-        ? {
-            '5s': earlyFlakeDetectionRetryCount,
-            '10s': earlyFlakeDetectionRetryCount,
-            '30s': earlyFlakeDetectionRetryCount,
-            '5m': earlyFlakeDetectionRetryCount,
-          }
-        : earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionRetryPolicy: filteredEarlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,

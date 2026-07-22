@@ -3,7 +3,7 @@
 const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
-const { getEfdSchedulingRetryCount } = require('../efd-retry-policy')
+const { createEfdRetryPolicy } = require('../efd-retry-policy')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -42,17 +42,16 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     coverage_report_upload_enabled: isCoverageReportUploadEnabled,
   } = parsedResponse?.data?.attributes ?? parsedResponse
 
-  const earlyFlakeDetectionSlowTestRetries =
+  const earlyFlakeDetectionRetriesByDuration =
     earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES
-  const earlyFlakeDetectionNumRetries = getEfdSchedulingRetryCount(earlyFlakeDetectionSlowTestRetries)
+  const earlyFlakeDetectionRetryPolicy = createEfdRetryPolicy(earlyFlakeDetectionRetriesByDuration)
   const settings = {
     isCodeCoverageEnabled,
     isSuitesSkippingEnabled,
     isItrEnabled,
     requireGit,
     isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
-    earlyFlakeDetectionNumRetries,
-    earlyFlakeDetectionSlowTestRetries,
+    earlyFlakeDetectionRetryPolicy,
     earlyFlakeDetectionFaultyThreshold:
       earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
     isFlakyTestRetriesEnabled,

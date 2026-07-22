@@ -4,8 +4,10 @@ const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const {
+  getEfdRetryCountForDuration,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   DYNAMIC_NAME_RE,
-  getEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -207,7 +209,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const {
       isEarlyFlakeDetectionEnabled,
       isKnownTestsEnabled,
-      numRepeats,
+      earlyFlakeDetectionRetryPolicy,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
       isImpactedTestsEnabled,
@@ -246,7 +248,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       if (isEarlyFlakeDetectionEnabled) {
         efdRetryTasks.add(task)
         disableFrameworkRetries(task)
-        task.repeats = numRepeats
+        task.repeats = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
       }
       modifiedTasks.add(task)
       taskToStatuses.set(task, [])
@@ -256,7 +258,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
         efdRetryTasks.add(task)
         disableFrameworkRetries(task)
-        task.repeats = numRepeats
+        task.repeats = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
       }
       newTasks.add(task)
       taskToStatuses.set(task, [])
@@ -320,7 +322,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
       isDiEnabled,
-      slowTestRetries,
+      earlyFlakeDetectionRetryPolicy,
     } = providedContext
 
     if (isKnownTestsEnabled) {
@@ -336,7 +338,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const duration = previousExecutionStart === undefined
         ? task.result?.duration ?? 0
         : performance.now() - previousExecutionStart
-      const retryCount = getEfdRetryCount(duration, slowTestRetries)
+      const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
       efdDeterminedRetries.set(task, retryCount)
       task.repeats = retryCount
       if (retryCount === 0) {
@@ -516,7 +518,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const {
         isEarlyFlakeDetectionEnabled,
         testManagementAttemptToFixRetries,
-        slowTestRetries,
+        earlyFlakeDetectionRetryPolicy,
       } = getProvidedContext()
 
       const status = getVitestTestStatus(task, retryInfo.retry)
@@ -544,7 +546,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       ) {
         const executionStart = efdExecutionStartByTask.get(task)
         const duration = executionStart === undefined ? task.result?.duration ?? 0 : performance.now() - executionStart
-        const retryCount = getEfdRetryCount(duration, slowTestRetries)
+        const retryCount = getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
         efdDeterminedRetries.set(task, retryCount)
         task.repeats = retryCount
         if (retryCount === 0) {
@@ -726,7 +728,8 @@ addHook({
             providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
           if (isEfdRetry) {
             const statuses = taskToStatuses.get(task)
-            const efdRetryCount = efdDeterminedRetries.get(task) ?? providedContext.numRepeats
+            const efdRetryCount = efdDeterminedRetries.get(task) ??
+              providedContext.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
             // statuses only includes repetitions (not the initial run), so we check against retry count (not +1)
             if (efdRetryCount > 0 && statuses && statuses.length === efdRetryCount &&
               statuses.every(status => status === 'fail')) {

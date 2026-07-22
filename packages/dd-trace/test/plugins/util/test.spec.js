@@ -32,7 +32,6 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  getMaxEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
@@ -1335,22 +1334,6 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     assert.strictEqual(isFaulty, true)
-  })
-})
-
-describe('getMaxEfdRetryCount', () => {
-  it('returns the largest retry count from slow test retry buckets', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
-  })
-
-  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
-  })
-
-  it('returns undefined when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
   })
 })
 

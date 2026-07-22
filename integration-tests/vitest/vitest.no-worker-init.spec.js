@@ -30,7 +30,6 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
@@ -294,8 +293,12 @@ describe('vitest no-worker init instrumentation selection', () => {
         testSessionConfiguration: {},
       }, {
         state: {
-          earlyFlakeDetectionNumRetries: 2,
-          earlyFlakeDetectionSlowTestRetries: { '5s': 2 },
+          earlyFlakeDetectionRetryPolicy: {
+            durationRetryCounts: [
+              { durationLimitMs: 5000, retryCount: 2 },
+            ],
+            schedulingRetryCount: 2,
+          },
           isEarlyFlakeDetectionEnabled: true,
           isEarlyFlakeDetectionFaulty: false,
           testManagementAttemptToFixRetries: 0,
@@ -309,9 +312,12 @@ describe('vitest no-worker init instrumentation selection', () => {
       configureNoWorkerReporter(ctx)
 
       const workerSetup = ctx.getRootProject()._provided._ddVitestWorkerSetup
-      assert.strictEqual(workerSetup.earlyFlakeDetectionRetries, 2)
-      assert.deepStrictEqual(workerSetup.earlyFlakeDetectionRetryThresholds, EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS)
-      assert.deepStrictEqual(workerSetup.earlyFlakeDetectionSlowRetries, { '5s': 2 })
+      assert.deepStrictEqual(workerSetup.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 2,
+      })
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {

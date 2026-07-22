@@ -7,6 +7,11 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
+  createEfdRetryPolicy,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   resetCoverage,
@@ -16,7 +21,6 @@ const {
   getRelativeCoverageFiles,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
-  getEfdRetryCount,
   applySkippedCoverageToCoverage,
   getTestCoverageLinesPercentage,
   recordAttemptToFixExecution,
@@ -61,6 +65,8 @@ const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const DD_EFD_RETRY_COUNT_MESSAGE = '_ddEfdRetryCount'
 
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
+
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
 }
@@ -103,8 +109,7 @@ let isItrEnabled = false
 let isSuitesSkippingEnabled = false
 let isCoverageReportUploadEnabled = false
 let isEarlyFlakeDetectionEnabled = false
-let earlyFlakeDetectionNumRetries = 0
-let earlyFlakeDetectionSlowTestRetries = {}
+let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
@@ -119,6 +124,13 @@ let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
 let repositoryRoot
+
+/**
+ * @returns {boolean}
+ */
+function shouldRunEarlyFlakeDetection () {
+  return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
+}
 
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
@@ -213,15 +225,13 @@ function configureParallelWorkerWorldParameters (options) {
     options.worldParameters._ddIsKnownTestsEnabled = true
     options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
     options.worldParameters._ddKnownTests = knownTests
-    options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-    options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
+    options.worldParameters._ddEarlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryPolicy
   } else {
     isEarlyFlakeDetectionEnabled = false
     isKnownTestsEnabled = false
     options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
     options.worldParameters._ddIsKnownTestsEnabled = false
-    options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
-    options.worldParameters._ddEarlyFlakeDetectionSlowTestRetries = {}
+    options.worldParameters._ddEarlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   }
 
   if (isImpactedTestsEnabled) {
@@ -253,10 +263,9 @@ function readParallelWorkerWorldParameters (options) {
     }
   }
   isEarlyFlakeDetectionEnabled = !!worldParameters._ddIsEarlyFlakeDetectionEnabled
-  if (isEarlyFlakeDetectionEnabled) {
-    earlyFlakeDetectionNumRetries = worldParameters._ddEarlyFlakeDetectionNumRetries
-    earlyFlakeDetectionSlowTestRetries = worldParameters._ddEarlyFlakeDetectionSlowTestRetries ?? {}
-  }
+  earlyFlakeDetectionRetryPolicy = isEarlyFlakeDetectionEnabled
+    ? worldParameters._ddEarlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+    : EMPTY_EFD_RETRY_POLICY
   isImpactedTestsEnabled = !!worldParameters._ddImpactedTestsEnabled
   if (isImpactedTestsEnabled) {
     modifiedFiles = worldParameters._ddModifiedFiles
@@ -337,7 +346,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
   const testFileAbsolutePath = pickle.uri
   const finished = pickleResultByFile[testFileAbsolutePath] || (pickleResultByFile[testFileAbsolutePath] = [])
 
-  if (isEarlyFlakeDetectionEnabled && isNew) {
+  if (shouldRunEarlyFlakeDetection() && isNew) {
     const testFullname = `${pickle.uri}:${pickle.name}`
     let testStatuses = newTestsByTestFullname.get(testFullname)
     if (testStatuses) {
@@ -350,7 +359,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
     if (efdRetryCount === undefined) {
       efdRetryCount = status === 'skip'
         ? 0
-        : earlyFlakeDetectionNumRetries
+        : earlyFlakeDetectionRetryPolicy.schedulingRetryCount
       efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
       if (efdRetryCount === 0 && status !== 'skip') {
         efdSlowAbortedPickleIds.add(pickle.id)
@@ -856,20 +865,24 @@ function wrapRun (pl, isLatestVersion, version) {
         }
 
         if (
-          isEarlyFlakeDetectionEnabled &&
+          shouldRunEarlyFlakeDetection() &&
           status !== 'skip' &&
           (isNew || isModified) &&
           !isEfdRetry &&
           !efdRetryCountByPickleId.has(this.pickle.id)
         ) {
-          const retryCount = getEfdRetryCount(performance.now() - executionStart, earlyFlakeDetectionSlowTestRetries)
+          const retryCount = getEfdRetryCountForDuration(
+            performance.now() - executionStart,
+            earlyFlakeDetectionRetryPolicy
+          )
           efdRetryCountByPickleId.set(this.pickle.id, retryCount)
           if (retryCount === 0) {
             efdSlowAbortedPickleIds.add(this.pickle.id)
           }
         }
 
-        const efdRetryCount = efdRetryCountByPickleId.get(this.pickle.id) ?? earlyFlakeDetectionNumRetries
+        const efdRetryCount = efdRetryCountByPickleId.get(this.pickle.id) ??
+          earlyFlakeDetectionRetryPolicy.schedulingRetryCount
 
         // Check if all EFD retries failed
         if (isEfdRetry && (isNew || isModified)) {
@@ -1055,8 +1068,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     repositoryRoot = configurationResponse.repositoryRoot
     isItrEnabled = configurationResponse.libraryConfig?.isItrEnabled
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
-    earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
-    earlyFlakeDetectionSlowTestRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
+    earlyFlakeDetectionRetryPolicy = configurationResponse.libraryConfig?.earlyFlakeDetectionRetryPolicy ??
+      EMPTY_EFD_RETRY_POLICY
     earlyFlakeDetectionFaultyThreshold = configurationResponse.libraryConfig?.earlyFlakeDetectionFaultyThreshold
     isSuitesSkippingEnabled = isItrEnabled && configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isCoverageReportUploadEnabled = configurationResponse.libraryConfig?.isCoverageReportUploadEnabled
@@ -1309,7 +1322,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       }
     }
     const originalRetry = this.options.retry
-    const isManagedRetry = isAttemptToFix || (isEarlyFlakeDetectionEnabled && (isNew || isModified))
+    const isManagedRetry = isAttemptToFix || (shouldRunEarlyFlakeDetection() && (isNew || isModified))
     if (isManagedRetry) {
       this.options.retry = 0
     }
@@ -1334,10 +1347,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
 
     // If it's a new test and it hasn't been skipped, we run it again
-    if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && (isNew || isModified)) {
+    if (shouldRunEarlyFlakeDetection() && lastTestStatus !== 'skip' && (isNew || isModified)) {
       let efdRetryCount = efdRetryCountByPickleId.get(pickle.id)
       if (efdRetryCount === undefined) {
-        efdRetryCount = getEfdRetryCount(firstExecutionDurationMs, earlyFlakeDetectionSlowTestRetries)
+        efdRetryCount = getEfdRetryCountForDuration(firstExecutionDurationMs, earlyFlakeDetectionRetryPolicy)
         efdRetryCountByPickleId.set(pickle.id, efdRetryCount)
         if (efdRetryCount === 0) {
           efdSlowAbortedPickleIds.add(pickle.id)
@@ -1356,7 +1369,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let shouldBePassedByEFD = false
     let shouldBePassedByTestManagement = false
     let shouldBeFailedByAttemptToFix = false
-    if ((isNew || isModified) && isEarlyFlakeDetectionEnabled) {
+    if ((isNew || isModified) && shouldRunEarlyFlakeDetection()) {
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
        * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
@@ -1414,7 +1427,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     this.options.retry = originalRetry
 
-    if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && (isNew || isModified)) {
+    if (isNewerCucumberVersion && shouldRunEarlyFlakeDetection() && (isNew || isModified)) {
       return shouldBePassedByEFD
     }
 
