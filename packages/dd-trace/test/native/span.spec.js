@@ -449,6 +449,19 @@ describe('NativeDatadogSpan', () => {
       sinon.assert.calledWith(span.context().syncToNativeOnly, batch)
     })
 
+    it('publishes dd-trace:span:tags:update after setTag (so subscribers like the wall profiler refresh)', () => {
+      const { channel } = require('dc-polyfill')
+      const ch = channel('dd-trace:span:tags:update')
+      const onUpdate = sinon.stub()
+      ch.subscribe(onUpdate)
+      try {
+        span.setTag('span.type', 'web')
+        sinon.assert.calledWith(onUpdate, span)
+      } finally {
+        ch.unsubscribe(onUpdate)
+      }
+    })
+
     it('publishes dd-trace:span:tags:update after addTags (so subscribers like the wall profiler refresh)', () => {
       const { channel } = require('dc-polyfill')
       const ch = channel('dd-trace:span:tags:update')

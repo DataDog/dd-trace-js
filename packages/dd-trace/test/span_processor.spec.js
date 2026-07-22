@@ -59,6 +59,7 @@ describe('SpanProcessor', () => {
 
     exporter = {
       export: sinon.stub(),
+      _resetNativeStateWhenIdle: sinon.stub(),
     }
     prioritySampler = {
       sample: sinon.stub(),
@@ -391,13 +392,40 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.finished, [finishedSpan])
   })
 
-  it('should skip unrecorded traces', () => {
+  it('should erase and reset native state for unrecorded traces', () => {
     trace.record = false
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(activeSpan)
 
     sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+    sinon.assert.calledOnce(exporter._resetNativeStateWhenIdle)
+  })
+
+  it('should erase and reset native state when tracing is disabled', () => {
+    config.DD_TRACE_ENABLED = false
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+    sinon.assert.calledOnce(exporter._resetNativeStateWhenIdle)
+  })
+
+  it('should erase and reset native state for filtered non-recording traces', () => {
+    trace.isRecording = false
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+    sinon.assert.calledOnce(exporter._resetNativeStateWhenIdle)
   })
 
   it('should export a partial trace with span count above configured threshold', () => {

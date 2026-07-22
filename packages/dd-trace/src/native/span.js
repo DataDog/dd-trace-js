@@ -414,6 +414,9 @@ class NativeDatadogSpan extends DatadogSpan {
     if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
     return this
   }
 

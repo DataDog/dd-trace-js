@@ -192,9 +192,34 @@ describe('NativeExporter', () => {
       assert.strictEqual(exporter._prioritySampler, prioritySampler)
       assert.strictEqual(exporter._nativeSpans, nativeSpans)
       assert.deepStrictEqual(exporter._pendingSpans, [])
+      assert.deepStrictEqual(exporter._pendingSpanChunks, [])
       // Constructor should add to the shared registry rather than attaching
       // a fresh listener to `process` (which would leak under test reinit).
       assert.strictEqual(ddTrace.beforeExitHandlers.size, beforeCount + 1)
+    })
+
+    it('runs the final native stats flush after the final trace flush', async () => {
+      const ddTrace = globalThis[Symbol.for('dd-trace')]
+      const handlersBefore = new Set(ddTrace.beforeExitHandlers)
+      const order = []
+      nativeSpans.flushSpansGrouped.callsFake(() => {
+        order.push('traces')
+        return Promise.resolve('unchanged')
+      })
+      nativeSpans.flushStats.callsFake(() => {
+        order.push('stats')
+        return Promise.resolve(true)
+      })
+      config.stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+      const finalFlush = [...ddTrace.beforeExitHandlers].find(handler => !handlersBefore.has(handler))
+
+      exporter.export([createMockSpan(1n)])
+      finalFlush()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      assert.deepStrictEqual(order, ['traces', 'stats'])
     })
 
     it('should derive URL from config.url, falling back to hostname:port', () => {
@@ -225,6 +250,31 @@ describe('NativeExporter', () => {
       exporter.export([span1, span2])
 
       assert.strictEqual(exporter._pendingSpans.length, 2)
+      assert.strictEqual(exporter._pendingSpanChunks.length, 1)
+    })
+
+    it('preserves same-trace chunk boundaries across export calls', () => {
+      const root = createMockSpan(1n)
+      root.context()._parentId = null
+      const child = createMockSpan(2n)
+      child.context()._trace = root.context()._trace
+      child.context()._parentId = root.context()._spanId
+
+      exporter.export([root])
+      exporter.export([child])
+      clock.tick(config.flushInterval)
+
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      const groups = nativeSpans.flushSpansGrouped.firstCall.args[0]
+      assert.strictEqual(groups.length, 2)
+      assert.deepStrictEqual(groups[0], {
+        spanIds: [root.context()._nativeSpanId],
+        firstIsLocalRoot: true,
+      })
+      assert.deepStrictEqual(groups[1], {
+        spanIds: [child.context()._nativeSpanId],
+        firstIsLocalRoot: false,
+      })
     })
 
     it('should flush immediately when flushInterval is 0', () => {
@@ -254,6 +304,30 @@ describe('NativeExporter', () => {
       clock.tick(2)
 
       sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+    })
+
+    it('resets native state immediately when explicitly requested while idle', () => {
+      exporter._resetNativeStateWhenIdle()
+
+      sinon.assert.calledWith(nativeSpans.setAgentUrl, config.url)
+    })
+
+    it('does not reset native state before native stats are flushed', () => {
+      config.stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+
+      exporter._resetNativeStateWhenIdle()
+
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+    })
+
+    it('delays explicit native state reset until active spans finish', () => {
+      exporter._trackSpanStart()
+      exporter._resetNativeStateWhenIdle()
+
+      sinon.assert.notCalled(nativeSpans.setAgentUrl)
+      exporter._trackSpanFinish()
+      sinon.assert.calledWith(nativeSpans.setAgentUrl, config.url)
     })
   })
 

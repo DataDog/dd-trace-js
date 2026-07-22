@@ -205,22 +205,6 @@ class NativeSpansInterface {
         })
       }, 10_000)
       this._statsInterval.unref?.()
-
-      // Force flush stats on process exit. Failure here loses buffered stats —
-      // we cannot retry past beforeExit, but we must surface the cause.
-      const handler = () => {
-        this._state.flushStats(true).then(normalizeStatsFlushResult).catch((err) => {
-          log.warn('Failed final native stats flush on exit:', err)
-        })
-      }
-      const handlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
-      if (handlers) {
-        handlers.add(handler)
-      } else {
-        // Fallback path covers test/synthetic setups that bypass dd-trace's
-        // entry point. In production the shared registry is always present.
-        process.once('beforeExit', handler)
-      }
     }
 
     log.debug('Native spans interface initialized')
@@ -333,7 +317,7 @@ class NativeSpansInterface {
     // Zero out the count header in WASM memory
     if (this._wasmMemory.buffer !== this._cqbView.buffer) {
       this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-      this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+      this._cqbBytes = new Uint8Array(this._cqbView.buffer, this._cqbView.byteOffset, this._cqbView.byteLength)
     }
     this._cqbView.setUint32(0, 0, true)
     this._cqbView.setUint32(4, 0, true)
@@ -541,7 +525,7 @@ class NativeSpansInterface {
    */
   #refreshViews () {
     this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-    this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+    this._cqbBytes = new Uint8Array(this._cqbView.buffer, this._cqbView.byteOffset, this._cqbView.byteLength)
   }
 
   /**

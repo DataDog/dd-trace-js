@@ -249,9 +249,14 @@ class SpanProcessor {
     const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
-    if (trace.record === false) return
+    if (trace.record === false) {
+      this._erase(trace, [])
+      this._exporter._resetNativeStateWhenIdle?.()
+      return
+    }
     if (DD_TRACE_ENABLED === false) {
       this._erase(trace, [])
+      this._exporter._resetNativeStateWhenIdle?.()
       return
     }
     const allStartedFinished = started.length === finished.length
@@ -343,6 +348,9 @@ class SpanProcessor {
       }
 
       this._erase(trace, active)
+      if (trace.isRecording === false) {
+        this._exporter._resetNativeStateWhenIdle?.()
+      }
     }
 
     if (this._killAll) {

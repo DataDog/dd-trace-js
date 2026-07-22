@@ -487,6 +487,14 @@ describe('OTel Span', () => {
     error.setStatus({ code: 2, message: 'error' })
     assert.strictEqual(errorCtx.getTag(ERROR_MESSAGE), 'error')
     assert.strictEqual(errorCtx.getTag(IGNORE_OTEL_ERROR), false)
+
+    const errorThenOk = makeSpan('name')
+    const errorThenOkCtx = errorThenOk._ddSpan.context()
+    errorThenOk.setStatus({ code: 2, message: 'error' })
+    errorThenOk.setStatus({ code: 1 })
+    assert.strictEqual(errorThenOkCtx.getTag(ERROR_MESSAGE), undefined)
+    assert.strictEqual(errorThenOkCtx.getTag(IGNORE_OTEL_ERROR), undefined)
+    assert.strictEqual(errorThenOkCtx.getTag('error'), 0)
   })
 
   it('should record exceptions', () => {

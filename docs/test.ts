@@ -47,7 +47,7 @@ tracer.init({
   url: 'http://localhost',
   runtimeMetrics: true,
   experimental: {
-    exporter: 'log'
+    exporter: 'agent'
   },
   iast: true,
   hostname: 'agent',

@@ -347,16 +347,18 @@ describe('OTel bridge helpers', () => {
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'second')
     })
 
-    it('records the OK transition out of ERROR so future ERRORs are locked', () => {
+    it('clears ERROR tags and records error=0 when OK overrides ERROR', () => {
       const ddSpan = createMockDdSpan()
       applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, false)
       const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 }, false)
       assert.strictEqual(afterOk, 1)
+      assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
+      assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
+      assert.strictEqual(ddSpan.tags.error, 0)
 
       const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' }, false)
       assert.strictEqual(stillOk, 1)
-      // The first ERROR's message stays. Tag clearing on OK override is out of scope.
-      assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'first')
+      assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
     })
 
     describe('setOtelOperationName vs setOtelResource', () => {

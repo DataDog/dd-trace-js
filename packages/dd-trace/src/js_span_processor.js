@@ -17,12 +17,13 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
+const { APM_TRACING_ENABLED_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class JsSpanProcessor {
-  constructor (exporter, prioritySampler, config) {
+  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
@@ -34,6 +35,11 @@ class JsSpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
+
+    if (!config.isCiVisibility && (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || otlpStatsExporter)) {
+      const { SpanStatsProcessor } = require('./span_stats')
+      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+    }
   }
 
   sample (span) {
@@ -65,7 +71,11 @@ class JsSpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else {
+          if (isFirstSpanInChunk && this._config.apmTracingEnabled === false) {
+            span.context().setTag(APM_TRACING_ENABLED_KEY, 0)
+          }
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (this._stats) this._stats.onSpanFinished(formattedSpan)
           isFirstSpanInChunk = false
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)

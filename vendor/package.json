@@ -1,7 +1,7 @@
 {
   "license": "(Apache-2.0 OR BSD-3-Clause)",
   "scripts": {
-    "postinstall": "node rspack"
+    "postinstall": "node -e \"try { require.resolve('@rspack/core') } catch (e) { if (e.code === 'MODULE_NOT_FOUND') process.exit(0); throw e } require('./rspack')\""
   },
   "dependencies": {
     "@apm-js-collab/code-transformer": "^0.18.0",
