@@ -5,93 +5,24 @@ const { setImmediate } = require('node:timers/promises')
 
 const { channel } = require('dc-polyfill')
 
+const {
+  FakeAPIPromise,
+  FakeMessages,
+  applyShim,
+  createDeferred,
+  loadAnthropicInstrumentation,
+} = require('../helpers/anthropic-lifecycle')
+
 const mode = process.argv[2]
 const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
 
-class FakeAPIPromise {
-  /**
-   * @param {object} body
-   */
-  constructor (body) {
-    this.body = body
-    this.response = new Response(JSON.stringify(body))
-  }
-
-  parse () {
-    return Promise.resolve(this.body)
-  }
-
-  asResponse () {
-    return Promise.resolve(this.response)
-  }
-}
-
-class Messages {
-  create () {
-    return this.apiPromise
-  }
-}
-
-function loadAnthropicInstrumentation () {
-  const instrumentPath = require.resolve('../../src/helpers/instrument')
-  const realInstrument = require(instrumentPath)
-  const hookCallbacks = []
-  const cache = require.cache[instrumentPath]
-  const previousExports = cache.exports
-
-  cache.exports = {
-    ...realInstrument,
-    /**
-     * @param {object} spec
-     * @param {Function} callback
-     */
-    addHook (spec, callback) {
-      hookCallbacks.push({ spec, callback })
-    },
-  }
-
-  try {
-    delete require.cache[require.resolve('../../src/anthropic')]
-    require('../../src/anthropic')
-  } finally {
-    cache.exports = previousExports
-  }
-
-  return hookCallbacks
-}
-
-/**
- * @param {Array<{ spec: object, callback: Function }>} hookCallbacks
- */
-function applyShim (hookCallbacks) {
-  for (const { spec, callback } of hookCallbacks) {
-    if (spec.file === 'resources/messages/messages.js') {
-      callback({ Messages })
-      return
-    }
-  }
-  throw new Error('Anthropic messages hook not registered')
-}
-
-function createDeferred () {
-  let resolveDeferred
-  const promise = new Promise(
-    /**
-     * @param {(value: object) => void} resolve
-     */
-    resolve => {
-      resolveDeferred = resolve
-    }
-  )
-  return { promise, resolve: resolveDeferred }
-}
-
 async function run () {
-  applyShim(loadAnthropicInstrumentation())
+  const Messages = class extends FakeMessages {}
+  applyShim(loadAnthropicInstrumentation(), 'resources/messages/messages', Messages)
 
   const messages = new Messages()
   const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
-  messages.apiPromise = apiPromise
+  messages._nextApiPromise = apiPromise
 
   if (mode === 'caught-after-verdict') {
     const error = new Error('blocked')
@@ -179,9 +110,9 @@ async function run () {
         }
       )
       await setImmediate()
-      assert.strictEqual(rawResponse, apiPromise.response)
+      assert.strictEqual(rawResponse, apiPromise._rawResponse)
 
-      parseDeferred.resolve(apiPromise.body)
+      parseDeferred.resolve(apiPromise._body)
       await parsePromise
     } finally {
       messagesAfterChannel.unsubscribe(subscriber)

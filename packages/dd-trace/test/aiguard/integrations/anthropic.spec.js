@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const { anthropic: anthropicIntegration } = require('../../../src/aiguard/integrations')
 const { SOURCE_AUTO } = require('../../../src/aiguard/tags')
+const log = require('../../../src/log')
 
 const messagesBeforeChannel = channel('dd-trace:anthropic:messages:before')
 const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
@@ -179,12 +180,14 @@ describe('AIGuard Anthropic integration', () => {
     })
   })
 
-  it('declines after-payloads where body is an invalid JSON string', () => {
+  it('fails open when an after-payload body is an invalid JSON string', () => {
     const args = [{ messages: [{ role: 'user', content: 'Hello' }] }]
+    const logError = sinon.stub(log, 'error')
     const ctx = publish(messagesAfterChannel, { args, body: 'not-json' })
 
     assert.strictEqual(ctx.pending.length, 0)
     sinon.assert.notCalled(evaluate)
+    sinon.assert.calledOnceWithExactly(logError, 'AIGuard: unable to decode Anthropic response body')
   })
 
   it('aborts with the original AIGuardAbortError', async () => {

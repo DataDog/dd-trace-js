@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
+const log = require('../../log')
 const { getMessagesInputMessages, getMessagesOutputMessages } = require('../messages/anthropic')
 const { SOURCE_AUTO } = require('../tags')
 const { pushEvaluation } = require('./evaluate')
@@ -55,6 +56,7 @@ function onMessagesAfter (ctx) {
     try {
       body = JSON.parse(body)
     } catch {
+      log.error('AIGuard: unable to decode Anthropic response body')
       return
     }
   }

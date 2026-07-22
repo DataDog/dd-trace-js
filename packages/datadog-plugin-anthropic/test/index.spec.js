@@ -7,6 +7,10 @@ const { promisify } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { describe, before, after, it } = require('mocha')
+const sinon = require('sinon')
+
+const { anthropic: anthropicIntegration } = require('../../dd-trace/src/aiguard/integrations')
+const log = require('../../dd-trace/src/log')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { useEnv } = require('../../../integration-tests/helpers')
@@ -66,14 +70,9 @@ describe('Plugin', () => {
         await tracesPromise
       })
 
-      it('finishes a raw response before its body is consumed', async () => {
-        const lifecycleCalls = []
-        /** @param {{ pending: Promise<void>[] }} ctx */
-        const onMessagesAfter = (ctx) => {
-          lifecycleCalls.push(ctx)
-          ctx.pending.push(Promise.resolve())
-        }
-        messagesAfterChannel.subscribe(onMessagesAfter)
+      it('finishes a raw response through the AI Guard lifecycle before its body is consumed', async () => {
+        const evaluate = sinon.stub().resolves()
+        anthropicIntegration.enable({ evaluate }, true)
 
         const tracesPromise = agent.assertSomeTraces(
           /**
@@ -95,11 +94,46 @@ describe('Plugin', () => {
           }).asResponse()
           const [response] = await Promise.all([responsePromise, tracesPromise])
 
-          assert.strictEqual(lifecycleCalls.length, typeof response.body?.pipe === 'function' ? 0 : 1)
+          const expectedEvaluationCount = typeof response.body?.pipe === 'function' ? 1 : 2
+          assert.strictEqual(evaluate.callCount, expectedEvaluationCount)
+          assert.deepStrictEqual(evaluate.firstCall.args[0], [{ role: 'user', content: 'Hello, world!' }])
+          if (expectedEvaluationCount === 2) {
+            const outputMessages = evaluate.secondCall.args[0]
+            assert.strictEqual(outputMessages[0].role, 'user')
+            assert.strictEqual(outputMessages[1].role, 'assistant')
+          }
           assert.strictEqual(response.bodyUsed, false)
           assert.ok(await response.json())
         } finally {
-          messagesAfterChannel.unsubscribe(onMessagesAfter)
+          anthropicIntegration.disable()
+        }
+      })
+
+      it('does not report the parser-owned raw response read as an instrumentation error', async () => {
+        const evaluate = sinon.stub().resolves()
+        const logError = sinon.stub(log, 'error')
+        anthropicIntegration.enable({ evaluate }, true)
+
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          assert.strictEqual(traces[0][0].name, 'anthropic.request')
+        })
+
+        try {
+          const resultPromise = client.messages.create({
+            model: 'claude-3-7-sonnet-20250219',
+            messages: [{ role: 'user', content: 'Hello, world!' }],
+            max_tokens: 100,
+            temperature: 0.5,
+          }).withResponse()
+          const [result] = await Promise.all([resultPromise, tracesPromise])
+
+          assert.strictEqual(result.data.role, 'assistant')
+          assert.strictEqual(result.response.bodyUsed, true)
+          sinon.assert.calledTwice(evaluate)
+          sinon.assert.notCalled(logError)
+        } finally {
+          anthropicIntegration.disable()
+          logError.restore()
         }
       })
 
@@ -136,12 +170,9 @@ describe('Plugin', () => {
         }
       })
 
-      it('does not report lifecycle clone failures as request errors', async () => {
-        /** @param {{ pending: Promise<void>[] }} ctx */
-        const onMessagesAfter = (ctx) => {
-          ctx.pending.push(Promise.resolve())
-        }
-        messagesAfterChannel.subscribe(onMessagesAfter)
+      it('keeps a completed raw response span successful when parsing starts later', async () => {
+        const evaluate = sinon.stub().resolves()
+        anthropicIntegration.enable({ evaluate }, true)
 
         const tracesPromise = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -150,17 +181,20 @@ describe('Plugin', () => {
         })
 
         try {
-          const responsePromise = malformedResponseClient.messages.create({
+          const apiPromise = malformedResponseClient.messages.create({
             model: 'claude-3-7-sonnet-20250219',
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
-          }).asResponse()
+          })
+          const responsePromise = apiPromise.asResponse()
           const [response] = await Promise.all([responsePromise, tracesPromise])
 
+          sinon.assert.calledOnce(evaluate)
           assert.strictEqual(response.bodyUsed, false)
-          assert.strictEqual(await response.text(), 'not json')
+          assert.strictEqual(await response.clone().text(), 'not json')
+          await assert.rejects(apiPromise, SyntaxError)
         } finally {
-          messagesAfterChannel.unsubscribe(onMessagesAfter)
+          anthropicIntegration.disable()
         }
       })
 

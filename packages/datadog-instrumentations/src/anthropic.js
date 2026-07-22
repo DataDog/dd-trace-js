@@ -85,7 +85,7 @@ function wrapCreate (create) {
       let afterVerdict
       let beforeVerdict
       let parseResult
-      let rawResponseEvaluation
+      let rawResponseRead
 
       function getBeforeVerdict () {
         if (!hasLifecycle || beforeVerdict) return beforeVerdict
@@ -96,7 +96,7 @@ function wrapCreate (create) {
       }
 
       /**
-       * @param {object} body
+       * @param {object|string} body
        */
       function getAfterVerdict (body) {
         if (!hasLifecycle || afterVerdict) return afterVerdict
@@ -156,8 +156,8 @@ function wrapCreate (create) {
                 return afterVerdict.then(() => response)
               }
 
-              if (rawResponseEvaluation) {
-                return rawResponseEvaluation
+              if (rawResponseRead) {
+                return rawResponseRead
               }
 
               if (messagesAfterChannel.hasSubscribers) {
@@ -169,16 +169,16 @@ function wrapCreate (create) {
 
                 let bodyPromise
                 try {
-                  bodyPromise = response.clone().json()
+                  bodyPromise = response.clone().text()
                 } catch {
-                  handleRawResponseEvaluationError(ctx, !parseResult)
-                  rawResponseEvaluation = Promise.resolve(response)
-                  return rawResponseEvaluation
+                  handleRawResponseReadError(ctx, !parseResult)
+                  rawResponseRead = Promise.resolve(response)
+                  return rawResponseRead
                 }
 
-                rawResponseEvaluation = bodyPromise.then(
+                rawResponseRead = bodyPromise.then(
                   /**
-                   * @param {object} body
+                   * @param {string} body
                    */
                   body => {
                     const verdict = getAfterVerdict(body)
@@ -193,12 +193,12 @@ function wrapCreate (create) {
                     })
                   },
                   () => {
-                    handleRawResponseEvaluationError(ctx, !parseResult && !afterVerdict)
+                    handleRawResponseReadError(ctx, !parseResult && !afterVerdict)
                     if (afterVerdict) return afterVerdict.then(() => response)
                     return response
                   }
                 )
-                return rawResponseEvaluation
+                return rawResponseRead
               }
             }
 
@@ -222,9 +222,11 @@ function wrapCreate (create) {
  * @param {object} ctx
  * @param {boolean} finishSpan
  */
-function handleRawResponseEvaluationError (ctx, finishSpan) {
-  log.error('Unable to evaluate Anthropic response body')
-  if (finishSpan) finish(ctx)
+function handleRawResponseReadError (ctx, finishSpan) {
+  if (!finishSpan) return
+
+  log.error('Unable to read Anthropic response body')
+  finish(ctx)
 }
 
 function finish (ctx, result, error) {

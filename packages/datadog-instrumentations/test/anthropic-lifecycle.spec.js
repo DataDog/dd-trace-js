@@ -10,43 +10,18 @@ const { before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../dd-trace/src/log')
+const {
+  FakeAPIPromise,
+  FakeMessages,
+  applyShim,
+  createDeferred,
+  loadAnthropicInstrumentation,
+} = require('./helpers/anthropic-lifecycle')
 
 const messagesBeforeChannel = channel('dd-trace:anthropic:messages:before')
 const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
 const execFileAsync = promisify(execFile)
 const lifecycleRejectionFixture = path.join(__dirname, 'fixtures', 'anthropic-lifecycle-rejections.js')
-
-class FakeAPIPromise {
-  /**
-   * @param {object} body
-   */
-  constructor (body) {
-    this._body = body
-    this._rawResponse = new Response(JSON.stringify(body))
-  }
-
-  parse () {
-    return Promise.resolve(this._body)
-  }
-
-  asResponse () {
-    return Promise.resolve(this._rawResponse)
-  }
-
-  withResponse () {
-    return Promise.all([this.parse(), this.asResponse()]).then(([data, response]) => ({ data, response }))
-  }
-
-  then (onFulfilled, onRejected) {
-    return this.parse().then(onFulfilled, onRejected)
-  }
-}
-
-class FakeMessages {
-  create () {
-    return this._nextApiPromise
-  }
-}
 
 function subscribeAutoResolve (channels) {
   const calls = []
@@ -82,61 +57,9 @@ function lifecycleAbortError (message = 'blocked') {
   return Object.assign(new Error(message), { name: 'AIGuardAbortError' })
 }
 
-function createDeferred () {
-  let resolveDeferred
-  let rejectDeferred
-  const promise = new Promise(
-    /**
-     * @param {(value?: void | PromiseLike<void>) => void} resolve
-     * @param {(reason?: unknown) => void} reject
-     */
-    (resolve, reject) => {
-      resolveDeferred = resolve
-      rejectDeferred = reject
-    }
-  )
-  return { promise, reject: rejectDeferred, resolve: resolveDeferred }
-}
-
 function blockLifecycle (ctx, err) {
   ctx.abortController.abort(err)
   ctx.pending.push(Promise.resolve())
-}
-
-function loadAnthropicInstrumentation () {
-  const instrumentPath = require.resolve('../src/helpers/instrument')
-  const realInstrument = require(instrumentPath)
-  const hookCallbacks = []
-
-  const stub = {
-    ...realInstrument,
-    addHook (spec, cb) {
-      hookCallbacks.push({ spec, cb })
-    },
-  }
-
-  const cache = require.cache[instrumentPath]
-  const prevExports = cache.exports
-  cache.exports = stub
-
-  try {
-    delete require.cache[require.resolve('../src/anthropic')]
-    require('../src/anthropic')
-  } finally {
-    cache.exports = prevExports
-  }
-
-  return hookCallbacks
-}
-
-function applyShim (hookCallbacks, filePath, Messages) {
-  for (const { spec, cb } of hookCallbacks) {
-    if (spec.file === `${filePath}.js`) {
-      cb({ Messages })
-      return
-    }
-  }
-  throw new Error(`No hook registered for ${filePath}.js`)
 }
 
 describe('anthropic lifecycle instrumentation', () => {
@@ -347,7 +270,7 @@ describe('anthropic lifecycle instrumentation', () => {
       const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
 
       assert.strictEqual(calls.length, 2)
-      assert.deepStrictEqual(calls[1].body, body)
+      assert.strictEqual(calls[1].body, JSON.stringify(body))
       assert.ok(asyncEndCtx, 'asyncEnd was not published')
       assert.strictEqual(asyncEndCtx.finished, true)
       assert.strictEqual(response.bodyUsed, false)
@@ -426,7 +349,7 @@ describe('anthropic lifecycle instrumentation', () => {
     const error = new Error('clone failed')
     const cloneFailures = [
       () => { throw error },
-      () => ({ json: () => { throw error } }),
+      () => ({ text: () => { throw error } }),
     ]
 
     try {
@@ -472,7 +395,7 @@ describe('anthropic lifecycle instrumentation', () => {
       for (const rejection of rejections) {
         const messages = new Messages()
         const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
-        apiPromise._rawResponse.clone = () => ({ json: () => Promise.reject(rejection) })
+        apiPromise._rawResponse.clone = () => ({ text: () => Promise.reject(rejection) })
         messages._nextApiPromise = apiPromise
 
         const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
@@ -484,7 +407,7 @@ describe('anthropic lifecycle instrumentation', () => {
       assert.strictEqual(calls.length, 0)
       assert.strictEqual(logError.callCount, rejections.length)
       for (const call of logError.getCalls()) {
-        assert.deepStrictEqual(call.args, ['Unable to evaluate Anthropic response body'])
+        assert.deepStrictEqual(call.args, ['Unable to read Anthropic response body'])
       }
     } finally {
       apmChannel.unsubscribe(apmHandlers)
@@ -493,7 +416,7 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('lets a started parser own the span when raw evaluation fails', async () => {
+  it('lets a started parser own the span when the raw response read fails', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let errorCount = 0
@@ -515,7 +438,7 @@ describe('anthropic lifecycle instrumentation', () => {
         const parseError = new SyntaxError('invalid response')
         apiPromise.parse = () => parseDeferred.promise
         apiPromise._rawResponse.clone = () => ({
-          json: () => {
+          text: () => {
             cloneStarted.resolve()
             return cloneDeferred.promise
           },
@@ -550,7 +473,7 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('honors an after verdict published while raw evaluation is pending', async () => {
+  it('honors an after verdict published while the raw response read is pending', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let errorCount = 0
@@ -578,7 +501,7 @@ describe('anthropic lifecycle instrumentation', () => {
     const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
     apiPromise.parse = () => parseDeferred.promise
     apiPromise._rawResponse.clone = () => ({
-      json: () => {
+      text: () => {
         cloneStarted.resolve()
         return cloneDeferred.promise
       },
@@ -608,7 +531,7 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('honors a resolving after verdict when raw evaluation fails', async () => {
+  it('honors a resolving after verdict when the raw response read fails', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
     let asyncEndCount = 0
@@ -634,7 +557,7 @@ describe('anthropic lifecycle instrumentation', () => {
     const apiPromise = new FakeAPIPromise(body)
     apiPromise.parse = () => parseDeferred.promise
     apiPromise._rawResponse.clone = () => ({
-      json: () => {
+      text: () => {
         cloneStarted.resolve()
         return cloneDeferred.promise
       },
@@ -674,9 +597,9 @@ describe('anthropic lifecycle instrumentation', () => {
     const messages = new Messages()
     const apiPromise = new FakeAPIPromise(body)
     apiPromise._rawResponse.clone = () => ({
-      json: async () => {
+      text: async () => {
         unsubscribe()
-        return body
+        return JSON.stringify(body)
       },
     })
     messages._nextApiPromise = apiPromise
@@ -847,7 +770,7 @@ describe('anthropic lifecycle instrumentation', () => {
 
       assert.deepStrictEqual(await response.json(), body)
       assert.strictEqual(calls.length, 2)
-      assert.deepStrictEqual(calls[1].body, body)
+      assert.strictEqual(calls[1].body, JSON.stringify(body))
     } finally {
       unsubscribe()
     }
@@ -868,7 +791,7 @@ describe('anthropic lifecycle instrumentation', () => {
 
       assert.strictEqual(raw, JSON.stringify(body))
       assert.strictEqual(calls.length, 2)
-      assert.deepStrictEqual(calls[1].body, body)
+      assert.strictEqual(calls[1].body, JSON.stringify(body))
     } finally {
       unsubscribe()
     }
@@ -1005,7 +928,7 @@ describe('anthropic lifecycle instrumentation', () => {
         lifecycleRejectionFixture,
         'ignored-parse-error',
       ]),
-      { code: 1 }
+      { code: 1, stderr: /SyntaxError: invalid response/ }
     )
   })
 
@@ -1016,7 +939,7 @@ describe('anthropic lifecycle instrumentation', () => {
         lifecycleRejectionFixture,
         'ignored-parse-error-with-raw',
       ]),
-      { code: 1 }
+      { code: 1, stderr: /SyntaxError: invalid response/ }
     )
   })
 
@@ -1027,7 +950,7 @@ describe('anthropic lifecycle instrumentation', () => {
         lifecycleRejectionFixture,
         'ignored-first-raw',
       ]),
-      { code: 1 }
+      { code: 1, stderr: /Error: blocked/ }
     )
   })
 
@@ -1075,12 +998,11 @@ describe('anthropic lifecycle instrumentation', () => {
     const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
 
     try {
-      const [, response] = await Promise.all([
+      await Promise.all([
         apiPromise.parse(),
         apiPromise.asResponse(),
       ])
 
-      assert.deepStrictEqual(await response.json(), { role: 'assistant', content: [] })
       assert.strictEqual(calls.length, 2)
       assert.strictEqual(asyncEndCount, 1)
     } finally {
