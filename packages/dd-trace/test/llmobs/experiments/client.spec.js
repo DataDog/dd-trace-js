@@ -33,12 +33,13 @@ describe('LLMObs Experiments control-plane client', () => {
     assert.equal(apiHost('datad0g.com'), 'api.datad0g.com')
   })
 
-  it('resolves the web-app host (app.<site> for single-level, regional as-is)', () => {
+  it('resolves the web-app host (app.<site> for single-level, staging override, regional as-is)', () => {
     assert.equal(appHost('datadoghq.com'), 'app.datadoghq.com')
+    assert.equal(appHost('datad0g.com'), 'dd.datad0g.com')
     assert.equal(appHost('us3.datadoghq.com'), 'us3.datadoghq.com')
-    const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com' })
-    assert.equal(client.appBase, 'https://app.datadoghq.com')
-    assert.equal(client.site, 'datadoghq.com')
+    const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datad0g.com' })
+    assert.equal(client.appBase, 'https://dd.datad0g.com')
+    assert.equal(client.site, 'datad0g.com')
   })
 
   it('ensureProjectId resolves the configured project name', async () => {

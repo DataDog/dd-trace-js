@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -42,10 +45,100 @@ describe('LLMObs Experiments facade', () => {
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())
-      const dataset = exp.createDataset('d', 'desc')
+      const dataset = exp.createDataset('d', {
+        description: 'desc',
+        records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
+      })
       assert.equal(typeof dataset.addRecord, 'function')
+      assert.equal(dataset.records()[0].input, 'in')
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
+    })
+
+    it('creates a dataset from selected CSV columns', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-llmobs-csv-'))
+      const csvPath = path.join(dir, 'dataset.csv')
+      fs.writeFileSync(csvPath, 'id;question;context;answer\nr1;"hello;world";ctx;ok\nr2;bye;ctx2;no\n')
+
+      const calls = []
+      global.fetch.callsFake(async (url, opts) => {
+        const u = new URL(url)
+        const body = opts.body ? JSON.parse(opts.body) : undefined
+        calls.push({ method: opts.method, path: u.pathname, body })
+        let payload = {}
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: { id: 'ds' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds/records') {
+          payload = { records: [{ id: 'rec-1' }, { id: 'rec-2' }] }
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      try {
+        const dataset = createExperiments(enabledConfig()).createDatasetFromCsv(csvPath, 'csv-dataset', {
+          inputDataColumns: ['question', 'context'],
+          expectedOutputColumns: ['answer'],
+          metadataColumns: ['id'],
+          csvDelimiter: ';',
+          description: 'from csv',
+          idColumn: 'id',
+        })
+
+        assert.deepEqual(dataset.records()[0].input, { question: 'hello;world', context: 'ctx' })
+        assert.deepEqual(dataset.records()[0].expectedOutput, { answer: 'ok' })
+        assert.deepEqual(dataset.records()[0].metadata, { id: 'r1' })
+        assert.equal(dataset.records()[0].id, 'r1')
+
+        await dataset.push()
+
+        const createCall = calls.find(call => call.path === '/api/v2/llm-obs/v1/proj/datasets')
+        assert.equal(createCall.body.data.attributes.description, 'from csv')
+        const recordsCall = calls.find(call => call.path === '/api/v2/llm-obs/v1/proj/datasets/ds/records')
+        assert.deepEqual(recordsCall.body.data.attributes.records, [
+          {
+            id: 'r1',
+            input: { question: 'hello;world', context: 'ctx' },
+            expected_output: { answer: 'ok' },
+            metadata: { id: 'r1' },
+          },
+          {
+            id: 'r2',
+            input: { question: 'bye', context: 'ctx2' },
+            expected_output: { answer: 'no' },
+            metadata: { id: 'r2' },
+          },
+        ])
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('validates CSV headers before creating a dataset', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-llmobs-csv-'))
+      const csvPath = path.join(dir, 'dataset.csv')
+      fs.writeFileSync(csvPath, 'question,answer\nq,a\n')
+
+      try {
+        assert.throws(
+          () => createExperiments(enabledConfig()).createDatasetFromCsv(csvPath, 'csv-dataset', {
+            inputDataColumns: ['missing'],
+          }),
+          /Input columns not found in CSV header: missing/
+        )
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    it('rejects duplicate custom record ids', () => {
+      assert.throws(
+        () => createExperiments(enabledConfig()).createDataset('d', {
+          records: [{ id: 'r1', inputData: 'a' }, { id: 'r1', inputData: 'b' }],
+        }),
+        /Duplicate record id 'r1'/
+      )
     })
 
     it('falls back to config.service for the project name when llmobs.mlApp is not set', async () => {
@@ -74,6 +167,7 @@ describe('LLMObs Experiments facade', () => {
     it('throws on every operation with a clear message', async () => {
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
       assert.throws(() => exp.createDataset('d'), /unavailable/)
+      assert.throws(() => exp.createDatasetFromCsv('d.csv', 'd', { inputDataColumns: ['input'] }), /unavailable/)
       assert.throws(() => exp.experiment({}), /unavailable/)
       await assert.rejects(() => exp.pullDataset('d'), /unavailable/)
     })
@@ -113,6 +207,28 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(ds.records()[0].input, { q: '2+2' })
       assert.equal(ds.records()[0].expectedOutput, '4')
       assert.deepEqual(ds.records()[0].metadata, { a: 1 })
+    })
+
+    it('passes explicit dataset version when reading records', async () => {
+      global.fetch.callsFake(async (url) => {
+        const u = new URL(url)
+        let payload
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
+          assert.equal(u.searchParams.get('filter[version]'), '3')
+          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
+        } else {
+          payload = {}
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', { version: 3 })
+      assert.equal(ds.version(), 3)
+      assert.equal(ds.latestVersion(), 7)
     })
 
     it('waits (backoff) until the expected record count is readable', async () => {

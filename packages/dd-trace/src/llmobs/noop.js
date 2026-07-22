@@ -15,6 +15,18 @@ class NoopLLMObs {
     return new NoopExperiments('LLM Observability is not enabled')
   }
 
+  createDataset (name, descriptionOrOptions) {
+    return this.experiments.createDataset(name, descriptionOrOptions)
+  }
+
+  createDatasetFromCsv (csvPath, name, options) {
+    return this.experiments.createDatasetFromCsv(csvPath, name, options)
+  }
+
+  pullDataset (name, options) {
+    return this.experiments.pullDataset(name, options)
+  }
+
   enable (options) {}
 
   disable () {}

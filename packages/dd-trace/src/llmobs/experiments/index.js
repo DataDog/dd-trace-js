@@ -1,5 +1,9 @@
 'use strict'
 
+const fs = require('node:fs')
+
+const { parse: parseCsv } = require('csv-parse/sync')
+
 const log = require('../../log')
 const { ExperimentsClient, API_BASE_PATH } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
@@ -22,6 +26,85 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
   }
 }
 
+function assertColumns (name, columns, allowEmpty = true) {
+  if (!Array.isArray(columns) || (!allowEmpty && columns.length === 0)) {
+    throw new Error(`${name} must be a ${allowEmpty ? '' : 'non-empty '}array of column names`)
+  }
+  for (const column of columns) {
+    if (typeof column !== 'string' || column.length === 0) {
+      throw new Error(`${name} must contain only non-empty column names`)
+    }
+  }
+}
+
+function selectedColumns (row, columns) {
+  const out = {}
+  for (const column of columns) out[column] = row[column]
+  return out
+}
+
+function recordsFromCsv (csvPath, options) {
+  const {
+    inputDataColumns,
+    expectedOutputColumns = [],
+    metadataColumns = [],
+    csvDelimiter = ',',
+    idColumn,
+  } = options
+
+  assertColumns('inputDataColumns', inputDataColumns, false)
+  assertColumns('expectedOutputColumns', expectedOutputColumns)
+  assertColumns('metadataColumns', metadataColumns)
+  if (typeof csvDelimiter !== 'string' || csvDelimiter.length !== 1) {
+    throw new Error('csvDelimiter must be a single character')
+  }
+  if (idColumn !== undefined && (typeof idColumn !== 'string' || idColumn.length === 0)) {
+    throw new Error('idColumn must be a non-empty column name')
+  }
+
+  const content = fs.readFileSync(csvPath, 'utf8')
+  if (content.trim().length === 0) throw new Error('CSV file appears to be empty or header is missing')
+
+  const rows = parseCsv(content, {
+    delimiter: csvDelimiter,
+    bom: true,
+    relaxColumnCount: true,
+  })
+  const header = rows.shift()
+  if (!header || header.every(column => column === '')) {
+    throw new Error('CSV file appears to be empty or header is missing')
+  }
+  header[0] = header[0].replace(/^\uFEFF/, '')
+  const headerColumns = new Set(header)
+  const missingInputColumns = inputDataColumns.filter(column => !headerColumns.has(column))
+  const missingOutputColumns = expectedOutputColumns.filter(column => !headerColumns.has(column))
+  const missingMetadataColumns = metadataColumns.filter(column => !headerColumns.has(column))
+
+  if (missingInputColumns.length > 0) {
+    throw new Error(`Input columns not found in CSV header: ${missingInputColumns.join(', ')}`)
+  }
+  if (missingOutputColumns.length > 0) {
+    throw new Error(`Expected output columns not found in CSV header: ${missingOutputColumns.join(', ')}`)
+  }
+  if (missingMetadataColumns.length > 0) {
+    throw new Error(`Metadata columns not found in CSV header: ${missingMetadataColumns.join(', ')}`)
+  }
+  if (idColumn !== undefined && !headerColumns.has(idColumn)) {
+    throw new Error(`ID column '${idColumn}' not found in CSV header`)
+  }
+
+  return rows.map((values) => {
+    const row = {}
+    for (let i = 0; i < header.length; i++) row[header[i]] = values[i] ?? ''
+    return {
+      inputData: selectedColumns(row, inputDataColumns),
+      expectedOutput: selectedColumns(row, expectedOutputColumns),
+      metadata: selectedColumns(row, metadataColumns),
+      id: idColumn === undefined ? undefined : row[idColumn],
+    }
+  })
+}
+
 // Entry point exposed as `tracer.llmobs.experiments`. Builds datasets and runs
 // experiments against the LLM Obs backend using the tracer's own config.
 class Experiments {
@@ -39,21 +122,45 @@ class Experiments {
   }
 
   // Create a local dataset buffer. Pushed remotely on first experiment run.
-  createDataset (name, description = '') {
-    return new Dataset(this.#client, name, description)
+  createDataset (name, descriptionOrOptions = '') {
+    const options = typeof descriptionOrOptions === 'string'
+      ? { description: descriptionOrOptions }
+      : (descriptionOrOptions ? { ...descriptionOrOptions } : {})
+    const dataset = new Dataset(this.#client, name, options.description ?? '')
+    const recordIds = new Set()
+    for (const record of options.records ?? []) {
+      if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
+        throw new Error('record id must be a non-empty string')
+      }
+      if (record.id !== undefined) {
+        if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
+        recordIds.add(record.id)
+      }
+      dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
+    }
+    return dataset
+  }
+
+  createDatasetFromCsv (csvPath, name, options = {}) {
+    return this.createDataset(name, {
+      description: options.description ?? '',
+      records: recordsFromCsv(csvPath, options),
+    })
   }
 
   // Pull an existing dataset by name (with its records). Polls with exponential
   // backoff to absorb read-after-write lag; pass `expectedRecordCount` to also
   // wait until that many records are readable.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000 } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, version } = options
     const projectId = await this.#client.ensureProjectId()
 
     let datasetId = null
     let description = ''
     let records = []
     let recordIds = []
+    let datasetVersion = version ?? null
+    let latestVersion = null
     let lastError = ''
 
     const succeeded = await retryWithBackoff(async () => {
@@ -67,6 +174,8 @@ class Experiments {
             if (item?.attributes?.name === name) {
               datasetId = String(item?.id ?? '')
               description = String(item?.attributes?.description ?? '')
+              latestVersion = item?.attributes?.current_version ?? null
+              datasetVersion = version ?? latestVersion
               break
             }
           }
@@ -78,11 +187,14 @@ class Experiments {
         let cursor = ''
         // Follow the meta.after / page[cursor] pagination until the last page.
         for (;;) {
-          const query = cursor ? `?page[cursor]=${encodeURIComponent(cursor)}` : ''
+          const query = new URLSearchParams()
+          if (cursor) query.set('page[cursor]', cursor)
+          if (version !== undefined && version !== null) query.set('filter[version]', String(version))
+          const queryString = query.toString() ? `?${query.toString()}` : ''
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
             'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${query}`
+            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`
           )
           for (const item of resp?.data ?? []) {
             const attrs = item?.attributes ?? item
@@ -119,7 +231,17 @@ class Experiments {
       )
     }
 
-    return Dataset.fromExisting(this.#client, name, description, datasetId, projectId, records, recordIds)
+    return Dataset.fromExisting(
+      this.#client,
+      name,
+      description,
+      datasetId,
+      projectId,
+      records,
+      recordIds,
+      datasetVersion,
+      latestVersion
+    )
   }
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.

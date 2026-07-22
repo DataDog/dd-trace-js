@@ -3781,6 +3781,22 @@ declare namespace tracer {
       experiments: Experiments,
 
       /**
+       * Create a local dataset buffer; pushed on the first experiment run.
+       */
+      createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
+
+      /**
+       * Create a local dataset buffer from a CSV file.
+       */
+      createDatasetFromCsv (csvPath: string, name: string, options: CreateDatasetFromCsvOptions): Dataset
+
+      /**
+       * Pull an existing dataset (with records) by name.
+       */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3935,6 +3951,20 @@ declare namespace tracer {
      */
     type ExperimentEvaluator = (input: any, output: any, expectedOutput: any) => any | Promise<any>
 
+    interface CreateDatasetOptions {
+      description?: string
+      records?: Array<{ id?: string, inputData: any, expectedOutput?: any, metadata?: Record<string, any> }>
+    }
+
+    interface CreateDatasetFromCsvOptions {
+      inputDataColumns: string[]
+      expectedOutputColumns?: string[]
+      metadataColumns?: string[]
+      csvDelimiter?: string
+      description?: string
+      idColumn?: string
+    }
+
     interface ExperimentOptions {
       name: string
       dataset: Dataset
@@ -3947,6 +3977,8 @@ declare namespace tracer {
     }
 
     interface PullDatasetOptions {
+      /** Dataset version to pull. Defaults to latest. */
+      version?: number
       /** Wait until at least this many records are readable (absorbs write lag). */
       expectedRecordCount?: number
       /** Maximum total time to wait, in ms. Default 30000. */
@@ -3990,7 +4022,9 @@ declare namespace tracer {
       name (): string
       id (): string | null
       projectId (): string | null
-      records (): Array<{ input: any, expectedOutput: any, metadata: Record<string, any> }>
+      version (): number | null
+      latestVersion (): number | null
+      records (): Array<{ id: string | null, input: any, expectedOutput: any, metadata: Record<string, any> }>
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }
@@ -4005,6 +4039,9 @@ declare namespace tracer {
     interface Experiments {
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
+      /** Create a local dataset buffer from a CSV file. */
+      createDatasetFromCsv (csvPath: string, name: string, options: CreateDatasetFromCsvOptions): Dataset
       /** Pull an existing dataset (with records) by name. */
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */

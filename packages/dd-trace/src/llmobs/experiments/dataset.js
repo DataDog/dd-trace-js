@@ -2,12 +2,13 @@
 
 const { API_BASE_PATH } = require('./client')
 
-// Immutable dataset record: { input, expectedOutput?, metadata? }.
+// Immutable dataset record: { input, expectedOutput?, metadata?, id? }.
 class DatasetRecord {
-  constructor (input, expectedOutput = null, metadata = {}) {
+  constructor (input, expectedOutput = null, metadata = {}, id = null) {
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
+    this.id = id ?? null
   }
 }
 
@@ -22,6 +23,8 @@ class Dataset {
   #id
   #projectId
   #pushedCount
+  #version
+  #latestVersion
 
   constructor (client, name, description = '') {
     this.#client = client
@@ -32,16 +35,20 @@ class Dataset {
     this.#id = null
     this.#projectId = null
     this.#pushedCount = 0
+    this.#version = null
+    this.#latestVersion = null
   }
 
   // Build a Dataset that already exists remotely (used by pullDataset).
-  static fromExisting (client, name, description, id, projectId, records, recordIds) {
+  static fromExisting (client, name, description, id, projectId, records, recordIds, version, latestVersion) {
     const dataset = new Dataset(client, name, description)
     dataset.#id = id
     dataset.#projectId = projectId
     dataset.#records.push(...records)
     dataset.#recordIds.push(...recordIds)
     dataset.#pushedCount = records.length
+    dataset.#version = version ?? null
+    dataset.#latestVersion = latestVersion ?? version ?? null
     return dataset
   }
 
@@ -74,6 +81,14 @@ class Dataset {
     return this.#projectId
   }
 
+  version () {
+    return this.#version
+  }
+
+  latestVersion () {
+    return this.#latestVersion
+  }
+
   // Dashboard URL for this dataset, or null until pushed/pulled.
   url () {
     if (this.#id === null) return null
@@ -101,6 +116,8 @@ class Dataset {
       }
       this.#id = response?.data?.id ?? null
       this.#projectId = projectId
+      this.#version = response?.data?.attributes?.current_version ?? this.#version
+      this.#latestVersion = response?.data?.attributes?.current_version ?? this.#latestVersion
     }
 
     if (this.#pushedCount >= this.#records.length) return { pushedCount: 0, totalCount: 0 }
@@ -108,6 +125,9 @@ class Dataset {
     const pending = this.#records.slice(this.#pushedCount)
     const records = pending.map((rec) => {
       const out = { input: rec.input }
+      if (rec.id !== null && rec.id !== undefined) {
+        out.id = rec.id
+      }
       if (rec.expectedOutput !== null && rec.expectedOutput !== undefined) {
         out.expected_output = rec.expectedOutput
       }
