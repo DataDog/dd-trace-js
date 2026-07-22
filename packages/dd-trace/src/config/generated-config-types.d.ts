@@ -16,6 +16,7 @@ export interface GeneratedConfig {
     DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
     DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
     DD_API_SECURITY_SAMPLE_DELAY: number;
+    DD_APPSEC_AGENTIC_ONBOARDING: string;
     DD_APPSEC_SCA_ENABLED: boolean | undefined;
     enabled: boolean | undefined;
     eventTracking: {
@@ -620,6 +621,7 @@ export interface GeneratedEnvVarConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APM_TRACING_ENABLED: boolean;
   DD_APP_KEY: string | undefined;
+  DD_APPSEC_AGENTIC_ONBOARDING: string;
   DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: string;
   DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING: string;
   DD_APPSEC_COLLECT_ALL_HEADERS: boolean;
