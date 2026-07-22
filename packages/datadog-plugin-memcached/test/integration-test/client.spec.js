@@ -16,7 +16,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('memcached', 'memcached', version => {
     useSandbox([`'memcached@${version}'`], false, [
@@ -31,11 +30,14 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'Memcached', undefined, 'memcached')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'Memcached',
+      packageName: 'memcached',
+      defaultExport: true,
+      namedExports: [],
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
