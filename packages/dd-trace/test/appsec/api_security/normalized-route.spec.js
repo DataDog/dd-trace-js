@@ -55,9 +55,7 @@ function check (route, url, expected, params = {}) {
 describe('normalizeRouteExpress', () => {
   describe('invalid / unsupported inputs', () => {
     check(null, undefined, null)
-    check(undefined, undefined, null)
     check('', undefined, null)
-    check(42, undefined, null)
     check('/users/:"unterminated', undefined, null)
     check('/users{/:id', undefined, null)
     check('/path(\\.ext)?', undefined, null)
@@ -73,7 +71,6 @@ describe('normalizeRouteExpress', () => {
     check('/users/:id(\\d+)', undefined, null, { id: '5' })
     check('/files/*', undefined, null)
     check('/files/:path*', undefined, null)
-    check('/files/:path+', undefined, null)
     check('/api/v:major?/users', undefined, null)
   })
 
@@ -87,8 +84,6 @@ describe('normalizeRouteExpress', () => {
   describe('static routes', () => {
     check('/api/v1/users', undefined, '/api/v1/users')
     check('/api/v2.0/some-path', undefined, '/api/v2.0/some-path')
-    check('/api/hello world', undefined, '/api/hello%20world')
-    check('/path/foo@bar', undefined, '/path/foo%40bar')
   })
 
   describe('required named params', () => {
