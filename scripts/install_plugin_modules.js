@@ -222,7 +222,7 @@ async function collectPeerDependencyFolders (rootFolder, parent = '') {
       continue
     }
 
-    const externalName = join(parent, entry.split('@')[0])
+    const externalName = join(parent, entry.split('@', 1)[0])
     if (externalDeps.has(externalName)) folders.push({ folder: current, externalName })
   }
 
@@ -262,7 +262,7 @@ async function patchPeerDependencies ({ folder, externalName }) {
             ? (latests[name] ?? '*')
             : declared.includes('||')
               // Use the first version in the list (as npm does by default)
-              ? declared.split('||')[0].trim()
+              ? declared.split('||', 1)[0].trim()
               // Only one version available so use that.
               : declared
         }

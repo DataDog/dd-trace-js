@@ -20,7 +20,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // mercurius 15+ ships fastify 5, which requires Node 20.9+; restrict to the
   // 13/14 line on older Node so the oldest-LTS CI leg does not sandbox an
@@ -34,8 +33,11 @@ describe('esm', () => {
     useSandbox([`'mercurius@${version}'`, `'${fastifyDep}'`], false, [
       './packages/datadog-plugin-mercurius/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'mercurius')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'mercurius',
+      packageName: 'mercurius',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -47,7 +49,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

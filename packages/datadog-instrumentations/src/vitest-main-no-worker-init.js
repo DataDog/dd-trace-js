@@ -784,7 +784,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
 
   return {
     errors,
-    finalAttempt: attempts[attempts.length - 1],
+    finalAttempt: attempts.at(-1),
     nonFinalAttempts: attempts.slice(0, -1),
     state,
     status,
@@ -880,7 +880,7 @@ function reportFinalTestAttempt (testReport) {
   const finalAttempt = testReport.finalAttempt
 
   if (status === 'fail') {
-    const error = errors[errors.length - 1] || errors[0]
+    const error = errors.at(-1) || errors[0]
     reportTestAttempt(testReport, finalAttempt || {
       error,
       finalStatus,

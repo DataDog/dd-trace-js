@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const semifies = require('semifies')
 
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
@@ -17,9 +18,9 @@ const {
  * @param {(version: string, openaiVersion: string) => void} callback
  */
 function withAiSdkOpenAiVersions (callback) {
-  withVersions('ai', 'ai', '>=7.0.0', version => {
+  withVersions('ai', 'ai', '>=7.0.0', (version, _, resolvedVersion) => {
     withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
-      callback(version, openaiVersion)
+      callback(version, resolvedVersion, openaiVersion)
     })
   })
 }
@@ -37,7 +38,7 @@ describe('Plugin', () => {
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
 
-  withAiSdkOpenAiVersions((version, openaiVersion) => {
+  withAiSdkOpenAiVersions((version, resolvedVersion, openaiVersion) => {
     let ai
     let openai
 
@@ -149,8 +150,9 @@ describe('Plugin', () => {
       })
     })
 
-    // eslint-disable-next-line mocha/no-pending-tests
-    it.skip('creates a span for embedMany', async () => {
+    it('creates a span for embedMany', async function () {
+      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],
@@ -166,7 +168,17 @@ describe('Plugin', () => {
       assertLlmObsSpanEvent(embedManySpan, {
         span: embedManyApmSpan,
         name: 'embedMany',
-        spanKind: 'workflow',
+        spanKind: 'embedding',
+        modelName: 'text-embedding-ada-002',
+        modelProvider: 'openai',
+        inputDocuments: [
+          { text: 'hello world' },
+          { text: 'goodbye world' },
+        ],
+        outputValue: '[2 embedding(s) returned with size 1536]',
+        metrics: {
+          input_tokens: 5,
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })

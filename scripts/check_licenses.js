@@ -7,6 +7,12 @@ const readline = require('node:readline')
 const { execSync } = require('node:child_process')
 const { name: rootPackageName } = require('../package.json')
 
+/**
+ * @typedef {object} NpmDependency
+ * @property {string} [resolved]
+ * @property {Record<string, NpmDependency>} [dependencies]
+ */
+
 const filePath = join(__dirname, '..', 'LICENSE-3rdparty.csv')
 const aliasMap = getAliasMap()
 const deps = getProdDeps()
@@ -81,20 +87,21 @@ function addNpmProdDeps (deps, cwd) {
   collectDependencies(deps, parsed)
 }
 
+/**
+ * @param {Set<string>} deps
+ * @param {NpmDependency} obj
+ */
 function collectDependencies (deps, obj) {
   if (!obj.dependencies) return
 
-  for (const dep of Object.keys(obj.dependencies)) {
-    const resolved = obj.dependencies[dep].resolved
-
-    if (!resolved) continue
-
+  for (const [dep, dependency] of Object.entries(obj.dependencies)) {
+    const { resolved } = dependency
     // Get the actual dependency name even when aliased in the package.json
-    const name = resolved.split('/-')[0].split('npmjs.org/').reverse()[0]
+    const name = resolved ? resolved.split('/-', 1)[0].split('npmjs.org/').reverse()[0] : dep
 
     deps.add(name)
 
-    collectDependencies(deps, obj.dependencies[dep])
+    collectDependencies(deps, dependency)
   }
 }
 

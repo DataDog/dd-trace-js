@@ -144,8 +144,8 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
   shimmer.wrap(oracledb.Pool.prototype, 'getConnection', getConnection => {
     return function wrappedGetConnection (...args) {
       let callback
-      if (typeof args[args.length - 1] === 'function') {
-        callback = args[args.length - 1]
+      if (typeof args.at(-1) === 'function') {
+        callback = args.at(-1)
       }
       if (callback) {
         args[args.length - 1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
