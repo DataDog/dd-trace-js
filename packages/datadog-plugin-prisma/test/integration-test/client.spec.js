@@ -63,7 +63,6 @@ const prismaClientConfigs = [{
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientJs}`,
   serverFile: 'server.mjs',
   importPath: '@prisma/client',
-  variant: 'default',
   env: {
     PRISMA_TEST_DATABASE_URL: TEST_DATABASE_URL,
   },
@@ -74,7 +73,6 @@ const prismaClientConfigs = [{
   importPath: './generated/prisma/index.js',
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientOutputJs}`,
   env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', PRISMA_TEST_DATABASE_URL: TEST_DATABASE_URL },
-  variant: 'star',
 },
 {
   name: 'prisma-generator v6 postgres',
@@ -86,7 +84,6 @@ const prismaClientConfigs = [{
     DATABASE_URL: TEST_DATABASE_URL,
   },
   ts: true,
-  variant: 'star',
 },
 {
   name: 'prisma-generator v7 pg adapter (url)',
@@ -99,7 +96,6 @@ const prismaClientConfigs = [{
     DATABASE_URL: TEST_DATABASE_URL,
   },
   ts: true,
-  variant: 'destructure',
 },
 {
   name: 'prisma-generator v7 pg adapter (fields)',
@@ -113,7 +109,6 @@ const prismaClientConfigs = [{
     PRISMA_PG_ADAPTER_CONFIG: 'fields',
   },
   ts: true,
-  variant: 'star',
 },
 {
   name: 'prisma-generator v6 mongodb',
@@ -127,7 +122,6 @@ const prismaClientConfigs = [{
   ts: true,
   waitForService: waitForMongoReplicaSet,
   skipMigrateReset: true,
-  variant: 'destructure',
   // mongodb@7.2 dropped Node 18 (crypto.getRandomValues is not a global there).
   skip: () => !semifies(semver.clean(process.version), '>=20.19.0'),
   dbSpan: {
@@ -151,7 +145,6 @@ const prismaClientConfigs = [{
     DATABASE_URL: TEST_MARIADB_DATABASE_URL,
   },
   ts: true,
-  variant: 'star',
   dbSpan: {
     name: 'mariadb.query',
     meta: {
@@ -173,7 +166,6 @@ const prismaClientConfigs = [{
   },
   ts: true,
   waitForService: waitForMssql,
-  variant: 'destructure',
   dbSpan: {
     name: 'tedious.request',
     meta: {
@@ -196,7 +188,6 @@ const prismaClientConfigs = [{
   },
   ts: true,
   waitForService: waitForMssql,
-  variant: 'star',
   dbSpan: {
     name: 'tedious.request',
     meta: {
@@ -260,7 +251,6 @@ describe('esm', () => {
 
       withVersions('prisma', '@prisma/client', supportedRange, version => {
         if (config.ts && version === '6.1.0') return
-        let variants
         const paths = ['./packages/datadog-plugin-prisma/test/integration-test/*', config.schema]
 
         if (isPrismaV7) paths.push(config.configFile)
@@ -277,15 +267,15 @@ describe('esm', () => {
 
         useSandbox(deps, false, paths)
 
-        if (!config.customTest) {
-          before(function () {
-            variants = varySandbox(config.serverFile, config.ts ? 'PrismaClient' : 'prismaLib',
-              config.ts ? 'PrismaClient' : undefined, config.importPath, config.ts)
-            if (!variants[config.variant]) {
-              throw new Error(`Unknown variant ${config.variant} for ${config.name}`)
-            }
+        const variants = config.customTest
+          ? undefined
+          : varySandbox(config.serverFile, {
+            bindingName: config.ts ? 'PrismaClient' : 'prismaLib',
+            packageName: config.importPath,
+            defaultExport: !config.ts,
+            namedExports: config.ts ? ['PrismaClient'] : [],
+            namedExportBinding: config.ts ? 'direct' : undefined,
           })
-        }
 
         before(function () {
           this.timeout(60000)
@@ -356,41 +346,39 @@ describe('esm', () => {
             proc = await config.customTest.run({ agent, config })
           })
         } else {
-          const variant = config.variant
-          it(`is instrumented with ${variant} import`, async function () {
-            this.timeout(60000)
-            const dbSpanExpectation = config.dbSpan || {
-              name: config.configFile ? 'pg.query' : 'prisma.engine',
-              service: config.configFile ? 'node-postgres' : 'node-prisma',
-              meta: {
-                'db.user': 'postgres',
-                'db.name': 'postgres',
-                'db.type': 'postgres',
-              },
-            }
-            const res = agent.assertMessageReceived(({ headers, payload }) => {
-              assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-              assertObjectContains(payload, [[{
-                name: 'prisma.client',
-                resource: 'User.create',
-                service: 'node-prisma',
-              }], [dbSpanExpectation]])
+          for (const variant of Object.keys(variants)) {
+            it(`is instrumented with ${variant} import`, async function () {
+              this.timeout(60000)
+              const dbSpanExpectation = config.dbSpan || {
+                name: config.configFile ? 'pg.query' : 'prisma.engine',
+                service: config.configFile ? 'node-postgres' : 'node-prisma',
+                meta: {
+                  'db.user': 'postgres',
+                  'db.name': 'postgres',
+                  'db.type': 'postgres',
+                },
+              }
+              const res = agent.assertMessageReceived(({ headers, payload }) => {
+                assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+                assertObjectContains(payload, [[{
+                  name: 'prisma.client',
+                  resource: 'User.create',
+                  service: 'node-prisma',
+                }], [dbSpanExpectation]])
+              })
+
+              const [childProcess] = await Promise.all([
+                spawnPluginIntegrationTestProcAndExpectExit(
+                  sandboxCwd(),
+                  variants[variant],
+                  agent.port,
+                  { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
+                ),
+                res,
+              ])
+              proc = childProcess
             })
-
-            const procPromise = spawnPluginIntegrationTestProcAndExpectExit(
-              sandboxCwd(),
-              variants[variant],
-              agent.port,
-              { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
-            )
-
-            await Promise.all([
-              procPromise.then((res) => {
-                proc = res
-              }),
-              res,
-            ])
-          })
+          }
         }
       })
     })
