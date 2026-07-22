@@ -1,5 +1,5 @@
 # LLM Validation Platform — dd-trace-js config
-model: claude-sonnet-5
+model: claude-haiku-4-5
 runs: 3
 
 # The instruction files this repo monitors (candidate = the PR's copy, baseline = master's). Repo-relative.
@@ -26,7 +26,7 @@ presets:
       - dd-trace-js-package-manager-001
       - dd-trace-js-new-cache-integration-005
       - dd-trace-js-control-http-propagation-007
-    runs: 4 # 6 pairwise comparisons per selected case.
+    runs: 3 # 6 pairwise comparisons per selected case.
   minimum: # One content case for each always-loaded or on-demand instruction source.
     cases:
       - dd-trace-js-package-manager-001
