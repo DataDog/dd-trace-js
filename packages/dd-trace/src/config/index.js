@@ -17,6 +17,7 @@ const {
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
+  isSomethingUnderNDA,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
@@ -89,6 +90,9 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    // A calculated value that RC has since overridden must not be reset here —
+    // the RC value takes precedence and will survive until RC itself is rolled back.
+    if (source === 'calculated' && trackedConfigOrigins.get(name) === 'remote_config') continue
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -331,6 +335,7 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
+    const logCaptureEnabledIsRC = trackedConfigOrigins.get('logCaptureEnabled') === 'remote_config'
     undo(this, 'calculated')
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
@@ -578,6 +583,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
+    if (!logCaptureEnabledIsRC && !trackedConfigOrigins.has('logCaptureEnabled')) {
+      setAndTrack(this, 'logCaptureEnabled', isSomethingUnderNDA())
+    }
+
     // TODO: Should this unconditionally be disabled?
     if (getEnvironmentVariable('JEST_WORKER_ID') &&
         !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
@@ -645,6 +654,24 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_TIMELINE_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+    }
+
+    // Normalize logCaptureProtocol: strip any '://' suffix, lowercase, add trailing colon,
+    // then validate — only 'http:' and 'https:' are supported; warn and fall back to 'http:'.
+    const rawProtocol = this.logCaptureProtocol
+    let protocol = String(rawProtocol).toLowerCase().replace(/:\/\/.*$/, '')
+    if (!protocol.endsWith(':')) {
+      protocol += ':'
+    }
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      log.warn('logCaptureProtocol: unsupported value %o, falling back to http:', rawProtocol)
+      protocol = 'http:'
+    }
+    const origin = trackedConfigOrigins.get('logCaptureProtocol')
+    if (origin === undefined) {
+      set(this, 'logCaptureProtocol', protocol)
+    } else {
+      setAndTrack(this, 'logCaptureProtocol', protocol, rawProtocol, /** @type {TelemetrySource} */ (origin))
     }
 
     // Single tags update is tracked as a calculated value.
