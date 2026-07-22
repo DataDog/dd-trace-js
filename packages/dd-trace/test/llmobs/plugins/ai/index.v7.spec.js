@@ -948,7 +948,7 @@ describe('Plugin', () => {
   })
 
   describe('tool result formatting', () => {
-    withAiSdkOpenAiVersions((version, openaiVersion) => {
+    withAiSdkOpenAiVersions((version, _, openaiVersion) => {
       let ai
       let openai
 
