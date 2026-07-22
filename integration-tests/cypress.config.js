@@ -6,9 +6,9 @@ const retries = Number(process.env.CYPRESS_RETRIES || 0)
 
 module.exports = defineConfig({
   defaultCommandTimeout: 1000,
-  retries: process.env.CYPRESS_RETRIES_AS_NUMBER === 'true'
-    ? retries
-    : { runMode: retries, openMode: 0 },
+  retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
+    ? { runMode: retries, openMode: 0 }
+    : Number(process.env.CYPRESS_RETRIES_AS_NUMBER),
   e2e: {
     ...(process.env.CYPRESS_TEST_ISOLATION === undefined
       ? {}
