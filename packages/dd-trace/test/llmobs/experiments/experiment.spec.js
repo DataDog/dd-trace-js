@@ -239,8 +239,19 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(patch.body.data.attributes.error, undefined)
   })
 
-  it('experiment create body carries project_id, dataset_id, config and ensure_unique', async () => {
-    const dataset = new Dataset(client, 'demo').addRecord('x')
+  it('experiment create body carries project_id, dataset_id, dataset_version, config and ensure_unique', async () => {
+    const { DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
+    const dataset = Dataset.fromExisting(
+      client,
+      'demo',
+      'desc',
+      'ds',
+      'proj',
+      [new DatasetRecord('x')],
+      ['rec-0'],
+      3,
+      7
+    )
     await new Experiment(client, {
       name: 'exp-demo', dataset, task: (i) => i, config: { approach: 'kw' },
     }).run()
@@ -251,6 +262,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(create.body.data.type, 'experiments')
     assert.equal(create.body.data.attributes.project_id, 'proj')
     assert.equal(create.body.data.attributes.dataset_id, 'ds')
+    assert.equal(create.body.data.attributes.dataset_version, 3)
     assert.equal(create.body.data.attributes.ensure_unique, true)
     assert.deepEqual(create.body.data.attributes.config, { approach: 'kw' })
   })
