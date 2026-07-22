@@ -40,6 +40,10 @@ include:
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
     ref: "main"
 
+"llm validation":
+  variables:
+    LLMVAL_PLATFORM_REF: "pabloerhard/add-ignore-failure"
+
 workflow:
   auto_cancel:
     on_new_commit: interruptible
