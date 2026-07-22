@@ -156,3 +156,184 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(10), '43981')
   })
 })
+
+describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
+  const microVmArn = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
+
+  function loadWithMock (arn, {
+    openThrows = false,
+    chunk = Infinity,
+    readThrows = false,
+    readReturnsZero = false,
+  } = {}) {
+    let opens = 0
+    let closes = 0
+    let kernelReads = 0
+    let perCallFill = 0
+    let batchFill = 0
+    const mockFs = {
+      openSync () {
+        opens++
+        if (openThrows) throw new Error('ENOENT: no /dev/urandom')
+        return 42
+      },
+      readSync (fd, buf, offset, length) {
+        kernelReads++
+        if (readThrows) throw new Error('EIO: kernel read failed')
+        if (readReturnsZero) return 0
+        const n = Math.min(length, chunk)
+        for (let i = offset; i < offset + n; i++) buf[i] = 0xAB
+        return n
+      },
+      closeSync () {
+        closes++
+      },
+    }
+    const mockCrypto = {
+      randomFillSync (buf) {
+        if (buf.length === 8) {
+          perCallFill++
+        } else {
+          batchFill++
+        }
+        for (let i = 0; i < buf.length; i++) buf[i] = 0xAB
+      },
+    }
+    const previousArn = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    if (arn !== undefined) {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = arn
+    } else {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    }
+    const mod = proxyquire('../src/id', { crypto: mockCrypto, fs: mockFs })
+    if (previousArn === undefined) {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    } else {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = previousArn
+    }
+    return {
+      mod,
+      opens: () => opens,
+      kernelReads: () => kernelReads,
+      closes: () => closes,
+      perCallFill: () => perCallFill,
+      batchFill: () => batchFill,
+    }
+  }
+
+  it('draws each id from the kernel CSPRNG when AWS_LAMBDA_MICROVM_IMAGE_ARN is set', () => {
+    const { mod, kernelReads, batchFill } = loadWithMock(microVmArn)
+    mod()
+    assert.ok(kernelReads() > 0, 'expected a /dev/urandom read per id when ARN is set')
+    assert.strictEqual(batchFill(), 0, 'must not fill the batch buffer in MicroVM mode')
+  })
+
+  it('uses the batch buffer when AWS_LAMBDA_MICROVM_IMAGE_ARN is unset', () => {
+    const { mod, batchFill, kernelReads } = loadWithMock(undefined)
+    mod()
+    assert.ok(batchFill() > 0, 'expected a batch randomFillSync when ARN is unset')
+    assert.strictEqual(kernelReads(), 0, 'must not read /dev/urandom outside a MicroVM')
+  })
+
+  it('uses the batch buffer when AWS_LAMBDA_MICROVM_IMAGE_ARN is empty string', () => {
+    const { mod, batchFill } = loadWithMock('')
+    mod()
+    assert.ok(batchFill() > 0, 'expected a batch randomFillSync when ARN is empty')
+  })
+
+  it('falls back to per-call randomFillSync when /dev/urandom cannot be opened', () => {
+    const { mod, perCallFill, kernelReads, closes } = loadWithMock(microVmArn, { openThrows: true })
+    mod()
+    assert.ok(perCallFill() > 0, 'expected per-call randomFillSync fallback')
+    assert.strictEqual(kernelReads(), 0, 'no kernel reads when the fd could not be opened')
+    assert.strictEqual(closes(), 0, 'nothing to close when open failed')
+  })
+
+  it('opens /dev/urandom once and reads it once per id', () => {
+    const { mod, opens, kernelReads, closes } = loadWithMock(microVmArn)
+    mod()
+    mod()
+    mod()
+    assert.strictEqual(opens(), 1, 'fd opened once at module load, not per id')
+    assert.strictEqual(kernelReads(), 3, 'one kernel read per id')
+    assert.strictEqual(closes(), 0, 'a healthy fd stays open')
+  })
+
+  it('accumulates short /dev/urandom reads until the 8-byte buffer is full', () => {
+    const { mod, kernelReads } = loadWithMock(microVmArn, { chunk: 3 })
+    const spanId = mod()
+    assert.ok(kernelReads() > 1, `expected multiple short reads, got ${kernelReads()}`)
+    // mock fills every byte with 0xAB; the first byte has its MSB cleared
+    // (0xAB & 0x7F = 0x2B), so a fully-filled buffer is 2b then seven ab bytes.
+    assert.strictEqual(spanId.toString(), '2bababababababab')
+  })
+
+  it('falls back to randomFillSync if a kernel read returns 0 (no infinite loop)', () => {
+    const { mod, perCallFill, closes } = loadWithMock(microVmArn, { readReturnsZero: true })
+    mod()
+    assert.ok(perCallFill() > 0, 'expected randomFillSync fallback when a read returns 0')
+    assert.strictEqual(closes(), 1, 'the broken fd is closed once')
+  })
+
+  it('falls back and stops using the fd when a kernel read throws', () => {
+    const { mod, perCallFill, kernelReads, closes } = loadWithMock(microVmArn, { readThrows: true })
+    mod()
+    const readsAfterFirst = kernelReads()
+    mod()
+    assert.ok(perCallFill() >= 2, 'both ids fall back to randomFillSync')
+    assert.strictEqual(kernelReads(), readsAfterFirst, 'fd disabled after the throw; no more kernel reads')
+    assert.strictEqual(closes(), 1, 'the broken fd is closed once')
+  })
+})
+
+describe('id in Lambda MicroVM environment', () => {
+  let id
+  let previousArn
+
+  beforeEach(() => {
+    previousArn = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
+    delete require.cache[require.resolve('../src/id')]
+    id = require('../src/id')
+  })
+
+  afterEach(() => {
+    if (previousArn === undefined) {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    } else {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = previousArn
+    }
+    delete require.cache[require.resolve('../src/id')]
+  })
+
+  it('should generate non-zero IDs', () => {
+    for (let i = 0; i < 10; i++) {
+      const spanId = id()
+      assert.notStrictEqual(spanId.toString(), '0000000000000000')
+    }
+  })
+
+  it('should generate varied IDs', () => {
+    const seen = new Set()
+    for (let i = 0; i < 100; i++) {
+      seen.add(id().toString())
+    }
+    assert.ok(seen.size > 90, `expected >90 unique IDs, got ${seen.size}`)
+  })
+
+  it('should generate IDs with the high bit of the first byte clear', () => {
+    for (let i = 0; i < 100; i++) {
+      const spanId = id()
+      const hex = spanId.toString()
+      const firstByte = Number.parseInt(hex.slice(0, 2), 16)
+      assert.strictEqual(firstByte & 0x80, 0, `expected high bit clear, got 0x${firstByte.toString(16)}`)
+    }
+  })
+
+  it('should generate IDs with hex length of 16 characters', () => {
+    for (let i = 0; i < 10; i++) {
+      const spanId = id()
+      assert.strictEqual(spanId.toString().length, 16)
+    }
+  })
+})
