@@ -54,7 +54,7 @@ function Hook (modules, hookOptions, onrequire) {
    * @param {string} moduleName
    * @param {string|undefined} moduleBaseDir
    * @param {string|undefined} moduleVersion
-   * @param {boolean} isIitm
+   * @param {boolean|undefined} isIitm
    */
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
