@@ -70,6 +70,7 @@ class NativeExporter {
     this._prioritySampler = prioritySampler
     this._nativeSpans = nativeSpans
     this._pendingSpans = []
+    this._pendingSpanChunks = []
 
     const { url, hostname = defaults.hostname, port } = config
     this._url = url || new URL(format({
@@ -192,7 +193,7 @@ class NativeExporter {
   #finishUrlUpdateCallbacks () {
     if (this.#urlUpdateCallbacks.length === 0) return
     if (this.#activeSpans > 0 || this.#flushInFlight) return
-    if (this._pendingSpans.length > 0) {
+    if (this._pendingSpanChunks.length > 0) {
       this.flush()
       return
     }
@@ -260,10 +261,16 @@ class NativeExporter {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${formatSpansForDebug(spans)}`)
 
-    // Collect spans for batch export
+    // Collect spans for batch export. `_pendingSpans` remains a flat buffer for
+    // observability/tests; `_pendingSpanChunks` preserves each SpanProcessor
+    // export call as a trace chunk. Preserving chunk boundaries matters when a
+    // delayed child span from an already-exported trace finishes before the
+    // HTTP timer fires: the legacy writer sends that child as a second chunk,
+    // not coalesced back into the parent chunk.
     for (const span of spans) {
       this._pendingSpans.push(span)
     }
+    if (spans.length > 0) this._pendingSpanChunks.push(spans)
 
     const { flushInterval } = this._config
 
@@ -343,7 +350,7 @@ class NativeExporter {
   }
 
   #finishSend () {
-    if (this._pendingSpans.length > 0) {
+    if (this._pendingSpanChunks.length > 0) {
       this.flush()
     } else {
       this.#finishFlushCallbacks()
@@ -366,6 +373,7 @@ class NativeExporter {
     if (err?.name === 'NativeExporterBuildError') {
       this.#disabled = true
       this._pendingSpans = []
+      this._pendingSpanChunks = []
       clearTimeout(this.#timer)
       this.#timer = undefined
       log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
@@ -403,45 +411,47 @@ class NativeExporter {
       return
     }
 
-    if (this._pendingSpans.length === 0) {
+    if (this._pendingSpanChunks.length === 0) {
       this.#finishFlushCallbacks()
       return
     }
 
-    const spans = this._pendingSpans
+    const spanChunks = this._pendingSpanChunks
     this._pendingSpans = []
+    this._pendingSpanChunks = []
 
-    // Group the batch by trace so each prepared chunk is exactly one trace
-    // (segment). This matters because the pipeline treats a chunk as a single
-    // segment and stamps trace-level tags (sampling priority, `_dd.p.dm`,
-    // origin, top_level) onto its local root. A deferred flush can hold many
-    // traces at once (spans pile up while a send is in flight); lumping them
-    // into one chunk would stamp only the first and mis-group the rest.
-    const byTrace = new Map()
-    for (const span of spans) {
-      const trace = span.context()._trace
-      let group = byTrace.get(trace)
-      if (group === undefined) { group = []; byTrace.set(trace, group) }
-      group.push(span)
-    }
-
+    // Convert each SpanProcessor export call into one or more native chunks,
+    // splitting only traces that happen to share one export call. Never group
+    // spans from different export calls together: those calls are already the
+    // JS processor's chunk boundaries, and the legacy writer preserves them even
+    // when flushInterval coalesces HTTP sends.
     const groups = []
-    for (const group of byTrace.values()) {
-      // The local root leads the chunk so the pipeline treats it as chunk root.
-      const root = group.find(span => this.#isLocalRoot(span))
-      const firstIsLocalRoot = root !== undefined
-      let ordered = group
-      if (firstIsLocalRoot) {
-        // Emit this trace's trace-level tags on its own local root.
-        this.#syncTraceTags(root)
-        if (group[0] !== root) {
-          ordered = [root, ...group.filter(span => span !== root)]
-        }
+    for (const spans of spanChunks) {
+      const byTrace = new Map()
+      for (const span of spans) {
+        const trace = span.context()._trace
+        let group = byTrace.get(trace)
+        if (group === undefined) { group = []; byTrace.set(trace, group) }
+        group.push(span)
       }
-      groups.push({
-        spanIds: ordered.map(span => span.context()._nativeSpanId),
-        firstIsLocalRoot,
-      })
+
+      for (const group of byTrace.values()) {
+        // The local root leads the chunk so the pipeline treats it as chunk root.
+        const root = group.find(span => this.#isLocalRoot(span))
+        const firstIsLocalRoot = root !== undefined
+        let ordered = group
+        if (firstIsLocalRoot) {
+          // Emit this trace's trace-level tags on its own local root.
+          this.#syncTraceTags(root)
+          if (group[0] !== root) {
+            ordered = [root, ...group.filter(span => span !== root)]
+          }
+        }
+        groups.push({
+          spanIds: ordered.map(span => span.context()._nativeSpanId),
+          firstIsLocalRoot,
+        })
+      }
     }
 
     // prepareChunk is synchronous — extract spans from native storage now.

@@ -24,14 +24,19 @@ const LogPropagator = require('./propagation/log')
 const SpanContext = require('./span_context')
 
 // Lazy-loaded so the libdatadog initialization cost is only paid the first
-// time native spans are selected. A missing optional libdatadog install still
-// fails through `require('../native')` instead of falling back silently.
+// time native spans are selected. A corrupt native install still fails hard;
+// an omitted optional @datadog/libdatadog can fall back to JS agent export.
 let nativeModule
 function getNativeModule () {
   if (nativeModule === undefined) {
     nativeModule = require('../native')
   }
   return nativeModule
+}
+
+function isMissingLibdatadog (error) {
+  return error?.code === 'MODULE_NOT_FOUND' &&
+    /^Cannot find module ['"]@datadog\/libdatadog['"]/.test(String(error.message))
 }
 
 const REFERENCE_CHILD_OF = 'child_of'
@@ -94,63 +99,90 @@ class DatadogTracer {
         )
       }
       this._useJsSpans = false
-      // Native spans are the only supported APM pipeline. libdatadog is a
-      // required dependency; if NativeSpansInterface construction fails, that's
-      // a hard error and we let it propagate to the caller.
-      const NativeSpansInterface = getNativeModule().NativeSpansInterface
-
-      const { url, hostname = defaults.hostname, port } = config
-      const agentUrl = url || new URL(format({
-        protocol: 'http:',
-        hostname,
-        port,
-      }))
-
-      this._nativeSpans = new NativeSpansInterface({
-        agentUrl: agentUrl.toString(),
-        tracerVersion: pkg.version,
-        lang: 'nodejs',
-        langVersion: process.version,
-        // Bun runs on JavaScriptCore; match the legacy agent writer's
-        // Datadog-Meta-Lang-Interpreter (process.versions.bun ? 'JavaScriptCore' : 'v8').
-        langInterpreter: process.versions.bun ? 'JavaScriptCore' : (process.jsEngine || 'v8'),
-        pid: process.pid,
-        tracerService: config.service,
-        // Native v0.6 client stats and OTLP trace metrics are mutually exclusive
-        // (system-tests FR02): when OTLP trace metrics are enabled, config forces
-        // DD_TRACE_STATS_COMPUTATION_ENABLED=true so the OTLP stats exporter runs,
-        // but the native concentrator must NOT also ship v0.6 stats. Route stats
-        // to OTLP only in that case by leaving the native concentrator disabled.
-        statsEnabled: (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
-          !config.OTEL_TRACES_SPAN_METRICS_ENABLED) || false,
-        hostname: config.hostname || os.hostname(),
-        env: config.env || '',
-        appVersion: config.version || '',
-        runtimeId: config.tags?.['runtime-id'] || '',
-        otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
-        // Advertise Datadog-Client-Computed-Stats when we compute stats
-        // client-side or run in APM-standalone (apmTracingEnabled=false), so the
-        // agent skips its own APM stats/sampling for these traces.
-        clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
-      })
-
-      let otlpStatsExporter
-      if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-        const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
-        otlpStatsExporter = createOtlpSpanStatsExporter(config)
+      let NativeSpansInterface
+      try {
+        NativeSpansInterface = getNativeModule().NativeSpansInterface
+      } catch (e) {
+        if (isMissingLibdatadog(e) && config.OTEL_TRACES_EXPORTER !== 'otlp') {
+          this._useJsSpans = true
+          this._isCiVisibility = false
+          let otlpStatsExporter
+          if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+            const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+            otlpStatsExporter = createOtlpSpanStatsExporter(config)
+          }
+          const Exporter = require('../exporters/agent')
+          this._exporter = new Exporter(config, this._prioritySampler)
+          this._processor = new JsSpanProcessor(
+            this._exporter,
+            this._prioritySampler,
+            config,
+            otlpStatsExporter
+          )
+          this._url = this._exporter._url
+          log.warn(
+            'Native spans unavailable because optional dependency %s is not installed; using JS span pipeline',
+            '@datadog/libdatadog'
+          )
+        } else {
+          throw e
+        }
       }
 
-      this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
-      this._processor = new SpanProcessor(
-        this._exporter,
-        this._prioritySampler,
-        config,
-        this._nativeSpans,
-        otlpStatsExporter
-      )
-      this._url = agentUrl
+      if (!this._useJsSpans) {
+        const { url, hostname = defaults.hostname, port } = config
+        const agentUrl = url || new URL(format({
+          protocol: 'http:',
+          hostname,
+          port,
+        }))
 
-      log.debug('Native spans mode enabled')
+        this._nativeSpans = new NativeSpansInterface({
+          agentUrl: agentUrl.toString(),
+          tracerVersion: pkg.version,
+          lang: 'nodejs',
+          langVersion: process.version,
+          // Bun runs on JavaScriptCore; match the legacy agent writer's
+          // Datadog-Meta-Lang-Interpreter (process.versions.bun ? 'JavaScriptCore' : 'v8').
+          langInterpreter: process.versions.bun ? 'JavaScriptCore' : (process.jsEngine || 'v8'),
+          pid: process.pid,
+          tracerService: config.service,
+          // Native v0.6 client stats and OTLP trace metrics are mutually exclusive
+          // (system-tests FR02): when OTLP trace metrics are enabled, config forces
+          // DD_TRACE_STATS_COMPUTATION_ENABLED=true so the OTLP stats exporter runs,
+          // but the native concentrator must NOT also ship v0.6 stats. Route stats
+          // to OTLP only in that case by leaving the native concentrator disabled.
+          statsEnabled: (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+          !config.OTEL_TRACES_SPAN_METRICS_ENABLED) || false,
+          hostname: config.hostname || os.hostname(),
+          env: config.env || '',
+          appVersion: config.version || '',
+          runtimeId: config.tags?.['runtime-id'] || '',
+          otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
+          // Advertise Datadog-Client-Computed-Stats when we compute stats
+          // client-side or run in APM-standalone (apmTracingEnabled=false), so the
+          // agent skips its own APM stats/sampling for these traces.
+          clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
+        })
+
+        let otlpStatsExporter
+        if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+          const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+          otlpStatsExporter = createOtlpSpanStatsExporter(config)
+        }
+
+        this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
+        this._processor = new SpanProcessor(
+          this._exporter,
+          this._prioritySampler,
+          config,
+          this._nativeSpans,
+          otlpStatsExporter
+        )
+        this._url = agentUrl
+
+        log.debug('Native spans mode enabled')
+      }
     }
 
     this._propagators = {

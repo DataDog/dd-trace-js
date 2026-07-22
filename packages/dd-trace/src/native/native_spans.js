@@ -333,7 +333,7 @@ class NativeSpansInterface {
     // Zero out the count header in WASM memory
     if (this._wasmMemory.buffer !== this._cqbView.buffer) {
       this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-      this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+      this._cqbBytes = new Uint8Array(this._cqbView.buffer, this._cqbView.byteOffset, this._cqbView.byteLength)
     }
     this._cqbView.setUint32(0, 0, true)
     this._cqbView.setUint32(4, 0, true)
@@ -541,7 +541,7 @@ class NativeSpansInterface {
    */
   #refreshViews () {
     this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-    this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+    this._cqbBytes = new Uint8Array(this._cqbView.buffer, this._cqbView.byteOffset, this._cqbView.byteLength)
   }
 
   /**

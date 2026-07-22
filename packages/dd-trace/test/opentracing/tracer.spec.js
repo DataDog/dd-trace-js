@@ -117,7 +117,7 @@ describe('Tracer', () => {
       debug: sinon.spy(),
     }
 
-    loadTracer = ({ isAWSLambda = false } = {}) => proxyquire('../../src/opentracing/tracer', {
+    loadTracer = ({ isAWSLambda = false, nativeError } = {}) => proxyquire('../../src/opentracing/tracer', {
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
       '../span_processor': SpanProcessor,
@@ -131,7 +131,10 @@ describe('Tracer', () => {
       '../exporters/agent': AgentExporter,
       '../serverless': { getIsAWSLambda: () => isAWSLambda },
       '../native': {
-        get NativeSpansInterface () { return NativeSpansInterface },
+        get NativeSpansInterface () {
+          if (nativeError) throw nativeError
+          return NativeSpansInterface
+        },
         get NativeDatadogSpan () { return NativeDatadogSpan },
       },
     })
@@ -180,6 +183,51 @@ describe('Tracer', () => {
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
     sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config)
     sinon.assert.calledWith(log.debug, 'AWS Lambda environment detected (JS span pipeline)')
+  })
+
+  it('uses the JS agent pipeline when optional libdatadog is omitted', () => {
+    const nativeError = Object.assign(new Error("Cannot find module '@datadog/libdatadog'"), {
+      code: 'MODULE_NOT_FOUND',
+    })
+    Tracer = loadTracer({ nativeError })
+    TextMapPropagator.returns(propagator)
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer._useJsSpans, true)
+    assert.strictEqual(tracer._isCiVisibility, false)
+    sinon.assert.notCalled(NativeExporter)
+    sinon.assert.calledOnceWithExactly(JsSpanProcessor, agentExporter, prioritySampler, config, undefined)
+    sinon.assert.calledWith(
+      log.warn,
+      'Native spans unavailable because optional dependency %s is not installed; using JS span pipeline',
+      '@datadog/libdatadog'
+    )
+
+    tracer.inject(spanCtx, opentracing.FORMAT_TEXT_MAP, carrier)
+    sinon.assert.calledWith(propagator.inject, spanCtx, carrier)
+  })
+
+  it('does not fall back to the JS agent pipeline when native OTLP export is requested', () => {
+    const nativeError = Object.assign(new Error("Cannot find module '@datadog/libdatadog'"), {
+      code: 'MODULE_NOT_FOUND',
+    })
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    Tracer = loadTracer({ nativeError })
+
+    assert.throws(() => new Tracer(config), nativeError)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('does not fall back to the JS agent pipeline when installed libdatadog is corrupt', () => {
+    const nativeError = Object.assign(
+      new Error("Cannot find module './load'\nRequire stack:\n- node_modules/@datadog/libdatadog/index.js"),
+      { code: 'MODULE_NOT_FOUND' }
+    )
+    Tracer = loadTracer({ nativeError })
+
+    assert.throws(() => new Tracer(config), nativeError)
+    sinon.assert.notCalled(AgentExporter)
   })
 
   it('treats the agent exporter as the native APM default', () => {

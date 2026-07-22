@@ -177,4 +177,7 @@ benchmark-serverless-trigger:
     UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
     # only available on Merge Requests
     UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    # The downstream serverless-tools hard cap can lag current main layer sizes;
+    # keep PRs gated by size increase while allowing the largest measured current-main layer.
+    MAX_LAYER_UNCOMPRESSED_SIZE_KB: "25280"
     DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
