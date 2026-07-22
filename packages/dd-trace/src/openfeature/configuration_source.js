@@ -1,6 +1,5 @@
 'use strict'
 
-const { isLoopbackHost } = require('../exporters/common/url')
 const log = require('../log')
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
@@ -23,18 +22,19 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled || source !== 'agentless') {
+  if (!enabled || source === 'remote_config') {
     return
   }
 
-  try {
-    if (!config.DD_API_KEY) {
-      throw new Error('DD_API_KEY is required for Feature Flagging agentless delivery')
-    }
+  if (source !== 'agentless') {
+    throw new Error(`Unsupported Feature Flagging configuration source: ${source}`)
+  }
 
+  try {
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
     return new AgentlessConfigurationSource({
       endpoint: endpoint(config, baseUrl),
+      allowInsecureApiKey: Boolean(baseUrl?.trim()),
       pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: config.DD_API_KEY,
@@ -74,10 +74,6 @@ function endpoint (config, configuredBaseUrl) {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('Feature Flagging agentless URL must use HTTP or HTTPS')
   }
-  if (url.protocol === 'http:' && !isLoopbackHost(url.hostname)) {
-    throw new Error('Feature Flagging agentless URL must use HTTPS unless it targets loopback')
-  }
-
   if (url.pathname === '' || url.pathname === '/') {
     url.pathname = DEFAULT_AGENTLESS_PATH
   }

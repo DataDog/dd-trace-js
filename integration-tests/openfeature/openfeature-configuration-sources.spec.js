@@ -65,7 +65,7 @@ const AGENTLESS_RESPONSE = zlib.gzipSync(JSON.stringify({
 }))
 
 /** @typedef {'absent'|'true'|'false'} BooleanSetting */
-/** @typedef {'agentless'|'remote_config'|'disabled'} Delivery */
+/** @typedef {'agentless'|'remote_config'|'disabled'|'error'} Delivery */
 /** @typedef {{ name: string, value?: string }} SourceSetting */
 /**
  * @typedef {object} ConfigurationCase
@@ -135,9 +135,10 @@ describe('OpenFeature configuration source contract', () => {
 
     assert.strictEqual(configurationCases.length, 63)
     assert.deepStrictEqual(countDeliveries(configurationCases), {
-      agentless: 16,
-      remote_config: 16,
-      disabled: 31,
+      agentless: 12,
+      remote_config: 12,
+      disabled: 27,
+      error: 12,
     })
 
     await runCases(configurationCases)
@@ -241,12 +242,19 @@ async function runCase (testCase) {
         waitForObservation(agentlessRequests, testCase.identifier, 'agentless', hasObservation),
         sendCommand(proc, accessCommand),
       ])
+    } else if (testCase.expected === 'error') {
+      await assert.rejects(
+        sendCommand(proc, accessCommand),
+        /Unsupported Feature Flagging configuration source: (offline|unsupported)/
+      )
     } else {
       await sendCommand(proc, accessCommand)
     }
 
-    const { details } = await sendCommand(proc, { command: 'evaluate' })
-    assertEvaluation(testCase, details)
+    if (testCase.expected !== 'error') {
+      const { details } = await sendCommand(proc, { command: 'evaluate' })
+      assertEvaluation(testCase, details)
+    }
 
     await waitForObservation(
       remoteConfigRequests,
@@ -639,6 +647,7 @@ function countDeliveries (cases) {
     agentless: 0,
     remote_config: 0,
     disabled: 0,
+    error: 0,
   }
   for (const testCase of cases) counts[testCase.expected]++
   return counts
@@ -677,6 +686,7 @@ function expectedDelivery (stable, source, legacy) {
   if (stable === 'false') return 'disabled'
   if (source.name === 'agentless') return 'agentless'
   if (source.name === 'remote_config') return 'remote_config'
+  if (source.name === 'offline' || source.name === 'invalid') return 'error'
   if (legacy === 'true') return 'remote_config'
   if (legacy === 'false') return 'disabled'
   return 'agentless'

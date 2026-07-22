@@ -32,13 +32,14 @@ const parseErrors = new Map()
  * @param {string} source - The source of the value.
  * @param {string} baseMessage - The base message to use for the warning.
  * @param {Error} [error] - An error that was thrown while parsing the value.
+ * @param {boolean} [pickedDefault] - Whether the invalid value was discarded in favor of a fallback.
  */
-function warnInvalidValue (value, optionName, source, baseMessage, error) {
+function warnInvalidValue (value, optionName, source, baseMessage, error, pickedDefault = true) {
   const canonicalName = (optionsTable[optionName]?.canonicalName ?? optionName) + source
   // Lazy load log module to avoid circular dependency
   if (!parseErrors.has(canonicalName)) {
-    // TODO: Rephrase: It will fallback to former source (or default if not set)
-    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source}), picked default`
+    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source})`
+    if (pickedDefault) message += ', picked default'
     if (error) {
       error.stack = error.toString()
       message += `\n\n${util.inspect(error)}`
@@ -242,8 +243,10 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       const originalTransform = transformer
       transformer = (value, optionName, source) => {
         if (!allowed.test(value)) {
-          warnInvalidValue(value, optionName, source, 'Invalid value')
-          return
+          const preserveInvalidSource = canonicalName === 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE' &&
+            String(value).trim() !== ''
+          warnInvalidValue(value, optionName, source, 'Invalid value', undefined, !preserveInvalidSource)
+          if (!preserveInvalidSource) return
         }
         if (originalTransform) {
           value = originalTransform(value)

@@ -5069,16 +5069,26 @@ rules:
           expected: { enabled: true, source: 'remote_config' },
         },
         {
-          name: 'falls back from an invalid source to legacy enablement',
+          name: 'fails closed for an invalid source',
           source: 'other',
-          legacyEnabled: 'true',
-          expected: { enabled: true, source: 'remote_config' },
+          expected: { enabled: true, source: 'other' },
         },
         {
-          name: 'falls back from the reserved offline source to legacy enablement',
+          name: 'fails closed for the reserved offline source',
+          source: 'offline',
+          expected: { enabled: true, source: 'offline' },
+        },
+        {
+          name: 'fails closed for an invalid source despite legacy enablement',
+          source: 'other',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'other' },
+        },
+        {
+          name: 'fails closed for the reserved offline source despite legacy enablement',
           source: 'offline',
           legacyEnabled: 'true',
-          expected: { enabled: true, source: 'remote_config' },
+          expected: { enabled: true, source: 'offline' },
         },
       ]) {
       it(name, () => {
@@ -5104,7 +5114,7 @@ rules:
       })
     }
 
-    it('falls back from an invalid source through calculated legacy precedence', () => {
+    it('preserves an explicit invalid source over calculated legacy precedence', () => {
       process.env.DD_FEATURE_FLAGS_ENABLED = 'true'
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
       process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
@@ -5112,14 +5122,14 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
-      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
       assert.strictEqual(config.experimental.flaggingProvider.enabled, true)
       assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'env_var')
-      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'calculated')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
       assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
         { name: 'DD_FEATURE_FLAGS_ENABLED', value: true, origin: 'env_var' },
-        { name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', value: 'remote_config', origin: 'calculated' },
+        { name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', value: 'offline', origin: 'env_var' },
         { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
       ])
 
