@@ -10,8 +10,8 @@ const {
   MOCK_STRING,
   useLlmObs,
   MOCK_NUMBER,
+  MOCK_OBJECT,
 } = require('../../util')
-const { createToolResultModelV3 } = require('./tool-result-model')
 
 /**
  * @param {(version: string, openaiVersion: string) => void} callback
@@ -936,19 +936,29 @@ describe('Plugin', () => {
   })
 
   describe('tool result formatting', () => {
-    withVersions('ai', 'ai', '>=7.0.0', version => {
+    withAiSdkOpenAiVersions((version, openaiVersion) => {
       let ai
+      let openai
 
       beforeEach(() => {
         ai = require(`../../../../../../versions/ai@${version}`).get()
+
+        const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+        openai = OpenAI.createOpenAI({
+          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+          compatibility: 'strict',
+        })
       })
 
       it('formats file result parts produced by the AI SDK', async () => {
-        await ai.generateText({
-          model: createToolResultModelV3(),
+        const result = await ai.generateText({
+          // Chat Completions serializes every tool result as text. The Responses API validates file contents before
+          // the instrumented request can capture their formatted value.
+          model: openai.chat('gpt-4o-mini'),
           prompt: 'Run the test tool',
           tools: {
             testTool: ai.tool({
+              description: 'Run the test tool and return its result',
               inputSchema: ai.jsonSchema({
                 type: 'object',
                 properties: {},
@@ -985,7 +995,13 @@ describe('Plugin', () => {
             }),
           },
           stopWhen: ai.stepCountIs(2),
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
         })
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
 
         const { apmSpans, llmobsSpans } = await getEvents(6)
         let finalModelSpan
@@ -1006,15 +1022,15 @@ describe('Plugin', () => {
           span: finalModelApmSpan,
           parentId: finalStepSpan.span_id,
           spanKind: 'llm',
-          modelName: 'test',
-          modelProvider: 'test',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
           name: 'languageModelCall',
           inputMessages: [
             { content: 'Run the test tool', role: 'user' },
             {
               role: 'assistant',
               tool_calls: [{
-                tool_id: 'call-1',
+                tool_id: toolCallId,
                 name: 'testTool',
                 arguments: {},
                 type: 'function',
@@ -1023,12 +1039,13 @@ describe('Plugin', () => {
             {
               content: 'before[Image][File][File][Image][Custom Content]after',
               role: 'tool',
-              tool_id: 'call-1',
+              tool_id: toolCallId,
             },
           ],
-          outputMessages: [{ content: 'done', role: 'assistant' }],
+          outputMessages: [MOCK_OBJECT],
           toolDefinitions: [{
             name: 'testTool',
+            description: 'Run the test tool and return its result',
             schema: {
               type: 'object',
               properties: {},
@@ -1037,10 +1054,10 @@ describe('Plugin', () => {
           }],
           metadata: {},
           metrics: {
-            input_tokens: 1,
+            input_tokens: MOCK_NUMBER,
             cache_write_input_tokens: 0,
             cache_read_input_tokens: 0,
-            output_tokens: 1,
+            output_tokens: MOCK_NUMBER,
             reasoning_output_tokens: 0,
           },
           tags: { ml_app: 'test', integration: 'ai' },

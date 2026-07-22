@@ -19,11 +19,6 @@ const {
   MOCK_NUMBER,
   MOCK_OBJECT,
 } = require('../../util')
-const {
-  createToolResultModelV1,
-  createToolResultModelV2,
-  createToolResultModelV3,
-} = require('./tool-result-model')
 
 const UNPARSABLE_TOOL_RESULT = '[Unparsable Tool Result]'
 const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
@@ -72,12 +67,17 @@ function getAiSdkAnthropicOrGoogleRange (vercelAiVersion) {
 
 /**
  * @param {string} versionRange
- * @param {(version: string, realVersion: string, openaiVersion: string) => void} callback
+ * @param {(
+ *   version: string,
+ *   realVersion: string,
+ *   openaiVersionKey: string,
+ *   openaiVersion: string
+ * ) => void} callback
  */
 function withAiSdkOpenAiVersions (versionRange, callback) {
   withVersions('ai', 'ai', versionRange, (version, _, realVersion) => {
-    withVersions('ai', '@ai-sdk/openai', getAiSdkOpenAiRange(realVersion), openaiVersion => {
-      callback(version, realVersion, openaiVersion)
+    withVersions('ai', '@ai-sdk/openai', getAiSdkOpenAiRange(realVersion), (openaiVersionKey, _, openaiVersion) => {
+      callback(version, realVersion, openaiVersionKey, openaiVersion)
     })
   })
 }
@@ -142,6 +142,7 @@ const TOOL_RESULT_SCENARIOS = [
   },
   {
     name: 'denied execution',
+    openaiRange: '>=3.0.0',
     execute: () => 'result',
     createModelOutput: () => ({
       type: 'execution-denied',
@@ -151,6 +152,7 @@ const TOOL_RESULT_SCENARIOS = [
   },
   {
     name: 'denied execution without a reason',
+    openaiRange: '>=3.0.0',
     execute: () => 'result',
     createModelOutput: () => ({ type: 'execution-denied' }),
     expectedContent: '[Tool Execution Denied]',
@@ -1187,18 +1189,27 @@ describe('Plugin', () => {
   })
 
   describe('tool result formatting', () => {
-    withVersions('ai', 'ai', range, (version, _, realVersion) => {
+    withAiSdkOpenAiVersions(range, (version, realVersion, openaiVersionKey, openaiVersion) => {
       let ai
+      let openai
 
       beforeEach(() => {
         ai = require(`../../../../../../versions/ai@${version}`).get()
+
+        const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+        const OpenAI = OpenAIModule.get()
+        openai = OpenAI.createOpenAI({
+          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+          compatibility: 'strict',
+        })
       })
 
       /**
        * @param {{
        *   execute: () => unknown,
        *   createModelOutput?: () => unknown,
-       *   expectedContent: string
+       *   expectedContent: string,
+       *   openaiRange?: string
        * }} scenario
        */
       async function assertToolResult (scenario) {
@@ -1207,20 +1218,17 @@ describe('Plugin', () => {
           type: 'object',
           properties: {},
         })
-        let model
         let tool
         if (isLegacy) {
-          model = createToolResultModelV1()
           tool = ai.tool({
             id: 'testTool',
+            description: 'Run the test tool and return its result',
             parameters: schema,
             execute: scenario.execute,
           })
         } else {
-          model = semifies(realVersion, '>=6.0.0')
-            ? createToolResultModelV3()
-            : createToolResultModelV2()
           tool = ai.tool({
+            description: 'Run the test tool and return its result',
             inputSchema: schema,
             execute: scenario.execute,
             toModelOutput: scenario.createModelOutput,
@@ -1228,7 +1236,9 @@ describe('Plugin', () => {
         }
 
         const options = {
-          model,
+          // Chat Completions serializes every tool result as text. The Responses API rejects some valid AI SDK
+          // result variants before the instrumented request can capture their formatted value.
+          model: openai.chat('gpt-4o-mini'),
           prompt: 'Run the test tool',
           tools: isLegacy ? [tool] : { testTool: tool },
         }
@@ -1237,8 +1247,16 @@ describe('Plugin', () => {
         } else {
           options.stopWhen = ai.stepCountIs(2)
         }
+        if (semifies(openaiVersion, '>=2.0.50')) {
+          options.providerOptions = {
+            openai: {
+              store: false,
+            },
+          }
+        }
 
-        await ai.generateText(options)
+        const result = await ai.generateText(options)
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
 
         const { apmSpans, llmobsSpans } = await getEvents(4)
         let finalModelSpan
@@ -1259,8 +1277,8 @@ describe('Plugin', () => {
           span: finalModelApmSpan,
           parentId: workflowSpan.span_id,
           spanKind: 'llm',
-          modelName: 'test',
-          modelProvider: 'test',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
           name: 'doGenerate',
           inputMessages: [
             { content: 'Run the test tool', role: 'user' },
@@ -1268,7 +1286,7 @@ describe('Plugin', () => {
               content: '',
               role: 'assistant',
               tool_calls: [{
-                tool_id: 'call-1',
+                tool_id: toolCallId,
                 name: 'testTool',
                 arguments: {},
                 type: 'function',
@@ -1277,18 +1295,18 @@ describe('Plugin', () => {
             {
               content: scenario.expectedContent,
               role: 'tool',
-              tool_id: 'call-1',
+              tool_id: toolCallId,
             },
           ],
-          outputMessages: [{ content: 'done', role: 'assistant' }],
-          metrics: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          outputMessages: [MOCK_OBJECT],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
           tags: { ml_app: 'test', integration: 'ai' },
         })
       }
 
       const scenarios = semifies(realVersion, '<5.0.0')
         ? LEGACY_TOOL_RESULT_SCENARIOS
-        : TOOL_RESULT_SCENARIOS
+        : TOOL_RESULT_SCENARIOS.filter(({ openaiRange }) => !openaiRange || semifies(openaiVersion, openaiRange))
       for (const scenario of scenarios) {
         it(`formats ${scenario.name} produced by the AI SDK`, async () => {
           await assertToolResult(scenario)

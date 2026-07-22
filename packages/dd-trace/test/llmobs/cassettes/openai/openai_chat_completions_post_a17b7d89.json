@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/5.0.218",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "1123"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Run the test tool\"},{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"call_tMh2IPARQABNSUlF7F8j20b1\",\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_tMh2IPARQABNSUlF7F8j20b1\",\"content\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"before\\\"},{\\\"type\\\":\\\"media\\\",\\\"mediaType\\\":\\\"image/png\\\",\\\"data\\\":\\\"private-image-data\\\"},{\\\"type\\\":\\\"media\\\",\\\"mediaType\\\":\\\"application/pdf\\\",\\\"data\\\":\\\"private-file-data\\\"},{\\\"type\\\":\\\"file-data\\\",\\\"mediaType\\\":\\\"application/pdf\\\",\\\"data\\\":\\\"private-file-data\\\"},{\\\"type\\\":\\\"file-id\\\",\\\"fileId\\\":\\\"private-file-id\\\"},{\\\"type\\\":\\\"image-data\\\",\\\"mediaType\\\":\\\"image/png\\\",\\\"data\\\":\\\"private-image-data\\\"},{\\\"type\\\":\\\"image-file-id\\\",\\\"fileId\\\":\\\"private-image-id\\\"},{\\\"type\\\":\\\"custom\\\",\\\"providerOptions\\\":{\\\"secret\\\":\\\"provider-data\\\"}},{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"after\\\"}]\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"description\":\"Run the test tool and return its result\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"strict\":false}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 22 Jul 2026 20:13:20 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a1f51af3bf244b05-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "1511",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999860",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_6249f88c64014cd1bf47344a3dfca024",
+      "set-cookie": "__cf_bm=qGUDyxGppIZmuRO79s_KGLMtRZPapFL_BNuUCio3b1Q-1784751199.314885-1.0.1.1-Nsmo7BiuF_SOSS3BX_3bpjsCRXCBmFQazwL4CeWZUZoVRb4F8doxj5atXcTpUCjVhpQ9WTsHqvJTpJMXQ7cYZCTA1Hnf7opb4F4yZdRqXCWICi.SoVdD1ddEPv2m1p19; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 22 Jul 2026 20:43:20 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-E4XbbdhlckyPXklTDOMjygf5LIxVi\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784751199,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The test tool has run successfully, and here are the results:\\n\\n- **Text Output**: \\\"before\\\"\\n- **Media Outputs**:\\n  - Image (PNG): Data is available but private.\\n  - PDF: Data is available but private (two representations).\\n- **File Information**:\\n  - PDF: File ID is private.\\n  - Image: File ID is private.\\n- **Custom Output**: Provider options contain secret data.\\n- **Text Output**: \\\"after\\\"\\n\\nIf you need further analysis or specific actions based on this output, let me know!\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 185,\n    \"completion_tokens\": 116,\n    \"total_tokens\": 301,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_67faaa3b02\"\n}\n"
+  }
+}
