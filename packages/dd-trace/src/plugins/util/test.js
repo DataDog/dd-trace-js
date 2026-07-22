@@ -77,6 +77,11 @@ const {
  *
  * @typedef {{ service?: string, isServiceUserProvided?: boolean }} TestEnvironmentConfig
  * @typedef {Record<string, string|number|undefined>} TestEnvironmentMetadata
+ * @typedef {{
+ *   isRumActive?: boolean,
+ *   browserVersion?: string,
+ *   testExecutionId?: string
+ * }} RumTestCorrelationContext
  */
 
 // session tags
@@ -434,6 +439,8 @@ module.exports = {
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
+  setRumTestCorrelation,
+  setRumTestTags,
   TEST_SOURCE_FILE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
@@ -798,12 +805,58 @@ function getTestTypeFromFramework (testFramework) {
   return 'test'
 }
 
+/**
+ * @param {import('../../opentracing/span')} span
+ */
 function finishAllTraceSpans (span) {
   for (const traceSpan of span.context()._trace.started) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
   }
+}
+
+/**
+ * @param {import('../../opentracing/span')} testSpan
+ * @param {boolean|undefined} isRumActive
+ * @param {string} [browserVersion]
+ * @returns {void}
+ */
+function setRumTestTags (testSpan, isRumActive, browserVersion) {
+  if (isRumActive) {
+    testSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+  }
+  if (browserVersion) {
+    testSpan.setTag(TEST_BROWSER_VERSION, browserVersion)
+  }
+}
+
+/**
+ * @param {RumTestCorrelationContext} context
+ * @param {import('../../opentracing/span')|undefined} activeSpan
+ * @returns {import('../../opentracing/span')|undefined}
+ */
+function setRumTestCorrelation (context, activeSpan) {
+  if (!activeSpan) return
+
+  const activeContext = activeSpan.context()
+  let testSpan
+  if (activeContext.getTag(SPAN_TYPE) === 'test') {
+    testSpan = activeSpan
+  } else {
+    for (const traceSpan of activeContext._trace.started) {
+      if (traceSpan.context().getTag(SPAN_TYPE) === 'test') {
+        testSpan = traceSpan
+        break
+      }
+    }
+  }
+
+  if (!testSpan) return
+
+  context.testExecutionId = testSpan.context().toTraceId()
+  setRumTestTags(testSpan, context.isRumActive, context.browserVersion)
+  return testSpan
 }
 
 function getTestParentSpan (tracer) {

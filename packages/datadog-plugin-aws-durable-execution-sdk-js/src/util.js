@@ -16,7 +16,8 @@ const REPLAYED_STATUSES = new Set(['SUCCEEDED', 'FAILED'])
  * @returns {{ stepId: string | undefined, stepData: object | undefined }}
  */
 function getStepDataForNext (ctxImpl) {
-  const stepId = ctxImpl?.getNextStepId?.()
+  // @aws/durable-execution-sdk-js@2.2.0 renames .getNextStepId() to .peekStepId()
+  const stepId = ctxImpl?.peekStepId?.() ?? ctxImpl?.getNextStepId?.()
   const stepData = stepId ? ctxImpl?._executionContext?.getStepData?.(stepId) : undefined
   return { stepId, stepData }
 }
