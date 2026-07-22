@@ -615,6 +615,41 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_APPSEC_AGENTIC_ONBOARDING', () => {
+    // RFC-1113: reported verbatim in configuration telemetry, always emitted
+    // (empty value with origin=default when unset). No effect on tracer behavior.
+    it('should default to an empty string and report it with origin=default when unset', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, '')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: '', origin: 'default' },
+      ])
+    })
+
+    it('should report the value verbatim with origin=env_var when set to true', () => {
+      process.env.DD_APPSEC_AGENTIC_ONBOARDING = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'true')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'true', origin: 'env_var' },
+      ])
+    })
+
+    it('should report an arbitrary value verbatim rather than collapsing to a boolean', () => {
+      process.env.DD_APPSEC_AGENTIC_ONBOARDING = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.appsec.DD_APPSEC_AGENTIC_ONBOARDING, 'false')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_APPSEC_AGENTIC_ONBOARDING', value: 'false', origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
