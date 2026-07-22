@@ -2804,6 +2804,7 @@ describe('Config', () => {
       },
       rateLimit: 42,
       rules: RULES_JSON_PATH,
+      DD_APPSEC_AGENTIC_ONBOARDING: '',
       DD_APPSEC_SCA_ENABLED: undefined,
       stackTrace: {
         enabled: true,
