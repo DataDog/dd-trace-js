@@ -1103,6 +1103,7 @@ function collectScripts (manifests) {
  */
 function detectSupportedFrameworks (root, definitions, manifests, scripts, textFiles) {
   const frameworks = []
+  const projectPreferenceScores = getProjectPreferenceScores(root, manifests)
 
   for (const definition of definitions) {
     const dependencyEntries = findDependencyEntries(manifests, definition.packages)
@@ -1116,6 +1117,7 @@ function detectSupportedFrameworks (root, definitions, manifests, scripts, textF
       dependencyEntries,
       scriptMatches,
       configMatches,
+      projectPreferenceScores,
       locations: unique([
         ...dependencyEntries.map(entry => entry.relativePath),
         ...scriptMatches.map(script => script.relativePath),
@@ -1190,19 +1192,84 @@ function getSupportedVersionDetection (framework, relativePath) {
  * @returns {object|undefined} eligible command match
  */
 function getEligibleCommandMatch (framework) {
-  const scriptMatches = framework.scriptMatches || []
+  const scriptMatches = [...(framework.scriptMatches || [])].sort((left, right) => {
+    return compareProjectPreference(left, right, framework.projectPreferenceScores)
+  })
 
   for (const script of scriptMatches) {
     if (isIneligibleFrameworkCommand(framework.id, script.command)) continue
     return script
   }
 
-  if (framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest') {
-    return framework.dependencyEntries?.[0] && {
+  if (framework.id === 'cucumber' || framework.id === 'cypress' || framework.id === 'jest' ||
+    framework.id === 'mocha' || framework.id === 'playwright' || framework.id === 'vitest') {
+    const dependencyEntries = [...(framework.dependencyEntries || [])].sort((left, right) => {
+      return compareProjectPreference(left, right, framework.projectPreferenceScores)
+    })
+    return dependencyEntries[0] && {
       command: `direct ${framework.id} binary`,
-      relativePath: framework.dependencyEntries[0].relativePath,
+      relativePath: dependencyEntries[0].relativePath,
     }
   }
+}
+
+/**
+ * Scores package manifests by how closely their names match the repository directory name.
+ *
+ * @param {string} root repository root
+ * @param {Array<object>} manifests package manifests
+ * @returns {Map<string, number>} preference score by package.json path
+ */
+function getProjectPreferenceScores (root, manifests) {
+  const repositoryTokens = getIdentityTokens(path.basename(root))
+  const scores = new Map()
+
+  for (const manifest of manifests) {
+    const projectName = manifest.json.name || (manifest.relativePath === 'package.json'
+      ? path.basename(root)
+      : path.basename(path.dirname(manifest.relativePath)))
+    const projectTokens = getIdentityTokens(projectName)
+    let score = 0
+    for (const token of projectTokens) {
+      if (repositoryTokens.has(token)) score++
+    }
+    scores.set(manifest.relativePath, score)
+  }
+
+  return scores
+}
+
+/**
+ * Normalizes repository and package names for conservative identity comparison.
+ *
+ * @param {string} value repository or package name
+ * @returns {Set<string>} normalized identity tokens
+ */
+function getIdentityTokens (value) {
+  const tokens = String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  const normalized = new Set()
+  for (const token of tokens) {
+    if (['monorepo', 'package', 'packages', 'project', 'repo', 'root', 'workspace'].includes(token)) continue
+    normalized.add(token.endsWith('js') && token.length > 2 ? token.slice(0, -2) : token)
+  }
+  return normalized
+}
+
+/**
+ * Orders command owners by repository identity, then by scope and stable path.
+ *
+ * @param {object} left first command or dependency entry
+ * @param {object} right second command or dependency entry
+ * @param {Map<string, number>|undefined} scores package preference scores
+ * @returns {number} sort order
+ */
+function compareProjectPreference (left, right, scores) {
+  const scoreDifference = (scores?.get(right.relativePath) || 0) - (scores?.get(left.relativePath) || 0)
+  if (scoreDifference !== 0) return scoreDifference
+
+  const depthDifference = left.relativePath.split('/').length - right.relativePath.split('/').length
+  if (depthDifference !== 0) return depthDifference
+  return left.relativePath.localeCompare(right.relativePath)
 }
 
 /**

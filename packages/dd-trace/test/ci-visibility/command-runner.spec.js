@@ -12,7 +12,7 @@ const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 const { getCommandOutputPaths } = require('../../../../ci/test-optimization-validation/command-output-policy')
 const {
-  buildCiWiringEnv,
+  buildOfflineCaptureEnv,
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,
@@ -147,8 +147,8 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('uses private filesystem routing without adding Datadog initialization to CI replay', () => {
-    const env = buildCiWiringEnv(validationRouting())
+  it('uses private filesystem routing without adding Datadog initialization', () => {
+    const env = buildOfflineCaptureEnv(validationRouting())
 
     assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MODE, '1')
     assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE,
@@ -168,7 +168,7 @@ describe('test optimization validation command runner', () => {
   it('keeps validator-controlled offline paths when a command supplies conflicting environment values', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
     const settingsCachePath = path.join(outDir, 'project-selected-settings-cache.json')
-    const env = buildCiWiringEnv(validationRouting())
+    const env = buildOfflineCaptureEnv(validationRouting())
 
     try {
       const result = await runCommand({
@@ -217,7 +217,7 @@ describe('test optimization validation command runner', () => {
 
   it('refuses inline offline routing, NODE_OPTIONS, and environment resets', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
-    const env = buildCiWiringEnv(validationRouting())
+    const env = buildOfflineCaptureEnv(validationRouting())
 
     try {
       await assert.rejects(runCommand({
@@ -314,7 +314,7 @@ describe('test optimization validation command runner', () => {
     const artifactRoot = path.join(repositoryRoot, 'results')
     const outDir = path.join(artifactRoot, 'run')
     const coverage = path.join(repositoryRoot, 'coverage')
-    const env = buildCiWiringEnv(validationRouting())
+    const env = buildOfflineCaptureEnv(validationRouting())
     fs.mkdirSync(artifactRoot)
     fs.mkdirSync(coverage)
     fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')

@@ -32,12 +32,13 @@ const JEST_OPTIONS_WITH_VALUE = new Set([
   '--testRegex',
 ])
 const JEST_ROOT_DIR_PATTERN = /(?:\brootDir\b|"rootDir"|'rootDir')\s*:\s*(['"])([^'"]+)\1/
+const JEST_CWD_ROOT_DIR_PATTERN = /(?:\brootDir\b|"rootDir"|'rootDir')\s*:\s*process\.cwd\(\)/
 const COMMON_NODE_EXPORT_CONDITIONS = new Set(['default', 'module-sync', 'node', 'node-addons'])
 const INLINE_TYPE_IMPORT_PATTERN = /^import\s*\{([^}]*)\}\s*from\b/
 const INLINE_TYPE_EXPORT_PATTERN = /^export\s*\{([^}]*)\}\s*from\b/
 const TYPE_ONLY_IMPORT_PATTERN = /^import\s+type\b/
 const TYPE_ONLY_EXPORT_PATTERN = /^export\s+type\b/
-const TEST_FILE_BASENAME_PATTERN = /^(?:(?:test|spec)|.+[._-](?:test|spec))\.[cm]?[jt]sx?$/
+const TEST_FILE_BASENAME_PATTERN = /^(?:(?:test|spec)|.+[._-](?:cy|test|spec))\.[cm]?[jt]sx?$/
 const VITEST_CONFIG_FILENAMES = [
   'vitest.config.js',
   'vitest.config.mjs',
@@ -64,6 +65,7 @@ const VITEST_CONFIG_FILENAMES = [
  * @returns {string|undefined} suitability error
  */
 function getCommandSuitabilityError ({ command, framework, label, repositoryRoot }) {
+  const isLocalTestCandidate = label === 'the selected test command' || label.startsWith('local test candidate ')
   const yarnError = getRepositoryYarnError(command, repositoryRoot)
   if (yarnError) return yarnError
   const packageScriptError = getPackageScriptForwardingError(command, repositoryRoot)
@@ -78,15 +80,14 @@ function getCommandSuitabilityError ({ command, framework, label, repositoryRoot
     }
   }
 
-  if (label === 'the selected test command') {
+  if (isLocalTestCandidate) {
     const missingBuildError = getMissingSelfPackageBuildError(command, framework, repositoryRoot)
     if (missingBuildError) return missingBuildError
     const missingLocalModuleError = getMissingLocalModuleError(command, framework, repositoryRoot)
     if (missingLocalModuleError) return missingLocalModuleError
   }
 
-  if (framework.framework === 'vitest' &&
-    (label === 'the selected test command' || label.includes('advanced-feature'))) {
+  if (framework.framework === 'vitest' && (isLocalTestCandidate || label.includes('advanced-feature'))) {
     if (label.includes('advanced-feature')) {
       const generatedPathError = getVitestGeneratedPathError(command, framework, repositoryRoot)
       if (generatedPathError) return generatedPathError
@@ -606,7 +607,7 @@ function getPackageScriptForwardingError (command, repositoryRoot) {
     `${JSON.stringify(sanitizeString(expansion.effectiveCommand))}, including a literal extra "--" before the ` +
     'runner arguments. ' +
     `For ${expansion.packageManager}, append focused runner arguments directly after the script name, then render ` +
-    'a fresh plan. Preserve the original package-manager wrapper for CI replay.'
+    'a fresh plan. Record the original package-manager wrapper only as CI configuration evidence.'
 }
 
 /**
@@ -707,11 +708,11 @@ function getJestGeneratedPathError (command, framework, repositoryRoot) {
  */
 function getJestCollectionRules (command, framework, repositoryRoot) {
   const explicitConfig = getJestConfigFile(command, repositoryRoot)
-  if (explicitConfig) return getJestConfigCollectionRules(explicitConfig, repositoryRoot)
+  if (explicitConfig) return getJestConfigCollectionRules(explicitConfig, repositoryRoot, command.cwd)
 
   for (const configFile of framework.project?.configFiles || []) {
     if (configFile === framework.project?.packageJson) continue
-    const rules = getJestConfigCollectionRules(configFile, repositoryRoot)
+    const rules = getJestConfigCollectionRules(configFile, repositoryRoot, command.cwd)
     if (rules) return rules
   }
 
@@ -741,9 +742,10 @@ function getJestCollectionRules (command, framework, repositoryRoot) {
  *
  * @param {string} configFile Jest config path
  * @param {string} repositoryRoot repository root
+ * @param {string} commandCwd selected command working directory
  * @returns {object|undefined} collection rules
  */
-function getJestConfigCollectionRules (configFile, repositoryRoot) {
+function getJestConfigCollectionRules (configFile, repositoryRoot, commandCwd) {
   const source = readRepositoryConfig(configFile, repositoryRoot)
   if (!source) return
   try {
@@ -766,7 +768,11 @@ function getJestConfigCollectionRules (configFile, repositoryRoot) {
   if (testMatch.length === 0 && testRegex.length === 0) return
   const rootDirMatch = source.match(JEST_ROOT_DIR_PATTERN)
   return {
-    rootDir: rootDirMatch ? path.resolve(path.dirname(configFile), rootDirMatch[2]) : path.dirname(configFile),
+    rootDir: rootDirMatch
+      ? path.resolve(path.dirname(configFile), rootDirMatch[2])
+      : JEST_CWD_ROOT_DIR_PATTERN.test(source)
+        ? path.resolve(commandCwd)
+        : path.dirname(configFile),
     source: configFile,
     testMatch,
     testRegex,
@@ -1176,6 +1182,15 @@ function getGlobRegexSource (pattern) {
 
   while (index < pattern.length) {
     const character = pattern[index]
+    if (character === '(') {
+      const end = pattern.indexOf(')', index + 1)
+      const alternatives = end === -1 ? [] : pattern.slice(index + 1, end).split('|')
+      if (alternatives.length > 1 && alternatives.every(value => /^[A-Za-z0-9._-]+$/.test(value))) {
+        source += `(?:${alternatives.map(escapeRegex).join('|')})`
+        index = end + 1
+        continue
+      }
+    }
     if ((character === '?' || character === '+') && pattern[index + 1] === '(') {
       const end = pattern.indexOf(')', index + 2)
       const value = end === -1 ? '' : pattern.slice(index + 2, end)

@@ -162,7 +162,7 @@ describe('test optimization validation cli', () => {
           mode,
         ])
 
-        assert.strictEqual(process.exitCode, 1)
+        assert.strictEqual(process.exitCode, 3)
         assert.match(errors.join('\n'), new RegExp(`cannot be combined with ${mode}`))
       } finally {
         console.error = originalError
@@ -201,7 +201,13 @@ describe('test optimization validation cli', () => {
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       './manifest-scaffold': {
         createManifestScaffold ({ root }) {
-          return { schemaVersion: '1.0', repository: { root }, environment: {}, frameworks: [] }
+          return {
+            schemaVersion: '1.0',
+            repository: { root },
+            environment: {},
+            ciDiscovery: { reviewTargets: ['.github/workflows/test.yml'], reviewRequired: false },
+            frameworks: [{ status: 'runnable', ciWiring: { initialization: { status: 'not_configured' } } }],
+          }
         },
       },
     })
@@ -216,8 +222,12 @@ describe('test optimization validation cli', () => {
         'dd-test-optimization-validation-manifest.json'
       )))
       assert.strictEqual(manifest.repository.root, fs.realpathSync(tmpDir))
-      assert.match(logs.join('\n'), /without running project code/)
-      assert.match(logs.join('\n'), /CI files listed in ciDiscovery/)
+      assert.match(logs.join('\n'), /schema-valid validation manifest without running project code/)
+      assert.match(logs.join('\n'), /Do not enumerate other packages, tests, runner configs, workflow files/)
+      assert.match(logs.join('\n'), /\.github\/workflows\/test\.yml/)
+      assert.match(logs.join('\n'), /CI initialization status: not_configured/)
+      assert.match(logs.join('\n'), /Do not open or edit the manifest/)
+      assert.match(logs.join('\n'), /--print-plan/)
       assert.strictEqual(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-validation-results')), false)
     } finally {
       console.log = originalLog
@@ -344,13 +354,18 @@ describe('test optimization validation cli', () => {
 
       assert.strictEqual(fs.existsSync(approvalJsonPath), true)
       assert.strictEqual(fs.existsSync(coveredFilesPath), true)
-      assert.match(presentationReminder, /Customer approval summary written to/)
+      assert.match(presentationReminder, /^===== CUSTOMER APPROVAL PLAN =====/)
+      assert.match(presentationReminder, /===== END CUSTOMER APPROVAL PLAN =====/)
       assert.ok(presentationReminder.includes(approvalSummaryPath))
       assert.ok(presentationReminder.includes(executionPlanPath))
-      assert.match(presentationReminder, /send its complete contents in a user-facing message/)
-      assert.doesNotMatch(presentationReminder, /--approved-plan-sha256/)
-      assert.doesNotMatch(presentationReminder, /--offline-fixture-nonce [a-f0-9]{32}/)
-      assert.doesNotMatch(presentationReminder, /[a-f0-9]{64}/)
+      assert.match(presentationReminder, /LIVE VALIDATION HAS NOT RUN\./)
+      assert.match(presentationReminder, /DISCOVERY IS COMPLETE\. STOP TOOL USE NOW\./)
+      assert.match(presentationReminder, /Tool output is not the next user-facing response/)
+      assert.match(presentationReminder, /A response containing only "Awaiting approval".*is invalid/)
+      const displayedSummary = presentationReminder
+        .split('===== CUSTOMER APPROVAL PLAN =====\n')[1]
+        .split('\n===== END CUSTOMER APPROVAL PLAN =====')[0]
+      assert.strictEqual(displayedSummary, approvalSummary.trimEnd())
       assert.match(approvalSummary, /# Test Optimization Validation Approval Summary/)
       assert.match(approvalSummary, /## Commands/)
       assert.match(approvalSummary, /## Safety and Outputs/)
@@ -385,7 +400,7 @@ describe('test optimization validation cli', () => {
     try {
       await main(['--manifest', manifestPath, '--out', out])
 
-      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(process.exitCode, 3)
       assert.strictEqual(fs.existsSync(out), false)
       assert.match(errors.join('\n'), /requires --run-approved-plan and --sha256/)
     } finally {
@@ -556,7 +571,7 @@ describe('test optimization validation cli', () => {
     try {
       await main(['--manifest', manifestPath, '--out', tmpDir, ...APPROVAL_ARGS])
 
-      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(process.exitCode, 3)
       assert.match(errors.join('\n'), /dedicated child directory inside repository.root/)
     } finally {
       console.error = originalError
@@ -613,14 +628,14 @@ describe('test optimization validation cli', () => {
     try {
       await main(['--manifest', manifestPath, '--out', out, '--scenario', 'efd', ...APPROVAL_ARGS])
 
-      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(process.exitCode, 2)
     } finally {
       process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
 
-  it('skips CI wiring when direct-initialization Basic Reporting fails', async () => {
+  it('still audits CI configuration when direct-initialization Basic Reporting fails', async () => {
     const validation = await runCliFixture({
       './scenarios/basic-reporting': {
         async runBasicReporting ({ framework }) {
@@ -635,28 +650,34 @@ describe('test optimization validation cli', () => {
         },
       },
       './scenarios/ci-wiring': {
-        async runCiWiring () {
-          throw new Error('CI wiring should not run until Basic Reporting passes')
+        async runCiWiring ({ framework, basicResult }) {
+          assert.strictEqual(basicResult.status, 'fail')
+          return {
+            frameworkId: framework.id,
+            scenario: 'ci-wiring',
+            status: 'fail',
+            diagnosis: 'Static CI evidence confirms that Test Optimization is not configured.',
+            evidence: {
+              conclusion: 'confirmed_misconfigured',
+              domain: 'ci_configuration',
+              evidenceStrength: 'confirmed_static',
+            },
+            artifacts: [],
+          }
         },
       },
-    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root))
+    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root))
 
     assert.strictEqual(validation.exitCode, 1)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:fail',
-      'ci-wiring:skip',
+      'ci-wiring:fail',
       'efd:skip',
       'atr:skip',
       'test-management:skip',
     ])
-    assert.match(validation.results[1].diagnosis, /Skipped CI wiring validation because Basic Reporting/)
-    assert.strictEqual(validation.results[1].evidence.basicReportingStatus, 'fail')
-    assert.deepStrictEqual(validation.results[1].evidence.featureEligibility, {
-      eligible: false,
-      blockedBy: 'basic-reporting',
-      reasonCode: 'basic-reporting-failed',
-      scenario: 'ci-wiring',
-    })
+    assert.strictEqual(validation.results[1].conclusion, 'confirmed_misconfigured')
+    assert.strictEqual(validation.results[1].evidenceStrength, 'confirmed_static')
     assert.deepStrictEqual(validation.results[2].evidence.featureEligibility, {
       eligible: false,
       blockedBy: 'basic-reporting',
@@ -672,7 +693,7 @@ describe('test optimization validation cli', () => {
           throw new Error('CI wiring should not run when only Basic Reporting is selected')
         },
       },
-    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root), [
+    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root), [
       '--scenario', 'basic-reporting',
     ])
 
@@ -682,7 +703,7 @@ describe('test optimization validation cli', () => {
     ])
   })
 
-  it('reports non-replayable CI wiring as incomplete during full validation', async () => {
+  it('reports statically configured CI as propagation-unverified during full validation', async () => {
     const validation = await runCliFixture({
       './scenarios/early-flake-detection': {
         async runEarlyFlakeDetection ({ framework }) {
@@ -701,14 +722,17 @@ describe('test optimization validation cli', () => {
       },
     }, manifest => {
       manifest.frameworks[0].ciWiring = {
-        status: 'unknown',
-        replayability: 'not_replayable',
-        replayBlocker: 'No replayable CI command was identified.',
-        reason: 'No replayable CI command was identified.',
+        command: 'npm test',
+        initialization: {
+          status: 'configured',
+          evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'],
+        },
+        stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
+        requiredSecretEnvVars: ['DD_API_KEY'],
       }
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:pass',
       'ci-wiring:error',
@@ -716,7 +740,7 @@ describe('test optimization validation cli', () => {
       'atr:pass',
       'test-management:pass',
     ])
-    assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
+    assert.strictEqual(validation.results[1].conclusion, 'configured_propagation_unverified')
     assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
   })
 
@@ -742,7 +766,7 @@ describe('test optimization validation cli', () => {
           return getPassingScenarioResult(framework, 'test-management')
         },
       },
-    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root))
+    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root))
 
     assert.strictEqual(validation.exitCode, 0)
     assert.strictEqual(validation.runSummary.validationCoverage, 'complete')
@@ -765,7 +789,7 @@ describe('test optimization validation cli', () => {
       },
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.strictEqual(validation.runSummary.runCompleted, true)
     assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
   })
@@ -773,24 +797,23 @@ describe('test optimization validation cli', () => {
   it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
     const validation = await runCliFixture({}, manifest => {
       manifest.frameworks[0].ciWiring = {
-        status: 'unknown',
-        replayability: 'not_replayable',
-        replayBlocker: 'No replayable CI command was identified.',
-        reason: 'No replayable CI command was identified.',
+        diagnosis: 'CI initialization evidence has not been completed.',
+        initialization: { status: 'unknown', evidence: [] },
       }
     }, ['--scenario', 'ci-wiring'])
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:pass',
       'ci-wiring:error',
     ])
     assert.strictEqual(validation.results[1].diagnosis,
-      'CI wiring was not replayed: No replayable CI command was identified. ' +
-      'No live CI-wiring conclusion was reached.')
-    assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
+      'The CI configuration audit could not determine whether the identified test job initializes Test ' +
+      'Optimization. No CI configuration conclusion was reached.')
+    assert.strictEqual(validation.results[1].conclusion, 'incomplete')
     assert.strictEqual(validation.results[1].evidence.recommendation,
-      'Resolve the recorded CI replay blocker, then rerun validation with the unchanged CI test command.')
+      'Record whether the identified CI test job configures NODE_OPTIONS with dd-trace/ci/init and whether it uses ' +
+      'agentless reporting or a reachable Datadog Agent.')
   })
 
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
@@ -846,7 +869,7 @@ describe('test optimization validation cli', () => {
       fs.writeFileSync(path.join(root, '.mocharc.json'), '{}\n')
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results[0].evidence.configFiles, ['.mocharc.json'])
     assert.deepStrictEqual(validation.results[0].evidence.directDependency, {
       field: 'devDependencies',
@@ -888,7 +911,7 @@ describe('test optimization validation cli', () => {
       fs.writeFileSync(path.join(root, 'cucumber.js'), 'module.exports = {}\n')
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => result.evidence.configFiles), [
       ['config-jest.js'],
       ['cypress.json'],
@@ -994,30 +1017,27 @@ function getRunnableManifest (root) {
           maxTestCount: 50,
         },
         ciWiring: {
-          status: 'skip',
-          replayability: 'not_replayable',
-          replayBlocker: 'No CI test job was found in this fixture.',
-          reason: 'No CI test job was found in this fixture.',
+          diagnosis: 'No CI test job was found in this fixture.',
+          initialization: { status: 'unknown', evidence: [] },
         },
       },
     ],
   }
 }
 
-function setReplayableCiWiring (framework, root) {
+function setStaticCiWiring (framework, root) {
   framework.ciWiring = {
-    status: 'fail',
-    replayability: 'replayable',
     provider: 'github-actions',
     configFile: path.join(root, '.github', 'workflows', 'test.yml'),
     job: 'test',
     step: 'Run tests',
     workingDirectory: root,
     whySelected: 'The step runs the selected representative test command.',
-  }
-  framework.ciWiringCommand = {
-    cwd: root,
-    argv: [process.execPath, '-e', 'console.log("1 passing")'],
+    command: 'npm test',
+    initialization: {
+      status: 'not_configured',
+      evidence: ['The selected CI job does not set NODE_OPTIONS.'],
+    },
   }
 }
 

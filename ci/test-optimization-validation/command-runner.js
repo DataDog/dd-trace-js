@@ -444,7 +444,7 @@ function buildDatadogEnv ({ fixture, outputRoot, scenario, framework }) {
   }
 }
 
-function buildCiWiringEnv ({ fixture, outputRoot }) {
+function buildOfflineCaptureEnv ({ fixture, outputRoot }) {
   return {
     ...buildOfflineValidationEnv({ fixture, outputRoot }),
     [VALIDATION_CAPTURE_MODE_ENV]: 'sample',
@@ -751,7 +751,7 @@ function getDisplayDetails (argv) {
 
 module.exports = {
   runCommand,
-  buildCiWiringEnv,
+  buildOfflineCaptureEnv,
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,

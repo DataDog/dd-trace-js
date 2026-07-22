@@ -22,9 +22,14 @@ const { verifyGeneratedTestStrategy } = require('./generated-verifier')
 const { annotateCiDiscovery } = require('./ci-discovery')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
-const { formatExecutionPlan, getApprovalSummaryPath, getExecutionPlanPath } = require('./plan-writer')
+const {
+  formatExecutionPlanArtifacts,
+  getApprovalSummaryPath,
+  getExecutionPlanPath,
+} = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
+const { annotateResults, getExecutionStatus, getValidatorExitCode } = require('./result-semantics')
 const { writePendingReport, writeReport } = require('./report-writer')
 const { ensureSafeDirectory } = require('./safe-files')
 const { runSetupCommands } = require('./setup-runner')
@@ -173,12 +178,28 @@ async function main (argv) {
       }
       const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
-      console.log(sanitizeConsoleText(
-        `Created validation manifest scaffold without running project code: ${manifestPath}\n` +
-        'This scaffold is already schema-valid; preserve its command boilerplate. Review the selected test commands ' +
-        'and CI files listed in ciDiscovery, record one replayable CI test step when available, then run ' +
-        '--validate-manifest and follow its field-specific errors.'
-      ))
+      const reviewTargets = manifest.ciDiscovery?.reviewTargets || []
+      const reviewRequired = manifest.ciDiscovery?.reviewRequired !== false
+      const initializationStatus = manifest.frameworks.find(framework => framework.status === 'runnable')
+        ?.ciWiring?.initialization?.status
+      const nextStep = reviewRequired
+        ? 'Inspect only the CI review targets in order and stop after the first matching test job. Preserve the ' +
+          'scaffold commands and temporary tests. Then run --validate-manifest and --print-plan.'
+        : 'The bounded scan found no dd-trace/ci/init preload in any discovered CI configuration. That static ' +
+          'conclusion is complete. Do not open or edit the manifest and do not inspect project files. Run the ' +
+          'following command next:\n' +
+          'node ./node_modules/dd-trace/ci/validate-test-optimization.js ' +
+          '--manifest ./dd-test-optimization-validation-manifest.json ' +
+          '--out ./dd-test-optimization-validation-results --print-plan'
+      console.log(sanitizeConsoleText([
+        `Created a schema-valid validation manifest without running project code: ${manifestPath}`,
+        'The scaffold selected bounded test candidates and validator-owned temporary tests. Do not enumerate ' +
+          'other packages, tests, runner configs, workflow files, or manifest fields.',
+        `CI review targets: ${reviewTargets.length > 0 ? reviewTargets.join(', ') : '<none found>'}.`,
+        `CI initialization status: ${initializationStatus || 'unknown'}. Allowed values are configured, ` +
+          'not_configured, and unknown.',
+        nextStep,
+      ].join('\n')))
       return
     }
 
@@ -188,7 +209,7 @@ async function main (argv) {
     if (options.printPlan) {
       const out = validateOutputPath(manifest, options.out)
       const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      formatExecutionPlan({
+      const { approvalSummary } = formatExecutionPlanArtifacts({
         manifest: approvalManifest,
         out,
         selectedFrameworkIds: options.frameworks.size > 0
@@ -198,12 +219,22 @@ async function main (argv) {
         keepTempFiles: options.keepTempFiles,
         verbose: options.verbose,
       })
-      console.log(sanitizeConsoleText(
-        '[test-optimization-validator-agent] Customer approval summary written to ' +
-        `${getApprovalSummaryPath(out)}. Read that file and send its complete contents in a user-facing message ` +
-        `before requesting approval. Detailed audit information is in ${getExecutionPlanPath(out)}. ` +
-        'The approval command is available only in the summary.'
-      ))
+      console.log(sanitizeConsoleText([
+        '===== CUSTOMER APPROVAL PLAN =====',
+        approvalSummary,
+        '===== END CUSTOMER APPROVAL PLAN =====',
+        '',
+        `Saved approval summary: ${getApprovalSummaryPath(out)}`,
+        `Detailed audit information: ${getExecutionPlanPath(out)}`,
+        '',
+        'LIVE VALIDATION HAS NOT RUN.',
+        'DISCOVERY IS COMPLETE. STOP TOOL USE NOW.',
+        'AGENT RESPONSE REQUIRED: Tool output is not the next user-facing response, even when it is visible in the ' +
+          'agent terminal. Your next response must begin with ===== CUSTOMER APPROVAL PLAN =====, reproduce the ' +
+          'complete delimited block above, and end with: Approve executing exactly the plan above?',
+        'A response containing only "Awaiting approval", "Approve the plan above", a prose summary, or a link to ' +
+          'the saved plan is invalid. Do not continue discovery or run another command while waiting.',
+      ].join('\n')))
       return
     }
     if (options.printApprovalSha256) {
@@ -322,16 +353,11 @@ async function main (argv) {
         }
 
         if (options.scenarios.has(CI_WIRING_SCENARIO)) {
-          if (basicResult && basicResult.status !== 'pass') {
-            results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
-          } else {
-            // CI wiring runs after Basic Reporting proves this framework can report when initialized directly.
-            logPhaseStart(framework, 'CI wiring')
-            // eslint-disable-next-line no-await-in-loop
-            const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
-            results.push(ciWiringResult)
-            logPhaseComplete(framework, 'CI wiring', ciWiringResult.status)
-          }
+          logPhaseStart(framework, 'CI configuration audit')
+          // eslint-disable-next-line no-await-in-loop
+          const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
+          results.push(ciWiringResult)
+          logPhaseComplete(framework, 'CI configuration audit', ciWiringResult.status)
         }
 
         const advancedScenarios = getAdvancedScenarios(options.scenarios)
@@ -390,14 +416,17 @@ async function main (argv) {
     }
 
     addMissingRequiredResults(results, runnableFrameworks, options.scenarios)
-    const validatorExitCode = results.some(isUnsuccessfulResult) || !didRunLiveValidation(results) ? 1 : 0
+    const annotatedResults = annotateResults(results)
+    const executionStatus = getExecutionStatus(annotatedResults)
+    const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
     await writeReport({
       manifest,
-      results,
+      results: annotatedResults,
       out,
       staticDiagnosis,
       runSummary: {
         runCompleted: true,
+        executionStatus,
         validatorExitCode,
         validationCoverage: getValidationCoverage({
           results,
@@ -413,7 +442,7 @@ async function main (argv) {
     })
     process.exitCode = validatorExitCode
   } catch (err) {
-    process.exitCode = 1
+    process.exitCode = 3
     if (activeManifest && activeOut) {
       try {
         await writeReport({
@@ -429,7 +458,8 @@ async function main (argv) {
           out: activeOut,
           runSummary: {
             runCompleted: true,
-            validatorExitCode: 1,
+            executionStatus: 'validator_error',
+            validatorExitCode: 3,
             validationCoverage: 'partial',
             checkedScenarios: [],
             omittedScenarios: getSelectableScenarios(),
@@ -653,30 +683,6 @@ function getSelectableScenarios () {
   ]
 }
 
-function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {
-  return {
-    frameworkId: framework.id,
-    scenario: 'ci-wiring',
-    status: 'skip',
-    diagnosis: 'Skipped CI wiring validation because Basic Reporting did not pass with direct Datadog ' +
-      'initialization. Fix the selected test command or local Test Optimization capability before diagnosing CI ' +
-      'wiring.',
-    evidence: {
-      blockedBy: BASIC_REPORTING_SCENARIO,
-      basicReportingStatus: basicResult.status,
-      basicReportingDiagnosis: basicResult.diagnosis,
-      featureEligibility: {
-        eligible: false,
-        blockedBy: BASIC_REPORTING_SCENARIO,
-        reasonCode: 'basic-reporting-failed',
-        scenario: 'ci-wiring',
-      },
-      ciWiring: framework.ciWiring,
-    },
-    artifacts: [],
-  }
-}
-
 function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
   return {
     frameworkId: framework.id,
@@ -705,6 +711,9 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
     status: 'skip',
     diagnosis: `Skipped because the temporary validation test could not run as expected: ${failure.diagnosis}`,
     evidence: {
+      conclusion: 'incomplete',
+      domain: 'validator_adapter',
+      evidenceStrength: 'confirmed_runtime',
       blockedBy: 'generated-test-verification',
       verificationStatus: failure.status,
       verificationDiagnosis: failure.diagnosis,
@@ -717,22 +726,6 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
     },
     artifacts: [],
   }
-}
-
-function isUnsuccessfulResult (result) {
-  return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
-}
-
-/**
- * Reports whether at least one live validation check produced a result.
- *
- * Framework discovery-only entries use the synthetic `all` scenario and do not prove Test Optimization behavior.
- *
- * @param {object[]} results validation results
- * @returns {boolean} whether live validation ran
- */
-function didRunLiveValidation (results) {
-  return results.some(result => result.scenario !== 'all')
 }
 
 /**
@@ -777,7 +770,7 @@ function logValidationProgress (message) {
 function getScenarioDisplayName (scenario) {
   return {
     'basic-reporting': 'Basic Reporting',
-    'ci-wiring': 'CI Wiring',
+    'ci-wiring': 'CI Configuration Audit',
     efd: 'Early Flake Detection',
     atr: 'Auto Test Retries',
     'test-management': 'Test Management',

@@ -315,6 +315,7 @@ function summarizeTestOutput (stdout = '', stderr = '') {
     /\b\d+\s+failed\b/i,
     /\btests?\b.*\bpassed\b/i,
     /\btests?\b.*\bfailed\b/i,
+    /\bTests\s*:\s*\d+\b/i,
     /\bSuccessfully ran target\b.*\btest\b/i,
     /\bsuccess:\s*\d+\b/i,
     /\bTasks:\s*\d+\s+successful\b/i,
@@ -325,6 +326,7 @@ function commandOutputShowsTestsRan (lines) {
   return lines.some(line => {
     return /\b\d+\s+(?:passing|passed|failing|failed)\b/i.test(line) ||
       /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
+      /\bTests\s*:\s*[1-9]\d*\b/i.test(line) ||
       /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
       /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
       /\bfailed:\s*[1-9]\d*\b/i.test(line) ||

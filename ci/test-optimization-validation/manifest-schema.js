@@ -42,13 +42,6 @@ const STATUSES = new Set([
   'unsupported_by_validator',
   'unknown',
 ])
-const CI_WIRING_STATUSES = new Set([
-  'pass',
-  'fail',
-  'skip',
-  'unknown',
-])
-const CI_WIRING_REPLAYABILITIES = new Set(['replayable', 'not_replayable'])
 const CI_INITIALIZATION_STATUSES = new Set(['configured', 'not_configured', 'unknown'])
 const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -56,6 +49,7 @@ const MAX_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
 const MAX_FRAMEWORKS = 100
 const MAX_MANIFEST_ARRAY_ENTRIES = 1000
 const MAX_SETUP_COMMANDS = 100
+const MAX_LOCAL_TEST_CANDIDATES = 3
 const MAX_VALIDATION_ERRORS = 50
 const MAX_REPRESENTATIVE_TESTS = 1000
 const SECRET_PLACEHOLDER = 'dd-validation-placeholder'
@@ -117,7 +111,6 @@ function validateManifest (manifest) {
     const frameworks = manifest.frameworks.slice(0, MAX_FRAMEWORKS)
     validateUniqueFrameworkIds(frameworks, errors)
     validateUniqueArtifactIds(frameworks, errors)
-    validateDuplicateRunnableCoverage(frameworks, errors)
     validateGeneratedPathCollisions(frameworks, errors)
     for (const [index, framework] of frameworks.entries()) {
       validateFramework(framework, index, errors)
@@ -161,29 +154,6 @@ function validateGeneratedPathCollisions (frameworks, errors) {
   }
 }
 
-function validateDuplicateRunnableCoverage (frameworks, errors) {
-  const seen = new Map()
-  for (const [index, framework] of frameworks.entries()) {
-    if (framework?.status !== 'runnable' || !framework.ciWiringCommand) continue
-    const key = JSON.stringify({
-      framework: framework.framework,
-      projectRoot: framework.project?.root,
-      existingTestCommand: commandExecutionShape(framework.existingTestCommand),
-      ciWiringCommand: commandExecutionShape(framework.ciWiringCommand),
-      ciInitializesDatadog: commandInitializesDatadog(framework.ciWiringCommand),
-    })
-    const previous = seen.get(key)
-    if (previous === undefined) {
-      seen.set(key, index)
-      continue
-    }
-    errors.push(
-      `frameworks[${index}] duplicates runnable framework and CI command coverage from frameworks[${previous}]. ` +
-      'Keep one representative framework entry and record the other CI job as an omitted or duplicate candidate.'
-    )
-  }
-}
-
 function validateUniqueArtifactIds (frameworks, errors) {
   const seen = new Map()
   for (const [index, framework] of frameworks.entries()) {
@@ -198,29 +168,6 @@ function validateUniqueArtifactIds (frameworks, errors) {
       seen.set(artifactId, framework.id)
     }
   }
-}
-
-function commandExecutionShape (command) {
-  if (!command) return null
-  return {
-    argv: command.argv,
-    cwd: command.cwd,
-    shell: command.shell,
-    shellCommand: command.shellCommand,
-    usesShell: Boolean(command.usesShell),
-  }
-}
-
-function commandInitializesDatadog (command) {
-  const values = [
-    ...(command?.argv || []),
-    command?.shellCommand,
-    command?.env?.NODE_OPTIONS,
-  ].filter(Boolean).join(' ')
-  const normalized = values.replaceAll('\\', '/')
-  const validatorInit = path.resolve(__dirname, '..', 'init.js').replaceAll('\\', '/')
-  return normalized.includes(validatorInit) ||
-    /(?:^|[\s"'=/])dd-trace\/ci\/init(?:\.js)?(?=$|[\s"'])/.test(normalized)
 }
 
 function validateRepositoryContainedPaths (manifest, errors) {
@@ -276,7 +223,7 @@ function validateRepositoryContainedPaths (manifest, errors) {
 
 function getFrameworkCommands (framework) {
   const commands = []
-  for (const name of ['existingTestCommand', 'ciWiringCommand']) {
+  for (const name of ['existingTestCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
   for (const [index, command] of limitedArray(framework.setup?.commands, MAX_SETUP_COMMANDS).entries()) {
@@ -304,7 +251,7 @@ function validateCiDiscovery (ciDiscovery, prefix, errors) {
     return
   }
 
-  for (const field of ['searched', 'found', 'staticFound', 'warnings', 'notes', 'contradictions']) {
+  for (const field of ['searched', 'found', 'reviewTargets', 'staticFound', 'warnings', 'notes', 'contradictions']) {
     if (ciDiscovery[field] !== undefined) {
       if (Array.isArray(ciDiscovery[field])) {
         validateStringArray(ciDiscovery, field, errors, prefix)
@@ -316,6 +263,9 @@ function validateCiDiscovery (ciDiscovery, prefix, errors) {
 
   if (ciDiscovery.method !== undefined && typeof ciDiscovery.method !== 'string') {
     errors.push(`${prefix}.method must be a string when present.`)
+  }
+  if (ciDiscovery.reviewRequired !== undefined && typeof ciDiscovery.reviewRequired !== 'boolean') {
+    errors.push(`${prefix}.reviewRequired must be a boolean when present.`)
   }
 }
 
@@ -340,6 +290,7 @@ function validateFramework (framework, index, errors) {
   if (framework.status === 'runnable') {
     requiredCommand(framework, 'existingTestCommand', errors, prefix, { datadogClean: true })
     validateDatadogCleanCommand(framework.existingTestCommand, `${prefix}.existingTestCommand`, errors)
+    validateLocalTestCandidates(framework, prefix, errors)
     requiredObject(framework, 'preflight', errors, prefix)
     validatePreflight(framework.preflight, `${prefix}.preflight`, errors)
     requiredObject(framework, 'ciWiring', errors, prefix)
@@ -348,18 +299,21 @@ function validateFramework (framework, index, errors) {
     validateNonRunnableFramework(framework, prefix, errors)
   }
 
-  if (framework.ciWiringCommand) {
-    requiredCommand(framework, 'ciWiringCommand', errors, prefix)
-  }
-
   if (framework.ciWiring) {
     validateCiWiring(framework, prefix, errors)
+  }
+
+  if (framework.ciWiringCommand !== undefined) {
+    errors.push(
+      `${prefix}.ciWiringCommand is not supported. Record the CI command as inert text in ` +
+      `${prefix}.ciWiring.command.`
+    )
   }
 
   if (framework.forcedLocalCommand !== undefined) {
     errors.push(
       `${prefix}.forcedLocalCommand is not supported. Use the focused existingTestCommand for Basic Reporting ` +
-      'and ciWiringCommand for the CI-shaped replay.'
+      'and record CI initialization only as static ciWiring evidence.'
     )
   }
 
@@ -388,13 +342,54 @@ function validateFramework (framework, index, errors) {
  * @returns {void}
  */
 function validateNonRunnableFramework (framework, prefix, errors) {
-  for (const field of ['existingTestCommand', 'ciWiringCommand', 'preflight', 'generatedTestStrategy']) {
+  for (const field of [
+    'existingTestCommand',
+    'localTestCandidates',
+    'preflight',
+    'generatedTestStrategy',
+  ]) {
     if (framework[field] !== undefined) {
       errors.push(`${prefix}.${field} must be omitted when ${prefix}.status is not runnable.`)
     }
   }
   if (Array.isArray(framework.setup?.commands) && framework.setup.commands.length > 0) {
     errors.push(`${prefix}.setup.commands must be empty or omitted when ${prefix}.status is not runnable.`)
+  }
+}
+
+/**
+ * Validates the bounded, approval-visible commands tried before Basic Reporting.
+ *
+ * @param {object} framework framework manifest entry
+ * @param {string} prefix manifest field path
+ * @param {{push: function(string): void}} errors bounded validation error collector
+ * @returns {void}
+ */
+function validateLocalTestCandidates (framework, prefix, errors) {
+  const candidates = framework.localTestCandidates
+  if (candidates === undefined) return
+  if (!Array.isArray(candidates) || candidates.length < 1 || candidates.length > MAX_LOCAL_TEST_CANDIDATES) {
+    errors.push(
+      `${prefix}.localTestCandidates must contain between 1 and ${MAX_LOCAL_TEST_CANDIDATES} candidates.`
+    )
+    return
+  }
+
+  for (const [index, candidate] of candidates.entries()) {
+    const candidatePrefix = `${prefix}.localTestCandidates[${index}]`
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      errors.push(`${candidatePrefix} must be an object.`)
+      continue
+    }
+    requiredCommand(candidate, 'command', errors, candidatePrefix, { datadogClean: true })
+    validateDatadogCleanCommand(candidate.command, `${candidatePrefix}.command`, errors)
+    if (!Number.isInteger(candidate.maxTestCount) || candidate.maxTestCount < 1 ||
+      candidate.maxTestCount > MAX_REPRESENTATIVE_TESTS) {
+      errors.push(
+        `${candidatePrefix}.maxTestCount must be an integer between 1 and ${MAX_REPRESENTATIVE_TESTS}.`
+      )
+    }
+    requiredAbsolutePath(candidate, 'sourceFile', errors, candidatePrefix)
   }
 }
 
@@ -475,65 +470,27 @@ function validateCiWiring (framework, prefix, errors) {
     return
   }
 
-  if (!CI_WIRING_STATUSES.has(ciWiring.status)) {
-    errors.push(`${prefix}.ciWiring.status must be pass, fail, skip, or unknown.`)
-  }
-
-  if (!CI_WIRING_REPLAYABILITIES.has(ciWiring.replayability)) {
-    errors.push(`${prefix}.ciWiring.replayability must be replayable or not_replayable.`)
-  }
-  if (Object.hasOwn(ciWiring, 'ciWiringCommand')) {
-    errors.push(`${prefix}.ciWiring.ciWiringCommand is misplaced; use ${prefix}.ciWiringCommand.`)
-  }
-  if (ciWiring.replayability === 'replayable' && !framework.ciWiringCommand) {
-    errors.push(`${prefix}.ciWiringCommand is required when ${prefix}.ciWiring.replayability is replayable.`)
-  }
-  if (ciWiring.replayability === 'not_replayable') {
-    if (ciWiring.status === 'pass' || ciWiring.status === 'fail') {
-      errors.push(`${prefix}.ciWiring.status must be skip or unknown when replayability is not_replayable.`)
-    }
-    if (framework.ciWiringCommand) {
-      errors.push(`${prefix}.ciWiringCommand must be omitted when ${prefix}.ciWiring.replayability is not_replayable.`)
-    }
-    if (!hasNonEmptyString(ciWiring.replayBlocker)) {
-      errors.push(`${prefix}.ciWiring.replayBlocker must explain why CI replay is not_replayable.`)
-    }
-  }
-
-  if (ciWiring.initialization !== undefined) {
+  if (ciWiring.initialization === undefined) {
+    errors.push(`${prefix}.ciWiring.initialization must record the static CI configuration conclusion.`)
+  } else {
     validateCiInitialization(ciWiring.initialization, `${prefix}.ciWiring.initialization`, errors)
   }
-
-  if (ciWiring.initialization?.status === 'not_configured' &&
-    commandInitializesDatadog(framework.ciWiringCommand)) {
-    errors.push(
-      `${prefix}.ciWiring.initialization.status is not_configured, but ${prefix}.ciWiringCommand adds dd-trace ` +
-      'initialization. The replay command must preserve the discovered CI configuration; remove the added ' +
-      'initialization or correct the initialization status and evidence.'
-    )
+  if (ciWiring.ciWiringCommand !== undefined) {
+    errors.push(`${prefix}.ciWiring.ciWiringCommand is not supported; use ${prefix}.ciWiring.command text.`)
   }
-
-  if (framework.ciWiringCommand) {
-    for (const field of ['provider', 'configFile', 'job', 'step', 'whySelected']) {
-      requiredString(ciWiring, field, errors, `${prefix}.ciWiring`)
-    }
-    requiredAbsolutePath(ciWiring, 'configFile', errors, `${prefix}.ciWiring`)
-    requiredAbsolutePath(ciWiring, 'workingDirectory', errors, `${prefix}.ciWiring`)
-    if (path.resolve(ciWiring.workingDirectory || '') !== path.resolve(framework.ciWiringCommand.cwd || '')) {
-      errors.push(`${prefix}.ciWiringCommand.cwd must match ${prefix}.ciWiring.workingDirectory.`)
-    }
-    if (ciWiring.shell !== undefined && ciWiring.shell !== null) {
-      if (typeof ciWiring.shell !== 'string' || ciWiring.shell.trim() === '') {
-        errors.push(`${prefix}.ciWiring.shell must be a non-empty string when present.`)
-      } else if (hasUnsafeExecutionCharacter(ciWiring.shell)) {
-        errors.push(`${prefix}.ciWiring.shell must not contain invisible or control characters.`)
-      }
+  if (ciWiring.command !== undefined && typeof ciWiring.command !== 'string') {
+    errors.push(`${prefix}.ciWiring.command must be a string when present.`)
+  }
+  if (ciWiring.shell !== undefined && ciWiring.shell !== null) {
+    if (typeof ciWiring.shell !== 'string' || ciWiring.shell.trim() === '') {
+      errors.push(`${prefix}.ciWiring.shell must be a non-empty string when present.`)
+    } else if (hasUnsafeExecutionCharacter(ciWiring.shell)) {
+      errors.push(`${prefix}.ciWiring.shell must not contain invisible or control characters.`)
     }
   }
-
-  if ((ciWiring.status === 'skip' || ciWiring.status === 'unknown') &&
+  if (ciWiring.initialization?.status === 'unknown' &&
     !hasNonEmptyString(ciWiring.diagnosis) && !hasNonEmptyString(ciWiring.reason)) {
-    errors.push(`${prefix}.ciWiring must explain why CI wiring is ${ciWiring.status}.`)
+    errors.push(`${prefix}.ciWiring must explain why CI initialization is unknown.`)
   }
 }
 
@@ -544,7 +501,11 @@ function validateCiInitialization (initialization, prefix, errors) {
   }
 
   if (!CI_INITIALIZATION_STATUSES.has(initialization.status)) {
-    errors.push(`${prefix}.status must be configured, not_configured, or unknown.`)
+    errors.push(
+      `${prefix}.status must be exactly configured, not_configured, or unknown. ` +
+      'Use not_configured when the selected CI job does not initialize Test Optimization; do not use missing, ' +
+      'absent, unconfigured, or other natural-language values.'
+    )
   }
   if (Array.isArray(initialization.evidence)) {
     validateStringArray(initialization, 'evidence', errors, prefix)
@@ -571,7 +532,7 @@ function validateDatadogCleanCommand (command, prefix, errors) {
   if (inlineInitialization) {
     errors.push(
       `${prefix} ${inlineInitialization} and must be Datadog-clean for local validation. ` +
-      'Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.'
+      'Remove the inline initialization; record CI initialization only as static ciWiring evidence.'
     )
   }
 }

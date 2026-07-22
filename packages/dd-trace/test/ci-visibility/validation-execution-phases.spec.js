@@ -14,7 +14,6 @@ const {
 } = require('../../../../ci/test-optimization-validation/executable')
 const { runCommand } = require('../../../../ci/test-optimization-validation/command-runner')
 const {
-  getCiWiringCommand,
   getLocalValidationCommand,
 } = require('../../../../ci/test-optimization-validation/local-command')
 const {
@@ -247,6 +246,100 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('reports a silent Cypress application abort as an execution-environment blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-cypress-launch-'))
+    const framework = {
+      id: 'cypress:root',
+      framework: 'cypress',
+      existingTestCommand: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'process.exit(134)'],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'cypress-application-launch-blocked')
+      assert.match(outcome.failure.diagnosis, /application process could not launch/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /exact checksum-approved validator command/)
+      assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not treat another framework exiting 134 as a Cypress environment blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-non-cypress-abort-'))
+    const framework = {
+      id: 'vitest:root',
+      framework: 'vitest',
+      existingTestCommand: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'process.exit(134)'],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'error')
+      assert.strictEqual(outcome.failure.evidence.commandFailure, undefined)
+      assert.match(outcome.failure.diagnosis, /determine how many tests/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a missing Playwright browser as a setup blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-playwright-browser-'))
+    const framework = {
+      id: 'playwright:root',
+      framework: 'playwright',
+      status: 'runnable',
+      project: { root },
+      existingTestCommand: {
+        cwd: root,
+        argv: [process.execPath, '-e', [
+          "console.error(\"browserType.launch: Executable doesn't exist at /missing/chromium\")",
+          "console.error('Please run the following command to download new browsers: playwright install')",
+          'process.exit(1)',
+        ].join(';')],
+      },
+      preflight: { maxTestCount: 1 },
+    }
+
+    try {
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: root,
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'playwright-browser-missing')
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /does not download browsers/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('reports module resolution failures before unknown test-count diagnostics', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-module-resolution-'))
     const framework = {
@@ -309,6 +402,76 @@ describe('test optimization validator-owned execution phases', () => {
       cleanupGeneratedFiles({ frameworks: [framework] })
 
       assert.strictEqual(fs.existsSync(generatedFile), false)
+      assert.strictEqual(fs.existsSync(generatedDirectory), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('verifies Cypress scenarios without requiring a persistent retry-state file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-cypress-'))
+    const generatedDirectory = path.join(root, 'cypress', 'e2e')
+    const generatedFiles = {
+      'basic-pass': path.join(generatedDirectory, 'dd-test-optimization-validation-basic-pass.cy.js'),
+      'atr-fail-once': path.join(generatedDirectory, 'dd-test-optimization-validation-atr-fail-once.cy.js'),
+      'test-management-target': path.join(
+        generatedDirectory,
+        'dd-test-optimization-validation-test-management-target.cy.js'
+      ),
+    }
+    const framework = {
+      id: 'cypress:root',
+      framework: 'cypress',
+      status: 'runnable',
+      project: { root },
+      generatedTestStrategy: {
+        status: 'planned',
+        adapter: 'cypress',
+        moduleSystem: 'commonjs',
+        files: Object.entries(generatedFiles).map(([id, filename]) => ({
+          path: filename,
+          contentLines: getGeneratedTestContent({
+            framework: 'cypress',
+            moduleSystem: 'commonjs',
+            scenarioId: id,
+          }).split('\n'),
+        })),
+        scenarios: Object.entries(generatedFiles).map(([id, filename]) => ({
+          id,
+          runCommand: {
+            cwd: root,
+            argv: [
+              process.execPath,
+              '-e',
+              `console.log('Tests: 1'); process.exit(${id === 'atr-fail-once' ? 1 : 0})`,
+              filename,
+            ],
+          },
+          expectedWithoutDatadog: {
+            exitCode: id === 'atr-fail-once' ? 1 : 0,
+            observedTestCount: 1,
+          },
+          testIdentities: [{ name: GENERATED_SCENARIOS[id].testName, file: filename }],
+        })),
+        cleanupPaths: Object.values(generatedFiles),
+      },
+    }
+    const out = path.join(root, 'results')
+
+    try {
+      fs.mkdirSync(out)
+      const outcome = await verifyGeneratedTestStrategy({
+        framework,
+        options: { verbose: false },
+        out,
+      })
+
+      assert.strictEqual(outcome.ok, true)
+      assert.strictEqual(framework.generatedTestStrategy.status, 'verified')
+      assert.ok(framework.generatedTestStrategy.verification.observedScenarios.every(scenario => {
+        return scenario.failOnceStateCreated === undefined
+      }))
+      cleanupGeneratedFiles({ frameworks: [framework] })
       assert.strictEqual(fs.existsSync(generatedDirectory), false)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -390,19 +553,14 @@ describe('test optimization validator-owned execution phases', () => {
       outputPaths: [path.join(root, 'coverage')],
     }
     framework.ciWiring = {
-      status: 'unknown',
-      reason: 'Replay selected.',
-    }
-    framework.ciWiringCommand = {
-      cwd: root,
-      usesShell: true,
-      shellCommand: 'pnpm test',
-      env: {
-        CI: 'true',
-        DD_API_KEY: 'safe-placeholder',
+      provider: 'github-actions',
+      command: 'pnpm test',
+      diagnosis: 'The selected CI job does not initialize Test Optimization.',
+      initialization: {
+        status: 'not_configured',
+        evidence: ['NODE_OPTIONS is not set in the selected CI job.'],
       },
     }
-    framework.ciWiring.shell = 'bash --noprofile --norc {0}'
     const unsupportedFramework = {
       id: 'karma:browser-example',
       framework: 'karma',
@@ -442,8 +600,12 @@ describe('test optimization validator-owned execution phases', () => {
       assert.strictEqual(fs.readFileSync(path.join(planOut, 'execution-plan.md'), 'utf8'), `${plan}\n`)
       const approvalSummary = fs.readFileSync(path.join(planOut, 'approval-summary.md'), 'utf8')
       assert.match(approvalSummary, /# Test Optimization Validation Approval Summary/)
-      assert.match(approvalSummary, /Test execution without Datadog/)
-      assert.match(approvalSummary, /Test execution with Datadog/)
+      assert.match(approvalSummary, /\*\*Test candidate 1\*\*/)
+      assert.match(approvalSummary, /Without Datadog \(confirms the selected test file runs normally\)/)
+      assert.match(
+        approvalSummary,
+        /With Datadog, only if this is the first candidate that passes: run the same command with/
+      )
       assert.match(approvalSummary, /Advanced Check: Auto Test Retries/)
       assert.match(approvalSummary, /npm test -- --runInBand --token <redacted> --no-watchman/)
       assert.match(approvalSummary, /test\('atr-fail-once'/)
@@ -469,23 +631,19 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
       assert.match(plan, /Command-created outputs: `coverage` \(must not exist before validation; newly created /)
-      assert.match(
-        fullPlan,
-        /CI=true DD_API_KEY=(?:"<redacted>"|'<redacted>') bash --noprofile --norc -c (?:"pnpm test"|'pnpm test')/
-      )
       assert.match(plan, /NODE_OPTIONS=(?:"-r dd-trace\/ci\/init"|'-r dd-trace\/ci\/init') npm test/)
-      assert.match(ciOnlyPlan, /#### CI Test Execution/)
+      assert.match(ciOnlyPlan, /#### CI Configuration Audit/)
       assert.doesNotMatch(ciOnlyPlan, /#### Temporary Tests Created for Advanced Checks/)
-      assert.match(plan, /#### Test Execution Without Datadog/)
-      assert.match(plan, /#### Test Execution With Datadog/)
-      assert.doesNotMatch(plan, /#### CI Test Execution/)
+      assert.match(plan, /#### Local Test Candidate 1: Without Datadog/)
+      assert.match(plan, /#### Local Test Candidate 1: With Datadog When Selected/)
+      assert.doesNotMatch(plan, /Optional Exact CI Test Execution/)
       assert.doesNotMatch(plan, /##### C\d|\| Check \| Command \|/)
       assert.match(plan, /#### Temporary Tests Created for Advanced Checks/)
       assert.match(plan, /Advanced Check: Auto Test Retries/)
       assert.doesNotMatch(plan, /Advanced Check: Early Flake Detection/)
       assert.doesNotMatch(plan, /Advanced Check: Test Management/)
       assert.doesNotMatch(plan, /#### Generated Test Verification:/)
-      assert.match(fullPlan, /1, plus 1 short preload probe when needed/)
+      assert.doesNotMatch(fullPlan, /preload probe/)
       assert.match(plan, /3: verify the test alone, discover its identity, then validate the feature/)
       assert.match(plan, /#### Temporary Test Cleanup/)
       assert.match(plan, /Paths are relative to the repository root/)
@@ -498,13 +656,8 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /\*\*Karma tests for browser-example\*\*: not supported by this validator/)
       assert.match(plan, /## Executables Used/)
       assert.match(plan, /- Node\.js: `/)
-      assert.match(fullPlan, /- Bash shell: `/)
       assert.doesNotMatch(plan, /Technical Safeguard: Command Identity|\(SHA-256 `/)
       assert.doesNotMatch(plan, /- Approved executable:|- Executable SHA-256:/)
-      const shellCommand = process.platform === 'win32'
-        ? 'bash --noprofile --norc -c "pnpm test"'
-        : "bash --noprofile --norc -c 'pnpm test'"
-      assert.strictEqual(countOccurrences(fullPlan, shellCommand), 1)
       assert.match(plan, /## Start the Validation/)
       assert.match(plan, /local validator included with the installed `dd-trace` package/)
       assert.match(plan, /bounded filesystem cache fixtures/)
@@ -577,7 +730,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('renders commands separately when identical argv has different execution settings', () => {
+  it('renders local candidates separately when identical argv has different execution settings', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-command-shape-'))
     const packageRoot = path.join(root, 'package')
     const commandArgv = [process.execPath, '-e', 'console.log("Tests: 1 passed, 1 total")']
@@ -586,17 +739,21 @@ describe('test optimization validator-owned execution phases', () => {
       path.join(root, 'tests', 'generated.test.js'),
       path.join(root, '.retry-state')
     )
-    framework.existingTestCommand = {
+    const directCommand = {
       cwd: root,
       argv: commandArgv,
       env: { SAFE_MODE: 'direct' },
     }
-    framework.ciWiring = { status: 'unknown', reason: 'Replay selected.' }
-    framework.ciWiringCommand = {
+    const fallbackCommand = {
       cwd: packageRoot,
       argv: commandArgv,
-      env: { SAFE_MODE: 'ci' },
+      env: { SAFE_MODE: 'fallback' },
     }
+    framework.existingTestCommand = directCommand
+    framework.localTestCandidates = [
+      { command: directCommand, maxTestCount: 1, sourceFile: path.join(root, 'direct.test.js') },
+      { command: fallbackCommand, maxTestCount: 1, sourceFile: path.join(root, 'fallback.test.js') },
+    ]
     fs.mkdirSync(packageRoot)
 
     try {
@@ -607,17 +764,16 @@ describe('test optimization validator-owned execution phases', () => {
           frameworks: [framework],
         },
         out: path.join(root, 'results'),
-        requestedScenario: 'ci-wiring',
+        requestedScenario: 'basic-reporting',
       })
       const renderedCommand = process.platform === 'win32'
         ? 'node -e "console.log(\\"Tests: 1 passed, 1 total\\")"'
         : String.raw`node -e 'console.log("Tests: 1 passed, 1 total")'`
 
-      assert.strictEqual(countOccurrences(plan, renderedCommand), 3)
+      assert.strictEqual(countOccurrences(plan, renderedCommand), 4)
       assert.match(plan, /SAFE_MODE=direct/)
-      assert.match(plan, /SAFE_MODE=ci/)
+      assert.match(plan, /SAFE_MODE=fallback/)
       assert.match(plan, /Working directory: `package`/)
-      assert.match(plan, /selected CI job supplies no Datadog variables/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -653,7 +809,7 @@ describe('test optimization validator-owned execution phases', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-unavailable-plan-'))
     const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
     const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
-    framework.ciWiringCommand = {
+    framework.existingTestCommand = {
       cwd: root,
       argv: ['definitely-not-an-installed-test-runner', 'test'],
     }
@@ -848,40 +1004,6 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('preserves executable approval on a derived CI shell replay', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-derived-ci-'))
-    const shell = path.join(root, 'bash')
-    const framework = getPlannedFramework(
-      root,
-      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
-      path.join(root, '.dd-validation-state')
-    )
-    framework.ciWiring = {
-      shell: `${shell} --noprofile --norc {0}`,
-      status: 'unknown',
-    }
-    framework.ciWiringCommand = {
-      cwd: root,
-      usesShell: true,
-      shellCommand: 'npm test',
-    }
-    const manifest = {
-      __path: path.join(root, 'manifest.json'),
-      repository: { root },
-      frameworks: [framework],
-    }
-    fs.writeFileSync(shell, 'approved shell', { mode: 0o755 })
-
-    try {
-      formatExecutionPlan({ manifest, out: path.join(root, 'results'), requestedScenario: 'ci-wiring' })
-      fs.writeFileSync(shell, 'changed shell', { mode: 0o755 })
-
-      assert.throws(() => getExecutableForSpawn(getCiWiringCommand(framework)), /changed after approval/)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
-  })
-
   it('preserves approved named-shim semantics while executing the canonical target', async function () {
     if (process.platform === 'win32') this.skip()
 
@@ -1009,7 +1131,7 @@ describe('test optimization validator-owned execution phases', () => {
       path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
       path.join(root, '.dd-validation-state')
     )
-    framework.ciWiringCommand = { cwd: root, argv: ['yarn', 'test'] }
+    framework.existingTestCommand = { cwd: root, argv: ['yarn', 'test'] }
     fs.mkdirSync(path.join(root, '.yarn', 'releases'), { recursive: true })
     fs.writeFileSync(path.join(root, '.yarn', 'releases', 'yarn-4.4.1.cjs'), '')
 
@@ -1034,7 +1156,7 @@ describe('test optimization validator-owned execution phases', () => {
       path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
       path.join(root, '.dd-validation-state')
     )
-    framework.ciWiringCommand = { cwd: root, argv: ['yarn', 'test'] }
+    framework.existingTestCommand = { cwd: root, argv: ['yarn', 'test'] }
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'yarn@4.10.0' }))
 
     try {
@@ -1729,6 +1851,35 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('rejects generated tests outside the project root before rendering an approval plan', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-root-contract-'))
+    const projectRoot = path.join(root, 'packages', 'app')
+    const originalFile = path.join(projectRoot, 'test', 'dd-validation.test.js')
+    const outsideFile = path.join(root, 'test', 'dd-validation.test.js')
+    const framework = getPlannedFramework(projectRoot, originalFile)
+    framework.project.root = projectRoot
+    const file = framework.generatedTestStrategy.files[0]
+    const scenario = framework.generatedTestStrategy.scenarios[0]
+    file.path = outsideFile
+    scenario.testIdentities[0].file = outsideFile
+    scenario.runCommand.argv = scenario.runCommand.argv.map(value => value === originalFile ? outsideFile : value)
+    framework.generatedTestStrategy.cleanupPaths = framework.generatedTestStrategy.cleanupPaths
+      .map(value => value === originalFile ? outsideFile : value)
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+      }), /scenario basic-pass file must remain inside project root/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   for (const [property, value] of [
     ['testMatch', '["**/*-test.js"]'],
     ['testRegex', '"-test\\\\.js$"'],
@@ -2348,7 +2499,7 @@ describe('test optimization validator-owned execution phases', () => {
 
       assert.match(
         summary,
-        /NODE_OPTIONS=(?:"--import dd-trace\/register\.js -r dd-trace\/ci\/init"|'--import dd-trace\/register\.js -r dd-trace\/ci\/init')/
+        /NODE_OPTIONS=--import dd-trace\/register\.js -r dd-trace\/ci\/init/
       )
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -2458,6 +2609,31 @@ describe('test optimization validator-owned execution phases', () => {
       1 passed (2.3s)
     `), 2)
     assert.strictEqual(getObservedTestCount('playwright', '1 skipped'), 0)
+  })
+
+  it('counts Cypress test summaries', () => {
+    assert.strictEqual(getObservedTestCount('cypress', `
+      (Run Finished)
+      Tests:        1
+      Passing:      1
+      Failing:      0
+    `), 1)
+    assert.strictEqual(getObservedTestCount('cypress', `
+      Tests:        3
+      Passing:      2
+      Failing:      1
+    `), 3)
+  })
+
+  it('counts Cucumber scenario summaries', () => {
+    assert.strictEqual(getObservedTestCount('cucumber', `
+      1 scenario (1 passed)
+      1 step (1 passed)
+    `), 1)
+    assert.strictEqual(getObservedTestCount('cucumber', `
+      3 scenarios (2 passed, 1 failed)
+      3 steps (2 passed, 1 failed)
+    `), 3)
   })
 })
 

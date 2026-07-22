@@ -260,6 +260,37 @@ describe('test optimization validation advanced features', () => {
     assert.strictEqual(result.evidence.autoTestRetryEvents, 0)
     assert.strictEqual(result.evidence.externalRetryEvents, 1)
   })
+
+  it('does not run Auto Test Retries for unsupported Cucumber versions', async () => {
+    const outDir = path.join('/tmp', 'dd-validation-cucumber-atr')
+    const helpers = buildScenarioHelpers({ outDir, scenario: {}, tests: [] })
+    helpers.skip = (framework, scenario, diagnosis, evidence) => ({
+      frameworkId: framework.id,
+      scenario,
+      status: 'skip',
+      diagnosis,
+      evidence,
+      artifacts: [],
+    })
+    const { runAutoTestRetries } = proxyquire(
+      '../../../../ci/test-optimization-validation/scenarios/auto-test-retries',
+      { './helpers': helpers }
+    )
+
+    const result = await runAutoTestRetries({
+      framework: {
+        id: 'cucumber:root',
+        framework: 'cucumber',
+        frameworkVersion: '7.3.2',
+      },
+      options: { verbose: false },
+      out: outDir,
+    })
+
+    assert.strictEqual(result.status, 'skip')
+    assert.strictEqual(result.evidence.featureEligibility.reasonCode, 'cucumber-atr-version-unsupported')
+    assert.match(result.diagnosis, /requires @cucumber\/cucumber >=8\.0\.0/)
+  })
 })
 
 function buildScenarioHelpers ({ commandExitCode = 1, outDir, scenario, tests }) {

@@ -233,7 +233,7 @@ describe('CI validation offline output', () => {
     }
   })
 
-  it('retains bounded early and late lifecycle evidence for a large sampled CI replay', () => {
+  it('retains bounded early and late lifecycle evidence for a large sampled export', () => {
     const sink = new CiValidationSink(outputRoot, { captureMode: 'sample' })
     const writer = new CiValidationWriter({ sink, tags: {} })
     const spans = []

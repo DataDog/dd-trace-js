@@ -1,386 +1,192 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
-const { buildCiRemediation } = require('../ci-remediation')
-const { getCiRuntimeCompatibility } = require('../ci-runtime-compatibility')
-const { getCommandBlocker } = require('../command-blocker')
-const { serializeCommand } = require('../command-runner')
+const { buildCiRemediation, getConfiguredTransport } = require('../ci-remediation')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
-const { runInitializationProbe } = require('../init-probe')
-const { findLateInitialization } = require('../late-initialization')
-const { getCiWiringCommand } = require('../local-command')
-const { ensureSafeDirectory } = require('../safe-files')
-const { getObservedTestCount } = require('../test-output')
-const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
-const {
-  basicEventEvidence,
-  error,
-  fail,
-  findInterestingLines,
-  frameworkOutDir,
-  hasAllBasicEventTypes,
-  incomplete,
-  inconclusive,
-  pass,
-  runInstrumentedCommand,
-  tailInterestingLines,
-} = require('./helpers')
-
-const INCONCLUSIVE_CI_WIRING_FAILURES = new Set([
-  'package-manager-filesystem-blocked',
-  'package-manager-version-mismatch',
-  'watchman-filesystem-blocked',
-  'local-test-socket-blocked',
-  'project-command-initialization-failed',
-  'ci-wiring-command-failed-before-tests',
-  'ci-wiring-command-failed-after-tests',
-  'ci-wiring-preload-resolution-failed',
-  'ci-wiring-command-timed-out',
-  'ci-wiring-no-observed-tests',
-  'ci-wiring-representative-scope-mismatch',
-  'ci-wiring-project-filter-mismatch',
-  'ci-wiring-test-filter-mismatch',
-  'no-test-optimization-events',
-])
-
-async function runCiWiring ({ manifest, framework, out, options, basicResult }) {
-  const scenarioName = 'ci-wiring'
-
-  try {
-    const runtimeCompatibility = getCiRuntimeCompatibility(framework)
-    if (runtimeCompatibility?.status === 'incompatible') {
-      const versions = runtimeCompatibility.configuredNodeVersions.join(', ')
-      return inconclusive(
-        framework,
-        scenarioName,
-        `CI wiring was not replayed because every recorded CI Node.js version (${versions}) is outside the ` +
-          `installed dd-trace supported range (${runtimeCompatibility.ddTraceSupportedRange}). No live CI-wiring ` +
-          'conclusion was reached.',
-        {
-          ciCommandCandidate: buildCiCommandCandidate(framework),
-          ciWiring: framework.ciWiring,
-          runtimeCompatibility,
-          recommendation: 'Select or upgrade a CI matrix entry to a Node.js version supported by the installed ' +
-            'dd-trace package, then replay that unchanged supported command shape.',
-        }
-      )
-    }
-
-    const command = getCiWiringCommand(framework)
-    if (!command) return getMissingCiWiringCommandResult(framework, manifest)
-
-    const outDir = frameworkOutDir(out, framework, scenarioName)
-    ensureSafeDirectory(out, outDir, 'CI wiring artifact directory')
-    const baseEvidence = getCiWiringBaseEvidence({ framework, manifest, basicResult, command })
-    const run = await runInstrumentedCommand({
-      framework,
-      out,
-      scenarioName,
-      command,
-      options,
-      ciWiring: true,
-    })
-    const { result, events } = run
-
-    const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
-    const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)
-    const evidence = {
-      ...baseEvidence,
-      commandExitCode: result.exitCode,
-      commandTimedOut: result.timedOut,
-      commandDescription: command.description,
-      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
-      observedTestCount,
-      ciCommandExecution: {
-        mode: 'full-replay',
-        fullReplayRan: true,
-      },
-      preflight: summarizePreflight(ciWiringPreflight),
-      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
-      offlineExporterCapture: {
-        mode: run.offline.captureMode,
-        completionCount: run.offline.completionCount,
-        observedEventCount: run.offline.observedEventCount,
-        retainedEventCount: run.offline.retainedEventCount,
-        sampled: run.offline.sampled,
-      },
-      offlineExporterSummary: run.offline.summary,
-      ...basicEventEvidence(events),
-    }
-
-    const scopeFailure = getCiWiringScopeFailure(ciWiringPreflight, observedTestCount)
-    if (scopeFailure) {
-      evidence.commandFailure = scopeFailure
-      evidence.eventLevelFailure = scopeFailure
-      return inconclusive(framework, scenarioName, scopeFailure.summary, evidence, outDir)
-    }
-
-    if (!hasAllBasicEventTypes(events)) {
-      const commandFailure = summarizeCiCommandFailure(result, evidence)
-      if (commandFailure.kind !== 'ci-wiring-command-result-unknown') {
-        evidence.commandFailure = commandFailure
-      }
-      evidence.debugSignals = summarizeCiDebugSignals(result)
-      const probe = await maybeRunInitializationProbe({ command, framework, options, outDir, result, evidence })
-      if (probe.summary) evidence.initializationProbe = probe.summary
-      evidence.monorepoFindings = getMonorepoFindings({ framework, command, probe: probe.summary })
-      evidence.eventLevelFailure = getCiWiringEventFailure({ framework, result, evidence, basicResult })
-      if (isInconclusiveCiWiringFailure(evidence.eventLevelFailure)) {
-        return inconclusive(
-          framework,
-          scenarioName,
-          evidence.eventLevelFailure.summary,
-          evidence,
-          outDir,
-          probe.artifacts
-        )
-      }
-      return fail(framework, scenarioName, evidence.eventLevelFailure.summary, evidence, outDir, probe.artifacts)
-    }
-
-    if (result.exitCode === 0) {
-      return pass(
-        framework,
-        scenarioName,
-        'The CI test command emitted session, module, suite, and test events with the initialization configured ' +
-          'by CI.',
-        evidence,
-        outDir
-      )
-    }
-
-    evidence.commandExitMatchesPreflight = false
-    return inconclusive(
-      framework,
-      scenarioName,
-      `The CI-shaped command emitted Test Optimization events but exited ${result.exitCode}. A failing CI test ` +
-        'command cannot prove that CI wiring is healthy, so no conclusive CI wiring result was reached.',
-      evidence,
-      outDir
-    )
-  } catch (err) {
-    return error(framework, scenarioName, err)
-  }
-}
+const { fail, incomplete } = require('./helpers')
 
 /**
- * Returns an inconclusive result when a focused CI replay exceeds its approved test bound.
+ * Audits the recorded CI configuration without executing repository CI commands.
  *
- * @param {object} preflight comparable CI preflight
- * @param {number|null} observedTestCount parsed CI replay test count
- * @returns {object|undefined} scope failure
+ * @param {object} input audit input
+ * @param {object} input.manifest validation manifest
+ * @param {object} input.framework framework manifest entry
+ * @param {object} [input.basicResult] Basic Reporting result
+ * @returns {object} CI configuration audit result
  */
-function getCiWiringScopeFailure (preflight, observedTestCount) {
-  const maxTestCount = preflight?.maxTestCount
-  if (!Number.isInteger(maxTestCount) || !Number.isInteger(observedTestCount)) return
-  if (observedTestCount >= 1 && observedTestCount <= maxTestCount) return
-
-  const observed = `${observedTestCount} test${observedTestCount === 1 ? '' : 's'}`
-  return {
-    kind: 'ci-wiring-representative-scope-mismatch',
-    signals: [],
-    summary: `The CI-shaped command ran ${observed}, outside the approved representative scope of at most ` +
-      `${maxTestCount}. No CI wiring conclusion was reached because the selected file or name filter may not have ` +
-      'reached the final test runner.',
-    recommendation: 'Correct the package-manager or wrapper argument forwarding, record a matching CI preflight, ' +
-      'or explicitly approve the unchanged broader CI command before rerunning validation.',
-  }
-}
-
-function isInconclusiveCiWiringFailure (failure) {
-  return INCONCLUSIVE_CI_WIRING_FAILURES.has(failure.kind)
-}
-
-function getCiWiringBaseEvidence ({ framework, manifest, basicResult, command }) {
-  return {
-    commandDescription: command.description,
-    ciCommandCandidate: buildCiCommandCandidate(framework),
-    ciWiring: framework.ciWiring,
-    ciRemediation: buildCiRemediation(framework),
-    runtimeCompatibility: getCiRuntimeCompatibility(framework),
-    nodeOptionsRemoval: findNodeOptionsRemoval(framework, manifest),
-    existingDatadogInitScripts: findDatadogInitScripts(manifest, framework),
-    lateInitialization: findLateInitialization(manifest, framework),
-    directInitializationBasicReporting: summarizeBasicReportingResult(basicResult),
-  }
-}
-
-async function maybeRunInitializationProbe ({ command, framework, options, outDir, result, evidence }) {
-  if (result.timedOut === true || evidence.commandFailure?.blockedByExecutionEnvironment ||
-    evidence.commandFailure?.toolchainBlocked) return {}
-  if (!commandOutputShowsTestsRan(evidence.commandOutputSummary)) return {}
-  if (evidence.nodeOptionsRemoval) {
-    return {
-      summary: {
-        ran: false,
-        skippedBecauseConfigurationProvesRemoval: true,
-        reason: `The package script expansion ${evidence.nodeOptionsRemoval.command} explicitly removes ` +
-          'NODE_OPTIONS before the test runner starts.',
-      },
-    }
-  }
-
-  try {
-    return await runInitializationProbe({
-      command,
-      framework,
-      options,
-      outDir,
-    })
-  } catch (err) {
-    return {
-      summary: {
-        ran: false,
-        error: err && err.message ? err.message : String(err),
-      },
-    }
-  }
-}
-
-function getMissingCiWiringCommandResult (framework, manifest) {
+function runCiWiring ({ manifest, framework, basicResult }) {
   const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
   if (contradiction) {
     return incomplete(framework, 'ci-wiring',
-      `CI wiring was not replayed: ${contradiction.reason} No live CI-wiring conclusion was reached.`, {
+      `The CI configuration audit is incomplete: ${contradiction.reason}`, {
         ciCommandCandidate: buildCiCommandCandidate(framework),
         ciWiring: framework.ciWiring,
         ciDiscovery: contradiction.ciDiscovery,
+        conclusion: 'incomplete',
+        domain: 'ci_configuration',
+        evidenceStrength: 'unknown',
         recommendation: contradiction.recommendation,
       })
   }
 
-  const ciWiring = framework.ciWiring
-  const diagnosis = ciWiring?.replayBlocker ||
-    ciWiring?.diagnosis ||
-    ciWiring?.reason ||
-    'No replayable CI wiring command was provided in the manifest.'
+  const ciWiring = framework.ciWiring || {}
+  const ciScope = getCiScope(ciWiring)
   const ciRemediation = buildCiRemediation(framework)
+  const nodeOptionsRemoval = findNodeOptionsRemoval(framework, manifest)
+  const initializationStatus = getStaticInitializationStatus(framework)
+  const transport = getConfiguredTransport(framework)
+  const apiKeyConfigured = hasApiKeyReference(framework)
   const evidence = {
     ciCommandCandidate: buildCiCommandCandidate(framework),
     ciWiring,
     ciRemediation,
-    recommendation: 'Resolve the recorded CI replay blocker, then rerun validation with the unchanged CI test ' +
-      'command.',
+    directInitializationBasicReporting: summarizeBasicReportingResult(basicResult),
+    initializationStatus,
+    nodeOptionsRemoval,
+    transport,
+    apiKeyConfigured,
+    domain: 'ci_configuration',
+    evidenceStrength: 'confirmed_static',
   }
 
+  if (nodeOptionsRemoval) {
+    evidence.conclusion = 'confirmed_misconfigured'
+    evidence.recommendation = getNodeOptionsRemovalRecommendation(nodeOptionsRemoval)
+    return fail(
+      framework,
+      'ci-wiring',
+      getNodeOptionsRemovalDiagnosis({ basicResult, evidence, framework }),
+      evidence
+    )
+  }
+
+  if (initializationStatus === 'not_configured') {
+    evidence.conclusion = 'confirmed_misconfigured'
+    evidence.recommendation = ciRemediation.summary
+    return fail(
+      framework,
+      'ci-wiring',
+      `${ciScope} does not configure NODE_OPTIONS with dd-trace/ci/init, so Test Optimization is not initialized. ` +
+        'This conclusion comes from the recorded CI configuration; no project CI command was run.',
+      evidence
+    )
+  }
+
+  if (initializationStatus === 'configured' && transport === 'agentless' && !apiKeyConfigured) {
+    evidence.conclusion = 'confirmed_misconfigured'
+    evidence.recommendation = 'Provide DD_API_KEY from the CI secret store for the identified test job.'
+    return fail(
+      framework,
+      'ci-wiring',
+      'The identified CI test job enables agentless Test Optimization reporting but does not record DD_API_KEY as ' +
+        'a required CI secret. Test data cannot be sent agentlessly without that key.',
+      evidence
+    )
+  }
+
+  if (initializationStatus === 'configured' && transport === 'unknown') {
+    evidence.conclusion = 'confirmed_misconfigured'
+    evidence.recommendation = ciRemediation.summary
+    return fail(
+      framework,
+      'ci-wiring',
+      'The identified CI test job configures Test Optimization initialization, but it neither enables agentless ' +
+        'reporting nor records a Datadog Agent for the job. Configure agentless reporting with a DD_API_KEY secret ' +
+        'reference, or make a Datadog Agent reachable from the test process.',
+      evidence
+    )
+  }
+
+  if (initializationStatus === 'configured' &&
+    ((transport === 'agentless' && apiKeyConfigured) || transport === 'agent')) {
+    evidence.conclusion = 'configured_propagation_unverified'
+    evidence.evidenceStrength = 'inferred_static'
+    evidence.recommendation = 'No CI configuration change is recommended from static evidence. Confirm the ' +
+      'configuration in a real CI run if runtime propagation evidence is required.'
+    return incomplete(
+      framework,
+      'ci-wiring',
+      'The identified CI job contains the required Test Optimization initialization and reporting transport. ' +
+        'Static analysis found no explicit environment reset, but it cannot prove that NODE_OPTIONS reaches the ' +
+        'final test process through every wrapper. CI propagation remains unverified.',
+      evidence
+    )
+  }
+
+  evidence.conclusion = 'incomplete'
+  evidence.evidenceStrength = initializationStatus === 'configured' ? 'inferred_static' : 'unknown'
+  evidence.recommendation = initializationStatus === 'configured'
+    ? ciRemediation.summary
+    : 'Record whether the identified CI test job configures NODE_OPTIONS with dd-trace/ci/init and whether it uses ' +
+      'agentless reporting or a reachable Datadog Agent.'
   return incomplete(
     framework,
     'ci-wiring',
-    `CI wiring was not replayed: ${diagnosis} No live CI-wiring conclusion was reached.`,
+    initializationStatus === 'configured'
+      ? 'The CI job configures Test Optimization initialization, but the reporting transport or final-process ' +
+        'propagation could not be established from static evidence.'
+      : 'The CI configuration audit could not determine whether the identified test job initializes Test ' +
+        'Optimization. No CI configuration conclusion was reached.',
     evidence
   )
 }
 
-function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) {
-  const localFailure = getMissingEventDiagnosis({ framework, result, evidence })
-  const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary)
+/**
+ * Describes the precision of the recorded CI evidence without implying a job was selected.
+ *
+ * @param {object} ciWiring static CI evidence
+ * @returns {string} customer-facing CI scope
+ */
+function getCiScope (ciWiring) {
+  if (ciWiring.job || ciWiring.step) return 'The identified CI test job'
+  if (ciWiring.configFile) return 'The inspected CI workflow'
+  return 'The inspected CI configuration'
+}
 
-  if (testsRan && result.exitCode !== 0) {
-    return {
-      ...localFailure,
-      kind: 'ci-wiring-command-failed-after-tests',
-      summary: `The CI-shaped command ran tests but exited ${result.exitCode}. No Test Optimization events were ` +
-        'reported, but a failing CI replay cannot establish whether initialization is wired correctly.',
-      recommendation: 'Fix the selected CI command or its test failures, then replay the unchanged CI command ' +
-        'again before drawing a CI wiring conclusion.',
-    }
-  }
+/**
+ * Resolves the statically recorded Test Optimization initialization state.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {'configured'|'not_configured'|'unknown'} initialization status
+ */
+function getStaticInitializationStatus (framework) {
+  const recorded = framework.ciWiring?.initialization?.status
+  if (recorded === 'configured' || recorded === 'not_configured') return recorded
+  const env = collectCiEnv(framework)
+  return /(?:^|\s)(?:-r|--require)(?:=|\s+)dd-trace\/ci\/init(?:\s|$)/.test(env.NODE_OPTIONS || '')
+    ? 'configured'
+    : 'unknown'
+}
 
-  if (testsRan) {
-    return {
-      ...localFailure,
-      kind: 'ci-wiring-no-test-optimization-events',
-      summary: getCiWiringTestsRanSummary({ basicResult, evidence, framework }),
-      recommendation: getCiWiringTestsRanRecommendation({ basicResult, evidence, framework }),
-    }
-  }
+/**
+ * Reports whether CI records a secret reference for agentless reporting.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {boolean} whether an API key reference is present
+ */
+function hasApiKeyReference (framework) {
+  if (framework.ciWiring?.requiredSecretEnvVars?.includes('DD_API_KEY')) return true
+  const env = collectCiEnv(framework)
+  return typeof env.DD_API_KEY === 'string' && env.DD_API_KEY.length > 0
+}
 
-  const commandFailure = evidence.commandFailure || summarizeCiCommandFailure(result, evidence)
-  if (commandFailure.kind !== 'ci-wiring-command-result-unknown') {
-    return {
-      ...localFailure,
-      kind: commandFailure.kind,
-      missingLevels: localFailure.missingLevels,
-      signals: commandFailure.signals,
-      summary: commandFailure.summary,
-      recommendation: commandFailure.recommendation,
-    }
-  }
-
+/**
+ * Collects non-secret CI environment evidence in effective scope order.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {Record<string, string>} effective environment evidence
+ */
+function collectCiEnv (framework) {
+  const ciWiring = framework.ciWiring || {}
   return {
-    ...localFailure,
-    summary: 'The CI-shaped command did not emit Test Optimization events, and the validator could not determine ' +
-      'from its output whether tests ran. Review the recorded stdout/stderr artifacts for the selected CI step.',
-    recommendation: 'Verify the selected CI step is the real test step, then rerun after making the command output ' +
-      'or preflight evidence identify the test runner result.',
+    ...ciWiring.workflowEnv,
+    ...ciWiring.jobEnv,
+    ...ciWiring.stepEnv,
+    ...ciWiring.inheritedEnv,
   }
-}
-
-function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
-  if (evidence.nodeOptionsRemoval) {
-    return getNodeOptionsRemovalDiagnosis({ basicResult, evidence, framework })
-  }
-
-  const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
-    'environment and setup described by the CI job, no Test Optimization events reached the offline event artifact.'
-  const probeSummary = getInitializationProbeSummary(evidence.initializationProbe, framework)
-  const lateInitializationSummary = getLateInitializationSummary(evidence.lateInitialization)
-
-  if (basicResult?.status === 'pass') {
-    return `${summary}${lateInitializationSummary} ` +
-      'The same selected test command ' +
-      'reported test data when the ' +
-      'validator supplied the ' +
-      'required Datadog initialization directly, so this repository can report when dd-trace is initialized ' +
-      `correctly.${probeSummary}`
-  }
-
-  return `${summary}${lateInitializationSummary}${probeSummary}`
-}
-
-function getCiWiringTestsRanRecommendation ({ basicResult, evidence, framework }) {
-  const existingInitScripts = evidence.existingDatadogInitScripts || []
-  const lateInitialization = evidence.lateInitialization || []
-  const probeReachedTestRunner = evidence.initializationProbe?.ran === true &&
-    evidence.initializationProbe.reachedTestRunnerProcess === true
-  const nodeOptionsRemoval = evidence.nodeOptionsRemoval
-  let recommendation
-
-  if (nodeOptionsRemoval) {
-    const source = nodeOptionsRemoval.scriptName && nodeOptionsRemoval.packageJson
-      ? `Script \`${nodeOptionsRemoval.scriptName}\` in \`${nodeOptionsRemoval.packageJson}\``
-      : 'The package script'
-    recommendation = `${source} clears NODE_OPTIONS before the test runner starts. Remove the empty ` +
-      '`NODE_OPTIONS=` assignment, or pass the CI-provided `-r dd-trace/ci/init` preload to the next command.'
-  } else if (lateInitialization.length > 0) {
-    const setupFiles = lateInitialization.map(finding => `\`${finding.setupFile}\``).join(', ')
-    recommendation = `Move Test Optimization initialization out of Vitest setup file ${setupFiles}. ` +
-      'Vitest setup files run after the test runner starts, which is too late for dd-trace to instrument the ' +
-      'runner. Set `NODE_OPTIONS=-r dd-trace/ci/init` on the CI test command instead.'
-  } else if (existingInitScripts.length > 0) {
-    const scriptNames = existingInitScripts.map(script => `\`${script.name}\``).join(', ')
-    recommendation = `The package already defines ${scriptNames} with the required ` +
-      '`dd-trace/ci/init` preload. Update the identified CI test step to invoke that script, or copy its ' +
-      '`NODE_OPTIONS` initialization into the CI test command.'
-  } else if (probeReachedTestRunner) {
-    recommendation = `${evidence.ciRemediation?.summary || buildCiRemediation(framework).summary} ` +
-      'The NODE_OPTIONS probe reached the test runner for this command shape, so no package-manager or wrapper ' +
-      'change is needed.'
-  } else {
-    recommendation = 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test ' +
-      'runner, and that any package manager, monorepo runner, or wrapper preserves it.'
-  }
-
-  if (basicResult?.status === 'pass' && !nodeOptionsRemoval && lateInitialization.length === 0 &&
-    !probeReachedTestRunner) {
-    return `${recommendation} Compare the passing direct-initialization command with the CI job command to find ` +
-      'where the Datadog setup differs.'
-  }
-
-  return recommendation
 }
 
 function getNodeOptionsRemovalDiagnosis ({ basicResult, evidence, framework }) {
@@ -397,23 +203,25 @@ function getNodeOptionsRemovalDiagnosis ({ basicResult, evidence, framework }) {
       '`NODE_OPTIONS=-r dd-trace/ci/init` supplied directly, it reports test data successfully.'
     : ''
 
-  return 'The CI test command ran tests, but no Test Optimization events reached the offline event artifact. ' +
-    `${ciCommand}` +
-    `${source} expands to \`${finding.command}\`. The empty \`NODE_OPTIONS=\` assignment clears the Datadog ` +
-    `preload before ${frameworkName} starts.${directResult}`
+  return `${ciCommand}${source} expands to \`${finding.command}\`. The empty \`NODE_OPTIONS=\` assignment clears ` +
+    `the Datadog preload before ${frameworkName} starts.${directResult}`
+}
+
+function getNodeOptionsRemovalRecommendation (finding) {
+  const source = finding.scriptName && finding.packageJson
+    ? `Script \`${finding.scriptName}\` in \`${finding.packageJson}\``
+    : 'The package script'
+  return `${source} clears NODE_OPTIONS before the test runner starts. Remove the empty \`NODE_OPTIONS=\` ` +
+    'assignment, or pass the CI-provided `-r dd-trace/ci/init` preload to the next command.'
 }
 
 function findNodeOptionsRemoval (framework, manifest) {
-  const commands = framework.ciWiring?.packageScriptExpansionChain || []
-  for (const command of commands) {
+  for (const command of framework.ciWiring?.packageScriptExpansionChain || []) {
     if (typeof command !== 'string') continue
     if (/(?:^|\s)NODE_OPTIONS\s*=\s*(?=\s|$)/.test(command) ||
       /(?:^|\s)unset\s+NODE_OPTIONS(?:\s|$)/.test(command) ||
       /(?:^|\s)env\s+-u\s+NODE_OPTIONS(?:\s|$)/.test(command)) {
-      return {
-        command,
-        ...findPackageScriptSource(manifest, framework, command),
-      }
+      return { command, ...findPackageScriptSource(manifest, framework, command) }
     }
   }
 }
@@ -436,339 +244,9 @@ function findPackageScriptSource (manifest, framework, command) {
   return {}
 }
 
-function getLateInitializationSummary (findings) {
-  if (!Array.isArray(findings) || findings.length === 0) return ''
-  const setupFiles = findings.map(finding => `\`${finding.setupFile}\``).join(', ')
-  return ' Static configuration inspection found Test Optimization initialization in Vitest setup file ' +
-    `${setupFiles}. Vitest loads setup files after the runner starts, so this initialization is too late to ` +
-    'instrument the test runner.'
-}
-
-/**
- * Finds package scripts that already set the required Test Optimization preload.
- *
- * @param {object|undefined} manifest normalized validation manifest
- * @param {object} framework manifest framework entry
- * @returns {{name: string, packageJson: string}[]} matching package scripts
- */
-function findDatadogInitScripts (manifest, framework) {
-  const roots = new Set([framework.project?.root, manifest?.repository?.root].filter(Boolean))
-  const scripts = []
-
-  for (const root of roots) {
-    let packageJson
-    try {
-      packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-    } catch {
-      continue
-    }
-
-    for (const [name, command] of Object.entries(packageJson.scripts || {})) {
-      if (typeof command !== 'string' || !/\bNODE_OPTIONS\s*=.*\bdd-trace\/ci\/init\b/.test(command)) {
-        continue
-      }
-      scripts.push({
-        name,
-        packageJson: path.join(root, 'package.json'),
-      })
-    }
-  }
-
-  return scripts
-}
-
-function summarizeCiCommandFailure (result, evidence) {
-  const output = `${result.stdout || ''}\n${result.stderr || ''}`
-  const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary || [])
-  const common = {
-    exitCode: result.exitCode,
-    stderrExcerpt: tailInterestingLines(result.stderr),
-    stdoutExcerpt: tailInterestingLines(result.stdout),
-  }
-
-  if (testsRan) {
-    return {
-      ...common,
-      kind: 'ci-wiring-command-result-unknown',
-      signals: [],
-      summary: 'The CI-shaped command ran tests; missing Test Optimization events are reported separately.',
-      recommendation: 'Review CI wiring event failure evidence.',
-    }
-  }
-
-  const preloadFailure = detectDatadogPreloadResolutionFailure(output)
-  if (preloadFailure) {
-    return {
-      ...common,
-      kind: 'ci-wiring-preload-resolution-failed',
-      signals: preloadFailure.signals,
-      summary: 'The CI-shaped command failed before tests started because Node could not resolve the Test ' +
-        'Optimization preload `dd-trace/ci/init` from the command working directory.',
-      recommendation: 'Make sure `dd-trace` is installed where the CI command starts, or run the CI command from ' +
-        'the package working directory that can resolve `dd-trace/ci/init`. After the preload resolves, rerun CI ' +
-        'wiring validation to check whether the required Datadog setup reaches the final test runner.',
-    }
-  }
-
-  const commandBlocker = getCommandBlocker(result)
-  if (commandBlocker) return { ...common, ...commandBlocker }
-
-  if (result.timedOut === true) {
-    return {
-      ...common,
-      kind: 'ci-wiring-command-timed-out',
-      signals: [],
-      summary: 'The CI-shaped command timed out before the validator could observe Test Optimization events.',
-      recommendation: 'Choose a smaller representative CI test command or record the setup needed to make the ' +
-        'selected command complete within the validation timeout.',
-    }
-  }
-
-  if (result.exitCode !== 0 && !testsRan) {
-    const termination = Number.isInteger(result.exitCode) ? `exited ${result.exitCode}` : 'failed'
-    const projectFilterMismatch = output.match(/No projects matched the filter\s+["']([^"']+)["']/i)
-    if (projectFilterMismatch) {
-      return {
-        ...common,
-        kind: 'ci-wiring-project-filter-mismatch',
-        signals: [projectFilterMismatch[0]],
-        summary: `The CI-shaped command ${termination} before tests because its added project filter ` +
-          `\`${projectFilterMismatch[1]}\` is not exposed by the configuration loaded from the CI working ` +
-          'directory. No CI wiring conclusion was reached.',
-        recommendation: 'Remove the invented project selector. Choose a representative test from a project the ' +
-          'original CI command actually loads, or mark CI replay unavailable when the real CI wrapper cannot be ' +
-          'focused safely.',
-      }
-    }
-
-    if (/No test files found/i.test(output)) {
-      return {
-        ...common,
-        kind: 'ci-wiring-test-filter-mismatch',
-        signals: findInterestingLines(output, [/No test files found/, /filter:/, /include:/]),
-        summary: `The CI-shaped command ${termination} before tests because its focused test filter matched no ` +
-          'files in the project configuration loaded by CI. No CI wiring conclusion was reached.',
-        recommendation: 'Choose a real test included by the exact CI-loaded project and use it consistently for ' +
-          'Basic Reporting and CI wiring. If the CI command cannot be focused without changing its project, cwd, ' +
-          'or wrapper chain, mark CI replay unavailable.',
-      }
-    }
-
-    const buildErrors = findInterestingLines(output, [
-      /Cannot find module/,
-      /Module not found/,
-      /Error \[ERR_MODULE_NOT_FOUND\]/,
-      /Could not resolve /,
-      /command not found/,
-    ])
-
-    return {
-      ...common,
-      buildErrors,
-      kind: 'ci-wiring-command-failed-before-tests',
-      signals: buildErrors,
-      summary: `The CI-shaped command ${termination} before the validator observed any tests running. ` +
-        'No CI wiring conclusion about Test Optimization initialization was reached for this command.',
-      recommendation: 'Fix or document the command/setup failure first. CI wiring can only be interpreted after ' +
-        'the selected CI-shaped command reaches the test runner.',
-    }
-  }
-
-  if (result.exitCode === 0 && !testsRan) {
-    return {
-      ...common,
-      kind: 'ci-wiring-no-observed-tests',
-      signals: [],
-      summary: 'The CI-shaped command exited 0, but the validator did not observe test-runner output or Test ' +
-        'Optimization events.',
-      recommendation: 'Verify that the selected CI step actually runs tests. If it is a wrapper with unusual ' +
-        'output, record preflight observedTestCount or choose a representative command whose output identifies ' +
-        'the test result.',
-    }
-  }
-
-  return {
-    ...common,
-    kind: 'ci-wiring-command-result-unknown',
-    signals: [],
-    summary: 'The CI-shaped command result did not explain why Test Optimization events were missing.',
-    recommendation: 'Review stdout, stderr, and debug lines for the selected CI-shaped command.',
-  }
-}
-
-function getComparableCiWiringPreflight (framework, command) {
-  if (commandsHaveSameExecutionShape(command, framework.existingTestCommand)) {
-    return {
-      ...framework.preflight,
-      source: 'existingTestCommand',
-    }
-  }
-
-  return {
-    ran: false,
-    reason: 'No dd-trace-less preflight result was recorded for the selected CI wiring command shape.',
-  }
-}
-
-function commandsHaveSameExecutionShape (left, right) {
-  if (!left || !right) return false
-  if (left.cwd !== right.cwd) return false
-  if (Boolean(left.usesShell) !== Boolean(right.usesShell)) return false
-  return serializeCommand(left) === serializeCommand(right)
-}
-
-function detectDatadogPreloadResolutionFailure (output) {
-  if (!/dd-trace(?:\/ci\/init)?/.test(output)) return null
-  if (!/MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/.test(output)) return null
-
-  const signals = findInterestingLines(output, [
-    /Cannot find module ['"]dd-trace\/ci\/init['"]/,
-    /Cannot find package ['"]dd-trace['"]/,
-    /Error \[ERR_MODULE_NOT_FOUND\].*dd-trace\/ci\/init/,
-    /MODULE_NOT_FOUND/,
-    /internal\/preload/,
-  ], 8)
-
-  return { signals }
-}
-
-function summarizeCiDebugSignals (result) {
-  const output = `${result.stdout || ''}\n${result.stderr || ''}`
-  const lines = findInterestingLines(output, [
-    /dd-trace/i,
-    /datadog/i,
-    /ci visibility/i,
-    /test optimization/i,
-    /ECONNREFUSED/,
-    /ECONNRESET/,
-    /ETIMEDOUT/,
-    /socket hang up/,
-    /failed to send/i,
-    /writer/i,
-  ], 12)
-
-  return {
-    debugEnvEnabled: true,
-    lines,
-  }
-}
-
 function summarizeBasicReportingResult (basicResult) {
-  if (!basicResult) {
-    return {
-      ran: false,
-      reason: 'Basic Reporting was not run before CI wiring.',
-    }
-  }
-
-  return {
-    ran: true,
-    status: basicResult.status,
-    diagnosis: basicResult.diagnosis,
-  }
-}
-
-function getInitializationProbeSummary (probe, framework) {
-  if (!probe || probe.ran !== true) return ''
-
-  const frameworkName = getDisplayFrameworkName(framework.framework)
-  if (!probe.reachedAnyNodeProcess) {
-    return ' The initialization probe did not reach any Node.js process in the CI command.'
-  }
-
-  if (probe.reachedTestRunnerProcess) {
-    return ` The NODE_OPTIONS probe reached a ${frameworkName} process, so NODE_OPTIONS can reach the test ` +
-      'runner in this command shape; inspect whether the CI workflow actually configures the required Datadog ' +
-      'initialization and environment.'
-  }
-
-  const wrappers = formatToolNames([...probe.wrapperSignals, ...probe.packageManagerSignals])
-  if (wrappers) {
-    return ` The NODE_OPTIONS probe reached ${wrappers}, but it did not appear to reach a ${frameworkName} ` +
-      'process. This usually means a package manager, monorepo runner, or wrapper removes NODE_OPTIONS before ' +
-      'the tests start.'
-  }
-
-  return ` The NODE_OPTIONS probe reached a Node.js process, but it did not appear to reach a ${frameworkName} ` +
-    'process.'
-}
-
-function getMonorepoFindings ({ framework, command, probe }) {
-  const findings = []
-  const commandText = [
-    command.description,
-    command.usesShell ? command.shellCommand : command.argv?.join(' '),
-    framework.ciWiring?.diagnosis,
-    ...(framework.ciWiring?.runnerToolChain || []),
-    ...(framework.ciWiring?.toolChain || []),
-    ...(framework.ciWiring?.commandChain || []),
-  ].filter(Boolean).join('\n')
-
-  if (/\bnx\b/i.test(commandText) || hasProbeTool(probe, 'nx')) {
-    findings.push({
-      id: 'nx-executor-env-forwarding',
-      tool: 'nx',
-      reason: 'Nx executors and wrapper scripts can sit between the CI command and the final test runner.',
-      recommendation: 'Verify that NODE_OPTIONS and Datadog environment variables are preserved by every Nx ' +
-        'target, executor, and wrapper that spawns the test runner.',
-    })
-  }
-
-  if (/\bturbo(?:repo)?\b/i.test(commandText) || hasProbeTool(probe, 'turbo')) {
-    findings.push({
-      id: 'turbo-env-pass-through',
-      tool: 'turbo',
-      reason: 'Turborepo can filter environment variables for tasks.',
-      recommendation: 'Verify turbo.json pass-through settings preserve NODE_OPTIONS and required DD_* variables ' +
-        'for test tasks.',
-    })
-  }
-
-  if (/\blage\b/i.test(commandText) || hasProbeTool(probe, 'lage')) {
-    findings.push({
-      id: 'lage-env-forwarding',
-      tool: 'lage',
-      reason: 'Lage can run package scripts through an intermediate task process.',
-      recommendation: 'Verify the Lage task and any package script it invokes preserve NODE_OPTIONS and required ' +
-        'DD_* variables for the final test runner.',
-    })
-  }
-
-  if (probe?.reachedAnyNodeProcess && !probe.reachedTestRunnerProcess && !findNodeOptionsRemoval(framework)) {
-    findings.push({
-      id: 'node-options-not-observed-in-test-runner',
-      tool: 'node',
-      reason: 'The NODE_OPTIONS probe reached an intermediate Node.js process but not the detected test runner.',
-      recommendation: 'Trace the command chain from the CI step to the test runner and find where NODE_OPTIONS is ' +
-        'removed or replaced.',
-    })
-  }
-
-  return findings
-}
-
-function hasProbeTool (probe, name) {
-  const signals = [
-    ...(probe?.wrapperSignals || []),
-    ...(probe?.packageManagerSignals || []),
-    ...(probe?.testRunnerSignals || []),
-  ]
-  return signals.some(signal => signal.name === name)
-}
-
-function formatToolNames (signals) {
-  const names = []
-  const seen = new Set()
-
-  for (const signal of signals) {
-    if (!signal.name || seen.has(signal.name)) continue
-    seen.add(signal.name)
-    names.push(signal.name)
-  }
-
-  if (names.length === 0) return ''
-  if (names.length === 1) return names[0]
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  if (!basicResult) return { ran: false, reason: 'Basic Reporting was not run before the CI audit.' }
+  return { ran: true, status: basicResult.status, diagnosis: basicResult.diagnosis }
 }
 
 function getDisplayFrameworkName (frameworkName) {
@@ -782,37 +260,4 @@ function getDisplayFrameworkName (frameworkName) {
   }[frameworkName] || frameworkName || 'test runner'
 }
 
-function commandOutputShowsTestsRan (lines) {
-  return lines.some(line => {
-    return /\b\d+\s+(?:passing|passed|failing|failed)\b/i.test(line) ||
-      /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
-      /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
-      /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
-      /\bfailed:\s*[1-9]\d*\b/i.test(line) ||
-      /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)
-  })
-}
-
-function summarizePreflight (preflight) {
-  if (!preflight || preflight.ran !== true) {
-    return {
-      ran: false,
-      reason: preflight?.reason || 'No dd-trace-less preflight result was recorded in the manifest.',
-    }
-  }
-
-  return {
-    ran: true,
-    source: preflight.source,
-    exitCode: preflight.exitCode,
-    observedTestCount: preflight.observedTestCount,
-    maxTestCount: preflight.maxTestCount,
-    stdoutSummary: preflight.stdoutSummary,
-    stderrSummary: preflight.stderrSummary,
-  }
-}
-
-module.exports = {
-  getCiWiringCommand,
-  runCiWiring,
-}
+module.exports = { runCiWiring }

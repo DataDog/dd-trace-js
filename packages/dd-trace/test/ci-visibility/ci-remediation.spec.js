@@ -17,11 +17,8 @@ describe('test optimization CI remediation', () => {
         workflow: 'CI',
         job: 'unit',
         step: 'Run unit tests',
-      },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'run', 'test:unit'],
-        env: { CI: 'true' },
+        command: 'npm run test:unit',
+        stepEnv: { CI: 'true' },
       },
     })
 
@@ -76,11 +73,10 @@ describe('test optimization CI remediation', () => {
   it('does not recommend agentless variables when CI already identifies an Agent endpoint', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',
-      ciWiring: { provider: 'github-actions' },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test'],
-        env: {
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'npm test',
+        stepEnv: {
           DD_AGENT_HOST: 'datadog-agent',
           DD_API_KEY: 'dd-validation-placeholder',
         },
@@ -99,11 +95,10 @@ describe('test optimization CI remediation', () => {
   it('does not infer agentless transport from a bare API key', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',
-      ciWiring: { provider: 'github-actions' },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test'],
-        env: { DD_API_KEY: 'dd-validation-placeholder' },
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'npm test',
+        stepEnv: { DD_API_KEY: 'dd-validation-placeholder' },
       },
     })
 
@@ -112,7 +107,7 @@ describe('test optimization CI remediation', () => {
     assert.match(remediation.summary, /If a Datadog Agent is available and reachable/)
   })
 
-  it('preserves the discovered CI command when live replay is unavailable', () => {
+  it('preserves the discovered CI command from static evidence', () => {
     const remediation = buildCiRemediation({
       id: 'vitest:date-fns',
       framework: 'vitest',
@@ -131,7 +126,7 @@ describe('test optimization CI remediation', () => {
     assert.doesNotMatch(remediation.variants[0].snippet, /keep the existing test command here/)
   })
 
-  it('preserves the original CI command instead of a narrowed validation replay', () => {
+  it('preserves the original CI command as inert configuration evidence', () => {
     const originalCommand = 'npm test -- --project "unit tests" && echo "$CI_JOB"'
     const remediation = buildCiRemediation({
       framework: 'jest',
@@ -140,14 +135,9 @@ describe('test optimization CI remediation', () => {
         provider: 'github-actions',
         command: originalCommand,
       },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test', '--', '--runTestsByPath', 'one.test.js'],
-      },
     })
 
     assert.match(remediation.variants[0].snippet, /npm test -- --project "unit tests" && echo "\$CI_JOB"/)
-    assert.doesNotMatch(remediation.variants[0].snippet, /runTestsByPath/)
   })
 
   it('quotes shell values for non-GitHub CI providers', () => {

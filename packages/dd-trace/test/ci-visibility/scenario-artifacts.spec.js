@@ -1,14 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const {
-  runInitializationProbe,
-} = require('../../../../ci/test-optimization-validation/init-probe')
 const {
   cleanupGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
@@ -30,9 +26,6 @@ const {
 const {
   runTestManagement,
 } = require('../../../../ci/test-optimization-validation/scenarios/test-management')
-
-const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
-const PROBE_PRELOAD = path.resolve(__dirname, '../../../../ci/test-optimization-validation/init-probe-preload.js')
 
 function validationOptions (repositoryRoot) {
   return {
@@ -100,7 +93,6 @@ describe('test optimization validation scenario artifacts', () => {
     const retryState = path.join(out, '.dd-test-optimization-validation-atr-state')
     const networkBlocker = path.join(out, 'block-network.js')
     const mocha = path.resolve('node_modules/mocha/bin/mocha.js')
-    const init = path.resolve('ci/init.js')
 
     fs.writeFileSync(existingTest, "describe('existing suite', () => { it('works', () => {}) })\n")
     fs.writeFileSync(networkBlocker, [
@@ -143,14 +135,14 @@ describe('test optimization validation scenario artifacts', () => {
       project: { root: out },
       existingTestCommand: command(existingTest),
       ciWiring: {
-        status: 'unknown',
-        replayability: 'replayable',
         provider: 'test',
-        diagnosis: 'The test CI command includes the Datadog preload.',
-      },
-      ciWiringCommand: {
-        ...command(existingTest),
-        env: { NODE_OPTIONS: `-r ${networkBlocker} -r ${init}` },
+        command: 'npm test',
+        initialization: {
+          status: 'configured',
+          evidence: ['The CI job sets NODE_OPTIONS=-r dd-trace/ci/init.'],
+        },
+        stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
+        requiredSecretEnvVars: ['DD_API_KEY'],
       },
       preflight: { ran: true, exitCode: 0, observedTestCount: 1, maxTestCount: 1 },
       generatedTestStrategy: {
@@ -205,7 +197,7 @@ describe('test optimization validation scenario artifacts', () => {
       }
       const expected = {
         basic: 'pass',
-        ciWiring: 'pass',
+        ciWiring: 'error',
         efd: 'pass',
         atr: 'pass',
         testManagement: 'pass',
@@ -277,7 +269,7 @@ describe('test optimization validation scenario artifacts', () => {
           },
         },
         options: validationOptions(out),
-        ciWiring: true,
+        injectInitialization: false,
       })
       const direct = await runInstrumentedCommand({
         framework: {
@@ -333,7 +325,7 @@ describe('test optimization validation scenario artifacts', () => {
           timeoutMs: 10_000,
         },
         options: validationOptions(out),
-        ciWiring: true,
+        injectInitialization: false,
       })
 
       assert.strictEqual(run.events.length, 2)
@@ -350,7 +342,7 @@ describe('test optimization validation scenario artifacts', () => {
     }
   })
 
-  it('completes a large multi-process CI replay with bounded early and late evidence', async () => {
+  it('completes a large multi-process export with bounded early and late evidence', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-large-multi-process-'))
     const firstExporter = path.join(out, 'first-exporter.js')
     const secondExporter = path.join(out, 'second-exporter.js')
@@ -370,7 +362,7 @@ describe('test optimization validation scenario artifacts', () => {
           timeoutMs: 10_000,
         },
         options: validationOptions(out),
-        ciWiring: true,
+        injectInitialization: false,
       })
 
       assert.strictEqual(run.result.exitCode, 0)
@@ -409,192 +401,8 @@ describe('test optimization validation scenario artifacts', () => {
           timeoutMs: 10_000,
         },
         options: validationOptions(out),
-        ciWiring: true,
+        injectInitialization: false,
       }), /Offline Test Optimization exporter failed: synthetic_exporter_failure/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('redacts secret-like argv and execArgv values in initialization probe records', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-'))
-    const recordsPath = path.join(tmpDir, 'records.ndjson')
-
-    fs.writeFileSync(recordsPath, '')
-
-    try {
-      execFileSync(process.execPath, [
-        '-r',
-        PROBE_PRELOAD,
-        '-e',
-        '"TOKEN=probe-exec-secret";',
-        'API_KEY=probe-argv-secret',
-      ], {
-        cwd: tmpDir,
-        env: {
-          ...process.env,
-          [PROBE_FILE_ENV]: recordsPath,
-          NODE_OPTIONS: '',
-        },
-      })
-
-      const records = fs.readFileSync(recordsPath, 'utf8')
-      assert.match(records, /API_KEY=<redacted>/)
-      assert.match(records, /TOKEN=<redacted>/)
-      assert.doesNotMatch(records, /probe-argv-secret/)
-      assert.doesNotMatch(records, /probe-exec-secret/)
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('detects Playwright CLI paths in initialization probe records', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-'))
-    const recordsPath = path.join(tmpDir, 'records.ndjson')
-    const playwrightCli = path.join(tmpDir, 'node_modules', 'playwright', 'cli.js')
-
-    fs.mkdirSync(path.dirname(playwrightCli), { recursive: true })
-    fs.writeFileSync(playwrightCli, 'process.exit(0)\n')
-    fs.writeFileSync(recordsPath, '')
-
-    try {
-      execFileSync(process.execPath, [
-        '-r',
-        PROBE_PRELOAD,
-        playwrightCli,
-      ], {
-        cwd: tmpDir,
-        env: {
-          ...process.env,
-          [PROBE_FILE_ENV]: recordsPath,
-          NODE_OPTIONS: '',
-        },
-      })
-
-      const records = fs.readFileSync(recordsPath, 'utf8')
-        .trim()
-        .split('\n')
-        .map(line => JSON.parse(line))
-      const processStart = records.find(record => record.type === 'process-start')
-
-      assert.deepStrictEqual(processStart.detectedTools, [
-        { name: 'playwright', kind: 'test-runner' },
-      ])
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('rewrites child-controlled probe output as a bounded sanitized artifact', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-parent-'))
-    const script = [
-      'const fs = require("node:fs")',
-      'const file = process.env.DD_TEST_OPTIMIZATION_INIT_PROBE_FILE',
-      'fs.appendFileSync(file, "TOKEN=raw-child-secret\\n")',
-      'fs.appendFileSync(file, JSON.stringify({',
-      '  type: "process-start", pid: 123, ppid: 1, cwd: process.cwd(),',
-      '  argv: ["API_KEY=forged-child-secret"]',
-      '}) + "\\n")',
-    ].join(';')
-
-    try {
-      const probe = await runInitializationProbe({
-        command: {
-          cwd: out,
-          argv: [process.execPath, '-e', script],
-        },
-        framework: { id: 'node:probe' },
-        outDir: out,
-        options: validationOptions(out),
-      })
-      const records = fs.readFileSync(probe.artifacts.records, 'utf8')
-
-      assert.doesNotMatch(records, /raw-child-secret|forged-child-secret/)
-      assert.doesNotMatch(records, /TOKEN=raw/)
-      assert.match(records, /API_KEY=<redacted>/)
-      assert.strictEqual(fs.existsSync(path.join(out, 'initialization-probe', '.records.raw.ndjson')), false)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('preserves inline non-Datadog NODE_OPTIONS while adding the initialization probe preload', async function () {
-    if (process.platform === 'win32') this.skip()
-
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-inline-'))
-    const requiredPreload = path.join(out, 'required-preload.js')
-    const marker = path.join(out, 'required-preload-ran')
-    fs.writeFileSync(requiredPreload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
-
-    try {
-      const probe = await runInitializationProbe({
-        command: {
-          cwd: out,
-          argv: ['/usr/bin/env', `NODE_OPTIONS=-r ${requiredPreload}`, process.execPath, '-e', ''],
-        },
-        framework: { id: 'vitest:probe', framework: 'vitest' },
-        outDir: out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(probe.summary.commandExitCode, 0)
-      assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
-      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran')
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('preserves shell non-Datadog NODE_OPTIONS and chaining in the initialization probe', async function () {
-    if (process.platform === 'win32') this.skip()
-
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-shell-'))
-    const requiredPreload = path.join(out, 'required-preload.js')
-    const marker = path.join(out, 'required-preload-ran')
-    fs.writeFileSync(requiredPreload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
-
-    try {
-      const probe = await runInitializationProbe({
-        command: {
-          cwd: out,
-          usesShell: true,
-          shell: '/bin/sh',
-          shellCommand: `export NODE_OPTIONS='-r ${requiredPreload}' && ${JSON.stringify(process.execPath)} -e ''`,
-        },
-        framework: { id: 'vitest:probe', framework: 'vitest' },
-        outDir: out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(probe.summary.commandExitCode, 0)
-      assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
-      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran')
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('preserves command environment NODE_OPTIONS required by the test runner', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-environment-'))
-    const requiredPreload = path.join(out, 'required-preload.js')
-    const marker = path.join(out, 'required-preload-ran')
-    fs.writeFileSync(requiredPreload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
-
-    try {
-      const probe = await runInitializationProbe({
-        command: {
-          cwd: out,
-          argv: [process.execPath, '-e', ''],
-          env: { NODE_OPTIONS: `-r ${requiredPreload} -r dd-trace/ci/init` },
-        },
-        framework: { id: 'vitest:probe', framework: 'vitest' },
-        outDir: out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(probe.summary.commandExitCode, 0)
-      assert.strictEqual(probe.summary.reachedAnyNodeProcess, true)
-      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran')
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }

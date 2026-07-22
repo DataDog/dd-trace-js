@@ -7,7 +7,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { bindApprovedExecutable, getApprovedExecutable } = require('./executable-approval')
-const { getCiWiringCommand, getLocalValidationCommand } = require('./local-command')
+const { getLocalValidationCommand } = require('./local-command')
 
 /**
  * Returns an executable that is unavailable for a structured command.
@@ -289,8 +289,14 @@ function getManifestCommands (manifest) {
     if (basicSource) {
       commands.push([`${prefix}:basic-reporting`, getLocalValidationCommand(framework, basicSource), basicSource])
     }
-    if (framework.ciWiringCommand) {
-      commands.push([`${prefix}:ci-wiring`, getCiWiringCommand(framework), framework.ciWiringCommand])
+    for (const [index, candidate] of (framework.localTestCandidates || []).entries()) {
+      if (candidate?.command) {
+        commands.push([
+          `${prefix}:local-test-candidate:${index}`,
+          getLocalValidationCommand(framework, candidate.command),
+          candidate.command,
+        ])
+      }
     }
     for (const [index, command] of (framework.setup?.commands || []).entries()) {
       commands.push([`${prefix}:setup:${index}`, command, command])

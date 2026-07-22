@@ -23,18 +23,15 @@ function readMarkdownJsonSection (markdown, title) {
 
 describe('test optimization validation report writer', () => {
   it('preserves non-command CI metadata without trying to execute or format it', () => {
-    const command = { run: 'npm test' }
     const candidate = buildCiCommandCandidate({
       ciWiring: {
-        command,
+        command: 'npm test',
         provider: 'github-actions',
-        replayability: 'not_replayable',
       },
     })
 
-    assert.strictEqual(candidate.command, command)
-    assert.strictEqual(candidate.originalCommand, command)
-    assert.strictEqual(candidate.validationReplayCommand, undefined)
+    assert.strictEqual(candidate.command, 'npm test')
+    assert.strictEqual(candidate.provider, 'github-actions')
   })
 
   it('records an incomplete run before live validation starts', () => {
@@ -139,13 +136,10 @@ describe('test optimization validation report writer', () => {
             packageScriptExpansionChain: ['pnpm test', 'vitest run'],
             runnerToolChain: ['GitHub Actions ubuntu-latest', 'pnpm test', 'vitest'],
             unresolved: ['Matrix node version was approximated locally.'],
-          },
-          ciWiringCommand: {
-            cwd: tmpDir,
-            argv: ['pnpm', 'test'],
-            env: {
-              NODE_OPTIONS: '-r dd-trace/ci/init',
-              DD_API_KEY: 'safe-placeholder',
+            command: 'pnpm test',
+            initialization: {
+              status: 'configured',
+              evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'],
             },
           },
         },
@@ -163,25 +157,15 @@ describe('test optimization validation report writer', () => {
       {
         frameworkId: 'vitest:app',
         scenario: 'ci-wiring',
-        status: 'fail',
-        diagnosis: 'The test command used by the CI job was identified and ran tests.',
+        status: 'error',
+        diagnosis: 'The CI job contains the required configuration, but propagation remains unverified.',
+        conclusion: 'configured_propagation_unverified',
+        domain: 'ci_configuration',
+        evidenceStrength: 'inferred_static',
         evidence: {
-          commandExitCode: 0,
-          commandFailure: {
-            kind: 'ci-wiring-preload-resolution-failed',
-            summary: 'The CI-shaped command failed before tests started because Node could not resolve the ' +
-              'Test Optimization preload.',
-            recommendation: 'Make sure dd-trace is installed where the CI command starts.',
-            signals: [
-              "Error: Cannot find module 'dd-trace/ci/init'",
-            ],
-          },
-          debugSignals: {
-            debugEnvEnabled: true,
-            lines: [
-              'dd-trace debug line',
-            ],
-          },
+          conclusion: 'configured_propagation_unverified',
+          domain: 'ci_configuration',
+          evidenceStrength: 'inferred_static',
         },
         artifacts: [],
       },
@@ -214,11 +198,7 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Runner\/tool chain: `GitHub Actions ubuntu-latest` -> `pnpm test` -> `vitest`/)
       assert.doesNotMatch(humanReadableReport, /Selected `pnpm test` -> `vitest run` from CI\./)
       assert.doesNotMatch(markdown, /&#96;|-&gt;/)
-      assert.match(markdown, /Unresolved replay details: `Matrix node version was approximated locally\.`/)
-      assert.match(markdown, /Command failure: The CI-shaped command failed before tests started/)
-      assert.match(markdown, /Command failure recommendation: Make sure dd-trace is installed/)
-      assert.match(markdown, /Command failure signals: `Error: Cannot find module 'dd-trace\/ci\/init'`/)
-      assert.match(markdown, /CI debug lines: `dd-trace debug line`/)
+      assert.match(markdown, /Unresolved CI audit details: `Matrix node version was approximated locally\.`/)
       assert.strictEqual(
         readMarkdownJsonSection(markdown, 'Diagnostic JSON').artifacts.scenarioEventArtifacts,
         'runs'
@@ -277,13 +257,10 @@ describe('test optimization validation report writer', () => {
             inheritedEnv: {
               ACCESS_TOKEN: 'inherited-secret',
             },
-          },
-          ciWiringCommand: {
-            cwd: tmpDir,
-            usesShell: true,
-            shellCommand: 'DD_API_KEY=command-secret pnpm test --token flag-secret',
-            env: {
-              DD_API_KEY: 'command-env-secret',
+            command: 'pnpm test',
+            initialization: {
+              status: 'unknown',
+              evidence: [],
             },
           },
         },
@@ -509,13 +486,9 @@ describe('test optimization validation report writer', () => {
   it('includes failure evidence, omitted commands, and static diagnosis notes in human reports', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
-    const runDir = path.join(out, 'runs', 'vitest-app', 'ci-wiring')
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
     const packageJsonPath = path.join(tmpDir, 'package.json')
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
-    const commandPath = path.join(runDir, 'command.json')
-    const stdoutPath = path.join(runDir, 'stdout.txt')
-    const stderrPath = path.join(runDir, 'stderr.txt')
     const manifest = {
       __path: manifestPath,
       repository: {
@@ -566,43 +539,15 @@ describe('test optimization validation report writer', () => {
         frameworkId: 'vitest:app',
         scenario: 'ci-wiring',
         status: 'fail',
-        diagnosis: 'The test command used by the CI job was identified and ran tests.',
+        diagnosis: 'The identified CI test job does not configure Test Optimization initialization.',
+        conclusion: 'confirmed_misconfigured',
+        domain: 'ci_configuration',
+        evidenceStrength: 'confirmed_static',
         evidence: {
-          commandExitCode: 1,
-          commandTimedOut: false,
-          commandOutputSummary: ['Tests  1 failed | 2 passed (3)'],
-          commandFailure: {
-            stdoutExcerpt: ['Tests  1 failed | 2 passed (3)'],
-            stderrExcerpt: ['AssertionError: expected true to be false'],
-          },
-          eventLevelFailure: {
-            kind: 'ci-wiring-no-test-optimization-events',
-            missingLevels: ['test_session_end', 'test'],
-            recommendation: 'Verify NODE_OPTIONS reaches Vitest.',
-          },
-          existingDatadogInitScripts: [
-            {
-              name: 'test:datadog',
-              packageJson: packageJsonPath,
-            },
-          ],
-          initializationProbe: {
-            ran: true,
-            processCount: 2,
-            reachedAnyNodeProcess: true,
-            reachedTestRunnerProcess: false,
-            wrapperSignals: [
-              {
-                name: 'turbo',
-                pid: 123,
-                processCount: 12,
-                cwd: tmpDir,
-              },
-            ],
-            testRunnerSignals: [],
-            packageManagerSignals: [],
-            recordsPath: path.join(runDir, 'initialization-probe', 'records.ndjson'),
-          },
+          conclusion: 'confirmed_misconfigured',
+          domain: 'ci_configuration',
+          evidenceStrength: 'confirmed_static',
+          recommendation: 'Add Test Optimization initialization to the selected CI test job.',
           monorepoFindings: [
             {
               id: 'turbo-env-pass-through',
@@ -620,18 +565,11 @@ describe('test optimization validation report writer', () => {
               configFile: path.join(tmpDir, '.github/workflows/test.yml'),
               job: 'unit',
               step: 'Run unit tests',
-            },
-            ciWiringCommand: {
-              cwd: tmpDir,
-              argv: ['pnpm', 'test'],
+              command: 'pnpm test',
             },
           }),
         },
-        artifacts: [
-          commandPath,
-          stdoutPath,
-          stderrPath,
-        ],
+        artifacts: [],
       },
       {
         frameworkId: 'vitest:app',
@@ -661,19 +599,9 @@ describe('test optimization validation report writer', () => {
     const originalLog = console.log
     const logs = []
 
-    fs.mkdirSync(runDir, { recursive: true })
+    fs.mkdirSync(out, { recursive: true })
     fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
     fs.writeFileSync(staticDiagnosisPath, '{}\n')
-    fs.writeFileSync(stdoutPath, 'Tests  1 failed | 2 passed (3)\n')
-    fs.writeFileSync(stderrPath, 'AssertionError: expected true to be false\n')
-    fs.writeFileSync(commandPath, `${JSON.stringify({
-      command: 'pnpm test',
-      displayCommand: 'pnpm test',
-      cwd: tmpDir,
-      exitCode: 1,
-      timedOut: false,
-      durationMs: 1234,
-    }, null, 2)}\n`)
     console.log = message => logs.push(message)
 
     try {
@@ -699,12 +627,12 @@ describe('test optimization validation report writer', () => {
       const humanReadableReport = markdown.split('<details><summary>Diagnostic JSON</summary>')[0]
 
       assert.ok(markdown.includes('example \\(Vitest\\): dd-trace successfully reports this test suite, but the ' +
-        'selected CI job does not load dd-trace when it runs the tests.'))
+        'identified CI job does not configure the required Test Optimization initialization or reporting transport.'))
       assert.ok(markdown.includes('Can these tests report to Datadog? \\(Basic Reporting\\)'))
-      assert.ok(markdown.includes('Does the selected CI job initialize Datadog? \\(CI Wiring\\)'))
+      assert.ok(markdown.includes('Does the selected CI job initialize Datadog? \\(CI Configuration Audit\\)'))
       assert.match(markdown, /## How to Fix/)
-      assert.ok(markdown.includes('### example \\(Vitest\\): CI Wiring'))
-      assert.match(markdown, /Verify NODE\\_OPTIONS reaches Vitest\./)
+      assert.ok(markdown.includes('### example \\(Vitest\\): CI Configuration Audit'))
+      assert.match(markdown, /Add Test Optimization initialization to the selected CI test job\./)
       assert.match(markdown, /Verify turbo\.json pass-through settings preserve NODE\\_OPTIONS\./)
       assert.match(markdown, /#### Agentless reporting/)
       assert.match(markdown, /Recommended variables: `DD_SERVICE=example-tests`/)
@@ -717,18 +645,7 @@ describe('test optimization validation report writer', () => {
       assert.doesNotMatch(humanReadableReport, /pnpm run legacy-test was omitted/)
       assert.ok(markdown.includes('Typecheck commands \\(1 command\\): do not execute supported runtime tests.'))
       assert.match(markdown, /## Failed, Incomplete, and Blocked Result Details/)
-      assert.match(markdown, /Command: `pnpm test`/)
-      assert.match(markdown, /Cwd: `/)
-      assert.match(markdown, /Exit code: `1`/)
-      assert.match(markdown, /Timed out: `false`/)
-      assert.match(markdown, /Command output summary: `Tests {2}1 failed \| 2 passed \(3\)`/)
-      assert.match(markdown, /Existing package scripts with Datadog initialization: `test:datadog \(/)
-      assert.match(markdown, /Stderr excerpt: `AssertionError: expected true to be false`/)
-      assert.match(markdown, /Event failure kind: `ci-wiring-no-test-optimization-events`/)
-      assert.match(markdown, /NODE\\_OPTIONS probe: reached Node process `true`, reached test runner `false`/)
-      assert.match(markdown, /Probe wrapper signals: `turbo 12 processes cwd /)
       assert.match(markdown, /Monorepo finding: `turbo-env-pass-through`, `tool turbo`/)
-      assert.match(markdown, /Scenario artifacts: \[open artifact directory\]\(<runs\/vitest-app\/ci-wiring\/>\)/)
       assert.match(markdown, /Are new tests retried\? .*The validator added a temporary passing test/)
       assert.match(markdown, /Are failed tests retried\? .*temporary test that fails once.*retry pass/)
       assert.match(markdown, /Can tests be quarantined\? .*temporary target test.*quarantine tag/)
@@ -741,11 +658,10 @@ describe('test optimization validation report writer', () => {
       const validation = diagnostic.validationSummaries[0]
       const ciWiring = validation.checks.find(check => check.id === 'ci-wiring')
       assert.strictEqual(validation.status, 'failed')
-      assert.strictEqual(ciWiring.command, 'pnpm test')
-      assert.strictEqual(ciWiring.exitCode, '1')
-      assert.strictEqual(ciWiring.evidence.failureKind, 'ci-wiring-no-test-optimization-events')
-      assert.strictEqual(ciWiring.evidence.initializationProbe.reachedTestRunnerProcess, false)
-      assert.strictEqual(ciWiring.artifactDirectory, 'runs/vitest-app/ci-wiring')
+      assert.strictEqual(ciWiring.command, undefined)
+      assert.strictEqual(ciWiring.exitCode, undefined)
+      assert.strictEqual(ciWiring.evidence.conclusion, 'confirmed_misconfigured')
+      assert.strictEqual(ciWiring.artifactDirectory, undefined)
       assert.ok(ciWiring.remediation.length > 0)
       assert.strictEqual(diagnostic.normalizedManifest, undefined)
       assert.strictEqual(diagnostic.staticDiagnosis, undefined)
@@ -753,8 +669,8 @@ describe('test optimization validation report writer', () => {
       assert.ok(Buffer.byteLength(JSON.stringify(diagnostic)) < 10_000)
       const summary = logs.join('\n')
       assert.match(summary, /How to fix:/)
-      assert.match(summary, /example \(Vitest\) - CI Wiring:/)
-      assert.match(summary, /Verify NODE_OPTIONS reaches Vitest\./)
+      assert.match(summary, /example \(Vitest\) - CI Configuration Audit:/)
+      assert.match(summary, /Add Test Optimization initialization to the selected CI test job\./)
       assert.match(summary, /Verify turbo\.json pass-through settings preserve NODE_OPTIONS\./)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
@@ -764,7 +680,7 @@ describe('test optimization validation report writer', () => {
     }
   })
 
-  it('does not claim a CI command ran when CI replay is unavailable', () => {
+  it('does not claim a CI command ran when the static audit is incomplete', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
     const packageJsonPath = path.join(tmpDir, 'package.json')
@@ -784,9 +700,11 @@ describe('test optimization validation report writer', () => {
       frameworkId: 'vitest:date-fns',
       scenario: 'ci-wiring',
       status: 'error',
-      diagnosis: 'CI wiring was not replayed. No live CI-wiring conclusion was reached.',
+      diagnosis: 'The CI configuration audit is incomplete. No CI configuration conclusion was reached.',
       evidence: {
-        manifestIncomplete: true,
+        conclusion: 'incomplete',
+        domain: 'ci_configuration',
+        evidenceStrength: 'unknown',
       },
       artifacts: [],
     }]
@@ -806,8 +724,8 @@ describe('test optimization validation report writer', () => {
 
       const summary = logs.join('\n')
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-      assert.match(summary, /CI wiring was not replayed/)
-      assert.match(summary, /No live CI-wiring conclusion was reached/)
+      assert.match(summary, /CI configuration audit is incomplete/)
+      assert.match(summary, /No CI configuration conclusion was reached/)
       assert.doesNotMatch(summary, /CI ran tests/)
       assert.doesNotMatch(markdown, /Missing event levels:/)
     } finally {
@@ -816,50 +734,38 @@ describe('test optimization validation report writer', () => {
     }
   })
 
-  it('reports a CI command failure before tests as incomplete without Datadog remediation', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
-    const out = path.join(tmpDir, 'results')
-    const packageJsonPath = path.join(tmpDir, 'package.json')
+  it('reports a confirmed static CI finding without claiming the CI command ran', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-static-ci-'))
+    const out = path.join(root, 'results')
     const manifest = {
-      repository: { root: tmpDir },
+      repository: { root },
       frameworks: [{
-        id: 'vitest:date-fns',
+        id: 'vitest:root',
         framework: 'vitest',
-        project: { name: 'date-fns', root: tmpDir, packageJson: packageJsonPath },
+        project: { name: 'example', root },
       }],
     }
     const results = [{
-      frameworkId: 'vitest:date-fns',
+      frameworkId: 'vitest:root',
       scenario: 'basic-reporting',
       status: 'pass',
       diagnosis: 'Basic Reporting passed.',
+      conclusion: 'confirmed_working',
+      domain: 'test_optimization',
+      evidenceStrength: 'confirmed_runtime',
       evidence: {},
       artifacts: [],
     }, {
-      frameworkId: 'vitest:date-fns',
+      frameworkId: 'vitest:root',
       scenario: 'ci-wiring',
-      status: 'error',
-      diagnosis: 'The CI-shaped command exited 1 before the validator observed any tests running.',
-      evidence: {
-        validationIncomplete: true,
-        commandFailure: {
-          recommendation: 'Correct the focused test filter, then rerun CI wiring validation.',
-        },
-        ciRemediation: {
-          variants: [{
-            id: 'agentless',
-            name: 'Agentless reporting',
-            prerequisite: 'Store an API key.',
-            requiredValues: [],
-            recommendedValues: [],
-            optionalValues: [],
-            snippet: 'DD_API_KEY=<redacted>',
-          }],
-        },
-      },
+      status: 'fail',
+      diagnosis: 'The identified CI test job does not configure NODE_OPTIONS with dd-trace/ci/init.',
+      conclusion: 'confirmed_misconfigured',
+      domain: 'ci_configuration',
+      evidenceStrength: 'confirmed_static',
+      evidence: {},
       artifacts: [],
     }]
-    fs.writeFileSync(packageJsonPath, '{}\n')
     fs.mkdirSync(out)
 
     try {
@@ -867,24 +773,20 @@ describe('test optimization validation report writer', () => {
         manifest,
         results,
         out,
-        runSummary: { runCompleted: true, validatorExitCode: 1 },
-        staticDiagnosis: {
-          report: {
-            results: [{ title: 'Missing Test Optimization initialization' }],
-          },
+        runSummary: {
+          runCompleted: true,
+          executionStatus: 'completed',
+          validatorExitCode: 1,
+          validationCoverage: 'complete',
         },
       })
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
-      assert.match(markdown, /selected CI command did not reach a test result/)
-      assert.match(markdown, /\| INCOMPLETE \|/)
-      assert.match(markdown, /Correct the focused test filter/)
-      assert.match(markdown, /selected CI replay did not reach a test result/)
-      assert.match(markdown, /Treat this as context only, not as a confirmed CI-wiring failure or remediation/)
-      assert.doesNotMatch(markdown, /Agentless reporting/)
-      assert.doesNotMatch(markdown, /DD_API_KEY/)
+      assert.match(markdown, /identified CI job does not configure the required Test Optimization/)
+      assert.match(markdown, /does not configure NODE_OPTIONS with dd-trace\/ci\/init/)
+      assert.doesNotMatch(markdown, /CI ran tests/)
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
+      fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
@@ -1028,7 +930,7 @@ describe('test optimization validation report writer', () => {
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       assert.match(markdown, /Validation coverage: partial/)
-      assert.match(markdown, /did not check CI Wiring, Early Flake Detection, Auto Test Retries, Test Management/)
+      assert.match(markdown, /did not check CI Configuration Audit, Early Flake Detection, Auto Test Retries, Test Management/)
       assert.strictEqual((markdown.match(/NOT CHECKED/g) || []).length, 4)
       assert.doesNotMatch(markdown, /other tests/)
       assert.match(logs.join('\n'), /Validation coverage: partial/)

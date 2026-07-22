@@ -2,6 +2,10 @@
 
 const path = require('node:path')
 
+const cucumberAdapter = require('./framework-adapters/cucumber')
+const cypressAdapter = require('./framework-adapters/cypress')
+const playwrightAdapter = require('./framework-adapters/playwright')
+
 const GENERATED_SCENARIOS = {
   'basic-pass': {
     purpose: 'basic_reporting|efd_candidate',
@@ -30,6 +34,21 @@ const GENERATED_SCENARIOS = {
 function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFile }) {
   const scenario = GENERATED_SCENARIOS[scenarioId]
   if (!scenario) throw new Error(`Unknown generated Test Optimization scenario: ${scenarioId}`)
+  if (framework === 'cucumber') {
+    return cucumberAdapter.getGeneratedTestContent({ testName: scenario.testName })
+  }
+  if (framework === 'cypress') {
+    return cypressAdapter.getGeneratedTestContent({
+      scenarioId,
+      testName: scenario.testName,
+    })
+  }
+  if (framework === 'playwright') {
+    return playwrightAdapter.getGeneratedTestContent({
+      scenarioId,
+      testName: scenario.testName,
+    })
+  }
 
   const imports = []
   if (framework === 'vitest' && moduleSystem === 'esm') {
@@ -75,7 +94,7 @@ function getGeneratedTestContractError (framework) {
   const strategy = framework.generatedTestStrategy
   if (!strategy || !['planned', 'verified'].includes(strategy.status)) return
 
-  if (!['jest', 'mocha', 'vitest'].includes(framework.framework)) return
+  if (!['cucumber', 'cypress', 'jest', 'mocha', 'playwright', 'vitest'].includes(framework.framework)) return
   if (strategy.adapter !== framework.framework) {
     return `must retain generatedTestStrategy.adapter ${JSON.stringify(framework.framework)} so the installed ` +
       'validator, rather than the agent, owns the temporary test source.'
@@ -86,13 +105,16 @@ function getGeneratedTestContractError (framework) {
 
   const files = strategy.files || []
   const scenarios = strategy.scenarios || []
+  const projectRoot = framework.project?.root
+  if (typeof projectRoot !== 'string') return 'must declare a project root for generated tests.'
   if ((strategy.cleanupPaths || []).some(filename => typeof filename !== 'string')) {
     return 'must contain only string cleanup paths.'
   }
   const cleanupPaths = new Set((strategy.cleanupPaths || []).map(filename => path.normalize(filename)))
-  if (files.length !== 3 || scenarios.length !== 3) {
+  const expectedFileCount = ['cucumber', 'playwright'].includes(framework.framework) ? 4 : 3
+  if (files.length !== expectedFileCount || scenarios.length !== 3) {
     return 'must contain exactly one validator-owned file for each of basic-pass, atr-fail-once, and ' +
-      'test-management-target.'
+      `test-management-target${getAdditionalGeneratedFileDescription(framework.framework)}.`
   }
 
   const selectedFiles = new Set()
@@ -105,6 +127,9 @@ function getGeneratedTestContractError (framework) {
 
     const filename = scenario.testIdentities[0].file
     if (typeof filename !== 'string') return `scenario ${scenarioId} must identify a generated test file.`
+    if (!isPathInside(projectRoot, filename)) {
+      return `scenario ${scenarioId} file must remain inside project root ${projectRoot}.`
+    }
     const file = files.find(entry => {
       return typeof entry.path === 'string' && path.normalize(entry.path) === path.normalize(filename)
     })
@@ -114,7 +139,9 @@ function getGeneratedTestContractError (framework) {
       return `scenario ${scenarioId} must retain test name ${JSON.stringify(definition.testName)}.`
     }
 
-    const stateFile = path.join(path.dirname(filename), '.dd-test-optimization-validation-atr-state')
+    const stateFile = ['cucumber', 'cypress', 'playwright'].includes(framework.framework)
+      ? undefined
+      : path.join(path.dirname(filename), '.dd-test-optimization-validation-atr-state')
     const expectedSource = getGeneratedTestContent({
       framework: framework.framework,
       moduleSystem: strategy.moduleSystem,
@@ -133,18 +160,80 @@ function getGeneratedTestContractError (framework) {
     }
   }
 
-  const atrScenario = scenarios.find(entry => entry.id === 'atr-fail-once')
-  const stateFile = path.join(
-    path.dirname(atrScenario.testIdentities[0].file),
-    '.dd-test-optimization-validation-atr-state'
-  )
-  if (!cleanupPaths.has(path.normalize(stateFile))) {
-    return `scenario atr-fail-once must clean up its persistent retry state file ${stateFile}.`
+  if (framework.framework === 'cucumber') {
+    const stepsFile = cucumberAdapter.getGeneratedStepsPath(strategy.testDirectory)
+    const steps = files.find(file => path.normalize(file.path) === path.normalize(stepsFile))
+    if (steps?.contentLines?.join('\n') !== cucumberAdapter.getGeneratedStepsContent()) {
+      return 'must retain the validator-owned Cucumber step definitions.'
+    }
+    if (!cleanupPaths.has(path.normalize(stepsFile))) {
+      return 'must include the isolated Cucumber step definitions in cleanupPaths.'
+    }
+    if (scenarios.some(scenario => !commandReferencesFile(scenario.runCommand, stepsFile))) {
+      return 'each Cucumber scenario runCommand must select the isolated generated step definitions.'
+    }
   }
-  if (selectedFiles.size !== 3 || cleanupPaths.size !== 4) {
-    return 'must use three distinct generated test files and clean up exactly those files plus the persistent ATR ' +
-      'state file.'
+
+  if (framework.framework === 'playwright') {
+    const configPath = playwrightAdapter.getGeneratedConfigPath(strategy.testDirectory)
+    const config = files.find(file => path.normalize(file.path) === path.normalize(configPath))
+    if (config?.contentLines?.join('\n') !== playwrightAdapter.getGeneratedConfigContent()) {
+      return 'must retain the validator-owned isolated Playwright config.'
+    }
+    if (!cleanupPaths.has(path.normalize(configPath))) {
+      return 'must include the isolated Playwright config in generatedTestStrategy.cleanupPaths.'
+    }
+    if (scenarios.some(scenario => !commandReferencesFile(scenario.runCommand, configPath))) {
+      return 'each Playwright scenario runCommand must select the isolated generated config.'
+    }
   }
+
+  const usesPersistentRetryState = !['cucumber', 'cypress', 'playwright'].includes(framework.framework)
+  if (usesPersistentRetryState) {
+    const atrScenario = scenarios.find(entry => entry.id === 'atr-fail-once')
+    const stateFile = path.join(
+      path.dirname(atrScenario.testIdentities[0].file),
+      '.dd-test-optimization-validation-atr-state'
+    )
+    if (!cleanupPaths.has(path.normalize(stateFile))) {
+      return `scenario atr-fail-once must clean up its persistent retry state file ${stateFile}.`
+    }
+  }
+  const expectedCleanupPathCount = usesPersistentRetryState ? 4 : expectedFileCount
+  if (selectedFiles.size !== 3 || cleanupPaths.size !== expectedCleanupPathCount) {
+    if (framework.framework === 'cucumber') {
+      return 'must use three distinct generated feature files and clean up those files plus the isolated Cucumber ' +
+        'step definitions.'
+    }
+    return usesPersistentRetryState
+      ? 'must use three distinct generated test files and clean up exactly those files plus the persistent ATR ' +
+        'state file.'
+      : 'must use three distinct generated test files and clean up exactly those files.'
+  }
+}
+
+/**
+ * Describes adapter-specific files in generated-contract errors.
+ *
+ * @param {string} framework framework name
+ * @returns {string} additional file description
+ */
+function getAdditionalGeneratedFileDescription (framework) {
+  if (framework === 'cucumber') return ' plus isolated Cucumber step definitions'
+  if (framework === 'playwright') return ' plus one isolated Playwright config'
+  return ''
+}
+
+/**
+ * Checks whether a generated path is inside or equal to the declared project root.
+ *
+ * @param {string} root project root
+ * @param {string} filename generated path
+ * @returns {boolean} whether the path is contained
+ */
+function isPathInside (root, filename) {
+  const relative = path.relative(path.resolve(root), path.resolve(filename))
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 /**

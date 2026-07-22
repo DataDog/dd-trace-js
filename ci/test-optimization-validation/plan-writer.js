@@ -14,13 +14,12 @@ const {
   getApprovedExecutable,
   getUnavailableExecutable,
 } = require('./executable')
-const { getCiWiringCommand, getDatadogCleanCommand, getLocalValidationCommand } = require('./local-command')
+const { getDatadogCleanCommand, getLocalValidationCommand } = require('./local-command')
 const {
   getOfflineFixturePaths,
   getOfflineScenarioNames,
 } = require('./offline-fixtures')
 const { sanitizeEnv, sanitizeString } = require('./redaction')
-const { getBasicReportingCommand } = require('./scenarios/basic-reporting')
 const { writeFileSafely } = require('./safe-files')
 
 const VALIDATOR_PATH = path.resolve(__dirname, '..', 'validate-test-optimization.js')
@@ -66,7 +65,23 @@ const CONTROL_CHARACTERS_PATTERN = new RegExp(String.raw`[\u0000-\u001F\u007F]+`
  * @param {boolean} [input.verbose] whether command progress should be printed
  * @returns {string} Markdown execution plan
  */
-function formatExecutionPlan ({
+function formatExecutionPlan (input) {
+  return formatExecutionPlanArtifacts(input).plan
+}
+
+/**
+ * Writes and returns both approval-plan representations without running project code.
+ *
+ * @param {object} input plan inputs
+ * @param {object} input.manifest normalized validation manifest
+ * @param {string} input.out validation output directory
+ * @param {string[]} [input.selectedFrameworkIds] explicitly selected framework entries
+ * @param {string|null} [input.requestedScenario] explicitly selected scenario
+ * @param {boolean} [input.keepTempFiles] whether generated files should be retained
+ * @param {boolean} [input.verbose] whether command progress should be printed
+ * @returns {{approvalSummary: string, plan: string}} written approval-plan content
+ */
+function formatExecutionPlanArtifacts ({
   manifest,
   out,
   selectedFrameworkIds = [],
@@ -114,9 +129,10 @@ function formatExecutionPlan ({
     '## What Will Be Validated',
     '',
     'The validator runs selected project tests without Datadog to confirm they work normally, then runs the same ' +
-      'tests with Datadog initialized to check that test data is reported. When a CI test command can be replayed, ' +
-      'it also checks whether the configuration from that CI job reaches the test process. Temporary tests are ' +
-      'used for the advanced feature checks.',
+      'tests with Datadog initialized to check that test data is reported. It audits the recorded CI configuration ' +
+      'for required initialization and reporting settings. When the exact unchanged CI test command can run ' +
+      'locally, it may also confirm that configuration at runtime. Temporary tests are used for the advanced ' +
+      'feature checks.',
     '',
   ]
 
@@ -216,7 +232,7 @@ function formatExecutionPlan ({
   })
   writeFileSafely(out, getExecutionPlanPath(out), `${plan}\n`, 'validation execution plan')
   writeFileSafely(out, getApprovalSummaryPath(out), `${approvalSummary}\n`, 'validation approval summary')
-  return plan
+  return { approvalSummary, plan }
 }
 
 /**
@@ -334,9 +350,8 @@ function formatApprovalSummary ({
  * @returns {void}
  */
 function appendApprovalSummaryFramework (lines, framework, requestedScenario, repositoryRoot) {
-  const basicCommand = getBasicReportingCommand(framework)
   const directInitialization = getDirectInitialization(framework)
-  const maxTestCount = framework.preflight?.maxTestCount ?? 50
+  const candidates = getLocalTestCandidates(framework)
   lines.push(`### ${plainText(formatFrameworkLabel(framework, repositoryRoot))}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
@@ -348,39 +363,24 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
       runs: '1',
     })
   }
-  appendApprovalSummaryCommand(lines, {
-    command: getDatadogCleanCommand(basicCommand),
-    label: 'Test execution without Datadog',
-    note: 'Inherited NODE_OPTIONS and DD_* variables are removed. The command must report between 1 and ' +
-      `${maxTestCount} tests.`,
-    repositoryRoot,
-    runs: '1, plus 1 clean confirmation only if the Datadog run exits differently',
-  })
-  appendApprovalSummaryCommand(lines, {
-    command: basicCommand,
-    environmentOverrides: { NODE_OPTIONS: directInitialization },
-    label: 'Test execution with Datadog',
-    note: 'A second Datadog debug run occurs only when diagnosis needs debug output.',
-    repositoryRoot,
-    runs: '1, plus at most 1 Datadog debug run when needed',
-  })
+  for (const [index, candidate] of candidates.entries()) {
+    appendApprovalSummaryCandidate(lines, {
+      candidate,
+      directInitialization,
+      framework,
+      index,
+      repositoryRoot,
+    })
+  }
 
   const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
-  if (ciWiringSelected && framework.ciWiringCommand) {
-    appendApprovalSummaryCommand(lines, {
-      command: getCiWiringCommand(framework),
-      label: 'CI test execution',
-      note: 'A short preload probe may run when initialization reachability needs confirmation.',
-      repositoryRoot,
-      runs: '1, plus at most 1 preload probe',
-    })
-  } else if (ciWiringSelected) {
+  if (ciWiringSelected) {
     lines.push(
-      '**CI test execution:** not run.',
+      '**CI configuration audit:** inspect the recorded workflow, job, step, environment, and wrapper evidence ' +
+        'without running a project command.',
       '',
-      `Reason: ${plainText(
-        framework.ciWiring?.reason || framework.ciWiring?.diagnosis || 'No replayable CI test command was selected.'
-      )}`,
+      `- Identified CI location: ${plainText(formatCiAuditLocation(framework.ciWiring))}`,
+      `- Recorded initialization: ${plainText(framework.ciWiring?.initialization?.status || 'unknown')}`,
       ''
     )
   }
@@ -392,14 +392,17 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
     const scenarios = selectedGeneratedScenario
       ? (strategy.scenarios || []).filter(scenario => scenario.id === selectedGeneratedScenario)
       : strategy.scenarios || []
+    lines.push(
+      '**Advanced feature checks:** each command runs verification, identity discovery, and feature validation ' +
+        '(3 runs, or 4 when a debug run is needed).',
+      ''
+    )
     for (const scenario of scenarios) {
-      appendApprovalSummaryCommand(lines, {
+      appendApprovalSummaryAdvancedCommand(lines, {
         command: getLocalValidationCommand(framework, scenario.runCommand),
-        environmentOverrides: { NODE_OPTIONS: directInitialization },
+        directInitialization,
         label: GENERATED_SCENARIO_DETAILS[scenario.id]?.heading || `Advanced check: ${scenario.id}`,
-        note: 'Runs verification, identity discovery, and feature validation; a debug run occurs only on failure.',
         repositoryRoot,
-        runs: '3, or 4 when the debug run is needed',
       })
     }
 
@@ -420,6 +423,74 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
   } else if (advancedSelected && strategy) {
     lines.push(`**Advanced feature checks:** not run. ${plainText(strategy.reason || strategy.status)}`, '')
   }
+}
+
+/**
+ * Appends the clean and Datadog executions for one disclosed fallback candidate.
+ *
+ * @param {string[]} lines rendered summary lines
+ * @param {object} input candidate summary
+ * @param {{command: object, maxTestCount: number}} input.candidate local candidate
+ * @param {string} input.directInitialization Datadog preload value
+ * @param {object} input.framework manifest framework entry
+ * @param {number} input.index zero-based candidate index
+ * @param {string} input.repositoryRoot repository root
+ * @returns {void}
+ */
+function appendApprovalSummaryCandidate (lines, {
+  candidate,
+  directInitialization,
+  framework,
+  index,
+  repositoryRoot,
+}) {
+  const command = getLocalValidationCommand(framework, candidate.command)
+  const cleanCommand = getDatadogCleanCommand(command)
+  lines.push(
+    `**Test candidate ${index + 1}**`,
+    '',
+    'Without Datadog (confirms the selected test file runs normally):',
+    '',
+    codeBlock(formatCommandForPlan(cleanCommand, repositoryRoot)),
+    '',
+    'With Datadog, only if this is the first candidate that passes: run the same command with ' +
+      `${inlineCode(`NODE_OPTIONS=${directInitialization}`)}.`,
+    `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
+    `- Test bound: 1 to ${candidate.maxTestCount}; timeout: ${command.timeoutMs || 300_000} ms`,
+    '- Each command runs at most once; the Datadog execution may have one additional debug rerun.',
+    '- Inherited `NODE_OPTIONS` and `DD_*` variables are removed from the clean execution.'
+  )
+  appendApprovalSummaryCommandContext(lines, command, repositoryRoot)
+  lines.push('')
+}
+
+/**
+ * Appends one compact advanced-feature command.
+ *
+ * @param {string[]} lines rendered summary lines
+ * @param {object} input command summary
+ * @param {object} input.command structured command
+ * @param {string} input.directInitialization Datadog preload value
+ * @param {string} input.label customer-facing label
+ * @param {string} input.repositoryRoot repository root
+ * @returns {void}
+ */
+function appendApprovalSummaryAdvancedCommand (lines, {
+  command,
+  directInitialization,
+  label,
+  repositoryRoot,
+}) {
+  lines.push(
+    `- **${plainText(label)}**`,
+    '',
+    codeBlock(formatCommandForPlan(command, repositoryRoot, { NODE_OPTIONS: directInitialization })),
+    '',
+    `  Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}; ` +
+      `timeout: ${command.timeoutMs || 300_000} ms`
+  )
+  appendApprovalSummaryCommandContext(lines, command, repositoryRoot, '  ')
+  lines.push('')
 }
 
 /**
@@ -454,11 +525,7 @@ function appendApprovalSummaryCommand (lines, {
     `- Runs: ${plainText(runs)}`,
     `- Timeout: ${command.timeoutMs || 300_000} ms`
   )
-  if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
-  const packageScriptExpansion = getPackageScriptExpansion(command, repositoryRoot)
-  if (packageScriptExpansion) {
-    lines.push(`- Effective package script: ${inlineCode(sanitizeString(packageScriptExpansion.effectiveCommand))}`)
-  }
+  appendApprovalSummaryCommandContext(lines, command, repositoryRoot)
   const outputPaths = getCommandOutputPaths(command)
   if (outputPaths.length > 0) {
     const cleanupTiming = deferOutputCleanup
@@ -468,11 +535,31 @@ function appendApprovalSummaryCommand (lines, {
       return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
     }).join(', '))
   }
-  for (const adjustment of command.localAdjustments || []) {
-    lines.push(`- Local adjustment: ${plainText(adjustment)}`)
-  }
   if (note) lines.push(`- ${plainText(note)}`)
   lines.push('')
+}
+
+/**
+ * Appends command details that differ from the rendered command itself.
+ *
+ * @param {string[]} lines rendered summary lines
+ * @param {object} command structured command
+ * @param {string} repositoryRoot repository root
+ * @param {string} [prefix] line prefix
+ * @returns {void}
+ */
+function appendApprovalSummaryCommandContext (lines, command, repositoryRoot, prefix = '- ') {
+  if (command.usesShell) {
+    lines.push(`${prefix}Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
+  }
+  const packageScriptExpansion = getPackageScriptExpansion(command, repositoryRoot)
+  if (packageScriptExpansion) {
+    lines.push(`${prefix}Effective package script: ` +
+      inlineCode(sanitizeString(packageScriptExpansion.effectiveCommand)))
+  }
+  for (const adjustment of command.localAdjustments || []) {
+    lines.push(`${prefix}Local adjustment: ${plainText(adjustment)}`)
+  }
 }
 
 /**
@@ -554,11 +641,11 @@ function getPlannedCommands (framework, requestedScenario) {
     commands.push({ label: `project setup command ${command.id || command.description || ''}`.trim(), command })
   }
 
-  commands.push({ label: 'the selected test command', command: getBasicReportingCommand(framework) })
-
-  const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
-  if (ciWiringSelected && framework.ciWiringCommand) {
-    commands.push({ label: 'the CI test command', command: getCiWiringCommand(framework) })
+  for (const [index, candidate] of getLocalTestCandidates(framework).entries()) {
+    commands.push({
+      label: `local test candidate ${index + 1}`,
+      command: getLocalValidationCommand(framework, candidate.command),
+    })
   }
 
   const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
@@ -639,10 +726,9 @@ function appendFrameworkExecutions (
   out,
   offlineFixtureNonce
 ) {
-  const basicCommand = getBasicReportingCommand(framework)
   const frameworkLabel = formatFrameworkLabel(framework, repositoryRoot)
   const directInitialization = getDirectInitialization(framework)
-  const maxTestCount = framework.preflight?.maxTestCount ?? 50
+  const candidates = getLocalTestCandidates(framework)
   lines.push(`### ${plainText(frameworkLabel)}`, '')
 
   for (const setupCommand of framework.setup?.commands || []) {
@@ -655,52 +741,44 @@ function appendFrameworkExecutions (
       repositoryRoot,
     })
   }
-  const cleanCommand = getDatadogCleanCommand(basicCommand)
-  appendExecutionSection(lines, {
-    heading: 'Test Execution Without Datadog',
-    description: 'Runs the selected test command without Datadog to confirm that the tests can run normally and ' +
-      `that it reports between 1 and ${maxTestCount} tests.`,
-    command: cleanCommand,
-    executions: '1, plus 1 clean confirmation only if the Datadog run exits differently',
-    environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(cleanCommand)}`,
-    repositoryRoot,
-  })
-  appendExecutionSection(lines, {
-    heading: 'Test Execution With Datadog',
-    description: 'Runs the same test command with Datadog initialized and checks that test data is reported.',
-    command: basicCommand,
-    executions: '1, plus at most 1 debug rerun when needed',
-    environment: 'Datadog initialization is shown inline. The validator also supplies private offline response ' +
-      'paths and noise-suppression settings only while this check runs.',
-    environmentOverrides: { NODE_OPTIONS: directInitialization },
-    repositoryRoot,
-  })
-
-  const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
-  if (ciWiringSelected && framework.ciWiringCommand) {
-    const ciCommand = getCiWiringCommand(framework)
+  for (const [index, candidate] of candidates.entries()) {
+    const cleanCommand = getDatadogCleanCommand(getLocalValidationCommand(framework, candidate.command))
     appendExecutionSection(lines, {
-      heading: 'CI Test Execution',
-      description: 'Runs the test command with the environment recorded from the identified CI job and checks ' +
-        'whether that CI configuration initializes Datadog in the final test process.',
-      command: ciCommand,
-      executions: '1, plus 1 short preload probe when needed',
-      environment: formatCiEnvironmentSummary(ciCommand),
+      heading: `Local Test Candidate ${index + 1}: Without Datadog`,
+      description: 'Tries this whole test file only if every earlier candidate was unsuitable. It must run between ' +
+        `1 and ${candidate.maxTestCount} tests. The first successful candidate becomes the Basic Reporting command.`,
+      command: cleanCommand,
+      executions: '0 or 1',
+      environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(cleanCommand)}`,
       repositoryRoot,
     })
-  } else if (ciWiringSelected) {
+    appendExecutionSection(lines, {
+      heading: `Local Test Candidate ${index + 1}: With Datadog When Selected`,
+      description: 'Runs only when this is the first candidate whose clean preflight succeeds, then checks that test ' +
+        'data is reported.',
+      command: getLocalValidationCommand(framework, candidate.command),
+      executions: '0 or 1, plus at most 1 debug rerun when selected',
+      environment: 'Datadog initialization is shown inline. The validator also supplies private offline response ' +
+        'paths and noise-suppression settings only while this check runs.',
+      environmentOverrides: { NODE_OPTIONS: directInitialization },
+      repositoryRoot,
+    })
+  }
+
+  const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
+  if (ciWiringSelected) {
     lines.push(
-      '#### CI Test Execution',
+      '#### CI Configuration Audit',
       '',
-      'Not run.',
+      'Inspects the recorded workflow, job, step, environment, and wrapper evidence without running a project ' +
+        'command. It can confirm missing configuration or an explicit environment reset, but configuration that ' +
+        'looks correct remains propagation-unverified until it is observed in a real CI run.',
       '',
-      `- Reason: ${plainText(
-        framework.ciWiring?.reason || framework.ciWiring?.diagnosis || 'No replayable CI test command was selected.'
-      )}`,
+      `- Identified CI location: ${plainText(formatCiAuditLocation(framework.ciWiring))}`,
+      `- Recorded initialization: ${plainText(framework.ciWiring?.initialization?.status || 'unknown')}`,
       ''
     )
   }
-
   const strategy = framework.generatedTestStrategy
   const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
   const advancedSelected = !requestedScenario || selectedGeneratedScenario
@@ -774,6 +852,19 @@ function appendFrameworkExecutions (
     )
   }
   lines.push('')
+}
+
+/**
+ * Formats the CI configuration location recorded for a framework.
+ *
+ * @param {object|undefined} ciWiring CI configuration evidence
+ * @returns {string} readable location
+ */
+function formatCiAuditLocation (ciWiring) {
+  if (!ciWiring) return 'not identified'
+  const parts = [ciWiring.provider, ciWiring.workflow, ciWiring.job, ciWiring.step].filter(Boolean)
+  if (ciWiring.configFile) parts.push(ciWiring.configFile)
+  return parts.length > 0 ? parts.join(' / ') : 'not identified'
 }
 
 /**
@@ -996,22 +1087,6 @@ function getDirectInitialization (framework) {
 }
 
 /**
- * Describes the variables captured from the selected CI job.
- *
- * @param {object} command CI test command
- * @returns {string} customer-facing environment summary
- */
-function formatCiEnvironmentSummary (command) {
-  const names = Object.keys(command.env || {})
-  const datadogNames = names.filter(name => name.startsWith('DD_') || name === 'NODE_OPTIONS')
-  if (datadogNames.length === 0) {
-    return 'The selected CI job supplies no Datadog variables. Other recorded CI variables, if any, are shown ' +
-      'inline.'
-  }
-  return 'Variables recorded from the selected CI job are shown inline. Secret-like values are redacted.'
-}
-
-/**
  * Names a framework using the package or project that contributors recognize.
  *
  * @param {object} framework manifest framework entry
@@ -1132,4 +1207,25 @@ function visibleMultilineText (value) {
     .trim()
 }
 
-module.exports = { formatExecutionPlan, getApprovalSummaryPath, getExecutionPlanPath }
+/**
+ * Returns the bounded local commands that approval permits the preflight to try in order.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {Array<{command: object, maxTestCount: number}>} local test candidates
+ */
+function getLocalTestCandidates (framework) {
+  if (Array.isArray(framework.localTestCandidates) && framework.localTestCandidates.length > 0) {
+    return framework.localTestCandidates
+  }
+  return [{
+    command: framework.existingTestCommand,
+    maxTestCount: framework.preflight?.maxTestCount ?? 50,
+  }]
+}
+
+module.exports = {
+  formatExecutionPlan,
+  formatExecutionPlanArtifacts,
+  getApprovalSummaryPath,
+  getExecutionPlanPath,
+}

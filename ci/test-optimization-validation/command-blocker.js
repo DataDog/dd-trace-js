@@ -6,6 +6,10 @@ const MODULE_OR_TRANSFORM_PATTERN =
   /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Could not resolve|transform failed)\b/i
 const PACKAGE_MANAGER_PATH_PATTERN = /(?:^|[/\\.])(?:corepack|npm|pnpm|yarn)(?:$|[/\\.])/i
 const WATCHMAN_PATTERN = /\bwatchman\b/i
+const CYPRESS_BINARY_PATTERN =
+  /(?:Cypress executable not found|Cypress binary is missing|Cypress failed to start|Please reinstall Cypress)/i
+const PLAYWRIGHT_BROWSER_PATTERN =
+  /(?:browserType\.launch: Executable doesn't exist|Please run the following command to download new browsers|playwright install)/i
 
 /**
  * Identifies toolchain and execution-environment failures that happen before tests start.
@@ -14,6 +18,7 @@ const WATCHMAN_PATTERN = /\bwatchman\b/i
  * @param {string} [result.stdout] captured stdout
  * @param {string} [result.stderr] captured stderr
  * @param {object} [options] classification options
+ * @param {string} [options.framework] test framework identifier
  * @param {boolean} [options.testsRan] whether reliable test output was observed
  * @returns {object|undefined} structured blocker diagnosis
  */
@@ -50,10 +55,10 @@ function getCommandBlocker (result, options = {}) {
     return {
       kind: 'local-test-socket-blocked',
       summary: 'The selected project test could not start its localhost listener in this execution environment. ' +
-        'No Test Optimization conclusion was reached.',
+        'The offline Datadog validator did not open this socket. No Test Optimization conclusion was reached.',
       recommendation: 'Run the same approved plan in an environment that permits the project test to use its ' +
-        'required localhost socket. Do not request broader permissions automatically or interpret this as a ' +
-        'Test Optimization failure.',
+        'required localhost socket. This may require normal project-test permissions. Do not request broader ' +
+        'permissions automatically or interpret this as a Test Optimization failure.',
       signals: getMatchingLines(
         output,
         /127\.0\.0\.1|localhost|listen|EACCES|EPERM|Operation not permitted|Permission denied/i
@@ -74,6 +79,43 @@ function getCommandBlocker (result, options = {}) {
       recommendation: 'Rerun with the project package manager already installed and a writable package-manager ' +
         'home or cache directory. Do not interpret this launcher failure as a Test Optimization problem.',
       signals: permissionLines,
+      blockedByExecutionEnvironment: true,
+    }
+  }
+
+  if (result.exitCode !== 0 && options.testsRan !== true && CYPRESS_BINARY_PATTERN.test(output)) {
+    return {
+      kind: 'cypress-runtime-missing',
+      summary: 'The Cypress npm package is installed, but its application binary is missing or could not start. ' +
+        'No Test Optimization conclusion was reached.',
+      recommendation: 'Complete the project\'s normal Cypress binary/browser setup, then render and approve a ' +
+        'fresh validation plan. The validator does not download browsers automatically.',
+      signals: getMatchingLines(output, CYPRESS_BINARY_PATTERN),
+      toolchainBlocked: true,
+    }
+  }
+
+  if (result.exitCode !== 0 && options.testsRan !== true && PLAYWRIGHT_BROWSER_PATTERN.test(output)) {
+    return {
+      kind: 'playwright-browser-missing',
+      summary: 'Playwright Test is installed, but the selected project test requires a browser binary that is not ' +
+        'installed. No Test Optimization conclusion was reached.',
+      recommendation: 'Complete the project\'s normal Playwright browser setup, then render and approve a fresh ' +
+        'validation plan. The validator does not download browsers automatically.',
+      signals: getMatchingLines(output, PLAYWRIGHT_BROWSER_PATTERN),
+      toolchainBlocked: true,
+    }
+  }
+
+  if (options.framework === 'cypress' && result.exitCode === 134 && options.testsRan !== true &&
+    !result.stdout?.trim() && !result.stderr?.trim()) {
+    return {
+      kind: 'cypress-application-launch-blocked',
+      summary: 'Cypress exited before producing output because its application process could not launch in the ' +
+        'current execution environment. No Test Optimization conclusion was reached.',
+      recommendation: 'Use the agent platform\'s permission prompt to rerun the exact checksum-approved validator ' +
+        'command with normal host/test permissions. Do not change the command, approval file, or approval SHA.',
+      signals: ['Cypress exited 134 without stdout or stderr.'],
       blockedByExecutionEnvironment: true,
     }
   }
