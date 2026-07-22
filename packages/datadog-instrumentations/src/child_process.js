@@ -190,7 +190,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             const error = context.abortController.signal.reason || new Error('Aborted')
             childProcess.emit('error', error)
 
-            const cb = context.callArgs[context.callArgs.length - 1]
+            const cb = context.callArgs.at(-1)
             if (typeof cb === 'function') {
               cb(error)
             }
