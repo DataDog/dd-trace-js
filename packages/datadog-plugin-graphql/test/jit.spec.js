@@ -572,6 +572,10 @@ describe('Plugin', () => {
           name: 'UncollapsedItem',
           fields: {
             profile: { type: Profile },
+            explicitProfile: {
+              type: Profile,
+              resolve: source => source.profile,
+            },
           },
         })
         const listSchema = new graphql.GraphQLSchema({
@@ -594,16 +598,29 @@ describe('Plugin', () => {
         try {
           const { query } = compileQuery(
             listSchema,
-            graphql.parse('query Uncollapsed { items { profile { value } } }')
+            graphql.parse('query Uncollapsed { items { profile { value } explicitProfile { value } } }')
           )
           const assertion = agent.assertSomeTraces(traces => {
             const spans = traces[0].filter(span => span.name === 'graphql.resolve')
+            const items = spans.find(span => span.meta['graphql.field.path'] === 'items')
+            assert.ok(items, 'expected items span')
             for (let i = 0; i < 3; i++) {
               const profile = spans.find(span => span.meta['graphql.field.path'] === `items.${i}.profile`)
               const value = spans.find(span => span.meta['graphql.field.path'] === `items.${i}.profile.value`)
+              const explicitProfile = spans.find(
+                span => span.meta['graphql.field.path'] === `items.${i}.explicitProfile`
+              )
+              const explicitValue = spans.find(
+                span => span.meta['graphql.field.path'] === `items.${i}.explicitProfile.value`
+              )
               assert.ok(profile, `expected items.${i}.profile span`)
               assert.ok(value, `expected items.${i}.profile.value span`)
+              assert.ok(explicitProfile, `expected items.${i}.explicitProfile span`)
+              assert.ok(explicitValue, `expected items.${i}.explicitProfile.value span`)
+              assert.strictEqual(profile.parent_id.toString(), items.span_id.toString())
               assert.strictEqual(value.parent_id.toString(), profile.span_id.toString())
+              assert.strictEqual(explicitProfile.parent_id.toString(), items.span_id.toString())
+              assert.strictEqual(explicitValue.parent_id.toString(), explicitProfile.span_id.toString())
             }
           }, { spanResourceMatch: /Uncollapsed/ })
 
@@ -613,9 +630,9 @@ describe('Plugin', () => {
           ])
           assert.deepStrictEqual(result.data, {
             items: [
-              { profile: { value: 'one' } },
-              { profile: { value: 'two' } },
-              { profile: { value: 'three' } },
+              { profile: { value: 'one' }, explicitProfile: { value: 'one' } },
+              { profile: { value: 'two' }, explicitProfile: { value: 'two' } },
+              { profile: { value: 'three' }, explicitProfile: { value: 'three' } },
             ],
           })
         } finally {
@@ -1000,6 +1017,47 @@ describe('Plugin', () => {
         assert.strictEqual(updateCalls, 0)
       })
 
+      it('skips inline defaults beyond a positive resolver depth', async () => {
+        const LimitedDepthChild = new graphql.GraphQLObjectType({
+          name: 'LimitedDepthChild',
+          fields: {
+            value: { type: graphql.GraphQLString },
+          },
+        })
+        const limitedDepthSchema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'LimitedDepthQuery',
+            fields: {
+              child: {
+                type: LimitedDepthChild,
+                resolve: () => ({ value: 'nested' }),
+              },
+            },
+          }),
+        })
+
+        agent.reload('graphql', { depth: 1 })
+        try {
+          const { query } = compileQuery(
+            limitedDepthSchema,
+            graphql.parse('query LimitedDepth { child { value } }')
+          )
+          const assertion = agent.assertSomeTraces(traces => {
+            const resolveSpans = traces[0].filter(span => span.name === 'graphql.resolve')
+            assert.strictEqual(resolveSpans.length, 1)
+            assert.strictEqual(resolveSpans[0].resource, 'child:LimitedDepthChild')
+          }, { spanResourceMatch: /LimitedDepth/ })
+
+          const [, result] = await Promise.all([
+            assertion,
+            (async () => query({}, {}, {}))(),
+          ])
+          assert.deepStrictEqual(result.data, { child: { value: 'nested' } })
+        } finally {
+          agent.reload('graphql', { variables: ['id', 'name'] })
+        }
+      })
+
       it('keeps AppSec resolver calls when depth disables resolver spans', async () => {
         const appsecChannel = dc.channel('datadog:graphql:resolver:start')
         const appsecFields = []
@@ -1104,6 +1162,13 @@ describe('Plugin', () => {
         const appsecCalls = new Map()
         const appsecInputs = []
         const updateCalls = new Map()
+        const expectedData = {
+          items: [
+            { value: 'one', plain: 'one' },
+            { value: 'two', plain: 'two' },
+            { value: 'three', plain: 'three' },
+          ],
+        }
         /** @param {{ args: object, info: { fieldName: string } }} message */
         const onIastResolve = ({ args, info }) => {
           iastArgs.get(info.fieldName)?.add(args)
@@ -1121,8 +1186,27 @@ describe('Plugin', () => {
 
         iastChannel.subscribe(onIastResolve)
         appsecChannel.subscribe(onAppsecResolve)
-        updateChannel.subscribe(onUpdate)
         try {
+          const assertionWithoutUpdates = agent.assertSomeTraces(() => {}, {
+            spanResourceMatch: /SecurityList/,
+          })
+          const [, resultWithoutUpdates] = await Promise.all([
+            assertionWithoutUpdates,
+            (async () => query({}, {}, {}))(),
+          ])
+          assert.deepStrictEqual(resultWithoutUpdates.data, expectedData)
+          assert.strictEqual(iastArgs.get('plain').size, 3)
+          assert.strictEqual(iastArgs.get('value').size, 3)
+          assert.strictEqual(appsecCalls.get('plain'), 3)
+          assert.strictEqual(appsecCalls.get('value'), 3)
+          assert.deepStrictEqual(appsecInputs, ['testattack', 'testattack', 'testattack'])
+          assert.strictEqual(updateCalls.size, 0)
+
+          for (const args of iastArgs.values()) args.clear()
+          appsecCalls.clear()
+          appsecInputs.length = 0
+          updateChannel.subscribe(onUpdate)
+
           const assertion = agent.assertSomeTraces(traces => {
             const valueSpans = traces[0].filter(span => span.name === 'graphql.resolve' &&
               (span.resource === 'value:String' || span.resource === 'plain:String'))
@@ -1133,13 +1217,7 @@ describe('Plugin', () => {
             assertion,
             (async () => query({}, {}, {}))(),
           ])
-          assert.deepStrictEqual(result.data, {
-            items: [
-              { value: 'one', plain: 'one' },
-              { value: 'two', plain: 'two' },
-              { value: 'three', plain: 'three' },
-            ],
-          })
+          assert.deepStrictEqual(result.data, expectedData)
         } finally {
           iastChannel.unsubscribe(onIastResolve)
           appsecChannel.unsubscribe(onAppsecResolve)
