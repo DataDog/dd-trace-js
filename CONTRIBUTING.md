@@ -148,17 +148,50 @@ such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
 unsure which version of Node.js to use, just use the latest version, which
 should always work.
 
-We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easiest way to install yarn 1.x with with npm:
+We use [bun](https://bun.com/) (1.3.14, matching `devDependencies.bun` in `package.json`) for installing
+dependencies and the per-plugin sandbox installs. Run-scripts (`test:*`, `lint`, …) go through
+`npm`. The easiest way to install bun:
 
 ```sh
-$ npm install -g yarn
+$ npm install -g bun@1.3.14
 ```
 
-To install dependencies once you have Node and yarn installed, run this in the project directory:
+To install dependencies once you have Node and bun installed, run this in the project directory:
 
 ```sh
-$ yarn
+$ bun install
 ```
+
+### Supply-chain hardening
+
+`bun install` (and the plugin sandbox install under `versions/`) waits **three days** before
+considering a freshly-published npm version. The window is set in `bunfig.toml` /
+`versions/bunfig.toml` via `minimumReleaseAge = 259200` and is meant to widen the gap in which
+a freshly-published compromised release gets caught and pulled from the registry before it lands
+in our installs. The Datadog-owned packages listed in `minimumReleaseAgeExcludes` bypass
+the wait because our publishing pipeline is their trust boundary. Bun only supports exact package
+names in this list; it does not expand the `@datadog/*` pattern used by Dependabot.
+
+CI runs `bun install --frozen-lockfile` (see `.github/actions/install/action.yml`); a `bun.lock`
+that disagrees with `package.json` fails the install step. If you change `package.json`, rerun
+`bun install` locally and commit the regenerated `bun.lock` in the same PR. Dependabot uses its
+Bun ecosystem for every internal Bun workspace, so its PRs update each manifest and lockfile together.
+Its five-day cooldown applies to version updates but not security updates; a security PR can
+therefore lock a freshly-published fix, and frozen CI installs that reviewed lock without resolving
+against the registry.
+
+If a real advisory drops and the patched version is still inside the three-day window:
+
+1. Pull the package's release notes and confirm the version is the advisory's fixed one.
+2. Run `bun update <pkg>@<exact-version> --minimum-release-age=0` locally to bypass the wait
+    for that one resolve, then commit the regenerated `bun.lock`.
+3. In the PR description, link the advisory and call out that the override was deliberate. The
+    override stays on the maintainer's machine, never in `bunfig.toml`, so every bypass shows up
+    in a reviewable diff.
+
+For a package that needs a permanently shorter window (rare — usually an internal one whose
+publish cadence is faster than three days), add its exact name to `minimumReleaseAgeExcludes` in
+`bunfig.toml` and explain why in the same commit.
 
 ## Coding Standards
 
@@ -423,7 +456,7 @@ Instead, you can follow this procedure for the plugin you want to run tests for:
 
 1. Check the CI config in `.github/workflows/*.yml` to see what the appropriate values for the `SERVICES` and `PLUGINS` environment variables are for the plugin you're trying to test (noting that not all plugins require `SERVICES`). For example, for the `amqplib` plugin, the `SERVICES` value is `rabbitmq`, and the `PLUGINS` value is `amqplib`.
 2. Run the appropriate docker-compose command to start the required services. For example, for the `amqplib` plugin, you would run: `docker compose up -d rabbitmq`.
-3. Run `yarn services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
+3. Run `npm run services`, with the environment variables set above. This will install any versions of the library to be tested against into the `versions` directory, and check that the appropriate services are running prior to running the test.
 4. Now, you can run `npm run test:plugins` with the environment variables set above to run the tests for the plugin you're interested in.
 
 To wrap that all up into a simple few lines of shell commands, here is all of the above, for the `amqplib` plugin:
@@ -434,18 +467,18 @@ export SERVICES="rabbitmq" # retrieved from .github/workflows/apm-integrations.y
 export PLUGINS="amqplib" # retrieved from .github/workflows/apm-integrations.yml
 
 docker compose up -d $SERVICES
-yarn services
+npm run services
 
 npm run test:plugins # This one actually runs the tests. Can be run many times.
 ```
 
-You can also run the tests for multiple plugins at once by separating them with a pipe (`|`) delimiter. For example, to run the tests for the `amqplib` and `bluebird` plugins:
+You can also run the tests for multiple plugins at once by separating them with a pipe (`|`) delimiter. For example, to run the tests for the `amqplib` and `pino` plugins:
 
 ```sh
-PLUGINS="amqplib|bluebird" npm run test:plugins
+PLUGINS="amqplib|pino" npm run test:plugins
 ```
 
-The necessary shell commands for the setup can also be executed at once by the `npm run env` script.
+The necessary shell commands for the setup can also be executed at once with `npm run env`.
 
 ### Other Unit Tests
 
@@ -467,9 +500,9 @@ details.
 ### Integration Tests
 
 When running integration tests, some packages are installed from npm into temporary sandboxes.
-If running locally without an internet connection,
-it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
-which will use the local yarn cache instead of fetching packages from npm.
+If running locally without an internet connection, set `OFFLINE=true` to make the sandbox install
+pass `--prefer-offline` to `bun add`, which serves matching versions from bun's local cache instead
+of fetching from npm.
 
 ### Adding a Plugin Test to CI
 

@@ -1,14 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { execSync } = require('child_process')
+const { execFileSync } = require('node:child_process')
 const { inspect } = require('node:util')
 
 const { satisfies } = require('semver')
 
 const {
   FakeAgent,
+  assertObjectContains,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
@@ -17,9 +17,9 @@ const {
   varySandbox,
   stopProc,
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { BUN } = require('../../../../integration-tests/helpers/bun')
 const { NODE_MAJOR } = require('../../../../version')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
@@ -41,7 +41,7 @@ describe('esm', () => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(300 * 1000)
-      execSync('yarn exec next build', {
+      execFileSync(BUN, ['run', 'next', 'build'], {
         cwd: sandboxCwd(),
         env: {
           ...process.env,

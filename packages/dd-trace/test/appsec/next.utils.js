@@ -1,11 +1,12 @@
 'use strict'
 
-const path = require('node:path')
-const { execSync, spawn } = require('node:child_process')
+const { execFileSync, spawn } = require('node:child_process')
 const { mkdirSync, rmSync, unlinkSync, writeFileSync } = require('node:fs')
+const path = require('node:path')
 
 const { satisfies } = require('semver')
 
+const { BUN, BUN_CONFIG } = require('../../../../integration-tests/helpers/bun')
 const agent = require('../plugins/agent')
 
 function initApp (appName, version, realVersion) {
@@ -24,19 +25,21 @@ function initApp (appName, version, realVersion) {
 
     writeFileSync(`${appDir}/package.json`, JSON.stringify(pkg, null, 2))
 
-    // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
-    // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
+    // Install a standalone tree because copying node_modules from versions does not generate the server files.
+    const installArguments = [`--config=${BUN_CONFIG}`, 'install', '--linker=hoisted', '--trust']
     try {
-      execSync('yarn install', { cwd })
-    } catch (e) { // retry in case of error from registry
-      execSync('yarn install', { cwd })
+      execFileSync(BUN, installArguments, { cwd })
+    } catch { // retry in case of error from registry
+      execFileSync(BUN, installArguments, { cwd })
     }
 
     // building in-process makes tests fail for an unknown reason
-    execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
+    const legacyOpenssl = satisfies(realVersion, '<12') ? '--openssl-legacy-provider' : ''
+    execFileSync(BUN, ['run', 'next', 'build'], {
       cwd,
       env: {
         ...process.env,
+        NODE_OPTIONS: legacyOpenssl,
         version,
       },
       stdio: ['pipe', 'ignore', 'pipe'],
@@ -56,7 +59,7 @@ function initApp (appName, version, realVersion) {
 
     const files = [
       'package.json',
-      'yarn.lock',
+      'bun.lock',
     ]
     const filePaths = files.map(file => `${appDir}/${file}`)
     filePaths.forEach(path => {

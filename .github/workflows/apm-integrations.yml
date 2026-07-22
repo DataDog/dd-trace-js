@@ -76,7 +76,6 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - run: yarn config set ignore-engines true
       - name: Install dependencies
         uses: ./.github/actions/install
       - name: Run tests
@@ -355,7 +354,6 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
       - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
@@ -1081,8 +1079,7 @@ jobs:
           sudo ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
           sudo sh -c "echo /opt/oracle/instantclient_19_28 > /etc/ld.so.conf.d/oracle-instantclient.conf"
           sudo ldconfig
-      - run: yarn config set ignore-engines true
-      - run: yarn services --ignore-engines
+      - run: npm run services
       - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs

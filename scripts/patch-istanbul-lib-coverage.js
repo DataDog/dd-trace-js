@@ -15,7 +15,8 @@
  * body changes, the bumped sentinel makes it replace a stale dd-trace-js patch
  * in place, so existing installs self-heal on the next `prepare` instead of
  * keeping the old body. Fails loudly only if the upstream `getLineCoverage()`
- * shape changes, so a future yarn upgrade can't silently leave it unapplied.
+ * shape changes, so a future dependency upgrade can't silently leave it
+ * unapplied.
  *
  * Wired to the `prepare` lifecycle so the script never fires on consumer
  * installs of the published tarball — the script itself is not in the
@@ -28,6 +29,8 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
+
+const { replaceFile } = require('./replace-file')
 
 // Inline marker so the script can detect a previous run without parsing the
 // whole replacement body. Bump the version suffix when the patch body changes.
@@ -141,10 +144,8 @@ for (const marker of requiredMarkers) {
   }
 }
 
-let targetFile
-try {
-  targetFile = require.resolve('istanbul-lib-coverage/lib/file-coverage.js', { paths: [repoRoot] })
-} catch {
+const targetFile = path.join(repoRoot, 'node_modules', 'istanbul-lib-coverage', 'lib', 'file-coverage.js')
+if (!fs.existsSync(targetFile)) {
   log('skipping: istanbul-lib-coverage is not installed yet')
   return
 }
@@ -178,5 +179,5 @@ if (current !== ORIGINAL && !current.includes(PATCH_MARKER)) {
   return
 }
 
-fs.writeFileSync(targetFile, source.replace(current, REPLACEMENT))
+replaceFile(targetFile, source.replace(current, REPLACEMENT))
 log(`patched ${relativeTarget}`)

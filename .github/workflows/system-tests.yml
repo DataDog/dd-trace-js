@@ -19,10 +19,12 @@ jobs:
     steps:
       - name: Checkout dd-trace-js
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          path: dd-trace-js
       - name: Pack dd-trace-js
-        run: mkdir -p ./binaries && echo /binaries/$(npm pack --silent --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
+        run: |
+          mkdir -p binaries
+          filename=$(npm pack --silent --pack-destination binaries)
+          test -f "binaries/$filename"
+          printf '/binaries/%s\n' "$filename" > binaries/nodejs-load-from-npm
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

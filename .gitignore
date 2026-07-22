@@ -34,8 +34,6 @@ logs
 *.log
 node-*-junit.xml
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Runtime data
 pids
@@ -88,9 +86,6 @@ typings/
 # Output of 'npm pack'
 *.tgz
 
-# Yarn Integrity file
-.yarn-integrity
-
 # Output of tap
 .tap/*
 
@@ -112,11 +107,10 @@ node-*-junit.xml
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
-/versions
+/versions/*
+!/versions/bunfig.toml
 .bun
 .next
-bun.lock
-bun.lockb
 package-lock.json
 out
 build
@@ -129,15 +123,13 @@ acmeair-nodejs
 !packages/*/test/**/node_modules
 packages/datadog-plugin-next/test/package.json
 packages/datadog-plugin-next/test/node_modules
-packages/datadog-plugin-next/test/yarn.lock
+packages/datadog-plugin-next/test/bun.lock
 packages/dd-trace/test/appsec/next/*/package.json
 packages/dd-trace/test/appsec/next/*/node_modules
-packages/dd-trace/test/appsec/next/*/yarn.lock
+packages/dd-trace/test/appsec/next/*/bun.lock
 packages/dd-trace/test/plugins/versions/node_modules
-packages/dd-trace/test/plugins/versions/yarn.lock
 !packages/dd-trace/**/telemetry/logs
 packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules
-!vendor/package-lock.json
 !benchmark/sirun/startup/everything-fixture/package-lock.json
 vendor.patch
 __azurite_db_queue__.json

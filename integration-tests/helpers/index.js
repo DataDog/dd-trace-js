@@ -22,7 +22,7 @@ const {
 } = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
-const { BUN, withBun } = require('./bun')
+const { BUN, BUN_CONFIG, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -587,7 +587,7 @@ async function createSandbox (
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv, timeout: 60_000 }
-  const addFlags = ['--linker=hoisted', '--trust']
+  const addFlags = [`--config=${JSON.stringify(BUN_CONFIG)}`, '--linker=hoisted', '--trust']
 
   // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
   // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.

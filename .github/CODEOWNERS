@@ -4,6 +4,7 @@
 /.agents/ @DataDog/lang-platform-js
 /.claude/ @DataDog/lang-platform-js
 /.github/actions/ @DataDog/lang-platform-js
+/.github/all-green/ @DataDog/lang-platform-js
 /scripts/ @DataDog/lang-platform-js
 
 # AppSec
@@ -84,6 +85,7 @@
 /packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
+/versions/bunfig.toml @DataDog/apm-idm-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js
@@ -308,6 +310,8 @@
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
+/docs/bun.lock @DataDog/lang-platform-js
+/vendor/bun.lock @DataDog/lang-platform-js
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/release.yml @DataDog/lang-platform-js
