@@ -2,6 +2,8 @@
 
 const fs = require('node:fs')
 
+const { parse: parseCsv } = require('csv-parse/sync')
+
 const log = require('../../log')
 const { ExperimentsClient, API_BASE_PATH } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
@@ -22,49 +24,6 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
     await new Promise((resolve) => setTimeout(resolve, Math.min(delay, maxDelayMs, remaining)))
     delay *= 2
   }
-}
-
-function parseCsv (content, delimiter) {
-  const rows = []
-  let field = ''
-  let row = []
-  let inQuotes = false
-
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i]
-    if (inQuotes) {
-      if (char === '"') {
-        if (content[i + 1] === '"') {
-          field += '"'
-          i++
-        } else {
-          inQuotes = false
-        }
-      } else {
-        field += char
-      }
-    } else if (char === '"') {
-      inQuotes = true
-    } else if (char === delimiter) {
-      row.push(field)
-      field = ''
-    } else if (char === '\n' || char === '\r') {
-      row.push(field)
-      field = ''
-      rows.push(row)
-      row = []
-      if (char === '\r' && content[i + 1] === '\n') i++
-    } else {
-      field += char
-    }
-  }
-
-  if (field !== '' || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-
-  return rows
 }
 
 function assertColumns (name, columns, allowEmpty = true) {
@@ -106,7 +65,11 @@ function recordsFromCsv (csvPath, options) {
   const content = fs.readFileSync(csvPath, 'utf8')
   if (content.trim().length === 0) throw new Error('CSV file appears to be empty or header is missing')
 
-  const rows = parseCsv(content, csvDelimiter)
+  const rows = parseCsv(content, {
+    delimiter: csvDelimiter,
+    bom: true,
+    relaxColumnCount: true,
+  })
   const header = rows.shift()
   if (!header || header.every(column => column === '')) {
     throw new Error('CSV file appears to be empty or header is missing')
