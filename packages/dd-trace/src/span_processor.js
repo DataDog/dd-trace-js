@@ -6,6 +6,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
+const { APM_TRACING_ENABLED_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -54,12 +55,16 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
+      const stampApmDisabled = this._config.apmTracingEnabled === false
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (isFirstSpanInChunk && stampApmDisabled) {
+            formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+          }
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so
           // record them before the OTel rename — an export-only transform.

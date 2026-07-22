@@ -14,7 +14,6 @@ const standalone = require('../../src/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 
 const {
-  APM_TRACING_ENABLED_KEY,
   SAMPLING_MECHANISM_APPSEC,
   DECISION_MAKER_KEY,
   TRACE_SOURCE_PROPAGATION_KEY,
@@ -24,7 +23,6 @@ const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const TraceState = require('../../src/opentracing/propagation/tracestate')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
 
-const startCh = channel('dd-trace:span:start')
 const extractCh = channel('dd-trace:span:extract')
 
 describe('Disabled APM Tracing or Standalone', () => {
@@ -49,33 +47,26 @@ describe('Disabled APM Tracing or Standalone', () => {
   afterEach(() => { sinon.restore() })
 
   describe('configure', () => {
-    let startChSubscribe
-    let startChUnsubscribe
     let extractChSubscribe
     let extractChUnsubscribe
 
     beforeEach(() => {
-      startChSubscribe = sinon.stub(startCh, 'subscribe')
-      startChUnsubscribe = sinon.stub(startCh, 'unsubscribe')
       extractChSubscribe = sinon.stub(extractCh, 'subscribe')
       extractChUnsubscribe = sinon.stub(extractCh, 'unsubscribe')
     })
 
-    it('should subscribe to start span if apmTracing disabled', () => {
+    it('should subscribe to extract if apmTracing disabled', () => {
       standalone.configure(config)
 
-      sinon.assert.calledOnce(startChSubscribe)
       sinon.assert.calledOnce(extractChSubscribe)
     })
 
-    it('should not subscribe to start span if apmTracing enabled', () => {
+    it('should not subscribe to extract if apmTracing enabled', () => {
       config.apmTracingEnabled = true
 
       standalone.configure(config)
 
-      sinon.assert.notCalled(startChSubscribe)
       sinon.assert.notCalled(extractChSubscribe)
-      sinon.assert.notCalled(startChUnsubscribe)
       sinon.assert.notCalled(extractChUnsubscribe)
     })
 
@@ -117,66 +108,6 @@ describe('Disabled APM Tracing or Standalone', () => {
       const prioritySampler = standalone.configure(config)
 
       assert.ok(prioritySampler instanceof TraceSourcePrioritySampler)
-    })
-  })
-
-  describe('onStartSpan', () => {
-    it('should not add _dd.apm.enabled tag when standalone is disabled', () => {
-      config.apmTracingEnabled = true
-      standalone.configure(config)
-
-      const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-      })
-
-      assert.ok(!span.context().hasTag(APM_TRACING_ENABLED_KEY))
-    })
-
-    it('should add _dd.apm.enabled tag when standalone is enabled', () => {
-      standalone.configure(config)
-
-      const span = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-      })
-
-      assert.ok(
-        span.context().hasTag(APM_TRACING_ENABLED_KEY),
-        `Available keys: ${inspect(Object.keys(span.context().getTags()))}`
-      )
-    })
-
-    it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
-      standalone.configure(config)
-
-      const parent = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-      })
-
-      assert.strictEqual(parent.context().getTag(APM_TRACING_ENABLED_KEY), 0)
-
-      const child = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        parent,
-      })
-
-      assert.ok(!child.context().hasTag(APM_TRACING_ENABLED_KEY))
-    })
-
-    it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
-      standalone.configure(config)
-
-      const parent = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-      })
-
-      parent._isRemote = true
-
-      const child = new DatadogSpan(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        parent,
-      })
-
-      assert.strictEqual(child.context().getTag(APM_TRACING_ENABLED_KEY), 0)
     })
   })
 
