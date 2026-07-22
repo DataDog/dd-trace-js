@@ -46,13 +46,26 @@ function discoverCoverageReports (rootDir) {
     return []
   }
 
+  let resolvedRoot
+  try {
+    resolvedRoot = path.resolve(rootDir)
+    const rootStats = fs.lstatSync(resolvedRoot, { throwIfNoEntry: false })
+    if (rootStats?.isSymbolicLink() || !rootStats?.isDirectory()) {
+      log.debug('Coverage report root is not a regular directory: %s', resolvedRoot)
+      return []
+    }
+  } catch (error) {
+    log.debug('Error checking coverage report root %s: %s', rootDir, error.message)
+    return []
+  }
+
   const discoveredReports = []
 
   for (const pattern of COVERAGE_REPORT_PATTERNS) {
     const fullPath = path.join(rootDir, pattern.path)
 
     try {
-      let currentPath = rootDir
+      let currentPath = resolvedRoot
       let stats
       for (const pathSegment of pattern.path.split('/')) {
         currentPath = path.join(currentPath, pathSegment)
