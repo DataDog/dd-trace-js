@@ -2,12 +2,13 @@
 
 const { API_BASE_PATH } = require('./client')
 
-// Immutable dataset record: { input, expectedOutput?, metadata? }.
+// Immutable dataset record: { input, expectedOutput?, metadata?, id? }.
 class DatasetRecord {
-  constructor (input, expectedOutput = null, metadata = {}) {
+  constructor (input, expectedOutput = null, metadata = {}, id = null) {
     this.input = input
     this.expectedOutput = expectedOutput ?? null
     this.metadata = metadata ?? {}
+    this.id = id ?? null
   }
 }
 
@@ -124,6 +125,9 @@ class Dataset {
     const pending = this.#records.slice(this.#pushedCount)
     const records = pending.map((rec) => {
       const out = { input: rec.input }
+      if (rec.id !== null && rec.id !== undefined) {
+        out.id = rec.id
+      }
       if (rec.expectedOutput !== null && rec.expectedOutput !== undefined) {
         out.expected_output = rec.expectedOutput
       }

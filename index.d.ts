@@ -3575,6 +3575,22 @@ declare namespace tracer {
       experiments: Experiments,
 
       /**
+       * Create a local dataset buffer; pushed on the first experiment run.
+       */
+      createDataset (name: string, description?: string): Dataset
+      createDataset (name: string, options?: CreateDatasetOptions): Dataset
+
+      /**
+       * Create a local dataset buffer from a CSV file.
+       */
+      createDatasetFromCsv (csvPath: string, name: string, options: CreateDatasetFromCsvOptions): Dataset
+
+      /**
+       * Pull an existing dataset (with records) by name.
+       */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3740,7 +3756,16 @@ declare namespace tracer {
 
     interface CreateDatasetOptions {
       description?: string
-      records?: Array<{ inputData: any, expectedOutput?: any, metadata?: Record<string, any> }>
+      records?: Array<{ id?: string, inputData: any, expectedOutput?: any, metadata?: Record<string, any> }>
+    }
+
+    interface CreateDatasetFromCsvOptions {
+      inputDataColumns: string[]
+      expectedOutputColumns?: string[]
+      metadataColumns?: string[]
+      csvDelimiter?: string
+      description?: string
+      idColumn?: string
     }
 
     interface ExperimentOptions {
@@ -3802,7 +3827,7 @@ declare namespace tracer {
       projectId (): string | null
       version (): number | null
       latestVersion (): number | null
-      records (): Array<{ input: any, expectedOutput: any, metadata: Record<string, any> }>
+      records (): Array<{ id: string | null, input: any, expectedOutput: any, metadata: Record<string, any> }>
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }
@@ -3818,6 +3843,8 @@ declare namespace tracer {
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
       createDataset (name: string, options?: CreateDatasetOptions): Dataset
+      /** Create a local dataset buffer from a CSV file. */
+      createDatasetFromCsv (csvPath: string, name: string, options: CreateDatasetFromCsvOptions): Dataset
       /** Pull an existing dataset (with records) by name. */
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
