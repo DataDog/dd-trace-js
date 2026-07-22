@@ -8,6 +8,8 @@ const proxyquire = require('proxyquire').noCallThru()
 
 require('./setup/core')
 
+const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+
 describe('SpanProcessor', () => {
   let prioritySampler
   let processor
@@ -457,6 +459,85 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.finished, [])
     assert.deepStrictEqual(finishedSpan.context().getTags(), {})
     sinon.assert.notCalled(exporter.export)
+  })
+
+  it('should add APM disabled marker to first native span in a chunk when APM tracing is disabled', () => {
+    config.apmTracingEnabled = false
+    config.flushMinSpans = 2
+    const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
+    const active = createProcessorSpan(1, null)
+    active._duration = undefined
+    const firstFinished = createProcessorSpan(2, active.context()._spanId)
+    const secondFinished = createProcessorSpan(3, active.context()._spanId)
+
+    trace.started = [active, firstFinished, secondFinished]
+    trace.finished = [firstFinished, secondFinished]
+
+    processor.process(firstFinished)
+
+    assert.strictEqual(firstFinished.context().getTag(APM_TRACING_ENABLED_KEY), 0)
+    assert.strictEqual(secondFinished.context().getTag(APM_TRACING_ENABLED_KEY), undefined)
+    sinon.assert.calledOnceWithExactly(exporter.export, [firstFinished, secondFinished])
+  })
+
+  it('should add APM disabled marker to every native chunk when a delayed child flushes alone', () => {
+    // Reproduces the standalone-ASM billing regression: the entry span flushes
+    // in one chunk, then a long-lived child (e.g. delayed http.request) flushes
+    // later in its own chunk. Both chunks must carry _dd.apm.enabled:0.
+    config.apmTracingEnabled = false
+    const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
+    const parentSpan = createProcessorSpan(10, null)
+    const childSpan = createProcessorSpan(11, parentSpan.context()._spanId)
+
+    trace.started = [parentSpan]
+    trace.finished = [parentSpan]
+
+    processor.process(parentSpan)
+
+    assert.strictEqual(parentSpan.context().getTag(APM_TRACING_ENABLED_KEY), 0)
+    sinon.assert.calledWith(exporter.export, [parentSpan])
+
+    trace.started = [childSpan]
+    trace.finished = [childSpan]
+
+    processor.process(childSpan)
+
+    assert.strictEqual(childSpan.context().getTag(APM_TRACING_ENABLED_KEY), 0)
+    sinon.assert.calledWith(exporter.export.secondCall, [childSpan])
+  })
+
+  it('should not add APM disabled marker when APM tracing is enabled', () => {
+    config.apmTracingEnabled = true
+    const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
+    const span = createProcessorSpan(20, null)
+    trace.started = [span]
+    trace.finished = [span]
+
+    processor.process(span)
+
+    assert.strictEqual(span.context().getTag(APM_TRACING_ENABLED_KEY), undefined)
+  })
+
+  describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
+    it('applies native OTel HTTP semantics before export', () => {
+      const span = createProcessorSpan(30, null)
+      const context = span.context()
+      const order = []
+      context.applyOtelHttpSemantics = sinon.stub().callsFake(() => order.push('otel'))
+      exporter.export.callsFake(() => order.push('export'))
+      const otelConfig = {
+        ...config,
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
+      const processor = new SpanProcessor(exporter, prioritySampler, otelConfig, nativeSpans)
+      trace.started = [span]
+      trace.finished = [span]
+
+      processor.process(span)
+
+      sinon.assert.calledOnce(context.applyOtelHttpSemantics)
+      assert.deepStrictEqual(order, ['otel', 'export'])
+    })
   })
 
   describe('extra services registration', () => {

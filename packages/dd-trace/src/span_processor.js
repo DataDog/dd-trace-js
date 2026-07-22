@@ -10,6 +10,7 @@ const processTags = require('./process-tags')
 const { MAX_META_VALUE_LENGTH } = require('./encode/tags-processors')
 const { registerExtraService } = require('./service-naming/extra-services')
 const {
+  APM_TRACING_ENABLED_KEY,
   SAMPLING_MECHANISM_MANUAL,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
@@ -273,6 +274,7 @@ class SpanProcessor {
       const finishedSpansToExport = allStartedFinished ? started : []
       const otelSemantics = this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
       let isFirstSpanInChunk = true
+      const stampApmDisabled = this._config.apmTracingEnabled === false
 
       for (const span of started) {
         if (span._duration === undefined) {
@@ -280,6 +282,9 @@ class SpanProcessor {
         } else {
           if (!allStartedFinished) finishedSpansToExport.push(span)
           const context = span.context()
+          if (isFirstSpanInChunk && stampApmDisabled) {
+            context.setTag(APM_TRACING_ENABLED_KEY, 0)
+          }
 
           // OTLP trace metrics remain a JS-side stats feature. Build the same
           // formatted span the legacy JS processor used, before OTel HTTP tag

@@ -14,13 +14,16 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('express-session', 'express-session', version => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox([`'express-session@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-express-session/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'expressSession', undefined, 'express-session')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'expressSession',
+      packageName: 'express-session',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -32,7 +35,7 @@ withVersions('express-session', 'express-session', version => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)

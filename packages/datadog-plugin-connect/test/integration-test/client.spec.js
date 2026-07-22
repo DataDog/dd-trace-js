@@ -17,14 +17,16 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
   // test against later versions because server.mjs uses newer package syntax
   withVersions('connect', 'connect', version => {
     useSandbox([`'connect@${version}'`], false, [
       './packages/datadog-plugin-connect/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'connect')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'connect',
+      packageName: 'connect',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -36,7 +38,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

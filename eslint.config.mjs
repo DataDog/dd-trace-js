@@ -689,7 +689,9 @@ export default [
         // The following are false positives that are supported in Node.js 0.8.0
         ignores: [
           'JSON',
+          'JSON.parse',
           'JSON.stringify',
+          'Object.keys',
           'parseInt',
           'String',
         ],
@@ -699,6 +701,7 @@ export default [
         ignores: [
           'array-prototype-indexof',
           'json',
+          'object-keys',
         ],
       }],
       'no-var': 'off', // Only supported in Node.js 6+

@@ -5,6 +5,10 @@ const realSetTimeout = setTimeout
 
 const shimmer = require('../../datadog-shimmer')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const {
+  RUM_TEST_EXECUTION_ID_COOKIE_NAME: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
+} = require('../../dd-trace/src/ci-visibility/rum')
+const log = require('../../dd-trace/src/log')
 const { addHook, channel } = require('./helpers/instrument')
 
 const ciSeleniumDriverGetStartCh = channel('ci:selenium:driver:get')
@@ -20,7 +24,6 @@ if (window.DD_RUM && window.DD_RUM.stopSession) {
 const IS_RUM_ACTIVE_SCRIPT = 'return !!window.DD_RUM'
 
 const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
-const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 // TODO: can we increase the supported version range?
 addHook({
@@ -32,28 +35,47 @@ addHook({
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
       return get.apply(this, arguments)
     }
-    let traceId
-    const setTraceId = (inputTraceId) => {
-      traceId = inputTraceId
-    }
     const getResult = await get.apply(this, arguments)
 
-    const isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
-    const capabilities = await this.getCapabilities()
+    let isRumActive
+    try {
+      isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
+    } catch (error) {
+      log.error('Selenium RUM detection error', error)
+    }
 
-    ciSeleniumDriverGetStartCh.publish({
-      setTraceId,
+    let browserName
+    let browserVersion
+    try {
+      const capabilities = await this.getCapabilities()
+      browserName = capabilities.getBrowserName()
+      browserVersion = capabilities.getBrowserVersion()
+    } catch (error) {
+      log.error('Selenium browser metadata error', error)
+    }
+
+    const context = {
       seleniumVersion,
-      browserName: capabilities.getBrowserName(),
-      browserVersion: capabilities.getBrowserVersion(),
+      browserName,
+      browserVersion,
       isRumActive,
-    })
+      testExecutionId: undefined,
+    }
+    try {
+      ciSeleniumDriverGetStartCh.publish(context)
+    } catch (error) {
+      log.error('Selenium RUM correlation channel error', error)
+    }
 
-    if (traceId && isRumActive) {
-      await this.manage().addCookie({
-        name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
-        value: traceId,
-      })
+    if (context.testExecutionId && isRumActive) {
+      try {
+        await this.manage().addCookie({
+          name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
+          value: context.testExecutionId,
+        })
+      } catch (error) {
+        log.error('Selenium RUM correlation cookie error', error)
+      }
     }
 
     return getResult
@@ -63,16 +85,20 @@ addHook({
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
       return quit.apply(this, arguments)
     }
-    const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
+    try {
+      const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
 
-    if (isRumActive) {
-      // We'll have time for RUM to flush the events (there's no callback to know when it's done)
-      await new Promise(resolve => {
-        realSetTimeout(() => {
-          resolve()
-        }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
-      })
-      await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
+      if (isRumActive) {
+        // We'll have time for RUM to flush the events (there's no callback to know when it's done)
+        await new Promise(resolve => {
+          realSetTimeout(() => {
+            resolve()
+          }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
+        })
+        await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
+      }
+    } catch (error) {
+      log.error('Selenium RUM cleanup error', error)
     }
 
     return quit.apply(this, arguments)
