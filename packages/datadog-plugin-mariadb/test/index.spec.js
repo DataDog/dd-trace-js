@@ -16,6 +16,20 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
 const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
 
+// proxyquire loads its target through `Module._load` directly rather than the (RITM-patched)
+// `Module.prototype.require`, so any require made *by* the proxyquired module bypasses our hooks.
+// That's invisible for versions whose hooks target a file nested under the package (lib/cmd/query.js
+// etc.) since the nested require still goes through the normal, patched path — but mariadb >=3.5.3
+// bundles everything into a single dist/*.cjs file that IS the direct require target, so proxyquire's
+// bypass would skip instrumentation entirely. Use plain `require` for those versions instead.
+function getMariadb (version, id) {
+  const modulePath = `../../../versions/mariadb@${version}`
+
+  return semver.intersects(version, '>=3.5.3')
+    ? require(modulePath).get(id)
+    : proxyquire(modulePath, {}).get(id)
+}
+
 // A pool created inside an active span must not attach its connection-setup
 // `tcp.connect` span to that trace. Accumulate span names across every payload
 // and assert once the root `test` span flushed: a single trace from one payload
@@ -53,7 +67,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           tracer = await agent.load('mariadb')
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+          mariadb = getMariadb(version, 'mariadb/callback')
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -193,6 +207,32 @@ describe('Plugin', () => {
               statement.close()
             })
           })
+
+          it('should handle prepared statement execute errors', done => {
+            let error
+
+            agent
+              .assertSomeTraces(traces => {
+                assertObjectContains(traces[0][0].meta, {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'mariadb',
+                })
+              })
+              .then(done)
+              .catch(done)
+
+            connection.prepare('SELECT ? + ? AS solution', (err, statement) => {
+              if (err) throw err
+
+              statement.execute([1], (executeError) => {
+                error = executeError
+
+                statement.close()
+              })
+            })
+          })
         }
 
         it('should handle errors', done => {
@@ -238,7 +278,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = await agent.load('mariadb')
-            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            mariadb = getMariadb(version, 'mariadb')
 
             connection = await mariadb.createConnection({
               host: 'localhost',
@@ -360,6 +400,26 @@ describe('Plugin', () => {
             await statement.close()
           })
 
+          it('should handle prepared statement execute errors', async () => {
+            const statement = await connection.prepare('SELECT ? + ? AS solution')
+            const executePromise = statement.execute([1]).catch(() => {})
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                resource: 'SELECT ? + ? AS solution',
+                meta: {
+                  component: 'mariadb',
+                  [ERROR_TYPE]: ANY_STRING,
+                  [ERROR_MESSAGE]: ANY_STRING,
+                  [ERROR_STACK]: ANY_STRING,
+                },
+              }, { spanResourceMatch: /SELECT \? \+ \? AS solution/ }),
+              executePromise,
+            ])
+
+            await statement.close()
+          })
+
           it('should handle errors', async () => {
             const queryPromise = connection.query('SELECT * FROM definitely_missing_table').catch(() => {})
 
@@ -391,7 +451,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = await agent.load('mariadb')
-            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            mariadb = getMariadb(version, 'mariadb')
             connection = await mariadb.createConnection({
               host: 'localhost',
               user: 'root',
@@ -433,7 +493,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           tracer = await agent.load('mariadb', { service: 'custom' })
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+          mariadb = getMariadb(version, 'mariadb/callback')
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -490,7 +550,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = await agent.load('mariadb', { service: 'custom' })
-            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            mariadb = getMariadb(version, 'mariadb')
 
             connection = await mariadb.createConnection({
               host: 'localhost',
@@ -535,7 +595,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           tracer = await agent.load('mariadb', { service: serviceSpy })
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+          mariadb = getMariadb(version, 'mariadb/callback')
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -596,7 +656,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = await agent.load('mariadb', { service: serviceSpy })
-            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            mariadb = getMariadb(version, 'mariadb')
 
             connection = await mariadb.createConnection({
               host: 'localhost',
@@ -647,7 +707,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           tracer = await agent.load('mariadb')
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+          mariadb = getMariadb(version, 'mariadb/callback')
 
           pool = mariadb.createPool({
             connectionLimit: 1,
@@ -748,7 +808,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = await agent.load('mariadb')
-            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            mariadb = getMariadb(version, 'mariadb')
 
             pool = mariadb.createPool({
               connectionLimit: 1,
@@ -813,7 +873,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           tracer = await agent.load(['mariadb', 'net'])
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+          mariadb = getMariadb(version, 'mariadb/callback')
         })
 
         it('should not instrument connections to avoid leaks from internal queue', done => {
@@ -855,7 +915,7 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer = await agent.load(['mariadb', 'net'])
-            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+            mariadb = getMariadb(version, 'mariadb')
           })
 
           it('should not instrument connections to avoid leaks from internal queue', async () => {
