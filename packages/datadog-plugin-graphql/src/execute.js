@@ -25,6 +25,18 @@ const {
  *   operationName?: string,
  *   fieldResolver?: GraphQLFieldResolver
  * }} ExecutionArguments
+ * @typedef {{
+ *   id: number,
+ *   baseTypeName?: string,
+ *   collapsedPath: string,
+ *   fieldName: string,
+ *   fieldNode?: import('graphql').FieldNode,
+ *   parentId?: number,
+ *   parentTypeName: string,
+ *   pathDepth: number,
+ *   returnType: import('graphql').GraphQLOutputType,
+ *   selectionDepth: number
+ * }} JitFieldDescriptor
  */
 
 const legacyStorage = storage('legacy')
@@ -71,6 +83,45 @@ class AbortError extends Error {
     super(message)
     this.name = 'AbortError'
   }
+}
+
+/**
+ * @param {GraphQLExecutePlugin} plugin
+ * @param {DatadogSpan} executeSpan
+ * @param {string | undefined} source
+ * @param {AbortController} abortController
+ * @param {{ fields: object[] } | undefined} jitPlan
+ * @param {Record<string, unknown> | undefined} variableValues
+ * @returns {object}
+ */
+function createRootContext (plugin, executeSpan, source, abortController, jitPlan, variableValues) {
+  const rootCtx = {
+    source,
+    config: plugin.config,
+    abortController,
+    executeSpan,
+    plugin,
+    filteredVariablesKey: NO_VARIABLES_CACHED,
+    filteredVariables: undefined,
+    hasIastSub: iastResolveCh.hasSubscribers,
+    hasResolverSub: resolverStartCh.hasSubscribers,
+    variableValues,
+  }
+
+  if (jitPlan) {
+    rootCtx.jitPlan = jitPlan
+    if (plugin.config.collapse) {
+      rootCtx.jitFields = new Array(jitPlan.fields.length)
+    } else {
+      rootCtx.jitFieldsByPath = new Map()
+    }
+  }
+  if (!jitPlan || !plugin.config.collapse) {
+    rootCtx.fields = new Map()
+    rootCtx.pathCache = new Map()
+  }
+
+  return rootCtx
 }
 
 class GraphQLExecutePlugin extends TracingPlugin {
@@ -213,18 +264,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
       return ctx.currentStore
     }
 
+    const signature = getSignature(document, name, type, this.config.signature)
     const requestStore =
       /** @type {{ graphqlRequestSpan?: DatadogSpan } | undefined} */ (legacyStorage.getStore())
-    refineRequestSpan(
-      requestStore?.graphqlRequestSpan,
-      document,
-      args.operationName,
-      this.config.signature
-    )
+    refineRequestSpan(requestStore?.graphqlRequestSpan, signature, type, name)
 
     ctx.collapse = this.config.collapse
-
-    const signature = getSignature(document, name, type, this.config.signature)
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
@@ -261,19 +306,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     this.wrapExecutionResolvers(ctx, args)
 
-    const rootCtx = {
-      source: docSource,
-      config: this.config,
-      fields: new Map(),
-      pathCache: new Map(),
-      abortController,
-      executeSpan: span,
-      plugin: this,
-      // graphql.resolve variable tags: memoize the filtered result for the
-      // last-seen variableValues object (see #filterVariables).
-      filteredVariablesKey: NO_VARIABLES_CACHED,
-      filteredVariables: undefined,
-    }
+    const rootCtx = createRootContext(this, span, docSource, abortController, ctx.ddPlan, args.variableValues)
     ctx.ddRootCtx = rootCtx
     this.storeRootContext(ctx, contextValue, rootCtx)
 
@@ -354,10 +387,18 @@ class GraphQLExecutePlugin extends TracingPlugin {
   // Public — called from wrapResolve (free function, crosses class boundary).
   // Resolve-span creation is inline at first-encounter; deferring to a batch
   // produces a bursty encoder stall when many spans finish together.
-  startResolveSpan (field, rootCtx, executeSpan, startTime) {
+  /**
+   * @param {object} field
+   * @param {object} rootCtx
+   * @param {DatadogSpan} executeSpan
+   * @param {number} startTime
+   * @param {object | null} [parentField]
+   * @returns {DatadogSpan}
+   */
+  startResolveSpan (field, rootCtx, executeSpan, startTime, parentField) {
     const { fieldNode, fieldName, returnType, baseTypeName, variableValues, collapsedKey } = field
 
-    const parent = getParentField(rootCtx, field)
+    const parent = parentField === undefined ? getParentField(rootCtx, field) : parentField
     const childOf = parent?.span || executeSpan
 
     const document = rootCtx.source
@@ -465,6 +506,13 @@ function wrapResolve (resolve, isJit = false) {
       ? legacyStorage.getStore()?.graphqlRootCtx
       : contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return resolve.apply(this, arguments)
+
+    if (isJit) {
+      const jitField = info?.__ddTraceField
+      if (jitField) {
+        return resolveJitField(resolve, this, arguments, args, info, rootCtx, jitField)
+      }
+    }
 
     const infoPath = info?.path
     const config = rootCtx.config
@@ -589,6 +637,234 @@ function wrapResolve (resolve, isJit = false) {
   patched.add(resolveAsync)
   originalResolvers.set(resolveAsync, resolve)
   return resolveAsync
+}
+
+/**
+ * @param {GraphQLFieldResolver} resolve
+ * @param {unknown} self
+ * @param {IArguments} callArguments
+ * @param {Record<string, unknown>} args
+ * @param {import('graphql').GraphQLResolveInfo & { __ddTraceField: JitFieldDescriptor }} info
+ * @param {object} rootCtx
+ * @param {JitFieldDescriptor} descriptor
+ * @returns {unknown}
+ */
+function resolveJitField (resolve, self, callArguments, args, info, rootCtx, descriptor) {
+  const config = rootCtx.config
+  const path = config.collapse ? undefined : pathToArray(info.path)
+  const pathString = path ? path.join('.') : descriptor.collapsedPath
+
+  if (rootCtx.hasIastSub) {
+    iastResolveCh.publish({
+      rootCtx,
+      args,
+      info,
+      path: path ?? pathToArray(info.path),
+      pathString,
+    })
+  }
+  if (rootCtx.hasResolverSub) {
+    resolverStartCh.publish({
+      abortController: rootCtx.abortController,
+      resolverInfo: getResolverInfo(info, args),
+    })
+  }
+
+  if (rootCtx.abortController?.signal.aborted) {
+    throw new AbortError('Aborted')
+  }
+
+  const depth = config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth
+  if (depthDisabled || (config.depth >= 0 && config.depth < depth)) {
+    return resolve.apply(self, callArguments)
+  }
+
+  const fieldKey = `${descriptor.id}:${pathString}`
+  let field = config.collapse
+    ? rootCtx.jitFields[descriptor.id]
+    : rootCtx.jitFieldsByPath.get(fieldKey)
+  if (field) {
+    return resolve.apply(self, callArguments)
+  }
+
+  field = {
+    fieldNode: descriptor.fieldNode,
+    fieldName: descriptor.fieldName,
+    parentTypeName: descriptor.parentTypeName,
+    returnType: descriptor.returnType,
+    baseTypeName: descriptor.baseTypeName,
+    variableValues: info.variableValues,
+    args,
+    infoPath: info.path,
+    pathString,
+    collapsedKey: pathString,
+    span: null,
+    parentStore: null,
+    currentStore: null,
+  }
+  if (config.collapse) {
+    rootCtx.jitFields[descriptor.id] = field
+  } else {
+    rootCtx.jitFieldsByPath.set(fieldKey, field)
+  }
+
+  const executeSpan = rootCtx.executeSpan
+  const startTime = executeSpan._getTime()
+  let parentField = null
+  if (descriptor.parentId !== undefined) {
+    if (config.collapse) {
+      parentField = rootCtx.jitFields[descriptor.parentId] ?? null
+    } else {
+      const parentPath = path.slice(0, -1)
+      while (typeof parentPath.at(-1) === 'number') parentPath.pop()
+      parentField = rootCtx.jitFieldsByPath.get(`${descriptor.parentId}:${parentPath.join('.')}`) ?? null
+    }
+  }
+  const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, parentField)
+
+  /**
+   * @param {unknown} error
+   * @param {unknown} result
+   */
+  const finishField = (error, result) => {
+    const endTime = executeSpan._getTime()
+    rootCtx.plugin.finishResolveSpan(span, field, error, result, endTime || startTime)
+  }
+  return callInAsyncScope(resolve, self, callArguments, rootCtx.abortController, field.currentStore, finishField)
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {number} descriptorId
+ * @param {unknown} source
+ * @param {(string | number)[] | undefined} path
+ * @returns {unknown}
+ */
+function resolveJitDefault (rootCtx, descriptorId, source, path) {
+  const descriptor = rootCtx.jitPlan.fields[descriptorId]
+  const pathString = path ? path.join('.') : descriptor.collapsedPath
+  const fieldKey = `${descriptorId}:${pathString}`
+  const field = {
+    fieldNode: descriptor.fieldNode,
+    fieldName: descriptor.fieldName,
+    parentTypeName: descriptor.parentTypeName,
+    returnType: descriptor.returnType,
+    baseTypeName: descriptor.baseTypeName,
+    variableValues: rootCtx.variableValues,
+    args: undefined,
+    infoPath: undefined,
+    pathString,
+    collapsedKey: pathString,
+    span: null,
+    parentStore: null,
+    currentStore: null,
+  }
+  if (rootCtx.config.collapse) {
+    rootCtx.jitFields[descriptorId] = field
+  } else {
+    rootCtx.jitFieldsByPath.set(fieldKey, field)
+  }
+
+  const executeSpan = rootCtx.executeSpan
+  const startTime = executeSpan._getTime()
+  let parentField = null
+  if (descriptor.parentId !== undefined) {
+    if (rootCtx.config.collapse) {
+      parentField = rootCtx.jitFields[descriptor.parentId] ?? null
+    } else {
+      const parentPath = path.slice(0, -1)
+      while (typeof parentPath.at(-1) === 'number') parentPath.pop()
+      parentField = rootCtx.jitFieldsByPath.get(`${descriptor.parentId}:${parentPath.join('.')}`) ?? null
+    }
+  }
+  const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime, parentField)
+
+  let result
+  try {
+    result = legacyStorage.run(field.currentStore, () => source?.[descriptor.fieldName])
+  } catch (error) {
+    const endTime = executeSpan._getTime()
+    rootCtx.plugin.finishResolveSpan(span, field, error, undefined, endTime || startTime)
+    throw error
+  }
+
+  if (typeof result?.then === 'function') {
+    return result.then(
+      /**
+       * @param {unknown} value
+       * @returns {unknown}
+       */
+      (value) => {
+        const endTime = executeSpan._getTime()
+        rootCtx.plugin.finishResolveSpan(span, field, undefined, value, endTime || startTime)
+        return value
+      },
+      /**
+       * @param {unknown} error
+       * @throws {unknown}
+       */
+      (error) => {
+        const endTime = executeSpan._getTime()
+        rootCtx.plugin.finishResolveSpan(span, field, error, undefined, endTime || startTime)
+        throw error
+      }
+    )
+  }
+
+  const endTime = executeSpan._getTime()
+  rootCtx.plugin.finishResolveSpan(span, field, undefined, result, endTime || startTime)
+  return result
+}
+
+/**
+ * @param {object} rootCtx
+ * @param {number} descriptorId
+ * @param {unknown} source
+ * @param {(string | number)[] | undefined} path
+ * @returns {unknown}
+ */
+function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path) {
+  const descriptor = rootCtx.jitPlan.fields[descriptorId]
+  const pathString = path ? path.join('.') : descriptor.collapsedPath
+  if (rootCtx.hasIastSub || rootCtx.hasResolverSub) {
+    const args = {}
+    const info = {
+      fieldName: descriptor.fieldName,
+      fieldNodes: [descriptor.fieldNode],
+    }
+    if (rootCtx.hasIastSub) {
+      iastResolveCh.publish({
+        rootCtx,
+        args,
+        info,
+        path: path ?? descriptor.collapsedPath.split('.'),
+        pathString,
+      })
+    }
+    if (rootCtx.hasResolverSub) {
+      resolverStartCh.publish({
+        abortController: rootCtx.abortController,
+        resolverInfo: getResolverInfo(info, args),
+      })
+    }
+    if (rootCtx.abortController?.signal.aborted) {
+      throw new AbortError('Aborted')
+    }
+  }
+
+  const depth = rootCtx.config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth
+  if (depthDisabled || (rootCtx.config.depth >= 0 && rootCtx.config.depth < depth)) {
+    if (rootCtx.config.collapse) rootCtx.jitFields[descriptorId] = false
+    return source?.[descriptor.fieldName]
+  }
+
+  const field = rootCtx.config.collapse
+    ? rootCtx.jitFields[descriptorId]
+    : rootCtx.jitFieldsByPath.get(`${descriptorId}:${pathString}`)
+  if (field === undefined) {
+    return resolveJitDefault(rootCtx, descriptorId, source, path)
+  }
+  return source?.[descriptor.fieldName]
 }
 
 /**
@@ -879,3 +1155,5 @@ function addVariableTags (config, span, variableValues) {
 
 module.exports = GraphQLExecutePlugin
 module.exports.wrapJitResolve = wrapJitResolve
+module.exports.resolveJitDefault = resolveJitDefault
+module.exports.resolveJitDefaultInvocation = resolveJitDefaultInvocation

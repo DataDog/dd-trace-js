@@ -23,27 +23,33 @@ function getOperation (document, operationName) {
 }
 
 /**
- * Refines a mercurius request span at the first boundary with a parsed document:
- * validate on the cold path, or graphql-jit execute on the warm path.
- *
  * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
- * @param {import('graphql').DocumentNode | undefined} document
- * @param {string | undefined} operationName - The requested operation name.
- * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
+ * @param {string} signature
+ * @param {string | undefined} type
+ * @param {string | undefined} name
  */
-function refineRequestSpan (requestSpan, document, operationName, calculateSignature) {
-  /* istanbul ignore if: downstream boundaries only refine with a request span and parsed document. */
-  if (!requestSpan || requestSpan.ddRequestRefined || !document) return
+function refineRequestSpan (requestSpan, signature, type, name) {
+  if (!requestSpan || requestSpan.ddRequestRefined) return
   requestSpan.ddRequestRefined = true
-
-  const operation = getOperation(document, operationName)
-  const type = operation?.operation
-  const name = operation?.name?.value
-  const signature = getSignature(document, name, type, calculateSignature)
 
   if (signature) requestSpan.setTag('resource.name', signature)
   if (type) requestSpan.setTag('graphql.operation.type', type)
   if (name) requestSpan.setTag('graphql.operation.name', name)
+}
+
+/**
+ * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
+ * @param {import('graphql').DocumentNode | undefined} document
+ * @param {string | undefined} operationName
+ * @param {boolean} calculateSignature
+ */
+function refineRequestSpanFromDocument (requestSpan, document, operationName, calculateSignature) {
+  if (!requestSpan || requestSpan.ddRequestRefined || !document) return
+
+  const operation = getOperation(document, operationName)
+  const type = operation?.operation
+  const name = operation?.name?.value
+  refineRequestSpan(requestSpan, getSignature(document, name, type, calculateSignature), type, name)
 }
 
 /**
@@ -175,4 +181,5 @@ module.exports = {
   isApolloHealthCheck,
   isApolloHealthCheckSource,
   refineRequestSpan,
+  refineRequestSpanFromDocument,
 }

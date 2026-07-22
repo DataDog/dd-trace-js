@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, isApolloHealthCheck, refineRequestSpan } = require('./utils')
+const { extractErrorIntoSpanEvent, isApolloHealthCheck, refineRequestSpanFromDocument } = require('./utils')
 
 /** @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan */
 
@@ -37,7 +37,7 @@ class GraphQLValidatePlugin extends TracingPlugin {
       /** @type {{ graphqlRequestSpan?: DatadogSpan, graphqlRequestOperationName?: string } | undefined} */ (
         legacyStorage.getStore()
       )
-    refineRequestSpan(
+    refineRequestSpanFromDocument(
       requestStore?.graphqlRequestSpan,
       document,
       requestStore?.graphqlRequestOperationName,

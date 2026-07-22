@@ -14,27 +14,11 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
-const GRAPHQL_JIT_PATH_SERIALIZER = parse(`
-  function serializeResponsePath (path) {
-    if (!path) return 'undefined'
-    if (path.type === 'meta') return serializeResponsePath(path.prev)
-
-    const concreteType = path.prev?.type === 'meta' ? path.prev : undefined
-    const previousPath = concreteType === undefined ? path.prev : concreteType.prev
-    const literalValue = \`"\${path.key}"\`
-    const typename = concreteType === undefined ? '' : \`,
-      typename: "\${concreteType.key}"\`
-    return \`{
-      key: \${path.type === 'literal' ? literalValue : path.key},
-      prev: \${serializeResponsePath(previousPath)}\${typename}
-    }\`
-  }
-`).body[0].body
-
 module.exports = {
   configureGraphqlJitCompileObject,
   configureGraphqlJitExecute,
-  preserveGraphqlJitPathType,
+  configureGraphqlJitExecutionInfo,
+  configureGraphqlJitRuntime,
   waitForAsyncEnd,
 }
 
@@ -53,6 +37,13 @@ function configureGraphqlJitCompileObject (_state, node) {
     'IfStatement[test.operator="&&"]:has(UnaryExpression[operator="!"][argument.name="resolver"])' +
       ':has(Identifier[name="alwaysDefer"]) AssignmentExpression[left.name="resolver"]'
   )
+  const defaultResolverConditions = query(
+    node,
+    'IfStatement[test.operator="&&"]:has(UnaryExpression[operator="!"][argument.name="resolver"])' +
+      ':has(Identifier[name="alwaysDefer"])'
+  )
+  const resolverConditions = query(node, 'IfStatement[test.name="resolver"]')
+  const compileTypeCalls = query(node, 'CallExpression[callee.name="compileType"]')
 
   assert.strictEqual(
     nestedTypeChecks.length,
@@ -63,6 +54,21 @@ function configureGraphqlJitCompileObject (_state, node) {
     defaultResolverAssignments.length,
     1,
     'configureGraphqlJitCompileObject: default resolver assignment not found'
+  )
+  assert.strictEqual(
+    defaultResolverConditions.length,
+    1,
+    'configureGraphqlJitCompileObject: default resolver condition not found'
+  )
+  assert.strictEqual(
+    resolverConditions.length,
+    1,
+    'configureGraphqlJitCompileObject: resolver condition not found'
+  )
+  assert.strictEqual(
+    compileTypeCalls.length,
+    1,
+    'configureGraphqlJitCompileObject: inline compile call not found'
   )
 
   const [nestedTypeCheck] = nestedTypeChecks
@@ -81,6 +87,84 @@ function configureGraphqlJitCompileObject (_state, node) {
       : (parent) => parent?.[fieldName]
   )`).body[0].expression
 
+  const [defaultResolverCondition] = defaultResolverConditions
+  const [resolverCondition] = resolverConditions
+  const [compileTypeCall] = compileTypeCalls
+  const inlineCompileCall = clone(compileTypeCall)
+  inlineCompileCall.arguments[4] = {
+    type: 'ArrayExpression',
+    elements: [{ type: 'Literal', value: '__ddValue' }],
+  }
+
+  const [defaultMarker] = parse(`
+    const ddTraceDefault = !resolver && alwaysDefer === 'datadog'
+  `).body
+  const [fastDefaultMarker] = parse(`
+    const ddTraceFastDefault = ddTraceDefault && context.ddTraceRuntime.canInlineDefault(fieldNodes)
+  `).body
+  replaceIdentifier(fastDefaultMarker, 'fieldNodes', clone(compileTypeCall.arguments[3]))
+  const [inlineField] = parse(`
+    const ddTraceInline = ddTraceDefault
+      ? context.ddTraceRuntime.compileDefaultField(
+        context,
+        DD_PATH,
+        type,
+        field,
+        DD_FIELD_NODES,
+        originPaths,
+        DD_COMPILED
+      )
+      : undefined
+  `).body
+  replaceIdentifier(inlineField, 'DD_PATH', clone(compileTypeCall.arguments[6]))
+  replaceIdentifier(inlineField, 'DD_FIELD_NODES', clone(compileTypeCall.arguments[3]))
+  replaceIdentifier(inlineField, 'DD_COMPILED', inlineCompileCall)
+
+  assert(
+    insertBeforeStatement(node.body, defaultResolverCondition, [defaultMarker]),
+    'configureGraphqlJitCompileObject: could not insert default marker'
+  )
+  assert(
+    insertBeforeStatement(node.body, resolverCondition, [fastDefaultMarker, inlineField]),
+    'configureGraphqlJitCompileObject: could not insert inline field'
+  )
+
+  const includedConditions = query(resolverCondition.consequent, 'IfStatement[test.name="alwaysIncluded"]')
+  let fastDefaultBody
+  if (includedConditions.length === 1) {
+    const [includedCondition] = includedConditions
+    wrapDefaultFieldBody(includedCondition.consequent, 'always')
+    wrapDefaultFieldBody(includedCondition.alternate, 'conditional')
+    fastDefaultBody = parse(`
+      if (alwaysIncluded) {
+        body(ddTraceInline)
+      } else {
+        body(\`? \${ddTraceInline} : undefined\`)
+      }
+    `).body
+  } else {
+    assert.strictEqual(
+      includedConditions.length,
+      0,
+      'configureGraphqlJitCompileObject: ambiguous included condition'
+    )
+    wrapDefaultFieldBody(resolverCondition.consequent, 'conditional')
+    fastDefaultBody = parse(`
+      body(\`? \${ddTraceInline} : undefined\`)
+    `).body
+  }
+
+  const originalResolverBody = resolverCondition.consequent
+  const [fastDefaultCondition] = parse(`
+    if (ddTraceFastDefault) {}
+  `).body
+  fastDefaultCondition.consequent.body.push(...fastDefaultBody)
+  fastDefaultCondition.alternate = originalResolverBody
+  resolverCondition.consequent = {
+    type: 'BlockStatement',
+    body: [fastDefaultCondition],
+  }
+
   // `true` defers defaults but also suppresses isTypeOf. A separate truthy value,
   // paired with the transformed `!== true` check, preserves both behaviors.
   node.body.body.unshift(...parse(`
@@ -88,6 +172,71 @@ function configureGraphqlJitCompileObject (_state, node) {
       alwaysDefer = 'datadog'
     }
   `).body)
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {string} name
+ * @param {import('estree').Node} replacement
+ */
+function replaceIdentifier (root, name, replacement) {
+  for (const key of Object.keys(root)) {
+    const value = root[key]
+    if (!value || typeof value !== 'object') continue
+    if (value.type === 'Identifier' && value.name === name) {
+      root[key] = clone(replacement)
+    } else {
+      replaceIdentifier(value, name, replacement)
+    }
+  }
+}
+
+/**
+ * @param {import('estree').Node} root
+ * @param {import('estree').Node} target
+ * @param {import('estree').Node[]} statements
+ * @returns {boolean}
+ */
+function insertBeforeStatement (root, target, statements) {
+  for (const key of Object.keys(root)) {
+    const value = root[key]
+    if (Array.isArray(value)) {
+      const index = value.indexOf(target)
+      if (index !== -1) {
+        value.splice(index, 0, ...statements)
+        return true
+      }
+      for (const entry of value) {
+        if (entry && typeof entry === 'object' && insertBeforeStatement(entry, target, statements)) return true
+      }
+    } else if (value && typeof value === 'object' && insertBeforeStatement(value, target, statements)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {import('estree').Node} node
+ * @param {'always' | 'conditional'} mode
+ */
+function wrapDefaultFieldBody (node, mode) {
+  const bodyCalls = query(node, 'CallExpression[callee.name="body"]')
+  assert.strictEqual(
+    bodyCalls.length,
+    1,
+    `configureGraphqlJitCompileObject: expected one ${mode} body call`
+  )
+
+  const [bodyCall] = bodyCalls
+  const original = bodyCall.arguments[0]
+  const replacement = parse(`
+    context.ddTraceRuntime
+      ? context.ddTraceRuntime.formatDefaultField(ddTraceInline, '${mode}', DD_ORIGINAL)
+      : DD_ORIGINAL
+  `).body[0].expression
+  replaceIdentifier(replacement, 'DD_ORIGINAL', original)
+  bodyCall.arguments[0] = replacement
 }
 
 /**
@@ -106,6 +255,7 @@ function configureGraphqlJitExecute (_state, node) {
   const properties = parse(`({
     ddDocument: document,
     ddOperationName: operationName,
+    ddPlan: compilationContext.ddTraceRuntime?.getPlan(compilationContext),
     ddResolvers: compilationContext.resolvers,
     ddSchema: compilationContext.schema
   })`).body[0].expression.properties
@@ -125,8 +275,49 @@ function configureGraphqlJitExecute (_state, node) {
  * @param {object} _state
  * @param {import('estree').FunctionDeclaration} node
  */
-function preserveGraphqlJitPathType (_state, node) {
-  node.body = clone(GRAPHQL_JIT_PATH_SERIALIZER)
+function configureGraphqlJitExecutionInfo (_state, node) {
+  const enrichers = query(
+    node,
+    'MemberExpression[property.name="resolverInfoEnricher"]' +
+      ':has(MemberExpression[object.name="context"][property.name="options"])'
+  )
+
+  assert.strictEqual(
+    enrichers.length,
+    1,
+    'configureGraphqlJitExecutionInfo: resolver info enricher not found'
+  )
+
+  const replacement = parse(`
+    context.ddTraceRuntime
+      ? context.ddTraceRuntime.createResolverInfoEnricher(
+        context,
+        responsePath,
+        context.options.resolverInfoEnricher
+      )
+      : context.options.resolverInfoEnricher
+  `).body[0].expression
+  const [enricher] = enrichers
+  for (const key of Object.keys(enricher)) delete enricher[key]
+  Object.assign(enricher, replacement)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionDeclaration} node
+ */
+function configureGraphqlJitRuntime (_state, node) {
+  const contexts = query(node, 'VariableDeclarator[id.name="executionContext"] > ObjectExpression')
+  assert.strictEqual(
+    contexts.length,
+    1,
+    'configureGraphqlJitRuntime: execution context not found'
+  )
+
+  const properties = parse(`({
+    ddTrace: compilationContext.ddTraceRuntime?.startExecution()
+  })`).body[0].expression.properties
+  contexts[0].properties.push(...properties)
 }
 
 /**
