@@ -230,7 +230,13 @@ for (const hook of getHooks('ai')) {
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
-        wrapModelWithLifecycle(ctx.result)
+        const model = ctx.arguments[0]
+        if (typeof model !== 'string' && model !== ctx.result) {
+          wrapModelWithLifecycle(model)
+          wrappedModels.add(ctx.result)
+        } else {
+          wrapModelWithLifecycle(ctx.result)
+        }
       },
     })
 
