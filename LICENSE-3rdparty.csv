@@ -38,7 +38,7 @@
 "@oxc-parser/binding-linux-x64-musl","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-openharmony-arm64","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-wasm32-wasi","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
-"@oxc-parser/binding-win32-arm64-msvc","npm:@oxc-parser/binding-win32-arm64-msvc","[]","[]"
+"@oxc-parser/binding-win32-arm64-msvc","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-win32-ia32-msvc","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-win32-x64-msvc","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-project/types","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
