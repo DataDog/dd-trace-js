@@ -75,6 +75,37 @@ describe('test optimization CI configuration audit', () => {
     assert.match(result.diagnosis, /cannot prove that NODE_OPTIONS reaches the final test process/)
   })
 
+  it('recognizes the explicit ci/init.js preload when inferring initialization', () => {
+    const framework = getFramework()
+    framework.ciWiring.stepEnv = {
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true',
+      NODE_OPTIONS: '-r dd-trace/ci/init.js',
+    }
+    framework.ciWiring.requiredSecretEnvVars = ['DD_API_KEY']
+
+    const result = runCiWiring({ manifest: {}, framework })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.initializationStatus, 'configured')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+  })
+
+  it('accepts DATADOG_API_KEY as the agentless API key reference', () => {
+    const framework = getFramework()
+    framework.ciWiring.initialization = {
+      status: 'configured',
+      evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'],
+    }
+    framework.ciWiring.stepEnv = { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' }
+    framework.ciWiring.requiredSecretEnvVars = ['DATADOG_API_KEY']
+
+    const result = runCiWiring({ manifest: {}, framework })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.apiKeyConfigured, true)
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+  })
+
   it('fails when agentless reporting has no API key reference', () => {
     const framework = getFramework()
     framework.ciWiring.initialization = {

@@ -7,7 +7,6 @@ const { spawn } = require('child_process')
 
 const {
   cleanupCommandOutputs,
-  deferCommandOutputCleanup,
   prepareCommandOutputs,
 } = require('./command-output-policy')
 const {
@@ -87,7 +86,6 @@ function runCommand (command, options = {}) {
   const {
     env = {},
     envMode = 'inherit',
-    deferOutputCleanup = false,
     outDir,
     label,
     repositoryRoot,
@@ -173,7 +171,7 @@ function runCommand (command, options = {}) {
       result.stderr = `${error.stack || error}\n`
       result.durationMs = Date.now() - startedAt
       try {
-        finishCommandOutputCleanup(result, outputStates, deferOutputCleanup)
+        finishCommandOutputCleanup(result, outputStates)
       } catch (cleanupError) {
         result.outputCleanupError = cleanupError?.message || String(cleanupError)
       }
@@ -268,7 +266,7 @@ function runCommand (command, options = {}) {
       result.durationMs = Date.now() - startedAt
 
       try {
-        finishCommandOutputCleanup(result, outputStates, deferOutputCleanup)
+        finishCommandOutputCleanup(result, outputStates)
       } catch (err) {
         result.outputCleanupError = err && err.message ? err.message : String(err)
         result.stderr += '\n[test-optimization-validator] could not clean up command outputs: ' +
@@ -324,19 +322,13 @@ function runCommand (command, options = {}) {
 }
 
 /**
- * Cleans command outputs now or records an opaque handle for a later validation-wide cleanup.
+ * Cleans command outputs after the command exits.
  *
  * @param {object} result command result
  * @param {object[]} outputStates prepared command output state
- * @param {boolean} deferOutputCleanup whether outputs are needed by later commands
  * @returns {void}
  */
-function finishCommandOutputCleanup (result, outputStates, deferOutputCleanup) {
-  if (deferOutputCleanup && outputStates.length > 0) {
-    result.outputCleanupHandle = deferCommandOutputCleanup(outputStates)
-    result.commandOutputPaths = outputStates.map(({ outputPath }) => ({ outputPath, action: 'deferred' }))
-    return
-  }
+function finishCommandOutputCleanup (result, outputStates) {
   result.commandOutputPaths = cleanupCommandOutputs(outputStates)
 }
 

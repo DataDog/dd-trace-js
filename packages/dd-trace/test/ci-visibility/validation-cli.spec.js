@@ -39,10 +39,7 @@ const PASSING_VALIDATION_PHASES = {
     },
   },
 }
-const APPROVAL_ARGS = [
-  '--offline-fixture-nonce', 'a'.repeat(32),
-  '--approved-plan-sha256', 'a'.repeat(64),
-]
+const APPROVAL_DIGEST = 'a'.repeat(64)
 
 describe('test optimization validation cli', () => {
   it('uses only published files and runtime dependencies', () => {
@@ -147,7 +144,7 @@ describe('test optimization validation cli', () => {
     assert.strictEqual(options.approvedArtifactSha256, digest)
   })
 
-  for (const mode of ['--help', '--init-manifest', '--print-plan', '--print-approval-sha256', '--validate-manifest']) {
+  for (const mode of ['--help', '--init-manifest', '--print-plan', '--validate-manifest']) {
     it(`rejects an approved live run combined with ${mode}`, async () => {
       const errors = []
       const originalError = console.error
@@ -170,12 +167,6 @@ describe('test optimization validation cli', () => {
       }
     })
   }
-
-  it('parses the read-only approval digest verification mode', () => {
-    const options = parseArgs(['--offline-fixture-nonce', 'b'.repeat(32), '--print-approval-sha256'])
-
-    assert.strictEqual(options.printApprovalSha256, true)
-  })
 
   it('documents the short approval-file execution command in help output', async () => {
     const logs = []
@@ -265,63 +256,6 @@ describe('test optimization validation cli', () => {
     }
   })
 
-  it('prints the approval digest without creating output or starting live validation', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-digest-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const digest = 'c'.repeat(64)
-    const nonce = 'd'.repeat(32)
-    const logs = []
-    const digestInputs = []
-    const originalLog = console.log
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      './approval': {
-        assertApprovalDigest () {
-          throw new Error('live approval should not run')
-        },
-        getApprovalDigest (input) {
-          digestInputs.push(input)
-          return digest
-        },
-      },
-      './static-diagnosis': {
-        runStaticDiagnosis () {
-          throw new Error('static diagnosis should not run')
-        },
-      },
-    })
-
-    const manifest = getRunnableManifest(tmpDir)
-    manifest.frameworks.push({
-      ...manifest.frameworks[0],
-      id: 'vitest:other',
-    })
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    console.log = message => logs.push(message)
-
-    try {
-      await main([
-        '--manifest', manifestPath,
-        '--out', out,
-        '--framework', manifest.frameworks[0].id,
-        '--offline-fixture-nonce', nonce,
-        '--print-approval-sha256',
-      ])
-
-      assert.deepStrictEqual(logs, [digest])
-      assert.strictEqual(fs.existsSync(out), false)
-      assert.strictEqual(digestInputs.length, 1)
-      assert.strictEqual(digestInputs[0].offlineFixtureNonce, nonce)
-      assert.deepStrictEqual(digestInputs[0].selectedFrameworkIds, [manifest.frameworks[0].id])
-      assert.deepStrictEqual(digestInputs[0].manifest.frameworks.map(framework => framework.id), [
-        manifest.frameworks[0].id,
-      ])
-    } finally {
-      console.log = originalLog
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
   it('reproduces the hash from a framework-scoped execution plan', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-reproduce-digest-'))
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
@@ -345,9 +279,7 @@ describe('test optimization validation cli', () => {
       ])
       const presentationReminder = logs.pop()
       const executionPlanPath = path.join(out, 'execution-plan.md')
-      const approvalSummaryPath = path.join(out, 'approval-summary.md')
       const plan = fs.readFileSync(executionPlanPath, 'utf8')
-      const approvalSummary = fs.readFileSync(approvalSummaryPath, 'utf8')
       const expectedDigest = plan.match(/Expected SHA-256: `([a-f0-9]{64})`/)?.[1]
       const approvalJsonPath = path.join(out, 'approval.json')
       const coveredFilesPath = path.join(out, 'approval-files.sha256')
@@ -356,7 +288,6 @@ describe('test optimization validation cli', () => {
       assert.strictEqual(fs.existsSync(coveredFilesPath), true)
       assert.match(presentationReminder, /^===== CUSTOMER APPROVAL PLAN =====/)
       assert.match(presentationReminder, /===== END CUSTOMER APPROVAL PLAN =====/)
-      assert.ok(presentationReminder.includes(approvalSummaryPath))
       assert.ok(presentationReminder.includes(executionPlanPath))
       assert.match(presentationReminder, /LIVE VALIDATION HAS NOT RUN\./)
       assert.match(presentationReminder, /DISCOVERY IS COMPLETE\. STOP TOOL USE NOW\./)
@@ -365,12 +296,12 @@ describe('test optimization validation cli', () => {
       const displayedSummary = presentationReminder
         .split('===== CUSTOMER APPROVAL PLAN =====\n')[1]
         .split('\n===== END CUSTOMER APPROVAL PLAN =====')[0]
-      assert.strictEqual(displayedSummary, approvalSummary.trimEnd())
-      assert.match(approvalSummary, /# Test Optimization Validation Approval Summary/)
-      assert.match(approvalSummary, /## Commands/)
-      assert.match(approvalSummary, /## Safety and Outputs/)
-      assert.match(approvalSummary, /## Approval Command/)
-      assert.match(approvalSummary, /--run-approved-plan results\/approval\.json --sha256 [a-f0-9]{64}/)
+      assert.strictEqual(displayedSummary, plan.trimEnd())
+      assert.match(plan, /# Test Optimization Validation Execution Plan/)
+      assert.match(plan, /## Commands/)
+      assert.match(plan, /## Safety and Outputs/)
+      assert.match(plan, /## Approval Command/)
+      assert.match(plan, /--run-approved-plan results\/approval\.json --sha256 [a-f0-9]{64}/)
       assert.strictEqual(
         crypto.createHash('sha256').update(fs.readFileSync(approvalJsonPath)).digest('hex'),
         expectedDigest
@@ -455,11 +386,6 @@ describe('test optimization validation cli', () => {
           return getPassingScenarioResult(framework, 'basic-reporting')
         },
       },
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
-        },
-      },
       './static-diagnosis': {
         getStaticBlocker () {},
         runStaticDiagnosis () {
@@ -498,6 +424,7 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': getApprovedPlanStub(manifestPath, out, ['--scenario', 'basic-reporting']),
       './report-writer': {
         async writeReport () {},
       },
@@ -511,11 +438,6 @@ describe('test optimization validation cli', () => {
             evidence: {},
             artifacts: [],
           }
-        },
-      },
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
         },
       },
       './static-diagnosis': {
@@ -533,12 +455,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main([
-        '--manifest', manifestPath,
-        '--out', out,
-        '--scenario', 'basic-reporting',
-        ...APPROVAL_ARGS,
-      ])
+      await main(getApprovalArgs(out))
 
       assert.deepStrictEqual(logs, [
         '[test-optimization-validator] jest:root: Test execution without Datadog started.',
@@ -562,6 +479,7 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': getApprovedPlanStub(manifestPath, tmpDir),
     })
 
     fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
@@ -569,7 +487,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', tmpDir, ...APPROVAL_ARGS])
+      await main(getApprovalArgs(tmpDir))
 
       assert.strictEqual(process.exitCode, 3)
       assert.match(errors.join('\n'), /dedicated child directory inside repository.root/)
@@ -588,6 +506,7 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': getApprovedPlanStub(manifestPath, out, ['--scenario', 'efd']),
       './report-writer': {
         async writeReport () {},
       },
@@ -601,11 +520,6 @@ describe('test optimization validation cli', () => {
             evidence: {},
             artifacts: [],
           }
-        },
-      },
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
         },
       },
       './static-diagnosis': {
@@ -626,7 +540,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'efd', ...APPROVAL_ARGS])
+      await main(getApprovalArgs(out))
 
       assert.strictEqual(process.exitCode, 2)
     } finally {
@@ -961,16 +875,6 @@ describe('test optimization validation cli', () => {
       executionStatus: 'completed',
     },
     {
-      name: 'reports required project setup as project setup rather than sandbox blocking',
-      setupBlocked: true,
-      ciStatus: 'unknown',
-      advancedStatuses: {},
-      exitCode: 2,
-      results: ['all:blocked'],
-      coverage: 'partial',
-      executionStatus: 'project_setup_required',
-    },
-    {
       name: 'reports a sandbox-blocked preflight as an execution-environment blocker',
       preflightBlocked: true,
       ciStatus: 'unknown',
@@ -1025,6 +929,7 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
   let runSummary
   const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
     ...PASSING_VALIDATION_PHASES,
+    './approval-artifacts': getApprovedPlanStub(manifestPath, out, args),
     './generated-files': {
       async cleanupGeneratedFiles () {},
     },
@@ -1047,11 +952,6 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
         }
       },
     },
-    './setup-runner': {
-      async runSetupCommands () {
-        return { ok: true }
-      },
-    },
     './static-diagnosis': {
       getStaticBlocker () {},
       runStaticDiagnosis () {
@@ -1066,11 +966,41 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
   process.exitCode = undefined
 
   try {
-    await main(['--manifest', manifestPath, '--out', out, ...args, ...APPROVAL_ARGS])
+    await main(getApprovalArgs(out))
     return { exitCode: process.exitCode, results, runSummary }
   } finally {
     process.exitCode = originalExitCode
     fs.rmSync(root, { recursive: true, force: true })
+  }
+}
+
+function getApprovalArgs (out) {
+  return [
+    '--run-approved-plan', path.join(out, 'approval.json'),
+    '--sha256', APPROVAL_DIGEST,
+  ]
+}
+
+function getApprovedPlanStub (manifestPath, out, args = []) {
+  const scenarioIndex = args.indexOf('--scenario')
+  const scenario = scenarioIndex === -1 ? null : args[scenarioIndex + 1]
+
+  return {
+    loadApprovedPlan () {
+      return {
+        material: {
+          manifest: { path: manifestPath },
+          selection: { frameworks: [], scenario },
+          validation: {
+            outputDirectory: out,
+            offlineFixtureNonce: 'd'.repeat(32),
+            keepTemporaryFiles: false,
+            verbose: false,
+          },
+        },
+        path: path.join(out, 'approval.json'),
+      }
+    },
   }
 }
 
@@ -1139,7 +1069,7 @@ function getPassingScenarioResult (framework, scenario) {
   }
 }
 
-function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, preflightBlocked, setupBlocked }) {
+function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, preflightBlocked }) {
   const stubs = {
     './scenarios/basic-reporting': {
       async runBasicReporting ({ framework }) {
@@ -1164,24 +1094,6 @@ function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, prefligh
             evidence: { blockedByExecutionEnvironment: true },
             artifacts: [],
           },
-        }
-      },
-    }
-  }
-  if (setupBlocked) {
-    stubs['./setup-runner'] = {
-      async runSetupCommands ({ framework }) {
-        return {
-          ok: false,
-          failure: {
-            frameworkId: framework.id,
-            scenario: 'all',
-            status: 'blocked',
-            diagnosis: 'Validation is blocked by required project setup.',
-            evidence: { blockedByProjectSetup: true, setupFailed: true },
-            artifacts: [],
-          },
-          outputCleanupHandles: [],
         }
       },
     }

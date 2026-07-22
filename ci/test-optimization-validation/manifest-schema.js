@@ -48,7 +48,6 @@ const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const MAX_COMMAND_TIMEOUT_MS = 30 * 60 * 1000
 const MAX_FRAMEWORKS = 100
 const MAX_MANIFEST_ARRAY_ENTRIES = 1000
-const MAX_SETUP_COMMANDS = 100
 const MAX_LOCAL_TEST_CANDIDATES = 3
 const MAX_VALIDATION_ERRORS = 50
 const MAX_REPRESENTATIVE_TESTS = 1000
@@ -226,9 +225,6 @@ function getFrameworkCommands (framework) {
   for (const name of ['existingTestCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
-  for (const [index, command] of limitedArray(framework.setup?.commands, MAX_SETUP_COMMANDS).entries()) {
-    commands.push([`setup.commands[${index}]`, command])
-  }
   for (const [index, scenario] of
     limitedArray(framework.generatedTestStrategy?.scenarios, GENERATED_SCENARIO_IDS.size).entries()) {
     if (scenario?.runCommand) {
@@ -317,15 +313,11 @@ function validateFramework (framework, index, errors) {
     )
   }
 
-  if (framework.setup?.commands) {
-    if (Array.isArray(framework.setup.commands)) {
-      validateArrayLimit(framework.setup, 'commands', MAX_SETUP_COMMANDS, errors, `${prefix}.setup`)
-      for (const [commandIndex, command] of framework.setup.commands.slice(0, MAX_SETUP_COMMANDS).entries()) {
-        requiredCommand({ command }, 'command', errors, `${prefix}.setup.commands[${commandIndex}]`)
-      }
-    } else {
-      errors.push(`${prefix}.setup.commands must be an array.`)
-    }
+  if (framework.setup?.commands !== undefined) {
+    errors.push(
+      `${prefix}.setup.commands is not supported. Record the concrete project-setup blocker and run setup as a ` +
+      'separate, explicitly approved workflow before creating a fresh validation plan.'
+    )
   }
 
   if (framework.generatedTestStrategy) {
@@ -351,9 +343,6 @@ function validateNonRunnableFramework (framework, prefix, errors) {
     if (framework[field] !== undefined) {
       errors.push(`${prefix}.${field} must be omitted when ${prefix}.status is not runnable.`)
     }
-  }
-  if (Array.isArray(framework.setup?.commands) && framework.setup.commands.length > 0) {
-    errors.push(`${prefix}.setup.commands must be empty or omitted when ${prefix}.status is not runnable.`)
   }
 }
 

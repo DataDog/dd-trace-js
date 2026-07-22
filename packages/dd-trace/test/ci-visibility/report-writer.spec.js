@@ -289,11 +289,6 @@ describe('test optimization validation report writer', () => {
               DD_API_KEY: 'raw-evidence-secret',
             },
           },
-          setupCommand: {
-            command: 'npm test --token setup-token',
-            cwd: tmpDir,
-            exitCode: 0,
-          },
           eventLevelFailure: {
             recommendation: 'Do not run with Authorization: Bearer bearer-token-value',
           },
@@ -349,7 +344,6 @@ describe('test optimization validation report writer', () => {
         'command-env-secret',
         'result-secret',
         'raw-evidence-secret',
-        'setup-token',
         'bearer-token-value',
         'artifact-secret',
         'artifact-token',
@@ -971,7 +965,6 @@ describe('test optimization validation report writer', () => {
         diagnosis: 'Validation is blocked by required project setup.',
         evidence: {
           blockedByProjectSetup: true,
-          setupFailed: true,
           recommendation: 'Run the required project build, then rerun validation for this framework.',
         },
         artifacts: [],
@@ -1102,6 +1095,34 @@ describe('test optimization validation customer outcome decision table', () => {
       forbidden: [/did not report successfully/],
     },
     {
+      name: 'explains how to rerun Playwright when the sandbox blocks browser launch',
+      framework: {
+        id: 'playwright:root',
+        framework: 'playwright',
+        frameworkVersion: '1.55.0',
+      },
+      results: [
+        {
+          ...getDecisionResult('basic-reporting', 'blocked', {
+            blockedByExecutionEnvironment: true,
+            commandFailure: {
+              kind: 'playwright-browser-launch-blocked',
+              recommendation: 'Approve rerunning the exact checksum-approved validator command with permission ' +
+                'to launch the project Playwright browser. If unavailable, run it from the host shell.',
+            },
+          }),
+          frameworkId: 'playwright:root',
+        },
+      ],
+      runSummary: { executionStatus: 'blocked', validatorExitCode: 2, validationCoverage: 'partial' },
+      expected: [
+        /Playwright could not run because the current agent sandbox did not allow it to launch the project browser/,
+        /Approve rerunning the exact checksum-approved validator command/,
+        /run it from the host shell/,
+      ],
+      forbidden: [/selected tests did not report successfully/],
+    },
+    {
       name: 'surfaces an advanced-feature failure after Basic Reporting passes',
       results: [
         getDecisionResult('basic-reporting', 'pass'),
@@ -1132,7 +1153,7 @@ describe('test optimization validation customer outcome decision table', () => {
   }
 })
 
-function renderDecisionReport ({ results, runSummary }) {
+function renderDecisionReport ({ framework, results, runSummary }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-decision-'))
   const out = path.join(root, 'results')
   const originalLog = console.log
@@ -1141,9 +1162,9 @@ function renderDecisionReport ({ results, runSummary }) {
     __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
     repository: { root },
     frameworks: [{
-      id: 'vitest:root',
-      framework: 'vitest',
-      frameworkVersion: '4.1.0',
+      id: framework?.id || 'vitest:root',
+      framework: framework?.framework || 'vitest',
+      frameworkVersion: framework?.frameworkVersion || '4.1.0',
       project: { name: 'example', root },
     }],
   }

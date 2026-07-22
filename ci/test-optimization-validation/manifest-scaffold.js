@@ -10,7 +10,11 @@ const { getCommandSuitabilityError } = require('./command-suitability')
 const cucumberAdapter = require('./framework-adapters/cucumber')
 const cypressAdapter = require('./framework-adapters/cypress')
 const playwrightAdapter = require('./framework-adapters/playwright')
-const { GENERATED_SCENARIOS, getGeneratedTestContent } = require('./generated-test-contract')
+const {
+  GENERATED_SCENARIOS,
+  getGeneratedRetryStatePath,
+  getGeneratedTestContent,
+} = require('./generated-test-contract')
 const { validateManifest } = require('./manifest-schema')
 const { maskJavaScriptComments, maskJavaScriptNonCode } = require('./source-text')
 
@@ -57,6 +61,7 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
   if (selected.length === 0 && unsupported.length === 0 && detectedNotRunnable.length === 0) {
     throw new Error('No test framework was detected for manifest scaffolding.')
   }
+  const artifactNamespaces = getArtifactNamespaces(repositoryRoot, selected)
 
   const manifest = {
     schemaVersion: '1.0',
@@ -77,7 +82,12 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
     },
     ciDiscovery,
     frameworks: [
-      ...selected.map(framework => buildFrameworkScaffold(repositoryRoot, framework, ciDiscovery)),
+      ...selected.map(framework => buildFrameworkScaffold(
+        repositoryRoot,
+        framework,
+        ciDiscovery,
+        artifactNamespaces.get(framework)
+      )),
       ...detectedNotRunnable.map(framework => buildDetectedNotRunnableFrameworkScaffold(repositoryRoot, framework)),
       ...unsupported.map(framework => buildUnsupportedFrameworkScaffold(repositoryRoot, framework)),
     ],
@@ -155,7 +165,7 @@ function buildUnsupportedFrameworkScaffold (repositoryRoot, detection) {
   }
 }
 
-function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery) {
+function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifactNamespace) {
   const packageJsonPath = path.resolve(repositoryRoot, detection.commandLocation || 'package.json')
   const projectRoot = path.dirname(packageJsonPath)
   const packageJson = readJson(packageJsonPath) || {}
@@ -298,6 +308,7 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery) {
     representative,
     runner,
     runnerEnvironment: getRunnerEnvironment(detection.command, framework),
+    artifactNamespace,
     runnerConfigurationArgs: preserveProjectWrapper
       ? []
       : getRunnerConfigurationArgs(framework, detection.command),
@@ -313,7 +324,6 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery) {
     supportLevel: 'validator_supported',
     localSocketRequired: representativeSelection.candidates.every(candidate => candidate.requiresLocalSocket),
     project,
-    setup: { commands: [], services: [] },
     existingTestCommand: command,
     localTestCandidates,
     preflight: { status: 'pending', maxTestCount: MAX_REPRESENTATIVE_TESTS },
@@ -436,6 +446,7 @@ function buildExistingCommand ({
 }
 
 function buildGeneratedTestStrategy ({
+  artifactNamespace,
   baseCommand,
   framework,
   packageJson,
@@ -448,7 +459,7 @@ function buildGeneratedTestStrategy ({
   const convention = getGeneratedTestConvention(representative, projectRoot)
   const packageType = getNearestPackageType(convention.testDirectory, projectRoot, packageJson.type)
   const moduleSystem = getGeneratedModuleSystem(framework, convention.fileExtension, packageType)
-  const definitions = getGeneratedDefinitions({ framework, convention, moduleSystem })
+  const definitions = getGeneratedDefinitions({ artifactNamespace, framework, convention, moduleSystem })
   const cucumberStepsFile = framework === 'cucumber'
     ? cucumberAdapter.getGeneratedStepsPath(convention.testDirectory)
     : undefined
@@ -529,8 +540,10 @@ function buildGeneratedTestStrategy ({
       ...(generatedConfig ? [generatedConfig.path] : []),
       ...(['cucumber', 'cypress', 'playwright'].includes(framework)
         ? []
-        : [path.join(path.dirname(definitions.find(definition => definition.id === 'atr-fail-once').file),
-            '.dd-test-optimization-validation-atr-state')]),
+        : [getGeneratedRetryStatePath(
+            framework,
+            definitions.find(definition => definition.id === 'atr-fail-once').file
+          )]),
     ],
   }
 }
@@ -592,9 +605,10 @@ function getGeneratedTestConvention (representative, projectRoot) {
   }
 }
 
-function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
+function getGeneratedDefinitions ({ artifactNamespace, framework, convention, moduleSystem }) {
   return Object.entries(GENERATED_SCENARIOS).map(([id, definition]) => {
-    const prefix = `dd-test-optimization-validation-${id}`
+    const namespace = artifactNamespace ? `${artifactNamespace}-` : ''
+    const prefix = `dd-test-optimization-validation-${namespace}${id}`
     const filename = convention.exactFilename
       ? path.join(prefix, convention.exactFilename)
       : `${prefix}${convention.fileExtension}`
@@ -609,10 +623,40 @@ function getGeneratedDefinitions ({ framework, convention, moduleSystem }) {
         scenarioId: id,
         stateFile: ['cucumber', 'cypress', 'playwright'].includes(framework)
           ? undefined
-          : path.join(path.dirname(generatedFile), '.dd-test-optimization-validation-atr-state'),
+          : getGeneratedRetryStatePath(framework, generatedFile),
       }),
     }
   })
+}
+
+/**
+ * Namespaces validator-owned artifacts when multiple runnable frameworks share a project root.
+ *
+ * @param {string} repositoryRoot repository root
+ * @param {object[]} detections selected runnable framework detections
+ * @returns {Map<object, string>} namespace by detection
+ */
+function getArtifactNamespaces (repositoryRoot, detections) {
+  const detectionsByRoot = new Map()
+  for (const detection of detections) {
+    const packageJsonPath = path.resolve(repositoryRoot, detection.commandLocation || 'package.json')
+    const projectRoot = path.dirname(packageJsonPath)
+    const entries = detectionsByRoot.get(projectRoot) || []
+    entries.push(detection)
+    detectionsByRoot.set(projectRoot, entries)
+  }
+
+  const namespaces = new Map()
+  for (const entries of detectionsByRoot.values()) {
+    if (entries.length < 2) continue
+    const frameworkCounts = new Map()
+    for (const detection of entries) {
+      const count = (frameworkCounts.get(detection.id) || 0) + 1
+      frameworkCounts.set(detection.id, count)
+      namespaces.set(detection, count === 1 ? detection.id : `${detection.id}-${count}`)
+    }
+  }
+  return namespaces
 }
 
 function buildGeneratedRunCommand (
@@ -1188,6 +1232,10 @@ function getRunnerOwnershipConflict (filename, root, framework) {
   }
   const code = maskJavaScriptNonCode(source)
   source = maskJavaScriptComments(source)
+  if (framework === 'playwright' &&
+    !hasJavaScriptCodeMatch(source, code, /(?:from\s+|require\s*\(\s*)['"]@playwright\/test['"]/)) {
+    return 'does not import @playwright/test'
+  }
   const conflicts = {
     jest: [
       [/(?:from\s+|require\s*\(\s*)['"]vitest['"]/, 'imports Vitest'],
@@ -1506,8 +1554,9 @@ function rankCiReviewTargets (files) {
     if (/^tests?\.ya?ml$/.test(filename)) score += 30
     if (/(?:^|[_-])(test|tests|ci)(?:[_-]|\.|$)/.test(filename)) score += 30
     if (/runtime.*test|test.*runtime/.test(filename)) score += 15
-    if (/\brun\s*:\s*[^\n]*(?:jest|vitest|mocha|(?:npm|pnpm|yarn)[^\n]*test)/.test(content)) score += 40
-    if (/(?:jest|vitest|mocha|\btest\b)/.test(content)) score += 10
+    if (/\brun\s*:\s*[^\n]*(?:cucumber(?:-js)?|cypress|jest|mocha|playwright|vitest|(?:npm|pnpm|yarn)[^\n]*test)/
+      .test(content)) score += 40
+    if (/(?:cucumber(?:-js)?|cypress|jest|mocha|playwright|vitest|\btest\b)/.test(content)) score += 10
     if (/codegen/.test(filename)) score -= 15
     if (/(?:release|publish|deploy|cleanup|stale|label|notify|lint)/.test(filename)) score -= 30
     return { ...file, score }

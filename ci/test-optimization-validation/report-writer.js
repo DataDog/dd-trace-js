@@ -763,7 +763,7 @@ function getResultDetailLines (result, options = {}) {
     ? markdownCode
     : value => value
   const lines = []
-  const command = readResultCommand(result) || getEvidenceCommand(evidence)
+  const command = readResultCommand(result)
 
   if (command?.command) lines.push(`Command: ${format(command.command)}`)
   if (command?.cwd) lines.push(`Cwd: ${format(command.cwd)}`)
@@ -810,7 +810,6 @@ function getResultDetailLines (result, options = {}) {
   appendExcerptLine(lines, 'Debug lines', evidence.debugRerun?.debugLines, { format })
   appendExcerptLine(lines, 'Debug stdout excerpt', evidence.debugRerun?.stdoutExcerpt, { format })
   appendExcerptLine(lines, 'Debug stderr excerpt', evidence.debugRerun?.stderrExcerpt, { format })
-  appendSetupFailureLines(lines, evidence, { format })
   appendEventFailureLines(lines, evidence, { format })
   appendMonorepoFindingLines(lines, evidence.monorepoFindings, { format })
 
@@ -859,34 +858,9 @@ function readResultCommand (result) {
   } catch {}
 }
 
-function getEvidenceCommand (evidence) {
-  const setupCommand = evidence.setupCommand
-  if (!setupCommand) return
-
-  return {
-    command: sanitizeString(setupCommand.command),
-    cwd: setupCommand.cwd,
-    exitCode: setupCommand.exitCode,
-    timedOut: setupCommand.timedOut,
-  }
-}
-
 function appendExcerptLine (lines, label, values, { format }) {
   if (!Array.isArray(values) || values.length === 0) return
   lines.push(`${label}: ${formatList(values, { format })}`)
-}
-
-function appendSetupFailureLines (lines, evidence, { format }) {
-  const setupCommand = evidence.setupCommand
-  if (!setupCommand) return
-
-  lines.push(`Setup failed: ${setupCommand.description || setupCommand.id || setupCommand.command}`)
-  if (setupCommand.stdoutSummary) {
-    lines.push(`Setup stdout excerpt: ${format(setupCommand.stdoutSummary)}`)
-  }
-  if (setupCommand.stderrSummary) {
-    lines.push(`Setup stderr excerpt: ${format(setupCommand.stderrSummary)}`)
-  }
 }
 
 function appendEventFailureLines (lines, evidence, { format }) {
@@ -1071,7 +1045,6 @@ function groupDiagnosticResults (results) {
 function getDiagnosticCategory (result) {
   const evidence = result.evidence || {}
   if (
-    evidence.setupFailed ||
     evidence.blockedByProjectSetup ||
     evidence.frameworkStatus === 'requires_manual_setup' ||
     evidence.frameworkStatus === 'requires_external_service'
@@ -1334,8 +1307,11 @@ function getFrameworkVerdicts (results) {
         verdict += ' CI configuration could not be verified completely.'
       }
     } else if (basic?.domain === 'execution_environment') {
-      verdict = `${label}: local validation was blocked by the execution environment. ` +
-        'No Test Optimization reporting conclusion was reached.'
+      verdict = basic.evidence?.commandFailure?.kind === 'playwright-browser-launch-blocked'
+        ? `${label}: Playwright could not run because the current agent sandbox did not allow it to launch the ` +
+          'project browser. No Test Optimization reporting conclusion was reached.'
+        : `${label}: local validation was blocked by the execution environment. ` +
+          'No Test Optimization reporting conclusion was reached.'
       if (ciWiring?.status === 'fail') {
         verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
           'Optimization configuration.'
@@ -1506,7 +1482,7 @@ function isDiagnosticOnlyResult (result) {
   if (result.scenario !== 'all') return false
   return result.evidence?.frameworkStatus ||
     result.evidence?.staticDiagnosis ||
-    result.evidence?.setupFailed
+    result.evidence?.blockedByProjectSetup
 }
 
 module.exports = { writePendingReport, writeReport }

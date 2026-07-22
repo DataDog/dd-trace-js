@@ -22,6 +22,23 @@ const GENERATED_SCENARIOS = {
 }
 
 /**
+ * Returns the retry-state path used by generated Node.js test scenarios.
+ *
+ * @param {string} framework test framework
+ * @param {string} filename generated ATR test file
+ * @returns {string} retry-state path
+ */
+function getGeneratedRetryStatePath (framework, filename) {
+  const namespace = `dd-test-optimization-validation-${framework}-`
+  const namespaced = path.basename(filename).includes(namespace) ||
+    path.basename(path.dirname(filename)).includes(namespace)
+  const stateFilename = namespaced
+    ? `.dd-test-optimization-validation-${framework}-atr-state`
+    : '.dd-test-optimization-validation-atr-state'
+  return path.join(path.dirname(filename), stateFilename)
+}
+
+/**
  * Returns validator-owned source for one generated scenario.
  *
  * @param {object} input generated source input
@@ -45,12 +62,19 @@ function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFi
   }
   if (framework === 'playwright') {
     return playwrightAdapter.getGeneratedTestContent({
+      moduleSystem,
       scenarioId,
       testName: scenario.testName,
     })
   }
 
   const imports = []
+  if (framework === 'jest') {
+    const requireCall = 'require'
+    imports.push(moduleSystem === 'esm'
+      ? "import { describe, expect, test } from '@jest/globals'"
+      : `const { describe, expect, test } = ${requireCall}('@jest/globals')`)
+  }
   if (framework === 'vitest' && moduleSystem === 'esm') {
     imports.push("import { describe, expect, it } from 'vitest'")
   }
@@ -141,7 +165,7 @@ function getGeneratedTestContractError (framework) {
 
     const stateFile = ['cucumber', 'cypress', 'playwright'].includes(framework.framework)
       ? undefined
-      : path.join(path.dirname(filename), '.dd-test-optimization-validation-atr-state')
+      : getGeneratedRetryStatePath(framework.framework, filename)
     const expectedSource = getGeneratedTestContent({
       framework: framework.framework,
       moduleSystem: strategy.moduleSystem,
@@ -191,10 +215,7 @@ function getGeneratedTestContractError (framework) {
   const usesPersistentRetryState = !['cucumber', 'cypress', 'playwright'].includes(framework.framework)
   if (usesPersistentRetryState) {
     const atrScenario = scenarios.find(entry => entry.id === 'atr-fail-once')
-    const stateFile = path.join(
-      path.dirname(atrScenario.testIdentities[0].file),
-      '.dd-test-optimization-validation-atr-state'
-    )
+    const stateFile = getGeneratedRetryStatePath(framework.framework, atrScenario.testIdentities[0].file)
     if (!cleanupPaths.has(path.normalize(stateFile))) {
       return `scenario atr-fail-once must clean up its persistent retry state file ${stateFile}.`
     }
@@ -284,6 +305,7 @@ function getAtrBody ({ moduleSystem, assertion, stateFile }) {
 
 module.exports = {
   GENERATED_SCENARIOS,
+  getGeneratedRetryStatePath,
   getGeneratedTestContent,
   getGeneratedTestContractError,
 }

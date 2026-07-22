@@ -77,7 +77,6 @@ describe('test optimization validation result semantics', () => {
       results: [
         getResult('all', 'blocked', {
           blockedByProjectSetup: true,
-          setupFailed: true,
         }),
         getResult('ci-wiring', 'error', incompleteCiEvidence('incomplete')),
       ],

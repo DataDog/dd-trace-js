@@ -35,16 +35,20 @@ function getTestExtension (filename) {
  * Returns validator-owned Playwright source for one generated scenario.
  *
  * @param {object} input generated source input
+ * @param {string} input.moduleSystem generated module system
  * @param {string} input.scenarioId generated scenario id
  * @param {string} input.testName generated test name
  * @returns {string} canonical generated Playwright source
  */
-function getGeneratedTestContent ({ scenarioId, testName }) {
+function getGeneratedTestContent ({ moduleSystem, scenarioId, testName }) {
   const assertion = scenarioId === 'atr-fail-once'
     ? '  expect(test.info().retry).toBe(1)'
     : '  expect(true).toBe(true)'
+  const imports = moduleSystem === 'commonjs'
+    ? `const { expect, test } = require(${JSON.stringify(PLAYWRIGHT_PACKAGE)})`
+    : `import { expect, test } from ${JSON.stringify(PLAYWRIGHT_PACKAGE)}`
   return [
-    `import { expect, test } from ${JSON.stringify(PLAYWRIGHT_PACKAGE)}`,
+    imports,
     '',
     `test(${JSON.stringify(testName)}, async () => {`,
     assertion,

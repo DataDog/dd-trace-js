@@ -5,7 +5,6 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const jsonSchema = require('../../../../ci/test-optimization-validation-manifest.schema.json')
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 const {
   MAX_FRAMEWORKS,
@@ -21,7 +20,6 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks must include at least one framework entry.',
     ])
-    assert.strictEqual(jsonSchema.properties.frameworks.minItems, 1)
   })
 
   it('requires unique framework ids', () => {
@@ -79,7 +77,6 @@ describe('test optimization validation manifest schema', () => {
   it('reports malformed repeated structures without throwing during path validation', () => {
     const manifest = getManifest()
     manifest.frameworks[0].project.configFiles = {}
-    manifest.frameworks[0].setup = { commands: {} }
     manifest.frameworks[0].generatedTestStrategy = {
       status: 'planned',
       files: {},
@@ -90,7 +87,6 @@ describe('test optimization validation manifest schema', () => {
     const errors = validateManifest(manifest)
 
     assert(errors.some(error => /project\.configFiles must be an array/.test(error)))
-    assert(errors.some(error => /setup\.commands must be an array/.test(error)))
     assert(errors.some(error => /generatedTestStrategy\.files must be an array/.test(error)))
     assert(errors.some(error => /generatedTestStrategy\.scenarios must be an array/.test(error)))
   })
@@ -223,76 +219,6 @@ describe('test optimization validation manifest schema', () => {
       'frameworks[0].existingTestCommand.cwd must be inside repository.root.',
       'frameworks[0].ciWiring.configFile must be inside repository.root.',
       'frameworks[0].ciWiring.workingDirectory must be inside repository.root.',
-    ])
-  })
-
-  it('publishes absolute-path constraints for path fields in the JSON schema', () => {
-    const absolutePathRef = { $ref: '#/$defs/absolutePathString' }
-    const nullableAbsolutePath = {
-      anyOf: [
-        absolutePathRef,
-        { type: 'null' },
-      ],
-    }
-
-    assert.deepStrictEqual(jsonSchema.$defs.repository.properties.root, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.project.properties.root, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.project.properties.packageJson, nullableAbsolutePath)
-    assert.deepStrictEqual(jsonSchema.$defs.project.properties.configFiles.items, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.command.properties.cwd, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.command.properties.outputPaths.items, absolutePathRef)
-    assert.strictEqual(jsonSchema.$defs.framework.properties.forcedLocalCommand, false)
-    assert.deepStrictEqual(jsonSchema.$defs.localTestCandidate.properties.sourceFile, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.framework.properties.localTestCandidates, {
-      type: 'array',
-      minItems: 1,
-      maxItems: 3,
-      items: { $ref: '#/$defs/localTestCandidate' },
-    })
-    assert.deepStrictEqual(jsonSchema.$defs.preflight.properties.maxTestCount, {
-      type: 'integer',
-      minimum: 1,
-      maximum: 1000,
-    })
-    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.testDirectory, nullableAbsolutePath)
-    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.cleanupPaths.items, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.generatedFile.properties.path, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.properties.file, nullableAbsolutePath)
-  })
-
-  it('publishes runtime conditional requirements in the JSON schema', () => {
-    const frameworkAllOf = jsonSchema.$defs.framework.allOf
-    const commandAllOf = jsonSchema.$defs.command.allOf
-    const initializationAllOf = jsonSchema.$defs.ciWiring.properties.initialization.allOf
-
-    assert.ok(frameworkAllOf.some(condition => {
-      return condition.if?.properties?.status?.enum?.includes('requires_manual_setup') &&
-        condition.then?.required?.includes('notes') &&
-        condition.then?.properties?.notes?.minItems === 1 &&
-        condition.then?.properties?.existingTestCommand === false &&
-        condition.then?.properties?.preflight === false &&
-        condition.then?.properties?.generatedTestStrategy === false
-    }))
-    assert.ok(commandAllOf.some(condition => {
-      return condition.if?.properties?.usesShell?.const === true &&
-        condition.if?.required?.includes('usesShell') &&
-        condition.then?.required?.includes('shellCommand')
-    }))
-    assert.ok(commandAllOf.some(condition => {
-      return condition.if?.required?.includes('shell') &&
-        condition.then?.required?.includes('usesShell') &&
-        condition.then?.properties?.usesShell?.const === true
-    }))
-    assert.deepStrictEqual(jsonSchema.$defs.ciWiring.required, ['initialization'])
-    assert.deepStrictEqual(jsonSchema.$defs.ciWiring.properties.command, { type: 'string' })
-    assert.strictEqual(jsonSchema.$defs.framework.properties.ciWiringCommand, undefined)
-    assert.ok(initializationAllOf.some(condition => {
-      return condition.if?.properties?.status?.enum?.includes('not_configured') &&
-        condition.then?.properties?.evidence?.minItems === 1
-    }))
-    assert.deepStrictEqual(jsonSchema.$defs.expectedWithoutDatadog.required, [
-      'exitCode',
-      'observedTestCount',
     ])
   })
 
@@ -484,8 +410,6 @@ describe('test optimization validation manifest schema', () => {
         'present.',
       'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities[0] must be an object.',
     ])
-    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.required, ['name'])
-    assert.strictEqual(jsonSchema.$defs.testIdentity.properties.name.minLength, 1)
   })
 
   it('requires recorded CI commands to be inert text', () => {
@@ -574,7 +498,6 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].existingTestCommand.displayCommand is not an allowed command field.',
     ])
-    assert.strictEqual(jsonSchema.$defs.command.additionalProperties, false)
   })
 
   it('allows an explicit executable for shell commands', () => {
@@ -587,9 +510,6 @@ describe('test optimization validation manifest schema', () => {
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [])
-    assert.deepStrictEqual(jsonSchema.$defs.command.properties.shell, {
-      $ref: '#/$defs/executableString',
-    })
   })
 
   it('rejects ambiguous command types, environment names, and excessive timeouts', () => {

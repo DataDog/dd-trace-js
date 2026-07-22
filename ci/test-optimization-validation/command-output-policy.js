@@ -5,7 +5,6 @@ const path = require('node:path')
 
 const { getPackageScriptExpansion } = require('./command-suitability')
 
-const deferredCleanups = new WeakMap()
 const NYC_OPTIONS_WITH_VALUE = new Set([
   '--branches',
   '--cache-dir',
@@ -99,31 +98,6 @@ function cleanupCommandOutputs (states) {
     actions.push({ outputPath: state.outputPath, action: existed ? 'removed' : 'absent' })
   }
   return actions.reverse()
-}
-
-/**
- * Creates an opaque handle for outputs that must survive beyond one command.
- *
- * @param {{outputPath: string, repositoryRoot: string, parentIdentities: object[]}[]} states cleanup state
- * @returns {object} opaque cleanup handle
- */
-function deferCommandOutputCleanup (states) {
-  const handle = {}
-  deferredCleanups.set(handle, states)
-  return handle
-}
-
-/**
- * Cleans outputs associated with an opaque deferred-cleanup handle exactly once.
- *
- * @param {object} handle opaque cleanup handle
- * @returns {object[]} customer-safe cleanup summary
- */
-function cleanupDeferredCommandOutputs (handle) {
-  const states = deferredCleanups.get(handle)
-  if (!states) throw new Error('Command output cleanup handle is invalid or has already been used.')
-  deferredCleanups.delete(handle)
-  return cleanupCommandOutputs(states)
 }
 
 /**
@@ -309,8 +283,6 @@ function isPathInside (directory, filename) {
 
 module.exports = {
   cleanupCommandOutputs,
-  cleanupDeferredCommandOutputs,
-  deferCommandOutputCleanup,
   getCommandOutputPaths,
   prepareCommandOutputs,
 }

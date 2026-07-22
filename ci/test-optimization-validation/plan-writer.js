@@ -4,26 +4,19 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { getArtifactId } = require('./artifact-id')
 const { writeApprovalArtifacts } = require('./approval-artifacts')
 const { getCommandOutputPaths } = require('./command-output-policy')
 const { getCommandSuitabilityError, getPackageScriptExpansion } = require('./command-suitability')
 const { serializeApprovalCommand } = require('./command-runner')
 const { getGeneratedTestContractError } = require('./generated-test-contract')
 const {
-  getApprovedExecutable,
   getUnavailableExecutable,
 } = require('./executable')
 const { getDatadogCleanCommand, getLocalValidationCommand } = require('./local-command')
-const {
-  getOfflineFixturePaths,
-  getOfflineScenarioNames,
-} = require('./offline-fixtures')
 const { sanitizeEnv, sanitizeString } = require('./redaction')
 const { writeFileSafely } = require('./safe-files')
 
 const VALIDATOR_PATH = path.resolve(__dirname, '..', 'validate-test-optimization.js')
-const APPROVAL_SUMMARY_FILENAME = 'approval-summary.md'
 const EXECUTION_PLAN_FILENAME = 'execution-plan.md'
 const GENERATED_SCENARIO_DETAILS = {
   'basic-pass': {
@@ -70,7 +63,7 @@ function formatExecutionPlan (input) {
 }
 
 /**
- * Writes and returns both approval-plan representations without running project code.
+ * Writes and returns the approval plan without running project code.
  *
  * @param {object} input plan inputs
  * @param {object} input.manifest normalized validation manifest
@@ -79,7 +72,7 @@ function formatExecutionPlan (input) {
  * @param {string|null} [input.requestedScenario] explicitly selected scenario
  * @param {boolean} [input.keepTempFiles] whether generated files should be retained
  * @param {boolean} [input.verbose] whether command progress should be printed
- * @returns {{approvalSummary: string, plan: string}} written approval-plan content
+ * @returns {{plan: string}} written approval-plan content
  */
 function formatExecutionPlanArtifacts ({
   manifest,
@@ -106,123 +99,7 @@ function formatExecutionPlanArtifacts ({
     approvalJsonPath: approvalArtifacts.approvalJsonPath,
     repositoryRoot: manifest.repository.root,
   })
-  const coveredFileVerification = process.platform === 'win32'
-    ? []
-    : [
-        'Optional: verify every listed dd-trace package and command executable file against its recorded SHA-256:',
-        '',
-        codeBlock(sanitizeString(serializeApprovalCommand({
-          argv: ['shasum', '-a', '256', '--quiet', '-c', approvalArtifacts.coveredFilesPath],
-          cwd: manifest.repository.root,
-          usesShell: false,
-        }))),
-        '',
-      ]
-
-  const lines = [
-    '# Test Optimization Validation Execution Plan',
-    '',
-    `Repository: ${inlineCode(manifest.repository.root)}`,
-    `Manifest: ${inlineCode(manifest.__path)}`,
-    `Results: ${inlineCode(out)}`,
-    '',
-    '## What Will Be Validated',
-    '',
-    'The validator runs selected project tests without Datadog to confirm they work normally, then runs the same ' +
-      'tests with Datadog initialized to check that test data is reported. It audits the recorded CI configuration ' +
-      'for required initialization and reporting settings. When the exact unchanged CI test command can run ' +
-      'locally, it may also confirm that configuration at runtime. Temporary tests are used for the advanced ' +
-      'feature checks.',
-    '',
-  ]
-
-  for (const framework of manifest.frameworks) {
-    const label = formatFrameworkLabel(framework, manifest.repository.root)
-    lines.push(`- **${plainText(label)}**: ${formatFrameworkStatus(framework.status)}`)
-    if (framework.status !== 'runnable') {
-      for (const note of framework.notes || []) lines.push(`  - ${plainText(note)}`)
-    }
-  }
-
-  lines.push(
-    '',
-    '## Test Commands',
-    '',
-    'Environment values that affect a project command are shown inline after secret-like values are replaced with ' +
-      '`<redacted>`. Repository files in a command are shown relative to its stated working directory. Datadog ' +
-      'preloads are shown as package names; the validator resolves them from the installed `dd-trace` package.',
-    ''
-  )
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
-    appendFrameworkExecutions(
-      lines,
-      framework,
-      requestedScenario,
-      manifest.repository.root,
-      out,
-      offlineFixtureNonce
-    )
-  }
-  appendCommandIntegrity(lines, manifest, requestedScenario)
-
-  lines.push(
-    '',
-    '## Start the Validation',
-    '',
-    '`validate-test-optimization.js` is the local validator included with the installed `dd-trace` package. ' +
-      'After approval, it creates bounded filesystem cache fixtures, performs every check listed above, writes ' +
-      'events to local artifacts, and removes temporary fixtures and tests afterward. It does not open a listener ' +
-      'or use a network endpoint.',
-    '',
-    'The validator wrote the exact approval material to these local files without running project code:',
-    '',
-    `- Approval details: ${inlineCode(getRepositoryRelativePath(
-      manifest.repository.root,
-      approvalArtifacts.approvalJsonPath
-    ))}`,
-    `- Covered file checksums: ${inlineCode(getRepositoryRelativePath(
-      manifest.repository.root,
-      approvalArtifacts.coveredFilesPath
-    ))}`,
-    '',
-    'The JSON contains the sanitized command shapes, generated test source, selected options, file fingerprints, ' +
-      'and executable identities covered by approval. It is an internal diagnostic artifact and may contain ' +
-      'repository paths or CI metadata.',
-    '',
-    'Optional: independently hash the approval JSON with a standard system tool:',
-    '',
-    codeBlock(formatIndependentHashCommand(approvalArtifacts.approvalJsonPath)),
-    '',
-    `Expected SHA-256: ${inlineCode(approvalDigest)}`,
-    '',
-    ...coveredFileVerification,
-    'Immediately before project code runs, the validator verifies the saved approval JSON against the SHA-256 in ' +
-      'the command below, then reconstructs the approval material from the current manifest, validator package, ' +
-      'generated tests, and executables. Both checks must match. This detects changes after review; it does not ' +
-      'verify where the installed `dd-trace` package came from.',
-    '',
-    'Run the approved validation command:',
-    '',
-    codeBlock(sanitizeString(serializeApprovalCommand({
-      argv: validatorArgv,
-      cwd: manifest.repository.root,
-      usesShell: false,
-    }))),
-    '',
-    `Working directory: ${inlineCode(manifest.repository.root)}`,
-    '',
-    'The validator supplies diagnostic Datadog settings from cache files only while these local checks run; those ' +
-      'settings are not customer CI recommendations. dd-trace makes no network requests in this validation mode. ' +
-      'A setup or test command may still use the network unless the execution sandbox blocks it.',
-    '',
-    'These checks run the project commands listed above. The validator does not require real Datadog ' +
-    'credentials, inspect credential stores, or upload validation results. Project tests are arbitrary code and ' +
-      'can forge diagnostic cache or event data, so this result is diagnostic evidence, not a security attestation. ' +
-      'Review the exact commands before approving them for this environment.'
-  )
-
-  const plan = lines.join('\n')
-  const approvalSummary = formatApprovalSummary({
+  const plan = formatApprovalPlan({
     approvalArtifacts,
     approvalDigest,
     manifest,
@@ -231,8 +108,7 @@ function formatExecutionPlanArtifacts ({
     validatorArgv,
   })
   writeFileSafely(out, getExecutionPlanPath(out), `${plan}\n`, 'validation execution plan')
-  writeFileSafely(out, getApprovalSummaryPath(out), `${approvalSummary}\n`, 'validation approval summary')
-  return { approvalSummary, plan }
+  return { plan }
 }
 
 /**
@@ -245,9 +121,9 @@ function formatExecutionPlanArtifacts ({
  * @param {string} input.out validation output directory
  * @param {string|null|undefined} input.requestedScenario selected scenario
  * @param {string[]} input.validatorArgv approved validator command
- * @returns {string} Markdown approval summary
+ * @returns {string} Markdown approval plan
  */
-function formatApprovalSummary ({
+function formatApprovalPlan ({
   approvalArtifacts,
   approvalDigest,
   manifest,
@@ -269,13 +145,15 @@ function formatApprovalSummary ({
         '',
       ]
   const lines = [
-    '# Test Optimization Validation Approval Summary',
+    '# Test Optimization Validation Execution Plan',
     '',
     `Repository: ${inlineCode(repositoryRoot)}`,
-    `Detailed execution plan: ${inlineCode(getRepositoryRelativePath(repositoryRoot, getExecutionPlanPath(out)))}`,
+    `Manifest: ${inlineCode(getRepositoryRelativePath(repositoryRoot, manifest.__path))}`,
+    `Results: ${inlineCode(getRepositoryRelativePath(repositoryRoot, out))}`,
     '',
-    'This summary shows every project command and the exact temporary test source. The detailed plan contains ' +
-      'the offline-fixture, artifact, executable-integrity, and checksum details covered by the same approval hash.',
+    'This plan shows every project command and the exact temporary test source. The validator also creates bounded ' +
+      'private filesystem responses for Test Optimization settings and writes local event artifacts; it opens no ' +
+      'listener and contacts no Datadog endpoint.',
     '',
     '## Scope',
     '',
@@ -341,7 +219,7 @@ function formatApprovalSummary ({
 }
 
 /**
- * Appends one runnable framework to the bounded approval summary.
+ * Appends one runnable framework to the bounded approval plan.
  *
  * @param {string[]} lines rendered summary lines
  * @param {object} framework manifest framework entry
@@ -354,15 +232,6 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
   const candidates = getLocalTestCandidates(framework)
   lines.push(`### ${plainText(formatFrameworkLabel(framework, repositoryRoot))}`, '')
 
-  for (const setupCommand of framework.setup?.commands || []) {
-    appendApprovalSummaryCommand(lines, {
-      command: setupCommand,
-      deferOutputCleanup: true,
-      label: `Project setup: ${setupCommand.id || setupCommand.description || 'setup'}`,
-      repositoryRoot,
-      runs: '1',
-    })
-  }
   for (const [index, candidate] of candidates.entries()) {
     appendApprovalSummaryCandidate(lines, {
       candidate,
@@ -494,52 +363,6 @@ function appendApprovalSummaryAdvancedCommand (lines, {
 }
 
 /**
- * Appends one exact command and its execution-relevant context to the approval summary.
- *
- * @param {string[]} lines rendered summary lines
- * @param {object} input command summary
- * @param {object} input.command structured command
- * @param {boolean} [input.deferOutputCleanup] whether outputs remain available through validation
- * @param {Record<string, string>} [input.environmentOverrides] validator-provided readable environment
- * @param {string} input.label customer-facing command label
- * @param {string} [input.note] additional execution behavior
- * @param {string} input.repositoryRoot repository root
- * @param {string} input.runs maximum execution count
- * @returns {void}
- */
-function appendApprovalSummaryCommand (lines, {
-  command,
-  deferOutputCleanup = false,
-  environmentOverrides = {},
-  label,
-  note,
-  repositoryRoot,
-  runs,
-}) {
-  lines.push(
-    `**${plainText(label)}**`,
-    '',
-    codeBlock(formatCommandForPlan(command, repositoryRoot, environmentOverrides)),
-    '',
-    `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
-    `- Runs: ${plainText(runs)}`,
-    `- Timeout: ${command.timeoutMs || 300_000} ms`
-  )
-  appendApprovalSummaryCommandContext(lines, command, repositoryRoot)
-  const outputPaths = getCommandOutputPaths(command)
-  if (outputPaths.length > 0) {
-    const cleanupTiming = deferOutputCleanup
-      ? 'remain available to later checks and are removed after validation'
-      : 'are removed after this command'
-    lines.push(`- Command-created outputs ${cleanupTiming}: ` + outputPaths.map(outputPath => {
-      return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
-    }).join(', '))
-  }
-  if (note) lines.push(`- ${plainText(note)}`)
-  lines.push('')
-}
-
-/**
  * Appends command details that differ from the rendered command itself.
  *
  * @param {string[]} lines rendered summary lines
@@ -560,6 +383,12 @@ function appendApprovalSummaryCommandContext (lines, command, repositoryRoot, pr
   for (const adjustment of command.localAdjustments || []) {
     lines.push(`${prefix}Local adjustment: ${plainText(adjustment)}`)
   }
+  const outputPaths = getCommandOutputPaths(command)
+  if (outputPaths.length > 0) {
+    lines.push(`${prefix}Command-created outputs removed after execution: ` + outputPaths.map(outputPath => {
+      return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
+    }).join(', '))
+  }
 }
 
 /**
@@ -570,16 +399,6 @@ function appendApprovalSummaryCommandContext (lines, command, repositoryRoot, pr
  */
 function getExecutionPlanPath (out) {
   return path.join(out, EXECUTION_PLAN_FILENAME)
-}
-
-/**
- * Returns the bounded approval summary path written by --print-plan.
- *
- * @param {string} out validation output directory
- * @returns {string} absolute approval summary path
- */
-function getApprovalSummaryPath (out) {
-  return path.join(out, APPROVAL_SUMMARY_FILENAME)
 }
 
 /**
@@ -637,10 +456,6 @@ function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
  */
 function getPlannedCommands (framework, requestedScenario) {
   const commands = []
-  for (const command of framework.setup?.commands || []) {
-    commands.push({ label: `project setup command ${command.id || command.description || ''}`.trim(), command })
-  }
-
   for (const [index, candidate] of getLocalTestCandidates(framework).entries()) {
     commands.push({
       label: `local test candidate ${index + 1}`,
@@ -718,142 +533,6 @@ function formatIndependentHashCommand (approvalJsonPath) {
   return sanitizeString(serializeApprovalCommand({ ...command, usesShell: false }))
 }
 
-function appendFrameworkExecutions (
-  lines,
-  framework,
-  requestedScenario,
-  repositoryRoot,
-  out,
-  offlineFixtureNonce
-) {
-  const frameworkLabel = formatFrameworkLabel(framework, repositoryRoot)
-  const directInitialization = getDirectInitialization(framework)
-  const candidates = getLocalTestCandidates(framework)
-  lines.push(`### ${plainText(frameworkLabel)}`, '')
-
-  for (const setupCommand of framework.setup?.commands || []) {
-    appendExecutionSection(lines, {
-      heading: `Project Setup: ${setupCommand.id || setupCommand.description || 'Project Setup'}`,
-      description: 'Prepares the project for the selected test command.',
-      command: setupCommand,
-      executions: '1',
-      environment: 'Use the command-specific variables shown inline. No Datadog variables are added.',
-      repositoryRoot,
-    })
-  }
-  for (const [index, candidate] of candidates.entries()) {
-    const cleanCommand = getDatadogCleanCommand(getLocalValidationCommand(framework, candidate.command))
-    appendExecutionSection(lines, {
-      heading: `Local Test Candidate ${index + 1}: Without Datadog`,
-      description: 'Tries this whole test file only if every earlier candidate was unsuitable. It must run between ' +
-        `1 and ${candidate.maxTestCount} tests. The first successful candidate becomes the Basic Reporting command.`,
-      command: cleanCommand,
-      executions: '0 or 1',
-      environment: `Remove inherited NODE_OPTIONS and DD_*; ${formatCommandVariableContext(cleanCommand)}`,
-      repositoryRoot,
-    })
-    appendExecutionSection(lines, {
-      heading: `Local Test Candidate ${index + 1}: With Datadog When Selected`,
-      description: 'Runs only when this is the first candidate whose clean preflight succeeds, then checks that test ' +
-        'data is reported.',
-      command: getLocalValidationCommand(framework, candidate.command),
-      executions: '0 or 1, plus at most 1 debug rerun when selected',
-      environment: 'Datadog initialization is shown inline. The validator also supplies private offline response ' +
-        'paths and noise-suppression settings only while this check runs.',
-      environmentOverrides: { NODE_OPTIONS: directInitialization },
-      repositoryRoot,
-    })
-  }
-
-  const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
-  if (ciWiringSelected) {
-    lines.push(
-      '#### CI Configuration Audit',
-      '',
-      'Inspects the recorded workflow, job, step, environment, and wrapper evidence without running a project ' +
-        'command. It can confirm missing configuration or an explicit environment reset, but configuration that ' +
-        'looks correct remains propagation-unverified until it is observed in a real CI run.',
-      '',
-      `- Identified CI location: ${plainText(formatCiAuditLocation(framework.ciWiring))}`,
-      `- Recorded initialization: ${plainText(framework.ciWiring?.initialization?.status || 'unknown')}`,
-      ''
-    )
-  }
-  const strategy = framework.generatedTestStrategy
-  const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
-  const advancedSelected = !requestedScenario || selectedGeneratedScenario
-  if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
-    const selectedScenarios = selectedGeneratedScenario
-      ? (strategy.scenarios || []).filter(scenario => scenario.id === selectedGeneratedScenario)
-      : strategy.scenarios || []
-    for (const scenario of selectedScenarios) {
-      const command = getLocalValidationCommand(framework, scenario.runCommand)
-      const details = GENERATED_SCENARIO_DETAILS[scenario.id] || {
-        heading: `Advanced Check: ${scenario.id}`,
-        description: 'Runs a temporary test to verify this advanced feature.',
-      }
-      appendExecutionSection(lines, {
-        heading: details.heading,
-        description: `${details.description} The framework runner is invoked directly so only this temporary test ` +
-          'runs instead of the broader project test suite.',
-        command,
-        executions: '3: verify the test alone, discover its identity, then validate the feature; ' +
-          'plus 1 debug rerun only on failure',
-        environment: 'Datadog initialization is shown inline. The validator supplies the feature setting from a ' +
-          'private offline response only while this check runs.',
-        environmentOverrides: { NODE_OPTIONS: directInitialization },
-        repositoryRoot,
-      })
-    }
-  }
-
-  appendOfflineArtifacts(lines, {
-    offlineFixtureNonce,
-    framework,
-    out,
-    repositoryRoot,
-    requestedScenario,
-  })
-
-  if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
-    lines.push(
-      '#### Temporary Tests Created for Advanced Checks',
-      '',
-      'The validator creates these tests temporarily and removes them after validation.',
-      ''
-    )
-    for (const file of strategy.files || []) {
-      lines.push(
-        `##### ${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}`,
-        '',
-        codeBlock(file.contentLines.join('\n')),
-        ''
-      )
-    }
-    lines.push(
-      '#### Temporary Test Cleanup',
-      '',
-      'The validator removes these temporary test and state files after validation. Paths are relative to the ' +
-        'repository root:',
-      ''
-    )
-    for (const cleanupPath of strategy.cleanupPaths || []) {
-      lines.push(`- ${inlineCode(getRepositoryRelativePath(repositoryRoot, cleanupPath))}`)
-    }
-    lines.push('', 'Directories created for these files are also removed when they are empty.', '')
-  } else if (advancedSelected && strategy) {
-    lines.push(
-      '#### Advanced Feature Checks',
-      '',
-      'Not run.',
-      '',
-      `- Reason: ${plainText(strategy.reason || strategy.status)}`,
-      ''
-    )
-  }
-  lines.push('')
-}
-
 /**
  * Formats the CI configuration location recorded for a framework.
  *
@@ -865,112 +544,6 @@ function formatCiAuditLocation (ciWiring) {
   const parts = [ciWiring.provider, ciWiring.workflow, ciWiring.job, ciWiring.step].filter(Boolean)
   if (ciWiring.configFile) parts.push(ciWiring.configFile)
   return parts.length > 0 ? parts.join(' / ') : 'not identified'
-}
-
-/**
- * Describes the offline Datadog responses and event outputs used by instrumented executions.
- *
- * @param {string[]} lines rendered plan lines
- * @param {object} input plan inputs
- * @param {string} input.offlineFixtureNonce random fixture-root nonce
- * @param {object} input.framework framework manifest entry
- * @param {string} input.out validation result directory
- * @param {string} input.repositoryRoot repository root
- * @param {string|null|undefined} input.requestedScenario selected scenario
- */
-function appendOfflineArtifacts (lines, {
-  offlineFixtureNonce,
-  framework,
-  out,
-  repositoryRoot,
-  requestedScenario,
-}) {
-  lines.push(
-    '#### Offline Datadog Responses',
-    '',
-    'During normal operation, `dd-trace` downloads Test Optimization settings and test lists from Datadog. ' +
-      'For this offline validation, the validator writes equivalent bounded responses to a private temporary ' +
-      'directory and `dd-trace` reads them from the filesystem. No Datadog backend, Agent, or network endpoint ' +
-      'is used.',
-    ''
-  )
-
-  const scenarioNames = getOfflineScenarioNames(requestedScenario)
-  const firstFixture = getOfflineFixturePaths({
-    offlineFixtureNonce,
-    framework,
-    scenarioName: scenarioNames[0],
-  })
-  const frameworkFixtureRoot = path.dirname(firstFixture.root)
-  lines.push(
-    `Private response directory: ${inlineCode(frameworkFixtureRoot)}`,
-    '',
-    'Each check gets an isolated subdirectory containing bounded Test Optimization settings and test lists that ' +
-      '`dd-trace` normally receives from Datadog. Isolation prevents a baseline, feature check, or conditional ' +
-      'debug rerun from overwriting another check. A debug rerun uses the same response data and adds ' +
-      '`DD_TRACE_DEBUG=1`.',
-    '',
-    `Captured event artifacts: ${inlineCode(getRepositoryRelativePath(
-      repositoryRoot,
-      path.join(out, 'runs', getArtifactId(framework.id))
-    ))}`,
-    '',
-    'Each execution writes bounded temporary JSON payload files under `.offline-payloads/payloads/tests/`, using ' +
-      'the Test Optimization payload-file layout. The temporary payload directory is removed after parsing, and a ' +
-      'sanitized `events.ndjson` file remains for diagnosis. Exact fixture recipes and paths are included in the ' +
-      'approval digest even though this plan summarizes their shared layout.',
-    ''
-  )
-}
-
-/**
- * Renders one customer-facing validation step with its exact command and execution context.
- *
- * @param {string[]} lines rendered plan lines
- * @param {object} input execution details
- * @param {string} input.heading customer-facing check name
- * @param {string} input.description reason for the execution
- * @param {object} input.command manifest command
- * @param {string} input.executions maximum execution count
- * @param {string} input.environment environment changes made for this check
- * @param {Record<string, string>} [input.environmentOverrides] readable validator-provided environment values
- * @param {string} input.repositoryRoot repository root
- * @returns {void}
- */
-function appendExecutionSection (lines, {
-  heading,
-  description,
-  command,
-  executions,
-  environment,
-  environmentOverrides = {},
-  repositoryRoot,
-}) {
-  lines.push(
-    `#### ${plainText(heading)}`,
-    '',
-    plainText(description),
-    '',
-    'Command:',
-    '',
-    codeBlock(formatCommandForPlan(command, repositoryRoot, environmentOverrides)),
-    '',
-    `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
-    `- Runs: ${plainText(executions)}`,
-    `- Environment changes: ${plainText(environment)}`,
-    `- Timeout: ${command.timeoutMs || 300_000} ms`
-  )
-  if (command.usesShell) lines.push(`- Shell executable: ${inlineCode(command.shell || 'platform default shell')}`)
-  const outputPaths = getCommandOutputPaths(command)
-  if (outputPaths.length > 0) {
-    lines.push('- Command-created outputs: ' + outputPaths.map(outputPath => {
-      return inlineCode(getRepositoryRelativePath(repositoryRoot, outputPath))
-    }).join(', ') + ' (must not exist before validation; newly created paths are removed)')
-  }
-  for (const adjustment of command.localAdjustments || []) {
-    lines.push(`- Local adjustment: ${plainText(adjustment)}`)
-  }
-  lines.push('')
 }
 
 /**
@@ -993,19 +566,6 @@ function getSelectedGeneratedScenario (requestedScenario) {
     atr: 'atr-fail-once',
     'test-management': 'test-management-target',
   }[requestedScenario]
-}
-
-/**
- * Describes command-specific variables without displaying their values.
- *
- * @param {object} command manifest command
- * @returns {string} variable context
- */
-function formatCommandVariableContext (command) {
-  const names = Object.keys(command.env || {})
-  return names.length > 0
-    ? `keep command variables: ${names.join(', ')}`
-    : 'the command sets no other environment variables'
 }
 
 /**
@@ -1105,69 +665,6 @@ function formatFrameworkLabel (framework, repositoryRoot) {
 }
 
 /**
- * Lists each executable identity once instead of repeating it under every command.
- *
- * @param {string[]} lines rendered plan lines
- * @param {object} manifest normalized validation manifest
- * @param {string|null|undefined} requestedScenario selected scenario
- * @returns {void}
- */
-function appendCommandIntegrity (lines, manifest, requestedScenario) {
-  const executables = new Map()
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
-    for (const { command } of getPlannedCommands(framework, requestedScenario)) {
-      const executable = getApprovedExecutable(command)
-      if (executable) {
-        for (const identity of [executable, ...(executable.delegated || [])]) {
-          const key = `${identity.invocationPath}:${identity.path}:${identity.sha256}`
-          const entry = executables.get(key) || { executable: identity, labels: new Set() }
-          entry.labels.add(getExecutableLabel(command, identity.invocationPath))
-          executables.set(key, entry)
-        }
-      }
-    }
-  }
-  if (executables.size === 0) return
-
-  lines.push(
-    '## Executables Used',
-    '',
-    'These programs start the commands shown above. The validator records their fingerprints internally and ' +
-      'stops if an executable or PATH selection changes after approval. This confirms that the approved programs ' +
-      'did not change; it does not establish that project scripts, packages, or subprocesses are safe.',
-    ''
-  )
-  for (const { executable, labels } of executables.values()) {
-    const canonicalTarget = executable.invocationPath === executable.path
-      ? ''
-      : ` (verified target: ${inlineCode(executable.path)})`
-    lines.push(`- ${[...labels].sort().join(', ')}: ${inlineCode(executable.invocationPath)}${canonicalTarget}`)
-  }
-  lines.push('')
-}
-
-function getExecutableLabel (command, invocationPath) {
-  const name = path.basename(invocationPath).replace(/\.(?:bat|cmd|exe)$/i, '').toLowerCase()
-  if (command.usesShell) {
-    return {
-      bash: 'Bash shell',
-      sh: 'POSIX shell',
-      zsh: 'Zsh shell',
-    }[name] || `${name} shell`
-  }
-  return {
-    bash: 'Bash shell',
-    node: 'Node.js',
-    npm: 'npm',
-    npx: 'npx',
-    pnpm: 'pnpm',
-    sh: 'POSIX shell',
-    yarn: 'Yarn',
-    zsh: 'Zsh shell',
-  }[name] || name
-}
-
-/**
  * Converts manifest framework statuses into customer-facing plan text.
  *
  * @param {string} status manifest framework status
@@ -1226,6 +723,5 @@ function getLocalTestCandidates (framework) {
 module.exports = {
   formatExecutionPlan,
   formatExecutionPlanArtifacts,
-  getApprovalSummaryPath,
   getExecutionPlanPath,
 }

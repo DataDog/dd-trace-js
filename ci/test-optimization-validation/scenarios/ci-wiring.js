@@ -8,6 +8,9 @@ const { buildCiRemediation, getConfiguredTransport } = require('../ci-remediatio
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { fail, incomplete } = require('./helpers')
 
+// eslint-disable-next-line eslint-rules/eslint-env-aliases
+const API_KEY_ENV_ALIAS = 'DATADOG_API_KEY'
+
 /**
  * Audits the recorded CI configuration without executing repository CI commands.
  *
@@ -156,7 +159,7 @@ function getStaticInitializationStatus (framework) {
   const recorded = framework.ciWiring?.initialization?.status
   if (recorded === 'configured' || recorded === 'not_configured') return recorded
   const env = collectCiEnv(framework)
-  return /(?:^|\s)(?:-r|--require)(?:=|\s+)dd-trace\/ci\/init(?:\s|$)/.test(env.NODE_OPTIONS || '')
+  return /(?:^|\s)(?:-r|--require)(?:=|\s+)dd-trace\/ci\/init(?:\.js)?(?:\s|$)/.test(env.NODE_OPTIONS || '')
     ? 'configured'
     : 'unknown'
 }
@@ -168,9 +171,12 @@ function getStaticInitializationStatus (framework) {
  * @returns {boolean} whether an API key reference is present
  */
 function hasApiKeyReference (framework) {
-  if (framework.ciWiring?.requiredSecretEnvVars?.includes('DD_API_KEY')) return true
+  if (framework.ciWiring?.requiredSecretEnvVars?.some(name => {
+    return name === 'DD_API_KEY' || name === API_KEY_ENV_ALIAS
+  })) return true
   const env = collectCiEnv(framework)
-  return typeof env.DD_API_KEY === 'string' && env.DD_API_KEY.length > 0
+  return [env.DD_API_KEY, env[API_KEY_ENV_ALIAS]]
+    .some(value => typeof value === 'string' && value.length > 0)
 }
 
 /**

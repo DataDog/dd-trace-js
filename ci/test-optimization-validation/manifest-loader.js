@@ -117,9 +117,6 @@ function getCommands (framework) {
   for (const name of ['existingTestCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
-  for (const [index, command] of (framework.setup?.commands || []).entries()) {
-    commands.push([`setup.commands[${index}]`, command])
-  }
   for (const [index, candidate] of (framework.localTestCandidates || []).entries()) {
     if (candidate?.command) {
       commands.push([`localTestCandidates[${index}].command`, candidate.command])

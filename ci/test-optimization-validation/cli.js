@@ -8,9 +8,8 @@ const path = require('path')
 const { getFrameworkDefinitions } = require('../diagnose')
 const { DD_MAJOR } = require('../../version')
 
-const { assertApprovalDigest, getApprovalDigest } = require('./approval')
+const { assertApprovalDigest } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
-const { cleanupDeferredCommandOutputs } = require('./command-output-policy')
 
 const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
@@ -24,7 +23,6 @@ const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
 const {
   formatExecutionPlanArtifacts,
-  getApprovalSummaryPath,
   getExecutionPlanPath,
 } = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
@@ -32,7 +30,6 @@ const { sanitizeConsoleText } = require('./redaction')
 const { annotateResults, getExecutionStatus, getValidatorExitCode } = require('./result-semantics')
 const { writePendingReport, writeReport } = require('./report-writer')
 const { ensureSafeDirectory } = require('./safe-files')
-const { runSetupCommands } = require('./setup-runner')
 const {
   getStaticBlocker,
   runStaticDiagnosis,
@@ -98,15 +95,6 @@ function parseArgs (argv) {
         break
       case '--print-plan':
         options.printPlan = true
-        break
-      case '--print-approval-sha256':
-        options.printApprovalSha256 = true
-        break
-      case '--approved-plan-sha256':
-        options.approvedPlanSha256 = requireValue(argv, ++i, arg)
-        break
-      case '--offline-fixture-nonce':
-        options.offlineFixtureNonce = requireValue(argv, ++i, arg)
         break
       case '--run-approved-plan':
         options.runApprovedPlan = requireValue(argv, ++i, arg)
@@ -209,7 +197,7 @@ async function main (argv) {
     if (options.printPlan) {
       const out = validateOutputPath(manifest, options.out)
       const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      const { approvalSummary } = formatExecutionPlanArtifacts({
+      const { plan } = formatExecutionPlanArtifacts({
         manifest: approvalManifest,
         out,
         selectedFrameworkIds: options.frameworks.size > 0
@@ -221,11 +209,10 @@ async function main (argv) {
       })
       console.log(sanitizeConsoleText([
         '===== CUSTOMER APPROVAL PLAN =====',
-        approvalSummary,
+        plan,
         '===== END CUSTOMER APPROVAL PLAN =====',
         '',
-        `Saved approval summary: ${getApprovalSummaryPath(out)}`,
-        `Detailed audit information: ${getExecutionPlanPath(out)}`,
+        `Saved execution plan: ${getExecutionPlanPath(out)}`,
         '',
         'LIVE VALIDATION HAS NOT RUN.',
         'DISCOVERY IS COMPLETE. STOP TOOL USE NOW.',
@@ -235,25 +222,6 @@ async function main (argv) {
         'A response containing only "Awaiting approval", "Approve the plan above", a prose summary, or a link to ' +
           'the saved plan is invalid. Do not continue discovery or run another command while waiting.',
       ].join('\n')))
-      return
-    }
-    if (options.printApprovalSha256) {
-      if (!options.offlineFixtureNonce) {
-        throw new Error('--print-approval-sha256 requires the --offline-fixture-nonce value shown in the plan.')
-      }
-      const out = validateOutputPath(manifest, options.out)
-      const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      console.log(getApprovalDigest({
-        manifest: approvalManifest,
-        out,
-        selectedFrameworkIds: options.frameworks.size > 0
-          ? approvalManifest.frameworks.map(framework => framework.id)
-          : [],
-        requestedScenario: options.requestedScenario,
-        offlineFixtureNonce: options.offlineFixtureNonce,
-        keepTempFiles: options.keepTempFiles,
-        verbose: options.verbose,
-      }))
       return
     }
     if (options.validateManifest) {
@@ -291,7 +259,6 @@ async function main (argv) {
 
     const results = []
     const runnableFrameworks = []
-    const setupOutputCleanups = []
 
     try {
       const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
@@ -312,22 +279,7 @@ async function main (argv) {
         liveReadyFrameworks.push(framework)
       }
 
-      for (const framework of liveReadyFrameworks) {
-        // Setup commands are project preparation, not Test Optimization signal collection.
-        if (framework.setup?.commands?.length > 0) logPhaseStart(framework, 'Project setup')
-        // eslint-disable-next-line no-await-in-loop
-        const setup = await runSetupCommands({ framework, out, options })
-        setupOutputCleanups.push(...(setup.outputCleanupHandles || []).map(handle => ({ framework, handle })))
-        if (framework.setup?.commands?.length > 0) {
-          logPhaseComplete(framework, 'Project setup', setup.ok ? 'pass' : setup.failure?.status)
-        }
-        if (!setup.ok) {
-          results.push(setup.failure)
-          continue
-        }
-
-        runnableFrameworks.push(framework)
-      }
+      runnableFrameworks.push(...liveReadyFrameworks)
       for (const framework of runnableFrameworks) {
         let basicResult
         if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
@@ -406,13 +358,6 @@ async function main (argv) {
       } catch (error) {
         results.push(getValidationCleanupFailure('temporary validation files', error))
       }
-      for (const cleanup of setupOutputCleanups.reverse()) {
-        try {
-          cleanupDeferredCommandOutputs(cleanup.handle)
-        } catch (error) {
-          results.push(getValidationCleanupFailure('project setup outputs', error, cleanup.framework))
-        }
-      }
     }
 
     addMissingRequiredResults(results, runnableFrameworks, options.scenarios)
@@ -483,7 +428,6 @@ function assertCompatibleModes (options) {
   const incompatible = [
     ['--help', options.help],
     ['--init-manifest', options.initManifest],
-    ['--print-approval-sha256', options.printApprovalSha256],
     ['--print-plan', options.printPlan],
     ['--validate-manifest', options.validateManifest],
   ].find(([, enabled]) => enabled)
@@ -525,10 +469,8 @@ function applyApprovedPlanOptions (options) {
   if (!options.approvedArtifactSha256) {
     throw new Error('--run-approved-plan requires --sha256 from the reviewed execution plan.')
   }
-  if (options.approvalOverrides.length > 0 || options.offlineFixtureNonce || options.approvedPlanSha256) {
-    throw new Error(
-      '--run-approved-plan cannot be combined with manifest, output, selection, or legacy approval flags.'
-    )
+  if (options.approvalOverrides.length > 0) {
+    throw new Error('--run-approved-plan cannot be combined with manifest, output, or selection flags.')
   }
 
   const { material } = loadApprovedPlan(options.runApprovedPlan, options.approvedArtifactSha256)

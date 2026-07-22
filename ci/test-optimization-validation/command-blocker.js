@@ -10,6 +10,8 @@ const CYPRESS_BINARY_PATTERN =
   /(?:Cypress executable not found|Cypress binary is missing|Cypress failed to start|Please reinstall Cypress)/i
 const PLAYWRIGHT_BROWSER_PATTERN =
   /(?:browserType\.launch: Executable doesn't exist|Please run the following command to download new browsers|playwright install)/i
+const PLAYWRIGHT_BROWSER_LAUNCH_PATTERN =
+  /(?:browserType\.launch: Failed to launch the browser process|bootstrap_check_in|MachPortRendezvous)/i
 
 /**
  * Identifies toolchain and execution-environment failures that happen before tests start.
@@ -62,6 +64,23 @@ function getCommandBlocker (result, options = {}) {
       signals: getMatchingLines(
         output,
         /127\.0\.0\.1|localhost|listen|EACCES|EPERM|Operation not permitted|Permission denied/i
+      ),
+      blockedByExecutionEnvironment: true,
+    }
+  }
+
+  if (options.framework === 'playwright' && result.exitCode !== 0 &&
+    PLAYWRIGHT_BROWSER_LAUNCH_PATTERN.test(output) && FILESYSTEM_PERMISSION_PATTERN.test(output)) {
+    return {
+      kind: 'playwright-browser-launch-blocked',
+      summary: 'Playwright needs to launch the project browser, but the current agent sandbox denied that launch. ' +
+        'No Test Optimization conclusion was reached.',
+      recommendation: 'Approve rerunning the exact checksum-approved validator command with permission to launch ' +
+        'the project Playwright browser. If this agent cannot offer that scoped approval, run the approved command ' +
+        'from the host shell. Do not change the command, approval file, or approval SHA.',
+      signals: getMatchingLines(
+        output,
+        /browserType\.launch|bootstrap_check_in|MachPortRendezvous|EACCES|EPERM|Operation not permitted|Permission denied/i
       ),
       blockedByExecutionEnvironment: true,
     }

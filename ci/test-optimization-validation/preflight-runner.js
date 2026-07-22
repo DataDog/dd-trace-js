@@ -89,6 +89,11 @@ async function runFrameworkPreflight ({ framework, out, options }) {
   framework.preflight = preflight
   const commandFailures = attempts.map(attempt => attempt.commandFailure).filter(Boolean)
   const executionBlocked = commandFailures.length === attempts.length && commandFailures.length > 0
+  const commonCommandFailure = executionBlocked && commandFailures.every(commandFailure => {
+    return commandFailure.kind === commandFailures[0].kind
+  })
+    ? commandFailures[0]
+    : undefined
   const representativeScopeMismatch = attempts.some(attempt => {
     return Number.isInteger(attempt.observedTestCount) && attempt.observedTestCount > attempt.maxTestCount
   })
@@ -109,9 +114,7 @@ async function runFrameworkPreflight ({ framework, out, options }) {
         validationIncomplete: true,
         domain: executionBlocked ? 'execution_environment' : 'validator_adapter',
         representativeScopeMismatch,
-        ...(attempts.length === 1 && attempts[0].commandFailure
-          ? { commandFailure: attempts[0].commandFailure }
-          : {}),
+        ...(commonCommandFailure ? { commandFailure: commonCommandFailure } : {}),
         candidateAttempts: attempts,
       },
       artifacts,

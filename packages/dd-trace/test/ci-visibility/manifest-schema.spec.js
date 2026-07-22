@@ -71,7 +71,8 @@ describe('test optimization validation manifest schema', () => {
       'frameworks[0].existingTestCommand must be omitted when frameworks[0].status is not runnable.',
       'frameworks[0].preflight must be omitted when frameworks[0].status is not runnable.',
       'frameworks[0].generatedTestStrategy must be omitted when frameworks[0].status is not runnable.',
-      'frameworks[0].setup.commands must be empty or omitted when frameworks[0].status is not runnable.',
+      'frameworks[0].setup.commands is not supported. Record the concrete project-setup blocker and run setup as ' +
+        'a separate, explicitly approved workflow before creating a fresh validation plan.',
     ])
   })
 
