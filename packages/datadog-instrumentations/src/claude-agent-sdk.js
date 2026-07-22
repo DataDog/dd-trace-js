@@ -496,7 +496,7 @@ function finishStream (chunks, ctx, error) {
 
   let processError
   if (chunks.length > 0) {
-    const lastChunk = chunks[chunks.length - 1]
+    const lastChunk = chunks.at(-1)
     if (lastChunk?.type === 'result') ctx.output = lastChunk.result
 
     try {

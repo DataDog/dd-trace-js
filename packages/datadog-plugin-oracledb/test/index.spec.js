@@ -256,6 +256,31 @@ describe('Plugin', () => {
             assert.strictEqual(tracer.scope().active(), null)
           })
 
+          it('should instrument pool.getConnection with a callback', async () => {
+            const callbackConnection = await new Promise((resolve, reject) => {
+              pool.getConnection((error, conn) => error ? reject(error) : resolve(conn))
+            })
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  name: expectedSchema.outbound.opName,
+                  service: expectedSchema.outbound.serviceName,
+                  resource: dbQuery,
+                  type: 'sql',
+                  meta: {
+                    'span.kind': 'client',
+                    component: 'oracledb',
+                    'db.instance': dbInstance,
+                  },
+                }),
+                callbackConnection.execute(dbQuery),
+              ])
+            } finally {
+              await callbackConnection.close()
+            }
+          })
+
           it('should instrument errors', async () => {
             try {
               await connection.execute('invalid')
