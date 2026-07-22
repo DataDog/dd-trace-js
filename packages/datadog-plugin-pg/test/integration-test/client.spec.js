@@ -18,22 +18,19 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('pg', 'pg', (version, _, realVersion) => {
     useSandbox([`'pg@${version}'`], false, [
       './packages/datadog-plugin-pg/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', {
-        default: 'import pg from \'pg\'',
-        star: semver.satisfies(realVersion, '<8.15.0')
-          ? 'import * as mod from \'pg\'; const pg = { Client: mod.Client || mod.default.Client }'
-          : 'import * as pg from \'pg\';',
-        destructure: semver.satisfies(realVersion, '<8.15.0')
-          ? 'import { default as pg } from \'pg\';'
-          : 'import { Client } from \'pg\'; const pg = { Client }',
-      })
+    const hasNamedExport = semver.satisfies(realVersion, '>=8.15.0')
+
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'pg',
+      packageName: 'pg',
+      defaultExport: true,
+      namedExports: hasNamedExport ? ['Client'] : [],
+      namedExportBinding: hasNamedExport ? 'namespace' : undefined,
     })
 
     beforeEach(async () => {
@@ -45,7 +42,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
