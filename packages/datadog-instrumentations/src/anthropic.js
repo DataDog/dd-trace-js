@@ -152,7 +152,7 @@ function wrapCreate (create) {
 
         asResponseResult = gated
           .then(response => {
-            if (!stream && hasLifecycle && messagesAfterChannel.hasSubscribers) {
+            if (!stream && hasLifecycle && (parseResult || messagesAfterChannel.hasSubscribers)) {
               if (parseResult) {
                 return parseResult.then(() => response)
               }

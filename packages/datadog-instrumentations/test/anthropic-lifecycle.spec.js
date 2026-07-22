@@ -608,6 +608,39 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
+  it('reuses the after verdict when parse() starts before asResponse()', async () => {
+    const error = lifecycleAbortError()
+    let calls = 0
+    const unsubscribe = subscribeWithHandler(
+      [messagesAfterChannel],
+      /**
+       * @param {{ abortController: AbortController, pending: Promise<void>[] }} ctx
+       */
+      ctx => {
+        calls++
+        blockLifecycle(ctx, error)
+        unsubscribe()
+      }
+    )
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+    const expectedError = { name: error.name, message: error.message }
+
+    try {
+      const parseRejection = assert.rejects(apiPromise.parse(), expectedError)
+      await Promise.resolve()
+      assert.strictEqual(calls, 1)
+
+      await Promise.all([
+        parseRejection,
+        assert.rejects(apiPromise.asResponse(), expectedError),
+      ])
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('evaluates and finishes exactly once when parse() starts before asResponse()', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
