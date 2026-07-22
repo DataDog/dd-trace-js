@@ -147,6 +147,7 @@ moduleTypes.forEach(({
             env: {
               ...envVars,
               CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RETRIES_AS_NUMBER: 'true',
               SPEC_PATTERN: specToRun,
             },
           }
