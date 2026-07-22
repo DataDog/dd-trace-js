@@ -20,8 +20,8 @@ const { getParse, getMatch } = require('../../../../datadog-instrumentations/src
  * `parse()`) → no tag.
  */
 
-// path-to-regexp's match() builds a regexp that is exponential in the number of optional groups, so
-// cap the count we resolve per route; routes beyond this are omitted.
+// path-to-regexp's match() builds a regexp exponential in a route's optional-group count, so cap it;
+// routes with more optional groups are omitted.
 const MAX_OPTIONAL_GROUPS = 8
 
 // Keyed on the raw route string — bounded by declared routes (never attacker URLs), so it retains
@@ -183,7 +183,6 @@ function compileRoute (route, parse, makeMatcher) {
 
   // Only resolvable (param) groups become variants; static-only groups stay out and render absent.
   const optionalGroups = [...represented].filter(g => detectable.has(g)).sort((a, b) => a - b)
-  if (optionalGroups.length > MAX_OPTIONAL_GROUPS) return null
 
   const compiled = {
     segments: cleaned,
@@ -194,15 +193,20 @@ function compileRoute (route, parse, makeMatcher) {
     matcher: null,
   }
 
-  // No optional groups → fixed output, computed once.
+  // No optional groups → fixed output, computed once (no matcher, so group count is irrelevant here).
   if (optionalGroups.length === 0) {
     compiled.precomputed = renderRoute(compiled, EMPTY_SET)
     return compiled
   }
 
+  // match()'s regexp is exponential in the route's TOTAL optional-group count (static and structural
+  // groups included, not just the resolvable ones), so cap that before building the matcher.
+  if (groupParent.size > MAX_OPTIONAL_GROUPS) return null
+
   const matcher = makeMatcher(route)
   if (matcher === undefined) return null
   compiled.matcher = matcher
+  compiled.variants = new Map()
   return compiled
 }
 
@@ -405,7 +409,6 @@ function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher) {
   const present = resolvePresence(entry, matched ?? params)
 
   const mask = presenceBitmask(entry.optionalGroups, present)
-  if (entry.variants === undefined) entry.variants = new Map()
   const cached = entry.variants.get(mask)
   if (cached !== undefined) return cached
 

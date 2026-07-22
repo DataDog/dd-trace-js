@@ -32,15 +32,18 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
-  // Capture path-to-regexp 8.x's `parse()` (Express 5). Probe the shape ({ tokens: [...] }) so a
-  // later-loaded older major (6.x/7.x returns a bare array) can't clobber the working v8 adapter.
-  if (typeof moduleExports?.parse === 'function') {
+  // Capture path-to-regexp 8.x's `parse()` and `match()` together (Express 5). Probe `parse` for the
+  // v8 TokenData shape ({ tokens: [...] }) and adopt this module's `match()` only when it holds. Tying
+  // both to the same confirmed-v8 module stops a later-loaded older major — whose `parse` returns a
+  // bare array, or whose `match` shares the { params } shape — from clobbering a working v8 adapter.
+  if (typeof moduleExports?.parse === 'function' && typeof moduleExports?.match === 'function') {
     const parse = moduleExports.parse
+    const match = moduleExports.match
     let probe
     try {
       probe = parse('/')
     } catch {
-      // not a usable parser
+      // not a usable v8 module
     }
     if (Array.isArray(probe?.tokens)) {
       parseTokens = pattern => {
@@ -52,20 +55,6 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
         }
         if (Array.isArray(result?.tokens)) return result
       }
-    }
-  }
-
-  // Capture path-to-regexp 8.x's `match()` (Express 5), used to resolve which optional params a
-  // request matched. Probe the v8 shape (`match(path)(url)` → { params }) as for parse() above.
-  if (typeof moduleExports?.match === 'function') {
-    const match = moduleExports.match
-    let probe
-    try {
-      probe = match('/')('/')
-    } catch {
-      // not a usable matcher
-    }
-    if (probe?.params) {
       makeMatcher = route => {
         let matcher
         try {

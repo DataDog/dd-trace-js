@@ -237,6 +237,7 @@ describe('normalizeRouteExpress', () => {
   describe('performance / safety guards', () => {
     const optionals = (n) => '/r' + Array.from({ length: n }, (_, i) => `{/:p${i}}`).join('')
     const url = (n) => '/r' + '/x'.repeat(n)
+    const statics = (n) => Array.from({ length: n }, (_, i) => `{s${i}}`).join('')
 
     it('resolves a route at the optional-group cap (8)', () => {
       assert.equal(normalize(optionals(8), {}, url(8)), '/r/{p0}/{p1}/{p2}/{p3}/{p4}/{p5}/{p6}/{p7}')
@@ -245,6 +246,16 @@ describe('normalizeRouteExpress', () => {
     // 9 > cap → omitted before a matcher (an exponential regexp) is ever built.
     it('omits a route just over the optional-group cap (9)', () => {
       assert.equal(normalize(optionals(9), {}, url(9)), null)
+    })
+
+    // The cap counts ALL optional groups (match()'s regexp is exponential in the total), not just the
+    // resolvable ones: static groups that render as absent still count.
+    it('counts static groups toward the cap (7 static + 1 param = 8 total → resolves)', () => {
+      assert.equal(normalize('/r' + statics(7) + '{/:id}', {}, '/r/5'), '/r/{id}')
+    })
+
+    it('counts static groups toward the cap (8 static + 1 param = 9 total → omitted)', () => {
+      assert.equal(normalize('/r' + statics(8) + '{/:id}', {}, '/r/5'), null)
     })
   })
 
