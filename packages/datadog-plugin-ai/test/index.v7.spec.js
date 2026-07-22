@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const semifies = require('semifies')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -9,9 +10,9 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
  * @param {(version: string, openaiVersion: string) => void} callback
  */
 function withAiSdkOpenAiVersions (callback) {
-  withVersions('ai', 'ai', '>=7.0.0', version => {
+  withVersions('ai', 'ai', '>=7.0.0', (version, _, resolvedVersion) => {
     withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
-      callback(version, openaiVersion)
+      callback(version, resolvedVersion, openaiVersion)
     })
   })
 }
@@ -21,7 +22,7 @@ describe('Plugin', () => {
     OPENAI_API_KEY: '<not-a-real-key>',
   })
 
-  withAiSdkOpenAiVersions((version, openaiVersion) => {
+  withAiSdkOpenAiVersions((version, resolvedVersion, openaiVersion) => {
     let ai
     let openai
 
@@ -105,8 +106,9 @@ describe('Plugin', () => {
       await checkTraces
     })
 
-    // eslint-disable-next-line mocha/no-pending-tests
-    it.skip('creates a span for embedMany', async () => { // TODO: it seems this was omitted from the change?
+    it('creates a span for embedMany', async function () {
+      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+
       const checkTraces = agent.assertSomeTraces(traces => {
         const spans = traces[0]
         const embedManySpan = spans.find(s => s.name === 'embedMany')
