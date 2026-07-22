@@ -125,7 +125,7 @@ moduleTypes.forEach(({
     })
 
     context('flaky test retries', () => {
-      it('retries flaky tests', async () => {
+      it('retries flaky tests with object Cypress retries', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -224,6 +224,64 @@ moduleTypes.forEach(({
               // Verify "flaky test retry always passes" comes last
               assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
               assert.equal(testExecutionOrder[9].isRetry, false)
+            }, { hardTimeout: 30000 })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
+      over12It('retries flaky tests', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/numeric-retries.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RETRIES_AS_NUMBER: '0',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(testSuites.length, 1)
+              assert.strictEqual(testSuites[0].meta[TEST_STATUS], 'pass')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 3)
+
+              const resource = 'cypress/e2e/numeric-retries.cy.js.numeric Cypress retries eventually passes'
+              assert.deepStrictEqual(tests.map(test => test.resource), [resource, resource, resource])
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests[1].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests[2].meta[TEST_STATUS], 'pass')
+              assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(tests[2].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              assert.strictEqual(tests[2].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
             }, { hardTimeout: 30000 })
 
         await Promise.all([
