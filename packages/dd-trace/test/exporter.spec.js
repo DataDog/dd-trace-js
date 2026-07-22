@@ -9,6 +9,7 @@ const sinon = require('sinon')
 require('./setup/core')
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
+const ElectronExporter = require('../src/exporters/electron')
 const { DATADOG_MINI_AGENT_PATH } = require('../src/constants')
 
 describe('exporter', () => {
@@ -63,5 +64,11 @@ describe('exporter', () => {
     const Exporter = require('../src/exporter')('log')
 
     assert.strictEqual(Exporter, LogExporter)
+  })
+
+  it('should create an ElectronExporter when configured', () => {
+    const Exporter = require('../src/exporter')('electron')
+
+    assert.strictEqual(Exporter, ElectronExporter)
   })
 })
