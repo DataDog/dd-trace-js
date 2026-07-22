@@ -1,5 +1,7 @@
 'use strict'
 
+const NoopExperiments = require('./experiments/noop')
+
 class NoopLLMObs {
   constructor (noopTracer) {
     this._tracer = noopTracer
@@ -7,6 +9,10 @@ class NoopLLMObs {
 
   get enabled () {
     return false
+  }
+
+  get experiments () {
+    return new NoopExperiments('LLM Observability is not enabled')
   }
 
   enable (options) {}

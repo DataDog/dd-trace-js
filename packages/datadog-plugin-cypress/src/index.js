@@ -80,7 +80,12 @@ class CypressPlugin extends Plugin {
         // Already initialized by manual plugin call — just chain user handlers.
         // Pass the plugin's afterScreenshot so chaining a user handler doesn't drop the upload
         // (the chained registration replaces the one plugin.js set, so it must include it).
-        for (const h of userAfterSpecHandlers) on('after:spec', h)
+        if (userAfterSpecHandlers.length > 0) {
+          on('after:spec', (spec, results) => userAfterSpecHandlers.reduce(
+            (chain, handler) => chain.then(() => handler(spec, results)),
+            Promise.resolve()
+          ))
+        }
         registerAfterScreenshot(datadogAfterScreenshotHandler)
         registerAfterRunWithCleanup()
         payload.registered = true

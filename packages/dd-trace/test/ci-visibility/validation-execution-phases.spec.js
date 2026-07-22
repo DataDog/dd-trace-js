@@ -47,7 +47,7 @@ describe('test optimization validator-owned execution phases', () => {
     const jestEntrypoint = path.join(root, 'jest.js')
     fs.writeFileSync(
       jestEntrypoint,
-      'if (process.env.NODE_OPTIONS || process.env.DD_API_KEY) process.exit(42); ' +
+      'if (process.env.NODE_OPTIONS?.includes("dd-trace/ci/init") || process.env.DD_API_KEY) process.exit(42); ' +
         'console.log("Tests: 1 passed, 1 total")\n'
     )
     const framework = {

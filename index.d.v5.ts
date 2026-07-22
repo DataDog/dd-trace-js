@@ -156,12 +156,12 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
-   * OpenFeature Provider with Remote Config integration.
+   * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed.
    *
-   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+   * @env DD_FEATURE_FLAGS_ENABLED
+   * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -869,9 +869,9 @@ declare namespace tracer {
        */
       flaggingProvider?: {
         /**
-         * Whether to enable the feature flagging provider.
-         * Requires Remote Config to be properly configured.
-         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
+         * Legacy feature flagging provider switch.
+         * When the stable Feature Flags configuration is unset, true selects Agent Remote Config and false disables
+         * the provider.
          *
          * @default false
          * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
@@ -1732,7 +1732,7 @@ declare namespace tracer {
   /**
    * Flagging Provider (OpenFeature-compatible).
    *
-   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
@@ -3775,6 +3775,12 @@ declare namespace tracer {
       enabled: boolean,
 
       /**
+       * Datasets & Experiments API. Requires LLM Observability to be enabled and
+       * `DD_API_KEY` / `DD_APP_KEY` to be set.
+       */
+      experiments: Experiments,
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3918,6 +3924,93 @@ declare namespace tracer {
       flush (): void
     }
 
+    /**
+     * A task run over each dataset record during an experiment.
+     */
+    type ExperimentTask = (input: any, config: Record<string, any>) => any | Promise<any>
+
+    /**
+     * Scores a single task output. The return type selects the metric:
+     * `boolean` -> boolean, `number` -> score, anything else -> categorical.
+     */
+    type ExperimentEvaluator = (input: any, output: any, expectedOutput: any) => any | Promise<any>
+
+    interface ExperimentOptions {
+      name: string
+      dataset: Dataset
+      task: ExperimentTask
+      /** Evaluators keyed by metric label. */
+      evaluators?: Record<string, ExperimentEvaluator>
+      description?: string
+      config?: Record<string, any>
+      tags?: Record<string, string>
+    }
+
+    interface PullDatasetOptions {
+      /** Wait until at least this many records are readable (absorbs write lag). */
+      expectedRecordCount?: number
+      /** Maximum total time to wait, in ms. Default 30000. */
+      maxWaitMs?: number
+    }
+
+    interface ExperimentResultRow {
+      index: number
+      spanId: string
+      traceId: string
+      startNs: number
+      durationNs: number
+      input: any
+      output: any
+      expectedOutput: any
+      readonly isError: boolean
+      errorType: string | null
+      errorMessage: string | null
+      evaluations: Record<string, any>
+      evaluationErrors: Record<string, string>
+    }
+
+    interface ExperimentResult {
+      experimentId: string
+      rows: ExperimentResultRow[]
+      /** Dashboard URL for the experiment. */
+      url: string
+    }
+
+    interface DatasetPushResult {
+      /** Number of records from this push that were confirmed with a record id. */
+      pushedCount: number
+      /** Number of records attempted in this push. */
+      totalCount: number
+    }
+
+    interface Dataset {
+      addRecord (input: any, expectedOutput?: any, metadata?: Record<string, any>): Dataset
+      /** Creates the dataset remotely if needed and pushes any unpushed records. */
+      push (): Promise<DatasetPushResult>
+      name (): string
+      id (): string | null
+      projectId (): string | null
+      records (): Array<{ input: any, expectedOutput: any, metadata: Record<string, any> }>
+      /** Dashboard URL for the dataset, or null until pushed. */
+      url (): string | null
+    }
+
+    interface Experiment {
+      name (): string
+      experimentId (): string | null
+      url (): string | null
+      run (): Promise<ExperimentResult>
+    }
+
+    interface Experiments {
+      /** Create a local dataset buffer; pushed on the first experiment run. */
+      createDataset (name: string, description?: string): Dataset
+      /** Pull an existing dataset (with records) by name. */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+      /** Build an experiment to run over a dataset. */
+      experiment (options: ExperimentOptions): Experiment
+    }
+
     interface LLMObservabilitySpan {
       /**
        * The span kind
@@ -4030,6 +4123,26 @@ declare namespace tracer {
        * Tool calls of the message
        */
       toolCalls?: ToolCall[],
+
+      /**
+       * Audio segments attached to the message (e.g. speech input/output)
+       */
+      audioParts?: AudioPart[],
+    }
+
+    /**
+     * Represents an audio segment attached to an LLM chat model message.
+     */
+    interface AudioPart {
+      /**
+       * The MIME type of the audio (e.g. "audio/wav", "audio/mpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The audio content as a base64-encoded string
+       */
+      content: string,
     }
 
     /**

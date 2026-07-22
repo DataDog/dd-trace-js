@@ -516,6 +516,8 @@ describe('Config', () => {
     const SENTINELS = {
       DD_API_KEY: 'SENTINEL_DD_API_KEY',
       DD_APP_KEY: 'SENTINEL_DD_APP_KEY',
+      DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL:
+        'https://SENTINEL_FEATURE_FLAGS_BASE_URL.example',
       OTEL_EXPORTER_OTLP_HEADERS: 'dd-api-key=SENTINEL_OTLP_BASE',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'dd-api-key=SENTINEL_OTLP_TRACES',
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'dd-api-key=SENTINEL_OTLP_METRICS',
@@ -991,6 +993,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
+      { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_HEADER', value: null, origin: 'default' },
       { name: 'DD_CODE_ORIGIN_FOR_SPANS_ENABLED', value: true, origin: 'default' },
@@ -3277,7 +3280,7 @@ describe('Config', () => {
       this.skip()
       return
     }
-    const tempDir = mkdtempSync(path.join(process.cwd(), 'dd-trace-span-sampling-rules-'))
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'dd-trace-span-sampling-rules-'))
     const rulesPath = path.join(tempDir, 'span-sampling-rules.json')
     writeFileSync(rulesPath, '{"sample_rate":')
 
@@ -3520,6 +3523,7 @@ describe('Config', () => {
     let options = {}
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED
+      delete process.env.DD_CODE_COVERAGE_FLAGS
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
@@ -3555,6 +3559,18 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = 'false'
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED, false)
+      })
+      it('should leave code coverage flags unset by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CODE_COVERAGE_FLAGS, undefined)
+      })
+      it('should read code coverage flags from the environment as a string', () => {
+        process.env.DD_CODE_COVERAGE_FLAGS = ' type:unit-tests, ,jvm-21,type:unit-tests, '
+        const config = getConfig(options)
+        assert.strictEqual(
+          config.testOptimization.DD_CODE_COVERAGE_FLAGS,
+          ' type:unit-tests, ,jvm-21,type:unit-tests, '
+        )
       })
       it('should activate ITR by default', () => {
         const config = getConfig(options)
@@ -4935,6 +4951,239 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  context('Feature Flagging configuration source', () => {
+    it('uses agentless as the source default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'], 'agentless')
+      assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+    })
+
+    for (const {
+      name,
+      stableEnabled,
+      source,
+      legacyEnabled,
+      legacyOption,
+      expected,
+    } of [
+        {
+          name: 'defaults to lazy agentless delivery',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'keeps the agentless default when the stable setting is explicitly enabled',
+          stableEnabled: 'true',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'lets the stable kill switch override explicit and legacy settings',
+          stableEnabled: 'false',
+          source: 'remote_config',
+          legacyEnabled: 'true',
+          expected: { enabled: false },
+        },
+        {
+          name: 'grandfathers legacy environment enablement onto Remote Config',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'preserves legacy environment disablement',
+          legacyEnabled: 'false',
+          expected: { enabled: false },
+        },
+        {
+          name: 'grandfathers legacy programmatic enablement onto Remote Config',
+          legacyOption: true,
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'preserves legacy programmatic disablement',
+          legacyOption: false,
+          expected: { enabled: false },
+        },
+        {
+          name: 'treats an empty source as absent before applying legacy enablement',
+          source: '',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'treats a whitespace source as absent before applying legacy disablement',
+          source: '   ',
+          legacyEnabled: 'false',
+          expected: { enabled: false },
+        },
+        {
+          name: 'defaults a blank source to agentless without a legacy setting',
+          source: '   ',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'lets an explicit agentless source override legacy enablement',
+          source: 'AgEnTlEsS',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'agentless' },
+        },
+        {
+          name: 'lets an explicit Remote Config source override legacy disablement',
+          source: 'REMOTE_CONFIG',
+          legacyEnabled: 'false',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'falls back from an invalid source to legacy enablement',
+          source: 'other',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+        {
+          name: 'falls back from the reserved offline source to legacy enablement',
+          source: 'offline',
+          legacyEnabled: 'true',
+          expected: { enabled: true, source: 'remote_config' },
+        },
+      ]) {
+      it(name, () => {
+        if (stableEnabled !== undefined) {
+          process.env.DD_FEATURE_FLAGS_ENABLED = stableEnabled
+        }
+        if (source !== undefined) {
+          process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = source
+        }
+        if (legacyEnabled !== undefined) {
+          process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = legacyEnabled
+        }
+        const options = legacyOption === undefined
+          ? undefined
+          : { experimental: { flaggingProvider: { enabled: legacyOption } } }
+
+        const config = getConfig(options)
+        const actual = config.featureFlags.DD_FEATURE_FLAGS_ENABLED
+          ? { enabled: true, source: config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE }
+          : { enabled: false }
+
+        assert.deepStrictEqual(actual, expected)
+      })
+    }
+
+    it('falls back from an invalid source through calculated legacy precedence', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'true'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
+      process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+      assert.strictEqual(config.experimental.flaggingProvider.enabled, true)
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'env_var')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'calculated')
+      assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_FEATURE_FLAGS_ENABLED', value: true, origin: 'env_var' },
+        { name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', value: 'remote_config', origin: 'calculated' },
+        { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
+      ])
+
+      config.setRemoteConfig({})
+
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('defaults agentless delivery timings', () => {
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        featureFlags: {
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
+        },
+      })
+    })
+
+    it('reads the configuration source environment variable', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+    })
+
+    it('reads the canonical agentless environment variables', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = 'https://example.com/ufc'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = '20'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = '5'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        featureFlags: {
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: 'https://example.com/ufc',
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 20,
+          DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
+        },
+      })
+    })
+
+    it('uses registry defaults for non-positive agentless timings', () => {
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = '0'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS = '-1'
+
+      const config = getConfig()
+
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
+        30
+      )
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
+        5
+      )
+      sinon.assert.calledTwice(log.warn)
+    })
+
+    it('does not accept programmatic configuration-source options', () => {
+      const config = getConfig({
+        experimental: {
+          flaggingProvider: {
+            enabled: false,
+            configurationSource: 'remote_config',
+            agentlessBaseUrl: 'https://example.com/programmatic',
+            agentlessPollIntervalSeconds: 20,
+            agentlessRequestTimeoutSeconds: 5,
+          },
+        },
+      })
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, undefined)
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS,
+        30
+      )
+      assert.strictEqual(
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS,
+        5
+      )
+      for (const name of [
+        'configurationSource',
+        'agentlessBaseUrl',
+        'agentlessPollIntervalSeconds',
+        'agentlessRequestTimeoutSeconds',
+      ]) {
+        sinon.assert.calledWithExactly(
+          log.warn,
+          'Unknown option %s with value %o',
+          `experimental.flaggingProvider.${name}`,
+          sinon.match.defined
+        )
+      }
     })
   })
 

@@ -431,6 +431,13 @@ export interface GeneratedConfig {
       };
     };
   };
+  featureFlags: {
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: "agentless" | "remote_config";
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
+    DD_FEATURE_FLAGS_ENABLED: boolean;
+  };
   flushInterval: number;
   flushMinSpans: number;
   headerTags: string[];
@@ -562,6 +569,7 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
     DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
     DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
+    DD_CODE_COVERAGE_FLAGS: string | undefined;
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
     DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
@@ -654,6 +662,7 @@ export interface GeneratedEnvVarConfig {
   DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
   DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
   DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
+  DD_CODE_COVERAGE_FLAGS: string | undefined;
   DD_CODE_ORIGIN_FOR_SPANS_ENABLED: boolean;
   DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
@@ -688,6 +697,11 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: "agentless" | "remote_config";
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
+  DD_FEATURE_FLAGS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;
