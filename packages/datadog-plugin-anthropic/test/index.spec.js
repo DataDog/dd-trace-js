@@ -1,10 +1,14 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+
+const { channel } = require('dc-polyfill')
 const { describe, before, after, it } = require('mocha')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { useEnv } = require('../../../integration-tests/helpers')
+
+const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
 
 describe('Plugin', () => {
   useEnv({
@@ -49,6 +53,43 @@ describe('Plugin', () => {
         assert.ok(result)
 
         await tracesPromise
+      })
+
+      it('finishes a raw response before its body is consumed', async () => {
+        const lifecycleCalls = []
+        /** @param {{ pending: Promise<void>[] }} ctx */
+        const onMessagesAfter = (ctx) => {
+          lifecycleCalls.push(ctx)
+          ctx.pending.push(Promise.resolve())
+        }
+        messagesAfterChannel.subscribe(onMessagesAfter)
+
+        const tracesPromise = agent.assertSomeTraces(
+          /**
+           * @param {Array<Array<{ name: string }>>} traces
+           */
+          traces => {
+            const span = traces[0][0]
+
+            assert.equal(span.name, 'anthropic.request')
+          }
+        )
+
+        try {
+          const responsePromise = client.messages.create({
+            model: 'claude-3-7-sonnet-20250219',
+            messages: [{ role: 'user', content: 'Hello, world!' }],
+            max_tokens: 100,
+            temperature: 0.5,
+          }).asResponse()
+          const [response] = await Promise.all([responsePromise, tracesPromise])
+
+          assert.strictEqual(lifecycleCalls.length, 1)
+          assert.strictEqual(response.bodyUsed, false)
+          assert.ok(await response.json())
+        } finally {
+          messagesAfterChannel.unsubscribe(onMessagesAfter)
+        }
       })
 
       describe('stream', () => {
