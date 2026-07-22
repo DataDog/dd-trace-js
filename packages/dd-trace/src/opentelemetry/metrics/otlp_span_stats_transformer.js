@@ -3,6 +3,7 @@
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../../vendor/dist/@datadog/sketches-js')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { GRPC_STATUS_NAMES } = require('../../constants')
 
 const NS_PER_S = 1e9
 
@@ -152,7 +153,10 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
     if (aggKey.rpcStatusCode !== '') {
-      raw['rpc.response.status_code'] = String(aggKey.rpcStatusCode).toUpperCase()
+      const n = Number(aggKey.rpcStatusCode)
+      raw['rpc.response.status_code'] = Number.isInteger(n) && n >= 0 && n < GRPC_STATUS_NAMES.length
+        ? GRPC_STATUS_NAMES[n]
+        : String(aggKey.rpcStatusCode).toUpperCase()
     }
 
     if (!this.#otelSemanticsEnabled) {
