@@ -2,6 +2,7 @@
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 const { addHook } = require('./helpers/instrument')
 
 const anthropicTracingChannel = tracingChannel('apm:anthropic:request')
@@ -84,6 +85,7 @@ function wrapCreate (create) {
       let afterVerdict
       let asResponseResult
       let beforeVerdict
+      let parseLifecycleResult
       let parseResult
 
       function getBeforeVerdict () {
@@ -136,6 +138,11 @@ function wrapCreate (create) {
             throw error
           })
 
+        if (hasLifecycle) {
+          const reuseAfterVerdict = () => afterVerdict
+          parseLifecycleResult = parseResult.then(reuseAfterVerdict, reuseAfterVerdict)
+        }
+
         return parseResult
       })
 
@@ -152,17 +159,16 @@ function wrapCreate (create) {
 
         asResponseResult = gated
           .then(response => {
-            if (!stream && hasLifecycle && (parseResult || messagesAfterChannel.hasSubscribers)) {
-              if (parseResult) {
-                return parseResult.then(() => response)
+            if (!stream && hasLifecycle && (parseLifecycleResult || messagesAfterChannel.hasSubscribers)) {
+              if (parseLifecycleResult) {
+                return parseLifecycleResult.then(() => response)
               }
 
               let bodyPromise
               try {
                 bodyPromise = response.clone().json()
               } catch (error) {
-                finish(ctx, null, error)
-                return response
+                return handleRawResponseEvaluationError(ctx, response, error)
               }
 
               return bodyPromise.then(
@@ -184,10 +190,7 @@ function wrapCreate (create) {
                 /**
                  * @param {Error} error
                  */
-                error => {
-                  finish(ctx, null, error)
-                  return response
-                }
+                error => handleRawResponseEvaluationError(ctx, response, error)
               )
             }
 
@@ -207,6 +210,18 @@ function wrapCreate (create) {
       return apiPromise
     })
   }
+}
+
+/**
+ * @param {object} ctx
+ * @param {object} response
+ * @param {Error} error
+ * @returns {object}
+ */
+function handleRawResponseEvaluationError (ctx, response, error) {
+  log.error('Unable to evaluate Anthropic response body: %s', error.message)
+  finish(ctx)
+  return response
 }
 
 function finish (ctx, result, error) {

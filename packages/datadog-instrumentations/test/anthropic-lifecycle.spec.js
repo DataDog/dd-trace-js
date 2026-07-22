@@ -323,14 +323,12 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('returns the raw response when cloning it throws', async () => {
+  it('finishes without a tracing error when cloning the raw response throws', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
-    let errorCtx
+    let errorCount = 0
     let asyncEndCount = 0
-    /** @param {{ error: Error }} ctx */
-    const onError = (ctx) => { errorCtx = ctx }
-    apmHandlers.error = onError
+    apmHandlers.error = () => { errorCount++ }
     apmHandlers.asyncEnd = () => { asyncEndCount++ }
     apmChannel.subscribe(apmHandlers)
 
@@ -345,7 +343,7 @@ describe('anthropic lifecycle instrumentation', () => {
       const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
 
       assert.strictEqual(response, apiPromise._rawResponse)
-      assert.strictEqual(errorCtx.error, error)
+      assert.strictEqual(errorCount, 0)
       assert.strictEqual(asyncEndCount, 1)
       assert.strictEqual(calls.length, 0)
     } finally {
@@ -354,14 +352,12 @@ describe('anthropic lifecycle instrumentation', () => {
     }
   })
 
-  it('returns the raw response when reading its clone rejects', async () => {
+  it('finishes without a tracing error when reading the raw response clone rejects', async () => {
     const apmChannel = tracingChannel('apm:anthropic:request')
     const apmHandlers = { start () {} }
-    let errorCtx
+    let errorCount = 0
     let asyncEndCount = 0
-    /** @param {{ error: Error }} ctx */
-    const onError = (ctx) => { errorCtx = ctx }
-    apmHandlers.error = onError
+    apmHandlers.error = () => { errorCount++ }
     apmHandlers.asyncEnd = () => { asyncEndCount++ }
     apmChannel.subscribe(apmHandlers)
 
@@ -376,7 +372,7 @@ describe('anthropic lifecycle instrumentation', () => {
       const response = await messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
 
       assert.strictEqual(response, apiPromise._rawResponse)
-      assert.strictEqual(errorCtx.error, error)
+      assert.strictEqual(errorCount, 0)
       assert.strictEqual(asyncEndCount, 1)
       assert.strictEqual(calls.length, 0)
     } finally {
@@ -636,6 +632,28 @@ describe('anthropic lifecycle instrumentation', () => {
         parseRejection,
         assert.rejects(apiPromise.asResponse(), expectedError),
       ])
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('keeps raw response access independent when parse() rejects before the after lifecycle', async () => {
+    const { calls, unsubscribe } = subscribeAutoResolve([messagesAfterChannel])
+    const messages = new Messages()
+    const apiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const error = new SyntaxError('invalid response')
+    apiPromise.parse = () => Promise.reject(error)
+    messages._nextApiPromise = apiPromise
+    const instrumentedPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+
+    try {
+      const [, response] = await Promise.all([
+        assert.rejects(instrumentedPromise.parse(), error),
+        instrumentedPromise.asResponse(),
+      ])
+
+      assert.strictEqual(response, apiPromise._rawResponse)
+      assert.strictEqual(calls.length, 0)
     } finally {
       unsubscribe()
     }

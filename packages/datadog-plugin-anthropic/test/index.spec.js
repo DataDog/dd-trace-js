@@ -17,12 +17,19 @@ describe('Plugin', () => {
 
   withVersions('anthropic', '@anthropic-ai/sdk', (version) => {
     let client
+    let malformedResponseClient
 
     before(async () => {
       await agent.load('anthropic')
 
       const { Anthropic } = require(`../../../versions/@anthropic-ai/sdk@${version}`).get()
       client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
+      malformedResponseClient = new Anthropic({
+        fetch: async () => new Response('not json', {
+          headers: { 'content-type': 'application/json' },
+          status: 200,
+        }),
+      })
     })
 
     after(() => agent.close())
@@ -87,6 +94,67 @@ describe('Plugin', () => {
           assert.strictEqual(lifecycleCalls.length, 1)
           assert.strictEqual(response.bodyUsed, false)
           assert.ok(await response.json())
+        } finally {
+          messagesAfterChannel.unsubscribe(onMessagesAfter)
+        }
+      })
+
+      it('keeps raw response access independent from parsing failures', async () => {
+        /** @param {{ pending: Promise<void>[] }} ctx */
+        const onMessagesAfter = (ctx) => {
+          ctx.pending.push(Promise.resolve())
+        }
+        messagesAfterChannel.subscribe(onMessagesAfter)
+
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.strictEqual(span.error, 1)
+        })
+        const apiPromise = malformedResponseClient.messages.create({
+          model: 'claude-3-7-sonnet-20250219',
+          messages: [{ role: 'user', content: 'Hello, world!' }],
+          max_tokens: 100,
+        })
+
+        try {
+          const [response] = await Promise.all([
+            (async () => {
+              await assert.rejects(apiPromise, SyntaxError)
+              return apiPromise.asResponse()
+            })(),
+            tracesPromise,
+          ])
+
+          assert.strictEqual(response.status, 200)
+        } finally {
+          messagesAfterChannel.unsubscribe(onMessagesAfter)
+        }
+      })
+
+      it('does not report lifecycle clone failures as request errors', async () => {
+        /** @param {{ pending: Promise<void>[] }} ctx */
+        const onMessagesAfter = (ctx) => {
+          ctx.pending.push(Promise.resolve())
+        }
+        messagesAfterChannel.subscribe(onMessagesAfter)
+
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.strictEqual(span.error, 0)
+        })
+
+        try {
+          const responsePromise = malformedResponseClient.messages.create({
+            model: 'claude-3-7-sonnet-20250219',
+            messages: [{ role: 'user', content: 'Hello, world!' }],
+            max_tokens: 100,
+          }).asResponse()
+          const [response] = await Promise.all([responsePromise, tracesPromise])
+
+          assert.strictEqual(response.bodyUsed, false)
+          assert.strictEqual(await response.text(), 'not json')
         } finally {
           messagesAfterChannel.unsubscribe(onMessagesAfter)
         }
