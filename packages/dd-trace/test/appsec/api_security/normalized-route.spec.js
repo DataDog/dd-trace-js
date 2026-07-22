@@ -160,6 +160,17 @@ describe('normalizeRouteExpress', () => {
     check('{/:a}{/:b/:c}', '/A/B/C', '/{a}/{b}/{c}')
   })
 
+  describe('mandatory static sharing a segment with an optional group', () => {
+    // The trailing static is group-0 (mandatory) but shares the optional group's URL segment; it must
+    // survive when the group is absent, not be dropped with the group's leading slash.
+    check('/files{/:id}.json', '/files.json', '/files.json')
+    check('/files{/:id}.json', '/files/5.json', '/files/{id}') // single-param segment → just the param
+    check('/a{/:id}b/c', '/ab/c', '/ab/c')
+    check('/a{/:id}b/c', '/a/5b/c', '/a/{id}/c')
+    check('/x{/a}{/b}y', '/xy', '/xy') // static-only groups dropped, mandatory 'y' kept
+    check('/a{/mid}b', '/ab', '/ab')
+  })
+
   describe('static-only optional groups are dropped (rendered absent)', () => {
     // A static-only optional group carries no param for match() to resolve, so it renders as absent —
     // a stable, minimal route rather than an omitted tag.
@@ -179,6 +190,7 @@ describe('normalizeRouteExpress', () => {
     check('/a{/:x}/b{/:x}', '/a/b/v', null, { x: 'v' })
     check('/files/*path.:ext', '/files/a/b.txt', null) // non-terminal catch-all
     check('/*a-*b', '/x-y', null)
+    check('/a{/b{/:c}}', '/a/b', null) // group detectable only via a nested param → presence ambiguous
   })
 
   describe('URL-based optional resolution (mergeParams=false fix)', () => {

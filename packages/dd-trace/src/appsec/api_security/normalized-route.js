@@ -171,11 +171,10 @@ function compileRoute (route, parse, makeMatcher) {
   for (const seg of cleaned) {
     for (const t of seg.tokens) {
       if (t.type === 'static') continue
-      const unique = nameCount.get(t.name) === 1
-      for (let g = t.group; g !== 0; g = groupParent.get(g)) {
-        paramGroups.add(g)
-        if (unique) detectable.add(g)
-      }
+      // Resolvable only via a unique param the group holds DIRECTLY: a param in a nested optional
+      // subgroup can be absent while this group is present, so it can't prove this group's presence.
+      if (t.group !== 0 && nameCount.get(t.name) === 1) detectable.add(t.group)
+      for (let g = t.group; g !== 0; g = groupParent.get(g)) paramGroups.add(g)
     }
   }
   for (const g of represented) {
@@ -258,10 +257,10 @@ function encodeParamName (name) {
 function renderRoute (compiled, present) {
   const { segments, groupParent } = compiled
 
-  // Pass 1: present dynamic tokens (param/wildcard) in declaration order.
+  // Pass 1: present dynamic tokens (param/wildcard) in declaration order. Activity is per token: a
+  // mandatory token can share a segment with an absent optional group (e.g. '.json' in '/x{/:id}.json').
   const dyn = []
   for (const seg of segments) {
-    if (!groupActive(seg.group, groupParent, present)) continue
     for (const t of seg.tokens) {
       if (t.type !== 'static' && groupActive(t.group, groupParent, present)) dyn.push(t)
     }
@@ -292,15 +291,32 @@ function renderRoute (compiled, present) {
     }
   }
 
-  // Pass 3: build each segment string (same present-token order as pass 1).
+  // Pass 3: build the output elements. Each present leading slash starts a new element; a segment
+  // whose leading slash is absent merges its still-present tokens into the current element (so the
+  // '.json' in '/x{/:id}.json' survives when :id is absent) rather than being dropped with the slash.
   const out = []
   let dynPtr = 0
-  for (const seg of segments) {
-    if (!groupActive(seg.group, groupParent, present)) continue
+  let staticText = ''
+  let paramNames = []
+  let isCatchAll = false
 
-    let staticText = ''
-    const paramNames = []
-    let isCatchAll = false
+  const flush = () => {
+    if (isCatchAll) {
+      out.push(`{${paramNames.join('+')}}`) // terminal catch-all; static prefix subsumed (rule 5)
+    } else if (paramNames.length === 1) {
+      out.push(`{${paramNames[0]}}`)
+    } else if (paramNames.length > 1) {
+      out.push(`{${paramNames.join('+')}}`)
+    } else if (staticText !== '') {
+      out.push(encodeStaticSegment(staticText))
+    }
+    staticText = ''
+    paramNames = []
+    isCatchAll = false
+  }
+
+  for (const seg of segments) {
+    if (groupActive(seg.group, groupParent, present)) flush()
     for (const t of seg.tokens) {
       if (!groupActive(t.group, groupParent, present)) continue
       if (t.type === 'static') {
@@ -310,17 +326,8 @@ function renderRoute (compiled, present) {
         paramNames.push(resolvedNames[dynPtr++])
       }
     }
-
-    if (isCatchAll) {
-      out.push(`{${paramNames.join('+')}}`) // terminal catch-all; static prefix subsumed (rule 5)
-    } else if (paramNames.length === 0) {
-      if (staticText !== '') out.push(encodeStaticSegment(staticText))
-    } else if (paramNames.length === 1) {
-      out.push(`{${paramNames[0]}}`)
-    } else {
-      out.push(`{${paramNames.join('+')}}`)
-    }
   }
+  flush()
 
   const normalized = '/' + out.join('/')
   return compiled.trailingSlash && normalized !== '/' ? normalized + '/' : normalized
