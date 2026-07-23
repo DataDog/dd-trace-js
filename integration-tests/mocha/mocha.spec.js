@@ -312,6 +312,59 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     ])
   })
 
+  /**
+   * @param {boolean} runInParallel
+   * @returns {Promise<void>}
+   */
+  async function assertProgrammaticRunWaitsForFinalPayload (runInParallel) {
+    const completionOrder = []
+    const completedMessage = 'programmatic Mocha run completed'
+    receiver.setWaitingTime(500)
+
+    const intakePromise = (async () => {
+      await receiver.payloadReceived(({ url, payload }) => (
+        url === '/api/v2/citestcycle' &&
+        payload.events.some(event => event.type === 'test_session_end')
+      ))
+      completionOrder.push('intake')
+    })()
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          REPORT_RUN_CALLBACK: '1',
+          ...(runInParallel && { RUN_IN_PARALLEL: '1' }),
+        },
+      }
+    )
+    childProcess.stdout?.on('data', (chunk) => {
+      const output = chunk.toString()
+      testOutput += output
+      if (output.includes(completedMessage)) completionOrder.push('run')
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      intakePromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.deepStrictEqual(completionOrder, ['intake', 'run'], testOutput)
+  }
+
+  for (const runInParallel of [false, true]) {
+    const mode = runInParallel ? 'parallel' : 'serial'
+    onlyLatestIt(`waits for the final payload before invoking the programmatic run callback (${mode})`, async () => {
+      await assertProgrammaticRunWaitsForFinalPayload(runInParallel)
+    })
+  }
+
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
