@@ -6,8 +6,9 @@ const { mkdirSync, mkdtempSync, rmSync, symlinkSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
 
-const { nodeFileTrace } = require('@vercel/nft')
 const { describe, it } = require('mocha')
+
+const { NODE_MAJOR } = require('../../../../version')
 
 const repoRoot = path.resolve(__dirname, '../../../..')
 const expectedPackageFiles = [
@@ -15,6 +16,14 @@ const expectedPackageFiles = [
   'node_modules/@datadog/flagging-core/package.json',
   'node_modules/spark-md5/package.json',
 ]
+
+if (NODE_MAJOR < 20) {
+  describe.skip('OpenFeature file tracing (requires @vercel/nft, which needs Node.js >= 20)')
+  return
+}
+
+// eslint-disable-next-line import/order
+const { nodeFileTrace } = require('@vercel/nft')
 
 /**
  * @param {string} entrypoint
