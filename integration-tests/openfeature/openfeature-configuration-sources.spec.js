@@ -65,7 +65,7 @@ const AGENTLESS_RESPONSE = zlib.gzipSync(JSON.stringify({
 }))
 
 /** @typedef {'absent'|'true'|'false'} BooleanSetting */
-/** @typedef {'agentless'|'remote_config'|'disabled'|'error'} Delivery */
+/** @typedef {'agentless'|'remote_config'|'disabled'} Delivery */
 /** @typedef {{ name: string, value?: string }} SourceSetting */
 /**
  * @typedef {object} ConfigurationCase
@@ -137,8 +137,7 @@ describe('OpenFeature configuration source contract', () => {
     assert.deepStrictEqual(countDeliveries(configurationCases), {
       agentless: 12,
       remote_config: 12,
-      disabled: 27,
-      error: 12,
+      disabled: 39,
     })
 
     await runCases(configurationCases)
@@ -242,19 +241,12 @@ async function runCase (testCase) {
         waitForObservation(agentlessRequests, testCase.identifier, 'agentless', hasObservation),
         sendCommand(proc, accessCommand),
       ])
-    } else if (testCase.expected === 'error') {
-      await assert.rejects(
-        sendCommand(proc, accessCommand),
-        /Unsupported Feature Flagging configuration source: (offline|unsupported)/
-      )
     } else {
       await sendCommand(proc, accessCommand)
     }
 
-    if (testCase.expected !== 'error') {
-      const { details } = await sendCommand(proc, { command: 'evaluate' })
-      assertEvaluation(testCase, details)
-    }
+    const { details } = await sendCommand(proc, { command: 'evaluate' })
+    assertEvaluation(testCase, details)
 
     await waitForObservation(
       remoteConfigRequests,
@@ -349,7 +341,7 @@ function assertDeliveryTraffic (testCase) {
     for (const request of cdnRequests) {
       assert.strictEqual(request.url, `${AGENTLESS_PATH}?case=${testCase.identifier}`, testCase.label)
       assert.strictEqual(request.headers['accept-encoding'], 'gzip', testCase.label)
-      assert.strictEqual(request.headers['dd-api-key'], 'integration-api-key', testCase.label)
+      assert.strictEqual(request.headers['dd-api-key'], undefined, testCase.label)
       assert.strictEqual(request.headers['dd-client-library-language'], 'nodejs', testCase.label)
       assert.strictEqual(request.headers['dd-client-library-version'], VERSION, testCase.label)
     }
@@ -647,7 +639,6 @@ function countDeliveries (cases) {
     agentless: 0,
     remote_config: 0,
     disabled: 0,
-    error: 0,
   }
   for (const testCase of cases) counts[testCase.expected]++
   return counts
@@ -686,7 +677,7 @@ function expectedDelivery (stable, source, legacy) {
   if (stable === 'false') return 'disabled'
   if (source.name === 'agentless') return 'agentless'
   if (source.name === 'remote_config') return 'remote_config'
-  if (source.name === 'offline' || source.name === 'invalid') return 'error'
+  if (source.name === 'offline' || source.name === 'invalid') return 'disabled'
   if (legacy === 'true') return 'remote_config'
   if (legacy === 'false') return 'disabled'
   return 'agentless'

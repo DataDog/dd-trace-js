@@ -847,23 +847,6 @@ describe('request', function () {
       })
     })
 
-    it('keeps dd-api-key over http for an explicitly trusted custom endpoint', (done) => {
-      nock('http://flags.dev.internal', { reqheaders: { 'dd-api-key': 'secret-key' } })
-        .post('/v1/input')
-        .reply(200, 'OK')
-
-      request(Buffer.from(''), {
-        method: 'POST',
-        url: new URL('http://flags.dev.internal/v1/input'),
-        headers: { 'dd-api-key': 'secret-key' },
-        allowInsecureApiKey: true,
-      }, (err, res) => {
-        assert.strictEqual(res, 'OK')
-        sinon.assert.notCalled(log.error)
-        done(err)
-      })
-    })
-
     for (const loopbackHost of ['127.0.0.1', '127.1.2.3', 'localhost', '[::1]']) {
       it(`keeps dd-api-key over http to the loopback host ${loopbackHost}`, (done) => {
         nock(`http://${loopbackHost}:9999`, {

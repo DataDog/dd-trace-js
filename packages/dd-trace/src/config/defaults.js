@@ -243,10 +243,8 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       const originalTransform = transformer
       transformer = (value, optionName, source) => {
         if (!allowed.test(value)) {
-          const preserveInvalidSource = canonicalName === 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE' &&
-            String(value).trim() !== ''
-          warnInvalidValue(value, optionName, source, 'Invalid value', undefined, !preserveInvalidSource)
-          if (!preserveInvalidSource) return
+          warnInvalidValue(value, optionName, source, 'Invalid value')
+          return
         }
         if (originalTransform) {
           value = originalTransform(value)
