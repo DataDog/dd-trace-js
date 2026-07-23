@@ -27,13 +27,47 @@ describe('Plugin', () => {
       legacyStorage.enterWith(undefined)
     })
 
-    it('normalizes the Orchestrion context into the semantic query lifecycle', () => {
+    it('keeps package subscriptions in one shared source adapter', () => {
       const MysqlOrchestrionPlugin = require('../src/orchestrion')
-      const { connectionQuery: ConnectionQueryPlugin } = MysqlOrchestrionPlugin.plugins
-      const plugin = new ConnectionQueryPlugin({}, {})
+      const { MysqlSourceAdapter } = require('../src/source-adapter')
+      const plugin = new MysqlOrchestrionPlugin({}, {})
+      const adapter = new MysqlSourceAdapter()
+
+      assert.strictEqual(plugin._subscriptions.length, 0)
+      assert.strictEqual(plugin._bindings.length, 0)
+      assert.strictEqual(adapter._subscriptions.length, 3)
+      assert.strictEqual(adapter._bindings.length, 4)
+    })
+
+    it('routes source configuration through the shared database processor', () => {
+      const MysqlOrchestrionPlugin = require('../src/orchestrion')
+      const { sourceRuntime } = require('../src/source-adapter')
+      const tracer = {
+        _env: 'test',
+        _service: 'test',
+        _version: '1.0.0',
+      }
+      const plugin = new MysqlOrchestrionPlugin(tracer, {})
+      const config = { enabled: true, dbmPropagationMode: 'disabled' }
+
+      plugin.configure(config)
+      try {
+        assert.strictEqual(plugin._registry.getSource('db.query', 'mysql').config, config)
+        assert.strictEqual(sourceRuntime.consumers.has(plugin), true)
+      } finally {
+        plugin.configure(false)
+      }
+
+      assert.strictEqual(plugin._registry.getSource('db.query', 'mysql'), undefined)
+      assert.strictEqual(sourceRuntime.consumers.has(plugin), false)
+    })
+
+    it('normalizes the Orchestrion context into the semantic query lifecycle', () => {
+      const { MysqlSourceAdapter } = require('../src/source-adapter')
+      const adapter = new MysqlSourceAdapter()
       const channel = dc.channel('tracing:datadog:db:query:start')
       const expectedStore = { span: {} }
-      const ctx = {
+      const context = {
         arguments: ['SELECT 1'],
         self: { config: { database: 'test' } },
       }
@@ -46,58 +80,118 @@ describe('Plugin', () => {
       })
 
       try {
-        const store = plugin.bindStart(ctx)
+        const store = adapter.bindConnectionQuery(context)
 
-        assert.strictEqual(received, ctx)
+        assert.strictEqual(received, context)
         assert.strictEqual(store, expectedStore)
-        assert.strictEqual(ctx.kind, 'database')
-        assert.strictEqual(ctx.operation, 'query')
-        assert.deepStrictEqual(ctx.source, { integration: 'mysql', system: 'mysql' })
-        assert.strictEqual(ctx.data.connection, ctx.self.config)
-        assert.strictEqual(ctx.arguments[0], '/* injected */ SELECT 1')
+        assert.strictEqual(context.kind, 'database')
+        assert.strictEqual(context.operation, 'query')
+        assert.deepStrictEqual(context.source, { integration: 'mysql', system: 'mysql' })
+        assert.strictEqual(context.data.scope, 'connection')
+        assert.strictEqual(context.data.connection, context.self.config)
+        assert.strictEqual(context.arguments[0], '/* injected */ SELECT 1')
       } finally {
         channel.unbindStore(legacyStorage)
       }
     })
 
-    it('ignores connection query end without a query result or active span', () => {
-      const MysqlOrchestrionPlugin = require('../src/orchestrion')
-      const { connectionQuery: ConnectionQueryPlugin } = MysqlOrchestrionPlugin.plugins
-      const plugin = new ConnectionQueryPlugin({}, {})
+    it('publishes error and finish before invoking a connection callback', () => {
+      const { MysqlSourceAdapter } = require('../src/source-adapter')
+      const adapter = new MysqlSourceAdapter()
+      const errorChannel = dc.channel('tracing:datadog:db:query:error')
+      const finishChannel = dc.channel('tracing:datadog:db:query:finish')
+      const onError = sinon.stub()
       const onFinish = sinon.stub()
-      const channel = dc.channel('tracing:datadog:db:query:finish')
+      const callback = sinon.stub().returns('callback-result')
+      const query = { _callback: callback }
+      const context = {
+        arguments: ['SELECT 1'],
+        self: { config: { database: 'test' } },
+      }
+      const error = new Error('query failed')
 
-      channel.subscribe(onFinish)
+      errorChannel.subscribe(onError)
+      finishChannel.subscribe(onFinish)
       try {
-        plugin.end({})
+        adapter.bindConnectionQuery(context)
+        context.result = query
+        adapter.endConnectionQuery(context)
+        const result = query._callback(error, 'query-result')
 
-        sinon.assert.notCalled(onFinish)
+        assert.strictEqual(result, 'callback-result')
+        assert.strictEqual(context.error, error)
+        assert.strictEqual(context.result, 'query-result')
+        sinon.assert.calledOnceWithExactly(onError, context, errorChannel.name)
+        sinon.assert.calledOnceWithExactly(onFinish, context, finishChannel.name)
+        sinon.assert.calledOnceWithExactly(callback, error, 'query-result')
       } finally {
-        channel.unsubscribe(onFinish)
+        errorChannel.unsubscribe(onError)
+        finishChannel.unsubscribe(onFinish)
       }
     })
 
-    it('publishes pool query finish when a thenable pool result settles', () => {
-      const MysqlOrchestrionPlugin = require('../src/orchestrion')
-      const { poolQuery: PoolQueryPlugin } = MysqlOrchestrionPlugin.plugins
-      const plugin = new PoolQueryPlugin({}, {})
-      const channel = dc.channel('datadog:mysql:pool:query:finish')
+    it('publishes connection completion from an EventEmitter exactly once', () => {
+      const { MysqlSourceAdapter } = require('../src/source-adapter')
+      const adapter = new MysqlSourceAdapter()
+      const finishChannel = dc.channel('tracing:datadog:db:query:finish')
       const onFinish = sinon.stub()
-      const ctx = {
-        result: {
-          then: sinon.stub().callsFake((resolve) => resolve()),
-        },
+      const query = { once: sinon.stub() }
+      const context = {
+        arguments: ['SELECT 1'],
+        self: { config: { database: 'test' } },
       }
 
-      channel.subscribe(onFinish)
+      finishChannel.subscribe(onFinish)
       try {
-        plugin.end(ctx)
+        adapter.bindConnectionQuery(context)
+        context.result = query
+        adapter.endConnectionQuery(context)
+        sinon.assert.calledOnceWithExactly(query.once, 'end', sinon.match.func)
 
-        sinon.assert.calledOnce(ctx.result.then)
-        sinon.assert.calledOnce(onFinish)
-        assert.strictEqual(onFinish.firstCall.args[0], ctx)
+        query.once.firstCall.args[1]()
+        query.once.firstCall.args[1]()
+        sinon.assert.calledOnceWithExactly(onFinish, context, finishChannel.name)
       } finally {
-        channel.unsubscribe(onFinish)
+        finishChannel.unsubscribe(onFinish)
+      }
+    })
+
+    it('runs pool query contributors without publishing a duplicate semantic query', () => {
+      const { MysqlSourceAdapter, sourceRegistry } = require('../src/source-adapter')
+      const adapter = new MysqlSourceAdapter()
+      const startChannel = dc.channel('tracing:datadog:db:query:start')
+      const finishChannel = dc.channel('tracing:datadog:db:query:finish')
+      const onSemanticStart = sinon.stub()
+      const onSemanticFinish = sinon.stub()
+      const parentStore = { parent: true }
+      const contributorStore = { analyzed: true }
+      const onContributorStart = sinon.stub().returns(contributorStore)
+      const onContributorFinish = sinon.stub().returns(parentStore)
+      const callback = sinon.stub()
+      const context = { arguments: ['SELECT 1', callback] }
+
+      startChannel.bindStore(legacyStorage, onSemanticStart)
+      finishChannel.subscribe(onSemanticFinish)
+      sourceRegistry.registerContributor('db.query', 'test.mysql.pool', {
+        sources: new Set(['mysql']),
+        start: onContributorStart,
+        finish: onContributorFinish,
+      })
+      try {
+        const store = legacyStorage.run(parentStore, () => adapter.bindPoolQuery(context))
+        context.arguments[1]('query-result')
+
+        assert.strictEqual(store, contributorStore)
+        assert.strictEqual(context.data.scope, 'pool')
+        sinon.assert.calledOnceWithExactly(onContributorStart, context, parentStore)
+        sinon.assert.calledOnceWithExactly(onContributorFinish, context, contributorStore)
+        sinon.assert.calledOnceWithExactly(callback, 'query-result')
+        sinon.assert.notCalled(onSemanticStart)
+        sinon.assert.notCalled(onSemanticFinish)
+      } finally {
+        sourceRegistry.unregisterContributor('db.query', 'test.mysql.pool')
+        startChannel.unbindStore(legacyStorage)
+        finishChannel.unsubscribe(onSemanticFinish)
       }
     })
   })

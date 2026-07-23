@@ -83,9 +83,10 @@ class DatabasePlugin extends StoragePlugin {
    * @param {import('../../../..').Span} span
    * @param {string} serviceName
    * @param {boolean} disableFullMode
+   * @param {object} [config] Plugin configuration for the operation source.
    */
-  createDbmComment (span, serviceName, disableFullMode = false) {
-    const mode = this.config.dbmPropagationMode
+  createDbmComment (span, serviceName, disableFullMode = false, config = this.config) {
+    const mode = config.dbmPropagationMode
 
     if (mode === 'disabled') {
       return null
@@ -99,7 +100,7 @@ class DatabasePlugin extends StoragePlugin {
 
     // Add propagation hash if process tags are enabled and either SQL base hash injection is enabled
     // or dynamic_service mode implicitly enables it
-    if (propagationHash.isEnabled() && (this.config['dbm.injectSqlBaseHash'] || mode === 'dynamic_service')) {
+    if (propagationHash.isEnabled() && (config['dbm.injectSqlBaseHash'] || mode === 'dynamic_service')) {
       const hashBase64 = propagationHash.getHashBase64()
       if (hashBase64) {
         dbmComment += `,ddsh='${hashBase64}'`
@@ -123,16 +124,17 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} query
    * @param {string} serviceName
    * @param {boolean} disableFullMode
+   * @param {object} [config] Plugin configuration for the operation source.
    * @returns {string}
    */
-  injectDbmQuery (span, query, serviceName, disableFullMode = false) {
-    const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
+  injectDbmQuery (span, query, serviceName, disableFullMode = false, config = this.config) {
+    const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode, config)
 
     if (!dbmTraceComment) {
       return query
     }
 
-    return this.config.appendComment
+    return config.appendComment
       ? `${query} /*${dbmTraceComment}*/`
       : `/*${dbmTraceComment}*/ ${query}`
   }

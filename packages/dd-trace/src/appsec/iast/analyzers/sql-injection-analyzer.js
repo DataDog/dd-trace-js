@@ -3,40 +3,31 @@
 const { SQL_INJECTION } = require('../vulnerabilities')
 const { getRanges } = require('../taint-tracking/operations')
 const { storage } = require('../../../../../datadog-core')
+const { getEventSourceRegistry } = require('../../../events/source-registry')
 const { getNodeModulesPaths } = require('../path-line')
 const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
-
-/**
- * @typedef {object} MysqlOrchestrionContext
- * @property {Array<unknown>} arguments
- * @property {unknown} [result]
- * @property {unknown} [sql]
- * @property {boolean} [iastSqlAnalyzed]
- */
-
-/**
- * @param {MysqlOrchestrionContext} ctx
- * @returns {unknown}
- */
-function getMysqlOrchestrionSql (ctx) {
-  const firstArg = ctx.arguments?.[0]
-
-  return firstArg?.sql || firstArg
-}
+const DATABASE_QUERY_OPERATION = 'db.query'
+const DATABASE_CONTRIBUTOR_ID = 'iast.sql-injection'
 
 class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   constructor () {
     super(SQL_INJECTION)
+
+    this._sourceRegistry = getEventSourceRegistry()
+    this._databaseContributor = {
+      sources: new Set(['mysql']),
+      start: (event, store) => this.analyzeDatabaseQuery(event, store),
+      finish: (event, store) => this.finishDatabaseQuery(event, store),
+    }
   }
 
   onConfigure () {
-    this.addSub('apm:mysql:query:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
-    this.addSub(
-      'tracing:orchestrion:mysql:Connection_query:start',
-      ctx => this.analyzeMysqlOrchestrionConnectionQuery(ctx)
-    )
+    this._mysqlEventSubscription = this._getAndRegisterSubscription({
+      moduleName: 'mysql',
+      tag: this._type,
+    })
     this.addSub('datadog:mysql2:outerquery:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
     this.addSub(
       'apm:pg:query:start',
@@ -52,17 +43,6 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addBind('datadog:pg:pool:query:start', ({ query }) => this.getStoreAndAnalyze(query.text, 'POSTGRES'))
     this.addSub('datadog:pg:pool:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.setStoreAndAnalyzeIfNeeded(sql, 'MYSQL'))
-    this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
-    this.addBind(
-      'tracing:orchestrion:mysql:Pool_query:start',
-      ctx => this.bindMysqlOrchestrionPoolQuery(ctx)
-    )
-    this.addSub(
-      'tracing:orchestrion:mysql:Pool_query:end',
-      ctx => this.finishMysqlOrchestrionPoolQuery(ctx)
-    )
-
     this.addBind('datadog:knex:raw:start', (context) => {
       const { sql, dialect: knexDialect } = context
       const dialect = this.normalizeKnexDialect(knexDialect)
@@ -75,32 +55,36 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addBind('datadog:knex:raw:finish', ({ currentStore }) => currentStore?.sqlParentStore)
   }
 
-  setStoreAndAnalyze (query, dialect) {
-    const store = this.getStoreAndAnalyze(query, dialect)
+  /**
+   * Register or remove the analyzer from the shared database event domain.
+   *
+   * @param {boolean|object} config IAST analyzer configuration.
+   * @returns {void}
+   */
+  configure (config) {
+    const enabled = typeof config === 'boolean' ? config : config?.enabled === true
 
-    if (store) {
-      storage('legacy').enterWith(store)
+    super.configure(config)
+    if (enabled) {
+      this._sourceRegistry.registerContributor(
+        DATABASE_QUERY_OPERATION,
+        DATABASE_CONTRIBUTOR_ID,
+        this._databaseContributor
+      )
+    } else {
+      this._sourceRegistry.unregisterContributor(DATABASE_QUERY_OPERATION, DATABASE_CONTRIBUTOR_ID)
     }
-
-    return store
   }
 
   /**
-   * Enter a SQL-analyzed store unless a parent pool-query hook already did it.
+   * Analyze a query and return a store marking nested database calls as handled.
    *
-   * @param {unknown} query
-   * @param {string} dialect
-   * @returns {object|undefined}
+   * @param {unknown} query SQL query value.
+   * @param {string} dialect SQL dialect.
+   * @param {object|undefined} parentStore Parent operation store.
+   * @returns {object|undefined} SQL-analyzed child store.
    */
-  setStoreAndAnalyzeIfNeeded (query, dialect) {
-    const store = storage('legacy').getStore()
-    if (store?.sqlAnalyzed) return store
-
-    return this.setStoreAndAnalyze(query, dialect)
-  }
-
-  getStoreAndAnalyze (query, dialect) {
-    const parentStore = storage('legacy').getStore()
+  getStoreAndAnalyze (query, dialect, parentStore = storage('legacy').getStore()) {
     if (parentStore) {
       this.analyze(query, parentStore, dialect)
 
@@ -115,69 +99,43 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   }
 
   /**
-   * Analyze Orchestrion mysql connection queries when the APM plugin is not configured.
+   * Analyze one normalized MySQL event without subscribing to package channels.
    *
-   * The mysql APM plugin republishes the legacy `apm:mysql:query:start` channel
-   * from its bind hook. When that path ran, `ctx.sql` is already populated and
-   * the legacy subscriber above has handled the original SQL text.
-   *
-   * @param {MysqlOrchestrionContext} ctx
-   * @returns {void}
+   * @param {object} event Normalized database query event.
+   * @param {object|undefined} store Current operation store.
+   * @returns {object|undefined} Store composed into the source lifecycle.
    */
-  analyzeMysqlOrchestrionConnectionQuery (ctx) {
-    if (ctx.sql !== undefined) return
+  analyzeDatabaseQuery (event, store) {
+    if (event.source?.integration !== 'mysql' || store?.sqlAnalyzed) return store
 
-    this.analyze(getMysqlOrchestrionSql(ctx), undefined, 'MYSQL')
+    return this._execHandlerAndIncMetric({
+      handler: () => {
+        if (event.data.scope === 'pool') {
+          const analyzedStore = this.getStoreAndAnalyze(event.data.statement, 'MYSQL', store)
+          if (analyzedStore) event.iastSqlAnalyzed = true
+          return analyzedStore || store
+        }
+
+        this.analyze(event.data.statement, store, 'MYSQL')
+        return store
+      },
+      metric: this._mysqlEventSubscription.executedMetric,
+      tags: this._mysqlEventSubscription.tags,
+    })
   }
 
   /**
-   * Bind the IAST SQL-analyzed store around Orchestrion mysql pool queries.
+   * Restore the parent store for a pool query analyzed by this contributor.
    *
-   * Pool queries dispatch into `Connection.query`, so the analyzed store must be
-   * active while the original pool method executes. The APM plugin also
-   * republishes the legacy pool channel from its bind hook; `ctx.sql` or an
-   * existing `sqlAnalyzed` store means that path has already run.
-   *
-   * @param {MysqlOrchestrionContext} ctx
-   * @returns {object|undefined}
+   * @param {object} event Normalized database query event.
+   * @param {object|undefined} store Store returned from the start phase.
+   * @returns {object|undefined} Parent operation store.
    */
-  bindMysqlOrchestrionPoolQuery (ctx) {
-    const currentStore = storage('legacy').getStore()
-    if (ctx.sql !== undefined || currentStore?.sqlAnalyzed) return currentStore
+  finishDatabaseQuery (event, store) {
+    if (event.source?.integration !== 'mysql' || !event.iastSqlAnalyzed) return store
 
-    const store = this.getStoreAndAnalyze(getMysqlOrchestrionSql(ctx), 'MYSQL')
-    if (!store) return
-
-    ctx.iastSqlAnalyzed = true
-
-    const args = ctx.arguments
-    const callback = args[args.length - 1]
-    if (typeof callback === 'function') {
-      const analyzer = this
-      args[args.length - 1] = function () {
-        analyzer.returnToParentStore()
-
-        return callback.apply(this, arguments)
-      }
-    }
-
-    return store
-  }
-
-  /**
-   * Restore the parent IAST store when an Orchestrion mysql pool query returns a thenable.
-   *
-   * @param {MysqlOrchestrionContext} ctx
-   * @returns {void}
-   */
-  finishMysqlOrchestrionPoolQuery (ctx) {
-    if (!ctx.iastSqlAnalyzed) return
-
-    const result = ctx.result
-    if (result && typeof result.then === 'function') {
-      const finish = () => this.returnToParentStore()
-      result.then(finish, finish)
-    }
+    event.iastSqlAnalyzed = false
+    return store?.sqlParentStore
   }
 
   _getEvidence (value, iastContext, dialect) {
