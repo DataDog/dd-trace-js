@@ -31,6 +31,52 @@ describe('rewriter loader', () => {
     loadSync = rewriterLoader.loadSync
   })
 
+  it('does not load the rewriter for dependencies without targets', () => {
+    const loaderUrl = pathToFileURL(join(testDirectory, '../../../src/helpers/rewriter/loader.mjs')).href
+    const rewriterPath = join(testDirectory, '../../../src/helpers/rewriter/index.js')
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
+      import { createRequire } from 'node:module'
+
+      const require = createRequire(import.meta.url)
+      const rewriterPath = require.resolve(${JSON.stringify(rewriterPath)})
+      const { load } = await import(${JSON.stringify(loaderUrl)})
+      const result = await load('file:///app/node_modules/example/index.mjs', { format: 'module' }, () => ({
+        format: 'module',
+        source: ${JSON.stringify(source)},
+      }))
+
+      console.log(result.source === ${JSON.stringify(source)})
+      console.log(require.cache[rewriterPath] === undefined)
+    `], {
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout, 'true\ntrue\n')
+  })
+
+  it('does not rewrite application modules', async () => {
+    const result = await load('file:///app.mjs', { format: 'module' }, () => ({ format: 'module', source }))
+
+    assert.strictEqual(result.source, source)
+  })
+
+  it('does not rewrite dependencies without targets', async () => {
+    const result = await load(
+      'file:///app/node_modules/example/index.mjs',
+      { format: 'module' },
+      () => ({ format: 'module', source })
+    )
+
+    assert.strictEqual(result.source, source)
+  })
+
+  it('does not rewrite results without source', async () => {
+    const result = await load(createAiModuleUrl(), { format: 'module' }, () => ({ format: 'module' }))
+
+    assert.deepStrictEqual(result, { format: 'module' })
+  })
+
   it('rewrites async loader results', async () => {
     const url = createAiModuleUrl()
     const result = await load(url, { format: 'module' }, () => ({ format: 'module', source }))
