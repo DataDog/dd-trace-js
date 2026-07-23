@@ -1112,6 +1112,7 @@ function main () {
   const packageJsonPath = path.join(repoRoot, 'package.json')
   const pluginsVar = '$' + '{PLUGINS}'
   const bracePluginsVar = '{' + pluginsVar + '}'
+  // eslint-disable-next-line unicorn/no-useless-concat -- Keep the GitHub expression marker non-contiguous.
   const ghaExprStart = '$' + '{{'
 
   /** @type {{ scripts?: Record<string, string> }} */

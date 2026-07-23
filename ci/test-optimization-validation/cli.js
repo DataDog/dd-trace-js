@@ -546,7 +546,7 @@ function getValidationCoverage ({ results, requestedScenario, frameworks, scenar
   if (runnableFrameworks.length === 0) return 'partial'
   for (const framework of runnableFrameworks) {
     for (const scenario of scenarios) {
-      if (results.every(result => !(result.frameworkId === framework.id && result.scenario === scenario))) {
+      if (!results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) {
         return 'partial'
       }
     }

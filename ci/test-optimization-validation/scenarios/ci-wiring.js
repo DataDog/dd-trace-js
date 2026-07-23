@@ -338,7 +338,7 @@ function getNodeOptionsRemovalDiagnosis ({ basicResult, evidence, framework }) {
     : ''
 
   return 'The CI test command ran tests, but no Test Optimization events reached the offline event artifact. ' +
-    `${ciCommand}` +
+    ciCommand +
     `${source} expands to \`${finding.command}\`. The empty \`NODE_OPTIONS=\` assignment clears the Datadog ` +
     `preload before ${frameworkName} starts.${directResult}`
 }

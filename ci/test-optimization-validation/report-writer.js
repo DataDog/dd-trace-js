@@ -845,7 +845,7 @@ function getResultDetailLines (result, options = {}) {
 
 function getCommonArtifactDirectory (artifacts) {
   let directory = path.dirname(path.resolve(artifacts[0]))
-  while (artifacts.some(artifact => !isPathInside(directory, path.resolve(artifact)))) {
+  while (!artifacts.every(artifact => isPathInside(directory, path.resolve(artifact)))) {
     const parent = path.dirname(directory)
     if (parent === directory) return directory
     directory = parent

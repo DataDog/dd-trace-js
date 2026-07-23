@@ -812,7 +812,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
  * @returns {boolean}
  */
 function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt, hasFailure) {
-  if (!isFinalAttempt || !hasFailure || statuses.length === 0 || statuses.some(status => status !== 'fail')) {
+  if (!isFinalAttempt || !hasFailure || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
     return false
   }
 

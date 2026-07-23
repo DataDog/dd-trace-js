@@ -140,7 +140,7 @@ class PrioritySampler {
       samplers[key] = new Sampler(rates[key])
     }
 
-    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
+    samplers[DEFAULT_KEY] ||= defaultSampler
 
     this._samplers = samplers
 

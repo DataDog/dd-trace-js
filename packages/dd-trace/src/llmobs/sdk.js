@@ -324,7 +324,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   exportSpan (span) {
-    span = span || this._active()
+    span ||= this._active()
     let err = ''
     try {
       if (!span) {

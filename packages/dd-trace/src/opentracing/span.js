@@ -440,7 +440,7 @@ class DatadogSpan {
       }
     }
 
-    spanContext._trace.ticks = spanContext._trace.ticks || now()
+    spanContext._trace.ticks ||= now()
     if (startTime) {
       spanContext._trace.startTime = startTime
     }

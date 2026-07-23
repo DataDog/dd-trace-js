@@ -55,7 +55,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return
 
-    options = options || {}
+    options ||= {}
 
     return this._tracer.trace(name, options, fn)
   }
@@ -68,7 +68,7 @@ class NoopProxy {
 
     if (typeof fn !== 'function') return fn
 
-    options = options || {}
+    options ||= {}
 
     return this._tracer.wrap(name, options, fn)
   }

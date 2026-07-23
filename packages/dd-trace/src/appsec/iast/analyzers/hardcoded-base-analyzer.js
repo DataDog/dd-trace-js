@@ -56,7 +56,7 @@ class HardcodedBaseAnalyzer extends Analyzer {
   }
 
   _getEvidence (value) {
-    return { value: `${value.data}` }
+    return { value: value.data }
   }
 
   _getLocation (value) {

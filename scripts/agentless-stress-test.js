@@ -21,9 +21,9 @@ if (!process.env.DD_API_KEY) {
 }
 
 process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
-process.env.DD_TRACE_DEBUG = process.env.DD_TRACE_DEBUG || 'false'
-process.env.DD_ENV = process.env.DD_ENV || 'agentless-stress-test'
-process.env.DD_SERVICE = process.env.DD_SERVICE || 'agentless-stress-test'
+process.env.DD_TRACE_DEBUG ||= 'false'
+process.env.DD_ENV ||= 'agentless-stress-test'
+process.env.DD_SERVICE ||= 'agentless-stress-test'
 process.env.DD_TRACE_FLUSH_INTERVAL = '2000'
 
 const tracer = require('../packages/dd-trace').init()

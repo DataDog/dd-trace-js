@@ -651,6 +651,7 @@ export default [
       'unicorn/no-array-splice': 'off', // toSpliced copies the whole array (perf)
       'unicorn/no-break-in-nested-loop': 'off', // Conflicts with our performance-oriented loops
       'unicorn/no-global-object-property-assignment': 'off', // We use globalThis[Symbol.for('dd-trace')]
+      'unicorn/no-negated-array-predicate': 'off', // Predicate inversion is harder to read and creates churn
       'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
@@ -678,17 +679,12 @@ export default [
       'unicorn/switch-case-braces': 'off', // Questionable benefit
 
       // These remaining rules need focused rewrites before activation (counts from the v72 run).
-      'unicorn/logical-assignment-operators': 'off', // 51 errors | matches our ??=/||= usage
       'unicorn/no-confusing-array-splice': 'off', // 1 error
       'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
       'unicorn/no-negated-comparison': 'off', // 1 error
       'unicorn/no-subtraction-comparison': 'off', // 2 errors
       'unicorn/no-unnecessary-global-this': 'off', // 3 errors | explicit globals are clearer
-      'unicorn/no-unnecessary-splice': 'off', // 2 errors
-      'unicorn/no-useless-concat': 'off', // 4 errors
       'unicorn/no-useless-continue': 'off', // 1 error
-      'unicorn/no-useless-delete-check': 'off', // 1 error
-      'unicorn/no-useless-template-literals': 'off', // 16 errors | String() rewrites reduce readability
       'unicorn/prefer-array-from-map': 'off', // 9 errors | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // 52 errors
       'unicorn/prefer-logical-operator-over-ternary': 'off', // 3 errors

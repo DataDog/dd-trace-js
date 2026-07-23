@@ -148,7 +148,7 @@ function buildQuarantinedResponse (framework, scenario, discoveredIdentities = [
   for (const identity of identities) {
     for (const suite of getSuiteCandidates(identity, scenario)) {
       for (const name of getNameCandidates(identity)) {
-        suites[suite] = suites[suite] || { tests: {} }
+        suites[suite] ||= { tests: {} }
         suites[suite].tests[name] = {
           properties: {
             quarantined: true,
