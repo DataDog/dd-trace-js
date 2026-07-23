@@ -694,7 +694,7 @@ function formatApprovalArgument (value) {
   const argument = String(value)
   if (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument)) return argument
   if (process.platform === 'win32') return JSON.stringify(argument)
-  return `'${argument.replaceAll('\'', String.raw`'"'"'`)}'`
+  return `'${argument.replaceAll('\'', '\'"\'"\'')}'`
 }
 
 function serializeDisplayCommand (command) {

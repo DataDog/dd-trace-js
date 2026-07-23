@@ -16,15 +16,18 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('amqplib', 'amqplib', '>=0.10.0', version => {
     useSandbox([`'amqplib@${version}'`], false,
       ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'amqplib', 'connect')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'amqplib',
+      packageName: 'amqplib',
+      defaultExport: true,
+      namedExports: ['connect'],
+      namedExportBinding: 'namespace',
     })
 
     beforeEach(async () => {
@@ -36,7 +39,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

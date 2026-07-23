@@ -139,7 +139,7 @@ function assertOutputParentsUnchanged (state) {
     }
   }
 
-  const lastExisting = state.parentIdentities[state.parentIdentities.length - 1].path
+  const lastExisting = state.parentIdentities.at(-1).path
   const relative = path.relative(lastExisting, path.dirname(state.outputPath))
   let current = lastExisting
   for (const segment of relative ? relative.split(path.sep) : []) {
