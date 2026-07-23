@@ -81,8 +81,7 @@ class ChildProcessPlugin extends TracingPlugin {
 
     const span = ctx.currentStore?.span || this.activeSpan
 
-    // eslint-disable-next-line unicorn/no-useless-template-literals -- Span tag contract requires a string.
-    span?.setTag('cmd.exit_code', `${exitCode}`)
+    span?.setTag('cmd.exit_code', String(exitCode))
     span?.finish()
 
     return ctx.parentStore
@@ -113,8 +112,7 @@ class ChildProcessPlugin extends TracingPlugin {
 
     const span = ctx.currentStore?.span || this.activeSpan
 
-    // eslint-disable-next-line unicorn/no-useless-template-literals -- Span tag contract requires a string.
-    span?.setTag('cmd.exit_code', `${exitCode}`)
+    span?.setTag('cmd.exit_code', String(exitCode))
     span?.finish()
 
     return ctx.parentStore

@@ -127,8 +127,7 @@ class PrismaPlugin extends DatabasePlugin {
 
 function formatResourceName (resource, attributes) {
   if (attributes?.name) {
-    // eslint-disable-next-line unicorn/no-useless-template-literals -- Attribute values are not always strings.
-    return `${attributes.name}`.trim()
+    return attributes.name.trim()
   }
   if (attributes?.model && attributes.method) {
     return `${attributes.model}.${attributes.method}`.trim()
