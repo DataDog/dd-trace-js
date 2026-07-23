@@ -404,9 +404,10 @@ function getToolCallResultContent (content) {
         return typeof reason === 'string' ? reason : UNPARSABLE_TOOL_RESULT
       }
       return UNPARSABLE_TOOL_RESULT
-    } else if (result !== undefined) {
-      return typeof result === 'string' ? result : stringifyToolCallResult(result)
     }
+    if (result !== undefined) {
+      return typeof result === 'string' ? result : stringifyToolCallResult(result)
+}
 
     return UNSUPPORTED_TOOL_RESULT
   } catch {
