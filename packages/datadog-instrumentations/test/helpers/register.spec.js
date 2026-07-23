@@ -3,12 +3,14 @@
 const Module = require('module')
 const assert = require('node:assert/strict')
 
+const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
 
 describe('register', () => {
   let hooksMock
   let HookMock
   let originalModuleProtoRequire
+  let telemetryMock
 
   const clearRegisterCache = () => {
     const registerPath = require.resolve('../../src/helpers/register')
@@ -29,6 +31,7 @@ describe('register', () => {
     }
 
     HookMock = sinon.stub()
+    telemetryMock = sinon.stub()
 
     const registerPath = require.resolve('../../src/helpers/register')
     originalModuleProtoRequire = Module.prototype.require
@@ -38,6 +41,7 @@ describe('register', () => {
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
+          '../../../dd-trace/src/guardrails/telemetry': telemetryMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }
@@ -97,4 +101,25 @@ describe('register', () => {
       assert.deepStrictEqual(registeredNames.sort(), ['@confluentinc/kafka-javascript', 'mongodb-core'])
     })
   }
+
+  it('should report the name and version correctly for scoped integration names', () => {
+    loadRegisterWithEnv()
+
+    const integrationName = '@confluentinc/kafka-javascript'
+    const moduleVersion = '0.1.0'
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === integrationName)
+    const callback = hookCall.args[2]
+
+    callback('original', integrationName, '/path/to/module', moduleVersion)
+    channel('dd-trace:exporter:first-flush').publish()
+
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'abort.integration', [
+      `integration:${integrationName}`,
+      `integration_version:${moduleVersion}`,
+    ], {
+      result: 'abort',
+      result_class: 'incompatible_library',
+      result_reason: `Incompatible integration version: ${integrationName}@${moduleVersion}`,
+    })
+  })
 })
