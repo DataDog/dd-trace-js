@@ -121,11 +121,16 @@ describe('Standalone ASM', () => {
       assert.ok(groups.indexOf(rootGroup) < groups.indexOf(outboundGroup))
       assert.strictEqual(String(outboundSpan.parent_id), String(rootSpan.span_id))
 
-      // Load-bearing: the delayed child chunk must carry the billing marker,
-      // even though its parent is a local (non-remote) span.
-      assert.strictEqual(rootSpan.metrics['_dd.apm.enabled'], 0)
-      assert.strictEqual(outboundGroup[0], outboundSpan)
-      assert.strictEqual(outboundSpan.metrics['_dd.apm.enabled'], 0)
+      // Load-bearing: every span in every chunk must carry the billing marker,
+      // including the delayed child whose parent is a local (non-remote) span.
+      for (const group of groups) {
+        for (const span of group) {
+          assert.strictEqual(
+            span.metrics['_dd.apm.enabled'], 0,
+            `span ${span.name}/${span.resource} missing _dd.apm.enabled:0`
+          )
+        }
+      }
     })
 
     it('should keep fifth req because RateLimiter allows 1 req/min', async () => {
