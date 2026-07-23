@@ -209,7 +209,7 @@ function summarizeManagedTests (testManagementTests) {
     }
     summary.set(displaySuite, testNames)
   }
-  return [...summary.entries()].slice(0, 5).map(([suite, tests]) => ({
+  return [...summary].slice(0, 5).map(([suite, tests]) => ({
     suite,
     tests: [...tests].slice(0, 5),
   }))

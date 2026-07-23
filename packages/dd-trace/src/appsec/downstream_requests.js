@@ -307,7 +307,7 @@ function parseBody (body, contentType) {
       const formBody = Buffer.isBuffer(body) ? body.toString('utf8') : String(body)
       const params = new URLSearchParams(formBody)
       const result = {}
-      for (const [key, value] of params.entries()) {
+      for (const [key, value] of params) {
         if (key in result) {
           const existing = result[key]
           if (Array.isArray(existing)) {

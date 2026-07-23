@@ -36,10 +36,7 @@ function getRemoveProbeExpression (id) {
  * @returns {string}
  */
 function compileBreakpointCondition (probes) {
-  const probeConditions = []
-  for (const probe of probes) {
-    probeConditions.push(compileProbeCondition(probe))
-  }
+  const probeConditions = probes.map(compileProbeCondition)
 
   // NOTE: $dd_sampler is read from the realm-local `globalThis` where it was installed (the main
   // realm). A probe whose code runs in a different V8 realm (e.g. a `vm.createContext` script with a

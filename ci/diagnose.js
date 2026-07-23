@@ -1394,7 +1394,7 @@ function findScriptMatches (scripts, patterns) {
 
   for (const script of scripts) {
     if (!/test|spec|e2e|integration|unit/i.test(script.name) &&
-      !patterns.some(pattern => pattern.test(script.command))) {
+      patterns.every(pattern => !pattern.test(script.command))) {
       continue
     }
 

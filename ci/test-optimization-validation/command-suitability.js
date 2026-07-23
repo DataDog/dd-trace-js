@@ -183,7 +183,7 @@ function getVitestGeneratedPathError (command, framework, repositoryRoot) {
     const relative = path.relative(path.dirname(configFile), file.path).split(path.sep).join('/')
     if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) continue
 
-    if (includes.length > 0 && !includes.some(pattern => matchesGlob(relative, pattern))) {
+    if (includes.length > 0 && includes.every(pattern => !matchesGlob(relative, pattern))) {
       return `uses temporary test path ${file.path}, which does not match the literal test.include patterns in ` +
         `${configFile}: ${includes.join(', ')}. Choose a temporary test path accepted by the selected Vitest ` +
         'config ' +
@@ -257,9 +257,7 @@ function readLiteralStringArray (config, offset) {
       }
       patterns.push(value)
       quote = ''
-    } else if (character.charCodeAt(0) === 92) {
-      return []
-    } else if (character === '\r' || character === '\n') {
+    } else if (character.charCodeAt(0) === 92 || character === '\r' || character === '\n') {
       return []
     } else {
       value += character

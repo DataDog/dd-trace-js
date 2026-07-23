@@ -9,7 +9,7 @@ function getTokensFromLlmOutput (result) {
   const { llmOutput } = result
   if (!llmOutput) return tokens
 
-  const tokenUsage = llmOutput.tokenUsage || llmOutput.usage_metadata || llmOutput.usage_metadata
+  const tokenUsage = llmOutput.tokenUsage || llmOutput.usage_metadata
   if (!tokenUsage) return tokens
 
   for (const tokenNames of [['input', 'prompt'], ['output', 'completion'], ['total']]) {

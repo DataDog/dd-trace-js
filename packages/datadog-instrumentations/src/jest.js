@@ -1361,8 +1361,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
           }
         }
-      }
-      if (event.name === 'test_done') {
+      } else if (event.name === 'test_done') {
         const originalError = event.test?.errors?.[0]
         let status = 'pass'
         if (event.test.errors && event.test.errors.length) {
@@ -1565,8 +1564,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (ctx.concurrentTestState) {
           ctx.currentStore = undefined
         }
-      }
-      if (event.name === 'run_finish') {
+      } else if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
@@ -1595,8 +1593,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
-      }
-      if (event.name === 'test_skip' || event.name === 'test_todo') {
+      } else if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {

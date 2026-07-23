@@ -7,10 +7,6 @@ class FsPlugin extends TracingPlugin {
   static operation = 'operation'
   static experimental = true
 
-  configure (...args) {
-    return super.configure(...args)
-  }
-
   bindStart (ctx) {
     if (!this.activeSpan) return { noop: true }
 

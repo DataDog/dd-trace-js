@@ -45,9 +45,11 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         }
         injectTraceContext(this.tracer, span, ctx.msg)
       }
-    }
-
-    if (ctx.functionName === 'send' || ctx.functionName === 'sendBatch' || ctx.functionName === 'scheduleMessages') {
+    } else if (
+      ctx.functionName === 'send' ||
+      ctx.functionName === 'sendBatch' ||
+      ctx.functionName === 'scheduleMessages'
+    ) {
       const messages = ctx.msg
       const isBatch = messages.constructor?.name === 'ServiceBusMessageBatchImpl'
       if (isBatch) {
