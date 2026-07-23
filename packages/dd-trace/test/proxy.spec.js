@@ -174,7 +174,7 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfig: sinon.spy(),
+      setRemoteConfigFromLibConfig: sinon.spy(),
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -346,7 +346,7 @@ describe('TracerProxy', () => {
 
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', conf))
 
-        sinon.assert.calledWith(config.setRemoteConfig, conf)
+        sinon.assert.calledWith(config.setRemoteConfigFromLibConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
       })
@@ -496,7 +496,7 @@ describe('TracerProxy', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
-        config.setRemoteConfig = remoteConfig => {
+        config.setRemoteConfigFromLibConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
         }
 
@@ -514,7 +514,7 @@ describe('TracerProxy', () => {
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {
         /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
-        config.setRemoteConfig = remoteConfig => {
+        config.setRemoteConfigFromLibConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
         }
 
@@ -573,7 +573,7 @@ describe('TracerProxy', () => {
         config.telemetry = {}
         config.appsec.enabled = true
         config.iast.enabled = true
-        config.setRemoteConfig = conf => {
+        config.setRemoteConfigFromLibConfig = conf => {
           config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
         }
 
