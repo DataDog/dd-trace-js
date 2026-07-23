@@ -29,6 +29,17 @@ describe('Orchestrion event source', () => {
     assert.strictEqual(channel.error.name, 'tracing:orchestrion:mysql:Connection_query:error')
   })
 
+  it('keeps physical source channels package-scoped', () => {
+    const mysql = getOrchestrionChannel('mysql', 'db_query')
+    const mysqlAgain = getOrchestrionChannel('mysql', 'db_query')
+    const mariadb = getOrchestrionChannel('mariadb', 'db_query')
+
+    assert.strictEqual(mysql.start, mysqlAgain.start)
+    assert.notStrictEqual(mysql.start, mariadb.start)
+    assert.strictEqual(mysql.start.name, 'tracing:orchestrion:mysql:db_query:start')
+    assert.strictEqual(mariadb.start.name, 'tracing:orchestrion:mariadb:db_query:start')
+  })
+
   it('carries the transform context and semantic store through the source start channel', () => {
     const source = getOrchestrionChannel('mysql', 'Connection_query')
     const semantic = createLifecycleChannels('tracing:datadog:db:query', ['start'])
