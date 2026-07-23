@@ -6,7 +6,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { runDiagnosis } = require('../diagnose')
-const { getCommandSuitabilityError } = require('./command-suitability')
 const cucumberAdapter = require('./framework-adapters/cucumber')
 const cypressAdapter = require('./framework-adapters/cypress')
 const playwrightAdapter = require('./framework-adapters/playwright')
@@ -15,16 +14,86 @@ const {
   getGeneratedRetryStatePath,
   getGeneratedTestContent,
 } = require('./generated-test-contract')
+const { getCommandSuitabilityError } = require('./command-suitability')
 const { validateManifest } = require('./manifest-schema')
 const { maskJavaScriptComments, maskJavaScriptNonCode } = require('./source-text')
 
 const SUPPORTED_SCAFFOLD_FRAMEWORKS = new Set(['cucumber', 'cypress', 'jest', 'mocha', 'playwright', 'vitest'])
 const MAX_LOCAL_TEST_CANDIDATES = 3
-const MAX_REPRESENTATIVE_TESTS = 150
+const MAX_DISCOVERY_ENTRIES = 5000
+const MAX_DIRECTORY_ENTRIES = 1024
 const MAX_CI_FILE_BYTES = 512 * 1024
+const MAX_JSON_FILE_BYTES = 512 * 1024
+const MAX_CI_DIRECTORY_ENTRIES = 256
 const MAX_CI_REVIEW_TARGETS = 3
+const LOCAL_SOCKET_API_PATTERN =
+  /(?:\bsupertest\b|\bcreateServer\s*\(|\.listen\s*\(|(?:from\s+|require\s*\(\s*)['"]node:(?:http|https|net)['"])/
+const LOCAL_SOCKET_REQUEST_PATTERN =
+  /\bcy\.(?:visit|request)\s*\(\s*['"](?:\/|https?:\/\/(?:localhost|127\.0\.0\.1))/
+const JEST_VALUE_OPTIONS = new Set([
+  '-c', '-t', '-w', '--config', '--env', '--ignoreProjects', '--maxWorkers', '--outputFile', '--runner',
+  '--selectProjects', '--shard', '--testEnvironment', '--testNamePattern', '--testPathPattern', '--testPathPatterns',
+  '--testTimeout',
+])
 const JEST_RUNNER_CONFIG_EXTENSION_PATTERN = /\.[cm]?[jt]s$/
 const JEST_RUNNER_CONFIG_SUFFIX_PATTERN = /^[A-Za-z0-9_.-]+$/
+const PLAYWRIGHT_FIXTURE_EXTENSIONS = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']
+const PLAYWRIGHT_LOCAL_ESM_TEST_IMPORT_PATTERN =
+  /\bimport\s*\{([^}]*)\}\s*from\s*(['"])(\.{1,2}\/[^'"\r\n]+)\2/g
+const PLAYWRIGHT_LOCAL_CJS_TEST_IMPORT_PATTERN =
+  /\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\s*\(\s*(['"])(\.{1,2}\/[^'"\r\n]+)\2\s*\)/g
+const PLAYWRIGHT_NAMED_EXPORT_PATTERN = /\bexport\s*\{([^}]*)\}/g
+const PLAYWRIGHT_COMMONJS_EXPORT_PATTERN = /\bmodule\.exports\s*=\s*\{([^}]*)\}/g
+const PLAYWRIGHT_DIRECT_IMPORT_PATTERN = /(?:from\s+|require\s*\(\s*)['"]@playwright\/test['"]/
+const ISOLATION_CONFIGURATION_OPTIONS = {
+  cucumber: new Set([
+    '-p', '--config', '--import', '--language', '--loader', '--profile', '--require', '--require-module',
+    '--world-parameters',
+  ]),
+  cypress: new Set(['--browser', '--component', '--config-file', '--e2e', '--headed', '--headless']),
+  jest: new Set(['--config', '--detectLeaks', '--env', '--runner', '--testEnvironment']),
+  mocha: new Set([
+    '-r', '-t', '-u', '--check-leaks', '--config', '--enable-source-maps', '--extension', '--loader', '--require',
+    '--timeout', '--ui',
+  ]),
+  playwright: new Set(['-c', '--config', '--project']),
+  vitest: new Set(['--browser', '--config', '--environment', '--project', '--root']),
+}
+const ISOLATION_CONFIGURATION_VALUE_OPTIONS = {
+  cucumber: new Set([
+    '-p', '--config', '--import', '--language', '--loader', '--profile', '--require', '--require-module',
+    '--world-parameters',
+  ]),
+  cypress: new Set(['--browser', '--config-file']),
+  jest: new Set(['--config', '--env', '--runner', '--testEnvironment']),
+  mocha: new Set(['-r', '-t', '-u', '--config', '--extension', '--loader', '--require', '--timeout', '--ui']),
+  playwright: new Set(['-c', '--config', '--project']),
+  vitest: new Set(['--browser', '--config', '--environment', '--project', '--root']),
+}
+const ISOLATION_PRESENTATION_OPTIONS = {
+  cucumber: new Set(['--format', '--format-options', '--no-publish', '--publish']),
+  cypress: new Set(['--quiet']),
+  jest: new Set(['--colors', '--noStackTrace', '--silent', '--verbose']),
+  mocha: new Set(['-R', '--color', '--no-color', '--recursive', '--reporter']),
+  playwright: new Set(['--quiet', '--reporter']),
+  vitest: new Set(['--color', '--no-color', '--reporter', '--silent']),
+}
+const ISOLATION_PRESENTATION_VALUE_OPTIONS = {
+  cucumber: new Set(['--format', '--format-options']),
+  cypress: new Set(),
+  jest: new Set(),
+  mocha: new Set(['-R', '--reporter']),
+  playwright: new Set(['--reporter']),
+  vitest: new Set(['--reporter']),
+}
+const RUNNER_ENVIRONMENT_VARIABLES = new Set([
+  'BABEL_ENV',
+  'CI',
+  'CUCUMBER_PUBLISH_ENABLED',
+  'NODE_ENV',
+  'TS_NODE_PROJECT',
+  'TZ',
+])
 const CI_PATHS = [
   '.github/workflows',
   '.gitlab-ci.yml',
@@ -88,8 +157,10 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
         ciDiscovery,
         artifactNamespaces.get(framework)
       )),
-      ...detectedNotRunnable.map(framework => buildDetectedNotRunnableFrameworkScaffold(repositoryRoot, framework)),
-      ...unsupported.map(framework => buildUnsupportedFrameworkScaffold(repositoryRoot, framework)),
+      ...detectedNotRunnable.map(framework => {
+        return buildDetectedNotRunnableFrameworkScaffold(repositoryRoot, framework, ciDiscovery)
+      }),
+      ...unsupported.map(framework => buildUnsupportedFrameworkScaffold(repositoryRoot, framework, ciDiscovery)),
     ],
     omitted: [],
   }
@@ -106,9 +177,10 @@ function createManifestScaffold ({ root, frameworks = new Set() }) {
  *
  * @param {string} repositoryRoot repository root
  * @param {object} detection framework detection
+ * @param {object} ciDiscovery bounded CI discovery result
  * @returns {object} manifest framework entry
  */
-function buildDetectedNotRunnableFrameworkScaffold (repositoryRoot, detection) {
+function buildDetectedNotRunnableFrameworkScaffold (repositoryRoot, detection, ciDiscovery) {
   const locations = detection.locations || []
   const packageJsonPath = getDetectionPackageJson(repositoryRoot, locations)
   const projectRoot = path.dirname(packageJsonPath)
@@ -133,6 +205,7 @@ function buildDetectedNotRunnableFrameworkScaffold (repositoryRoot, detection) {
       repositoryRoot,
       framework: detection.id,
     }),
+    ciWiring: buildCiWiringScaffold(ciDiscovery),
     notes: [reason],
   }
 }
@@ -142,9 +215,10 @@ function buildDetectedNotRunnableFrameworkScaffold (repositoryRoot, detection) {
  *
  * @param {string} repositoryRoot repository root
  * @param {object} detection static framework detection
+ * @param {object} ciDiscovery bounded CI discovery result
  * @returns {object} non-runnable framework manifest entry
  */
-function buildUnsupportedFrameworkScaffold (repositoryRoot, detection) {
+function buildUnsupportedFrameworkScaffold (repositoryRoot, detection, ciDiscovery) {
   const packageJsonPath = getDetectionPackageJson(repositoryRoot, detection.locations)
   const projectRoot = path.dirname(packageJsonPath)
   const packageJson = readJson(packageJsonPath) || {}
@@ -158,6 +232,7 @@ function buildUnsupportedFrameworkScaffold (repositoryRoot, detection) {
     status: 'unsupported_by_validator',
     supportLevel: 'detected_only',
     project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+    ciWiring: buildCiWiringScaffold(ciDiscovery),
     notes: [
       `${detection.name} was detected at ${detection.locations.join(', ') || 'an unknown location'}, but is not ` +
         'supported by this Test Optimization validator.',
@@ -179,6 +254,7 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
       status: 'detected_not_runnable',
       supportLevel: 'dd_trace_supported_but_validator_missing_adapter',
       project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+      ciWiring: buildCiWiringScaffold(ciDiscovery),
       notes: [
         `${detection.name} was detected and is supported by dd-trace, but this local validator has no live ` +
           `${detection.name} adapter. Live validation currently supports Cucumber, Cypress, Jest, Mocha, ` +
@@ -187,7 +263,7 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
     }
   }
 
-  const runner = tryResolveRunner(framework, projectRoot)
+  const runner = tryResolveRunner(framework, projectRoot, repositoryRoot)
   if (!runner) {
     const packageName = getRunnerPackageName(framework)
     const declaredVersion = packageJson.dependencies?.[packageName] || packageJson.devDependencies?.[packageName]
@@ -201,6 +277,7 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
       frameworkVersion: detection.version,
       status: 'requires_manual_setup',
       project: getProject({ packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }),
+      ciWiring: buildCiWiringScaffold(ciDiscovery),
       notes: [
         `${detection.name} was detected, but its executable package could not be resolved from ` +
           `${path.relative(repositoryRoot, projectRoot) || 'the repository root'}.${setupDetail}`,
@@ -208,55 +285,40 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
     }
   }
   const scriptName = getPackageScriptName(packageJson, detection.command)
-  const preserveProjectWrapper = framework !== 'cypress' &&
-    Boolean(scriptName) && !usesFrameworkRunner(detection.command, framework)
-  const packageScriptSetupBlocker = preserveProjectWrapper
-    ? getPackageScriptSetupBlocker({
-      command: detection.command,
-      packageJson,
-      projectRoot,
-      repositoryRoot,
-      scriptName,
-    })
-    : undefined
-  if (packageScriptSetupBlocker) {
-    return {
-      id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
-      framework,
-      frameworkVersion: detection.version,
-      language: 'unknown',
-      status: 'requires_manual_setup',
-      supportLevel: 'validator_supported',
-      project: getProject({
-        detectedCommand: detection.command,
-        framework,
-        packageJson,
-        packageJsonPath,
-        projectRoot,
-        repositoryRoot,
-      }),
-      notes: [packageScriptSetupBlocker],
-    }
-  }
-  const projectOwnedRunner = preserveProjectWrapper
-    ? getProjectOwnedNodeRunner(detection.command, projectRoot)
-    : undefined
+  const preserveProjectWrapper = Boolean(scriptName)
   const baseCommand = buildExistingCommand({
     framework,
     detectedCommand: detection.command,
-    projectOwnedRunner,
     projectRoot,
     repositoryRoot,
     runner,
     scriptName,
     preserveProjectWrapper,
   })
+  const directRunnerSelection = scriptName
+    ? getIsolationRunnerSelection(framework, detection.command)
+    : undefined
+  const directBaseCommand = directRunnerSelection
+    ? buildDirectRunnerBaseCommand({
+      framework,
+      projectRoot,
+      runner,
+      selection: directRunnerSelection,
+    })
+    : undefined
   const representativeRoot = findPreferredRepresentativeRoot(projectRoot, repositoryRoot)
   const representativePackage = readJson(path.join(representativeRoot, 'package.json')) || packageJson
+  const representativeSearchRoots = getRepresentativeSearchRoots(
+    representativeRoot,
+    framework,
+    detection.command,
+    representativePackage
+  )
   const representativeSelection = findRepresentativeTestFiles(
     representativeRoot,
     framework,
-    representativePackage.name
+    representativePackage.name,
+    representativeSearchRoots
   )
   const project = getProject({
     detectedCommand: detection.command,
@@ -266,27 +328,64 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
     projectRoot,
     repositoryRoot,
   })
-  const localTestCandidates = representativeSelection.candidates.map(({ file }) => ({
-    command: buildFocusedCommand(
+  const candidateSelections = []
+  for (const { file } of representativeSelection.candidates) {
+    const projectCommand = buildFocusedCommand(
       baseCommand,
       framework,
       file,
       Boolean(scriptName),
       preserveProjectWrapper
-    ),
-    maxTestCount: MAX_REPRESENTATIVE_TESTS,
-    sourceFile: file,
-  })).filter(candidate => !getCommandSuitabilityError({
-    command: candidate.command,
-    framework: { framework, project },
-    label: 'the selected test command',
-    repositoryRoot,
-  }))
+    )
+    const projectError = getCommandSuitabilityError({
+      command: projectCommand,
+      framework: { framework },
+      label: `${framework} Basic Reporting candidate`,
+      repositoryRoot,
+    })
+    const useDirectRunner = Boolean(directBaseCommand) &&
+      (directRunnerSelection.hasSourceSelectors || projectError)
+    if (projectError && !useDirectRunner) {
+      representativeSelection.rejected.push(`${path.relative(projectRoot, file)} (${projectError})`)
+      continue
+    }
+    const selectedBaseCommand = useDirectRunner ? directBaseCommand : baseCommand
+    candidateSelections.push({
+      baseCommand: selectedBaseCommand,
+      candidate: {
+        command: buildFocusedCommand(
+          selectedBaseCommand,
+          framework,
+          file,
+          !useDirectRunner && Boolean(scriptName),
+          !useDirectRunner && preserveProjectWrapper
+        ),
+        origin: useDirectRunner ? 'validator-direct' : 'project',
+        selection: useDirectRunner || directRunnerSelection ? 'exact' : 'best_effort',
+        sourceFile: file,
+      },
+    })
+  }
+  const localTestCandidates = candidateSelections.map(selection => selection.candidate)
+  const isolationTestCandidates = []
+  for (const [primaryCandidateIndex, candidate] of localTestCandidates.entries()) {
+    if (candidate.origin !== 'project') continue
+    const isolationTestCandidate = buildIsolationTestCandidate({
+      detectedCommand: detection.command,
+      framework,
+      primaryCandidateIndex,
+      projectRoot,
+      representative: candidate.sourceFile,
+      runner,
+      scriptName,
+    })
+    if (isolationTestCandidate) isolationTestCandidates.push(isolationTestCandidate)
+  }
   const representative = localTestCandidates[0]?.sourceFile
   if (!representative) {
     const reason = representativeSelection.rejected.length > 0
       ? `Candidate test files could not be selected safely: ${representativeSelection.rejected.slice(0, 3).join(', ')}.`
-      : 'No bounded representative test file could be selected from the detected project.'
+      : 'No suitable representative test file could be selected from the detected project.'
     return {
       id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
       framework,
@@ -295,13 +394,15 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
       status: 'requires_manual_setup',
       supportLevel: 'validator_supported',
       project,
+      ciWiring: buildCiWiringScaffold(ciDiscovery),
       notes: [`${reason} Select a real ${detection.name} test before live validation.`],
     }
   }
   const command = localTestCandidates[0].command
+  const isolationTestCandidate = isolationTestCandidates.find(candidate => candidate.primaryCandidateIndex === 0)
 
   const generatedTestStrategy = buildGeneratedTestStrategy({
-    baseCommand: preserveProjectWrapper ? baseCommand : undefined,
+    baseCommand: candidateSelections[0]?.baseCommand,
     framework,
     packageJson,
     projectRoot,
@@ -309,11 +410,10 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
     runner,
     runnerEnvironment: getRunnerEnvironment(detection.command, framework),
     artifactNamespace,
-    runnerConfigurationArgs: preserveProjectWrapper
-      ? []
-      : getRunnerConfigurationArgs(framework, detection.command),
+    runnerConfigurationArgs: getRunnerConfigurationArgs(framework, detection.command),
   })
-  const ciWiring = buildCiWiringScaffold(repositoryRoot, ciDiscovery)
+  const ciWiring = buildCiWiringScaffold(ciDiscovery)
+  const runnerMode = getRunnerMode(framework, detection.command)
 
   return {
     id: `${framework}:${getProjectIdentifier(packageJson, projectRoot, repositoryRoot)}`,
@@ -322,28 +422,40 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
     language: /\.tsx?$/.test(generatedTestStrategy.fileExtension) ? 'typescript' : 'javascript',
     status: 'runnable',
     supportLevel: 'validator_supported',
+    browserRequired: framework === 'cypress' || framework === 'playwright' ||
+      (framework === 'vitest' && runnerMode === 'browser'),
     localSocketRequired: representativeSelection.candidates.every(candidate => candidate.requiresLocalSocket),
     project,
     existingTestCommand: command,
     localTestCandidates,
-    preflight: { status: 'pending', maxTestCount: MAX_REPRESENTATIVE_TESTS },
+    ...(isolationTestCandidate ? { isolationTestCandidate } : {}),
+    ...(isolationTestCandidates.length > 0 ? { isolationTestCandidates } : {}),
+    preflight: { status: 'pending' },
     ciWiring,
     generatedTestStrategy,
     notes: [
       representative
-        ? `Generated by --init-manifest with up to ${MAX_LOCAL_TEST_CANDIDATES} bounded whole-file candidates, ` +
+        ? `Generated by --init-manifest with up to ${MAX_LOCAL_TEST_CANDIDATES} whole-file candidates, ` +
           `starting with ${path.relative(repositoryRoot, representative)}.`
-        : 'Generated by --init-manifest. Select a bounded existing test file if no candidate passes preflight.',
-      projectOwnedRunner
-        ? `Basic Reporting preserves project-owned runner ${path.relative(projectRoot, projectOwnedRunner)}.`
-        : preserveProjectWrapper
-          ? `Basic Reporting preserves package script ${scriptName} because it contains runner flags or custom ` +
-            'wrapper logic.'
-          : `Basic Reporting invokes the installed ${framework} runner directly; record the CI wrapper separately.`,
+        : 'Generated by --init-manifest. Select an existing test file if no candidate passes preflight.',
+      ...(representativeSearchRoots.length === 1 && representativeSearchRoots[0] !== representativeRoot
+        ? ['Candidate discovery was restricted to the statically selected test root ' +
+            `${path.relative(repositoryRoot, representativeSearchRoots[0])}.`]
+        : []),
+      localTestCandidates[0]?.origin === 'project'
+        ? `Basic Reporting preserves package script ${scriptName} and its project-owned runner semantics.`
+        : `Basic Reporting invokes the detected installed ${framework} runner directly with the selected file and ` +
+          'statically retained project configuration.',
+      ...(isolationTestCandidate
+        ? ['If the project command passes cleanly but does not produce complete initialized events, the validator ' +
+            'may run the disclosed equivalent direct-runner command to isolate wrapper propagation from tracer ' +
+            'or adapter behavior.']
+        : []),
       ...(representativeSelection.candidates.every(candidate => candidate.requiresLocalSocket)
         ? ['Every safe representative test found appears to open a local listener. The approved test command may ' +
-            'be blocked in an execution environment that denies project localhost sockets. If so, request normal ' +
-            'host/test permission only for the exact checksum-approved validator command.']
+            'be blocked in an execution environment that denies project localhost sockets. If so, retry the same ' +
+            'approved plan in a suitable project-test environment without requesting broader permissions ' +
+            'automatically.']
         : []),
       'CI command selection still requires repository-specific evidence.',
     ],
@@ -353,53 +465,34 @@ function buildFrameworkScaffold (repositoryRoot, detection, ciDiscovery, artifac
 /**
  * Builds bounded static CI evidence for a runnable framework.
  *
- * @param {string} repositoryRoot repository root
  * @param {object} ciDiscovery bounded CI discovery result
  * @returns {object} static CI wiring evidence
  */
-function buildCiWiringScaffold (repositoryRoot, ciDiscovery) {
-  const reviewTarget = ciDiscovery.reviewTargets[0]
+function buildCiWiringScaffold (ciDiscovery) {
   const initialization = {
     status: ciDiscovery.initialization.status,
     evidence: [...ciDiscovery.initialization.evidence],
   }
-  if (initialization.status !== 'not_configured') {
-    return {
-      diagnosis: 'Inspect the first matching CI review target and record the selected test job, command, ' +
-        'environment, and Test Optimization initialization evidence.',
-      initialization,
-    }
-  }
-
-  const ciWiring = {
-    diagnosis: 'The bounded scaffold inspected every discovered CI configuration file and found no ' +
-      'dd-trace/ci/init preload. No additional CI-file review is required for this static conclusion.',
+  return {
+    configFile: null,
+    job: null,
+    step: null,
+    command: null,
+    workingDirectory: null,
+    shell: null,
+    wrapperChain: [],
+    terminalTestCommand: null,
+    diagnosis: 'Inspect the first matching CI review target and record the selected test job, exact command, ' +
+      'environment, wrapper chain, and unresolved configuration before drawing a CI initialization conclusion.',
     initialization,
+    transport: {
+      mode: 'unknown',
+      evidence: [],
+    },
+    unresolved: [
+      'The CI test job, exact command, inherited configuration, and wrapper chain have not been resolved.',
+    ],
   }
-  if (reviewTarget) {
-    ciWiring.provider = getCiProvider(reviewTarget)
-    ciWiring.configFile = path.join(repositoryRoot, reviewTarget)
-    ciWiring.whySelected = `${reviewTarget} is the highest-ranked discovered test workflow. The missing ` +
-      'initialization conclusion applies to every discovered CI configuration file.'
-  }
-  return ciWiring
-}
-
-/**
- * Identifies a CI provider from a known repository-relative configuration path.
- *
- * @param {string} relativePath repository-relative CI path
- * @returns {string} provider name
- */
-function getCiProvider (relativePath) {
-  if (relativePath.startsWith('.github/workflows/')) return 'github-actions'
-  if (relativePath.startsWith('.circleci/')) return 'circleci'
-  if (relativePath.startsWith('.buildkite/')) return 'buildkite'
-  if (relativePath.startsWith('.gitlab-ci.')) return 'gitlab-ci'
-  if (relativePath.startsWith('azure-pipelines.')) return 'azure-pipelines'
-  if (relativePath.startsWith('bitbucket-pipelines.')) return 'bitbucket-pipelines'
-  if (relativePath === 'Jenkinsfile') return 'jenkins'
-  return 'unknown'
 }
 
 function getProject ({ detectedCommand, packageJson, packageJsonPath, projectRoot, repositoryRoot, framework }) {
@@ -416,26 +509,19 @@ function buildExistingCommand ({
   detectedCommand,
   framework,
   projectRoot,
-  projectOwnedRunner,
   repositoryRoot,
   runner,
   scriptName,
   preserveProjectWrapper,
 }) {
-  const packageManager = preserveProjectWrapper && !projectOwnedRunner
-    ? detectPackageManager(repositoryRoot)
-    : undefined
-  const argv = projectOwnedRunner
-    ? [process.execPath, projectOwnedRunner]
-    : preserveProjectWrapper
-      ? getPackageScriptArgv(packageManager, scriptName, repositoryRoot)
-      : getDirectRunnerArgv(framework, runner, detectedCommand)
+  const packageManager = preserveProjectWrapper ? detectPackageManager(repositoryRoot) : undefined
+  const argv = preserveProjectWrapper
+    ? getPackageScriptArgv(packageManager, scriptName, repositoryRoot)
+    : getDirectRunnerArgv(framework, runner, getRunnerConfigurationArgs(framework, detectedCommand))
   return {
-    description: projectOwnedRunner
-      ? `Detected project test runner ${path.relative(projectRoot, projectOwnedRunner)}`
-      : preserveProjectWrapper
-        ? `Detected custom package script ${scriptName}`
-        : `Direct installed ${framework} runner for local capability validation`,
+    description: preserveProjectWrapper
+      ? `Detected project package script ${scriptName}`
+      : `Detected installed ${framework} runner`,
     cwd: projectRoot,
     argv,
     env: preserveProjectWrapper ? {} : getRunnerEnvironment(detectedCommand, framework),
@@ -443,6 +529,96 @@ function buildExistingCommand ({
     timeoutMs: 300_000,
     usesShell: false,
   }
+}
+
+/**
+ * Builds an optional direct-runner command that keeps the selected file and statically recoverable runner mode.
+ *
+ * @param {object} input isolation inputs
+ * @param {string} input.detectedCommand detected package script
+ * @param {string} input.framework framework name
+ * @param {number} input.primaryCandidateIndex matching project candidate index
+ * @param {string} input.projectRoot project root
+ * @param {string} input.representative selected existing test file
+ * @param {string} input.runner resolved runner entrypoint
+ * @param {string|undefined} input.scriptName selected package script name
+ * @returns {object|undefined} isolation candidate
+ */
+function buildIsolationTestCandidate ({
+  detectedCommand,
+  framework,
+  primaryCandidateIndex,
+  projectRoot,
+  representative,
+  runner,
+  scriptName,
+}) {
+  if (!scriptName) return
+  const isolationSelection = getIsolationRunnerSelection(framework, detectedCommand)
+  if (!isolationSelection) return
+
+  const baseCommand = buildDirectRunnerBaseCommand({
+    description: `Direct installed ${framework} runner used only to isolate project-wrapper propagation`,
+    framework,
+    projectRoot,
+    runner,
+    selection: isolationSelection,
+  })
+  return {
+    command: buildFocusedCommand(baseCommand, framework, representative, false, false),
+    equivalence: {
+      configurationArgs: isolationSelection.configurationArgs,
+      framework,
+      mode: isolationSelection.mode,
+      sourceFile: representative,
+    },
+    origin: 'validator-direct',
+    primaryCandidateIndex,
+    sourceFile: representative,
+  }
+}
+
+/**
+ * Builds a direct installed-runner command with statically retained project semantics.
+ *
+ * @param {object} input direct command inputs
+ * @param {string} [input.description] command description
+ * @param {string} input.framework framework name
+ * @param {string} input.projectRoot project root
+ * @param {string} input.runner resolved runner entrypoint
+ * @param {object} input.selection retained runner selection
+ * @returns {object} direct runner command
+ */
+function buildDirectRunnerBaseCommand ({
+  description,
+  framework,
+  projectRoot,
+  runner,
+  selection,
+}) {
+  return {
+    description: description || `Detected installed ${framework} runner with project configuration`,
+    cwd: projectRoot,
+    argv: getDirectRunnerArgv(framework, runner, selection.configurationArgs),
+    env: selection.environment,
+    requiredEnvVars: [],
+    timeoutMs: 300_000,
+    usesShell: false,
+  }
+}
+
+/**
+ * Describes the statically retained runner mode for isolation reporting.
+ *
+ * @param {string} framework framework name
+ * @param {string} command detected command
+ * @returns {string} runner mode
+ */
+function getRunnerMode (framework, command) {
+  if (framework === 'cypress') return /(?:^|\s)--component(?:\s|$)/.test(command) ? 'component' : 'e2e'
+  if (framework === 'playwright') return 'test'
+  if (framework === 'vitest') return /(?:^|\s)--browser(?:[=\s]|$)/.test(command) ? 'browser' : 'node'
+  return 'test'
 }
 
 function buildGeneratedTestStrategy ({
@@ -504,12 +680,10 @@ function buildGeneratedTestStrategy ({
       id: definition.id,
       purpose: definition.purpose,
       runCommand: baseCommand && !['cucumber', 'playwright'].includes(framework)
-        ? buildFocusedCommand(
+        ? buildGeneratedProjectCommand(
           baseCommand,
           framework,
           definition.file,
-          true,
-          true,
           moduleSystem
         )
         : buildGeneratedRunCommand(
@@ -545,6 +719,35 @@ function buildGeneratedTestStrategy ({
             definitions.find(definition => definition.id === 'atr-fail-once').file
           )]),
     ],
+  }
+}
+
+/**
+ * Focuses a project-owned wrapper on one generated scenario while retaining generated-test controls.
+ *
+ * @param {object} baseCommand selected project or direct-runner command
+ * @param {string} framework selected framework
+ * @param {string} filename generated test file
+ * @param {string} moduleSystem generated test module system
+ * @returns {object} generated scenario command
+ */
+function buildGeneratedProjectCommand (baseCommand, framework, filename, moduleSystem) {
+  if (framework !== 'cypress') {
+    const command = buildFocusedCommand(baseCommand, framework, filename, true, true, moduleSystem)
+    if (framework === 'jest') {
+      command.argv = command.argv.filter(argument => argument.split('=', 1)[0] !== '--detectLeaks')
+      command.argv.push('--detectLeaks=false')
+    }
+    return command
+  }
+
+  const argv = [...baseCommand.argv]
+  if (path.basename(argv[0]).toLowerCase() === 'npm') argv.push('--')
+  argv.push(...cypressAdapter.getGeneratedTestArgs(filename, []).slice(1))
+  return {
+    ...baseCommand,
+    description: `${baseCommand.description} targeting ${path.basename(filename)}`,
+    argv,
   }
 }
 
@@ -687,6 +890,7 @@ function buildGeneratedRunCommand (
       ...args,
     ],
     env: runnerEnvironment,
+    outputPaths: framework === 'playwright' ? [playwrightAdapter.getOutputPath(filename)] : [],
     requiredEnvVars: [],
     timeoutMs: 300_000,
     usesShell: false,
@@ -720,6 +924,9 @@ function buildFocusedCommand (
     ...baseCommand,
     description: `${baseCommand.description} targeting ${path.basename(filename)}`,
     argv,
+    ...(framework === 'playwright'
+      ? { outputPaths: [...new Set([...(baseCommand.outputPaths || []), playwrightAdapter.getOutputPath(filename)])] }
+      : {}),
   }
 }
 
@@ -759,19 +966,53 @@ function getFocusedTestArgs (framework, filename, preserveDefaultReporter, modul
  * @param {string} projectRoot detected project root
  * @returns {string|undefined} resolved executable path
  */
-function tryResolveRunner (framework, projectRoot) {
+function tryResolveRunner (framework, projectRoot, repositoryRoot) {
   try {
-    return resolveRunner(framework, projectRoot)
+    return resolveRunner(framework, projectRoot, repositoryRoot)
   } catch {}
 }
 
-function resolveRunner (framework, projectRoot) {
+function resolveRunner (framework, projectRoot, repositoryRoot) {
   const packageName = getRunnerPackageName(framework)
-  const packageJsonPath = require.resolve(`${packageName}/package.json`, { paths: [projectRoot] })
-  const packageJson = readJson(packageJsonPath)
-  const binName = getRunnerExecutableName(framework)
-  const bin = typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin[binName]
-  return path.resolve(path.dirname(packageJsonPath), bin)
+  const root = path.resolve(repositoryRoot)
+  const projectPackageJsonPath = path.join(projectRoot, 'package.json')
+  const projectPackageJson = readJson(projectPackageJsonPath)
+  if (projectPackageJson?.name === packageName) {
+    const binName = getRunnerExecutableName(framework)
+    const bin = typeof projectPackageJson.bin === 'string'
+      ? projectPackageJson.bin
+      : projectPackageJson.bin?.[binName]
+    if (typeof bin === 'string') {
+      const runner = fs.realpathSync(path.resolve(projectRoot, bin))
+      if (!isPathInside(fs.realpathSync(root), runner)) {
+        throw new Error('runner executable resolves outside repository')
+      }
+      return runner
+    }
+  }
+  let directory = path.resolve(projectRoot)
+  while (directory === root || isPathInside(root, directory)) {
+    const packageJsonPath = path.join(directory, 'node_modules', ...packageName.split('/'), 'package.json')
+    try {
+      const stat = fs.lstatSync(packageJsonPath)
+      const physicalPackageJson = fs.realpathSync(packageJsonPath)
+      if (!stat.isFile() || stat.isSymbolicLink() || !isPathInside(fs.realpathSync(root), physicalPackageJson)) {
+        throw new Error('runner package metadata is not a regular repository-contained file')
+      }
+      const packageJson = readJson(physicalPackageJson)
+      const binName = getRunnerExecutableName(framework)
+      const bin = typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin?.[binName]
+      if (typeof bin !== 'string') throw new Error('runner package has no executable')
+      const runner = fs.realpathSync(path.resolve(path.dirname(physicalPackageJson), bin))
+      if (!isPathInside(fs.realpathSync(root), runner)) throw new Error('runner executable resolves outside repository')
+      return runner
+    } catch (error) {
+      if (fs.existsSync(packageJsonPath)) throw error
+    }
+    if (directory === root) break
+    directory = path.dirname(directory)
+  }
+  throw new Error(`${packageName} is not installed inside the repository`)
 }
 
 /**
@@ -840,30 +1081,19 @@ function getPackageScriptName (packageJson, command) {
 }
 
 /**
- * Reports whether a package script is a plain framework invocation that can be narrowed directly.
- *
- * @param {string} command detected framework command
- * @param {string} framework detected test framework
- * @returns {boolean} whether the command contains no project-owned runner flags
- */
-function usesFrameworkRunner (command, framework) {
-  return getFrameworkInvocation(command, framework) !== undefined
-}
-
-/**
  * Builds a direct local runner invocation while retaining bounded configuration flags.
  *
  * @param {string} framework framework name
  * @param {string} runner resolved runner entrypoint
- * @param {string} detectedCommand detected package command
+ * @param {string[]} configurationArgs approved runner configuration arguments
  * @returns {string[]} command arguments
  */
-function getDirectRunnerArgv (framework, runner, detectedCommand) {
+function getDirectRunnerArgv (framework, runner, configurationArgs = []) {
   return [
     process.execPath,
     runner,
     ...(['cypress', 'vitest'].includes(framework) ? ['run'] : framework === 'playwright' ? ['test'] : []),
-    ...getRunnerConfigurationArgs(framework, detectedCommand),
+    ...configurationArgs,
   ]
 }
 
@@ -875,53 +1105,9 @@ function getDirectRunnerArgv (framework, runner, detectedCommand) {
  * @returns {string[]} configuration arguments
  */
 function getRunnerConfigurationArgs (framework, command) {
-  const allowed = {
-    cucumber: new Set([
-      '--config',
-      '--import',
-      '--language',
-      '--loader',
-      '--profile',
-      '--require',
-      '--require-module',
-      '--world-parameters',
-    ]),
-    cypress: new Set(['--component', '--config-file', '--e2e']),
-    jest: new Set(['--config', '--env', '--runner', '--testEnvironment']),
-    mocha: new Set([
-      '-r',
-      '-t',
-      '-u',
-      '--check-leaks',
-      '--config',
-      '--enable-source-maps',
-      '--extension',
-      '--loader',
-      '--require',
-      '--timeout',
-      '--ui',
-    ]),
-    playwright: new Set(['-c', '--config', '--project']),
-    vitest: new Set(['--config', '--environment', '--project', '--root']),
-  }[framework]
+  const allowed = ISOLATION_CONFIGURATION_OPTIONS[framework]
   if (!allowed) return []
-  const valueOptions = {
-    cucumber: new Set([
-      '--config',
-      '--import',
-      '--language',
-      '--loader',
-      '--profile',
-      '--require',
-      '--require-module',
-      '--world-parameters',
-    ]),
-    cypress: new Set(['--config-file']),
-    jest: new Set(['--config', '--env', '--runner', '--testEnvironment']),
-    mocha: new Set(['-r', '-t', '-u', '--config', '--extension', '--loader', '--require', '--timeout', '--ui']),
-    playwright: new Set(['-c', '--config', '--project']),
-    vitest: new Set(['--config', '--environment', '--project', '--root']),
-  }[framework]
+  const valueOptions = ISOLATION_CONFIGURATION_VALUE_OPTIONS[framework]
 
   const invocation = getFrameworkInvocation(command, framework)
   if (!invocation) return []
@@ -940,6 +1126,100 @@ function getRunnerConfigurationArgs (framework, command) {
 }
 
 /**
+ * Returns the complete runner semantics that can be preserved in a direct isolation command.
+ *
+ * Any unclassified runner option makes isolation unavailable instead of silently changing execution mode.
+ *
+ * @param {string} framework framework name
+ * @param {string} command detected package command
+ * @returns {{
+ *   configurationArgs: string[],
+ *   environment: Record<string, string>,
+ *   hasSourceSelectors: boolean,
+ *   mode: string
+ * }|undefined}
+ * equivalent runner selection
+ */
+function getIsolationRunnerSelection (framework, command) {
+  if (/[<>]/.test(String(command || ''))) return
+  const invocation = getFrameworkInvocation(command, framework)
+  if (!invocation) return
+
+  const configurationOptions = ISOLATION_CONFIGURATION_OPTIONS[framework]
+  const configurationValueOptions = ISOLATION_CONFIGURATION_VALUE_OPTIONS[framework]
+  const presentationOptions = ISOLATION_PRESENTATION_OPTIONS[framework]
+  const presentationValueOptions = ISOLATION_PRESENTATION_VALUE_OPTIONS[framework]
+  if (!configurationOptions || !configurationValueOptions || !presentationOptions || !presentationValueOptions) return
+  const environment = getRunnerEnvironment(command, framework)
+  for (const token of invocation.tokens.slice(0, invocation.runnerIndex)) {
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(token)
+    if (assignment && !Object.hasOwn(environment, assignment[1])) return
+  }
+
+  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
+  const expectedSubcommand = {
+    cypress: 'run',
+    playwright: 'test',
+    vitest: 'run',
+  }[framework]
+  if (tokens[0] === expectedSubcommand) tokens.shift()
+
+  const configurationArgs = []
+  let hasSourceSelectors = false
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    if (!token.startsWith('-')) {
+      hasSourceSelectors = true
+      continue
+    }
+    const optionName = token.split('=', 1)[0]
+    if (framework === 'vitest' && optionName === '--run') continue
+    if (isFocusedSourceOption(framework, optionName)) {
+      if (!token.includes('=') && tokens[index + 1] && !tokens[index + 1].startsWith('-')) index++
+      continue
+    }
+    if (configurationOptions.has(optionName)) {
+      configurationArgs.push(token)
+      if (configurationValueOptions.has(optionName) && !token.includes('=')) {
+        const value = tokens[index + 1]
+        if (!value || value.startsWith('-')) return
+        configurationArgs.push(value)
+        index++
+      }
+      continue
+    }
+    if (presentationOptions.has(optionName)) {
+      if (presentationValueOptions.has(optionName) && !token.includes('=')) {
+        const value = tokens[index + 1]
+        if (!value || value.startsWith('-')) return
+        index++
+      }
+      continue
+    }
+    return
+  }
+
+  return {
+    configurationArgs,
+    environment,
+    hasSourceSelectors,
+    mode: getRunnerMode(framework, command),
+  }
+}
+
+/**
+ * Identifies runner arguments that select source files rather than changing runner semantics.
+ *
+ * @param {string} framework framework name
+ * @param {string} optionName runner option
+ * @returns {boolean} whether the option selects a source file
+ */
+function isFocusedSourceOption (framework, optionName) {
+  return (framework === 'cypress' && optionName === '--spec') ||
+    (framework === 'jest' && optionName === '--runTestsByPath')
+}
+
+/**
  * Returns simple test-configuration assignments from a direct framework invocation.
  *
  * @param {string} command detected package command
@@ -951,8 +1231,8 @@ function getRunnerEnvironment (command, framework) {
   const env = framework === 'cucumber' ? { CUCUMBER_PUBLISH_ENABLED: 'false' } : {}
   if (!invocation) return env
   for (const token of invocation.tokens.slice(0, invocation.runnerIndex)) {
-    const match = /^(BABEL_ENV|CI|NODE_ENV|TS_NODE_PROJECT|TZ)=(.*)$/.exec(token)
-    if (match) env[match[1]] = match[2]
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(token)
+    if (match && RUNNER_ENVIRONMENT_VARIABLES.has(match[1])) env[match[1]] = match[2]
   }
   return env
 }
@@ -965,16 +1245,25 @@ function getRunnerEnvironment (command, framework) {
  * @returns {{runnerIndex: number, tokens: string[]}|undefined} direct invocation
  */
 function getFrameworkInvocation (command, framework) {
+  if (/[\r\n;&|`]|\$\(/.test(String(command || ''))) return
   const tokens = tokenizeCommand(command)
   const executableName = getRunnerExecutableName(framework)
   const runnerIndex = tokens.findIndex(token => {
     const basename = path.basename(token).replace(/\.cmd$/i, '').toLowerCase()
-    return basename === executableName || (framework === 'cucumber' && basename === 'cucumber')
+    return basename === executableName ||
+      (framework === 'cucumber' && ['cucumber', 'cucumber.js', 'cucumber-js.js'].includes(basename))
   })
   if (runnerIndex === -1) return
 
-  for (const token of tokens.slice(0, runnerIndex)) {
+  const prefix = tokens.slice(0, runnerIndex)
+  const firstCommand = prefix.find(token => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))
+  const wrapper = path.basename(firstCommand || '').toLowerCase()
+  if (['c8', 'cross-env', 'env', 'npx', 'nyc'].includes(wrapper)) {
+    return { runnerIndex, tokens }
+  }
+  for (const token of prefix) {
     if (['c8', 'cross-env', 'env', 'npx'].includes(path.basename(token).toLowerCase())) continue
+    if (path.basename(token).toLowerCase() === 'node') continue
     if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
     return
   }
@@ -996,46 +1285,6 @@ function tokenizeCommand (command) {
 }
 
 /**
- * Identifies package scripts that would install dependencies or remove files before the selected runner starts.
- *
- * @param {object} input package-script inputs
- * @param {string} input.command selected package script source
- * @param {object} input.packageJson selected package metadata
- * @param {string} input.projectRoot selected project root
- * @param {string} input.repositoryRoot repository root
- * @param {string} input.scriptName selected package script name
- * @returns {string|undefined} customer-facing setup blocker
- */
-function getPackageScriptSetupBlocker ({ command, packageJson, projectRoot, repositoryRoot, scriptName }) {
-  const scripts = [packageJson.scripts?.[`pre${scriptName}`], packageJson.scripts?.[scriptName]]
-  const nested = /^cd\s+([^\s;&|]+)\s*&&\s*(?:npm\s+)?(?:run\s+)?(test)\b/.exec(String(command || '').trim())
-  if (nested) {
-    const nestedRoot = path.resolve(projectRoot, nested[1])
-    if (isPathInside(repositoryRoot, nestedRoot)) {
-      const nestedPackageJson = readJson(path.join(nestedRoot, 'package.json'))
-      scripts.push(nestedPackageJson?.scripts?.pretest, nestedPackageJson?.scripts?.test)
-    }
-  }
-  const setup = scripts.find(script => typeof script === 'string' && hasMaterialPackageScriptSetup(script))
-  if (!setup) return
-
-  return 'The selected package script performs a dependency install or recursive file removal before the test ' +
-    `runner starts: ${JSON.stringify(setup)}. That setup is not included in the bounded local validation plan. ` +
-    'Review and approve the setup separately, or use an already-installed direct runner command.'
-}
-
-/**
- * Reports whether a lifecycle script contains material install or recursive-delete behavior.
- *
- * @param {string} script package script source
- * @returns {boolean} whether material setup is present
- */
-function hasMaterialPackageScriptSetup (script) {
-  return /(?:^|[;&|]\s*)(?:npm|pnpm|yarn)\s+(?:ci|install)\b/.test(script) ||
-    /(?:^|[;&|]\s*)(?:rm\s+-[a-z]*r[a-z]*f?|rimraf)\b/.test(script)
-}
-
-/**
  * Narrows a repository-level command to the conventional package that matches the repository identity.
  *
  * @param {string} projectRoot detected command owner
@@ -1050,10 +1299,9 @@ function findPreferredRepresentativeRoot (projectRoot, repositoryRoot) {
     const container = path.join(repositoryRoot, containerName)
     let entries
     try {
-      entries = fs.readdirSync(container, { withFileTypes: true })
+      entries = readDirectoryEntries(container, 256)
         .filter(entry => entry.isDirectory())
         .sort((left, right) => left.name.localeCompare(right.name))
-        .slice(0, 256)
     } catch {
       continue
     }
@@ -1083,33 +1331,34 @@ function normalizeProjectIdentity (value) {
  * @param {string} root project root
  * @param {string} framework selected framework
  * @param {string} [packageName] selected package name
+ * @param {string[]} [searchRoots] statically selected search roots
  * @returns {{candidates: Array<{file: string, requiresLocalSocket: boolean}>, rejected: string[]}}
  * representative selection
  */
-function findRepresentativeTestFiles (root, framework, packageName) {
-  const stack = [root]
+function findRepresentativeTestFiles (root, framework, packageName, searchRoots = [root]) {
+  const stack = [...searchRoots]
   const candidates = []
   const rejected = []
   const packageRanks = new Map()
   const sourceRanks = new Map()
   let visited = 0
-  while (stack.length > 0 && visited < 5000) {
+  while (stack.length > 0 && visited < MAX_DISCOVERY_ENTRIES) {
     const directory = stack.pop()
     let entries
     try {
-      entries = fs.readdirSync(directory, { withFileTypes: true })
+      entries = readDirectoryEntries(directory, MAX_DISCOVERY_ENTRIES - visited)
         .sort((left, right) => left.name.localeCompare(right.name))
     } catch {
       continue
     }
     for (const entry of entries) {
+      visited++
       if (['.git', 'node_modules', 'coverage', 'dist', 'build'].includes(entry.name)) continue
       const filename = path.join(directory, entry.name)
       if (entry.isDirectory()) {
         stack.push(filename)
         continue
       }
-      visited++
       const testDirectories = path.relative(root, directory).split(path.sep)
       const inTestsDirectory = testDirectories.some(name => ['__tests__', 'test', 'tests'].includes(name))
       const matchesFrameworkConvention = framework === 'cucumber'
@@ -1118,7 +1367,7 @@ function findRepresentativeTestFiles (root, framework, packageName) {
           ? cypressAdapter.isTestFile(entry.name, directory, root)
           : framework === 'playwright'
             ? playwrightAdapter.isTestFile(entry.name, directory, root)
-            : /^(?:test\.(?:[cm]?[jt]s|[jt]sx)|.+[.-](?:test|spec)\.(?:[cm]?[jt]s|[jt]sx))$/.test(entry.name) ||
+            : /^(?:test\.(?:[cm]?[jt]s|[jt]sx)|.+[._-](?:test|spec)\.(?:[cm]?[jt]s|[jt]sx))$/.test(entry.name) ||
               (inTestsDirectory && /\.(?:[cm]?[jt]s|[jt]sx)$/.test(entry.name))
       if (matchesFrameworkConvention) {
         const ownershipConflict = getRunnerOwnershipConflict(filename, root, framework)
@@ -1156,6 +1405,141 @@ function findRepresentativeTestFiles (root, framework, packageName) {
     })),
     rejected,
   }
+}
+
+/**
+ * Restricts Jest candidate discovery to literal roots selected by the package script or static package metadata.
+ * Dynamic JavaScript configuration remains subject to the clean preflight instead of being executed during discovery.
+ *
+ * @param {string} root representative project root
+ * @param {string} framework selected framework
+ * @param {string} command detected package command
+ * @param {object} packageJson representative package metadata
+ * @returns {string[]} bounded test search roots
+ */
+function getRepresentativeSearchRoots (root, framework, command, packageJson) {
+  const commandRoots = framework === 'jest'
+    ? getJestCommandRoots(root, command)
+    : getRunnerCommandRoots(root, framework, command)
+  if (commandRoots.length > 0) return commandRoots
+  if (framework !== 'jest') return [root]
+
+  const configuredRoots = []
+  for (const configuredRoot of Array.isArray(packageJson.jest?.roots) ? packageJson.jest.roots : []) {
+    if (typeof configuredRoot !== 'string') continue
+    const expanded = configuredRoot.replaceAll('<rootDir>', root)
+    const resolved = getContainedDirectory(root, expanded)
+    if (resolved) configuredRoots.push(resolved)
+    if (configuredRoots.length === MAX_LOCAL_TEST_CANDIDATES) break
+  }
+  return configuredRoots.length > 0 ? configuredRoots : [root]
+}
+
+/**
+ * Extracts literal test roots selected by supported runner positional arguments.
+ *
+ * @param {string} root representative project root
+ * @param {string} framework selected framework
+ * @param {string} command detected package command
+ * @returns {string[]} existing contained test roots
+ */
+function getRunnerCommandRoots (root, framework, command) {
+  const invocation = getFrameworkInvocation(command, framework)
+  if (!invocation) return []
+  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
+  const expectedSubcommand = {
+    cypress: 'run',
+    playwright: 'test',
+    vitest: 'run',
+  }[framework]
+  if (tokens[0] === expectedSubcommand) tokens.shift()
+
+  const valueOptions = new Set([
+    ...(ISOLATION_CONFIGURATION_VALUE_OPTIONS[framework] || []),
+    ...(ISOLATION_PRESENTATION_VALUE_OPTIONS[framework] || []),
+  ])
+  const roots = []
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    if (token.startsWith('-')) {
+      const optionName = token.split('=', 1)[0]
+      if (valueOptions.has(optionName) && !token.includes('=')) index++
+      continue
+    }
+    const resolved = getContainedDirectory(root, token) ||
+      getContainedDirectory(root, getStaticSelectorRoot(token))
+    if (resolved) roots.push(resolved)
+    if (roots.length === MAX_LOCAL_TEST_CANDIDATES) break
+  }
+  return [...new Set(roots)]
+}
+
+/**
+ * Returns the static directory prefix selected by a literal file, directory, or glob argument.
+ *
+ * @param {string} selector runner positional selector
+ * @returns {string|undefined} selector directory
+ */
+function getStaticSelectorRoot (selector) {
+  if (typeof selector !== 'string' || /[$`]/.test(selector)) return
+  const wildcardIndex = selector.search(/[*?[\]{}]/)
+  const literal = wildcardIndex === -1 ? selector : selector.slice(0, wildcardIndex)
+  if (!literal) return
+  return literal.endsWith('/') || literal.endsWith(path.sep) ? literal : path.dirname(literal)
+}
+
+/**
+ * Extracts existing literal Jest test roots from a direct runner invocation.
+ *
+ * @param {string} root representative project root
+ * @param {string} command detected package command
+ * @returns {string[]} bounded literal test roots
+ */
+function getJestCommandRoots (root, command) {
+  const invocation = getFrameworkInvocation(command, 'jest')
+  if (!invocation) return []
+
+  const roots = []
+  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    const optionName = token.split('=', 1)[0]
+    if (optionName === '--roots') {
+      if (!token.includes('=')) index++
+      const value = token.includes('=') ? token.slice(token.indexOf('=') + 1) : tokens[index]
+      const resolved = getContainedDirectory(root, value)
+      if (resolved) roots.push(resolved)
+      continue
+    }
+    if (JEST_VALUE_OPTIONS.has(optionName)) {
+      if (!token.includes('=')) index++
+      continue
+    }
+    if (token.startsWith('-')) continue
+    const resolved = getContainedDirectory(root, token)
+    if (resolved) roots.push(resolved)
+    if (roots.length === MAX_LOCAL_TEST_CANDIDATES) break
+  }
+  return [...new Set(roots)]
+}
+
+/**
+ * Resolves one regular directory without following it outside the selected project.
+ *
+ * @param {string} root selected project root
+ * @param {string|undefined} candidate literal path
+ * @returns {string|undefined} contained physical directory
+ */
+function getContainedDirectory (root, candidate) {
+  if (typeof candidate !== 'string' || !candidate || /[*?[\]{}$`]/.test(candidate)) return
+  const filename = path.resolve(root, candidate)
+  try {
+    const stat = fs.lstatSync(filename)
+    const physicalRoot = fs.realpathSync(root)
+    const physicalFilename = fs.realpathSync(filename)
+    if (!stat.isDirectory() || stat.isSymbolicLink() || !isPathInside(physicalRoot, physicalFilename)) return
+    return filename
+  } catch {}
 }
 
 /**
@@ -1232,9 +1616,8 @@ function getRunnerOwnershipConflict (filename, root, framework) {
   }
   const code = maskJavaScriptNonCode(source)
   source = maskJavaScriptComments(source)
-  if (framework === 'playwright' &&
-    !hasJavaScriptCodeMatch(source, code, /(?:from\s+|require\s*\(\s*)['"]@playwright\/test['"]/)) {
-    return 'does not import @playwright/test'
+  if (framework === 'playwright' && !hasPlaywrightOwnership(physicalFilename, root, source, code)) {
+    return 'does not import @playwright/test directly or through one local fixture'
   }
   const conflicts = {
     jest: [
@@ -1252,6 +1635,152 @@ function getRunnerOwnershipConflict (filename, root, framework) {
     ],
   }[framework] || []
   return conflicts.find(([pattern]) => hasJavaScriptCodeMatch(source, code, pattern))?.[1]
+}
+
+/**
+ * Checks direct Playwright ownership or one bounded local fixture module.
+ *
+ * @param {string} filename physical candidate test path
+ * @param {string} root project root
+ * @param {string} source candidate source with comments masked
+ * @param {string} code candidate source with comments and strings masked
+ * @returns {boolean} whether the candidate is owned by Playwright Test
+ */
+function hasPlaywrightOwnership (filename, root, source, code) {
+  if (hasJavaScriptCodeMatch(source, code, PLAYWRIGHT_DIRECT_IMPORT_PATTERN)) return true
+
+  const fixtureSpecifiers = getPlaywrightFixtureSpecifiers(source, code)
+  for (const specifier of fixtureSpecifiers) {
+    const fixture = resolvePlaywrightFixture(filename, root, specifier)
+    if (fixture && isPlaywrightFixtureModule(fixture)) return true
+  }
+  return false
+}
+
+/**
+ * Finds relative modules from which the candidate statically imports a binding named test.
+ *
+ * @param {string} source candidate source with comments masked
+ * @param {string} code candidate source with comments and strings masked
+ * @returns {string[]} bounded relative module specifiers
+ */
+function getPlaywrightFixtureSpecifiers (source, code) {
+  const specifiers = []
+  for (const [pattern, commonjs] of [
+    [PLAYWRIGHT_LOCAL_ESM_TEST_IMPORT_PATTERN, false],
+    [PLAYWRIGHT_LOCAL_CJS_TEST_IMPORT_PATTERN, true],
+  ]) {
+    for (const match of source.matchAll(pattern)) {
+      if (code[match.index] === ' ' || !importsNamedTest(match[1], commonjs)) continue
+      if (!specifiers.includes(match[3])) specifiers.push(match[3])
+      if (specifiers.length === 8) return specifiers
+    }
+  }
+  return specifiers
+}
+
+/**
+ * Checks whether a static named-import list imports a binding named test.
+ *
+ * @param {string} bindings named import or destructuring source
+ * @param {boolean} commonjs whether the bindings use object-destructuring syntax
+ * @returns {boolean} whether test is imported
+ */
+function importsNamedTest (bindings, commonjs) {
+  for (const binding of bindings.split(',')) {
+    const normalized = binding.trim().replace(/^type\s+/, '')
+    const imported = commonjs ? normalized.split(':', 1)[0] : normalized.split(/\s+as\s+/, 1)[0]
+    if (imported.trim() === 'test') return true
+  }
+  return false
+}
+
+/**
+ * Resolves one regular, repository-contained JavaScript or TypeScript fixture module.
+ *
+ * @param {string} importer physical importing test path
+ * @param {string} root project root
+ * @param {string} specifier relative module specifier
+ * @returns {string|undefined} physical fixture path
+ */
+function resolvePlaywrightFixture (importer, root, specifier) {
+  if (/[*?[\]{}$`#]/.test(specifier)) return
+  const base = path.resolve(path.dirname(importer), specifier)
+  const extension = path.extname(base)
+  const candidates = extension
+    ? (PLAYWRIGHT_FIXTURE_EXTENSIONS.includes(extension) ? [base] : [])
+    : [
+        ...PLAYWRIGHT_FIXTURE_EXTENSIONS.map(candidateExtension => `${base}${candidateExtension}`),
+        ...PLAYWRIGHT_FIXTURE_EXTENSIONS.map(candidateExtension => path.join(base, `index${candidateExtension}`)),
+      ]
+
+  let physicalRoot
+  try {
+    physicalRoot = fs.realpathSync(root)
+  } catch {
+    return
+  }
+  for (const candidate of candidates) {
+    try {
+      const stat = fs.lstatSync(candidate)
+      const physicalCandidate = fs.realpathSync(candidate)
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024 ||
+        !isPathInside(physicalRoot, physicalCandidate)) {
+        continue
+      }
+      return physicalCandidate
+    } catch {}
+  }
+}
+
+/**
+ * Checks that a one-hop fixture both imports Playwright Test and exports a binding named test.
+ *
+ * @param {string} filename physical fixture path
+ * @returns {boolean} whether the fixture exposes a Playwright-owned test binding
+ */
+function isPlaywrightFixtureModule (filename) {
+  let source
+  try {
+    source = fs.readFileSync(filename, 'utf8')
+  } catch {
+    return false
+  }
+  const code = maskJavaScriptNonCode(source)
+  source = maskJavaScriptComments(source)
+  if (!hasJavaScriptCodeMatch(source, code, PLAYWRIGHT_DIRECT_IMPORT_PATTERN)) return false
+  if (hasJavaScriptCodeMatch(
+    source,
+    code,
+    /\bexport\s+(?:const|let|var|function|class)\s+test\b|\b(?:module\.)?exports\.test\s*=/
+  )) {
+    return true
+  }
+  for (const match of source.matchAll(PLAYWRIGHT_NAMED_EXPORT_PATTERN)) {
+    if (code[match.index] !== ' ' && exportsNamedTest(match[1], false)) return true
+  }
+  for (const match of source.matchAll(PLAYWRIGHT_COMMONJS_EXPORT_PATTERN)) {
+    if (code[match.index] !== ' ' && exportsNamedTest(match[1], true)) return true
+  }
+  return false
+}
+
+/**
+ * Checks whether an export list exposes a binding with the public name test.
+ *
+ * @param {string} bindings named export or object-literal source
+ * @param {boolean} commonjs whether the bindings use object-literal syntax
+ * @returns {boolean} whether test is exported
+ */
+function exportsNamedTest (bindings, commonjs) {
+  for (const binding of bindings.split(',')) {
+    const normalized = binding.trim()
+    const exported = commonjs
+      ? normalized.split(':', 1)[0]
+      : (normalized.split(/\s+as\s+/)[1] || normalized.split(/\s+as\s+/)[0])
+    if (exported.trim() === 'test') return true
+  }
+  return false
 }
 
 /**
@@ -1316,10 +1845,7 @@ function getLocalListenerRank (filename, root) {
 
   try {
     const source = fs.readFileSync(physicalFilename, 'utf8')
-    return /(?:\bsupertest\b|\bcreateServer\s*\(|\.listen\s*\(|(?:from\s+|require\s*\(\s*)['"]node:(?:http|https|net)['"]|\bcy\.(?:visit|request)\s*\(\s*['"](?:\/|https?:\/\/(?:localhost|127\.0\.0\.1)))/
-      .test(source)
-      ? 1
-      : 0
+    return LOCAL_SOCKET_API_PATTERN.test(source) || LOCAL_SOCKET_REQUEST_PATTERN.test(source) ? 1 : 0
   } catch {
     return 1
   }
@@ -1395,7 +1921,7 @@ function findConfigFiles (root, framework, detectedCommand) {
   if (!patterns) return []
   let configFiles = []
   try {
-    configFiles = fs.readdirSync(root)
+    configFiles = readDirectoryEntries(root, MAX_DIRECTORY_ENTRIES).map(entry => entry.name)
       .filter(filename => patterns.test(filename))
       .map(filename => path.join(root, filename))
   } catch {}
@@ -1405,7 +1931,7 @@ function findConfigFiles (root, framework, detectedCommand) {
   if (!runner) return configFiles
 
   try {
-    const runnerConfigs = fs.readdirSync(path.dirname(runner))
+    const runnerConfigs = readDirectoryEntries(path.dirname(runner), MAX_DIRECTORY_ENTRIES).map(entry => entry.name)
       .filter(isJestRunnerConfigFile)
       .sort((left, right) => {
         return Number(!/^config\.base\./.test(left)) - Number(!/^config\.base\./.test(right)) ||
@@ -1478,7 +2004,10 @@ function discoverCiFiles (root) {
     const stat = fs.lstatSync(filename)
     if (stat.isSymbolicLink()) continue
     if (stat.isDirectory()) {
-      for (const entry of fs.readdirSync(filename).sort()) {
+      const entries = readDirectoryEntries(filename, MAX_CI_DIRECTORY_ENTRIES)
+        .map(entry => entry.name)
+        .sort()
+      for (const entry of entries) {
         if (/\.ya?ml$/.test(entry)) found.push(path.posix.join(relativePath, entry))
       }
     } else {
@@ -1491,32 +2020,28 @@ function discoverCiFiles (root) {
   })).filter(file => file.content !== undefined)
   const reviewTargets = rankCiReviewTargets(readableFiles)
   const hasInitialization = readableFiles.some(file => /dd-trace[\\/]ci[\\/]init/.test(file.content))
-  const initialization = readableFiles.length > 0 && !hasInitialization
-    ? {
-        status: 'not_configured',
-        evidence: [
-          `The scaffold inspected ${readableFiles.length} discovered CI configuration file(s) and found no ` +
-            'reference to dd-trace/ci/init.',
-        ],
-      }
-    : {
-        status: 'unknown',
-        evidence: [],
-      }
+  const initialization = {
+    status: 'unknown',
+    evidence: readableFiles.length === 0
+      ? []
+      : [hasInitialization
+          ? 'The bounded scan found a dd-trace/ci/init reference, but it did not resolve a specific test job or ' +
+            'wrapper chain.'
+          : `The bounded scan found no direct dd-trace/ci/init reference in ${readableFiles.length} discovered CI ` +
+            'configuration file(s). Reusable workflows, includes, inherited configuration, and wrappers remain ' +
+            'unresolved.'],
+  }
   return {
     searched: [...CI_PATHS],
     found,
     reviewTargets,
-    reviewRequired: initialization.status !== 'not_configured',
+    reviewRequired: readableFiles.length > 0,
     initialization,
     method: 'deterministic-known-ci-paths',
     warnings: [],
     notes: [
-      initialization.status === 'not_configured'
-        ? 'Generated by --init-manifest; the bounded scan found no initialization in any discovered CI file, so ' +
-          'no additional CI-file review is required.'
-        : 'Generated by --init-manifest; inspect CI review targets in order and stop after recording the first ' +
-          'matching test step for each runnable framework.',
+      'Generated by --init-manifest; inspect CI review targets in order and stop after recording the first matching ' +
+        'test step for each runnable framework. A literal scan alone cannot confirm CI initialization.',
     ],
   }
 }
@@ -1587,9 +2112,41 @@ function getManifestOs (platform) {
 function findYarnRelease (root) {
   const directory = path.join(root, '.yarn', 'releases')
   try {
-    const release = fs.readdirSync(directory).find(filename => /^yarn-.+\.cjs$/.test(filename))
-    return release && path.join(directory, release)
+    const physicalRoot = fs.realpathSync(root)
+    const releases = readDirectoryEntries(directory, 64)
+      .map(entry => entry.name)
+      .filter(filename => /^yarn-.+\.cjs$/.test(filename))
+      .sort()
+    for (const release of releases) {
+      const filename = path.join(directory, release)
+      const stat = fs.lstatSync(filename)
+      if (!stat.isFile() || stat.isSymbolicLink()) continue
+      const physicalFile = fs.realpathSync(filename)
+      if (isPathInside(physicalRoot, physicalFile)) return filename
+    }
   } catch {}
+}
+
+/**
+ * Reads at most the approved number of entries without first allocating the whole directory.
+ *
+ * @param {string} directory directory to inspect
+ * @param {number} limit maximum entries to return
+ * @returns {fs.Dirent[]} bounded directory entries
+ */
+function readDirectoryEntries (directory, limit) {
+  const entries = []
+  const handle = fs.opendirSync(directory)
+  try {
+    while (entries.length < limit) {
+      const entry = handle.readSync()
+      if (!entry) break
+      entries.push(entry)
+    }
+  } finally {
+    handle.closeSync()
+  }
+  return entries
 }
 
 function getProjectIdentifier (packageJson, projectRoot, repositoryRoot) {
@@ -1606,9 +2163,24 @@ function isPathInside (root, filename) {
 }
 
 function readJson (filename) {
+  let descriptor
   try {
-    return JSON.parse(fs.readFileSync(filename, 'utf8'))
-  } catch {}
+    const entry = fs.lstatSync(filename)
+    if (!entry.isFile() || entry.isSymbolicLink() || entry.size > MAX_JSON_FILE_BYTES) return
+    descriptor = fs.openSync(filename, 'r')
+    const stat = fs.fstatSync(descriptor)
+    if (!stat.isFile() || stat.size > MAX_JSON_FILE_BYTES) return
+    const buffer = Buffer.alloc(stat.size)
+    let offset = 0
+    while (offset < buffer.length) {
+      const bytesRead = fs.readSync(descriptor, buffer, offset, buffer.length - offset, offset)
+      if (bytesRead === 0) break
+      offset += bytesRead
+    }
+    return JSON.parse(buffer.subarray(0, offset).toString('utf8'))
+  } catch {} finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor)
+  }
 }
 
 module.exports = { createManifestScaffold }

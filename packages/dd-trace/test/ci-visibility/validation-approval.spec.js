@@ -84,6 +84,7 @@ describe('test optimization validation approval', () => {
     const manifestPath = path.join(root, 'manifest.json')
     const manifestSource = getManifest(root, [process.execPath, '-e', 'console.log("API_KEY=secret")'])
     manifestSource.frameworks[0].existingTestCommand.env = { API_KEY: 'secret', SAFE_MODE: 'enabled' }
+    manifestSource.frameworks[0].existingTestCommand.requiredEnvVars = ['PROJECT_TEST_MODE']
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
     const manifest = { ...manifestSource, __path: manifestPath }
     const input = {
@@ -101,6 +102,7 @@ describe('test optimization validation approval', () => {
       assert.strictEqual(`${JSON.stringify(material, null, 2)}\n`, approvalJson)
       assert.strictEqual(material.commands[0].environment.API_KEY, '<redacted>')
       assert.strictEqual(material.commands[0].environment.SAFE_MODE, 'enabled')
+      assert.deepStrictEqual(material.commands[0].inheritedEnvironmentNames, ['PROJECT_TEST_MODE'])
       assert.doesNotMatch(approvalJson, /API_KEY=secret/)
       assert.match(material.commands[0].argv[2], /API_KEY=<redacted>/)
       assert.ok(material.validator.coveredFiles.some(file => file.path === 'package.json'))
@@ -198,6 +200,103 @@ describe('test optimization validation approval', () => {
     }
   })
 
+  it('binds approval to the conditional direct-runner isolation command', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-isolation-approval-'))
+    const { approval } = copyApprovalPackage(root)
+    const manifestPath = path.join(root, 'manifest.json')
+    const manifestSource = getManifest(root, ['npm', 'test'])
+    manifestSource.frameworks[0].isolationTestCandidate = {
+      origin: 'validator-direct',
+      sourceFile: path.join(root, 'test', 'example.test.js'),
+      maxTestCount: 1,
+      command: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'console.log("Tests: 1 passed, 1 total")'],
+      },
+      equivalence: {
+        framework: 'jest',
+        mode: 'jest',
+        sourceFile: path.join(root, 'test', 'example.test.js'),
+        configurationArgs: [],
+      },
+    }
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
+    const manifest = loadManifest(manifestPath)
+    const input = {
+      manifest,
+      offlineFixtureNonce: '0'.repeat(32),
+      out: path.join(root, 'results'),
+    }
+
+    try {
+      const digest = approval.getApprovalDigest(input)
+      const material = approval.getApprovalMaterial(input)
+      assert.ok(material.commands.some(command => command.id.endsWith(':isolation')))
+
+      manifestSource.frameworks[0].isolationTestCandidate.command.argv[2] =
+        'console.log("Tests: 2 passed, 2 total")'
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
+      const changedManifest = loadManifest(manifestPath)
+      assert.notStrictEqual(approval.getApprovalDigest({ ...input, manifest: changedManifest }), digest)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('binds approval to isolation commands for every project-command fallback', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-isolation-approval-'))
+    const { approval } = copyApprovalPackage(root)
+    const manifestPath = path.join(root, 'manifest.json')
+    const manifestSource = getManifest(root, ['npm', 'test'])
+    manifestSource.frameworks[0].localTestCandidates = [0, 1].map(index => ({
+      origin: 'project',
+      sourceFile: path.join(root, 'test', `example-${index}.test.js`),
+      maxTestCount: 1,
+      command: {
+        cwd: root,
+        argv: [process.execPath, '-e', `console.log("project candidate ${index}")`],
+      },
+    }))
+    manifestSource.frameworks[0].isolationTestCandidates = [0, 1].map(index => ({
+      origin: 'validator-direct',
+      primaryCandidateIndex: index,
+      sourceFile: path.join(root, 'test', `example-${index}.test.js`),
+      maxTestCount: 1,
+      command: {
+        cwd: root,
+        argv: [process.execPath, '-e', `console.log("candidate ${index}")`],
+      },
+      equivalence: {
+        framework: 'jest',
+        mode: 'test',
+        sourceFile: path.join(root, 'test', `example-${index}.test.js`),
+        configurationArgs: [],
+      },
+    }))
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
+    const manifest = loadManifest(manifestPath)
+    const input = {
+      manifest,
+      offlineFixtureNonce: '0'.repeat(32),
+      out: path.join(root, 'results'),
+    }
+
+    try {
+      const digest = approval.getApprovalDigest(input)
+      const material = approval.getApprovalMaterial(input)
+      assert.ok(material.commands.some(command => command.id.endsWith(':isolation:0')))
+      assert.ok(material.commands.some(command => command.id.endsWith(':isolation:1')))
+
+      manifestSource.frameworks[0].isolationTestCandidates[1].command.argv[2] =
+        'console.log("changed fallback")'
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
+      const changedManifest = loadManifest(manifestPath)
+      assert.notStrictEqual(approval.getApprovalDigest({ ...input, manifest: changedManifest }), digest)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('refuses manifests outside the repository or reached through a symbolic link', function () {
     if (process.platform === 'win32') this.skip()
 
@@ -232,6 +331,90 @@ describe('test optimization validation approval', () => {
       fs.symlinkSync(outside, linkedDirectory)
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
       assert.throws(() => loadManifest(manifestPath), /resolves outside repository.root/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('physically contains isolation command and source paths', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-isolation-paths-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-isolation-outside-'))
+    const linkedDirectory = path.join(root, 'linked')
+    const manifestPath = path.join(root, 'manifest.json')
+    const manifest = getManifest(root, ['npm', 'test'])
+    manifest.frameworks[0].isolationTestCandidate = {
+      origin: 'validator-direct',
+      sourceFile: path.join(root, 'test', 'example.test.js'),
+      maxTestCount: 1,
+      command: {
+        cwd: linkedDirectory,
+        argv: [process.execPath, '-e', 'console.log("Tests: 1 passed, 1 total")'],
+      },
+      equivalence: {
+        framework: 'jest',
+        mode: 'jest',
+        sourceFile: path.join(root, 'test', 'example.test.js'),
+        configurationArgs: [],
+      },
+    }
+
+    try {
+      fs.symlinkSync(outside, linkedDirectory)
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
+      assert.throws(() => loadManifest(manifestPath), /isolationTestCandidate\.command\.cwd resolves outside/)
+
+      manifest.frameworks[0].isolationTestCandidate.command.cwd = root
+      manifest.frameworks[0].isolationTestCandidate.sourceFile = path.join(linkedDirectory, 'example.test.js')
+      manifest.frameworks[0].isolationTestCandidate.equivalence.sourceFile =
+        manifest.frameworks[0].isolationTestCandidate.sourceFile
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
+      assert.throws(() => loadManifest(manifestPath), /isolationTestCandidate\.sourceFile resolves outside/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a validator-owned runner whose executable escapes through a repository symlink', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-isolation-runner-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-isolation-runner-outside-'))
+    const { approval } = copyApprovalPackage(root)
+    const outsideRunner = path.join(outside, 'jest')
+    const linkedRunner = path.join(root, 'linked-jest')
+    const manifestPath = path.join(root, 'manifest.json')
+    const manifestSource = getManifest(root, ['npm', 'test'])
+    manifestSource.frameworks[0].isolationTestCandidate = {
+      origin: 'validator-direct',
+      sourceFile: path.join(root, 'test', 'example.test.js'),
+      maxTestCount: 1,
+      command: {
+        cwd: root,
+        argv: [linkedRunner],
+      },
+      equivalence: {
+        framework: 'jest',
+        mode: 'jest',
+        sourceFile: path.join(root, 'test', 'example.test.js'),
+        configurationArgs: [],
+      },
+    }
+
+    try {
+      fs.writeFileSync(outsideRunner, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.symlinkSync(outsideRunner, linkedRunner)
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifestSource)}\n`)
+      const manifest = loadManifest(manifestPath)
+
+      assert.throws(() => approval.getApprovalDigest({
+        manifest,
+        offlineFixtureNonce: '0'.repeat(32),
+        out: path.join(root, 'results'),
+      }), /validator-owned executable resolves outside the repository/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
       fs.rmSync(outside, { recursive: true, force: true })
@@ -316,6 +499,7 @@ function getManifest (root, argv) {
       ciWiring: {
         diagnosis: 'CI initialization evidence has not been completed.',
         initialization: { status: 'unknown', evidence: [] },
+        transport: { mode: 'unknown', evidence: [] },
       },
     }],
   }

@@ -33,6 +33,41 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('does not treat a Cucumber config filename as a Cucumber runner invocation', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-cucumber-command-'))
+    const conformanceCommand = 'cucumber-js ./conformance/features/*-protocol-binding.feature -p default'
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { '@cucumber/cucumber': '8.11.1' },
+      scripts: {
+        'lint:js': "eslint 'src/**/*.{js,ts}' 'test/**/*.{js,ts}' cucumber.js",
+        conformance: conformanceCommand,
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const cucumber = report.supportedFrameworks.find(framework => framework.id === 'cucumber')
+
+      assert.strictEqual(cucumber.eligibleCommand.command, conformanceCommand)
+      assert.deepStrictEqual(report.eligibleFrameworks.filter(framework => framework.id === 'cucumber'), [{
+        id: 'cucumber',
+        name: 'Cucumber',
+        command: conformanceCommand,
+        commandLocation: 'package.json',
+        supportedRange: '>=7.0.0',
+        version: '8.11.1',
+        versionLocation: 'package.json',
+      }])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('ignores a root package.json symbolic link that escapes the repository', function () {
     if (process.platform === 'win32') this.skip()
 

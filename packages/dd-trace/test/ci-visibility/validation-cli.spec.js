@@ -130,10 +130,10 @@ describe('test optimization validation cli', () => {
     assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'efd'])
   })
 
-  it('adds basic reporting as a prerequisite for CI wiring scenario selection', () => {
+  it('selects only the CI configuration audit for CI wiring scenario selection', () => {
     const options = parseArgs(['--scenario', 'ci-wiring'])
 
-    assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'ci-wiring'])
+    assert.deepStrictEqual([...options.scenarios], ['ci-wiring'])
   })
 
   it('parses a plan approval digest for live validation', () => {
@@ -196,8 +196,14 @@ describe('test optimization validation cli', () => {
             schemaVersion: '1.0',
             repository: { root },
             environment: {},
-            ciDiscovery: { reviewTargets: ['.github/workflows/test.yml'], reviewRequired: false },
-            frameworks: [{ status: 'runnable', ciWiring: { initialization: { status: 'not_configured' } } }],
+            ciDiscovery: { reviewTargets: ['.github/workflows/test.yml'], reviewRequired: true },
+            frameworks: [{
+              status: 'runnable',
+              ciWiring: {
+                initialization: { status: 'unknown' },
+                transport: { mode: 'unknown', evidence: [] },
+              },
+            }],
           }
         },
       },
@@ -216,13 +222,117 @@ describe('test optimization validation cli', () => {
       assert.match(logs.join('\n'), /schema-valid validation manifest without running project code/)
       assert.match(logs.join('\n'), /Do not enumerate other packages, tests, runner configs, workflow files/)
       assert.match(logs.join('\n'), /\.github\/workflows\/test\.yml/)
-      assert.match(logs.join('\n'), /CI initialization status: not_configured/)
-      assert.match(logs.join('\n'), /Do not open or edit the manifest/)
-      assert.match(logs.join('\n'), /--print-plan/)
+      assert.match(logs.join('\n'), /CI initialization status: unknown/)
+      assert.match(logs.join('\n'), /populate ciWiring\.configFile, ciWiring\.job, and ciWiring\.command/)
+      assert.match(logs.join('\n'), /record ciWiring\.transport mode and evidence/)
+      assert.match(logs.join('\n'), /keep unknowns in ciWiring\.unresolved/)
       assert.strictEqual(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-validation-results')), false)
     } finally {
       console.log = originalLog
       process.chdir(originalCwd)
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('explains a denied declared pre-live write without retrying it', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-init-permission-'))
+    const originalCwd = process.cwd()
+    const originalError = console.error
+    const originalExitCode = process.exitCode
+    const errors = []
+    let writeAttempts = 0
+    const fsStub = Object.create(fs)
+    fsStub.writeFileSync = () => {
+      writeAttempts++
+      const error = new Error('operation not permitted')
+      error.code = 'EPERM'
+      throw error
+    }
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      fs: fsStub,
+      './manifest-scaffold': {
+        createManifestScaffold ({ root }) {
+          return {
+            schemaVersion: '1.0',
+            repository: { root },
+            environment: {},
+            ciDiscovery: { reviewTargets: [], reviewRequired: false },
+            frameworks: [],
+          }
+        },
+      },
+    })
+
+    process.chdir(tmpDir)
+    console.error = message => errors.push(message)
+    process.exitCode = undefined
+    try {
+      await main(['--init-manifest'])
+
+      const output = errors.join('\n')
+      assert.strictEqual(process.exitCode, 3)
+      assert.strictEqual(writeAttempts, 1)
+      assert.match(output, /Pre-live write denied during --init-manifest \(EPERM\)/)
+      assert.ok(output.includes(path.join(
+        tmpDir,
+        'dd-test-optimization-validation-manifest.json'
+      )))
+      assert.match(output, /will not retry or request permissions itself/)
+      assert.match(output, /native permission control scoped to this exact command and these declared paths/)
+      assert.match(output, /may request it once and retry the unchanged command once/)
+      assert.match(output, /raw EACCES or EPERM error does not prove/)
+      assert.match(output, /If no narrowly scoped platform permission is offered.*stop/s)
+      assert.match(output, /Do not use sudo, change filesystem permissions, enable bypass mode/)
+    } finally {
+      console.error = originalError
+      process.exitCode = originalExitCode
+      process.chdir(originalCwd)
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('identifies the declared output when plan artifact writes are denied', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-plan-permission-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const originalError = console.error
+    const originalExitCode = process.exitCode
+    const errors = []
+    let writeAttempts = 0
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './manifest-loader': {
+        loadManifest () {
+          return getRunnableManifest(tmpDir)
+        },
+      },
+      './plan-writer': {
+        formatExecutionPlanArtifacts () {
+          writeAttempts++
+          const error = new Error('permission denied')
+          error.code = 'EACCES'
+          throw error
+        },
+        getExecutionPlanPath () {
+          throw new Error('execution plan path should not be requested after a failed write')
+        },
+      },
+    })
+
+    console.error = message => errors.push(message)
+    process.exitCode = undefined
+    try {
+      await main(['--manifest', manifestPath, '--out', out, '--print-plan'])
+
+      const output = errors.join('\n')
+      assert.strictEqual(process.exitCode, 3)
+      assert.strictEqual(writeAttempts, 1)
+      assert.match(output, /Pre-live write denied during --print-plan \(EACCES\)/)
+      assert.ok(output.includes(`Declared write target: ${out}`))
+      assert.match(output, /will not retry or request permissions itself/)
+      assert.match(output, /may request it once and retry the unchanged command once/)
+    } finally {
+      console.error = originalError
+      process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
@@ -267,6 +377,10 @@ describe('test optimization validation cli', () => {
       ...manifest.frameworks[0],
       id: 'jest:other',
     })
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+      scripts: { test: 'node jest-runner.js' },
+    }))
+    fs.writeFileSync(path.join(tmpDir, 'jest-runner.js'), 'process.exit(0)\n')
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     console.log = message => logs.push(message)
 
@@ -402,7 +516,7 @@ describe('test optimization validation cli', () => {
       assert.strictEqual(process.exitCode, 0)
       assert.strictEqual(writtenReport.out, out)
       assert.deepStrictEqual(writtenReport.results.map(result => result.scenario), ['basic-reporting'])
-      assert.strictEqual(writtenReport.runSummary.validationCoverage, 'partial')
+      assert.strictEqual(writtenReport.runSummary.validationCoverage, 'complete')
       assert.deepStrictEqual(writtenReport.runSummary.omittedScenarios, [
         'ci-wiring',
         'efd',
@@ -435,7 +549,10 @@ describe('test optimization validation cli', () => {
             scenario: 'basic-reporting',
             status: 'pass',
             diagnosis: 'Basic Reporting passed.',
-            evidence: {},
+            evidence: {
+              foundationalReportingEstablished: true,
+              reportingPath: 'project-command',
+            },
             artifacts: [],
           }
         },
@@ -517,7 +634,10 @@ describe('test optimization validation cli', () => {
             scenario: 'basic-reporting',
             status: 'pass',
             diagnosis: 'Basic Reporting passed.',
-            evidence: {},
+            evidence: {
+              foundationalReportingEstablished: true,
+              reportingPath: 'project-command',
+            },
             artifacts: [],
           }
         },
@@ -565,7 +685,7 @@ describe('test optimization validation cli', () => {
       },
       './scenarios/ci-wiring': {
         async runCiWiring ({ framework, basicResult }) {
-          assert.strictEqual(basicResult.status, 'fail')
+          assert.strictEqual(basicResult, undefined)
           return {
             frameworkId: framework.id,
             scenario: 'ci-wiring',
@@ -595,7 +715,7 @@ describe('test optimization validation cli', () => {
     assert.deepStrictEqual(validation.results[2].evidence.featureEligibility, {
       eligible: false,
       blockedBy: 'basic-reporting',
-      reasonCode: 'basic-reporting-failed',
+      reasonCode: 'foundational-reporting-not-established',
       scenario: 'efd',
     })
   })
@@ -637,12 +757,19 @@ describe('test optimization validation cli', () => {
     }, manifest => {
       manifest.frameworks[0].ciWiring = {
         command: 'npm test',
+        configFile: path.join(manifest.repository.root, '.github', 'workflows', 'test.yml'),
         initialization: {
           status: 'configured',
           evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'],
         },
+        job: 'test',
         stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
         requiredSecretEnvVars: ['DD_API_KEY'],
+        transport: {
+          mode: 'agentless',
+          evidence: ['The selected test step enables agentless reporting.'],
+        },
+        unresolved: [],
       }
     })
 
@@ -713,21 +840,19 @@ describe('test optimization validation cli', () => {
       manifest.frameworks[0].ciWiring = {
         diagnosis: 'CI initialization evidence has not been completed.',
         initialization: { status: 'unknown', evidence: [] },
+        transport: { mode: 'unknown', evidence: [] },
       }
     }, ['--scenario', 'ci-wiring'])
 
     assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
-      'basic-reporting:pass',
       'ci-wiring:error',
     ])
-    assert.strictEqual(validation.results[1].diagnosis,
-      'The CI configuration audit could not determine whether the identified test job initializes Test ' +
-      'Optimization. No CI configuration conclusion was reached.')
-    assert.strictEqual(validation.results[1].conclusion, 'incomplete')
-    assert.strictEqual(validation.results[1].evidence.recommendation,
-      'Record whether the identified CI test job configures NODE_OPTIONS with dd-trace/ci/init and whether it uses ' +
-      'agentless reporting or a reachable Datadog Agent.')
+    assert.match(validation.results[0].diagnosis,
+      /did not resolve the complete test job and wrapper chain.*No confirmed CI misconfiguration was reported/s)
+    assert.strictEqual(validation.results[0].conclusion, 'incomplete')
+    assert.match(validation.results[0].evidence.recommendation,
+      /Resolve the actual CI test job, exact command, and wrapper chain/)
   })
 
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
@@ -750,14 +875,94 @@ describe('test optimization validation cli', () => {
       })
     }, ['--scenario', 'basic-reporting'])
 
-    assert.strictEqual(validation.exitCode, 0)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => {
       return `${result.frameworkId}:${result.scenario}:${result.status}`
-    }), ['jest:fixture:all:skip', 'node-test:root:all:skip', 'jest:root:basic-reporting:pass'])
+    }), [
+      'jest:fixture:all:skip',
+      'jest:fixture:basic-reporting:skip',
+      'node-test:root:all:skip',
+      'node-test:root:basic-reporting:skip',
+      'jest:root:basic-reporting:pass',
+    ])
     assert.match(validation.results[0].diagnosis, /no runnable validation command/)
     assert.strictEqual(validation.results[0].evidence.frameworkStatus, 'requires_manual_setup')
-    assert.match(validation.results[1].diagnosis, /not supported/)
-    assert.strictEqual(validation.results[1].evidence.frameworkStatus, 'unsupported_by_validator')
+    assert.match(validation.results[2].diagnosis, /not supported/)
+    assert.strictEqual(validation.results[2].evidence.frameworkStatus, 'unsupported_by_validator')
+  })
+
+  it('audits CI independently of local framework and execution eligibility', async () => {
+    const audited = []
+    const validation = await runCliFixture({
+      './preflight-runner': {
+        async runFrameworkPreflight ({ framework }) {
+          return {
+            ok: false,
+            failure: {
+              frameworkId: framework.id,
+              scenario: 'basic-reporting',
+              status: 'blocked',
+              diagnosis: 'The clean project test could not run in this execution environment.',
+              evidence: { blockedByExecutionEnvironment: true },
+              artifacts: [],
+            },
+          }
+        },
+      },
+      './scenarios/ci-wiring': {
+        async runCiWiring ({ framework }) {
+          audited.push(framework.id)
+          return getPassingScenarioResult(framework, 'ci-wiring')
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker (framework) {
+          if (framework.id === 'vitest:static-blocked') {
+            return {
+              reason: 'Static project evidence blocks local execution.',
+              recommendation: 'Resolve the project blocker.',
+            }
+          }
+        },
+        runStaticDiagnosis () {
+          return { report: {}, reportPath: 'static-diagnosis.json' }
+        },
+      },
+    }, manifest => {
+      const root = manifest.repository.root
+      const staticBlocked = JSON.parse(JSON.stringify(manifest.frameworks[0]))
+      staticBlocked.id = 'vitest:static-blocked'
+      staticBlocked.framework = 'vitest'
+      staticBlocked.frameworkVersion = '4.0.0'
+      const manualSetup = {
+        id: 'cypress:manual-setup',
+        framework: 'cypress',
+        frameworkVersion: '15.0.0',
+        status: 'requires_manual_setup',
+        project: { root },
+        notes: ['The browser prerequisite is unavailable.'],
+      }
+      const unsupported = {
+        id: 'node-test:unsupported',
+        framework: 'node:test',
+        frameworkVersion: '22.0.0',
+        status: 'unsupported_by_validator',
+        project: { root },
+        notes: ['node:test is diagnostic-only.'],
+      }
+      for (const framework of [manifest.frameworks[0], staticBlocked, manualSetup, unsupported]) {
+        setStaticCiWiring(framework, root)
+      }
+      manifest.frameworks = [manualSetup, unsupported, staticBlocked, manifest.frameworks[0]]
+    })
+
+    assert.strictEqual(validation.exitCode, 1)
+    assert.deepStrictEqual(audited, [
+      'cypress:manual-setup',
+      'node-test:unsupported',
+      'vitest:static-blocked',
+      'jest:root',
+    ])
   })
 
   it('includes Mocha rc files in non-runnable status evidence', async () => {
@@ -826,7 +1031,9 @@ describe('test optimization validation cli', () => {
     })
 
     assert.strictEqual(validation.exitCode, 2)
-    assert.deepStrictEqual(validation.results.map(result => result.evidence.configFiles), [
+    assert.deepStrictEqual(validation.results
+      .filter(result => result.scenario === 'all')
+      .map(result => result.evidence.configFiles), [
       ['config-jest.js'],
       ['cypress.json'],
       ['cucumber.js'],
@@ -947,7 +1154,10 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
           scenario: 'basic-reporting',
           status: 'pass',
           diagnosis: 'Basic Reporting passed.',
-          evidence: {},
+          evidence: {
+            foundationalReportingEstablished: true,
+            reportingPath: 'project-command',
+          },
           artifacts: [],
         }
       },
@@ -1036,6 +1246,7 @@ function getRunnableManifest (root) {
         ciWiring: {
           diagnosis: 'No CI test job was found in this fixture.',
           initialization: { status: 'unknown', evidence: [] },
+          transport: { mode: 'unknown', evidence: [] },
         },
       },
     ],
@@ -1051,10 +1262,12 @@ function setStaticCiWiring (framework, root) {
     workingDirectory: root,
     whySelected: 'The step runs the selected representative test command.',
     command: 'npm test',
+    unresolved: [],
     initialization: {
       status: 'not_configured',
       evidence: ['The selected CI job does not set NODE_OPTIONS.'],
     },
+    transport: { mode: 'unknown', evidence: [] },
   }
 }
 
@@ -1064,7 +1277,12 @@ function getPassingScenarioResult (framework, scenario) {
     scenario,
     status: 'pass',
     diagnosis: `${scenario} passed.`,
-    evidence: {},
+    evidence: scenario === 'basic-reporting'
+      ? {
+          foundationalReportingEstablished: true,
+          reportingPath: 'project-command',
+        }
+      : {},
     artifacts: [],
   }
 }
@@ -1077,6 +1295,15 @@ function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, prefligh
           ...getPassingScenarioResult(framework, 'basic-reporting'),
           status: basicStatus,
           diagnosis: `Basic Reporting ${basicStatus}.`,
+          evidence: basicStatus === 'pass'
+            ? {
+                foundationalReportingEstablished: true,
+                reportingPath: 'project-command',
+              }
+            : {
+                foundationalReportingEstablished: false,
+                reportingPath: 'none',
+              },
         }
       },
     },
@@ -1138,6 +1365,10 @@ function setDecisionCiWiring (framework, root, status) {
     initialization: { status: 'configured', evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'] },
     stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
     requiredSecretEnvVars: ['DD_API_KEY'],
+    transport: {
+      mode: 'agentless',
+      evidence: ['The selected test step enables agentless reporting.'],
+    },
   }
 }
 

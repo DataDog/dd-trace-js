@@ -98,7 +98,6 @@ describe('Test Optimization validation initialization', () => {
       startupLogs: false,
       isCiVisibility: true,
       flushInterval: 5000,
-      telemetry: { enabled: false },
       experimental: { exporter: 'ci_validation' },
     })
   })

@@ -28,11 +28,13 @@ describe('test optimization validation report writer', () => {
       ciWiring: {
         command: 'npm test',
         provider: 'github-actions',
+        wrapperChain: ['npm test', 'vitest run'],
       },
     })
 
     assert.strictEqual(candidate.command, 'npm test')
     assert.strictEqual(candidate.provider, 'github-actions')
+    assert.deepStrictEqual(candidate.runnerToolChain, ['npm test', 'vitest run'])
   })
 
   it('records an incomplete run before live validation starts', () => {
@@ -621,10 +623,11 @@ describe('test optimization validation report writer', () => {
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       const humanReadableReport = markdown.split('<details><summary>Diagnostic JSON</summary>')[0]
 
-      assert.ok(markdown.includes('example \\(Vitest\\): dd-trace successfully reports this test suite, but the ' +
+      assert.ok(markdown.includes('example \\(Vitest\\): the controlled local run emitted a complete Test ' +
+        'Optimization event hierarchy, but the ' +
         'identified CI job does not configure the required Test Optimization initialization or reporting transport.'))
-      assert.ok(markdown.includes('Can these tests report to Datadog? \\(Basic Reporting\\)'))
-      assert.ok(markdown.includes('Does the selected CI job initialize Datadog? \\(CI Configuration Audit\\)'))
+      assert.ok(markdown.includes('| Project / framework | Clean baseline | Controlled initialization | ' +
+        'CI configuration | Advanced checks | Conclusion | Next action |'))
       assert.match(markdown, /## How to Fix/)
       assert.ok(markdown.includes('### example \\(Vitest\\): CI Configuration Audit'))
       assert.match(markdown, /Add Test Optimization initialization to the selected CI test job\./)
@@ -641,9 +644,6 @@ describe('test optimization validation report writer', () => {
       assert.ok(markdown.includes('Typecheck commands \\(1 command\\): do not execute supported runtime tests.'))
       assert.match(markdown, /## Failed, Incomplete, and Blocked Result Details/)
       assert.match(markdown, /Monorepo finding: `turbo-env-pass-through`, `tool turbo`/)
-      assert.match(markdown, /Are new tests retried\? .*The validator added a temporary passing test/)
-      assert.match(markdown, /Are failed tests retried\? .*temporary test that fails once.*retry pass/)
-      assert.match(markdown, /Can tests be quarantined\? .*temporary target test.*quarantine tag/)
       assert.match(markdown, /<details><summary>Diagnostic JSON<\/summary>/)
       assert.doesNotMatch(markdown, /## Validation Payloads JSON/)
       assert.doesNotMatch(markdown, /## Execution Results JSON/)
@@ -697,9 +697,19 @@ describe('test optimization validation report writer', () => {
       status: 'error',
       diagnosis: 'The CI configuration audit is incomplete. No CI configuration conclusion was reached.',
       evidence: {
+        apiKeyConfigured: false,
+        ciWiring: {
+          unresolved: ['External action inputs were not resolved.'],
+        },
         conclusion: 'incomplete',
         domain: 'ci_configuration',
         evidenceStrength: 'unknown',
+        initializationStatus: 'unknown',
+        representativeMatch: {
+          matched: false,
+          reason: 'the resolved wrapper chain was not anchored to the selected Vitest runner',
+        },
+        transport: 'unknown',
       },
       artifacts: [],
     }]
@@ -723,6 +733,13 @@ describe('test optimization validation report writer', () => {
       assert.match(summary, /No CI configuration conclusion was reached/)
       assert.doesNotMatch(summary, /CI ran tests/)
       assert.doesNotMatch(markdown, /Missing event levels:/)
+      assert.match(markdown, /Recorded CI initialization: `unknown`/)
+      assert.match(markdown, /CI command anchor: not proven; the resolved wrapper chain was not anchored/)
+      assert.match(markdown, /Unresolved CI evidence: `External action inputs were not resolved\.`/)
+      const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
+      const ciWiring = diagnostic.validationSummaries[0].checks[0]
+      assert.strictEqual(ciWiring.evidence.apiKeyConfigured, false)
+      assert.strictEqual(ciWiring.evidence.representativeMatch.matched, false)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -874,7 +891,7 @@ describe('test optimization validation report writer', () => {
     }
   })
 
-  it('labels scenario-scoped validation as partial and shows every unselected check', () => {
+  it('labels scenario-scoped validation once without adding unselected check rows', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-coverage-'))
     const out = path.join(tmpDir, 'results')
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
@@ -926,10 +943,10 @@ describe('test optimization validation report writer', () => {
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       assert.match(markdown, /Validation coverage: partial/)
       assert.match(markdown, /did not check CI Configuration Audit, Early Flake Detection, Auto Test Retries, Test Management/)
-      assert.strictEqual((markdown.match(/NOT CHECKED/g) || []).length, 4)
+      assert.strictEqual((markdown.match(/NOT CHECKED/g) || []).length, 0)
       assert.doesNotMatch(markdown, /other tests/)
       assert.match(logs.join('\n'), /Validation coverage: partial/)
-      assert.match(logs.join('\n'), /NOT CHECKED unit tests \(Vitest\) - Does the selected CI job initialize Datadog/)
+      assert.doesNotMatch(logs.join('\n'), /NOT CHECKED/)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -995,6 +1012,176 @@ describe('test optimization validation report writer', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('shows project-versus-isolation evidence and prioritizes a confirmed CI fix', () => {
+    const basic = getDecisionResult('basic-reporting', 'fail', {
+      eventLevelFailure: {
+        kind: 'no-test-optimization-events',
+        recommendation: 'Inspect generic Basic Reporting debug output.',
+      },
+      commandExitCode: 0,
+      foundationalReportingEstablished: true,
+      reportingPath: 'validator-direct-isolation',
+      preflight: {
+        ran: true,
+        exitCode: 0,
+        observedTestCount: 1,
+        sourceFile: '/repo/test/example.test.js',
+      },
+      isolationPreflight: {
+        ran: true,
+        exitCode: 0,
+        observedTestCount: 1,
+        sourceFile: '/repo/test/example.test.js',
+      },
+      isolation: {
+        commandExitCode: 0,
+        cleanConfirmation: {
+          exitCode: 0,
+          exitMatchesPreflight: true,
+        },
+        equivalence: {
+          configurationArgs: ['--config', 'vitest.config.js'],
+          mode: 'node',
+          sourceFile: '/repo/test/example.test.js',
+        },
+        testSessionEvents: 1,
+        testModuleEvents: 1,
+        testSuiteEvents: 1,
+        testEvents: 1,
+      },
+      isolationDiagnosis: 'The isolation command established strong compatibility evidence.',
+      isolationStatus: 'fail',
+    })
+    const ciWiring = getDecisionResult('ci-wiring', 'fail', {
+      conclusion: 'confirmed_misconfigured',
+      recommendation: 'Add dd-trace/ci/init to the identified CI test step.',
+    })
+
+    const { markdown } = renderDecisionReport({
+      results: [basic, ciWiring],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
+    })
+    const checksRow = markdown.split('\n').find(line => line.startsWith('| example'))
+    const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
+    const diagnosticBasic = diagnostic.validationSummaries[0].checks.find(check => check.id === 'basic-reporting')
+
+    assert.match(checksRow, /Add dd-trace\/ci\/init to the identified CI test step/)
+    assert.match(markdown, /Project clean preflight: exit `0`, observed tests `1`/)
+    assert.match(markdown, /Reporting path: `validator-direct-isolation`/)
+    assert.match(markdown, /Isolation clean preflight: exit `0`, observed tests `1`/)
+    assert.match(markdown, /Isolation equivalence: mode `node`/)
+    assert.match(markdown, /Isolation status: `fail`/)
+    assert.match(markdown, /Isolation diagnosis: `The isolation command established strong compatibility evidence\.`/)
+    assert.match(markdown, /Isolation result: exit `0`, events `session=1, module=1, suite=1, test=1`/)
+    assert.match(markdown, /Isolation clean confirmation: exit `0`, matches preflight `true`/)
+    assert.ok(diagnosticBasic, JSON.stringify(diagnostic.validationSummaries))
+    assert.strictEqual(diagnosticBasic.evidence.reportingPath, 'validator-direct-isolation')
+    assert.strictEqual(diagnosticBasic.evidence.projectPreflight.sourceFile, '/repo/test/example.test.js')
+    assert.strictEqual(diagnosticBasic.evidence.isolation.events.tests, 1)
+    assert.strictEqual(diagnosticBasic.evidence.isolation.status, 'fail')
+    assert.strictEqual(
+      diagnosticBasic.evidence.isolation.diagnosis,
+      'The isolation command established strong compatibility evidence.'
+    )
+    assert.strictEqual(diagnosticBasic.evidence.isolation.cleanConfirmation.exitMatchesPreflight, true)
+  })
+
+  it('surfaces isolation failure remediation and debug evidence', () => {
+    const basic = getDecisionResult('basic-reporting', 'fail', {
+      commandExitCode: 0,
+      eventLevelFailure: {
+        kind: 'no-test-optimization-events',
+        recommendation: 'Inspect the project wrapper.',
+      },
+      isolation: {
+        commandExitCode: 0,
+        commandFailure: {
+          kind: 'isolation-command-failure',
+          recommendation: 'Repair the direct runner command.',
+          summary: 'Direct runner signal.',
+          signals: ['Direct runner signal.'],
+        },
+        debugRerun: {
+          debugLines: ['Isolation debug signal.'],
+          ran: true,
+        },
+        eventLevelFailure: {
+          kind: 'adapter-compatibility-failure',
+          recommendation: 'Check dd-trace adapter compatibility for this runner version.',
+        },
+        testSessionEvents: 1,
+        testModuleEvents: 1,
+        testSuiteEvents: 1,
+        testEvents: 0,
+      },
+      isolationDiagnosis: 'The direct runner initialized but did not emit test events.',
+      isolationStatus: 'fail',
+    })
+
+    const { markdown } = renderDecisionReport({
+      results: [basic],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
+    })
+    const diagnostic = readMarkdownJsonSection(markdown, 'Diagnostic JSON')
+    const diagnosticBasic = diagnostic.validationSummaries[0].checks.find(check => check.id === 'basic-reporting')
+    const isolation = diagnosticBasic.evidence.isolation
+
+    assert.ok(
+      markdown.indexOf('Check dd-trace adapter compatibility for this runner version.') <
+        markdown.indexOf('Inspect the project wrapper.')
+    )
+    assert.match(markdown, /Isolation failure kind: `adapter-compatibility-failure`/)
+    assert.match(markdown, /Isolation command failure: Direct runner signal\./)
+    assert.match(markdown, /Isolation debug lines: `Isolation debug signal\.`/)
+    assert.strictEqual(isolation.failureKind, 'adapter-compatibility-failure')
+    assert.strictEqual(
+      isolation.recommendation,
+      'Check dd-trace adapter compatibility for this runner version.'
+    )
+    assert.deepStrictEqual(isolation.debugRerun.debugLines, ['Isolation debug signal.'])
+  })
+
+  it('summarizes every failed Basic Reporting candidate', () => {
+    const basic = getDecisionResult('basic-reporting', 'blocked', {
+      candidateAttempts: [
+        {
+          sourceFile: '/repo/test/first.test.js',
+          exitCode: 1,
+          timedOut: false,
+          observedTestCount: 1,
+          rejectionReason: 'The selected project test failed without Datadog.',
+          diagnosticSummary: ['Error: generated prerequisite is missing.'],
+        },
+        {
+          sourceFile: '/repo/test/second.test.js',
+          exitCode: null,
+          timedOut: true,
+          observedTestCount: null,
+          rejectionReason: 'Basic Reporting could not be tested reliably within the approved timeout.',
+        },
+      ],
+      validationIncomplete: true,
+    })
+
+    const { markdown } = renderDecisionReport({
+      results: [basic],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 2, validationCoverage: 'partial' },
+    })
+
+    assert.match(
+      markdown,
+      /Candidate 1: source `\/repo\/test\/first\.test\.js`; exit `1`; timed out `false`; observed tests `1`\./
+    )
+    assert.match(
+      markdown,
+      /Candidate 2: source `\/repo\/test\/second\.test\.js`; exit `unknown`; timed out `true`;/
+    )
+    assert.match(markdown, /observed tests `unknown`\./)
+    assert.match(markdown, /Basic Reporting could not be tested reliably within the approved timeout\./)
+    assert.match(markdown, /Candidate failure evidence: `Error: generated prerequisite is missing\.`/)
+    assert.match(markdown, /\| INCOMPLETE \|/)
+  })
 })
 
 describe('test optimization validation customer outcome decision table', () => {
@@ -1014,7 +1201,7 @@ describe('test optimization validation customer outcome decision table', () => {
       runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
       expected: [
         /completed and found at least one confirmed actionable problem/,
-        /dd-trace successfully reports this test suite, but the inspected CI configuration does not configure/,
+        /controlled local run emitted a complete Test Optimization event hierarchy, but the inspected CI configuration does not configure/,
         /Add Test Optimization initialization to the identified CI test job/,
       ],
       forbidden: [/CI ran tests/],
@@ -1056,10 +1243,73 @@ describe('test optimization validation customer outcome decision table', () => {
       forbidden: [/no local Test Optimization conclusion was reached/],
     },
     {
+      name: 'does not relabel a clean-confirmed Datadog-only failure as missing project setup',
+      results: [{
+        ...getDecisionResult('basic-reporting', 'fail', {
+          commandFailure: {
+            summary: 'The selected command failed only with Datadog initialized.',
+            recommendation: 'Inspect the recorded dd-trace debug evidence.',
+          },
+          commandExitMatchesPreflight: false,
+          cleanConfirmation: { exitMatchesPreflight: true },
+        }),
+        diagnosis: 'The selected command passed twice without Datadog but failed with Datadog initialized. This may ' +
+          'indicate a dd-trace compatibility issue.',
+      }],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
+      expected: [
+        /passed in repeated runs without Datadog but failed when dd-trace was initialized/,
+        /may indicate a dd-trace compatibility issue/,
+        /Inspect the recorded dd-trace debug evidence/,
+      ],
+      forbidden: [
+        /local validation could not run because required project setup is unavailable/,
+        /No Test Optimization reporting conclusion was reached/,
+      ],
+    },
+    {
+      name: 'surfaces controlled offline initialization failures in the framework verdict',
+      results: [{
+        ...getDecisionResult('basic-reporting', 'error', {
+          localDiagnosis: {
+            kind: 'offline-exporter-not-initialized',
+            recommendation: 'Inspect the recorded debug rerun.',
+          },
+        }),
+        diagnosis: 'The offline Test Optimization exporter did not initialize.',
+      }],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 2, validationCoverage: 'partial' },
+      expected: [
+        /controlled Datadog initialization did not activate the validator's offline reporting path/,
+        /may indicate a dd-trace initialization or validator integration problem/,
+        /Inspect the recorded debug rerun/,
+      ],
+      forbidden: [/required project setup is unavailable/],
+    },
+    {
+      name: 'does not describe skipped local validation as a reporting failure',
+      results: [
+        getDecisionResult('basic-reporting', 'skip'),
+        getDecisionResult('ci-wiring', 'fail', {
+          conclusion: 'confirmed_misconfigured',
+          domain: 'ci_configuration',
+          evidenceStrength: 'confirmed_static',
+        }),
+        ...getDecisionAdvancedResults('skip'),
+      ],
+      runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'partial' },
+      expected: [
+        /local Test Optimization compatibility was not tested because no runnable local command completed/,
+        /Separately, static inspection confirmed that the inspected CI configuration is missing/,
+      ],
+      forbidden: [/selected tests did not report when dd-trace was initialized directly/],
+    },
+    {
       name: 'reports missing project setup without implying a sandbox or product failure',
       results: [
         getDecisionResult('basic-reporting', 'error', {
           commandFailure: { kind: 'project-setup-failed' },
+          domain: 'project_setup',
           recommendation: 'Complete the required project build, then rerun validation.',
         }),
         getDecisionResult('ci-wiring', 'error', {
@@ -1070,8 +1320,8 @@ describe('test optimization validation customer outcome decision table', () => {
       ],
       runSummary: { executionStatus: 'project_setup_required', validatorExitCode: 2, validationCoverage: 'partial' },
       expected: [
-        /requires additional project setup before it can complete/,
-        /local validation could not run because required project setup is unavailable/,
+        /selected project test or one of its prerequisites must pass before validation can complete/,
+        /local validation could not run because the selected project test or required setup did not complete/,
         /No Test Optimization reporting conclusion was reached/,
       ],
       forbidden: [/blocked by the execution environment/, /did not report successfully/],
@@ -1088,14 +1338,41 @@ describe('test optimization validation customer outcome decision table', () => {
       ],
       runSummary: { executionStatus: 'blocked', validatorExitCode: 2, validationCoverage: 'partial' },
       expected: [
-        /blocked by the execution environment before reaching a complete conclusion/,
+        /blocked by the local execution environment or runtime before reaching a complete conclusion/,
         /local validation was blocked by the execution environment/,
         /No Test Optimization reporting conclusion was reached/,
       ],
       forbidden: [/did not report successfully/],
     },
     {
-      name: 'explains how to rerun Playwright when the sandbox blocks browser launch',
+      name: 'reports an unattributed local runtime abort without calling it project setup',
+      results: [
+        getDecisionResult('basic-reporting', 'blocked', {
+          candidateAttempts: [{ exitCode: 1, timedOut: false }],
+          commandFailure: {
+            kind: 'playwright-browser-process-aborted',
+            recommendation: 'Collect browser crash diagnostics, then rerun the same command.',
+          },
+          domain: 'local_runtime',
+          localRuntimeBlocked: true,
+        }),
+        getDecisionResult('ci-wiring', 'error', {
+          conclusion: 'incomplete',
+          domain: 'ci_configuration',
+          evidenceStrength: 'unknown',
+        }),
+      ],
+      runSummary: { executionStatus: 'blocked', validatorExitCode: 2, validationCoverage: 'partial' },
+      expected: [
+        /blocked by the local execution environment or runtime/,
+        /local browser or test runtime aborted/,
+        /available evidence does not establish the cause/,
+        /\| BLOCKED \|/,
+      ],
+      forbidden: [/required project setup is unavailable/, /sandbox denied/, /Test Optimization failed/],
+    },
+    {
+      name: 'explains how to retry Playwright without automatic permission escalation',
       framework: {
         id: 'playwright:root',
         framework: 'playwright',
@@ -1107,8 +1384,8 @@ describe('test optimization validation customer outcome decision table', () => {
             blockedByExecutionEnvironment: true,
             commandFailure: {
               kind: 'playwright-browser-launch-blocked',
-              recommendation: 'Approve rerunning the exact checksum-approved validator command with permission ' +
-                'to launch the project Playwright browser. If unavailable, run it from the host shell.',
+              recommendation: 'Retry the same approved plan from a host shell where the project browser can launch. ' +
+                'Do not request broader permissions automatically.',
             },
           }),
           frameworkId: 'playwright:root',
@@ -1117,8 +1394,8 @@ describe('test optimization validation customer outcome decision table', () => {
       runSummary: { executionStatus: 'blocked', validatorExitCode: 2, validationCoverage: 'partial' },
       expected: [
         /Playwright could not run because the current agent sandbox did not allow it to launch the project browser/,
-        /Approve rerunning the exact checksum-approved validator command/,
-        /run it from the host shell/,
+        /Retry the same approved plan from a host shell/,
+        /Do not request broader permissions automatically/,
       ],
       forbidden: [/selected tests did not report successfully/],
     },
@@ -1135,7 +1412,7 @@ describe('test optimization validation customer outcome decision table', () => {
       ],
       runSummary: { executionStatus: 'completed', validatorExitCode: 1, validationCoverage: 'complete' },
       expected: [
-        /dd-trace successfully reports this test suite/,
+        /controlled local run emitted a complete event hierarchy/,
         /Auto Test Retries did not pass/,
       ],
       forbidden: [/Every selected check reached a conclusive pass or fail result.*all passed/],

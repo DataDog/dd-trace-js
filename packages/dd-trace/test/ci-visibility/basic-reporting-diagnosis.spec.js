@@ -67,6 +67,268 @@ describe('test optimization basic reporting diagnosis', () => {
     }
   })
 
+  it('uses equivalent direct-runner reporting to diagnose a project wrapper propagation failure', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const { runBasicReporting } = getBasicReportingWithIsolation({ isolationHasEvents: true })
+    const framework = getIsolationFramework(root)
+
+    try {
+      const result = await runBasicReporting({ framework, out: root, options: { repositoryRoot: root } })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, true)
+      assert.strictEqual(result.evidence.reportingPath, 'validator-direct-isolation')
+      assert.strictEqual(result.evidence.isolation.foundationalReportingEstablished, true)
+      assert.match(result.diagnosis, /project wrapper likely does not propagate the required initialization/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a possible adapter issue when direct isolation initializes without test events', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const { runBasicReporting } = getBasicReportingWithIsolation({ isolationHasEvents: false })
+    const framework = getIsolationFramework(root)
+
+    try {
+      const result = await runBasicReporting({ framework, out: root, options: { repositoryRoot: root } })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, false)
+      assert.strictEqual(result.evidence.reportingPath, 'none')
+      assert.strictEqual(result.evidence.isolation.offlineExporterInitialized, true)
+      assert.match(result.diagnosis, /may indicate a dd-trace adapter or compatibility issue/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps isolation unavailable as incomplete foundational evidence', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const { runBasicReporting } = getBasicReportingWithIsolation({
+      isolationHasEvents: false,
+      isolationPreflightOk: false,
+    })
+    const framework = getIsolationFramework(root)
+
+    try {
+      const result = await runBasicReporting({ framework, out: root, options: { repositoryRoot: root } })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, false)
+      assert.strictEqual(result.evidence.reportingPath, 'none')
+      assert.strictEqual(result.evidence.isolationUnavailable, true)
+      assert.strictEqual(result.evidence.isolation, undefined)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not replace an instrumented exit failure with an isolation diagnosis', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const validation = getBasicReportingWithIsolation({
+      isolationHasEvents: true,
+      primaryExitCode: 1,
+    })
+    const framework = getIsolationFramework(root)
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework,
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(validation.getExecutionCounts().cleanConfirmations, 1)
+      assert.strictEqual(validation.getExecutionCounts().isolationPreflights, 0)
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, false)
+      assert.ok(result.evidence.cleanConfirmation)
+      assert.doesNotMatch(result.diagnosis, /project wrapper likely does not propagate/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not attempt isolation after an instrumented timeout', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const validation = getBasicReportingWithIsolation({
+      isolationHasEvents: true,
+      primaryTimedOut: true,
+    })
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework: getIsolationFramework(root),
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(validation.getExecutionCounts().isolationPreflights, 0)
+      assert.strictEqual(result.evidence.isolationEligible, false)
+      assert.doesNotMatch(result.diagnosis, /project wrapper likely does not propagate/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('uses direct isolation when the project command does not load authoritative settings', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const validation = getBasicReportingWithIsolation({
+      isolationHasEvents: true,
+      primarySettingsLoaded: false,
+    })
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework: getIsolationFramework(root),
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(validation.getExecutionCounts().isolationPreflights, 1)
+      assert.strictEqual(validation.getExecutionCounts().debugReruns, 1)
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.isolationEligible, true)
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, true)
+      assert.strictEqual(result.evidence.localDiagnosis.kind, 'offline-settings-not-loaded')
+      assert.match(result.diagnosis, /project wrapper likely does not propagate/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('debug-reruns an exporter initialization failure before trying direct isolation', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-exporter-'))
+    const validation = getBasicReportingWithIsolation({
+      isolationHasEvents: false,
+      primaryExporterInitialized: false,
+    })
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework: getIsolationFramework(root),
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(validation.getExecutionCounts().debugReruns, 2)
+      assert.strictEqual(validation.getExecutionCounts().isolationPreflights, 1)
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.domain, 'test_optimization')
+      assert.strictEqual(result.evidence.localDiagnosis.kind, 'offline-exporter-not-initialized')
+      assert.strictEqual(result.evidence.debugRerun.ran, true)
+      assert.match(result.diagnosis, /direct-runner isolation check did not report a complete event hierarchy/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not call a Cucumber source-checkout isolation result an adapter bug', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-cucumber-source-'))
+    const validation = getBasicReportingWithIsolation({ isolationHasEvents: false })
+    const framework = getIsolationFramework(root)
+    framework.id = 'cucumber:root'
+    framework.framework = 'cucumber'
+    framework.project = { name: '@cucumber/cucumber', root }
+    framework.isolationTestCandidate.command.argv = [
+      process.execPath,
+      path.join(root, 'bin', 'cucumber.js'),
+    ]
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework,
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(result.evidence.isolationRepresentativeness.representative, false)
+      assert.match(result.diagnosis, /not a reliable reproduction of customer Cucumber instrumentation/)
+      assert.match(result.diagnosis, /installed under node_modules/)
+      assert.doesNotMatch(result.diagnosis, /may indicate a dd-trace adapter/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('requires authoritative isolation settings before establishing reporting', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const validation = getBasicReportingWithIsolation({
+      isolationHasEvents: true,
+      isolationSettingsLoaded: false,
+    })
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework: getIsolationFramework(root),
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, false)
+      assert.strictEqual(result.evidence.isolationStatus, 'error')
+      assert.strictEqual(result.evidence.isolation.settingsLoadedFromCache, false)
+      assert.doesNotMatch(result.diagnosis, /project wrapper likely does not propagate/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('clean-confirms a nonzero isolation exit even when all events were emitted', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const validation = getBasicReportingWithIsolation({
+      isolationExitCode: 1,
+      isolationHasEvents: true,
+    })
+
+    try {
+      const result = await validation.runBasicReporting({
+        framework: getIsolationFramework(root),
+        out: root,
+        options: { repositoryRoot: root },
+      })
+
+      assert.strictEqual(validation.getExecutionCounts().cleanConfirmations, 1)
+      assert.strictEqual(result.evidence.foundationalReportingEstablished, false)
+      assert.strictEqual(result.evidence.isolationStatus, 'fail')
+      assert.strictEqual(result.evidence.isolation.cleanConfirmation.exitMatchesPreflight, true)
+      assert.match(result.evidence.isolationDiagnosis, /may indicate a dd-trace compatibility issue/)
+      assert.match(result.diagnosis, /direct-runner isolation emitted a complete event hierarchy/)
+      assert.match(result.diagnosis, /may indicate a dd-trace compatibility issue/)
+      assert.doesNotMatch(result.diagnosis, /project wrapper likely does not propagate/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the isolation command associated with the selected project fallback', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-basic-reporting-isolation-'))
+    const validation = getBasicReportingWithIsolation({ isolationHasEvents: true })
+    const framework = getIsolationFramework(root)
+    const secondSource = path.join(root, 'test', 'fallback.spec.js')
+    framework.preflight.selectedCandidateIndex = 1
+    framework.isolationTestCandidates = [
+      { ...framework.isolationTestCandidate, primaryCandidateIndex: 0 },
+      {
+        ...framework.isolationTestCandidate,
+        primaryCandidateIndex: 1,
+        sourceFile: secondSource,
+        equivalence: {
+          ...framework.isolationTestCandidate.equivalence,
+          sourceFile: secondSource,
+        },
+      },
+    ]
+
+    try {
+      await validation.runBasicReporting({ framework, out: root, options: { repositoryRoot: root } })
+
+      assert.strictEqual(validation.getExecutionCounts().selectedIsolationSource, secondSource)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('explains Vitest benchmark mode without scheduling a debug rerun', () => {
     const eventLevelFailure = getMissingEventDiagnosis({
       framework: {
@@ -397,4 +659,137 @@ function getBasicReportingWithExitMismatch ({ cleanExitCode, onCleanRun = () => 
       }),
     },
   })
+}
+
+function getIsolationFramework (root) {
+  return {
+    id: 'mocha:root',
+    framework: 'mocha',
+    existingTestCommand: {
+      cwd: root,
+      argv: [process.execPath, '-e', 'console.log("1 passing")'],
+    },
+    isolationTestCandidate: {
+      origin: 'validator-direct',
+      sourceFile: path.join(root, 'test', 'example.spec.js'),
+      maxTestCount: 1,
+      command: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'console.log("1 passing")'],
+      },
+      equivalence: {
+        sourceFile: path.join(root, 'test', 'example.spec.js'),
+        runnerMode: 'mocha',
+        configFiles: [],
+      },
+    },
+    preflight: {
+      ran: true,
+      exitCode: 0,
+      maxTestCount: 1,
+      observedTestCount: 1,
+    },
+  }
+}
+
+function getBasicReportingWithIsolation ({
+  isolationExitCode = 0,
+  isolationExporterInitialized = true,
+  isolationHasEvents,
+  isolationPreflightOk = true,
+  isolationSettingsLoaded = true,
+  primaryExitCode = 0,
+  primaryExporterInitialized = true,
+  primarySettingsLoaded = true,
+  primaryTimedOut = false,
+}) {
+  let cleanConfirmations = 0
+  let debugReruns = 0
+  let isolationPreflights = 0
+  let selectedIsolationSource
+  const basicReporting = proxyquire('../../../../ci/test-optimization-validation/scenarios/basic-reporting', {
+    '../command-runner': {
+      runCommand: async () => {
+        cleanConfirmations++
+        return {
+          artifacts: {},
+          exitCode: 0,
+          stderr: '',
+          stdout: '1 passing',
+          timedOut: false,
+        }
+      },
+    },
+    '../preflight-runner': {
+      runIsolationPreflight: async ({ isolationTestCandidate }) => {
+        isolationPreflights++
+        selectedIsolationSource = isolationTestCandidate.sourceFile
+        return {
+          ok: isolationPreflightOk,
+          preflight: {
+            ran: true,
+            exitCode: isolationPreflightOk ? 0 : 1,
+            maxTestCount: 1,
+            observedTestCount: isolationPreflightOk ? 1 : 0,
+          },
+        }
+      },
+    },
+    './helpers': {
+      basicEventEvidence: events => {
+        const count = events.includes('complete') ? 1 : 0
+        return {
+          testSessionEvents: count,
+          testModuleEvents: count,
+          testSuiteEvents: count,
+          testEvents: count,
+        }
+      },
+      failWithDebugRerun: async options => {
+        debugReruns++
+        options.evidence.debugRerun = {
+          ran: true,
+          debugLines: ['Test Optimization debug fixture output.'],
+        }
+        return {
+          artifacts: [],
+          diagnosis: options.diagnosis,
+          evidence: options.evidence,
+          frameworkId: options.framework.id,
+          scenario: options.scenarioName,
+          status: 'fail',
+        }
+      },
+      hasAllBasicEventTypes: events => events.includes('complete'),
+      runInstrumentedCommand: async ({ out, scenarioName }) => {
+        const events = scenarioName === 'basic-reporting-isolation' && isolationHasEvents
+          ? ['complete']
+          : []
+        const isolation = scenarioName === 'basic-reporting-isolation'
+        return {
+          events,
+          offline: {
+            initialized: isolation ? isolationExporterInitialized : primaryExporterInitialized,
+            inputs: {
+              settings: {
+                status: (isolation ? isolationSettingsLoaded : primarySettingsLoaded) ? 'loaded' : 'missing',
+              },
+            },
+            summary: { errors: [] },
+          },
+          outDir: path.join(out, scenarioName),
+          result: {
+            exitCode: isolation ? isolationExitCode : primaryExitCode,
+            stderr: '',
+            stdout: '1 passing',
+            timedOut: isolation ? false : primaryTimedOut,
+          },
+        }
+      },
+    },
+  })
+  return {
+    ...basicReporting,
+    getExecutionCounts: () => ({ cleanConfirmations, debugReruns, isolationPreflights, selectedIsolationSource }),
+  }
 }

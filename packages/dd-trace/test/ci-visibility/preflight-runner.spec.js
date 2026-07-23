@@ -5,6 +5,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
+
 const { runFrameworkPreflight } = require('../../../../ci/test-optimization-validation/preflight-runner')
 
 describe('test optimization validation preflight runner', () => {
@@ -14,7 +16,7 @@ describe('test optimization validation preflight runner', () => {
     const marker = path.join(root, 'third-candidate-ran')
     const framework = getFramework(root, [
       getCandidate(root, 'first.test.js', 'console.log("0 passing")'),
-      getCandidate(root, 'second.test.js', 'console.log("2 passing")'),
+      getCandidate(root, 'second.test.js', 'console.log("828 passing")'),
       getCandidate(root, 'third.test.js', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`),
     ])
     fs.mkdirSync(out)
@@ -28,7 +30,8 @@ describe('test optimization validation preflight runner', () => {
 
       assert.strictEqual(result.ok, true)
       assert.strictEqual(result.preflight.selectedCandidateIndex, 1)
-      assert.strictEqual(result.preflight.observedTestCount, 2)
+      assert.strictEqual(result.preflight.observedTestCount, 828)
+      assert.strictEqual(result.preflight.testCountAccepted, true)
       assert.strictEqual(result.preflight.attempts.length, 2)
       assert.deepStrictEqual(framework.existingTestCommand, framework.localTestCandidates[1].command)
       assert.strictEqual(fs.existsSync(marker), false)
@@ -37,7 +40,7 @@ describe('test optimization validation preflight runner', () => {
     }
   })
 
-  it('returns an incomplete adapter result after every approved candidate is rejected', async () => {
+  it('accepts a successful command when its output does not expose a test count', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-'))
     const out = path.join(root, 'results')
     const framework = getFramework(root, [
@@ -53,12 +56,48 @@ describe('test optimization validation preflight runner', () => {
         options: { repositoryRoot: root },
       })
 
+      assert.strictEqual(result.ok, true)
+      assert.strictEqual(result.preflight.selectedCandidateIndex, 1)
+      assert.strictEqual(result.preflight.testCountKnown, false)
+      assert.strictEqual(result.preflight.testCountAccepted, true)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a timed-out project command as incomplete project validation', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-timeout-'))
+    const framework = getFramework(root, [getCandidate(root, 'first.test.js', '')])
+    const { runFrameworkPreflight } = proxyquire(
+      '../../../../ci/test-optimization-validation/preflight-runner',
+      {
+        './command-runner': {
+          runCommand: async () => ({
+            artifacts: {},
+            durationMs: 300_000,
+            exitCode: null,
+            stderr: '',
+            stdout: '100 passing',
+            timedOut: true,
+          }),
+          serializeDisplayCommand: () => 'npm test',
+        },
+      }
+    )
+
+    try {
+      const result = await runFrameworkPreflight({
+        framework,
+        out: path.join(root, 'results'),
+        options: { repositoryRoot: root },
+      })
+
       assert.strictEqual(result.ok, false)
-      assert.strictEqual(result.failure.status, 'error')
-      assert.strictEqual(result.failure.evidence.validationIncomplete, true)
-      assert.strictEqual(result.failure.evidence.domain, 'validator_adapter')
-      assert.strictEqual(result.failure.evidence.candidateAttempts.length, 2)
-      assert.match(result.failure.diagnosis, /None of the 2 approved whole-file test candidates/)
+      assert.strictEqual(result.failure.status, 'blocked')
+      assert.strictEqual(result.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(result.failure.evidence.projectCommandTimedOut, true)
+      assert.strictEqual(result.failure.evidence.projectBaselineFailed, false)
+      assert.match(result.failure.diagnosis, /Basic Reporting could not be tested reliably/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -78,10 +117,7 @@ function getFramework (root, candidates) {
     framework: 'mocha',
     existingTestCommand: candidates[0].command,
     localTestCandidates: candidates,
-    preflight: {
-      status: 'pending',
-      maxTestCount: 50,
-    },
+    preflight: { status: 'pending' },
     project: { root },
   }
 }
@@ -99,7 +135,6 @@ function getCandidate (root, sourceFile, source) {
   fs.writeFileSync(absoluteSourceFile, '// candidate fixture\n')
   return {
     sourceFile: absoluteSourceFile,
-    maxTestCount: 50,
     command: {
       cwd: root,
       argv: [process.execPath, '-e', source],

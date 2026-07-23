@@ -15,7 +15,7 @@ const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*
  * @returns {number|null} observed count when a supported summary was found
  */
 function getObservedTestCount (framework, stdout = '', stderr = '') {
-  const output = `${stdout}\n${stderr}`.replaceAll(ANSI_PATTERN, '')
+  const output = stripAnsi(`${stdout}\n${stderr}`)
   if (framework === 'cucumber') return cucumberAdapter.getObservedTestCount(output)
   if (framework === 'cypress') return cypressAdapter.getObservedTestCount(output)
   if (framework === 'playwright') return playwrightAdapter.getObservedTestCount(output)
@@ -38,6 +38,10 @@ function getObservedTestCount (framework, stdout = '', stderr = '') {
   }
 
   return getLastMatchCount(output, /\b(\d+)\s+tests?\s+(?:passed|failed)\b/gi)
+}
+
+function stripAnsi (value) {
+  return String(value || '').replaceAll(ANSI_PATTERN, '')
 }
 
 /**
@@ -112,4 +116,4 @@ function sumLastMatchCounts (output, patterns) {
   return found ? count : null
 }
 
-module.exports = { getObservedTestCount }
+module.exports = { getObservedTestCount, stripAnsi }

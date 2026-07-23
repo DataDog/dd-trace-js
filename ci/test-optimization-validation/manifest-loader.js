@@ -77,13 +77,32 @@ function getManifestPaths (manifest) {
       [`${prefix}.project.root`, framework.project?.root],
       [`${prefix}.project.packageJson`, framework.project?.packageJson],
       [`${prefix}.ciWiring.configFile`, framework.ciWiring?.configFile],
-      [`${prefix}.ciWiring.workingDirectory`, framework.ciWiring?.workingDirectory]
+      [`${prefix}.ciWiring.workingDirectory`, framework.ciWiring?.workingDirectory],
+      [`${prefix}.ciWiring.terminalTestCommand.projectRoot`, framework.ciWiring?.terminalTestCommand?.projectRoot]
     )
+    for (const [index, wrapper] of (framework.ciWiring?.wrapperChain || []).entries()) {
+      paths.push([`${prefix}.ciWiring.wrapperChain[${index}].workingDirectory`, wrapper?.workingDirectory])
+    }
     for (const [index, configFile] of (framework.project?.configFiles || []).entries()) {
       paths.push([`${prefix}.project.configFiles[${index}]`, configFile])
     }
     for (const [index, candidate] of (framework.localTestCandidates || []).entries()) {
       paths.push([`${prefix}.localTestCandidates[${index}].sourceFile`, candidate.sourceFile])
+    }
+    for (const [index, candidate] of (framework.isolationTestCandidates || []).entries()) {
+      paths.push(
+        [`${prefix}.isolationTestCandidates[${index}].sourceFile`, candidate.sourceFile],
+        [`${prefix}.isolationTestCandidates[${index}].equivalence.sourceFile`, candidate.equivalence?.sourceFile]
+      )
+    }
+    if (!Array.isArray(framework.isolationTestCandidates) && framework.isolationTestCandidate) {
+      paths.push(
+        [`${prefix}.isolationTestCandidate.sourceFile`, framework.isolationTestCandidate.sourceFile],
+        [
+          `${prefix}.isolationTestCandidate.equivalence.sourceFile`,
+          framework.isolationTestCandidate.equivalence?.sourceFile,
+        ]
+      )
     }
     for (const [name, command] of getCommands(framework)) {
       paths.push([`${prefix}.${name}.cwd`, command.cwd])
@@ -121,6 +140,14 @@ function getCommands (framework) {
     if (candidate?.command) {
       commands.push([`localTestCandidates[${index}].command`, candidate.command])
     }
+  }
+  for (const [index, candidate] of (framework.isolationTestCandidates || []).entries()) {
+    if (candidate?.command) {
+      commands.push([`isolationTestCandidates[${index}].command`, candidate.command])
+    }
+  }
+  if (!Array.isArray(framework.isolationTestCandidates) && framework.isolationTestCandidate?.command) {
+    commands.push(['isolationTestCandidate.command', framework.isolationTestCandidate.command])
   }
   for (const [index, scenario] of (framework.generatedTestStrategy?.scenarios || []).entries()) {
     if (scenario?.runCommand) {

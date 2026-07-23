@@ -91,6 +91,14 @@ const WATCH_MODE_RE = /(?:^|\s)(?:watch|--watch|--watchAll)(?!(?:=false)(?:\s|$)
 const CYPRESS_MANUAL_PLUGIN_RE = /dd-trace\/ci\/cypress\/(?:plugin|after-run|after-spec)\b/
 const CYPRESS_SUPPORT_RE = /dd-trace\/ci\/cypress\/support\b/
 const CYPRESS_SUPPORT_DISABLED_RE = /supportFile\s*:\s*false|"supportFile"\s*:\s*false/
+const CUCUMBER_RUNNER_COMMAND_RE = new RegExp(
+  String.raw`(?:^|(?:&&|\|\||[;|])\s*)` +
+  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;&|]+)|` +
+  String.raw`cross-env|env|npx|nyc|c8|npm\s+exec|pnpm\s+exec|yarn\s+exec|--?[^\s;&|]+)\s+)*` +
+  String.raw`(?:(?:[^\s"';&|]+[\/\\])?(?:cucumber-js(?:\.cmd)?|cucumber(?:\.cmd)?)|` +
+  String.raw`node(?:\.exe)?\s+(?:[^\s"';&|]+[\/\\])?bin[\/\\]cucumber\.js)` +
+  String.raw`(?=$|[\s"';&|])`
+)
 const CUCUMBER_PARALLEL_RE =
   /\bcucumber(?:-js)?\b[\s\S]{0,200}\s--parallel\b|--parallel\b[\s\S]{0,200}\bcucumber(?:-js)?\b/
 const JEST_FORCE_EXIT_RE = /\bforceExit\s*:\s*true\b|--forceExit\b|"forceExit"\s*:\s*true/
@@ -144,7 +152,7 @@ function getFrameworkDefinitions (ddMajor) {
       id: 'cucumber',
       name: 'Cucumber',
       packages: ['@cucumber/cucumber'],
-      commandPatterns: [/\bcucumber-js\b/, /\bcucumber\b/],
+      commandPatterns: [CUCUMBER_RUNNER_COMMAND_RE],
       configPatterns: [/^cucumber\./],
       supportedRange: '>=7.0.0',
       recommendation: 'Upgrade @cucumber/cucumber to >=7.0.0.',
@@ -1106,7 +1114,10 @@ function detectSupportedFrameworks (root, definitions, manifests, scripts, textF
   const projectPreferenceScores = getProjectPreferenceScores(root, manifests)
 
   for (const definition of definitions) {
-    const dependencyEntries = findDependencyEntries(manifests, definition.packages)
+    const dependencyEntries = [
+      ...findDependencyEntries(manifests, definition.packages),
+      ...findPackageIdentityEntries(manifests, definition.packages),
+    ]
     const scriptMatches = findScriptMatches(scripts, definition.commandPatterns)
     const configMatches = findConfigMatches(textFiles, definition.configPatterns)
 
@@ -1193,7 +1204,8 @@ function getSupportedVersionDetection (framework, relativePath) {
  */
 function getEligibleCommandMatch (framework) {
   const scriptMatches = [...(framework.scriptMatches || [])].sort((left, right) => {
-    return compareProjectPreference(left, right, framework.projectPreferenceScores)
+    return compareProjectPreference(left, right, framework.projectPreferenceScores) ||
+      getFrameworkCommandPreference(framework.id, left) - getFrameworkCommandPreference(framework.id, right)
   })
 
   for (const script of scriptMatches) {
@@ -1211,6 +1223,24 @@ function getEligibleCommandMatch (framework) {
       relativePath: dependencyEntries[0].relativePath,
     }
   }
+}
+
+/**
+ * Prefers direct, single-stage framework scripts over aggregate coverage or setup chains.
+ *
+ * @param {string} frameworkId framework id
+ * @param {object} script package script
+ * @returns {number} lower is preferred
+ */
+function getFrameworkCommandPreference (frameworkId, script) {
+  let score = 0
+  if (/coverage|all|full/i.test(script.name)) score += 4
+  if (/[\r\n;&|`]|\$\(/.test(script.command)) score += 4
+  const invokesFramework = frameworkId === 'cucumber'
+    ? isCucumberRunnerCommand(script.command)
+    : script.command.toLowerCase().includes(frameworkId.toLowerCase())
+  if (invokesFramework) score--
+  return score
 }
 
 /**
@@ -1280,10 +1310,21 @@ function compareProjectPreference (left, right, scores) {
  * @returns {boolean} whether the command is ineligible
  */
 function isIneligibleFrameworkCommand (frameworkId, command) {
+  if (frameworkId === 'cucumber' && !isCucumberRunnerCommand(command)) return true
   if (frameworkId === 'vitest' && /\bvitest\s+bench\b/.test(command)) return true
   if (WATCH_MODE_RE.test(command)) return true
 
   return false
+}
+
+/**
+ * Checks whether a package command invokes the Cucumber runner instead of merely naming a Cucumber config file.
+ *
+ * @param {string} command package script command
+ * @returns {boolean} whether the command invokes Cucumber
+ */
+function isCucumberRunnerCommand (command) {
+  return CUCUMBER_RUNNER_COMMAND_RE.test(String(command || ''))
 }
 
 /**
@@ -1376,6 +1417,28 @@ function findDependencyEntries (manifests, packageNames) {
     }
   }
 
+  return entries
+}
+
+/**
+ * Treats a repository containing a framework's own package as a local version source.
+ *
+ * @param {Array<object>} manifests package manifests
+ * @param {string[]} packageNames framework package names
+ * @returns {Array<object>} local package identities
+ */
+function findPackageIdentityEntries (manifests, packageNames) {
+  const packageSet = new Set(packageNames)
+  const entries = []
+  for (const manifest of manifests) {
+    if (!packageSet.has(manifest.json.name) || typeof manifest.json.version !== 'string') continue
+    entries.push({
+      packageName: manifest.json.name,
+      rawVersion: manifest.json.version,
+      section: 'package',
+      relativePath: manifest.relativePath,
+    })
+  }
   return entries
 }
 

@@ -20,6 +20,74 @@ const {
 } = require('./helpers')
 
 async function runBasicReporting ({ framework, out, options }) {
+  const primaryResult = await runPrimaryBasicReporting({ framework, out, options })
+  if (primaryResult.evidence?.foundationalReportingEstablished) return primaryResult
+  const isolationTestCandidate = getSelectedIsolationTestCandidate(framework)
+  if (primaryResult.evidence?.isolationEligible !== true || !isolationTestCandidate) return primaryResult
+
+  const { runIsolationPreflight } = require('../preflight-runner')
+  const isolationPreflight = await runIsolationPreflight({ framework, isolationTestCandidate, out, options })
+  primaryResult.evidence ||= {}
+  primaryResult.evidence.isolationPreflight = isolationPreflight.preflight
+  if (!isolationPreflight.ok) {
+    primaryResult.evidence.foundationalReportingEstablished = false
+    primaryResult.evidence.reportingPath = 'none'
+    primaryResult.evidence.isolationUnavailable = true
+    return primaryResult
+  }
+
+  const isolationResult = await runIsolationBasicReporting({
+    framework,
+    isolationPreflight: isolationPreflight.preflight,
+    isolationTestCandidate,
+    out,
+    options,
+  })
+  primaryResult.artifacts ||= []
+  primaryResult.artifacts.push(...(isolationResult.artifacts || []))
+  primaryResult.evidence.isolation = isolationResult.evidence
+  primaryResult.evidence.isolationDiagnosis = isolationResult.diagnosis
+  primaryResult.evidence.isolationStatus = isolationResult.status
+  primaryResult.evidence.foundationalReportingEstablished =
+    isolationResult.evidence?.foundationalReportingEstablished === true
+  primaryResult.evidence.reportingPath = primaryResult.evidence.foundationalReportingEstablished
+    ? 'validator-direct-isolation'
+    : 'none'
+
+  if (primaryResult.evidence.foundationalReportingEstablished) {
+    primaryResult.status = 'fail'
+    primaryResult.diagnosis = 'The selected project test command passed without Datadog but did not produce a ' +
+      'complete Test Optimization event hierarchy when initialized. The equivalent direct test-runner command ' +
+      'reported session, module, suite, and test events for the same file and runner mode. dd-trace and the ' +
+      `${framework.framework} adapter can report in this project; the project wrapper likely does not propagate ` +
+      'the required initialization to the final test process.'
+  } else if (isCucumberSourceCheckoutIsolation(framework, isolationTestCandidate)) {
+    primaryResult.evidence.isolationRepresentativeness = {
+      representative: false,
+      reason: 'The Cucumber runner is loaded from the framework repository source tree rather than node_modules.',
+    }
+    primaryResult.diagnosis = 'The selected project command and its direct-runner isolation did not establish Basic ' +
+      'Reporting, but this repository is the Cucumber framework source checkout and its runner is not loaded as an ' +
+      'installed dependency under node_modules. This topology is not a reliable reproduction of customer Cucumber ' +
+      'instrumentation. Reproduce with @cucumber/cucumber installed under node_modules before treating the result as ' +
+      'a dd-trace adapter bug.'
+  } else if (isolationResult.diagnosis) {
+    const completeIsolationEvents = isolationResult.evidence?.testSessionEvents > 0 &&
+      isolationResult.evidence?.testModuleEvents > 0 &&
+      isolationResult.evidence?.testSuiteEvents > 0 &&
+      isolationResult.evidence?.testEvents > 0
+    primaryResult.diagnosis = completeIsolationEvents
+      ? 'The selected project command did not establish Basic Reporting. The equivalent direct-runner isolation ' +
+        `emitted a complete event hierarchy but failed its compatibility contract. ${isolationResult.diagnosis}`
+      : 'The selected project command did not establish Basic Reporting, and the equivalent direct-runner isolation ' +
+        `check did not report a complete event hierarchy either. ${isolationResult.diagnosis} This may indicate a ` +
+        'dd-trace adapter or compatibility issue; inspect the recorded debug evidence.'
+  }
+
+  return primaryResult
+}
+
+async function runPrimaryBasicReporting ({ framework, out, options }) {
   const scenarioName = 'basic-reporting'
   try {
     const command = getBasicReportingCommand(framework)
@@ -42,24 +110,72 @@ async function runBasicReporting ({ framework, out, options }) {
       offlineExporterInitialized: offline.initialized,
       settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
       offlineExporterSummary: offline.summary,
+      foundationalReportingEstablished: false,
+      isolationEligible: result.exitCode === 0 && result.timedOut !== true,
+      reportingPath: 'none',
       ...basicEventEvidence(events),
     }
 
-    if (evidence.offlineExporterInitialized && !evidence.settingsLoadedFromCache) {
-      return error(
+    if (!evidence.offlineExporterInitialized || !evidence.settingsLoadedFromCache) {
+      const reason = evidence.offlineExporterInitialized
+        ? 'Basic Reporting settings were not loaded from the authoritative offline cache fixture.'
+        : 'The offline Test Optimization exporter did not initialize during Basic Reporting.'
+      return diagnoseInitializationFailure({
+        command,
+        diagnosis: reason,
+        evidence,
         framework,
         scenarioName,
-        new Error('Basic Reporting settings were not loaded from the authoritative offline cache fixture.'),
+        options,
+        out,
+        outDir,
+      })
+    }
+
+    const complete = hasAllBasicEventTypes(events)
+    evidence.foundationalReportingEstablished = complete &&
+      evidence.offlineExporterInitialized &&
+      evidence.settingsLoadedFromCache &&
+      result.exitCode === 0 &&
+      result.timedOut !== true
+    evidence.reportingPath = evidence.foundationalReportingEstablished ? 'project-command' : 'none'
+
+    if (result.timedOut) {
+      evidence.commandFailure = summarizeCommandFailure(result, evidence)
+      return inconclusive(
+        framework,
+        scenarioName,
+        'The initialized project command timed out. No wrapper-propagation or Test Optimization compatibility ' +
+          'conclusion was reached.',
+        evidence,
         outDir
       )
     }
 
-    if (!hasAllBasicEventTypes(events)) {
-      if (result.exitCode !== 0) {
+    if (result.exitCode !== 0) {
+      if (!complete) {
         evidence.commandFailure = summarizeCommandFailure(result, evidence)
+        evidence.eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
       }
+      return handleInstrumentedExitMismatch({
+        command,
+        complete,
+        evidence,
+        framework,
+        options,
+        out,
+        outDir,
+        result,
+        scenarioName,
+      })
+    }
+
+    if (!complete) {
       const eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
       evidence.eventLevelFailure = eventLevelFailure
+      evidence.isolationEligible = evidence.offlineExporterInitialized &&
+        evidence.settingsLoadedFromCache &&
+        result.timedOut !== true
 
       return failBasicReportingWithDebugRerun({
         command,
@@ -75,7 +191,7 @@ async function runBasicReporting ({ framework, out, options }) {
       })
     }
 
-    if (result.exitCode === 0) {
+    if (evidence.foundationalReportingEstablished) {
       return pass(
         framework,
         scenarioName,
@@ -85,25 +201,134 @@ async function runBasicReporting ({ framework, out, options }) {
       )
     }
 
-    evidence.commandFailure = summarizeCommandFailure(result, evidence)
-    evidence.commandExitMatchesPreflight = false
-    const cleanConfirmation = await runCleanConfirmation({ command, framework, options, out, scenarioName })
-    evidence.cleanConfirmation = cleanConfirmation.evidence
+    throw new Error('Basic Reporting reached an unexpected result state.')
+  } catch (err) {
+    return error(framework, scenarioName, err)
+  }
+}
 
-    if (!cleanConfirmation.evidence.exitMatchesPreflight) {
+/**
+ * Detects a framework-development checkout that is not equivalent to a customer-installed Cucumber package.
+ *
+ * @param {object} framework framework manifest entry
+ * @param {object} isolationTestCandidate selected direct-runner candidate
+ * @returns {boolean} whether the isolation runner comes from the Cucumber source tree
+ */
+function isCucumberSourceCheckoutIsolation (framework, isolationTestCandidate) {
+  if (framework.framework !== 'cucumber' || framework.project?.name !== '@cucumber/cucumber') return false
+  const source = isolationTestCandidate.command?.usesShell
+    ? isolationTestCandidate.command.shellCommand
+    : (isolationTestCandidate.command?.argv || []).join(' ')
+  return !String(source || '').replaceAll('\\', '/').includes('/node_modules/')
+}
+
+/**
+ * Runs the approved direct-runner isolation command after its clean preflight succeeds.
+ *
+ * @param {object} input validation inputs
+ * @param {object} input.framework framework manifest entry
+ * @param {object} input.isolationPreflight successful isolation preflight
+ * @param {object} input.isolationTestCandidate approved isolation candidate
+ * @param {string} input.out validation output directory
+ * @param {object} input.options validator options
+ * @returns {Promise<object>} isolation result
+ */
+async function runIsolationBasicReporting ({
+  framework,
+  isolationPreflight,
+  isolationTestCandidate,
+  out,
+  options,
+}) {
+  const scenarioName = 'basic-reporting-isolation'
+  const command = getLocalValidationCommand(framework, isolationTestCandidate.command)
+  try {
+    const { result, events, offline, outDir } = await runInstrumentedCommand({
+      allowMissingInitialization: true,
+      command,
+      framework,
+      options,
+      out,
+      scenarioName,
+    })
+    const complete = hasAllBasicEventTypes(events)
+    const evidence = {
+      commandExitCode: result.exitCode,
+      commandTimedOut: result.timedOut,
+      commandDescription: command?.description,
+      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
+      equivalence: isolationTestCandidate.equivalence,
+      foundationalReportingEstablished: false,
+      offlineExporterInitialized: offline.initialized,
+      offlineExporterSummary: offline.summary,
+      preflight: summarizePreflight(isolationPreflight),
+      reportingPath: 'none',
+      settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
+      ...basicEventEvidence(events),
+    }
+
+    if (!evidence.offlineExporterInitialized || !evidence.settingsLoadedFromCache) {
+      const reason = evidence.offlineExporterInitialized
+        ? 'Direct-runner isolation did not load settings from the authoritative offline cache fixture.'
+        : 'The offline Test Optimization exporter did not initialize during direct-runner isolation.'
+      return diagnoseInitializationFailure({
+        command,
+        diagnosis: reason,
+        evidence,
+        framework,
+        scenarioName,
+        options,
+        out,
+        outDir,
+      })
+    }
+
+    if (result.timedOut) {
+      evidence.commandFailure = summarizeCommandFailure(result, evidence)
       return inconclusive(
         framework,
         scenarioName,
-        getUnstableBaselineDiagnosis(framework.preflight, result, cleanConfirmation.result),
+        'The direct-runner isolation command timed out. It did not establish foundational reporting.',
         evidence,
-        outDir,
-        cleanConfirmation.artifacts
+        outDir
       )
     }
 
+    if (result.exitCode !== 0) {
+      if (!complete) {
+        evidence.commandFailure = summarizeCommandFailure(result, evidence)
+        evidence.eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
+      }
+      return handleInstrumentedExitMismatch({
+        command,
+        complete,
+        evidence,
+        framework,
+        options,
+        out,
+        outDir,
+        preflight: isolationPreflight,
+        result,
+        scenarioName,
+      })
+    }
+
+    if (complete && result.timedOut !== true) {
+      evidence.foundationalReportingEstablished = true
+      evidence.reportingPath = 'validator-direct-isolation'
+      return pass(
+        framework,
+        scenarioName,
+        'The equivalent direct test-runner command emitted session, module, suite, and test events.',
+        evidence,
+        outDir
+      )
+    }
+
+    evidence.eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
     const failure = await failBasicReportingWithDebugRerun({
       command,
-      diagnosis: getPossibleCompatibilityDiagnosis(framework.preflight, result),
+      diagnosis: evidence.eventLevelFailure.summary,
       evidence,
       framework,
       options,
@@ -111,11 +336,87 @@ async function runBasicReporting ({ framework, out, options }) {
       outDir,
       scenarioName,
     })
-    failure.artifacts.push(...cleanConfirmation.artifacts)
+    failure.evidence.foundationalReportingEstablished = false
+    failure.evidence.reportingPath = 'none'
     return failure
   } catch (err) {
-    return error(framework, scenarioName, err)
+    const result = error(framework, scenarioName, err)
+    result.evidence ||= {}
+    result.evidence.foundationalReportingEstablished = false
+    result.evidence.reportingPath = 'none'
+    return result
   }
+}
+
+/**
+ * Reconciles an instrumented nonzero exit with a second clean execution.
+ *
+ * @param {object} input mismatch inputs
+ * @param {object} input.command selected command
+ * @param {boolean} input.complete whether all required event levels were emitted
+ * @param {object} input.evidence collected scenario evidence
+ * @param {object} input.framework framework manifest entry
+ * @param {object} input.options validator options
+ * @param {string} input.out validation output directory
+ * @param {string} input.outDir scenario artifact directory
+ * @param {object} [input.preflight] matching clean preflight
+ * @param {object} input.result instrumented command result
+ * @param {string} input.scenarioName scenario identifier
+ * @returns {Promise<object>} reconciled result
+ */
+async function handleInstrumentedExitMismatch ({
+  command,
+  complete,
+  evidence,
+  framework,
+  options,
+  out,
+  outDir,
+  preflight = framework.preflight,
+  result,
+  scenarioName,
+}) {
+  evidence.commandFailure ||= summarizeCommandFailure(result, evidence)
+  evidence.commandExitMatchesPreflight = false
+  const cleanConfirmation = await runCleanConfirmation({
+    command,
+    framework,
+    options,
+    out,
+    preflight,
+    scenarioName,
+  })
+  evidence.cleanConfirmation = cleanConfirmation.evidence
+
+  if (!cleanConfirmation.evidence.exitMatchesPreflight) {
+    return inconclusive(
+      framework,
+      scenarioName,
+      getUnstableBaselineDiagnosis(preflight, result, cleanConfirmation.result),
+      evidence,
+      outDir,
+      cleanConfirmation.artifacts
+    )
+  }
+
+  const failure = await failBasicReportingWithDebugRerun({
+    command,
+    diagnosis: complete
+      ? getPossibleCompatibilityDiagnosis(preflight, result)
+      : evidence.eventLevelFailure.summary,
+    evidence,
+    framework,
+    options,
+    out,
+    outDir,
+    scenarioName,
+    skipDebug: evidence.commandFailure?.buildErrors?.length > 0 ||
+      !shouldRunDebugRerun(evidence.eventLevelFailure || {}, result),
+  })
+  failure.evidence.foundationalReportingEstablished = false
+  failure.evidence.reportingPath = 'none'
+  failure.artifacts.push(...cleanConfirmation.artifacts)
+  return failure
 }
 
 /**
@@ -126,10 +427,18 @@ async function runBasicReporting ({ framework, out, options }) {
  * @param {object} input.framework manifest framework entry
  * @param {object} input.options validator options
  * @param {string} input.out validation output directory
+ * @param {object} input.preflight matching clean preflight
  * @param {string} input.scenarioName scenario identifier
  * @returns {Promise<{artifacts: string[], evidence: object, result: object}>} clean confirmation outcome
  */
-async function runCleanConfirmation ({ command, framework, options, out, scenarioName }) {
+async function runCleanConfirmation ({
+  command,
+  framework,
+  options,
+  out,
+  preflight = framework.preflight,
+  scenarioName,
+}) {
   const outDir = frameworkOutDir(out, framework, `${scenarioName}-clean-confirmation`)
   const result = await runCommand(getDatadogCleanCommand(command), {
     artifactRoot: out,
@@ -140,7 +449,7 @@ async function runCleanConfirmation ({ command, framework, options, out, scenari
     requireExecutableApproval: options.requireExecutableApproval,
     verbose: options.verbose,
   })
-  const exitMatchesPreflight = !result.timedOut && matchesPreflightExitCode(framework.preflight, result.exitCode)
+  const exitMatchesPreflight = !result.timedOut && matchesPreflightExitCode(preflight, result.exitCode)
   return {
     artifacts: Object.values(result.artifacts),
     result,
@@ -152,6 +461,21 @@ async function runCleanConfirmation ({ command, framework, options, out, scenari
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
     },
   }
+}
+
+/**
+ * Returns the isolation candidate approved for the project candidate selected by clean preflight.
+ *
+ * @param {object} framework framework manifest entry
+ * @returns {object|undefined} matching isolation candidate
+ */
+function getSelectedIsolationTestCandidate (framework) {
+  const selectedCandidateIndex = framework.preflight?.selectedCandidateIndex ?? 0
+  const candidates = framework.isolationTestCandidates
+  if (Array.isArray(candidates)) {
+    return candidates.find(candidate => candidate.primaryCandidateIndex === selectedCandidateIndex)
+  }
+  return selectedCandidateIndex === 0 ? framework.isolationTestCandidate : undefined
 }
 
 /**
@@ -191,6 +515,43 @@ function getBasicReportingCommand (framework) {
 async function failBasicReportingWithDebugRerun (options) {
   const failure = await failWithDebugRerun(options)
   return refineBasicReportingFailure(failure)
+}
+
+async function diagnoseInitializationFailure ({
+  command,
+  diagnosis,
+  evidence,
+  framework,
+  options,
+  out,
+  outDir,
+  scenarioName,
+}) {
+  const localDiagnosis = {
+    kind: evidence.offlineExporterInitialized
+      ? 'offline-settings-not-loaded'
+      : 'offline-exporter-not-initialized',
+    summary: `${diagnosis} The validator supplied controlled initialization and offline fixtures, so this may ` +
+      'indicate ' +
+      'a dd-trace initialization or validator integration problem.',
+    recommendation: 'Inspect the recorded debug rerun for tracer initialization or offline exporter errors. If the ' +
+      'same failure reproduces with the approved command, provide its debug artifacts to Datadog Support or the ' +
+      'dd-trace maintainers.',
+  }
+  evidence.domain = 'test_optimization'
+  evidence.localDiagnosis = localDiagnosis
+  const failure = await failWithDebugRerun({
+    command,
+    diagnosis: localDiagnosis.summary,
+    evidence,
+    framework,
+    options,
+    out,
+    outDir,
+    scenarioName,
+  })
+  failure.status = 'error'
+  return failure
 }
 
 function refineBasicReportingFailure (failure) {
@@ -301,6 +662,10 @@ function summarizePreflight (preflight) {
     ran: true,
     exitCode: preflight.exitCode,
     observedTestCount: preflight.observedTestCount,
+    testCountKnown: preflight.testCountKnown,
+    origin: preflight.origin,
+    selectedCandidateIndex: preflight.selectedCandidateIndex,
+    sourceFile: preflight.sourceFile,
     stdoutSummary: preflight.stdoutSummary,
     stderrSummary: preflight.stderrSummary,
   }

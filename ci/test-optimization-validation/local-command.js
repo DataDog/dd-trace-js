@@ -2,6 +2,10 @@
 
 const path = require('path')
 
+const {
+  environmentNamesEqual,
+  isDatadogEnvironmentName,
+} = require('./environment')
 const { inheritApprovedExecutable } = require('./executable-approval')
 
 const JEST_NO_WATCHMAN_ADJUSTMENT = 'Disable Watchman for local validation to avoid home-directory writes.'
@@ -69,7 +73,8 @@ function getDatadogCleanCommand (command) {
 
   const env = {}
   for (const [name, value] of Object.entries(command.env || {})) {
-    if (name.startsWith('DD_') || (name === 'NODE_OPTIONS' && /dd-trace/.test(value))) continue
+    if (isDatadogEnvironmentName(name) ||
+      (environmentNamesEqual(name, 'NODE_OPTIONS') && /dd-trace/.test(value))) continue
     env[name] = value
   }
 

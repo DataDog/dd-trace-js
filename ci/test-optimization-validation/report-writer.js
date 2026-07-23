@@ -28,11 +28,7 @@ function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {}
     staticDiagnosis: staticDiagnosis && staticDiagnosis.reportPath,
   }
   const frameworkLabels = getFrameworkLabels(manifest)
-  const sanitizedResults = addNotSelectedResults({
-    manifest,
-    results: sanitizeForReport(results),
-    runSummary,
-  }).map(result => ({
+  const sanitizedResults = sanitizeForReport(results).map(result => ({
     ...result,
     frameworkDisplayName: frameworkLabels.get(result.frameworkId) || result.frameworkId,
   }))
@@ -123,15 +119,11 @@ function renderMarkdown (report) {
     '',
     `> ${UNTRUSTED_EVIDENCE_WARNING}`,
     '',
-    '## Verdict',
-    '',
   ]
 
-  for (const verdict of getFrameworkVerdicts(report.results)) lines.push(`- ${markdownText(verdict)}`)
-  lines.push('')
-  appendMarkdownScope(lines, report)
   appendMarkdownChecks(lines, report.results)
   lines.push(getValidationCoverageSummary(report.runSummary), '')
+  appendMarkdownScope(lines, report)
   appendMarkdownHowToFix(lines, report.results)
   appendMarkdownCiDiscovery(lines, report.ciDiscovery)
   appendMarkdownStaticDiagnosisNotes(lines, report.staticDiagnosisNotes)
@@ -287,10 +279,34 @@ function compactResultEvidence (checkId, evidence) {
       suites: evidence.testSuiteEvents || 0,
       tests: evidence.testEvents || 0,
     }
+    const isolation = evidence.isolation
     return compactDefined({
       events,
       missingLevels: getMissingEventLevels(events),
       failureKind: evidence.eventLevelFailure?.kind || evidence.commandFailure?.kind,
+      projectPreflight: evidence.preflight,
+      reportingPath: evidence.reportingPath,
+      isolation: isolation && compactDefined({
+        cleanConfirmation: isolation.cleanConfirmation,
+        commandFailure: isolation.commandFailure,
+        debugRerun: isolation.debugRerun,
+        diagnosis: evidence.isolationDiagnosis,
+        equivalence: isolation.equivalence,
+        events: {
+          sessions: isolation.testSessionEvents || 0,
+          modules: isolation.testModuleEvents || 0,
+          suites: isolation.testSuiteEvents || 0,
+          tests: isolation.testEvents || 0,
+        },
+        exitCode: isolation.commandExitCode,
+        failureKind: isolation.eventLevelFailure?.kind ||
+          isolation.localDiagnosis?.kind ||
+          isolation.commandFailure?.kind,
+        localDiagnosis: isolation.localDiagnosis,
+        preflight: evidence.isolationPreflight,
+        recommendation: getEvidenceRecommendationValues(isolation).find(isRecommendation),
+        status: evidence.isolationStatus,
+      }),
     })
   }
   if (checkId === 'ci-wiring') {
@@ -300,6 +316,8 @@ function compactResultEvidence (checkId, evidence) {
       transport: evidence.transport,
       apiKeyConfigured: evidence.apiKeyConfigured,
       nodeOptionsRemoval: evidence.nodeOptionsRemoval,
+      representativeMatch: evidence.representativeMatch,
+      unresolved: evidence.ciWiring?.unresolved,
     })
   }
   if (checkId === 'efd-new-test-detection-and-retry') {
@@ -682,6 +700,13 @@ function formatCiCommandCandidateDetails (candidate, options = {}) {
   if (candidate.whySelected) {
     details.push(`Selected because: ${candidate.whySelected}`)
   }
+  if (candidate.terminalTestCommand?.command) {
+    const terminal = candidate.terminalTestCommand
+    details.push(
+      `Terminal test command: ${format(terminal.command)}; framework ${format(terminal.framework)}; ` +
+      `mode ${format(terminal.mode)}; project ${format(terminal.projectRoot)}`
+    )
+  }
 
   const envSummary = formatCiEnvSummary(candidate.env, { format })
   if (envSummary) {
@@ -753,6 +778,21 @@ function formatCommandDetails (details) {
   return parts.join('; ')
 }
 
+/**
+ * Formats required Test Optimization event counts for a project or isolation run.
+ *
+ * @param {object} evidence event evidence
+ * @returns {string} compact event counts
+ */
+function formatEventCounts (evidence) {
+  return [
+    `session=${evidence.testSessionEvents || 0}`,
+    `module=${evidence.testModuleEvents || 0}`,
+    `suite=${evidence.testSuiteEvents || 0}`,
+    `test=${evidence.testEvents || 0}`,
+  ].join(', ')
+}
+
 function shouldRenderResultDetails (result) {
   return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
 }
@@ -771,8 +811,101 @@ function getResultDetailLines (result, options = {}) {
   if (command?.timedOut !== undefined) lines.push(`Timed out: ${format(command.timedOut)}`)
   if (command?.durationMs !== undefined) lines.push(`Duration ms: ${format(command.durationMs)}`)
 
+  if (result.scenario === 'ci-wiring') {
+    if (evidence.initializationStatus) {
+      lines.push(`Recorded CI initialization: ${format(evidence.initializationStatus)}`)
+    }
+    if (evidence.transport) lines.push(`Recorded CI transport: ${format(evidence.transport)}`)
+    if (evidence.transport === 'agentless' && typeof evidence.apiKeyConfigured === 'boolean') {
+      lines.push(`Agentless API key reference recorded: ${format(evidence.apiKeyConfigured)}`)
+    }
+    if (evidence.representativeMatch) {
+      lines.push(
+        `CI command anchor: ${evidence.representativeMatch.matched ? 'matched' : 'not proven'}; ` +
+          `${markdownText(evidence.representativeMatch.reason || 'no reason recorded')}`
+      )
+    }
+    if (evidence.ciWiring?.unresolved?.length > 0) {
+      lines.push(`Unresolved CI evidence: ${formatList(evidence.ciWiring.unresolved, { format })}`)
+    }
+  }
+
   if (Array.isArray(evidence.commandOutputSummary) && evidence.commandOutputSummary.length > 0) {
     lines.push(`Command output summary: ${formatList(evidence.commandOutputSummary, { format })}`)
+  }
+  if (evidence.preflight) {
+    lines.push(
+      `Project clean preflight: exit ${format(evidence.preflight.exitCode)}, observed tests ${
+        format(evidence.preflight.observedTestCount)
+      }, source ${format(evidence.preflight.sourceFile || 'unknown')}`
+    )
+  }
+  if (evidence.reportingPath) lines.push(`Reporting path: ${format(evidence.reportingPath)}`)
+  if (evidence.isolationPreflight) {
+    lines.push(
+      `Isolation clean preflight: exit ${format(evidence.isolationPreflight.exitCode)}, observed tests ${
+        format(evidence.isolationPreflight.observedTestCount)
+      }, source ${format(evidence.isolationPreflight.sourceFile || 'unknown')}`
+    )
+  }
+  if (evidence.isolation) {
+    const isolation = evidence.isolation
+    const equivalence = isolation.equivalence || {}
+    if (evidence.isolationStatus) lines.push(`Isolation status: ${format(evidence.isolationStatus)}`)
+    if (evidence.isolationDiagnosis) lines.push(`Isolation diagnosis: ${format(evidence.isolationDiagnosis)}`)
+    lines.push(
+      `Isolation equivalence: mode ${format(equivalence.mode || 'unknown')}, source ${
+        format(equivalence.sourceFile || 'unknown')
+      }, configuration ${format(JSON.stringify(equivalence.configurationArgs || []))}`,
+      `Isolation result: exit ${format(isolation.commandExitCode)}, events ${
+        format(formatEventCounts(isolation))
+      }`
+    )
+    if (isolation.cleanConfirmation) {
+      lines.push(
+        `Isolation clean confirmation: exit ${format(isolation.cleanConfirmation.exitCode)}, matches preflight ${
+          format(isolation.cleanConfirmation.exitMatchesPreflight)
+        }`
+      )
+    }
+    const isolationFailureKind = isolation.eventLevelFailure?.kind ||
+      isolation.localDiagnosis?.kind ||
+      isolation.commandFailure?.kind
+    if (isolationFailureKind) lines.push(`Isolation failure kind: ${format(isolationFailureKind)}`)
+    const isolationRecommendation = getEvidenceRecommendationValues(isolation).find(isRecommendation)
+    if (isolationRecommendation) lines.push(`Isolation recommendation: ${isolationRecommendation}`)
+    if (isolation.commandFailure?.summary) {
+      lines.push(`Isolation command failure: ${isolation.commandFailure.summary}`)
+    }
+    if (isolation.commandFailure?.recommendation) {
+      lines.push(`Isolation command failure recommendation: ${isolation.commandFailure.recommendation}`)
+    }
+    if (evidence.isolationRepresentativeness?.representative === false) {
+      lines.push(`Isolation representativeness: ${evidence.isolationRepresentativeness.reason}`)
+    }
+    appendExcerptLine(lines, 'Isolation command failure signals', isolation.commandFailure?.signals, { format })
+    appendExcerptLine(lines, 'Isolation debug lines', isolation.debugRerun?.debugLines, { format })
+    appendExcerptLine(lines, 'Isolation debug stdout excerpt', isolation.debugRerun?.stdoutExcerpt, { format })
+    appendExcerptLine(lines, 'Isolation debug stderr excerpt', isolation.debugRerun?.stderrExcerpt, { format })
+  }
+  for (const [index, attempt] of (evidence.candidateAttempts || []).entries()) {
+    const sourceFile = attempt.sourceFile || 'not recorded'
+    const exitCode = Number.isInteger(attempt.exitCode) ? attempt.exitCode : 'unknown'
+    const timedOut = typeof attempt.timedOut === 'boolean' ? attempt.timedOut : 'unknown'
+    const observedTestCount = Number.isInteger(attempt.observedTestCount) ? attempt.observedTestCount : 'unknown'
+    const reason = attempt.rejectionReason && !evidence.commandFailure
+      ? ` Reason: ${sanitizeString(attempt.rejectionReason)}`
+      : ''
+    lines.push(
+      `Candidate ${index + 1}: source ${format(sourceFile)}; exit ${format(exitCode)}; ` +
+      `timed out ${format(timedOut)}; ` +
+      `observed tests ${format(observedTestCount)}.${reason}`
+    )
+  }
+  if (!evidence.commandFailure?.signals?.length) {
+    appendExcerptLine(lines, 'Candidate failure evidence', getCandidateFailureEvidence(evidence.candidateAttempts), {
+      format,
+    })
   }
   if (Array.isArray(evidence.existingDatadogInitScripts) && evidence.existingDatadogInitScripts.length > 0) {
     const scripts = evidence.existingDatadogInitScripts.map(script => {
@@ -861,6 +994,27 @@ function readResultCommand (result) {
 function appendExcerptLine (lines, label, values, { format }) {
   if (!Array.isArray(values) || values.length === 0) return
   lines.push(`${label}: ${formatList(values, { format })}`)
+}
+
+function getCandidateFailureEvidence (attempts = []) {
+  const values = []
+  const seen = new Set()
+  for (const attempt of attempts) {
+    const candidates = [
+      ...(attempt.commandFailure?.signals || []),
+      ...(attempt.diagnosticSummary || []),
+      ...String(attempt.stderrSummary || '').split(/\r?\n/),
+      ...String(attempt.stdoutSummary || '').split(/\r?\n/),
+    ]
+    for (const candidate of candidates) {
+      const value = sanitizeString(candidate).trim()
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      values.push(value.slice(0, 500))
+      if (values.length === 6) return values
+    }
+  }
+  return values
 }
 
 function appendEventFailureLines (lines, evidence, { format }) {
@@ -991,8 +1145,10 @@ function getExecutionSummary (runSummary) {
       : runSummary.validatorExitCode === 2
         ? 'The validator completed, but one or more selected checks remain incomplete.'
         : 'The validator completed its eligible approved checks.',
-    blocked: 'The validator was blocked by the execution environment before reaching a complete conclusion.',
-    project_setup_required: 'The validator requires additional project setup before it can complete.',
+    blocked: 'The validator was blocked by the local execution environment or runtime before reaching a complete ' +
+      'conclusion.',
+    project_setup_required: 'The selected project test or one of its prerequisites must pass before validation can ' +
+      'complete.',
     validator_error: 'The validator encountered an implementation or orchestration error.',
   }[status] || `The validator finished with execution status ${status}.`
   return `${explanation} Exit code: ${runSummary.validatorExitCode}.`
@@ -1142,11 +1298,8 @@ function getHowToFixEntries (results) {
 function getResultRecommendations (result) {
   const evidence = result.evidence || {}
   const values = [
-    evidence.eventLevelFailure?.recommendation,
-    evidence.localDiagnosis?.recommendation,
-    evidence.commandFailure?.recommendation,
-    evidence.recommendation,
-    ...(Array.isArray(evidence.remediation) ? evidence.remediation : []),
+    ...getEvidenceRecommendationValues(evidence.isolation),
+    ...getEvidenceRecommendationValues(evidence),
   ]
 
   for (const finding of evidence.monorepoFindings || []) {
@@ -1161,6 +1314,32 @@ function getResultRecommendations (result) {
     recommendations.push(value)
   }
   return recommendations
+}
+
+/**
+ * Returns structured recommendations from one primary or isolation evidence object.
+ *
+ * @param {object|undefined} evidence validation evidence
+ * @returns {(string|undefined)[]} recommendation candidates
+ */
+function getEvidenceRecommendationValues (evidence = {}) {
+  return [
+    evidence.eventLevelFailure?.recommendation,
+    evidence.localDiagnosis?.recommendation,
+    evidence.commandFailure?.recommendation,
+    evidence.recommendation,
+    ...(Array.isArray(evidence.remediation) ? evidence.remediation : []),
+  ]
+}
+
+/**
+ * Checks whether a recommendation contains reportable text.
+ *
+ * @param {unknown} value recommendation candidate
+ * @returns {boolean} whether the value is a non-empty string
+ */
+function isRecommendation (value) {
+  return typeof value === 'string' && value.trim() !== ''
 }
 
 /**
@@ -1235,19 +1414,106 @@ function getDiagnosticOnlyResults (results) {
 
 function appendMarkdownChecks (lines, results) {
   const liveResults = getLiveValidationResults(results)
-  if (liveResults.length === 0) return
+  if (liveResults.length === 0) {
+    lines.push(
+      '## Checks',
+      '',
+      'No live Test Optimization validation ran. The available result is incomplete.',
+      ''
+    )
+    return
+  }
 
   lines.push(
     '## Checks',
     '',
-    '| Project | Question | Result | What this means |',
-    '|---|---|---:|---|'
+    '| Project / framework | Clean baseline | Controlled initialization | CI configuration | Advanced checks | ' +
+      'Conclusion | Next action |',
+    '|---|---:|---:|---:|---|---|---|'
   )
-  for (const result of liveResults) {
-    lines.push(`| ${markdownText(getResultFrameworkLabel(result))} | ${markdownText(getCheckQuestion(result))} | ` +
-      `${markdownText(getDisplayResultStatus(result))} | ${markdownText(getCompactResultMeaning(result))} |`)
+  const grouped = groupResultsByFramework(liveResults)
+  for (const frameworkResults of grouped.values()) {
+    const basic = frameworkResults.find(result => result.scenario === 'basic-reporting')
+    const cleanBaseline = getCleanBaselineStatus(basic)
+    const reportingPath = basic?.evidence?.reportingPath === 'validator-direct-isolation'
+      ? ' via direct-runner isolation'
+      : basic?.evidence?.reportingPath === 'project-command' ? ' via project command' : ''
+    const conclusion = getFrameworkVerdicts(frameworkResults)[0] || 'No conclusion was reached.'
+    const fixEntries = getHowToFixEntries(frameworkResults)
+    const confirmedCiFailure = frameworkResults.find(result => {
+      return result.scenario === CI_WIRING_SCENARIO && result.status === 'fail' && !isIncompleteResult(result)
+    })
+    const recommendation = (confirmedCiFailure
+      ? fixEntries.find(entry => entry.scenario === CI_WIRING_SCENARIO)?.recommendations?.[0]
+      : undefined) ||
+      fixEntries[0]?.recommendations?.[0] ||
+      getFirstRecommendation(frameworkResults) || 'No change is recommended from the available evidence.'
+    const advancedChecks = [
+      `EFD ${getScenarioStatus(frameworkResults, 'efd')}`,
+      `ATR ${getScenarioStatus(frameworkResults, 'atr')}`,
+      `Test Management ${getScenarioStatus(frameworkResults, 'test-management')}`,
+    ].join('; ')
+    lines.push([
+      markdownText(getResultFrameworkLabel(frameworkResults[0])),
+      markdownText(cleanBaseline),
+      markdownText(`${getScenarioStatus(frameworkResults, 'basic-reporting')}${reportingPath}`),
+      markdownText(getScenarioStatus(frameworkResults, CI_WIRING_SCENARIO)),
+      markdownText(advancedChecks),
+      markdownText(conclusion),
+      markdownText(recommendation),
+    ].join(' | ').replace(/^/, '| ').replace(/$/, ' |'))
   }
   lines.push('')
+}
+
+function getCleanBaselineStatus (basic) {
+  if (!basic) return 'NOT SELECTED'
+  if (basic.evidence?.preflight?.ran === true) {
+    return basic.evidence.preflight.exitCode === 0 ? 'PASS' : 'FAIL'
+  }
+  const attempts = basic.evidence?.candidateAttempts || []
+  if (attempts.length === 0) return 'NOT REACHED'
+  if (['execution_environment', 'local_runtime'].includes(basic.domain || basic.evidence?.domain)) return 'BLOCKED'
+  if (basic.evidence?.projectBaselineFailed === true) return 'FAIL'
+  return 'INCOMPLETE'
+}
+
+/**
+ * Groups results by framework without adding checks that were not selected.
+ *
+ * @param {object[]} results validation results
+ * @returns {Map<string, object[]>} results by framework
+ */
+function groupResultsByFramework (results) {
+  const grouped = new Map()
+  for (const result of results) {
+    const entries = grouped.get(result.frameworkId) || []
+    entries.push(result)
+    grouped.set(result.frameworkId, entries)
+  }
+  return grouped
+}
+
+/**
+ * Formats one selected scenario status for the lead table.
+ *
+ * @param {object[]} results framework results
+ * @param {string} scenario scenario id
+ * @returns {string} compact status
+ */
+function getScenarioStatus (results, scenario) {
+  const result = results.find(candidate => candidate.scenario === scenario)
+  return result ? getDisplayResultStatus(result) : 'NOT SELECTED'
+}
+
+/**
+ * Finds the first structured recommendation without manufacturing a fix.
+ *
+ * @param {object[]} results framework results
+ * @returns {string|undefined} recommendation
+ */
+function getFirstRecommendation (results) {
+  return results.map(result => result.evidence?.recommendation).find(Boolean)
 }
 
 function getScenarioExecutionExplanation (result) {
@@ -1298,7 +1564,8 @@ function getFrameworkVerdicts (results) {
       : 'inspected CI configuration'
     let verdict
     if (setupBlocker) {
-      verdict = `${label}: local validation could not run because required project setup is unavailable. ` +
+      verdict = `${label}: local validation could not run because the selected project test or required setup did ` +
+        'not complete successfully. ' +
         'No Test Optimization reporting conclusion was reached.'
       if (ciWiring?.status === 'fail') {
         verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
@@ -1318,24 +1585,79 @@ function getFrameworkVerdicts (results) {
       } else if (isIncompleteResult(ciWiring)) {
         verdict += ' CI configuration could not be verified completely.'
       }
+    } else if (basic?.domain === 'local_runtime') {
+      verdict = `${label}: a local browser or test runtime aborted before the selected test could produce reliable ` +
+        'results. The available evidence does not establish the cause, and no Test Optimization reporting conclusion ' +
+        'was reached.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
+          'Optimization configuration.'
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration could not be verified completely.'
+      }
+    } else if (basic?.evidence?.commandExitMatchesPreflight === false &&
+      basic.evidence?.cleanConfirmation?.exitMatchesPreflight === true) {
+      verdict = `${label}: the selected command passed in repeated runs without Datadog but failed when dd-trace ` +
+        'was initialized. This may indicate a dd-trace compatibility problem.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, the ${ciTarget} has a confirmed configuration problem.`
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration remains incomplete.'
+      }
+    } else if (['offline-exporter-not-initialized', 'offline-settings-not-loaded'].includes(
+      basic?.evidence?.localDiagnosis?.kind
+    )) {
+      verdict = `${label}: controlled Datadog initialization did not activate the validator's offline reporting ` +
+        'path. This may indicate a dd-trace initialization or validator integration problem; inspect the recorded ' +
+        'debug rerun.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, the ${ciTarget} has a confirmed configuration problem.`
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration remains incomplete.'
+      }
+    } else if (basic?.evidence?.foundationalReportingEstablished === true &&
+      basic.evidence.reportingPath === 'validator-direct-isolation') {
+      verdict = `${label}: the selected project command did not preserve Datadog initialization, while the ` +
+        'equivalent direct-runner isolation emitted a complete local event hierarchy. The project wrapper or ' +
+        'environment propagation is the actionable difference.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, the ${ciTarget} has a confirmed configuration problem.`
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration remains incomplete.'
+      }
     } else if (basic?.status === 'pass' && ciWiring?.status === 'fail') {
-      verdict = `${label}: dd-trace successfully reports this test suite, but the ${ciTarget} does not ` +
+      verdict = `${label}: the controlled local run emitted a complete Test Optimization event hierarchy, but the ` +
+        `${ciTarget} does not ` +
         'configure the required Test Optimization initialization or reporting transport.'
     } else if (basic?.status === 'pass' && isIncompleteResult(ciWiring)) {
       verdict = ciWiring?.conclusion === 'configured_propagation_unverified'
-        ? `${label}: dd-trace successfully reports this test suite. The ${ciTarget} contains the required ` +
+        ? `${label}: the controlled local run emitted a complete event hierarchy. The ${ciTarget} contains the ` +
+          'required ' +
           'configuration, but static analysis cannot prove that it reaches the final test process.'
-        : `${label}: dd-trace successfully reports this test suite, but CI configuration could not be verified ` +
+        : `${label}: the controlled local run emitted a complete event hierarchy, but CI configuration could not ` +
+          'be verified ' +
           'completely.'
     } else if (basic?.status === 'pass' && ciWiring?.status === 'pass') {
-      verdict = `${label}: this test suite reports successfully, including from the selected CI job.`
+      verdict = `${label}: the controlled local run emitted a complete event hierarchy. CI runtime delivery is not ` +
+        'attested by this offline validator.'
+    } else if (basic?.status === 'skip') {
+      verdict = `${label}: local Test Optimization compatibility was not tested because no runnable local command ` +
+        'completed in the current setup.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
+          'Optimization configuration.'
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration remains unverified.'
+      }
     } else if (basic && basic.status !== 'pass') {
       verdict = ciWiring?.status === 'fail'
         ? `${label}: the selected tests did not report when dd-trace was initialized directly. Separately, ` +
           `static inspection confirmed that the ${ciTarget} is missing required Test Optimization configuration.`
-        : `${label}: the selected tests did not report successfully, and CI configuration remains unverified.`
+        : `${label}: the selected tests did not emit a complete local event hierarchy, and CI configuration remains ` +
+          'unverified.'
     } else if (basic?.status === 'pass') {
-      verdict = `${label}: this test suite reports successfully when dd-trace is initialized.`
+      verdict = `${label}: the controlled local run emitted session, module, suite, and test events when dd-trace ` +
+        'was initialized.'
     }
     if (verdict && advancedFailures.length > 0) {
       const checks = advancedFailures.map(result => formatScenarioName(result.scenario))
@@ -1354,7 +1676,7 @@ function getFrameworkVerdicts (results) {
 
 function getCheckQuestion (result) {
   return {
-    'basic-reporting': 'Can these tests report to Datadog? (Basic Reporting)',
+    'basic-reporting': 'Does controlled initialization emit a complete local event hierarchy? (Basic Reporting)',
     'ci-wiring': 'Does the selected CI job initialize Datadog? (CI Configuration Audit)',
     'generated-test-verification': 'Can the temporary validation test run?',
     efd: 'Are new tests retried? (Early Flake Detection)',
@@ -1364,7 +1686,6 @@ function getCheckQuestion (result) {
 }
 
 function getCompactResultMeaning (result) {
-  if (result.evidence?.validationNotSelected === true) return result.diagnosis
   if (result.scenario === 'basic-reporting' && result.status === 'pass') {
     return 'Tests emitted session, module, suite, and test data.'
   }
@@ -1390,42 +1711,7 @@ function isIncompleteResult (result) {
 }
 
 function getDisplayResultStatus (result) {
-  if (result.evidence?.validationNotSelected === true) return 'NOT CHECKED'
   return isIncompleteResult(result) ? 'INCOMPLETE' : result.status.toUpperCase()
-}
-
-/**
- * Adds explicit report-only rows for checks excluded by a scenario-scoped run.
- *
- * @param {object} input report inputs
- * @param {object} input.manifest validation manifest
- * @param {object[]} input.results sanitized validation results
- * @param {object} input.runSummary run metadata
- * @returns {object[]} results including unselected check rows
- */
-function addNotSelectedResults ({ manifest, results, runSummary }) {
-  const omittedScenarios = Array.isArray(runSummary?.omittedScenarios) ? runSummary.omittedScenarios : []
-  if (omittedScenarios.length === 0) return results
-
-  const selected = formatScenarioList(runSummary.checkedScenarios || [])
-  const selectedFrameworkIds = new Set(runSummary.selectedFrameworkIds || [])
-  const additions = []
-  for (const framework of manifest.frameworks || []) {
-    if (framework.status !== 'runnable') continue
-    if (selectedFrameworkIds.size > 0 && !selectedFrameworkIds.has(framework.id)) continue
-    for (const scenario of omittedScenarios) {
-      if (results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) continue
-      additions.push({
-        frameworkId: framework.id,
-        scenario,
-        status: 'skip',
-        diagnosis: `Not checked because this run was limited to ${selected}.`,
-        evidence: { validationNotSelected: true },
-        artifacts: [],
-      })
-    }
-  }
-  return [...results, ...additions]
 }
 
 /**

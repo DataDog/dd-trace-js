@@ -4,6 +4,7 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { VERSION: PACKAGE_VERSION } = require('../../version')
 const { writeApprovalArtifacts } = require('./approval-artifacts')
 const { getCommandOutputPaths } = require('./command-output-policy')
 const { getCommandSuitabilityError, getPackageScriptExpansion } = require('./command-suitability')
@@ -18,6 +19,8 @@ const { writeFileSafely } = require('./safe-files')
 
 const VALIDATOR_PATH = path.resolve(__dirname, '..', 'validate-test-optimization.js')
 const EXECUTION_PLAN_FILENAME = 'execution-plan.md'
+const PACKAGE_NAME = 'dd-trace'
+const PUBLIC_SETUP_DOCUMENTATION = 'https://docs.datadoghq.com/tests/setup/javascript/'
 const GENERATED_SCENARIO_DETAILS = {
   'basic-pass': {
     heading: 'Advanced Check: Early Flake Detection',
@@ -36,6 +39,8 @@ const GENERATED_SCENARIO_DETAILS = {
   },
 }
 const FRAMEWORK_NAMES = {
+  cucumber: 'Cucumber',
+  cypress: 'Cypress',
   jest: 'Jest',
   karma: 'Karma',
   mocha: 'Mocha',
@@ -151,9 +156,20 @@ function formatApprovalPlan ({
     `Manifest: ${inlineCode(getRepositoryRelativePath(repositoryRoot, manifest.__path))}`,
     `Results: ${inlineCode(getRepositoryRelativePath(repositoryRoot, out))}`,
     '',
-    'This plan shows every project command and the exact temporary test source. The validator also creates bounded ' +
-      'private filesystem responses for Test Optimization settings and writes local event artifacts; it opens no ' +
-      'listener and contacts no Datadog endpoint.',
+    '## Validator Identity',
+    '',
+    `- Package: ${inlineCode(`${PACKAGE_NAME}@${PACKAGE_VERSION}`)}`,
+    '- Shipped npm paths: `ci/runbook.md` and `ci/validate-test-optimization.js`',
+    `- Public setup documentation: ${PUBLIC_SETUP_DOCUMENTATION}`,
+    '- These identifiers do not prove package origin. Verify the expected installation using trusted ' +
+      'lockfile/integrity ' +
+      'metadata or a verified package tarball. A symlinked live source checkout is a development setup, not a normal ' +
+      'customer installation.',
+    '',
+    'This plan shows every project command and the exact temporary test source. Run it only for a trusted repository ' +
+      'with trusted installed dependencies: project tests run with your OS privileges, just as they do when you run ' +
+      'the disclosed command directly. The validator-controlled transport writes bounded local artifacts and does ' +
+      'not contact a Datadog endpoint.',
     '',
     '## Scope',
     '',
@@ -162,6 +178,13 @@ function formatApprovalPlan ({
   for (const framework of manifest.frameworks) {
     const label = formatFrameworkLabel(framework, repositoryRoot)
     lines.push(`- **${plainText(label)}**: ${formatFrameworkStatus(framework.status)}`)
+    if (framework.ciWiring) {
+      lines.push(`  - CI audit: ${plainText(formatCiAuditLocation(framework.ciWiring))}`)
+    }
+    if (framework.browserRequired) {
+      lines.push('  - The selected project test launches a browser. The execution environment must allow that ' +
+        'browser process; the validator does not download or replace it.')
+    }
     if (framework.localSocketRequired) {
       lines.push('  - Every safe representative test found appears to require a project localhost listener. ' +
         'Validation may be blocked if the current execution environment denies those sockets.')
@@ -172,7 +195,8 @@ function formatApprovalPlan ({
   }
 
   lines.push('', '## Commands', '')
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+  for (const framework of manifest.frameworks) {
+    if (framework.status !== 'runnable' && !framework.ciWiring) continue
     appendApprovalSummaryFramework(lines, framework, requestedScenario, repositoryRoot)
   }
 
@@ -182,8 +206,8 @@ function formatApprovalPlan ({
     `- Local results: ${inlineCode(getRepositoryRelativePath(repositoryRoot, out))}`,
     '- The validator creates private offline Datadog response files outside the repository and removes them ' +
       'afterward.',
-    '- The dd-trace validation path opens no listener, contacts no Datadog endpoint, requires no real Datadog ' +
-      'credentials, and uploads nothing.',
+    '- The validator-controlled offline transport opens no listener, contacts no Datadog endpoint, requires no real ' +
+      'Datadog credentials, and uploads nothing.',
     '- Project commands are repository code and may use the network or access local resources unless the ' +
       'execution environment prevents it.',
     '',
@@ -201,9 +225,11 @@ function formatApprovalPlan ({
     `Expected SHA-256: ${inlineCode(approvalDigest)}`,
     '',
     ...coveredFileVerification,
-    'These checks confirm that the reviewed inputs have not changed since plan generation. They do not verify ' +
-      'where the installed `dd-trace` package came from; establish package origin separately through trusted ' +
-      'lockfile/integrity metadata or a verified package tarball.',
+    'These checks detect changes to the inputs explicitly covered by this approval: validator files, the manifest, ' +
+      'approved command shapes and selected launch inputs, generated files, and execution options. They do not ' +
+      'comprehensively fingerprint existing tests, runner configuration, shell or interpreter behavior, or ' +
+      'transitive dependencies. They also do not verify where the installed `dd-trace` package came from; establish ' +
+      'package origin separately through trusted lockfile/integrity metadata or a verified package tarball.',
     '',
     'Run the approved validation command:',
     '',
@@ -213,7 +239,19 @@ function formatApprovalPlan ({
       usesShell: false,
     }))),
     '',
-    `Working directory: ${inlineCode(repositoryRoot)}`
+    `Working directory: ${inlineCode(repositoryRoot)}`,
+    '',
+    '## Platform Trust-Gate Fallback',
+    '',
+    'If the platform instead presents a native permission control scoped to this exact approved command and its ' +
+      'declared paths, the agent may request it once and retry the unchanged command once. A raw `EACCES` or ' +
+      '`EPERM` error does not prove that such a permission is available.',
+    '',
+    'If the agent platform hard-denies this exact command and says chat approval cannot authorize it, do not retry ' +
+      'the ' +
+      'unchanged command, enable bypass mode, or add a broad shell allowlist. The user can run the command above in ' +
+      `their terminal from ${inlineCode(repositoryRoot)}, then ask the agent to interpret ` +
+      `${inlineCode(getRepositoryRelativePath(repositoryRoot, path.join(out, 'report.md')))}.`
   )
   return lines.join('\n')
 }
@@ -232,14 +270,25 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
   const candidates = getLocalTestCandidates(framework)
   lines.push(`### ${plainText(formatFrameworkLabel(framework, repositoryRoot))}`, '')
 
-  for (const [index, candidate] of candidates.entries()) {
-    appendApprovalSummaryCandidate(lines, {
-      candidate,
-      directInitialization,
-      framework,
-      index,
-      repositoryRoot,
-    })
+  const localChecksSelected = requestedScenario !== 'ci-wiring'
+  if (framework.status === 'runnable' && localChecksSelected) {
+    for (const [index, candidate] of candidates.entries()) {
+      appendApprovalSummaryCandidate(lines, {
+        candidate,
+        directInitialization,
+        framework,
+        index,
+        repositoryRoot,
+      })
+    }
+    for (const candidate of getIsolationTestCandidates(framework)) {
+      appendApprovalSummaryIsolationCandidate(lines, {
+        candidate,
+        directInitialization,
+        framework,
+        repositoryRoot,
+      })
+    }
   }
 
   const ciWiringSelected = !requestedScenario || requestedScenario === 'ci-wiring'
@@ -255,7 +304,7 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
   }
 
   const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
-  const advancedSelected = !requestedScenario || selectedGeneratedScenario
+  const advancedSelected = framework.status === 'runnable' && (!requestedScenario || selectedGeneratedScenario)
   const strategy = framework.generatedTestStrategy
   if (advancedSelected && strategy && ['planned', 'verified'].includes(strategy.status)) {
     const scenarios = selectedGeneratedScenario
@@ -295,11 +344,52 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
 }
 
 /**
+ * Appends the conditional direct-runner isolation command.
+ *
+ * @param {string[]} lines rendered summary lines
+ * @param {object} input isolation summary
+ * @param {object} input.candidate isolation candidate
+ * @param {string} input.directInitialization Datadog preload value
+ * @param {object} input.framework manifest framework entry
+ * @param {string} input.repositoryRoot repository root
+ * @returns {void}
+ */
+function appendApprovalSummaryIsolationCandidate (lines, {
+  candidate,
+  directInitialization,
+  framework,
+  repositoryRoot,
+}) {
+  const command = getLocalValidationCommand(framework, candidate.command)
+  lines.push(
+    `**Conditional direct-runner isolation for project candidate ${candidate.primaryCandidateIndex + 1}**`,
+    '',
+    'This command runs only when the selected project command passes cleanly but controlled initialization does not ' +
+      'establish a complete event hierarchy, including initialization or settings-load failures. It uses the same ' +
+      'existing test file, framework mode, and configuration arguments to distinguish project-wrapper propagation ' +
+      'from tracer or adapter behavior.',
+    '',
+    codeBlock(formatCommandForPlan(command, repositoryRoot, { NODE_OPTIONS: directInitialization })),
+    '',
+    `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
+    `- Test file: ${inlineCode(getRepositoryRelativePath(repositoryRoot, candidate.sourceFile))}`,
+    `- Runner mode: ${inlineCode(candidate.equivalence.mode)}`,
+    `- Requested test file: ${inlineCode(getRepositoryRelativePath(repositoryRoot, candidate.sourceFile))}`,
+    `- Reliability limit: ${command.timeoutMs || 300_000} ms. The observed test count is diagnostic only.`,
+    '- Maximum executions: one clean equivalence preflight, one initialized run, one conditional clean confirmation, ' +
+      'and one conditional debug rerun.',
+    ''
+  )
+  appendApprovalSummaryCommandContext(lines, command, repositoryRoot)
+  lines.push('')
+}
+
+/**
  * Appends the clean and Datadog executions for one disclosed fallback candidate.
  *
  * @param {string[]} lines rendered summary lines
  * @param {object} input candidate summary
- * @param {{command: object, maxTestCount: number}} input.candidate local candidate
+ * @param {{command: object, sourceFile?: string}} input.candidate local candidate
  * @param {string} input.directInitialization Datadog preload value
  * @param {object} input.framework manifest framework entry
  * @param {number} input.index zero-based candidate index
@@ -325,8 +415,13 @@ function appendApprovalSummaryCandidate (lines, {
     'With Datadog, only if this is the first candidate that passes: run the same command with ' +
       `${inlineCode(`NODE_OPTIONS=${directInitialization}`)}.`,
     `- Working directory: ${inlineCode(getRepositoryRelativePath(repositoryRoot, command.cwd))}`,
-    `- Test bound: 1 to ${candidate.maxTestCount}; timeout: ${command.timeoutMs || 300_000} ms`,
-    '- Each command runs at most once; the Datadog execution may have one additional debug rerun.',
+    candidate.sourceFile
+      ? `- Requested test file: ${inlineCode(getRepositoryRelativePath(repositoryRoot, candidate.sourceFile))}`
+      : '- Requested test file: not recorded in this legacy manifest; command scope is controlled by the timeout.',
+    `- Reliability limit: ${command.timeoutMs || 300_000} ms. The command may run additional tests; the observed ` +
+      'count is diagnostic only.',
+    '- The selected candidate can run up to four times: one clean preflight, one Datadog execution, one conditional ' +
+      'clean confirmation, and one conditional debug rerun.',
     '- Inherited `NODE_OPTIONS` and `DD_*` variables are removed from the clean execution.'
   )
   appendApprovalSummaryCommandContext(lines, command, repositoryRoot)
@@ -379,9 +474,20 @@ function appendApprovalSummaryCommandContext (lines, command, repositoryRoot, pr
   if (packageScriptExpansion) {
     lines.push(`${prefix}Effective package script: ` +
       inlineCode(sanitizeString(packageScriptExpansion.effectiveCommand)))
+    for (const lifecycle of packageScriptExpansion.lifecycle || []) {
+      lines.push(`${prefix}Automatic lifecycle script ${inlineCode(lifecycle.name)}: ` +
+        inlineCode(sanitizeString(lifecycle.command)))
+    }
   }
   for (const adjustment of command.localAdjustments || []) {
     lines.push(`${prefix}Local adjustment: ${plainText(adjustment)}`)
+  }
+  if (command.requiredEnvVars?.length > 0) {
+    lines.push(
+      `${prefix}Inherited non-secret environment names: ` +
+        command.requiredEnvVars.map(name => inlineCode(name)).join(', ') +
+        '. Their current values are used only at execution and are not printed or integrity-bound.'
+    )
   }
   const outputPaths = getCommandOutputPaths(command)
   if (outputPaths.length > 0) {
@@ -409,7 +515,8 @@ function getExecutionPlanPath (out) {
  * @returns {void}
  */
 function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+  for (const framework of manifest.frameworks) {
+    if (framework.status !== 'runnable') continue
     const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
     if (!requestedScenario || selectedGeneratedScenario) {
       const generatedTestContractError = getGeneratedTestContractError(framework)
@@ -422,17 +529,7 @@ function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
     }
     const plannedCommands = getPlannedCommands(framework, requestedScenario)
     for (const plannedCommand of plannedCommands) {
-      const executable = getUnavailableExecutable(plannedCommand.command)
-      if (!executable) continue
-
-      throw new Error(
-        `Cannot render an approvable plan because ${plannedCommand.label} for ${framework.id} uses ` +
-        `executable "${executable}", which is not available from ${plannedCommand.command.cwd}. ` +
-        'Choose a locally available command or mark this check with its concrete setup blocker before asking ' +
-        'for approval.'
-      )
-    }
-    for (const plannedCommand of plannedCommands) {
+      if (!plannedCommand.strict) continue
       const suitabilityError = getCommandSuitabilityError({
         command: plannedCommand.command,
         framework,
@@ -444,6 +541,17 @@ function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
         `Cannot render an approvable plan because ${plannedCommand.label} for ${framework.id} ${suitabilityError}`
       )
     }
+    for (const plannedCommand of plannedCommands) {
+      const executable = getUnavailableExecutable(plannedCommand.command, manifest.repository.root)
+      if (!executable) continue
+
+      throw new Error(
+        `Cannot render an approvable plan because ${plannedCommand.label} for ${framework.id} uses ` +
+        `executable "${executable}", which is not available from ${plannedCommand.command.cwd}. ` +
+        'Choose a locally available command or mark this check with its concrete setup blocker before asking ' +
+        'for approval.'
+      )
+    }
   }
 }
 
@@ -452,15 +560,27 @@ function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
  *
  * @param {object} framework manifest framework entry
  * @param {string|null|undefined} requestedScenario selected scenario
- * @returns {{label: string, command: object}[]} planned commands
+ * @returns {{label: string, command: object, strict: boolean}[]} planned commands
  */
 function getPlannedCommands (framework, requestedScenario) {
   const commands = []
-  for (const [index, candidate] of getLocalTestCandidates(framework).entries()) {
-    commands.push({
-      label: `local test candidate ${index + 1}`,
-      command: getLocalValidationCommand(framework, candidate.command),
-    })
+  if (requestedScenario !== 'ci-wiring') {
+    for (const [index, candidate] of getLocalTestCandidates(framework).entries()) {
+      commands.push({
+        label: `local test candidate ${index + 1}`,
+        command: getLocalValidationCommand(framework, candidate.command),
+        strict: candidate.origin === 'validator-direct',
+      })
+    }
+    for (const candidate of getIsolationTestCandidates(framework)) {
+      commands.push({
+        label: `the conditional direct-runner isolation command for local candidate ${
+          candidate.primaryCandidateIndex + 1
+        }`,
+        command: getLocalValidationCommand(framework, candidate.command),
+        strict: true,
+      })
+    }
   }
 
   const selectedGeneratedScenario = getSelectedGeneratedScenario(requestedScenario)
@@ -474,6 +594,7 @@ function getPlannedCommands (framework, requestedScenario) {
       commands.push({
         label: `the ${scenario.id} advanced-feature command`,
         command: getLocalValidationCommand(framework, scenario.runCommand),
+        strict: true,
       })
     }
   }
@@ -573,10 +694,10 @@ function getSelectedGeneratedScenario (requestedScenario) {
  *
  * @param {object} command manifest command
  * @param {string} repositoryRoot absolute repository root
- * @param {Record<string, string>} environmentOverrides readable validator-provided values
+ * @param {Record<string, string>} [environmentOverrides] readable validator-provided values
  * @returns {string} readable command
  */
-function formatCommandForPlan (command, repositoryRoot, environmentOverrides) {
+function formatCommandForPlan (command, repositoryRoot, environmentOverrides = {}) {
   const displayCommand = command.usesShell
     ? command
     : {
@@ -708,7 +829,7 @@ function visibleMultilineText (value) {
  * Returns the bounded local commands that approval permits the preflight to try in order.
  *
  * @param {object} framework manifest framework entry
- * @returns {Array<{command: object, maxTestCount: number}>} local test candidates
+ * @returns {Array<{command: object, sourceFile?: string}>} local test candidates
  */
 function getLocalTestCandidates (framework) {
   if (Array.isArray(framework.localTestCandidates) && framework.localTestCandidates.length > 0) {
@@ -716,8 +837,20 @@ function getLocalTestCandidates (framework) {
   }
   return [{
     command: framework.existingTestCommand,
-    maxTestCount: framework.preflight?.maxTestCount ?? 50,
   }]
+}
+
+/**
+ * Returns every approved isolation command, preserving legacy single-candidate manifests.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {object[]} isolation candidates
+ */
+function getIsolationTestCandidates (framework) {
+  if (Array.isArray(framework.isolationTestCandidates)) return framework.isolationTestCandidates
+  return framework.isolationTestCandidate
+    ? [{ primaryCandidateIndex: 0, ...framework.isolationTestCandidate }]
+    : []
 }
 
 module.exports = {

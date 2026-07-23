@@ -112,20 +112,18 @@ describe('test optimization validation manifest schema', () => {
     ])
   })
 
-  it('requires a bounded representative test count', () => {
+  it('treats legacy representative test counts as optional diagnostic metadata', () => {
     const manifest = getManifest()
     delete manifest.frameworks[0].preflight.maxTestCount
 
+    assert.deepStrictEqual(validateManifest(manifest), [])
+
+    manifest.frameworks[0].preflight.maxTestCount = 0
     assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].preflight.maxTestCount must be a positive integer.',
+      'frameworks[0].preflight.maxTestCount must be a positive integer when present.',
     ])
 
     manifest.frameworks[0].preflight.maxTestCount = 1001
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].preflight.maxTestCount must not exceed 1000.',
-    ])
-
-    manifest.frameworks[0].preflight.maxTestCount = 1000
     assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
@@ -212,6 +210,7 @@ describe('test optimization validation manifest schema', () => {
       command: 'npm test',
       diagnosis: 'CI initialization evidence has not been completed.',
       initialization: { status: 'unknown', evidence: [] },
+      transport: { mode: 'unknown', evidence: [] },
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [
@@ -342,6 +341,45 @@ describe('test optimization validation manifest schema', () => {
 
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].ciWiring.initialization must record the static CI configuration conclusion.',
+    ])
+  })
+
+  it('accepts structured CI wrapper and terminal-command evidence', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring.wrapperChain = [{
+      source: '.github/workflows/test.yml job test',
+      command: 'mise x -- npm test',
+      workingDirectory: '/repo',
+    }]
+    manifest.frameworks[0].ciWiring.terminalTestCommand = {
+      command: 'npm test',
+      framework: 'mocha',
+      projectRoot: '/repo',
+      mode: 'test',
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('rejects malformed structured CI wrapper and terminal-command evidence', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring.wrapperChain = [{
+      source: '',
+      workingDirectory: 'relative',
+    }]
+    manifest.frameworks[0].ciWiring.terminalTestCommand = {
+      command: 'npm test',
+      framework: 'jest',
+      projectRoot: 'relative',
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.wrapperChain[0].source must be a non-empty string.',
+      'frameworks[0].ciWiring.wrapperChain[0].command must be a non-empty string.',
+      'frameworks[0].ciWiring.wrapperChain[0].workingDirectory must be an absolute path when present.',
+      'frameworks[0].ciWiring.terminalTestCommand.mode must be a non-empty string.',
+      'frameworks[0].ciWiring.terminalTestCommand.projectRoot must be an absolute path.',
+      'frameworks[0].ciWiring.terminalTestCommand.framework must match the selected framework.',
     ])
   })
 
@@ -564,6 +602,7 @@ describe('test optimization validation manifest schema', () => {
       command: 'npm test',
       diagnosis: 'CI initialization evidence has not been completed.',
       initialization: { status: 'unknown', evidence: [] },
+      transport: { mode: 'unknown', evidence: [] },
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [
@@ -600,8 +639,13 @@ function getManifest (frameworkOverrides = {}) {
           maxTestCount: 50,
         },
         ciWiring: {
+          configFile: '/repo/.github/workflows/test.yml',
+          job: 'test',
+          command: 'npm test',
           diagnosis: 'CI initialization evidence has not been completed.',
           initialization: { status: 'unknown', evidence: [] },
+          transport: { mode: 'unknown', evidence: [] },
+          unresolved: [],
         },
         notes: [],
         ...frameworkOverrides,

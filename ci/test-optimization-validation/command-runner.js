@@ -14,6 +14,13 @@ const {
   isEnvExecutable,
   parseArgv,
 } = require('./executable')
+const {
+  environmentNamesEqual,
+  getEnvironmentValue,
+  isDatadogEnvironmentName,
+  mergeEnvironment,
+  setEnvironmentValue,
+} = require('./environment')
 const { sanitizeConsoleText, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
@@ -127,19 +134,27 @@ function runCommand (command, options = {}) {
   } catch (error) {
     return Promise.reject(error)
   }
+  const missingRequiredEnvVars = getMissingRequiredEnvironmentNames(command.requiredEnvVars)
+  if (missingRequiredEnvVars.length > 0) {
+    result.missingRequiredEnvVars = missingRequiredEnvVars
+    result.stderr = 'The approved command requires environment variables that are not available: ' +
+      `${missingRequiredEnvVars.join(', ')}.\n`
+    result.durationMs = Date.now() - startedAt
+    return Promise.resolve(result)
+  }
   const outputStates = prepareCommandOutputs({ command, artifactRoot, outDir, repositoryRoot })
 
   return new Promise((resolve) => {
     let finalized = false
     let processGroupCleanupPending = false
     let pendingCloseResult
-    const childEnv = {
-      ...getBaseEnv(envMode),
-      ...command.env,
-      ...env,
-    }
-    if (command.env?.NODE_OPTIONS && env.NODE_OPTIONS) {
-      childEnv.NODE_OPTIONS = mergeNodeOptions(env.NODE_OPTIONS, command.env.NODE_OPTIONS)
+    const childEnv = { ...getBaseEnv(envMode, command.requiredEnvVars) }
+    mergeEnvironment(childEnv, command.env)
+    mergeEnvironment(childEnv, env)
+    const commandNodeOptions = getEnvironmentValue(command.env || {}, 'NODE_OPTIONS')
+    const injectedNodeOptions = getEnvironmentValue(env, 'NODE_OPTIONS')
+    if (commandNodeOptions && injectedNodeOptions) {
+      setEnvironmentValue(childEnv, 'NODE_OPTIONS', mergeNodeOptions(injectedNodeOptions, commandNodeOptions))
     }
     for (const [name, value] of Object.entries(childEnv)) {
       if (value === undefined) delete childEnv[name]
@@ -410,14 +425,27 @@ function signalChild (child, signal, useProcessGroup) {
   child.kill(signal)
 }
 
-function getBaseEnv (envMode) {
+function getBaseEnv (envMode, requiredEnvVars = []) {
   if (envMode !== 'clean') return process.env
 
   const cleanEnv = {}
-  for (const name of CLEAN_ENV_ALLOWLIST) {
-    if (process.env[name] !== undefined) cleanEnv[name] = process.env[name]
+  for (const name of [...CLEAN_ENV_ALLOWLIST, ...requiredEnvVars]) {
+    const entry = Object.entries(process.env).find(([candidate]) => {
+      return environmentNamesEqual(candidate, name)
+    })
+    if (entry) setEnvironmentValue(cleanEnv, name, entry[1])
   }
   return cleanEnv
+}
+
+/**
+ * Finds explicitly approved ambient variables that are unavailable at execution time.
+ *
+ * @param {string[]|undefined} requiredEnvVars approved variable names
+ * @returns {string[]} missing names
+ */
+function getMissingRequiredEnvironmentNames (requiredEnvVars = []) {
+  return requiredEnvVars.filter(name => getEnvironmentValue(process.env, name) === undefined)
 }
 
 function buildDatadogEnv ({ fixture, outputRoot, scenario, framework }) {
@@ -488,7 +516,8 @@ function assertNoInlineValidationEnvOverrides (command, env) {
   const reservedEnvNames = new Set([
     ...VALIDATION_RESERVED_ENV_NAMES,
     ...Object.keys(env).filter(name => {
-      return name.startsWith('DD_') || name.startsWith('_DD_') || name.startsWith('OTEL_')
+      return isDatadogEnvironmentName(name) ||
+        (process.platform === 'win32' ? name.toUpperCase() : name).startsWith('OTEL_')
     }),
   ])
 
@@ -502,10 +531,10 @@ function assertNoInlineValidationEnvOverrides (command, env) {
   if (parsed.ignoreEnvironment) throwEnvironmentReset()
   if (parsed.unsupportedEnvOption) throwUnsupportedEnvOption(parsed.unsupportedEnvOption)
   for (const name of Object.keys(parsed.prefixEnv)) {
-    if (reservedEnvNames.has(name)) throwReservedEnvOverride(name)
+    if (hasEnvironmentName(reservedEnvNames, name)) throwReservedEnvOverride(name)
   }
   for (const name of parsed.unsetEnvNames) {
-    if (reservedEnvNames.has(name)) throwReservedEnvOverride(name)
+    if (hasEnvironmentName(reservedEnvNames, name)) throwReservedEnvOverride(name)
   }
 
   if (isPosixShellExecutable(command.argv[parsed.commandIndex])) {
@@ -516,6 +545,20 @@ function assertNoInlineValidationEnvOverrides (command, env) {
       }
     }
   }
+}
+
+/**
+ * Checks a reserved environment-name set using child-platform name semantics.
+ *
+ * @param {Set<string>} names reserved names
+ * @param {string} candidate candidate name
+ * @returns {boolean} whether the candidate is reserved
+ */
+function hasEnvironmentName (names, candidate) {
+  for (const name of names) {
+    if (environmentNamesEqual(name, candidate)) return true
+  }
+  return false
 }
 
 /**

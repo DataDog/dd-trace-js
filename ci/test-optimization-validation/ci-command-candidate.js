@@ -22,8 +22,10 @@ function buildCiCommandCandidate (framework) {
     shell: ciWiring.shell,
     command: typeof ciWiring.command === 'string' ? ciWiring.command : undefined,
     cwd: ciWiring.workingDirectory,
+    terminalTestCommand: ciWiring.terminalTestCommand,
     whySelected: ciWiring.whySelected || ciWiring.selectionReason || ciWiring.diagnosis,
     initialization: ciWiring.initialization,
+    transport: ciWiring.transport,
     env: buildCiEnvSummary(ciWiring),
     packageScriptExpansionChain: getFirstArray(
       ciWiring.packageScriptExpansionChain,
@@ -31,6 +33,7 @@ function buildCiCommandCandidate (framework) {
       ciWiring.commandExpansion
     ),
     runnerToolChain: getFirstArray(
+      ciWiring.wrapperChain,
       ciWiring.runnerToolChain,
       ciWiring.toolChain,
       ciWiring.commandChain
@@ -53,8 +56,14 @@ function buildCiEnvSummary (ciWiring) {
 
 function getFirstArray (...values) {
   for (const value of values) {
-    if (Array.isArray(value) && value.length > 0) return value
+    if (Array.isArray(value) && value.length > 0) return value.map(formatChainEntry)
   }
+}
+
+function formatChainEntry (entry) {
+  if (typeof entry === 'string') return entry
+  if (!entry || typeof entry !== 'object') return String(entry)
+  return entry.source ? `${entry.source}: ${entry.command}` : entry.command
 }
 
 function removeUndefined (object) {

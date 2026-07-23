@@ -5,6 +5,7 @@ const path = require('node:path')
 const CONFIG_PATTERN = /^playwright\.config\.[cm]?[jt]s$/
 const TEST_FILE_PATTERN = /(?:\.(?:spec|test)\.[cm]?[jt]sx?)$/
 const GENERATED_CONFIG_FILENAME = 'dd-test-optimization-validation.playwright.config.cjs'
+const VALIDATION_OUTPUT_DIRECTORY = '.dd-test-optimization-validation-playwright-output'
 const PLAYWRIGHT_PACKAGE = '@playwright/test'
 
 /**
@@ -93,7 +94,12 @@ function getGeneratedConfigPath (testDirectory) {
  * @returns {string[]} focused Playwright arguments
  */
 function getFocusedTestArgs (filename) {
-  return [filename, '--reporter=line', '--workers=1']
+  return [
+    filename,
+    '--reporter=line',
+    '--workers=1',
+    `--output=${getOutputPath(filename)}`,
+  ]
 }
 
 /**
@@ -111,7 +117,18 @@ function getGeneratedTestArgs (filename, configFile) {
     filename,
     '--reporter=line',
     '--workers=1',
+    `--output=${getOutputPath(filename)}`,
   ]
+}
+
+/**
+ * Returns the validator-owned Playwright output directory for a selected spec.
+ *
+ * @param {string} filename selected or generated Playwright spec
+ * @returns {string} absolute output directory
+ */
+function getOutputPath (filename) {
+  return path.join(path.dirname(filename), VALIDATION_OUTPUT_DIRECTORY)
 }
 
 /**
@@ -158,6 +175,7 @@ module.exports = {
   getGeneratedTestArgs,
   getGeneratedTestContent,
   getObservedTestCount,
+  getOutputPath,
   getTestExtension,
   isTestFile,
 }

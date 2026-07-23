@@ -73,6 +73,18 @@ describe('test optimization validation result semantics', () => {
       ],
     },
     {
+      name: 'keeps a Datadog-only command failure in the Test Optimization domain',
+      results: [
+        getResult('basic-reporting', 'fail', {
+          commandFailure: { summary: 'The command failed only with Datadog initialized.' },
+          cleanConfirmation: { exitMatchesPreflight: true },
+        }),
+      ],
+      executionStatus: 'completed',
+      exitCode: 1,
+      resultSemantics: [{ conclusion: 'confirmed_not_working', domain: 'test_optimization' }],
+    },
+    {
       name: 'reports required project setup separately from sandbox blocking',
       results: [
         getResult('all', 'blocked', {
@@ -97,6 +109,19 @@ describe('test optimization validation result semantics', () => {
       exitCode: 2,
       resultSemantics: [
         { conclusion: 'incomplete', domain: 'execution_environment' },
+        { conclusion: 'incomplete', domain: 'ci_configuration' },
+      ],
+    },
+    {
+      name: 'returns two when an unattributed local runtime abort blocks validation',
+      results: [
+        getResult('basic-reporting', 'blocked', { localRuntimeBlocked: true }),
+        getResult('ci-wiring', 'error', incompleteCiEvidence('incomplete')),
+      ],
+      executionStatus: 'blocked',
+      exitCode: 2,
+      resultSemantics: [
+        { conclusion: 'incomplete', domain: 'local_runtime' },
         { conclusion: 'incomplete', domain: 'ci_configuration' },
       ],
     },

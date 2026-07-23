@@ -128,6 +128,7 @@ function getCoveredFilesManifest (material) {
   for (const executable of material.executables) {
     files.set(executable.path, executable.sha256)
     for (const delegated of executable.delegated || []) files.set(delegated.path, delegated.sha256)
+    for (const entrypoint of executable.entrypoints || []) files.set(entrypoint.path, entrypoint.sha256)
   }
 
   return [...files]

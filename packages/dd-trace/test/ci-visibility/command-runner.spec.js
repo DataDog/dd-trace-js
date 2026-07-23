@@ -88,6 +88,58 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('merges Windows environment aliases without leaving bypass spellings', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-env-'))
+    const out = path.join(root, 'results')
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    let spawnOptions
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+      const { runCommand } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+        child_process: {
+          spawn (executable, args, options) {
+            spawnOptions = options
+            const child = new EventEmitter()
+            child.kill = () => {}
+            child.pid = 1
+            child.stderr = new PassThrough()
+            child.stdout = new PassThrough()
+            process.nextTick(() => child.emit('close', 0, null))
+            return child
+          },
+        },
+      })
+
+      await runCommand({
+        cwd: root,
+        argv: [process.execPath, '-e', ''],
+        env: {
+          dd_api_key: 'must-be-removed',
+          Node_Options: '--no-warnings',
+        },
+      }, {
+        artifactRoot: root,
+        env: buildDatadogEnv({
+          ...validationRouting(),
+          scenario: 'basic-reporting',
+          framework: { framework: 'mocha' },
+        }),
+        envMode: 'clean',
+        outDir: out,
+        repositoryRoot: root,
+      })
+
+      assert.strictEqual(spawnOptions.env.dd_api_key, undefined)
+      assert.strictEqual(spawnOptions.env.Node_Options, undefined)
+      assert.match(spawnOptions.env.NODE_OPTIONS, /--no-warnings/)
+      assert.match(spawnOptions.env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('disables unrelated Datadog side channels during forced local validation', () => {
     const env = buildDatadogEnv({
       ...validationRouting(),
@@ -1040,15 +1092,18 @@ describe('test optimization validation command runner', () => {
     const originalVoltaHome = process.env.VOLTA_HOME
     const originalNodeOptions = process.env.NODE_OPTIONS
     const originalOtelTracesExporter = process.env.OTEL_TRACES_EXPORTER
+    const originalProjectTestMode = process.env.PROJECT_TEST_MODE
 
     process.env.VOLTA_HOME = '/Users/example/.volta'
     process.env.NODE_OPTIONS = '-r dd-trace/ci/init'
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.PROJECT_TEST_MODE = 'integration'
 
     try {
-      const cleanEnv = getBaseEnv('clean')
+      const cleanEnv = getBaseEnv('clean', ['PROJECT_TEST_MODE'])
 
       assert.strictEqual(cleanEnv.VOLTA_HOME, '/Users/example/.volta')
+      assert.strictEqual(cleanEnv.PROJECT_TEST_MODE, 'integration')
       assert.strictEqual(cleanEnv.NODE_OPTIONS, undefined)
       assert.strictEqual(cleanEnv.OTEL_TRACES_EXPORTER, undefined)
     } finally {
@@ -1068,6 +1123,12 @@ describe('test optimization validation command runner', () => {
         delete process.env.OTEL_TRACES_EXPORTER
       } else {
         process.env.OTEL_TRACES_EXPORTER = originalOtelTracesExporter
+      }
+
+      if (originalProjectTestMode === undefined) {
+        delete process.env.PROJECT_TEST_MODE
+      } else {
+        process.env.PROJECT_TEST_MODE = originalProjectTestMode
       }
     }
   })

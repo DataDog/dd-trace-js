@@ -166,6 +166,7 @@ function getApprovalCommand (id, command) {
     cwd: path.resolve(command.cwd),
     environmentMode: 'clean',
     environment: command.env || {},
+    inheritedEnvironmentNames: command.requiredEnvVars || [],
     ...getCommandExecutionSettings(command),
     outputPaths: getCommandOutputPaths(command),
   }

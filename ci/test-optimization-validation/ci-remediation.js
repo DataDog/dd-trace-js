@@ -2,6 +2,9 @@
 
 const path = require('node:path')
 
+const { findEnvironmentEntry } = require('./environment')
+const { splitNodeOptions } = require('./executable')
+
 const GITHUB_API_KEY_REFERENCE = '$' + '{{ secrets.DD_API_KEY }}'
 const AGENTLESS_ENV = {
   DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true',
@@ -45,24 +48,8 @@ function buildCiRemediation (framework) {
 }
 
 function getConfiguredTransport (framework) {
-  const env = collectCiEnv(framework)
-  if (isTrue(env.DD_CIVISIBILITY_AGENTLESS_ENABLED)) return 'agentless'
-  if (env.DD_AGENT_HOST || env.DD_TRACE_AGENT_URL || env.DD_TRACE_AGENT_HOSTNAME) return 'agent'
-  return 'unknown'
-}
-
-function collectCiEnv (framework) {
-  const ciWiring = framework.ciWiring || {}
-  return {
-    ...ciWiring.workflowEnv,
-    ...ciWiring.jobEnv,
-    ...ciWiring.stepEnv,
-    ...ciWiring.inheritedEnv,
-  }
-}
-
-function isTrue (value) {
-  return ['1', 'true'].includes(String(value || '').toLowerCase())
+  const mode = framework.ciWiring?.transport?.mode
+  return ['agentless', 'agent', 'none'].includes(mode) ? mode : 'unknown'
 }
 
 function getCiLocation (ciWiring) {
@@ -130,8 +117,75 @@ function getVariant (transport, ciWiring, recommendedValues, nodeOptions) {
 }
 
 function getNodeOptions (framework) {
-  if (framework.framework === 'vitest') return '--import dd-trace/register.js -r dd-trace/ci/init'
-  return '-r dd-trace/ci/init'
+  const existing = getEffectiveNodeOptions(framework.ciWiring)
+  const options = existing ? [existing] : []
+  if (framework.framework === 'vitest' &&
+    !hasNodeModuleOption(existing, ['--import'], isDatadogRegisterSpecifier)) {
+    options.push('--import dd-trace/register.js')
+  }
+  if (!hasNodeModuleOption(existing, ['-r', '--require'], isDatadogCiInitSpecifier)) {
+    options.push('-r dd-trace/ci/init')
+  }
+  return options.join(' ')
+}
+
+function getEffectiveNodeOptions (ciWiring = {}) {
+  const shellName = path.basename(String(ciWiring.shell || '')).toLowerCase()
+  const platform = ['cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'pwsh', 'pwsh.exe'].includes(shellName)
+    ? 'win32'
+    : process.platform
+  let value
+  for (const field of ['inheritedEnv', 'workflowEnv', 'jobEnv', 'stepEnv']) {
+    const entry = findEnvironmentEntry(ciWiring[field], 'NODE_OPTIONS', platform)
+    if (entry) value = entry[1]
+  }
+  if (typeof value !== 'string') return ''
+  const literal = value.trim()
+  return hasDynamicEnvironmentReference(literal) ? '' : literal
+}
+
+function hasNodeModuleOption (value, optionNames, matchesSpecifier) {
+  if (!value) return false
+  let args
+  try {
+    args = splitNodeOptions(value)
+  } catch {
+    return false
+  }
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]
+    let specifier
+    if (optionNames.includes(argument)) {
+      specifier = args[++index]
+    } else {
+      for (const optionName of optionNames) {
+        const prefix = `${optionName}=`
+        if (argument.startsWith(prefix)) specifier = argument.slice(prefix.length)
+      }
+    }
+    if (matchesSpecifier(specifier)) return true
+  }
+  return false
+}
+
+function isDatadogCiInitSpecifier (specifier) {
+  return isDatadogModuleSpecifier(specifier, 'ci/init')
+}
+
+function isDatadogRegisterSpecifier (specifier) {
+  return isDatadogModuleSpecifier(specifier, 'register')
+}
+
+function isDatadogModuleSpecifier (specifier, entrypoint) {
+  if (typeof specifier !== 'string') return false
+  const normalized = specifier.replaceAll('\\', '/')
+  return [`dd-trace/${entrypoint}`, `dd-trace/${entrypoint}.js`].some(candidate => {
+    return normalized === candidate || normalized.endsWith(`/${candidate}`)
+  })
+}
+
+function hasDynamicEnvironmentReference (value) {
+  return /(?:\$[A-Za-z_{]|\$\(|%[A-Za-z_][A-Za-z0-9_]*%)/.test(value)
 }
 
 function getRecommendedValues (framework) {
@@ -171,14 +225,24 @@ function normalizeName (value) {
 function formatSnippet (env, ciWiring) {
   if (ciWiring.provider === 'github-actions') {
     const testCommand = getTestCommand(ciWiring)
-    return [
+    const lines = [
       ciWiring.configFile ? `# ${formatPath(ciWiring.configFile)}` : '# GitHub Actions workflow',
       ciWiring.job ? `# Job: ${ciWiring.job}` : '# Selected test job',
+    ]
+    if (!testCommand) {
+      return [
+        ...lines,
+        'env:',
+        ...Object.entries(env).map(([name, value]) => `  ${name}: ${quoteYamlValue(value)}`),
+      ].join('\n')
+    }
+    return [
+      ...lines,
       `- name: ${quoteYamlValue(ciWiring.step || 'Run tests with Datadog')}`,
       '  env:',
       ...Object.entries(env).map(([name, value]) => `    ${name}: ${quoteYamlValue(value)}`),
       '  run: |',
-      ...String(testCommand).split(/\r?\n/).map(line => `    ${line}`),
+      ...testCommand.split(/\r?\n/).map(line => `    ${line}`),
     ].join('\n')
   }
 
@@ -194,8 +258,7 @@ function quoteShellValue (value) {
 
 function getTestCommand (ciWiring) {
   if (typeof ciWiring.command === 'string' && ciWiring.command.trim()) return ciWiring.command
-  return ciWiring.packageScriptExpansionChain?.[0] || ciWiring.runnerToolChain?.[0] ||
-    '# keep the existing test command here'
+  return ciWiring.packageScriptExpansionChain?.[0] || ciWiring.runnerToolChain?.[0]
 }
 
 function quoteYamlValue (value) {

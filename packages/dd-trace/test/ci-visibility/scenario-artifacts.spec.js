@@ -37,7 +37,7 @@ function validationOptions (repositoryRoot) {
 }
 
 describe('test optimization validation scenario artifacts', () => {
-  it('diagnoses missing offline initialization while preserving command artifacts', async () => {
+  it('marks missing offline initialization as isolation-eligible while preserving command artifacts', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-initialization-failure-'))
     const testRunner = path.join(out, 'test-runner.js')
     const wrapper = path.join(out, process.platform === 'win32' ? 'run-tests.cmd' : 'run-tests.sh')
@@ -61,11 +61,14 @@ describe('test optimization validation scenario artifacts', () => {
     try {
       const result = await runBasicReporting({ framework, out, options: validationOptions(out) })
 
-      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.offlineExporterInitialized, false)
+      assert.strictEqual(result.evidence.isolationEligible, true)
+      assert.strictEqual(result.evidence.isolation, undefined)
+      assert.strictEqual(result.evidence.debugRerun.ran, true)
       assert.strictEqual(result.evidence.debugRerun.offlineExporterInitialized, false)
-      assert.strictEqual(result.evidence.localDiagnosis.kind, 'tests-ran-no-test-optimization-events')
-      assert.match(result.diagnosis, /selected command ran tests, but no Test Optimization events reached/)
+      assert.match(result.evidence.debugRerun.artifactDirectory, /basic-reporting-debug$/)
+      assert.match(result.diagnosis, /offline Test Optimization exporter did not initialize/)
       assert.strictEqual(result.artifacts.length, 10)
       const outDir = path.dirname(result.artifacts[0])
       assert.deepStrictEqual(result.artifacts, [
@@ -74,11 +77,11 @@ describe('test optimization validation scenario artifacts', () => {
         path.join(outDir, 'stderr.txt'),
         path.join(outDir, 'events.ndjson'),
         path.join(outDir, 'result.json'),
-        path.join(`${outDir}-debug`, 'command.json'),
-        path.join(`${outDir}-debug`, 'stdout.txt'),
-        path.join(`${outDir}-debug`, 'stderr.txt'),
-        path.join(`${outDir}-debug`, 'events.ndjson'),
-        path.join(`${outDir}-debug`, 'result.json'),
+        path.join(result.evidence.debugRerun.artifactDirectory, 'command.json'),
+        path.join(result.evidence.debugRerun.artifactDirectory, 'stdout.txt'),
+        path.join(result.evidence.debugRerun.artifactDirectory, 'stderr.txt'),
+        path.join(result.evidence.debugRerun.artifactDirectory, 'events.ndjson'),
+        path.join(result.evidence.debugRerun.artifactDirectory, 'result.json'),
       ])
       assert.ok(result.artifacts.every(filename => fs.existsSync(filename)))
     } finally {

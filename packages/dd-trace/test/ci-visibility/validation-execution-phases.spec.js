@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const { version: packageVersion } = require('../../../../package.json')
 const {
   getExecutableForSpawn,
   getResolvedExecutable,
@@ -14,12 +15,14 @@ const {
 } = require('../../../../ci/test-optimization-validation/executable')
 const { runCommand } = require('../../../../ci/test-optimization-validation/command-runner')
 const {
+  getDatadogCleanCommand,
   getLocalValidationCommand,
 } = require('../../../../ci/test-optimization-validation/local-command')
 const {
   getCommandSuitabilityError,
   getPackageScriptExpansion,
 } = require('../../../../ci/test-optimization-validation/command-suitability')
+const { getCommandBlocker } = require('../../../../ci/test-optimization-validation/command-blocker')
 const {
   cleanupGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
@@ -109,7 +112,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('stops when the clean preflight exceeds the approved representative scope', async () => {
+  it('accepts a successful clean preflight even when the runner executes many tests', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-scope-'))
     const framework = {
       id: 'mocha:root',
@@ -129,11 +132,11 @@ describe('test optimization validator-owned execution phases', () => {
         out: path.join(root, 'results'),
       })
 
-      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.ok, true)
       assert.strictEqual(outcome.preflight.observedTestCount, 100)
-      assert.strictEqual(outcome.preflight.scopeMatched, false)
-      assert.match(outcome.failure.diagnosis, /exceeding the approved representative scope of at most 1/)
-      assert.strictEqual(outcome.failure.evidence.representativeScopeMismatch, true)
+      assert.strictEqual(outcome.preflight.testCountKnown, true)
+      assert.strictEqual(outcome.preflight.testCountAccepted, true)
+      assert.strictEqual(outcome.failure, undefined)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -166,6 +169,9 @@ describe('test optimization validator-owned execution phases', () => {
 
       assert.strictEqual(outcome.ok, false)
       assert.strictEqual(outcome.preflight.observedTestCount, 1)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(outcome.failure.evidence.projectBaselineFailed, true)
       assert.match(outcome.failure.diagnosis, /ran 1 test but exited 1 without Datadog/)
       assert.strictEqual(outcome.failure.evidence.commandFailure, undefined)
     } finally {
@@ -201,12 +207,54 @@ describe('test optimization validator-owned execution phases', () => {
 
       assert.strictEqual(outcome.ok, false)
       assert.strictEqual(outcome.failure.status, 'blocked')
-      assert.strictEqual(outcome.failure.evidence.representativeScopeMismatch, false)
+      assert.strictEqual(outcome.failure.evidence.domain, 'execution_environment')
+      assert.strictEqual(outcome.failure.evidence.projectBaselineFailed, false)
       assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'package-manager-filesystem-blocked')
       assert.match(outcome.failure.diagnosis, /package manager could not write to its tool or cache directory/)
       assert.match(outcome.failure.evidence.commandFailure.recommendation, /writable package-manager home or cache/)
       assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
     } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a missing approved project environment variable as setup required', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-environment-'))
+    const variable = 'PROJECT_VALIDATION_TEST_MODE'
+    const original = process.env[variable]
+    delete process.env[variable]
+    const framework = {
+      id: 'mocha:root',
+      framework: 'mocha',
+      existingTestCommand: {
+        cwd: root,
+        argv: [process.execPath, '-e', 'process.exit(0)'],
+        requiredEnvVars: [variable],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(
+        outcome.failure.evidence.commandFailure.kind,
+        'project-command-environment-missing'
+      )
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, new RegExp(variable))
+    } finally {
+      if (original === undefined) {
+        delete process.env[variable]
+      } else {
+        process.env[variable] = original
+      }
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
@@ -237,24 +285,36 @@ describe('test optimization validator-owned execution phases', () => {
 
       assert.strictEqual(outcome.ok, false)
       assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'execution_environment')
       assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'local-test-socket-blocked')
       assert.match(outcome.failure.diagnosis, /project test could not start its localhost listener/)
       assert.match(outcome.failure.evidence.commandFailure.recommendation, /Do not request broader permissions/)
       assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
+      assert.strictEqual(
+        outcome.failure.evidence.commandFailure.summary.match(/No Test Optimization conclusion was reached\./g)?.length,
+        1
+      )
+      assert.match(outcome.failure.diagnosis, /Basic Reporting could not be tested reliably/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
-  it('reports a silent Cypress application abort as an execution-environment blocker', async () => {
+  it('reports a Cypress abort with only npm lifecycle output without inventing a cause', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-cypress-launch-'))
+    const command = {
+      cwd: root,
+      argv: [
+        process.execPath,
+        '-e',
+        'process.stdout.write("\\n> example@1.0.0 e2e\\n> cypress run --spec example.cy.js\\n"); process.exit(134)',
+      ],
+    }
     const framework = {
       id: 'cypress:root',
       framework: 'cypress',
-      existingTestCommand: {
-        cwd: root,
-        argv: [process.execPath, '-e', 'process.exit(134)'],
-      },
+      existingTestCommand: command,
+      localTestCandidates: [{ command }, { command }, { command }],
       preflight: { status: 'pending', maxTestCount: 1 },
     }
 
@@ -268,13 +328,73 @@ describe('test optimization validator-owned execution phases', () => {
 
       assert.strictEqual(outcome.ok, false)
       assert.strictEqual(outcome.failure.status, 'blocked')
-      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'cypress-application-launch-blocked')
-      assert.match(outcome.failure.diagnosis, /application process could not launch/)
-      assert.match(outcome.failure.evidence.commandFailure.recommendation, /exact checksum-approved validator command/)
+      assert.strictEqual(outcome.failure.evidence.domain, 'local_runtime')
+      assert.strictEqual(outcome.failure.evidence.localRuntimeBlocked, true)
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'cypress-process-aborted')
+      assert.match(outcome.failure.diagnosis, /does not identify whether Cypress/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /project's normal test environment/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Do not treat this result/)
       assert.doesNotMatch(outcome.failure.diagnosis, /determine how many tests/)
+      assert.doesNotMatch(outcome.failure.diagnosis, /sandbox denied|could not launch/)
+      assert.strictEqual(outcome.preflight.attempts.length, 3)
+      assert.strictEqual(outcome.failure.diagnosis.match(/does not identify whether Cypress/g)?.length, 1)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('reports a Playwright browser abort as an unattributed local-runtime blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-playwright-abort-'))
+    const framework = {
+      id: 'playwright:root',
+      framework: 'playwright',
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          'console.log("\\u001b[31mError: browserType.launch: Target page, context or browser has been ' +
+            'closed\\u001b[0m"); ' +
+            'console.log("[pid=1] <process did exit: exitCode=null, signal=SIGABRT>"); ' +
+            'console.log("9 failed"); process.exit(1)',
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.evidence.domain, 'local_runtime')
+      assert.strictEqual(
+        outcome.failure.evidence.commandFailure.kind,
+        'playwright-browser-process-aborted'
+      )
+      assert.match(outcome.failure.diagnosis, /does not identify whether the browser\/runtime setup/)
+      assert.strictEqual(
+        outcome.failure.evidence.commandFailure.signals.join('\n').includes(String.fromCharCode(27)),
+        false
+      )
+      assert.doesNotMatch(outcome.failure.diagnosis, /sandbox denied/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('recognizes package exports failures as project command initialization blockers', () => {
+    const blocker = getCommandBlocker({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath "./register" is not defined by "exports"',
+    }, { framework: 'vitest', testsRan: false })
+
+    assert.strictEqual(blocker.kind, 'project-command-initialization-failed')
   })
 
   it('does not treat another framework exiting 134 as a Cypress environment blocker', async () => {
@@ -298,9 +418,11 @@ describe('test optimization validator-owned execution phases', () => {
       })
 
       assert.strictEqual(outcome.ok, false)
-      assert.strictEqual(outcome.failure.status, 'error')
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(outcome.failure.evidence.projectBaselineFailed, true)
       assert.strictEqual(outcome.failure.evidence.commandFailure, undefined)
-      assert.match(outcome.failure.diagnosis, /determine how many tests/)
+      assert.match(outcome.failure.diagnosis, /Fix the failing project test or its setup/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -333,8 +455,150 @@ describe('test optimization validator-owned execution phases', () => {
 
       assert.strictEqual(outcome.ok, false)
       assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'project_setup')
       assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'playwright-browser-missing')
       assert.match(outcome.failure.evidence.commandFailure.recommendation, /does not download browsers/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not classify Playwright browser text as a blocker for another framework', () => {
+    const result = {
+      exitCode: 1,
+      stderr: "browserType.launch: Executable doesn't exist. Please run playwright install.",
+      stdout: '',
+    }
+
+    assert.strictEqual(
+      getCommandBlocker(result, { framework: 'playwright', testsRan: false }).kind,
+      'playwright-browser-missing'
+    )
+    for (const framework of ['cucumber', 'cypress', 'jest', 'mocha']) {
+      assert.strictEqual(getCommandBlocker(result, { framework, testsRan: false }), undefined)
+    }
+  })
+
+  it('does not classify Cypress runtime text as a blocker for another framework', () => {
+    const result = {
+      exitCode: 1,
+      stderr: 'Cypress executable not found. Please reinstall Cypress.',
+      stdout: '',
+    }
+
+    assert.strictEqual(
+      getCommandBlocker(result, { framework: 'cypress', testsRan: false }).kind,
+      'cypress-runtime-missing'
+    )
+    for (const framework of ['cucumber', 'jest', 'mocha', 'playwright', 'vitest']) {
+      assert.strictEqual(getCommandBlocker(result, { framework, testsRan: false }), undefined)
+    }
+  })
+
+  it('reports a missing Vitest browser provider as a setup blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-vitest-browser-'))
+    const framework = {
+      id: 'vitest:browser',
+      framework: 'vitest',
+      browserRequired: true,
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          'console.error("Error: Cannot find package \'@vitest/browser-playwright\'"); process.exit(1)',
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'vitest-browser-provider-missing')
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /normal Vitest browser setup/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a denied Vitest browser launch as an execution-environment blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-vitest-browser-launch-'))
+    const framework = {
+      id: 'vitest:browser',
+      framework: 'vitest',
+      browserRequired: true,
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          [
+            "console.error('browserType.launch: Failed to launch the browser process.')",
+            "console.error('bootstrap_check_in: Permission denied (1100)')",
+            'process.exit(1)',
+          ].join(';'),
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'execution_environment')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'vitest-browser-launch-blocked')
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Retry the same approved plan/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Do not request broader permissions/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a missing project test-runner executable as a setup blocker', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-preflight-runner-missing-'))
+    const framework = {
+      id: 'playwright:root',
+      framework: 'playwright',
+      existingTestCommand: {
+        cwd: root,
+        argv: [
+          process.execPath,
+          '-e',
+          'console.error("/bin/sh: playwright: command not found"); process.exit(127)',
+        ],
+      },
+      preflight: { status: 'pending', maxTestCount: 1 },
+    }
+
+    try {
+      fs.mkdirSync(path.join(root, 'results'))
+      const outcome = await runFrameworkPreflight({
+        framework,
+        options: { repositoryRoot: root, verbose: false },
+        out: path.join(root, 'results'),
+      })
+
+      assert.strictEqual(outcome.ok, false)
+      assert.strictEqual(outcome.failure.status, 'blocked')
+      assert.strictEqual(outcome.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'test-runner-command-missing')
+      assert.match(outcome.failure.diagnosis, /local Test Optimization compatibility was not tested/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -374,8 +638,9 @@ describe('test optimization validator-owned execution phases', () => {
       assert.strictEqual(outcome.failure.status, 'blocked')
       assert.strictEqual(outcome.failure.evidence.commandFailure.kind, 'playwright-browser-launch-blocked')
       assert.match(outcome.failure.diagnosis, /Playwright needs to launch the project browser/)
-      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Approve rerunning the exact/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Retry the same approved plan/)
       assert.match(outcome.failure.evidence.commandFailure.recommendation, /host shell/)
+      assert.match(outcome.failure.evidence.commandFailure.recommendation, /Do not request broader permissions/)
       assert.strictEqual(outcome.failure.evidence.candidateAttempts.length, 2)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -585,6 +850,8 @@ describe('test optimization validator-owned execution phases', () => {
     const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
     const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-test-optimization-validation'))
     framework.project.name = '@example/app'
+    framework.browserRequired = true
+    framework.localSocketRequired = true
     framework.existingTestCommand = {
       cwd: root,
       argv: ['npm', 'test', '--', '--runInBand', '--token', 'plan-secret'],
@@ -593,7 +860,11 @@ describe('test optimization validator-owned execution phases', () => {
         BASH_ENV: './project-shell-init',
       },
       outputPaths: [path.join(root, 'coverage')],
+      requiredEnvVars: ['PROJECT_TEST_MODE'],
     }
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      scripts: { test: 'node dd-test-optimization-validation-jest-runner.js' },
+    }))
     framework.ciWiring = {
       provider: 'github-actions',
       command: 'pnpm test',
@@ -610,10 +881,17 @@ describe('test optimization validator-owned execution phases', () => {
       project: { name: 'browser-example', root: path.join(root, 'examples', 'browser') },
       notes: ['Karma requires browser execution and is not supported by this validator.'],
     }
+    const setupBlockedFrameworks = ['cucumber', 'cypress'].map(name => ({
+      id: `${name}:example`,
+      framework: name,
+      status: 'requires_manual_setup',
+      project: { name: 'example', root },
+      notes: ['Complete project setup before live validation.'],
+    }))
     const manifest = {
       __path: manifestPath,
       repository: { root },
-      frameworks: [framework, unsupportedFramework],
+      frameworks: [framework, unsupportedFramework, ...setupBlockedFrameworks],
     }
     const manifestFile = { ...manifest }
     delete manifestFile.__path
@@ -639,6 +917,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(approvalSummary, /# Test Optimization Validation Execution Plan/)
       assert.match(approvalSummary, /\*\*Test candidate 1\*\*/)
       assert.match(approvalSummary, /Without Datadog \(confirms the selected test file runs normally\)/)
+      assert.match(approvalSummary, /selected candidate can run up to four times/)
       assert.match(
         approvalSummary,
         /With Datadog, only if this is the first candidate that passes: run the same command with/
@@ -667,6 +946,8 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /npm test -- --runInBand --token <redacted> --no-watchman/)
       assert.doesNotMatch(plan, /echo harmless-display-command/)
       assert.match(plan, /BASH_ENV=\.\/project-shell-init/)
+      assert.match(plan, /Inherited non-secret environment names: `PROJECT_TEST_MODE`/)
+      assert.match(plan, /current values are used only at execution and are not printed or integrity-bound/)
       assert.match(plan, /Command-created outputs removed after execution: `coverage`/)
       assert.match(plan, /NODE_OPTIONS=-r dd-trace\/ci\/init/)
       assert.match(ciOnlyPlan, /\*\*CI configuration audit:\*\*/)
@@ -681,8 +962,12 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /test\('atr-fail-once'/)
       assert.match(plan, /Working directory: `\.`/)
       assert.match(plan, /## Scope/)
+      assert.match(plan, /selected project test launches a browser/)
+      assert.match(plan, /representative test found appears to require a project localhost listener/)
       assert.match(plan, /\*\*Jest tests for @example\/app\*\*: will be validated/)
       assert.match(plan, /\*\*Karma tests for browser-example\*\*: not supported by this validator/)
+      assert.match(plan, /\*\*Cucumber tests for example\*\*: requires additional setup/)
+      assert.match(plan, /\*\*Cypress tests for example\*\*: requires additional setup/)
       assert.match(plan, /## Safety and Outputs/)
       assert.match(plan, /opens no listener, contacts no Datadog endpoint, requires no real Datadog credentials/)
       assert.doesNotMatch(plan, /plan-secret/)
@@ -727,7 +1012,22 @@ describe('test optimization validator-owned execution phases', () => {
       assert.doesNotMatch(approvalJson.toString(), /plan-secret/)
       assert.match(plan, /without running project code/)
       assert.match(plan, /do not verify where the installed .* package came from/)
+      assert.match(plan, /trusted repository.*trusted installed dependencies/s)
+      assert.match(plan, /project tests run with your OS privileges/)
+      assert.match(plan, /inputs explicitly covered by this approval/)
+      assert.match(plan, /do not comprehensively fingerprint existing tests, runner configuration/)
+      assert.match(plan, /## Validator Identity/)
+      assert.match(plan, new RegExp(`Package: \`dd-trace@${escapeRegExp(packageVersion)}\``))
+      assert.match(plan, /https:\/\/docs\.datadoghq\.com\/tests\/setup\/javascript\//)
+      assert.match(plan, /symlinked live source checkout is a development setup/)
       assert.match(plan, /Run the approved validation command/)
+      assert.match(plan, /## Platform Trust-Gate Fallback/)
+      assert.match(plan, /native permission control scoped to this exact approved command/)
+      assert.match(plan, /may request it once and retry the unchanged command once/)
+      assert.match(plan, /raw `EACCES` or `EPERM` error does not prove/)
+      assert.match(plan, /hard-denies this exact command/)
+      assert.match(plan, /do not retry the unchanged command/)
+      assert.match(plan, /then ask the agent to interpret `results-atr\/report\.md`/)
       assert.doesNotMatch(plan, /not user-visible merely because it appeared in tool output/)
       assert.doesNotMatch(plan, /Never send only an approval question/)
     } finally {
@@ -735,15 +1035,40 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('documents the limited approval and offline-transport trust boundaries in the runbook', () => {
+    const runbook = fs.readFileSync(path.resolve(__dirname, '../../../../ci/runbook.md'), 'utf8')
+
+    assert.match(runbook, /trusted repository with trusted installed dependencies/)
+    assert.match(runbook, /developer's OS privileges/)
+    assert.match(runbook, /Approval detects drift only in inputs it explicitly covers/)
+    assert.match(runbook, /does not comprehensively fingerprint existing\s+tests, runner configuration/)
+    assert.match(runbook, /Volta-managed `npm`, `pnpm`, `yarn`, and Node\.js runtime executables may resolve outside/)
+    assert.match(runbook, /revalidate them before spawn/)
+    assert.match(runbook, /Project commands may\s+still use the network and local resources/)
+    assert.match(runbook, /## Human-Facing Provenance and Command Effects/)
+    assert.match(runbook, /--init-manifest` \| No \| Exclusively creates/)
+    assert.match(runbook, /Pre-live discovery does not execute project code or use the network, but it is not filesystem-read-only/)
+    assert.doesNotMatch(runbook, /Discovery is read-only/)
+    assert.match(runbook, /symlink to a live source\s+checkout.*not equivalent/s)
+    assert.match(runbook, /## Platform Trust-Gate Fallback/)
+    assert.match(runbook, /native permission control scoped to the exact pre-live command/)
+    assert.match(runbook, /request it at most once and retry that unchanged command at most once/)
+    assert.match(runbook, /raw `EACCES` or `EPERM`/)
+    assert.match(runbook, /Playwright candidate may establish runner ownership through one statically resolved/)
+    assert.match(runbook, /fixture chains are not followed/)
+    assert.match(runbook, /do not retry the unchanged command/)
+    assert.match(runbook, /Never retry an unchanged hard-denied command/)
+  })
+
   it('renders local candidates separately when identical argv has different execution settings', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-command-shape-'))
     const packageRoot = path.join(root, 'package')
-    const commandArgv = [process.execPath, '-e', 'console.log("Tests: 1 passed, 1 total")']
     const framework = getPlannedFramework(
       root,
       path.join(root, 'tests', 'generated.test.js'),
       path.join(root, '.retry-state')
     )
+    const commandArgv = [...framework.existingTestCommand.argv]
     const directCommand = {
       cwd: root,
       argv: commandArgv,
@@ -771,11 +1096,7 @@ describe('test optimization validator-owned execution phases', () => {
         out: path.join(root, 'results'),
         requestedScenario: 'basic-reporting',
       })
-      const renderedCommand = process.platform === 'win32'
-        ? 'node -e "console.log(\\"Tests: 1 passed, 1 total\\")"'
-        : String.raw`node -e 'console.log("Tests: 1 passed, 1 total")'`
-
-      assert.strictEqual(countOccurrences(plan, renderedCommand), 2)
+      assert.strictEqual(countOccurrences(plan, 'dd-test-optimization-validation-jest-runner.js'), 2)
       assert.match(plan, /SAFE_MODE=direct/)
       assert.match(plan, /SAFE_MODE=fallback/)
       assert.match(plan, /Working directory: `package`/)
@@ -827,11 +1148,190 @@ describe('test optimization validator-owned execution phases', () => {
           frameworks: [framework],
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
-      }), /Cannot render an approvable plan.*definitely-not-an-installed-test-runner.*not available/s)
+      }), /Cannot render an approvable plan.*uses executable "definitely-not-an-installed-test-runner"/s)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('rejects an approval plan when a package script runner is unavailable', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-unavailable-package-runner-'))
+    const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
+    const framework = getPlannedFramework(root, generatedFile, path.join(root, '.dd-validation-state'))
+    const bin = path.join(root, 'bin')
+    const npmExecutable = path.join(bin, process.platform === 'win32' ? 'npm.cmd' : 'npm')
+    fs.mkdirSync(bin, { recursive: true })
+    fs.writeFileSync(npmExecutable, '')
+    fs.chmodSync(npmExecutable, 0o755)
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      scripts: { test: 'playwright test' },
+    }))
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [path.basename(npmExecutable), 'run', 'test'],
+      env: { PATH: bin },
+    }
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'dd-test-optimization-validation-results'),
+      }), /Cannot render an approvable plan.*uses executable "playwright"/s)
+      assert.strictEqual(fs.existsSync(path.join(root, 'dd-test-optimization-validation-results')), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('discloses a trusted project wrapper without applying validator-direct command restrictions', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-project-wrapper-'))
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      shellCommand: 'npm test && echo project-wrapper-complete',
+      usesShell: true,
+    }
+
+    try {
+      const plan = formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+
+      assert.match(plan, /npm test && echo project-wrapper-complete/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts direct matching runner and contained Node.js runner shapes', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-supported-command-'))
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = { framework: 'jest', project: { root, configFiles: [] } }
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      for (const argv of [['jest', '--runInBand'], [process.execPath, runner, '--runInBand']]) {
+        assert.strictEqual(getCommandSuitabilityError({
+          command: { cwd: root, argv },
+          framework,
+          label: 'local test candidate',
+          repositoryRoot: root,
+        }), undefined)
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const [option, reason] of [
+    ['--inspect-brk=0', /inspector listener/],
+    ['--watch', /waits for file changes/],
+    ['--cpu-prof', /profiling or heap tracking/],
+    ['--redirect-warnings=warnings.log', /redirects warnings/],
+    ['--tls-keylog=keys.log', /TLS key material/],
+  ]) {
+    it(`rejects unsuitable Node.js runtime option ${option}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-mode-'))
+      const runner = path.join(root, 'jest-runner.js')
+      fs.writeFileSync(runner, 'process.exit(0)\n')
+
+      try {
+        assert.match(getCommandSuitabilityError({
+          command: { cwd: root, argv: [process.execPath, option, runner] },
+          framework: { framework: 'jest', project: { root, configFiles: [] } },
+          label: 'local test candidate',
+          repositoryRoot: root,
+        }), reason)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('rejects unsuitable NODE_OPTIONS on a direct runner command', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-runner-node-options-'))
+
+    try {
+      assert.match(getCommandSuitabilityError({
+        command: { cwd: root, argv: ['jest'], env: { NODE_OPTIONS: '--inspect=0' } },
+        framework: { framework: 'jest', project: { root, configFiles: [] } },
+        label: 'local test candidate',
+        repositoryRoot: root,
+      }), /inspector listener/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('treats Windows environment aliases as Datadog and Node.js execution settings', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-env-aliases-'))
+    const runner = path.join(root, 'jest-runner.js')
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+      const command = {
+        cwd: root,
+        argv: [process.execPath, runner],
+        env: {
+          dd_api_key: 'must-be-removed',
+          Node_Options: '-r dd-trace/ci/init',
+          SAFE_MODE: 'enabled',
+        },
+      }
+      assert.deepStrictEqual(getDatadogCleanCommand(command).env, { SAFE_MODE: 'enabled' })
+      assert.match(getCommandSuitabilityError({
+        command: {
+          cwd: root,
+          argv: [process.execPath, runner],
+          env: { node_v8_coverage: 'coverage' },
+        },
+        framework: { framework: 'jest', project: { root, configFiles: [] } },
+        label: 'isolation test candidate',
+        repositoryRoot: root,
+      }), /NODE_V8_COVERAGE/)
+    } finally {
+      Object.defineProperty(process, 'platform', platformDescriptor)
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const [name, value] of [
+    ['NODE_V8_COVERAGE', 'coverage'],
+    ['NODE_REDIRECT_WARNINGS', 'warnings.log'],
+    ['NODE_COMPILE_CACHE', 'compile-cache'],
+  ]) {
+    it(`rejects implicit Node.js output environment ${name}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-output-env-'))
+      const runner = path.join(root, 'jest-runner.js')
+      fs.writeFileSync(runner, 'process.exit(0)\n')
+
+      try {
+        assert.match(getCommandSuitabilityError({
+          command: { cwd: root, argv: [process.execPath, runner], env: { [name]: value } },
+          framework: { framework: 'jest', project: { root, configFiles: [] } },
+          label: 'local test candidate',
+          repositoryRoot: root,
+        }), new RegExp(name))
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('resolves Windows executable names that already include a PATHEXT extension', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-windows-executable-'))
@@ -889,12 +1389,42 @@ describe('test optimization validator-owned execution phases', () => {
     assert.strictEqual(getResolvedExecutable(command), undefined)
   })
 
+  it('resolves a package-script runner from the package-manager execution PATH', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-package-runner-'))
+    const bin = path.join(root, 'bin')
+    const packageBin = path.join(root, 'node_modules', '.bin')
+    const npmExecutable = path.join(bin, process.platform === 'win32' ? 'npm.cmd' : 'npm')
+    const playwrightExecutable = path.join(packageBin, process.platform === 'win32' ? 'playwright.cmd' : 'playwright')
+    fs.mkdirSync(bin, { recursive: true })
+    fs.mkdirSync(packageBin, { recursive: true })
+    fs.writeFileSync(npmExecutable, '')
+    fs.writeFileSync(playwrightExecutable, '')
+    fs.chmodSync(npmExecutable, 0o755)
+    fs.chmodSync(playwrightExecutable, 0o755)
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      scripts: { test: 'playwright test' },
+    }))
+    const command = {
+      cwd: root,
+      argv: [path.basename(npmExecutable), 'run', 'test'],
+      env: { PATH: bin },
+    }
+
+    try {
+      assert.strictEqual(getUnavailableExecutable(command, root), undefined)
+      fs.rmSync(playwrightExecutable)
+      assert.strictEqual(getUnavailableExecutable(command, root), 'playwright')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('detects an executable replaced after approval before it can be spawned', async function () {
     if (process.platform === 'win32') this.skip()
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-executable-approval-'))
     const bin = path.join(root, 'bin')
-    const executable = path.join(bin, 'test-runner')
+    const executable = path.join(bin, 'jest')
     const marker = path.join(root, 'changed-executable-ran')
     const out = path.join(root, 'results')
     const framework = getPlannedFramework(
@@ -904,7 +1434,7 @@ describe('test optimization validator-owned execution phases', () => {
     )
     framework.existingTestCommand = {
       cwd: root,
-      argv: ['test-runner'],
+      argv: ['jest'],
       env: { PATH: bin },
     }
     const manifest = {
@@ -932,12 +1462,572 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('detects a Node.js program replaced after approval before it can be spawned', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-entrypoint-'))
+    const runner = path.join(root, 'jest-runner.js')
+    const marker = path.join(root, 'changed-runner-ran')
+    const out = path.join(root, 'results')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, runner] }
+    const manifest = {
+      __path: path.join(root, 'manifest.json'),
+      repository: { root },
+      frameworks: [framework],
+    }
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      formatExecutionPlan({ manifest, out, requestedScenario: 'basic-reporting' })
+      const approval = JSON.parse(fs.readFileSync(path.join(out, 'approval.json'), 'utf8'))
+      const basicReporting = approval.executables.find(entry => entry.label.endsWith(':basic-reporting'))
+      assert.strictEqual(basicReporting.entrypoints[0].path, fs.realpathSync(runner))
+      if (process.platform !== 'win32') {
+        assert.match(
+          fs.readFileSync(path.join(out, 'approval-files.sha256'), 'utf8'),
+          new RegExp(`${escapeRegExp(fs.realpathSync(runner))}$`, 'm')
+        )
+      }
+
+      fs.writeFileSync(runner, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\n`)
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+      const result = await runCommand(
+        framework.existingTestCommand,
+        { artifactRoot: out, outDir: path.join(out, 'run'), repositoryRoot: root }
+      )
+      assert.match(result.stderr, /changed after approval/)
+      assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const [name, getArguments] of [
+    ['require', (preload, runner) => ['--require', preload, runner]],
+    ['import', (preload, runner) => [`--import=${preload}`, runner]],
+    ['loader', (preload, runner) => ['--loader', preload, runner]],
+    ['experimental loader', (preload, runner) => ['--experimental-loader', preload, runner]],
+  ]) {
+    it(`detects a Node.js ${name} module replaced after approval`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), `dd-validation-node-${name}-`))
+      const preload = path.join(root, 'preload.js')
+      const runner = path.join(root, 'jest-runner.js')
+      const out = path.join(root, 'results')
+      const framework = getPlannedFramework(
+        root,
+        path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+        path.join(root, '.dd-validation-state')
+      )
+      framework.existingTestCommand = {
+        cwd: root,
+        argv: [process.execPath, ...getArguments(preload, runner)],
+      }
+      fs.writeFileSync(preload, 'globalThis.loaded = true\n')
+      fs.writeFileSync(runner, 'process.exit(0)\n')
+
+      try {
+        formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out,
+          requestedScenario: 'basic-reporting',
+        })
+        const approval = JSON.parse(fs.readFileSync(path.join(out, 'approval.json'), 'utf8'))
+        const basicReporting = approval.executables.find(entry => entry.label.endsWith(':basic-reporting'))
+        assert.deepStrictEqual(basicReporting.entrypoints.map(entry => entry.path), [
+          fs.realpathSync(preload),
+          fs.realpathSync(runner),
+        ])
+
+        fs.writeFileSync(preload, 'globalThis.loaded = false\n')
+
+        assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  for (const [name, getArguments, expected] of [
+    [
+      'environment file',
+      (input, runner) => [`--env-file=${input}`, runner],
+      /Node\.js option "--env-file".*undisclosed environment/s,
+    ],
+    [
+      'optional environment file',
+      (input, runner) => [`--env-file-if-exists=${input}`, runner],
+      /Node\.js option "--env-file-if-exists".*undisclosed environment/s,
+    ],
+    [
+      'experimental config file',
+      (input, runner) => [`--experimental-config-file=${input}`, runner],
+      /Node\.js option "--experimental-config-file".*undisclosed environment/s,
+    ],
+    [
+      'default experimental config file',
+      (input, runner) => ['--experimental-default-config-file', runner],
+      /Node\.js option "--experimental-default-config-file".*undisclosed environment/s,
+    ],
+    [
+      'test global setup',
+      (input, runner) => [`--test-global-setup=${input}`, runner],
+      /Node\.js option "--test-global-setup".*test-hook input/s,
+    ],
+    [
+      'custom test reporter',
+      (input, runner) => [`--test-reporter=${input}`, runner],
+      /Node\.js option "--test-reporter".*test-hook input/s,
+    ],
+    [
+      'snapshot blob',
+      (input, runner) => [`--snapshot-blob=${input}`, runner],
+      /Node\.js option "--snapshot-blob".*snapshot/s,
+    ],
+    [
+      'test snapshot update',
+      (input, runner) => ['--test-update-snapshots', runner],
+      /Node\.js option "--test-update-snapshots".*snapshot/s,
+    ],
+  ]) {
+    it(`rejects a Node.js ${name} before approval`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-file-option-'))
+      const input = path.join(root, name.includes('environment') ? '.env' : 'input.js')
+      const preload = path.join(root, 'preload.js')
+      const runner = path.join(root, 'jest-runner.js')
+      const framework = getPlannedFramework(
+        root,
+        path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+        path.join(root, '.dd-validation-state')
+      )
+      framework.existingTestCommand = {
+        cwd: root,
+        argv: [process.execPath, ...getArguments(input, runner)],
+      }
+      fs.writeFileSync(preload, 'globalThis.loaded = true\n')
+      const inputContent = name.includes('config')
+        ? JSON.stringify({ nodeOptions: { import: [preload] } })
+        : name.includes('environment')
+          ? `NODE_OPTIONS=--require ${preload}\n`
+          : `require(${JSON.stringify(preload)})\n`
+      fs.writeFileSync(input, inputContent)
+      fs.writeFileSync(runner, 'process.exit(0)\n')
+
+      try {
+        assert.throws(() => formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out: path.join(root, 'results'),
+          requestedScenario: 'basic-reporting',
+        }), expected)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('rejects an unclassified Node.js option before the program entrypoint', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-unknown-option-'))
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, '--future-code-loader=./loader.js', runner],
+    }
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      }), /unsupported or unclassified Node\.js option "--future-code-loader/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const [source, configureCommand] of [
+    ['command.env.NODE_OPTIONS', (framework, root, runner) => {
+      framework.existingTestCommand = {
+        cwd: root,
+        argv: [process.execPath, runner],
+        env: { NODE_OPTIONS: '--env-file=.env' },
+      }
+    }],
+    ['a package-script expansion', (framework, root) => {
+      framework.existingTestCommand = { cwd: root, argv: ['npm', 'run', 'test'] }
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+        scripts: { test: 'NODE_OPTIONS=--env-file=.env node jest-runner.js' },
+      }))
+    }],
+    ['a shell command environment assignment', (framework, root) => {
+      framework.existingTestCommand = {
+        cwd: root,
+        usesShell: true,
+        shellCommand: 'NODE_OPTIONS=--env-file=.env node jest-runner.js',
+      }
+    }],
+  ]) {
+    it(`rejects a Node.js environment file supplied through ${source}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-options-source-'))
+      const runner = path.join(root, 'jest-runner.js')
+      const framework = getPlannedFramework(
+        root,
+        path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+        path.join(root, '.dd-validation-state')
+      )
+      configureCommand(framework, root, runner)
+      fs.writeFileSync(path.join(root, '.env'), 'NODE_OPTIONS=--require ./preload.js\n')
+      fs.writeFileSync(path.join(root, 'preload.js'), 'globalThis.loaded = true\n')
+      fs.writeFileSync(runner, 'process.exit(0)\n')
+
+      try {
+        assert.throws(() => formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out: path.join(root, 'results'),
+          requestedScenario: 'basic-reporting',
+        }), /Node\.js option "--env-file".*undisclosed environment/s)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('accepts classified Node.js options and leaves application arguments after the entrypoint alone', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-classified-options-'))
+    const preload = path.join(root, 'preload.js')
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [
+        process.execPath,
+        '--no-warnings',
+        '--max-old-space-size=4096',
+        '--require',
+        preload,
+        runner,
+        '--env-file=.application-argument',
+      ],
+    }
+    fs.writeFileSync(preload, 'globalThis.loaded = true\n')
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+      fs.writeFileSync(preload, 'globalThis.loaded = false\n')
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const [name, getNodeOptions] of [
+    ['require', preload => `--require "${preload}"`],
+    ['import', preload => `--import='${preload}'`],
+    ['loader', preload => `--loader "${preload}"`],
+  ]) {
+    it(`detects a Node.js ${name} module from NODE_OPTIONS replaced after approval`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), `dd-validation-node-options-${name}-`))
+      const moduleDirectory = path.join(root, 'execution files')
+      const preload = path.join(moduleDirectory, 'preload.js')
+      const runner = path.join(root, 'jest-runner.js')
+      const out = path.join(root, 'results')
+      const framework = getPlannedFramework(
+        root,
+        path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+        path.join(root, '.dd-validation-state')
+      )
+      framework.existingTestCommand = {
+        cwd: root,
+        argv: [process.execPath, runner],
+        env: { NODE_OPTIONS: getNodeOptions(preload) },
+      }
+      fs.mkdirSync(moduleDirectory)
+      fs.writeFileSync(preload, 'globalThis.loaded = true\n')
+      fs.writeFileSync(runner, 'process.exit(0)\n')
+
+      try {
+        formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out,
+          requestedScenario: 'basic-reporting',
+        })
+        const approval = JSON.parse(fs.readFileSync(path.join(out, 'approval.json'), 'utf8'))
+        const basicReporting = approval.executables.find(entry => entry.label.endsWith(':basic-reporting'))
+        assert.deepStrictEqual(basicReporting.entrypoints.map(entry => entry.path), [
+          fs.realpathSync(preload),
+          fs.realpathSync(runner),
+        ])
+
+        fs.writeFileSync(preload, 'globalThis.loaded = false\n')
+
+        assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('rejects a bare NODE_OPTIONS preload when command NODE_PATH can change its resolution', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-path-preload-'))
+    const moduleRoot = path.join(root, 'safe-modules', 'selected-preload')
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, runner],
+      env: {
+        NODE_OPTIONS: '--require selected-preload',
+        NODE_PATH: path.dirname(moduleRoot),
+      },
+    }
+    fs.mkdirSync(moduleRoot, { recursive: true })
+    fs.writeFileSync(path.join(moduleRoot, 'index.js'), 'globalThis.loaded = true\n')
+    fs.writeFileSync(path.join(moduleRoot, 'package.json'), JSON.stringify({ main: 'index.js' }))
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      }), /bare Node\.js preload while NODE_PATH is set/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts classified underscore aliases in NODE_OPTIONS and still fingerprints preloads', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-option-alias-'))
+    const preload = path.join(root, 'preload.js')
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, runner],
+      env: { NODE_OPTIONS: '--max_old_space_size=4096 --require ./preload.js' },
+    }
+    fs.writeFileSync(preload, 'globalThis.loaded = true\n')
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+      fs.writeFileSync(preload, 'globalThis.loaded = false\n')
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a Node.js program whose physical path escapes the repository', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-entrypoint-root-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-entrypoint-outside-'))
+    const runner = path.join(root, 'jest-runner.js')
+    const outsideRunner = path.join(outside, 'runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = { cwd: root, argv: [process.execPath, runner] }
+    fs.writeFileSync(outsideRunner, 'process.exit(0)\n')
+    fs.symlinkSync(outsideRunner, runner)
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      }), /Node\.js program entrypoint resolves outside the repository/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a Node.js preload whose physical path escapes the repository', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-preload-root-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-node-preload-outside-'))
+    const preload = path.join(root, 'preload.js')
+    const outsidePreload = path.join(outside, 'preload.js')
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      argv: [process.execPath, '--require', preload, runner],
+    }
+    fs.writeFileSync(outsidePreload, 'globalThis.loaded = true\n')
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+    fs.symlinkSync(outsidePreload, preload)
+
+    try {
+      assert.throws(() => formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      }), /Node\.js preload module resolves outside the repository/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('detects package lifecycle changes after approval', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-package-script-approval-'))
+    const packageJson = path.join(root, 'package.json')
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = { cwd: root, argv: ['npm', 'run', 'test'] }
+    fs.writeFileSync(packageJson, JSON.stringify({ scripts: { test: 'node jest-runner.js' } }))
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+      fs.writeFileSync(packageJson, JSON.stringify({
+        scripts: { test: 'node jest-runner.js', posttest: 'node unexpected.js' },
+      }))
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('detects a Node.js preload reached through a package script when it changes after approval', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-package-script-node-files-'))
+    const preload = path.join(root, 'preload.js')
+    const runner = path.join(root, 'jest-runner.js')
+    const out = path.join(root, 'results')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = { cwd: root, argv: ['npm', 'run', 'test'] }
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      scripts: { test: 'node --require ./preload.js ./jest-runner.js' },
+    }))
+    fs.writeFileSync(preload, 'globalThis.loaded = true\n')
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out,
+        requestedScenario: 'basic-reporting',
+      })
+      const approval = JSON.parse(fs.readFileSync(path.join(out, 'approval.json'), 'utf8'))
+      const basicReporting = approval.executables.find(entry => entry.label.endsWith(':basic-reporting'))
+      assert.deepStrictEqual(basicReporting.entrypoints.map(entry => entry.path), [
+        fs.realpathSync(preload),
+        fs.realpathSync(runner),
+        fs.realpathSync(path.join(root, 'package.json')),
+      ])
+
+      fs.writeFileSync(preload, 'globalThis.loaded = false\n')
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('fingerprints an env-wrapped command target and rejects its replacement after approval', function () {
     if (process.platform === 'win32') this.skip()
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-env-target-'))
     const bin = path.join(root, 'bin')
-    const target = path.join(bin, 'test-runner')
+    const target = path.join(bin, 'jest')
     const out = path.join(root, 'results')
     const framework = getPlannedFramework(
       root,
@@ -946,7 +2036,7 @@ describe('test optimization validator-owned execution phases', () => {
     )
     framework.existingTestCommand = {
       cwd: root,
-      argv: ['/usr/bin/env', `PATH=${bin}`, 'test-runner'],
+      argv: ['/usr/bin/env', `PATH=${bin}`, 'jest'],
     }
     const manifest = {
       __path: path.join(root, 'manifest.json'),
@@ -1008,13 +2098,74 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  for (const packageManager of ['npm', 'pnpm', 'yarn']) {
+    it(`allows an external ${packageManager} launcher while approval-binding its repository runner`, function () {
+      if (process.platform === 'win32') this.skip()
+
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), `dd-validation-external-${packageManager}-`))
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), `dd-validation-external-${packageManager}-bin-`))
+      const manager = path.join(outside, packageManager)
+      const runnerDirectory = path.join(root, 'node_modules', '.bin')
+      const runner = path.join(runnerDirectory, 'jest')
+      const generatedFile = path.join(root, 'test', 'dd-test-optimization-validation.test.js')
+      const framework = getPlannedFramework(root, generatedFile)
+
+      fs.mkdirSync(runnerDirectory, { recursive: true })
+      fs.writeFileSync(manager, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.writeFileSync(runner, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+        scripts: { test: 'jest' },
+      }))
+      for (const scenario of framework.generatedTestStrategy.scenarios) {
+        scenario.runCommand = {
+          cwd: root,
+          argv: [
+            manager,
+            'run',
+            'test',
+            ...(packageManager === 'npm' ? ['--'] : []),
+            scenario.testIdentities[0].file,
+          ],
+        }
+      }
+
+      try {
+        const out = path.join(root, 'results')
+        formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out,
+          requestedScenario: 'atr',
+        })
+
+        const approval = JSON.parse(fs.readFileSync(path.join(out, 'approval.json'), 'utf8'))
+        const generatedIdentity = approval.executables.find(entry => entry.label.endsWith(':generated:0'))
+        assert.strictEqual(generatedIdentity.path, fs.realpathSync(manager))
+        assert.strictEqual(generatedIdentity.delegated.at(-1).path, fs.realpathSync(runner))
+
+        fs.writeFileSync(manager, '#!/bin/sh\nexit 42\n', { mode: 0o755 })
+        assert.throws(
+          () => getExecutableForSpawn(framework.generatedTestStrategy.scenarios[0].runCommand),
+          /changed after approval/
+        )
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+        fs.rmSync(outside, { recursive: true, force: true })
+      }
+    })
+  }
+
   it('preserves approved named-shim semantics while executing the canonical target', async function () {
     if (process.platform === 'win32') this.skip()
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-named-shim-'))
     const bin = path.join(root, 'bin')
-    const shim = path.join(bin, 'yarn')
+    const shim = path.join(bin, 'node')
     const marker = path.join(root, 'named-shim-ran')
+    const runner = path.join(root, 'jest-runner.js')
     const out = path.join(root, 'results')
     const framework = getPlannedFramework(
       root,
@@ -1024,10 +2175,8 @@ describe('test optimization validator-owned execution phases', () => {
     framework.existingTestCommand = {
       cwd: root,
       argv: [
-        'yarn',
-        '-e',
-        'if (require(\'node:path\').basename(process.argv0) !== \'yarn\') process.exit(126); ' +
-          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'named-shim')`,
+        'node',
+        runner,
       ],
       env: { PATH: bin },
     }
@@ -1039,6 +2188,11 @@ describe('test optimization validator-owned execution phases', () => {
     fs.mkdirSync(bin)
     fs.mkdirSync(out)
     fs.symlinkSync(process.execPath, shim)
+    fs.writeFileSync(runner, [
+      "if (require('node:path').basename(process.argv0) !== 'node') process.exit(126)",
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'named-shim')`,
+      '',
+    ].join('\n'))
 
     try {
       formatExecutionPlan({ manifest, out, requestedScenario: 'basic-reporting' })
@@ -1127,7 +2281,7 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
-  it('rejects ambient Yarn when the repository pins a Yarn release', () => {
+  it('preserves a disclosed project Yarn command when the repository pins a Yarn release', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-plan-'))
     const framework = getPlannedFramework(
       root,
@@ -1139,20 +2293,22 @@ describe('test optimization validator-owned execution phases', () => {
     fs.writeFileSync(path.join(root, '.yarn', 'releases', 'yarn-4.4.1.cjs'), '')
 
     try {
-      assert.throws(() => formatExecutionPlan({
+      const plan = formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
           repository: { root },
           frameworks: [framework],
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
-      }), /uses bare "yarn".*repository pins \.yarn\/releases\/yarn-4\.4\.1\.cjs/s)
+      })
+
+      assert.match(plan, /yarn test/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
 
-  it('rejects ambient Yarn when package.json requires modern Yarn', () => {
+  it('does not synthesize Corepack for a disclosed project Yarn command', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-plan-'))
     const framework = getPlannedFramework(
       root,
@@ -1163,14 +2319,17 @@ describe('test optimization validator-owned execution phases', () => {
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'yarn@4.10.0' }))
 
     try {
-      assert.throws(() => formatExecutionPlan({
+      const plan = formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'dd-test-optimization-validation-manifest.json'),
           repository: { root },
           frameworks: [framework],
         },
         out: path.join(root, 'dd-test-optimization-validation-results'),
-      }), /uses bare "yarn".*package\.json requires yarn@4\.10\.0.*explicit Corepack command/s)
+      })
+
+      assert.match(plan, /yarn test/)
+      assert.doesNotMatch(plan, /corepack/i)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -1278,6 +2437,7 @@ describe('test optimization validator-owned execution phases', () => {
       assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
         effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
         forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+        lifecycle: [],
         packageManager: 'pnpm',
         script: 'jest',
         scriptName: 'test:lib',
@@ -1290,6 +2450,216 @@ describe('test optimization validator-owned execution phases', () => {
       }), /literal extra "--".*Append focused runner arguments directly/s)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const [name, scripts, expected] of [
+    ['pretest lifecycle', { pretest: 'node prepare.js', test: 'mocha' }, /undisclosed lifecycle script "pretest"/],
+    ['posttest lifecycle', { test: 'mocha', posttest: 'node cleanup.js' }, /undisclosed lifecycle script "posttest"/],
+    ['compound setup', { test: 'npm run build && mocha' }, /compound shell command/],
+    ['newline-separated setup', { test: 'node prepare.js\nmocha' }, /compound shell command/],
+    ['command substitution', { test: 'mocha $(node prepare.js)' }, /dynamic shell evaluation/],
+    ['nested shell', { test: 'sh -c "node prepare.js && mocha"' }, /nested shell interpreter "sh"/],
+    ['env-wrapped nested shell', { test: 'env SAFE=1 sh -c "node prepare.js && mocha"' }, /nested shell interpreter "sh"/],
+    ['cross-env shell', { test: 'cross-env-shell NODE_ENV=test "node prepare.js && mocha"' }, /nested shell interpreter "cross-env-shell"/],
+    ['dynamic shell', { test: '$SHELL -c "node prepare.js && mocha"' }, /dynamic command word "\$SHELL"/],
+    ['dynamic runner', { test: '$RUNNER --runInBand' }, /dynamic command word "\$RUNNER"/],
+    ['command wrapper', { test: 'command sh -c "node prepare.js && mocha"' }, /unsupported wrapper or command "command"/],
+    ['exec wrapper', { test: 'exec sh -c "node prepare.js && mocha"' }, /unsupported wrapper or command "exec"/],
+    ['nice wrapper', { test: 'nice sh -c "node prepare.js && mocha"' }, /unsupported wrapper or command "nice"/],
+    ['npx wrapper', { test: 'npx sh -c "node prepare.js && mocha"' }, /unsupported wrapper or command "npx"/],
+    ['nested package script', { test: 'npm run test:unit', 'test:unit': 'mocha' }, /another package script/],
+  ]) {
+    it(`rejects a package command with ${name}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-package-lifecycle-'))
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts }))
+
+      try {
+        assert.match(getCommandSuitabilityError({
+          command: { cwd: root, argv: ['npm', 'run', 'test'] },
+          framework: { framework: 'mocha', project: { root, configFiles: [] } },
+          label: 'the selected test command',
+          repositoryRoot: root,
+        }), expected)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  for (const script of ['NODE_ENV=test mocha', 'env NODE_ENV=test mocha', 'env env NODE_ENV=test mocha']) {
+    it(`accepts the direct runner package script ${JSON.stringify(script)}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-direct-package-runner-'))
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { test: script } }))
+
+      try {
+        assert.strictEqual(getCommandSuitabilityError({
+          command: { cwd: root, argv: ['npm', 'run', 'test'] },
+          framework: { framework: 'mocha', project: { root, configFiles: [] } },
+          label: 'the selected test command',
+          repositoryRoot: root,
+        }), undefined)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('rejects cross-env instead of trusting an unbound package-script wrapper', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cross-env-package-runner-'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      scripts: { test: 'cross-env NODE_ENV=test mocha' },
+    }))
+
+    try {
+      assert.match(getCommandSuitabilityError({
+        command: { cwd: root, argv: ['npm', 'run', 'test'] },
+        framework: { framework: 'mocha', project: { root, configFiles: [] } },
+        label: 'the selected test command',
+        repositoryRoot: root,
+      }), /unsupported wrapper or command "cross-env"/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a shell-form package command with undisclosed lifecycle', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-shell-package-lifecycle-'))
+
+    try {
+      assert.match(getCommandSuitabilityError({
+        command: { cwd: root, usesShell: true, shellCommand: 'npm test' },
+        framework: { framework: 'mocha', project: { root, configFiles: [] } },
+        label: 'the selected test command',
+        repositoryRoot: root,
+      }), /structured direct command with an argv array/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  for (const source of [
+    '/usr/bin/npm test',
+    './bin/npm test',
+    '"npm" test',
+    'n\\pm test',
+    'npm.cmd test',
+    'pnpm.cmd test',
+    'yarn.cmd test',
+    'yarnpkg test',
+    'corepack npm test',
+    'env npm test',
+    'command npm test',
+    'exec npm test',
+    '$RUNNER test',
+    '%RUNNER% test',
+    'sh -c "npm test"',
+  ]) {
+    it(`rejects shell-form package-manager or wrapper command ${JSON.stringify(source)}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-shell-package-bypass-'))
+
+      try {
+        assert.match(getCommandSuitabilityError({
+          command: { cwd: root, usesShell: true, shellCommand: source },
+          framework: { framework: 'mocha', project: { root, configFiles: [] } },
+          label: 'the selected test command',
+          repositoryRoot: root,
+        }), /structured direct command with an argv array/)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  for (const lifecycle of ['pretest', 'posttest']) {
+    it(`discloses a trusted project package command with ${lifecycle} without running project code`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-shell-package-plan-'))
+      const marker = path.join(root, 'project-code-ran')
+      const framework = getPlannedFramework(
+        root,
+        path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+        path.join(root, '.dd-validation-state')
+      )
+      framework.existingTestCommand = { cwd: root, usesShell: true, shellCommand: 'npm test' }
+      fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+        scripts: {
+          [lifecycle]: `node -e "require('node:fs').writeFileSync('${marker}', 'ran')"`,
+          test: 'node dd-test-optimization-validation-jest-runner.js',
+        },
+      }))
+
+      try {
+        const plan = formatExecutionPlan({
+          manifest: {
+            __path: path.join(root, 'manifest.json'),
+            repository: { root },
+            frameworks: [framework],
+          },
+          out: path.join(root, 'results'),
+          requestedScenario: 'basic-reporting',
+        })
+
+        assert.match(plan, new RegExp(`lifecycle script \\\`${lifecycle}\\\``))
+        assert.match(plan, /npm test/)
+        assert.strictEqual(fs.existsSync(marker), false)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('approval-binds the Node.js program selected by a safe shell command', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-shell-direct-node-'))
+    const runner = path.join(root, 'jest-runner.js')
+    const framework = getPlannedFramework(
+      root,
+      path.join(root, 'tests', 'dd-test-optimization-validation.test.js'),
+      path.join(root, '.dd-validation-state')
+    )
+    framework.existingTestCommand = {
+      cwd: root,
+      usesShell: true,
+      shellCommand: `node ${JSON.stringify(runner)}`,
+    }
+    fs.writeFileSync(runner, 'process.exit(0)\n')
+
+    try {
+      formatExecutionPlan({
+        manifest: {
+          __path: path.join(root, 'manifest.json'),
+          repository: { root },
+          frameworks: [framework],
+        },
+        out: path.join(root, 'results'),
+        requestedScenario: 'basic-reporting',
+      })
+      fs.writeFileSync(runner, 'process.exit(42)\n')
+
+      assert.throws(() => getExecutableForSpawn(framework.existingTestCommand), /changed after approval/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a checked-in Yarn release symlink that escapes the repository', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-release-root-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-yarn-release-outside-'))
+    const releases = path.join(root, '.yarn', 'releases')
+    fs.mkdirSync(releases, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { test: 'mocha' } }))
+    fs.writeFileSync(path.join(outside, 'yarn-4.4.1.cjs'), '')
+    fs.symlinkSync(path.join(outside, 'yarn-4.4.1.cjs'), path.join(releases, 'yarn-4.4.1.cjs'))
+
+    try {
+      assert.match(getCommandSuitabilityError({
+        command: { cwd: root, argv: ['yarn', 'test'] },
+        framework: { framework: 'mocha', project: { root, configFiles: [] } },
+        label: 'the selected test command',
+        repositoryRoot: root,
+      }), /symlink or resolves outside the repository/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
     }
   })
 
@@ -1307,6 +2677,7 @@ describe('test optimization validator-owned execution phases', () => {
         assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
           effectiveCommand: ['jest', ...forwardedArgs].join(' '),
           forwardedArgs,
+          lifecycle: [],
           packageManager,
           script: 'jest',
           scriptName: 'test:lib',
@@ -1338,6 +2709,7 @@ describe('test optimization validator-owned execution phases', () => {
         assert.deepStrictEqual(getPackageScriptExpansion(command, root), {
           effectiveCommand: 'jest -- --runTestsByPath test/unit-test.ts',
           forwardedArgs: ['--', '--runTestsByPath', 'test/unit-test.ts'],
+          lifecycle: [],
           packageManager,
           script: 'jest',
           scriptName: 'test:lib',
@@ -1354,28 +2726,36 @@ describe('test optimization validator-owned execution phases', () => {
     })
   }
 
-  it('rejects an explicit Vitest typecheck command', () => {
+  it('discloses a trusted project Vitest typecheck command for timeout-limited preflight validation', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-vitest-typecheck-plan-'))
+    const binDirectory = path.join(root, 'node_modules', '.bin')
+    const executable = path.join(binDirectory, process.platform === 'win32' ? 'vitest.cmd' : 'vitest')
     const framework = getPlannedFramework(
       root,
       path.join(root, 'dd-test-optimization-validation.test.ts'),
       path.join(root, '.dd-validation-state')
     )
     setGeneratedTestFramework(framework, 'vitest')
+    fs.mkdirSync(binDirectory, { recursive: true })
+    fs.writeFileSync(executable, '')
+    fs.chmodSync(executable, 0o755)
     framework.existingTestCommand = {
       cwd: root,
-      argv: [process.execPath, '-e', '', '--typecheck'],
+      argv: ['vitest', '--typecheck'],
+      env: { PATH: `${binDirectory}${path.delimiter}${process.env.PATH}` },
     }
 
     try {
-      assert.throws(() => formatExecutionPlan({
+      const plan = formatExecutionPlan({
         manifest: {
           __path: path.join(root, 'manifest.json'),
           repository: { root },
           frameworks: [framework],
         },
         out: path.join(root, 'results'),
-      }), /runs Vitest with --typecheck/)
+      })
+
+      assert.match(plan, /vitest --typecheck/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -1422,7 +2802,7 @@ describe('test optimization validator-owned execution phases', () => {
     setGeneratedTestFramework(framework, 'vitest')
     framework.existingTestCommand = {
       cwd: root,
-      argv: [nodeShim, '-e', ''],
+      argv: [nodeShim, path.join(root, 'dd-test-optimization-validation-jest-runner.js')],
     }
     fs.writeFileSync(nodeShim, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
 
@@ -1518,6 +2898,20 @@ function getPlannedFramework (root, generatedFile, _stateFile) {
     path.dirname(generatedFiles['atr-fail-once']),
     '.dd-test-optimization-validation-atr-state'
   )
+  const runner = path.join(root, 'dd-test-optimization-validation-jest-runner.js')
+  fs.mkdirSync(root, { recursive: true })
+  fs.writeFileSync(runner, [
+    "const fs = require('node:fs')",
+    "const path = require('node:path')",
+    "const filename = process.argv.at(-1) || ''",
+    "if (filename.includes('atr-fail-once')) {",
+    "  fs.writeFileSync(path.join(path.dirname(filename), '.dd-test-optimization-validation-atr-state'), 'state')",
+    "  console.log('Tests: 1 failed, 1 total')",
+    '  process.exit(1)',
+    '}',
+    "console.log('Tests: 1 passed, 1 total')",
+    '',
+  ].join('\n'))
   return {
     id: 'jest:root',
     framework: 'jest',
@@ -1525,7 +2919,7 @@ function getPlannedFramework (root, generatedFile, _stateFile) {
     project: { root },
     existingTestCommand: {
       cwd: root,
-      argv: [process.execPath, '-e', 'console.log("Tests: 1 passed, 1 total")'],
+      argv: [process.execPath, runner],
     },
     generatedTestStrategy: {
       status: 'planned',
@@ -1541,23 +2935,19 @@ function getPlannedFramework (root, generatedFile, _stateFile) {
         }).split('\n'),
       })),
       scenarios: Object.entries(generatedFiles).map(([id, filename]) => {
-        return getScenario(root, id, id === 'atr-fail-once' ? 1 : 0, filename, stateFile)
+        return getScenario(root, id, id === 'atr-fail-once' ? 1 : 0, filename)
       }),
       cleanupPaths: [...Object.values(generatedFiles), stateFile],
     },
   }
 }
 
-function getScenario (root, id, exitCode, filename, stateFile) {
-  const script = id === 'atr-fail-once'
-    ? `require('node:fs').writeFileSync(${JSON.stringify(stateFile)}, 'state'); ` +
-      'console.log("Tests: 1 failed, 1 total"); process.exit(1)'
-    : `console.log("Tests: 1 passed, 1 total"); process.exit(${exitCode})`
+function getScenario (root, id, exitCode, filename) {
   return {
     id,
     runCommand: {
       cwd: root,
-      argv: [process.execPath, '-e', script, filename],
+      argv: [process.execPath, path.join(root, 'dd-test-optimization-validation-jest-runner.js'), filename],
     },
     expectedWithoutDatadog: {
       exitCode,

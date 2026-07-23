@@ -151,6 +151,7 @@ Options:
 async function main (argv) {
   let activeManifest
   let activeOut
+  let preLiveWrite
   try {
     const options = parseArgs(argv)
     assertCompatibleModes(options)
@@ -165,23 +166,33 @@ async function main (argv) {
         throw new Error('The generated manifest must be stored directly in the current repository root.')
       }
       const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
+      preLiveWrite = {
+        mode: '--init-manifest',
+        paths: [manifestPath],
+      }
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+      preLiveWrite = undefined
       const reviewTargets = manifest.ciDiscovery?.reviewTargets || []
       const reviewRequired = manifest.ciDiscovery?.reviewRequired !== false
       const initializationStatus = manifest.frameworks.find(framework => framework.status === 'runnable')
         ?.ciWiring?.initialization?.status
       const nextStep = reviewRequired
-        ? 'Inspect only the CI review targets in order and stop after the first matching test job. Preserve the ' +
-          'scaffold commands and temporary tests. Then run --validate-manifest and --print-plan.'
-        : 'The bounded scan found no dd-trace/ci/init preload in any discovered CI configuration. That static ' +
-          'conclusion is complete. Do not open or edit the manifest and do not inspect project files. Run the ' +
-          'following command next:\n' +
+        ? 'Inspect only the CI review targets in order and stop after the first matching test job. For each selected ' +
+          'framework with relevant CI evidence, populate ciWiring.configFile, ciWiring.job, and ciWiring.command; ' +
+          'record optional step, workingDirectory, and shell; record each wrapperChain entry as exact source, ' +
+          'command, and working directory data plus the exact terminalTestCommand; record ciWiring.transport mode ' +
+          'and evidence; ' +
+          'keep unknowns in ciWiring.unresolved. Preserve the scaffold commands and temporary tests. Then run ' +
+          '--validate-manifest and --print-plan.'
+        : 'No readable CI review target was found. Keep CI initialization unknown; the report will describe CI ' +
+          'configuration as incomplete. Run the following command next:\n' +
           'node ./node_modules/dd-trace/ci/validate-test-optimization.js ' +
           '--manifest ./dd-test-optimization-validation-manifest.json ' +
           '--out ./dd-test-optimization-validation-results --print-plan'
       console.log(sanitizeConsoleText([
         `Created a schema-valid validation manifest without running project code: ${manifestPath}`,
-        'The scaffold selected bounded test candidates and validator-owned temporary tests. Do not enumerate ' +
+        'The scaffold selected focused test candidates with explicit timeouts and validator-owned temporary tests. ' +
+          'Do not enumerate ' +
           'other packages, tests, runner configs, workflow files, or manifest fields.',
         `CI review targets: ${reviewTargets.length > 0 ? reviewTargets.join(', ') : '<none found>'}.`,
         `CI initialization status: ${initializationStatus || 'unknown'}. Allowed values are configured, ` +
@@ -197,6 +208,10 @@ async function main (argv) {
     if (options.printPlan) {
       const out = validateOutputPath(manifest, options.out)
       const approvalManifest = getApprovalManifest(manifest, options.frameworks)
+      preLiveWrite = {
+        mode: '--print-plan',
+        paths: [out],
+      }
       const { plan } = formatExecutionPlanArtifacts({
         manifest: approvalManifest,
         out,
@@ -207,6 +222,7 @@ async function main (argv) {
         keepTempFiles: options.keepTempFiles,
         verbose: options.verbose,
       })
+      preLiveWrite = undefined
       console.log(sanitizeConsoleText([
         '===== CUSTOMER APPROVAL PLAN =====',
         plan,
@@ -262,27 +278,35 @@ async function main (argv) {
 
     try {
       const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
-      const liveReadyFrameworks = []
-
       for (const framework of frameworks) {
+        let ciWiringResult
         if (framework.status !== 'runnable') {
           results.push(getFrameworkStatusResult(framework))
+        }
+
+        if (options.scenarios.has(CI_WIRING_SCENARIO) && framework.ciWiring) {
+          logPhaseStart(framework, 'CI configuration audit')
+          // eslint-disable-next-line no-await-in-loop
+          ciWiringResult = await runCiWiring({ manifest, framework })
+          logPhaseComplete(framework, 'CI configuration audit', ciWiringResult.status)
+        }
+
+        if (framework.status !== 'runnable') {
+          if (ciWiringResult) results.push(ciWiringResult)
+          addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
           continue
         }
+        runnableFrameworks.push(framework)
 
         const staticBlocker = getStaticBlocker(framework, staticDiagnosis.report)
+        let basicResult
         if (staticBlocker) {
           results.push(getStaticFailure(framework, staticBlocker, staticDiagnosis.reportPath))
-          continue
-        }
-
-        liveReadyFrameworks.push(framework)
-      }
-
-      runnableFrameworks.push(...liveReadyFrameworks)
-      for (const framework of runnableFrameworks) {
-        let basicResult
-        if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
+          if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
+            basicResult = getBasicReportingNotReached(framework, staticBlocker.reason, 'static-project-blocker')
+            results.push(basicResult)
+          }
+        } else if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
           // The validator owns the dd-trace-less control so ambient agent initialization cannot contaminate it.
           logPhaseStart(framework, 'Test execution without Datadog')
           // eslint-disable-next-line no-await-in-loop
@@ -303,19 +327,13 @@ async function main (argv) {
           }
           results.push(basicResult)
         }
-
-        if (options.scenarios.has(CI_WIRING_SCENARIO)) {
-          logPhaseStart(framework, 'CI configuration audit')
-          // eslint-disable-next-line no-await-in-loop
-          const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
-          results.push(ciWiringResult)
-          logPhaseComplete(framework, 'CI configuration audit', ciWiringResult.status)
-        }
+        if (ciWiringResult) results.push(ciWiringResult)
 
         const advancedScenarios = getAdvancedScenarios(options.scenarios)
-        if (basicResult && basicResult.status !== 'pass') {
+        if (advancedScenarios.length === 0) continue
+        if (basicResult?.evidence?.foundationalReportingEstablished !== true) {
           for (const scenario of advancedScenarios) {
-            results.push(getSkippedAfterBasicFailure(framework, scenario, basicResult))
+            results.push(getAdvancedNotReached(framework, scenario, basicResult))
           }
           continue
         }
@@ -413,8 +431,44 @@ async function main (argv) {
         })
       } catch {}
     }
-    console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
+    const errorMessage = preLiveWrite && isPermissionDeniedError(err)
+      ? formatPreLiveWritePermissionError(err, preLiveWrite)
+      : err && err.stack ? err.stack : err
+    console.error(sanitizeConsoleText(errorMessage))
   }
+}
+
+/**
+ * Detects an operating-system permission denial without assuming the agent platform can grant it.
+ *
+ * @param {Error & {code?: string, cause?: {code?: string}}} error caught error
+ * @returns {boolean} whether the error is a permission denial
+ */
+function isPermissionDeniedError (error) {
+  return ['EACCES', 'EPERM'].includes(error?.code) || ['EACCES', 'EPERM'].includes(error?.cause?.code)
+}
+
+/**
+ * Explains how an agent should handle a denied declared pre-live write without retrying automatically.
+ *
+ * @param {Error & {code?: string, cause?: {code?: string}}} error caught permission error
+ * @param {{mode: string, paths: string[]}} operation declared pre-live write
+ * @returns {string} customer-facing failure guidance
+ */
+function formatPreLiveWritePermissionError (error, operation) {
+  const errorCode = error?.code || error?.cause?.code || 'permission denied'
+  return [
+    `Pre-live write denied during ${operation.mode} (${errorCode}).`,
+    ...operation.paths.map(target => `Declared write target: ${target}`),
+    'The validator did not run project code and will not retry or request permissions itself.',
+    'If the platform presents a native permission control scoped to this exact command and these declared paths, ' +
+      'the agent may request it once and retry the unchanged command once. A raw EACCES or EPERM error does not ' +
+      'prove that such a permission is available.',
+    'If no narrowly scoped platform permission is offered, or a classifier says chat approval cannot authorize the ' +
+      'command, stop and let the user run the exact command in their terminal.',
+    'Do not use sudo, change filesystem permissions, enable bypass mode, or add a broad shell allowlist.',
+    `Original error: ${error?.message || String(error)}`,
+  ].join('\n')
 }
 
 /**
@@ -547,7 +601,7 @@ function formatFrameworkTargets (targets) {
 }
 
 function normalizeScenarioSelection (scenario) {
-  if (scenario === BASIC_REPORTING_SCENARIO) return new Set([scenario])
+  if (scenario === BASIC_REPORTING_SCENARIO || scenario === CI_WIRING_SCENARIO) return new Set([scenario])
   return new Set([BASIC_REPORTING_SCENARIO, scenario])
 }
 
@@ -561,7 +615,7 @@ function getAdvancedScenarios (scenarios) {
  * Fails closed when orchestration omits a selected check for a runnable framework.
  *
  * @param {object[]} results collected validation results
- * @param {object[]} frameworks runnable frameworks whose live phases started
+ * @param {object[]} frameworks selected frameworks whose validation phases started
  * @param {Set<string>} scenarios selected scenarios
  * @returns {void}
  */
@@ -590,20 +644,17 @@ function addMissingRequiredResults (results, frameworks, scenarios) {
  *
  * @param {object} input coverage inputs
  * @param {object[]} input.results validation results
- * @param {string|null} input.requestedScenario explicitly selected scenario
  * @param {object[]} input.frameworks selected manifest frameworks
  * @param {Set<string>} input.scenarios selected scenarios
  * @returns {'complete'|'partial'} validation coverage
  */
-function getValidationCoverage ({ results, requestedScenario, frameworks, scenarios }) {
-  if (requestedScenario) return 'partial'
+function getValidationCoverage ({ results, frameworks, scenarios }) {
   if (results.some(result => result.evidence?.manifestIncomplete || result.evidence?.validationIncomplete)) {
     return 'partial'
   }
 
-  const runnableFrameworks = frameworks.filter(framework => framework.status === 'runnable')
-  if (runnableFrameworks.length === 0) return 'partial'
-  for (const framework of runnableFrameworks) {
+  if (frameworks.length === 0) return 'partial'
+  for (const framework of frameworks) {
     for (const scenario of scenarios) {
       if (!results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) {
         return 'partial'
@@ -625,22 +676,72 @@ function getSelectableScenarios () {
   ]
 }
 
-function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
+function getAdvancedNotReached (framework, scenario, basicResult) {
   return {
     frameworkId: framework.id,
     scenario,
     status: 'skip',
-    diagnosis: `Skipped because basic reporting did not pass: ${basicResult.diagnosis}`,
+    diagnosis: 'This advanced check was not reached because neither the selected project command nor an approved ' +
+      'equivalent direct-runner isolation established complete foundational reporting.',
     evidence: {
+      conclusion: 'incomplete',
+      validationIncomplete: true,
       blockedBy: BASIC_REPORTING_SCENARIO,
-      basicReportingStatus: basicResult.status,
-      basicReportingDiagnosis: basicResult.diagnosis,
+      basicReportingStatus: basicResult?.status || 'not_run',
+      basicReportingDiagnosis: basicResult?.diagnosis,
       featureEligibility: {
         eligible: false,
         blockedBy: BASIC_REPORTING_SCENARIO,
-        reasonCode: 'basic-reporting-failed',
+        reasonCode: 'foundational-reporting-not-established',
         scenario,
       },
+    },
+    artifacts: [],
+  }
+}
+
+/**
+ * Records selected local checks that could not run for a non-runnable framework.
+ *
+ * @param {object[]} results collected results
+ * @param {object} framework framework manifest entry
+ * @param {Set<string>} scenarios selected scenarios
+ * @param {string} reasonCode structured reason
+ * @returns {void}
+ */
+function addNotReachedLocalResults (results, framework, scenarios, reasonCode) {
+  if (scenarios.has(BASIC_REPORTING_SCENARIO)) {
+    results.push(getBasicReportingNotReached(
+      framework,
+      'The framework has no approved runnable local test command.',
+      reasonCode
+    ))
+  }
+  for (const scenario of getAdvancedScenarios(scenarios)) {
+    results.push(getAdvancedNotReached(framework, scenario))
+  }
+}
+
+/**
+ * Creates an incomplete Basic Reporting result when project execution cannot start.
+ *
+ * @param {object} framework framework manifest entry
+ * @param {string} diagnosis blocker diagnosis
+ * @param {string} reasonCode structured reason
+ * @returns {object} Basic Reporting result
+ */
+function getBasicReportingNotReached (framework, diagnosis, reasonCode) {
+  return {
+    frameworkId: framework.id,
+    scenario: BASIC_REPORTING_SCENARIO,
+    status: 'skip',
+    diagnosis: `Basic Reporting was not reached. ${diagnosis}`,
+    evidence: {
+      conclusion: 'incomplete',
+      foundationalReportingEstablished: false,
+      reasonCode,
+      reportingPath: 'none',
+      validationIncomplete: true,
     },
     artifacts: [],
   }
@@ -748,7 +849,7 @@ function getFrameworkStatusResult (framework) {
         ...evidence,
         validatorAdapterUnavailable: true,
         recommendation: 'Use the static diagnostic evidence for this framework. Live local validation currently ' +
-          'supports Jest, Mocha, and Vitest.',
+          'supports Cucumber, Cypress, Jest, Mocha, Playwright, and Vitest.',
       },
       artifacts: [],
     }
