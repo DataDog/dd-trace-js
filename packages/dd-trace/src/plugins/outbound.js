@@ -125,7 +125,10 @@ class OutboundPlugin extends TracingPlugin {
    */
   tagPeerService (span) {
     if (this._tracerConfig.spanComputePeerService) {
-      const peerData = this.getPeerService(span.context().getTags())
+      const tags = span.context().getTags()
+      if (tags[PEER_SERVICE_SOURCE_KEY] !== undefined) return
+
+      const peerData = this.getPeerService(tags)
       if (peerData !== undefined) {
         span.addTags(this.getPeerServiceRemap(peerData))
       }
