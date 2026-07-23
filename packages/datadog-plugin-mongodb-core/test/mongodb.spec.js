@@ -109,7 +109,8 @@ describe('Plugin', () => {
             'mongodb-core',
             (done) => collection.insertOne({ a: 1 }, {}, done),
             'test',
-            'peer.service'
+            'peer.service',
+            { component: 'mongodb' }
           )
 
           // The bulkWrite span is opened with `db.name` set, so it flows through the same
@@ -120,7 +121,11 @@ describe('Plugin', () => {
             () => collection.bulkWrite([{ insertOne: { document: { a: 1 } } }]),
             'test',
             'peer.service',
-            { desc: 'with bulkWrite' }
+            {
+              component: 'mongodb',
+              desc: 'with bulkWrite',
+              resource: () => `bulkWrite test.${collectionName}`,
+            }
           )
 
           it('should do automatic instrumentation', done => {
