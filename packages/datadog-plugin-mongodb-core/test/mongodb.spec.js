@@ -13,6 +13,8 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
+const traceTimeoutMs = 2_000
+
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
@@ -107,7 +109,8 @@ describe('Plugin', () => {
             'mongodb-core',
             (done) => collection.insertOne({ a: 1 }, {}, done),
             'test',
-            'peer.service'
+            'peer.service',
+            { component: 'mongodb' }
           )
 
           // The bulkWrite span is opened with `db.name` set, so it flows through the same
@@ -118,7 +121,11 @@ describe('Plugin', () => {
             () => collection.bulkWrite([{ insertOne: { document: { a: 1 } } }]),
             'test',
             'peer.service',
-            { desc: 'with bulkWrite' }
+            {
+              component: 'mongodb',
+              desc: 'with bulkWrite',
+              resource: () => `bulkWrite test.${collectionName}`,
+            }
           )
 
           it('should do automatic instrumentation', done => {
@@ -134,7 +141,10 @@ describe('Plugin', () => {
                   'out.host': '127.0.0.1',
                   component: 'mongodb',
                 },
-              }, { spanResourceMatch: new RegExp(`^insert test\\.${collectionName}$`) })
+              }, {
+                spanResourceMatch: new RegExp(`^insert test\\.${collectionName}$`),
+                timeoutMs: traceTimeoutMs,
+              })
               .then(done)
               .catch(done)
 
@@ -215,7 +225,10 @@ describe('Plugin', () => {
                 `insert test.${collectionName}`,
                 `update test.${collectionName}`,
               ].sort())
-            }, { spanResourceMatch: /^bulkWrite test\./ })
+            }, {
+              spanResourceMatch: /^bulkWrite test\./,
+              timeoutMs: traceTimeoutMs,
+            })
           })
 
           it('should tag the bulkWrite span when the operation fails', async () => {
@@ -273,7 +286,10 @@ describe('Plugin', () => {
                 // The bulkWrite span has finished by the time the callback runs, so a span
                 // started there must nest under the original parent, not the bulkWrite span.
                 assert.strictEqual(child.parent_id.toString(), parentSpan.context().toSpanId())
-              }, { spanResourceMatch: /^bulkWrite test\./ })
+              }, {
+                spanResourceMatch: /^bulkWrite test\./,
+                timeoutMs: traceTimeoutMs,
+              })
 
               tracer.scope().activate(parentSpan, () => {
                 collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {
@@ -623,7 +639,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
               assert.strictEqual(traces[0][0].service, 'custom')
-            })
+            }, { timeoutMs: traceTimeoutMs })
             .then(done)
             .catch(done)
 

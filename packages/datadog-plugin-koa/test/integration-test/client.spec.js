@@ -17,7 +17,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('koa', 'koa', version => {
     useSandbox([`'koa@${version}'`], false,
@@ -32,11 +31,14 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'Koa', undefined, 'koa')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'Koa',
+      packageName: 'koa',
+      defaultExport: true,
+      namedExports: [],
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

@@ -18,7 +18,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('anthropic', ['@anthropic-ai/sdk'], version => {
     useSandbox([
@@ -31,8 +30,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'Anthropic', undefined, '@anthropic-ai/sdk')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'Anthropic',
+      packageName: '@anthropic-ai/sdk',
+      defaultExport: true,
+      namedExports: ['Anthropic'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -40,7 +43,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

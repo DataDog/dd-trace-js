@@ -14,13 +14,16 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox([`'body-parser@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-body-parser/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'bodyParser', undefined, 'body-parser')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'bodyParser',
+      packageName: 'body-parser',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -32,7 +35,7 @@ withVersions('body-parser', 'body-parser', version => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await axios.post(`${proc.url}/`, { key: 'value' })

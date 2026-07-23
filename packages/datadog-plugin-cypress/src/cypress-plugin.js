@@ -7,9 +7,10 @@ const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../vendor/dist/semifies')
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const {
   TEST_STATUS,
-  TEST_IS_RUM_ACTIVE,
+  setRumTestTags,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
   getTestLevelsMetadataTags,
@@ -857,6 +858,12 @@ class CypressPlugin {
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
             this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            if (typeof this.cypressConfig.retries === 'number') {
+              this.cypressConfig.retries = {
+                openMode: this.cypressConfig.retries,
+                runMode: this.cypressConfig.retries,
+              }
+            }
             this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
           } else {
             this.flakyTestRetriesCount = 0
@@ -1400,13 +1407,13 @@ class CypressPlugin {
     // and create a skipped test span for each of them
     for (const { title } of cypressTests) {
       const cypressTestName = title.join(' ')
-      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
+      const isTestFinished = finishedTests.some(({ testName }) => cypressTestName === testName)
 
       if (isTestFinished) {
         continue
       }
 
-      const isSkippedByItr = this.testsToSkip.find(test =>
+      const isSkippedByItr = this.testsToSkip.some(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
       const testSourceFile = spec.absolute && this.repositoryRoot
@@ -1677,6 +1684,7 @@ class CypressPlugin {
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
+          rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
 
         this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
@@ -1803,9 +1811,7 @@ class CypressPlugin {
         if (error) {
           this.activeTestSpan.setTag('error', error)
         }
-        if (isRUMActive) {
-          this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
-        }
+        setRumTestTags(this.activeTestSpan, isRUMActive)
         // Source-line resolution strategy:
         // 1. If plain JS and no source map, trust invocationDetails.line directly.
         // 2. Otherwise, try invocationDetails.stack line mapped through source map.

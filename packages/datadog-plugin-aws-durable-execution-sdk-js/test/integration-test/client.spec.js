@@ -22,7 +22,6 @@ const COMPONENT = 'aws-durable-execution-sdk-js'
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // Ride the same SDK version matrix as the unit suite (createIntegrationTestSuite). The local
   // test runner is a separate companion package; like the unit suite (versions/package.json),
@@ -35,8 +34,12 @@ describe('esm', () => {
       './packages/datadog-plugin-aws-durable-execution-sdk-js/test/integration-test/*',
     ])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'withDurableExecution', undefined, '@aws/durable-execution-sdk-js', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'withDurableExecution',
+      packageName: '@aws/durable-execution-sdk-js',
+      defaultExport: false,
+      namedExports: ['withDurableExecution'],
+      namedExportBinding: 'direct',
     })
 
     beforeEach(async () => {
@@ -50,7 +53,7 @@ describe('esm', () => {
 
     // The SDK is instrumented via Orchestrion source rewriting, so the import shape on the
     // consumer side should not matter. Exercise both to guard the ESM rewrite path.
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
