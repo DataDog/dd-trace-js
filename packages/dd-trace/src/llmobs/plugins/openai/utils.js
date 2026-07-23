@@ -1,5 +1,6 @@
 'use strict'
 
+const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
 const { audioMimeTypeFromFormat, formatAudioPart } = require('../../util')
 const {
   INPUT_TYPE_IMAGE,
@@ -160,10 +161,29 @@ function extractContentParts (parts) {
   return { content: extracted.join('\n'), audioParts }
 }
 
+/**
+ * Maps an OpenAI-compatible base URL to a model provider string. Covers
+ * OpenAI, Azure OpenAI, and DeepSeek; falls back to UNKNOWN_MODEL_PROVIDER
+ * for unrecognised hosts (e.g. local proxies or custom deployments).
+ *
+ * Shared with the openai-agents integration since both consume the same
+ * client baseURL convention.
+ *
+ * @param {string} baseUrl
+ * @returns {string}
+ */
+function getOpenAIModelProvider (baseUrl = '') {
+  if (baseUrl.includes('azure')) return 'azure_openai'
+  if (baseUrl.includes('deepseek')) return 'deepseek'
+  if (baseUrl.includes('openai')) return 'openai'
+  return UNKNOWN_MODEL_PROVIDER
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
+  getOpenAIModelProvider,
 }
