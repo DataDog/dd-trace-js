@@ -13,7 +13,7 @@
 <h1>Interface LLMObs</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">LLMObs</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#enabled">enabled</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#experiments">experiments</a><span class="tsd-signature-symbol">:</span> <a href="llmobs.Experiments.html" class="tsd-signature-type tsd-kind-interface">Experiments</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#annotate-1">annotate</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.AnnotationOptions.html" class="tsd-signature-type tsd-kind-interface">AnnotationOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#annotate-2">annotate</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">span</span><span class="tsd-signature-symbol">:</span> <a href="Span.html" class="tsd-signature-type tsd-kind-interface">Span</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.AnnotationOptions.html" class="tsd-signature-type tsd-kind-interface">AnnotationOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#annotationcontext-1">annotationContext</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#annotationcontextt">T</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.AnnotationContextOptions.html" class="tsd-signature-type tsd-kind-interface">AnnotationContextOptions</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">fn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#annotationcontextt">T</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#annotationcontextt">T</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#decorate-1">decorate</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.LLMObsNamelessSpanOptions.html" class="tsd-signature-type tsd-kind-interface">LLMObsNamelessSpanOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#deregisterprocessor-1">deregisterProcessor</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#disable-1">disable</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#enable-1">enable</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.LLMObsEnableOptions.html" class="tsd-signature-type tsd-kind-interface">LLMObsEnableOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#exportspan-1">exportSpan</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">span</span><span class="tsd-signature-symbol">?:</span> <a href="Span.html" class="tsd-signature-type tsd-kind-interface">Span</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.ExportedLLMObsSpan.html" class="tsd-signature-type tsd-kind-interface">ExportedLLMObsSpan</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#flush-1">flush</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#registerprocessor-1">registerProcessor</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">processor</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">span</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.LLMObservabilitySpan.html" class="tsd-signature-type tsd-kind-interface">LLMObservabilitySpan</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <a href="llmobs.LLMObservabilitySpan.html" class="tsd-signature-type tsd-kind-interface">LLMObservabilitySpan</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#routingcontext-1">routingContext</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#routingcontextt">T</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.RoutingContextOptions.html" class="tsd-signature-type tsd-kind-interface">RoutingContextOptions</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">fn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#routingcontextt">T</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#routingcontextt">T</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#submitevaluation-1">submitEvaluation</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">spanContext</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.ExportedLLMObsSpan.html" class="tsd-signature-type tsd-kind-interface">ExportedLLMObsSpan</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.EvaluationOptions.html" class="tsd-signature-type tsd-kind-interface">EvaluationOptions</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#trace-1">trace</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#tracet">T</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.LLMObsNamedSpanOptions.html" class="tsd-signature-type tsd-kind-interface">LLMObsNamedSpanOptions</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">fn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">span</span><span class="tsd-signature-symbol">:</span> <a href="Span.html" class="tsd-signature-type tsd-kind-interface">Span</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">done</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">error</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Error</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#tracet">T</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#tracet">T</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#wrap-1">wrap</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#wrapt">T</a> <span class="tsd-signature-symbol">=</span> <span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">...</span><span class="tsd-kind-parameter">args</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.LLMObsNamelessSpanOptions.html" class="tsd-signature-type tsd-kind-interface">LLMObsNamelessSpanOptions</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">fn</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#wrapt">T</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#wrapt">T</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3564">index.d.ts:3564</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3564">index.d.ts:3564</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -49,7 +49,7 @@
 <div class="tsd-comment tsd-typography"><p>Whether or not LLM Observability is enabled.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3569">index.d.ts:3569</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3569">index.d.ts:3569</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="experiments"><span>experiments</span><a href="#experiments" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">experiments</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.Experiments.html" class="tsd-signature-type tsd-kind-interface">Experiments</a></div>
@@ -57,7 +57,7 @@
 <code>DD_API_KEY</code> / <code>DD_APP_KEY</code> to be set.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3575">index.d.ts:3575</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3575">index.d.ts:3575</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -82,7 +82,7 @@ Note that with the exception of tags, this method will override any existing val
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3678">index.d.ts:3678</a></li></ul></aside></div></li>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3678">index.d.ts:3678</a></li></ul></aside></div></li>
 <li class="">
 <div class="tsd-signature tsd-anchor-link" id="annotate-2"><span class="tsd-kind-call-signature">annotate</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">span</span><span class="tsd-signature-symbol">:</span> <a href="Span.html" class="tsd-signature-type tsd-kind-interface">Span</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.AnnotationOptions.html" class="tsd-signature-type tsd-kind-interface">AnnotationOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#annotate-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
@@ -93,7 +93,7 @@ Note that with the exception of tags, this method will override any existing val
 <li><span><span class="tsd-kind-parameter">options</span>: <a href="llmobs.AnnotationOptions.html" class="tsd-signature-type tsd-kind-interface">AnnotationOptions</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3679">index.d.ts:3679</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3679">index.d.ts:3679</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="annotationcontext"><span>annotation<wbr/>Context</span><a href="#annotationcontext" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -118,7 +118,7 @@ Note that with the exception of tags, this method will override any existing val
 <h4 class="tsd-returns-title">Returns <a class="tsd-signature-type tsd-kind-type-parameter" href="#annotationcontextt">T</a></h4><p>The result of the function.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3714">index.d.ts:3714</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3714">index.d.ts:3714</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="decorate"><span>decorate</span><a href="#decorate" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -138,7 +138,7 @@ function decorators are supported.</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">any</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3638">index.d.ts:3638</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3638">index.d.ts:3638</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="deregisterprocessor"><span>deregister<wbr/>Processor</span><a href="#deregisterprocessor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -149,7 +149,7 @@ function decorators are supported.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3698">index.d.ts:3698</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3698">index.d.ts:3698</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="disable"><span class="deprecated">disable</span><a href="#disable" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -164,7 +164,7 @@ function decorators are supported.</p>
 <h4 class="tsd-anchor-link" id="deprecated">Deprecated<a href="#deprecated" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Disabling LLM Observability via <code>llmobs.disable()</code> is deprecated and will be removed in dd-trace@7.0.0. Set DD_LLMOBS_ENABLED=false to disable LLM Observability.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3589">index.d.ts:3589</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3589">index.d.ts:3589</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="enable"><span class="deprecated">enable</span><a href="#enable" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -183,7 +183,7 @@ function decorators are supported.</p>
 <h4 class="tsd-anchor-link" id="deprecated-1">Deprecated<a href="#deprecated-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>Enabling LLM Observability via <code>llmobs.enable()</code> is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or <code>tracer.init({ llmobs: ...options })</code>.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3582">index.d.ts:3582</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3582">index.d.ts:3582</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="exportspan"><span>export<wbr/>Span</span><a href="#exportspan" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -202,7 +202,7 @@ If no span is provided, the current LLMObs-type span will be used.</p>
 <h4 class="tsd-returns-title">Returns <a href="llmobs.ExportedLLMObsSpan.html" class="tsd-signature-type tsd-kind-interface">ExportedLLMObsSpan</a></h4><p>An object containing the span and trace IDs.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3646">index.d.ts:3646</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3646">index.d.ts:3646</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="flush"><span>flush</span><a href="#flush" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -213,7 +213,7 @@ If no span is provided, the current LLMObs-type span will be used.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3727">index.d.ts:3727</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3727">index.d.ts:3727</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="registerprocessor"><span>register<wbr/>Processor</span><a href="#registerprocessor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -238,7 +238,7 @@ You can also return <code>null</code> to omit the span entirely from being sent 
 <h4 class="tsd-anchor-link" id="throws">Throws<a href="#throws" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>If a processor is already registered.</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3693">index.d.ts:3693</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3693">index.d.ts:3693</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="routingcontext"><span>routing<wbr/>Context</span><a href="#routingcontext" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -263,7 +263,7 @@ You can also return <code>null</code> to omit the span entirely from being sent 
 <h4 class="tsd-returns-title">Returns <a class="tsd-signature-type tsd-kind-type-parameter" href="#routingcontextt">T</a></h4><p>The result of the function.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3722">index.d.ts:3722</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3722">index.d.ts:3722</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="submitevaluation"><span>submit<wbr/>Evaluation</span><a href="#submitevaluation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -283,7 +283,7 @@ You can also return <code>null</code> to omit the span entirely from being sent 
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3705">index.d.ts:3705</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3705">index.d.ts:3705</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="trace"><span>trace</span><a href="#trace" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -319,7 +319,7 @@ which case the span will finish at the end of the function execution.</li>
 <h4 class="tsd-returns-title">Returns <a class="tsd-signature-type tsd-kind-type-parameter" href="#tracet">T</a></h4><p>The return value of the function.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3608">index.d.ts:3608</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3608">index.d.ts:3608</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="wrap"><span>wrap</span><a href="#wrap" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -355,7 +355,7 @@ which case the span will finish at the end of the function execution.</li>
 <h4 class="tsd-returns-title">Returns <a class="tsd-signature-type tsd-kind-type-parameter" href="#wrapt">T</a></h4><p>A new function that wraps the provided function with span creation.</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3b026a57210874c5a92ed3dd3b9dc87d7783bc27/index.d.ts#L3627">index.d.ts:3627</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/263c930c922d89491574707fff34d052056f0ba9/index.d.ts#L3627">index.d.ts:3627</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
