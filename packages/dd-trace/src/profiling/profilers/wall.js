@@ -1,13 +1,18 @@
 'use strict'
 
-const dc = require('dc-polyfill')
-
-const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
+const { endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 const { SAMPLING_INTERVAL } = require('../constants')
+const {
+  enterCh,
+  beforeCh,
+  spanFinishCh,
+  getActiveSpan,
+  ensureChannelsActivated,
+} = require('../../storage-channels')
+const webTagsCache = require('../../web-tags-cache')
 
 const {
   END_TIMESTAMP_LABEL,
@@ -21,20 +26,11 @@ const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
 
-let beforeCh
-const enterCh = dc.channel('dd-trace:storage:enter')
-const spanFinishCh = dc.channel('dd-trace:span:finish')
-const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
-
-function getActiveSpan () {
-  const store = storage('legacy').getStore()
-  return store && store.span
-}
 
 function toBigInt (spanId) {
   return spanId !== null && typeof spanId === 'object' ? spanId.toBigInt() : spanId
@@ -56,55 +52,6 @@ function updateContext (context) {
     // if tags are not available anymore during serialization
     context.endpoint = endpointNameFromTags(context.webTags)
   }
-}
-
-let channelsActivated = false
-function ensureChannelsActivated (asyncContextFrameEnabled) {
-  if (channelsActivated) return
-
-  const shimmer = require('../../../../datadog-shimmer')
-
-  // We need to instrument enterWith() on the legacy storage — that's the storage
-  // carrying span data and the only one the profiler cares about.
-  const legacyStorage = storage('legacy')
-  let inRun = false
-  shimmer.wrap(legacyStorage, 'enterWith', function (original) {
-    return function (store) {
-      const retVal = original.call(this, store)
-      if (!inRun) enterCh.publish()
-      return retVal
-    }
-  })
-
-  // When not using AsyncContextFrame, we need additional instrumentation.
-  if (!asyncContextFrameEnabled) {
-    // We need async_hooks.createHook to create a "before" callback.
-    const { createHook } = require('async_hooks')
-    beforeCh = dc.channel('dd-trace:storage:before')
-    createHook({ before: () => beforeCh.publish() }).enable()
-
-    // In ACF-based implementation run() delegates to enterWith()  so it doesn't
-    // need to be separately instrumented. in non-ACF implementation run()
-    // doesn't delegate to enterWith(), so separate instrumentation is necessary.
-    shimmer.wrap(legacyStorage, 'run', function (original) {
-      return function (store, callback, ...args) {
-        const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
-          inRun = false
-          enterCh.publish()
-          const retVal = cb.apply(this, args)
-          inRun = true
-          return retVal
-        })
-        inRun = true
-        const retVal = original.call(this, store, wrappedCb, ...args)
-        enterCh.publish()
-        inRun = false
-        return retVal
-      }
-    })
-  }
-
-  channelsActivated = true
 }
 
 class NativeWallProfiler {
@@ -215,7 +162,10 @@ class NativeWallProfiler {
         enterCh.subscribe(this.#boundEnter)
         spanFinishCh.subscribe(this.#boundSpanFinished)
         if (this.#endpointCollectionEnabled) {
-          tagsUpdateCh.subscribe(this.#boundSpanTagsUpdated)
+          // Web-tags cache publishes once per span at the moment its
+          // walk-result transitions from undefined to a real value —
+          // exactly when we need to refresh the ProfilingContext snapshot.
+          webTagsCache.resolvedCh.subscribe(this.#boundSpanTagsUpdated)
         }
       }
     }
@@ -298,32 +248,20 @@ class NativeWallProfiler {
     let profilingContext = span[ProfilingContext]
     if (profilingContext === undefined) {
       const context = span.context()
-      const startedSpans = getStartedSpans(context)
 
       let spanId
       let rootSpanId
       if (this.#codeHotspotsEnabled) {
+        const startedSpans = getStartedSpans(context)
         spanId = context._spanId
         rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
       }
 
-      let webTags
-      if (this.#endpointCollectionEnabled) {
-        const tags = context.getTags()
-        if (isWebServerSpan(tags)) {
-          webTags = tags
-        } else {
-          // Get parent's context's web tags
-          const parentId = context._parentId
-          for (let i = startedSpans.length; --i >= 0;) {
-            const ispan = startedSpans[i]
-            if (ispan.context()._spanId === parentId) {
-              webTags = this.#getProfilingContext(ispan).webTags
-              break
-            }
-          }
-        }
-      }
+      // webTags is snapshotted into the sample context at getProfilingContext
+      // time; if the answer turns out to be undefined and the span later gets
+      // web-server tags, #spanTagsUpdated refreshes this field via the shared
+      // cache (see web-tags-cache.js).
+      const webTags = this.#endpointCollectionEnabled ? webTagsCache.getCachedWebTags(span) : undefined
 
       profilingContext = { spanId, rootSpanId, webTags }
       span[ProfilingContext] = profilingContext
@@ -344,14 +282,15 @@ class NativeWallProfiler {
     }
   }
 
+  // Invoked (via webTagsCache.resolvedCh) once per span at the moment the
+  // shared cache promotes a previously-undefined webTags answer into a
+  // real value. Refresh the ProfilingContext snapshot so future samples
+  // pick it up.
   #spanTagsUpdated (span) {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
-    if (profilingContext === undefined || profilingContext.webTags !== undefined) return
-    const tags = span.context().getTags()
-    if (isWebServerSpan(tags)) {
-      profilingContext.webTags = tags
-    }
+    if (profilingContext === undefined) return
+    profilingContext.webTags = webTagsCache.getCachedWebTags(span)
   }
 
   #reportV8bug (maybeBug) {
@@ -400,7 +339,7 @@ class NativeWallProfiler {
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
         if (this.#endpointCollectionEnabled) {
-          tagsUpdateCh.unsubscribe(this.#boundSpanTagsUpdated)
+          webTagsCache.resolvedCh.unsubscribe(this.#boundSpanTagsUpdated)
         }
         this.#profilerState = undefined
       }
