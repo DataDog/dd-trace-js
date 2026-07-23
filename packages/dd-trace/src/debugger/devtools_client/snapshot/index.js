@@ -155,7 +155,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
           fatalErrors.push(...ctx.fatalErrors)
         }
 
-        if (ctx.deadlineReached === true) {
+        if (ctx.deadlineReached) {
           // Add the current expression (properties may be incomplete due to timeout)
           rawResults.push({ name, remoteObject: result, maxLength })
           // Add stub entries for remaining uncaptured expressions

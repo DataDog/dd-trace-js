@@ -1605,7 +1605,7 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   const frames = stackLines.filter(line => line.includes('at ') && line.includes(repositoryRoot))
 
   const topRelevantFrameIndex = frames.findIndex(line =>
-    line.includes(repositoryRoot) && !DEPENDENCY_FOLDERS.some(pattern => line.includes(pattern))
+    line.includes(repositoryRoot) && DEPENDENCY_FOLDERS.every(pattern => !line.includes(pattern))
   )
 
   if (topRelevantFrameIndex === -1) {

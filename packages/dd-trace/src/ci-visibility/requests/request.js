@@ -100,9 +100,9 @@ function request (data, options, callback) {
           if (res.statusCode === 429 && !hasRetried) {
             const resetHeader = res.headers['x-ratelimit-reset']
             const resetTs = (resetHeader === null || resetHeader === undefined)
-              ? Number.NaN
+              ? NaN
               : Number.parseInt(resetHeader, 10)
-            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : Number.NaN
+            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : NaN
 
             if (Number.isFinite(waitMs) && waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
               hasRetried = true

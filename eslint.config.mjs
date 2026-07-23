@@ -586,9 +586,8 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules.
-      // Rules not listed here are left at the `recommended` default. The v65→v68 bump
-      // turned ~130 rules on in `recommended`; the entries below are the ones that fire
-      // on our source and are intentionally kept off (counts are from the v68 run).
+      // Rules not listed here are left at the `recommended` default. The entries below
+      // document deliberate exceptions (counts are from the v72 run where applicable).
       'unicorn/catch-error-name': ['off', { name: 'err' }], // Many errors
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // Many errors
@@ -598,10 +597,15 @@ export default [
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
       'unicorn/no-array-sort': 'off', // Node.js 20
+      'unicorn/prefer-abort-signal-any': 'off', // Node.js 18.17
       'unicorn/prefer-dispose': 'off', // Explicit resource management (newer Node.js)
+      'unicorn/prefer-group-by': 'off', // Node.js 21
+      'unicorn/prefer-iterator-helpers': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-promise-try': 'off', // Promise.try (Node.js 24)
       'unicorn/prefer-promise-with-resolvers': 'off', // 6 errors | Promise.withResolvers (Node.js 22)
+      'unicorn/prefer-set-methods': 'off', // Set methods (Node.js 22)
       'unicorn/prefer-temporal': 'off', // Temporal is not stable on supported Node.js
       'unicorn/prefer-uint8array-base64': 'off', // Uint8Array base64 (Node.js 22)
 
@@ -615,21 +619,17 @@ export default [
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-computed-property-existence-check': 'off', // 160 errors | needs an audit
       'unicorn/no-declarations-before-early-exit': 'off', // 62 errors
-      'unicorn/no-duplicate-if-branches': 'off', // 1 error | may surface real bugs
-      'unicorn/no-duplicate-logical-operands': 'off', // 2 errors | may surface real bugs
       'unicorn/no-error-property-assignment': 'off', // 6 errors
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
-      'unicorn/no-incorrect-template-string-interpolation': 'off', // 3 errors | audit for real bugs first
       'unicorn/no-invalid-argument-count': 'off', // 98 errors | high false-positive risk, worth a focused pass
-      'unicorn/no-loop-iterable-mutation': 'off', // 2 errors | may surface real bugs
       'unicorn/no-nonstandard-builtin-properties': 'off', // 34 errors | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/no-undeclared-class-members': 'off', // 272 errors | requires declaring every field
       'unicorn/no-unreadable-array-destructuring': 'off', // 4 errors | not autofixable, needs manual rewrite
       'unicorn/no-unreadable-for-of-expression': 'off', // 32 errors
       'unicorn/no-unreadable-object-destructuring': 'off', // 57 errors
-      'unicorn/no-unsafe-string-replacement': 'off', // 6 errors
-      'unicorn/no-useless-recursion': 'off', // 2 errors
+      'unicorn/no-unsafe-string-replacement': 'off', // 16 errors | replacement callbacks reduce readability
+      'unicorn/no-useless-recursion': 'off', // 7 errors | iterative rewrites add substantial nesting
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
       'unicorn/prefer-early-return': 'off', // 67 errors | tension with our positive-`if` style
       'unicorn/prefer-hoisting-branch-code': 'off', // 2 errors | reshapes branch bodies
@@ -637,9 +637,11 @@ export default [
       'unicorn/prefer-number-is-safe-integer': 'off', // 17 errors
       'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
       'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
+      'unicorn/prefer-simple-condition-first': 'off', // 184 errors | needs a short-circuit behavior audit
       'unicorn/prefer-smaller-scope': 'off', // 3 errors
       'unicorn/prefer-split-limit': 'off', // 23 errors
-      'unicorn/require-array-sort-compare': 'off', // 8 errors | may surface real default-sort bugs
+      'unicorn/prefer-then-catch': 'off', // 45 errors | broadens rejection boundaries
+      'unicorn/require-array-sort-compare': 'off', // 28 errors | many intentional lexicographic sorts
 
       // The following rules should not be activated!
       'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
@@ -659,6 +661,7 @@ export default [
       'unicorn/operator-assignment': 'off', // Covered by core operator-assignment
       'unicorn/prefer-array-last-methods': 'off', // Questionable benefit
       'unicorn/prefer-await': 'off', // We avoid async/await in production hot paths
+      'unicorn/prefer-dom-node-html-methods': 'off', // Browser compatibility and different serialization semantics
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-includes-over-repeated-comparisons': 'off', // Bad for performance
@@ -674,32 +677,22 @@ export default [
       'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
       'unicorn/switch-case-braces': 'off', // Questionable benefit
 
-      // Safe to enable in a follow-up: autofixable and aligned with our style. Kept off
-      // here only to keep this version bump free of source churn (counts from the v68 run).
-      'unicorn/logical-assignment-operators': 'off', // 42 errors | matches our ??=/||= usage
+      // These remaining rules need focused rewrites before activation (counts from the v72 run).
+      'unicorn/logical-assignment-operators': 'off', // 51 errors | matches our ??=/||= usage
       'unicorn/no-confusing-array-splice': 'off', // 1 error
       'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
-      'unicorn/no-negated-array-predicate': 'off', // 2 errors
       'unicorn/no-negated-comparison': 'off', // 1 error
       'unicorn/no-subtraction-comparison': 'off', // 2 errors
-      'unicorn/no-unnecessary-boolean-comparison': 'off', // 6 errors
-      'unicorn/no-unnecessary-global-this': 'off', // 4 errors
+      'unicorn/no-unnecessary-global-this': 'off', // 3 errors | explicit globals are clearer
       'unicorn/no-unnecessary-splice': 'off', // 2 errors
       'unicorn/no-useless-concat': 'off', // 4 errors
       'unicorn/no-useless-continue': 'off', // 1 error
       'unicorn/no-useless-delete-check': 'off', // 1 error
-      'unicorn/no-useless-fallback-in-spread': 'off', // 5 errors
-      'unicorn/no-useless-override': 'off', // 1 error
-      'unicorn/no-useless-template-literals': 'off', // 13 errors
-      'unicorn/prefer-array-from-map': 'off', // 6 errors
-      'unicorn/prefer-boolean-return': 'off', // 1 error
+      'unicorn/no-useless-template-literals': 'off', // 16 errors | String() rewrites reduce readability
+      'unicorn/prefer-array-from-map': 'off', // 9 errors | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // 52 errors
-      'unicorn/prefer-direct-iteration': 'off', // 5 errors
-      'unicorn/prefer-else-if': 'off', // 6 errors
-      'unicorn/prefer-global-number-constants': 'off', // 3 errors
       'unicorn/prefer-logical-operator-over-ternary': 'off', // 3 errors
       'unicorn/prefer-ternary': 'off', // 16 errors
-      'unicorn/prefer-unary-minus': 'off', // 1 error
     },
   },
   {

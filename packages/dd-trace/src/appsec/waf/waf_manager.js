@@ -72,7 +72,7 @@ class WAFManager {
   }
 
   setAsmDdFallbackConfig () {
-    if (!this.ddwaf.configPaths.some(cp => cp.includes('ASM_DD'))) {
+    if (this.ddwaf.configPaths.every(configPath => !configPath.includes('ASM_DD'))) {
       this.updateConfig(WAFManager.defaultWafConfigPath, this.defaultRules)
     }
   }

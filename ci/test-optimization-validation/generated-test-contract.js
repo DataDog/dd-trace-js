@@ -192,9 +192,7 @@ function getGeneratedTestContractError (framework) {
     if (!cleanupPaths.has(path.normalize(stepsFile))) {
       return 'must include the isolated Cucumber step definitions in cleanupPaths.'
     }
-  }
-
-  if (framework.framework === 'playwright') {
+  } else if (framework.framework === 'playwright') {
     const configPath = playwrightAdapter.getGeneratedConfigPath(strategy.testDirectory)
     const config = files.find(file => path.normalize(file.path) === path.normalize(configPath))
     if (config?.contentLines?.join('\n') !== playwrightAdapter.getGeneratedConfigContent()) {

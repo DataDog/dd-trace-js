@@ -340,7 +340,7 @@ ${build.initialOptions.banner.js}`
 
       if (data.isESM) {
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
-          args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
+          args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
           if (data.internal) {
             args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
