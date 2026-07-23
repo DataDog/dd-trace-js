@@ -201,7 +201,7 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(log.error)
   })
 
-  it('requires a Datadog API key for the default Datadog API', () => {
+  it('requires a Datadog API key for the default Datadog Feature Flagging endpoint', () => {
     delete config.DD_API_KEY
 
     const source = configurationSource.create(config, sinon.spy())
@@ -209,7 +209,7 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.calledOnceWithMatch(
       log.error,
       'Unable to configure Feature Flagging configuration source',
-      sinon.match.has('message', 'DD_API_KEY is required for the Datadog Feature Flagging API')
+      sinon.match.has('message', 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint')
     )
     assert.strictEqual(source, undefined)
     sinon.assert.notCalled(AgentlessConfigurationSource)

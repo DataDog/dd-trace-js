@@ -30,7 +30,7 @@ function create (config, applyConfiguration) {
 
   try {
     if (!hasCustomEndpoint && !config.DD_API_KEY) {
-      throw new Error('DD_API_KEY is required for the Datadog Feature Flagging API')
+      throw new Error('DD_API_KEY is required for the default Datadog Feature Flagging endpoint')
     }
 
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
