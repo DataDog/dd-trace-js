@@ -1,24 +1,39 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { format } = require('node:util')
+const { request } = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
-const { request } = require('node:http')
+const { format } = require('node:util')
 
-const { describe, it, before, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 const express = require('express')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const upload = require('multer')()
+const proxyquire = require('proxyquire')
+const semver = require('semver')
+const sinon = require('sinon')
 
 const { Profile } = require('../../../../../vendor/dist/pprof-format')
+const pkg = require('../../../../../package.json')
+
+const injectForce = process.env.DD_INJECT_FORCE
+if (!semver.satisfies(process.version, `${pkg.engines.node} <${pkg.nodeMaxMajor}`)) {
+  process.env.DD_INJECT_FORCE = 'true'
+}
+
 require('../../setup/core')
 const tracer = require('../../../../../init')
+
+if (injectForce === undefined) {
+  delete process.env.DD_INJECT_FORCE
+} else {
+  process.env.DD_INJECT_FORCE = injectForce
+}
+
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-const version = require('../../../../../package.json').version
+const version = pkg.version
 const processTags = require('../../../src/process-tags')
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
