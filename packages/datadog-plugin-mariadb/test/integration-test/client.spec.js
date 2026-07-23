@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const semver = require('semver')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -18,10 +20,9 @@ describe('esm', () => {
   let proc
 
   // test against later versions because server.mjs uses newer package syntax
-  withVersions('mariadb', 'mariadb', '>=3.0.0', version => {
+  withVersions('mariadb', 'mariadb', '>=3.0.0', (version, _, resolvedVersion) => {
     useSandbox([`'mariadb@${version}'`], false, [
       './packages/datadog-plugin-mariadb/test/integration-test/*'])
-
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
@@ -33,13 +34,16 @@ describe('esm', () => {
       namedExports: ['createPool'],
       namedExportBinding: 'namespace',
     })
+    const importVariants = semver.gte(resolvedVersion, '3.5.1')
+      ? ['named', 'named-from-namespace']
+      : Object.keys(variants)
 
     afterEach(async () => {
       await stopProc(proc)
       await agent.stop()
     })
 
-    for (const variant of Object.keys(variants)) {
+    for (const variant of importVariants) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
