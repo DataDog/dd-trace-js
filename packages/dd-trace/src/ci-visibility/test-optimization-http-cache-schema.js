@@ -75,7 +75,8 @@ function validateSettingsResponse (response, options = {}) {
   assertBooleanFields(attributes.test_management, ['enabled'], 'settings test_management')
   assertOptionalBoundedNumber(
     attributes.early_flake_detection.faulty_session_threshold,
-    'settings early_flake_detection faulty_session_threshold'
+    'settings early_flake_detection faulty_session_threshold',
+    { integer: true }
   )
   assertRetryMap(attributes.early_flake_detection.slow_test_retries)
   assertOptionalBoundedNumber(
