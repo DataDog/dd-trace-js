@@ -419,7 +419,7 @@ function createMainProcessReporter (reporterState) {
     testSuiteFinishCh.publish({
       status: getDatadogStatus(testSuiteResult),
       deferFlush: true,
-      onFinish: noop,
+      onDone: noop,
       ...testSuiteCtx.currentStore,
     })
     testSuiteContexts.delete(testModuleId)
