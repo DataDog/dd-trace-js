@@ -447,25 +447,44 @@ function useLlmObs ({
 
   return {
     getEvents: async function (numLlmObsSpans = 1) {
-      // get apm spans from the agent
-      const apmSpans = await apmTracesPromise
-      resetTracesPromises()
-
-      // get llmobs span events requests from the agent
-      // because llmobs process spans on span finish and submits periodically,
-      // we need to aggregate all of the span events
-      // tests should know how many spans they expect to see, otherwise tests will timeout
-      const llmobsSpans = getLlmObsSpansFromApmSpans(apmSpans)
+      // LLMObs spans can arrive either on the sampled APM trace's meta_struct or through the
+      // LLMObs writer fallback. Poll writer requests while waiting for APM so writer-only tests
+      // do not block on an unrelated trace assertion.
+      const apmSpans = []
+      const llmobsSpans = []
+      let apmError
+      let apmTracesReceived = false
+      let apmTraces = waitForApmTraces()
 
       while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
-        await new Promise(resolve => setImmediate(resolve))
+        await Promise.race([apmTraces, new Promise(resolve => setImmediate(resolve))])
+
         const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
         llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+
+        if (apmError && llmobsSpans.length < numLlmObsSpans) throw apmError
+
+        if (apmTracesReceived && llmobsSpans.length < numLlmObsSpans) {
+          apmTracesReceived = false
+          apmTraces = waitForApmTraces()
+        }
       }
 
       await new Promise(resolve => setImmediate(resolve))
 
       return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+
+      function waitForApmTraces () {
+        return apmTracesPromise.then(spans => {
+          apmSpans.push(...spans)
+          llmobsSpans.push(...getLlmObsSpansFromApmSpans(spans))
+          apmTracesReceived = true
+          resetTracesPromises()
+        }, error => {
+          apmError = error
+          apmTracesReceived = true
+        })
+      }
     },
 
     /**
@@ -630,6 +649,7 @@ module.exports = {
   assertLlmObsEvaluationMetric,
   assertLlmObsSpanEvent,
   assertPromptTracking,
+  getLlmObsSpansFromApmSpans,
   removeDestroyHandler,
   useLlmObs,
   MOCK_NOT_NULLISH,
