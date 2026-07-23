@@ -245,6 +245,37 @@ describe('Span', () => {
       assert.ok('foo' in span.context()._baggageItems)
       assert.strictEqual(span.context()._baggageItems.foo, 'bar')
     })
+
+    it('should isolate baggage mutations between parent and sibling spans', () => {
+      id.onThirdCall().returns('789')
+
+      const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+      parent.setBaggageItem('shared', 'parent')
+
+      const child = new Span(tracer, processor, prioritySampler, {
+        operationName: 'child',
+        parent: parent.context(),
+      })
+      const sibling = new Span(tracer, processor, prioritySampler, {
+        operationName: 'sibling',
+        parent: parent.context(),
+      })
+
+      child.setBaggageItem('child', 'value')
+      parent.setBaggageItem('parent', 'value')
+
+      assert.strictEqual(child.getBaggageItem('shared'), 'parent')
+      assert.strictEqual(child.getBaggageItem('child'), 'value')
+      assert.strictEqual(child.getBaggageItem('parent'), undefined)
+
+      assert.strictEqual(sibling.getBaggageItem('shared'), 'parent')
+      assert.strictEqual(sibling.getBaggageItem('child'), undefined)
+      assert.strictEqual(sibling.getBaggageItem('parent'), undefined)
+
+      assert.strictEqual(parent.getBaggageItem('shared'), 'parent')
+      assert.strictEqual(parent.getBaggageItem('child'), undefined)
+      assert.strictEqual(parent.getBaggageItem('parent'), 'value')
+    })
   })
 
   // TODO are these tests trivial?
@@ -492,6 +523,21 @@ describe('Span', () => {
       assert.strictEqual(span.getBaggageItem('foo'), 'bar')
       span.removeBaggageItem('foo')
       assert.strictEqual(span.getBaggageItem('foo'), undefined)
+    })
+
+    it('should isolate inherited baggage removal from the parent span', () => {
+      const parent = new Span(tracer, processor, prioritySampler, { operationName: 'parent' })
+      parent.setBaggageItem('foo', 'bar')
+
+      span = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        parent: parent.context(),
+      })
+
+      span.removeBaggageItem('foo')
+
+      assert.strictEqual(span.getBaggageItem('foo'), undefined)
+      assert.strictEqual(parent.getBaggageItem('foo'), 'bar')
     })
   })
 
