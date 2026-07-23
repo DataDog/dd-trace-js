@@ -155,6 +155,47 @@ describe('SemanticLifecycleBridge', () => {
     assert.strictEqual(bridge.finish(context), callbackStore)
   })
 
+  it('supports contributor-only source contexts without publishing semantic phases', () => {
+    const sourceRegistry = new EventSourceRegistry()
+    const channels = createChannels()
+    const parentStore = { parent: true }
+    const contributorStore = { contributor: true }
+    const callbackStore = { callback: true }
+    const context = { scope: 'pool' }
+    const contributorStart = sinon.stub().returns(contributorStore)
+    const contributorFinish = sinon.stub().returns(callbackStore)
+    const semanticStart = sinon.spy()
+    const semanticFinish = sinon.spy()
+
+    sourceRegistry.registerContributor('db.query', 'iast', {
+      start: contributorStart,
+      finish: contributorFinish,
+    })
+    channels.start.bindStore(legacyStorage, semanticStart)
+    bindings.push(channels.start)
+    subscribe(channels.finish, semanticFinish)
+
+    const bridge = new SemanticLifecycleBridge({
+      operation: 'db.query',
+      channels,
+      normalize: identity,
+      shouldPublishSemantic: event => event.scope !== 'pool',
+      sourceRegistry,
+    })
+
+    let operationStore
+    legacyStorage.run(parentStore, () => {
+      operationStore = bridge.start(context)
+    })
+
+    assert.strictEqual(operationStore, contributorStore)
+    assert.strictEqual(bridge.finish(context), callbackStore)
+    sinon.assert.calledOnceWithExactly(contributorStart, context, parentStore)
+    sinon.assert.calledOnceWithExactly(contributorFinish, context, contributorStore)
+    sinon.assert.notCalled(semanticStart)
+    sinon.assert.notCalled(semanticFinish)
+  })
+
   it('keeps concurrent source contexts isolated', () => {
     const sourceRegistry = new EventSourceRegistry()
     const channels = createChannels()
@@ -193,6 +234,15 @@ describe('SemanticLifecycleBridge', () => {
     assert.throws(
       () => new SemanticLifecycleBridge({ operation: 'db.query', channels, normalize: undefined }),
       /requires a normalizer/
+    )
+    assert.throws(
+      () => new SemanticLifecycleBridge({
+        operation: 'db.query',
+        channels,
+        normalize: identity,
+        shouldPublishSemantic: true,
+      }),
+      /requires a semantic publication predicate/
     )
 
     const bridge = new SemanticLifecycleBridge({

@@ -24,9 +24,17 @@ class SemanticLifecycleBridge {
    *   finish: import('diagnostics_channel').Channel
    * }} definition.channels Semantic start/error/finish channels.
    * @param {(context: object) => object} definition.normalize In-place source normalizer.
+   * @param {(event: object) => boolean} [definition.shouldPublishSemantic]
+   * Whether this source context should enter the shared semantic processor.
    * @param {import('./source-registry').EventSourceRegistry} [definition.sourceRegistry]
    */
-  constructor ({ operation, channels, normalize, sourceRegistry = getEventSourceRegistry() }) {
+  constructor ({
+    operation,
+    channels,
+    normalize,
+    shouldPublishSemantic = alwaysPublish,
+    sourceRegistry = getEventSourceRegistry(),
+  }) {
     if (!operation) throw new Error('Semantic lifecycle bridge requires an operation')
     if (!channels?.start || !channels?.error || !channels?.finish) {
       throw new Error(`Semantic lifecycle bridge "${operation}" requires start, error, and finish channels`)
@@ -34,10 +42,14 @@ class SemanticLifecycleBridge {
     if (typeof normalize !== 'function') {
       throw new TypeError(`Semantic lifecycle bridge "${operation}" requires a normalizer`)
     }
+    if (typeof shouldPublishSemantic !== 'function') {
+      throw new TypeError(`Semantic lifecycle bridge "${operation}" requires a semantic publication predicate`)
+    }
 
     this._operation = operation
     this._channels = channels
     this._normalize = normalize
+    this._shouldPublishSemantic = shouldPublishSemantic
     this._sourceRegistry = sourceRegistry
     this._state = Symbol(`datadog.event.bridge.${operation}`)
   }
@@ -67,6 +79,7 @@ class SemanticLifecycleBridge {
       event,
       finished: false,
       parentStore,
+      publishSemantic: this._shouldPublishSemantic(event),
       store: parentStore,
     }
     context[this._state] = state
@@ -79,10 +92,12 @@ class SemanticLifecycleBridge {
       parentStore
     )
 
-    state.store = legacyStorage.run(
-      state.contributorStore,
-      () => this._channels.start.runStores(event, getStore)
-    )
+    state.store = state.publishSemantic
+      ? legacyStorage.run(
+        state.contributorStore,
+        () => this._channels.start.runStores(event, getStore)
+      )
+      : state.contributorStore
 
     return state.store
   }
@@ -151,6 +166,8 @@ class SemanticLifecycleBridge {
    * @returns {void}
    */
   _publish (channel, state) {
+    if (!state.publishSemantic) return
+
     legacyStorage.run(state.store, () => channel.publish(state.event))
   }
 }
@@ -173,6 +190,15 @@ function assertContext (context, operation) {
  */
 function getStore () {
   return legacyStorage.getStore()
+}
+
+/**
+ * Publish every normalized source event to its semantic processor by default.
+ *
+ * @returns {true} Semantic publication is enabled.
+ */
+function alwaysPublish () {
+  return true
 }
 
 module.exports = { SemanticLifecycleBridge }
