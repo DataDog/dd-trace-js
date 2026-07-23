@@ -36,10 +36,9 @@ function create (config, applyConfiguration) {
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
     return new AgentlessConfigurationSource({
       endpoint: endpoint(config, baseUrl),
-      allowInsecureApiKey: hasCustomEndpoint,
       pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
       requestTimeoutMs: requestTimeoutSeconds * 1000,
-      apiKey: config.DD_API_KEY,
+      apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
     }, applyConfiguration)
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)

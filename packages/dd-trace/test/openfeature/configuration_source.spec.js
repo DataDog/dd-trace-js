@@ -52,7 +52,6 @@ describe('OpenFeature configuration source', () => {
       'https://ufc-server.ff-cdn.datadoghq.com/api/v2/feature-flagging/config/rules-based/server?dd_env=my+env'
     )
     assert.strictEqual(resolved.apiKey, 'test-api-key')
-    assert.strictEqual(resolved.allowInsecureApiKey, false)
     assert.strictEqual(resolved.pollIntervalMs, 30_000)
     assert.strictEqual(resolved.requestTimeoutMs, 5000)
   })
@@ -87,10 +86,12 @@ describe('OpenFeature configuration source', () => {
     it(`allows the loopback endpoint ${baseUrl}`, () => {
       config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL = baseUrl
 
+      const resolved = createSourceConfig()
       assert.strictEqual(
-        createSourceConfig().endpoint.toString(),
+        resolved.endpoint.toString(),
         `${baseUrl}/api/v2/feature-flagging/config/rules-based/server`
       )
+      assert.strictEqual(resolved.apiKey, undefined)
     })
   }
 
@@ -103,17 +104,19 @@ describe('OpenFeature configuration source', () => {
       resolved.endpoint.toString(),
       'http://flags.dev.internal:8080/api/v2/feature-flagging/config/rules-based/server'
     )
-    assert.strictEqual(resolved.allowInsecureApiKey, true)
+    assert.strictEqual(resolved.apiKey, undefined)
   })
 
   it('preserves an exact configured path and query', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
       'https://example.com/custom/ufc?tenant=one'
 
+    const resolved = createSourceConfig()
     assert.strictEqual(
-      createSourceConfig().endpoint.toString(),
+      resolved.endpoint.toString(),
       'https://example.com/custom/ufc?tenant=one'
     )
+    assert.strictEqual(resolved.apiKey, undefined)
   })
 
   it('derives and creates the managed GovCloud endpoint without hard-coding availability', () => {
