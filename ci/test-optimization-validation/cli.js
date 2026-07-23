@@ -8,7 +8,7 @@ const path = require('path')
 const { getFrameworkDefinitions } = require('../diagnose')
 const { DD_MAJOR } = require('../../version')
 
-const { assertApprovalDigest, getApprovalDigest } = require('./approval')
+const { assertApprovalDigest } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
 
 const { runBasicReporting } = require('./scenarios/basic-reporting')
@@ -21,12 +21,15 @@ const { verifyGeneratedTestStrategy } = require('./generated-verifier')
 const { annotateCiDiscovery } = require('./ci-discovery')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
-const { formatExecutionPlan, getApprovalSummaryPath, getExecutionPlanPath } = require('./plan-writer')
+const {
+  formatExecutionPlanArtifacts,
+  getExecutionPlanPath,
+} = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
+const { annotateResults, getExecutionStatus, getValidatorExitCode } = require('./result-semantics')
 const { writePendingReport, writeReport } = require('./report-writer')
 const { ensureSafeDirectory } = require('./safe-files')
-const { runSetupCommands } = require('./setup-runner')
 const {
   getStaticBlocker,
   runStaticDiagnosis,
@@ -93,15 +96,6 @@ function parseArgs (argv) {
       case '--print-plan':
         options.printPlan = true
         break
-      case '--print-approval-sha256':
-        options.printApprovalSha256 = true
-        break
-      case '--approved-plan-sha256':
-        options.approvedPlanSha256 = requireValue(argv, ++i, arg)
-        break
-      case '--offline-fixture-nonce':
-        options.offlineFixtureNonce = requireValue(argv, ++i, arg)
-        break
       case '--run-approved-plan':
         options.runApprovedPlan = requireValue(argv, ++i, arg)
         break
@@ -155,8 +149,11 @@ Options:
 }
 
 async function main (argv) {
+  let activeManifest
+  let activeOut
   try {
     const options = parseArgs(argv)
+    assertCompatibleModes(options)
     if (options.help) {
       printHelp()
       return
@@ -169,12 +166,28 @@ async function main (argv) {
       }
       const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
-      console.log(sanitizeConsoleText(
-        `Created validation manifest scaffold without running project code: ${manifestPath}\n` +
-        'This scaffold is already schema-valid; preserve its command boilerplate. Review the selected test commands ' +
-        'and CI files listed in ciDiscovery, record one replayable CI test step when available, then run ' +
-        '--validate-manifest and follow its field-specific errors.'
-      ))
+      const reviewTargets = manifest.ciDiscovery?.reviewTargets || []
+      const reviewRequired = manifest.ciDiscovery?.reviewRequired !== false
+      const initializationStatus = manifest.frameworks.find(framework => framework.status === 'runnable')
+        ?.ciWiring?.initialization?.status
+      const nextStep = reviewRequired
+        ? 'Inspect only the CI review targets in order and stop after the first matching test job. Preserve the ' +
+          'scaffold commands and temporary tests. Then run --validate-manifest and --print-plan.'
+        : 'The bounded scan found no dd-trace/ci/init preload in any discovered CI configuration. That static ' +
+          'conclusion is complete. Do not open or edit the manifest and do not inspect project files. Run the ' +
+          'following command next:\n' +
+          'node ./node_modules/dd-trace/ci/validate-test-optimization.js ' +
+          '--manifest ./dd-test-optimization-validation-manifest.json ' +
+          '--out ./dd-test-optimization-validation-results --print-plan'
+      console.log(sanitizeConsoleText([
+        `Created a schema-valid validation manifest without running project code: ${manifestPath}`,
+        'The scaffold selected bounded test candidates and validator-owned temporary tests. Do not enumerate ' +
+          'other packages, tests, runner configs, workflow files, or manifest fields.',
+        `CI review targets: ${reviewTargets.length > 0 ? reviewTargets.join(', ') : '<none found>'}.`,
+        `CI initialization status: ${initializationStatus || 'unknown'}. Allowed values are configured, ` +
+          'not_configured, and unknown.',
+        nextStep,
+      ].join('\n')))
       return
     }
 
@@ -184,7 +197,7 @@ async function main (argv) {
     if (options.printPlan) {
       const out = validateOutputPath(manifest, options.out)
       const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      formatExecutionPlan({
+      const { plan } = formatExecutionPlanArtifacts({
         manifest: approvalManifest,
         out,
         selectedFrameworkIds: options.frameworks.size > 0
@@ -194,31 +207,21 @@ async function main (argv) {
         keepTempFiles: options.keepTempFiles,
         verbose: options.verbose,
       })
-      console.log(sanitizeConsoleText(
-        '[test-optimization-validator-agent] Customer approval summary written to ' +
-        `${getApprovalSummaryPath(out)}. Read that file and send its complete contents in a user-facing message ` +
-        `before requesting approval. Detailed audit information is in ${getExecutionPlanPath(out)}. ` +
-        'The approval command is available only in the summary.'
-      ))
-      return
-    }
-    if (options.printApprovalSha256) {
-      if (!options.offlineFixtureNonce) {
-        throw new Error('--print-approval-sha256 requires the --offline-fixture-nonce value shown in the plan.')
-      }
-      const out = validateOutputPath(manifest, options.out)
-      const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      console.log(getApprovalDigest({
-        manifest: approvalManifest,
-        out,
-        selectedFrameworkIds: options.frameworks.size > 0
-          ? approvalManifest.frameworks.map(framework => framework.id)
-          : [],
-        requestedScenario: options.requestedScenario,
-        offlineFixtureNonce: options.offlineFixtureNonce,
-        keepTempFiles: options.keepTempFiles,
-        verbose: options.verbose,
-      }))
+      console.log(sanitizeConsoleText([
+        '===== CUSTOMER APPROVAL PLAN =====',
+        plan,
+        '===== END CUSTOMER APPROVAL PLAN =====',
+        '',
+        `Saved execution plan: ${getExecutionPlanPath(out)}`,
+        '',
+        'LIVE VALIDATION HAS NOT RUN.',
+        'DISCOVERY IS COMPLETE. STOP TOOL USE NOW.',
+        'AGENT RESPONSE REQUIRED: Tool output is not the next user-facing response, even when it is visible in the ' +
+          'agent terminal. Your next response must begin with ===== CUSTOMER APPROVAL PLAN =====, reproduce the ' +
+          'complete delimited block above, and end with: Approve executing exactly the plan above?',
+        'A response containing only "Awaiting approval", "Approve the plan above", a prose summary, or a link to ' +
+          'the saved plan is invalid. Do not continue discovery or run another command while waiting.',
+      ].join('\n')))
       return
     }
     if (options.validateManifest) {
@@ -232,6 +235,8 @@ async function main (argv) {
       )
     }
     const out = validateOutputPath(manifest, options.out)
+    activeManifest = manifest
+    activeOut = out
     options.repositoryRoot = manifest.repository.root
     const selectedFrameworks = filterFrameworks(manifest.frameworks, options.frameworks)
     const approvalManifest = getApprovalManifest(manifest, options.frameworks)
@@ -274,21 +279,7 @@ async function main (argv) {
         liveReadyFrameworks.push(framework)
       }
 
-      for (const framework of liveReadyFrameworks) {
-        // Setup commands are project preparation, not Test Optimization signal collection.
-        if (framework.setup?.commands?.length > 0) logPhaseStart(framework, 'Project setup')
-        // eslint-disable-next-line no-await-in-loop
-        const setup = await runSetupCommands({ framework, out, options })
-        if (framework.setup?.commands?.length > 0) {
-          logPhaseComplete(framework, 'Project setup', setup.ok ? 'pass' : setup.failure?.status)
-        }
-        if (!setup.ok) {
-          results.push(setup.failure)
-          continue
-        }
-
-        runnableFrameworks.push(framework)
-      }
+      runnableFrameworks.push(...liveReadyFrameworks)
       for (const framework of runnableFrameworks) {
         let basicResult
         if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
@@ -314,16 +305,11 @@ async function main (argv) {
         }
 
         if (options.scenarios.has(CI_WIRING_SCENARIO)) {
-          if (basicResult && basicResult.status !== 'pass') {
-            results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
-          } else {
-            // CI wiring runs after Basic Reporting proves this framework can report when initialized directly.
-            logPhaseStart(framework, 'CI wiring')
-            // eslint-disable-next-line no-await-in-loop
-            const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
-            results.push(ciWiringResult)
-            logPhaseComplete(framework, 'CI wiring', ciWiringResult.status)
-          }
+          logPhaseStart(framework, 'CI configuration audit')
+          // eslint-disable-next-line no-await-in-loop
+          const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
+          results.push(ciWiringResult)
+          logPhaseComplete(framework, 'CI configuration audit', ciWiringResult.status)
         }
 
         const advancedScenarios = getAdvancedScenarios(options.scenarios)
@@ -367,18 +353,25 @@ async function main (argv) {
         }
       }
     } finally {
-      await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+      try {
+        await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+      } catch (error) {
+        results.push(getValidationCleanupFailure('temporary validation files', error))
+      }
     }
 
     addMissingRequiredResults(results, runnableFrameworks, options.scenarios)
-    const validatorExitCode = results.some(isUnsuccessfulResult) || !didRunLiveValidation(results) ? 1 : 0
+    const annotatedResults = annotateResults(results)
+    const executionStatus = getExecutionStatus(annotatedResults)
+    const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
     await writeReport({
       manifest,
-      results,
+      results: annotatedResults,
       out,
       staticDiagnosis,
       runSummary: {
         runCompleted: true,
+        executionStatus,
         validatorExitCode,
         validationCoverage: getValidationCoverage({
           results,
@@ -389,12 +382,80 @@ async function main (argv) {
         checkedScenarios: [...options.scenarios],
         omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
         requestedScenario: options.requestedScenario,
+        selectedFrameworkIds: selectedFrameworks.map(framework => framework.id),
       },
     })
     process.exitCode = validatorExitCode
   } catch (err) {
-    process.exitCode = 1
+    process.exitCode = 3
+    if (activeManifest && activeOut) {
+      try {
+        await writeReport({
+          manifest: activeManifest,
+          results: [{
+            frameworkId: 'validator',
+            scenario: 'all',
+            status: 'error',
+            diagnosis: err?.message || String(err),
+            evidence: { validationIncomplete: true, validationOrchestrationFailed: true },
+            artifacts: [],
+          }],
+          out: activeOut,
+          runSummary: {
+            runCompleted: true,
+            executionStatus: 'validator_error',
+            validatorExitCode: 3,
+            validationCoverage: 'partial',
+            checkedScenarios: [],
+            omittedScenarios: getSelectableScenarios(),
+            selectedFrameworkIds: [],
+          },
+        })
+      } catch {}
+    }
     console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
+  }
+}
+
+/**
+ * Prevents a reviewed live-run artifact from being combined with a print-only mode.
+ *
+ * @param {object} options parsed CLI options
+ * @returns {void}
+ */
+function assertCompatibleModes (options) {
+  if (!options.runApprovedPlan) return
+  const incompatible = [
+    ['--help', options.help],
+    ['--init-manifest', options.initManifest],
+    ['--print-plan', options.printPlan],
+    ['--validate-manifest', options.validateManifest],
+  ].find(([, enabled]) => enabled)
+  if (incompatible) {
+    throw new Error(`--run-approved-plan cannot be combined with ${incompatible[0]}.`)
+  }
+}
+
+/**
+ * Creates a fail-closed result when validation-owned cleanup cannot be completed safely.
+ *
+ * @param {string} target customer-facing cleanup target
+ * @param {Error} error cleanup error
+ * @param {object} [framework] affected framework
+ * @returns {object} validation error result
+ */
+function getValidationCleanupFailure (target, error, framework) {
+  return {
+    frameworkId: framework?.id || 'validation-cleanup',
+    scenario: 'all',
+    status: 'error',
+    diagnosis: `The validator could not safely remove ${target}. Review the local artifacts before rerunning.`,
+    evidence: {
+      validationIncomplete: true,
+      cleanupFailed: true,
+      error: error?.message || String(error),
+    },
+    artifacts: [],
   }
 }
 
@@ -408,10 +469,8 @@ function applyApprovedPlanOptions (options) {
   if (!options.approvedArtifactSha256) {
     throw new Error('--run-approved-plan requires --sha256 from the reviewed execution plan.')
   }
-  if (options.approvalOverrides.length > 0 || options.offlineFixtureNonce || options.approvedPlanSha256) {
-    throw new Error(
-      '--run-approved-plan cannot be combined with manifest, output, selection, or legacy approval flags.'
-    )
+  if (options.approvalOverrides.length > 0) {
+    throw new Error('--run-approved-plan cannot be combined with manifest, output, or selection flags.')
   }
 
   const { material } = loadApprovedPlan(options.runApprovedPlan, options.approvedArtifactSha256)
@@ -549,6 +608,10 @@ function getValidationCoverage ({ results, requestedScenario, frameworks, scenar
       if (!results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) {
         return 'partial'
       }
+      const result = results.find(result => result.frameworkId === framework.id && result.scenario === scenario)
+      if (!['pass', 'fail'].includes(result.status) || result.evidence?.validationIncomplete === true) {
+        return 'partial'
+      }
     }
   }
   return 'complete'
@@ -560,30 +623,6 @@ function getSelectableScenarios () {
     CI_WIRING_SCENARIO,
     ...Object.keys(SCENARIOS).filter(scenario => scenario !== BASIC_REPORTING_SCENARIO),
   ]
-}
-
-function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {
-  return {
-    frameworkId: framework.id,
-    scenario: 'ci-wiring',
-    status: 'skip',
-    diagnosis: 'Skipped CI wiring validation because Basic Reporting did not pass with direct Datadog ' +
-      'initialization. Fix the selected test command or local Test Optimization capability before diagnosing CI ' +
-      'wiring.',
-    evidence: {
-      blockedBy: BASIC_REPORTING_SCENARIO,
-      basicReportingStatus: basicResult.status,
-      basicReportingDiagnosis: basicResult.diagnosis,
-      featureEligibility: {
-        eligible: false,
-        blockedBy: BASIC_REPORTING_SCENARIO,
-        reasonCode: 'basic-reporting-failed',
-        scenario: 'ci-wiring',
-      },
-      ciWiring: framework.ciWiring,
-    },
-    artifacts: [],
-  }
 }
 
 function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
@@ -614,6 +653,9 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
     status: 'skip',
     diagnosis: `Skipped because the temporary validation test could not run as expected: ${failure.diagnosis}`,
     evidence: {
+      conclusion: 'incomplete',
+      domain: 'validator_adapter',
+      evidenceStrength: 'confirmed_runtime',
       blockedBy: 'generated-test-verification',
       verificationStatus: failure.status,
       verificationDiagnosis: failure.diagnosis,
@@ -626,22 +668,6 @@ function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failu
     },
     artifacts: [],
   }
-}
-
-function isUnsuccessfulResult (result) {
-  return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
-}
-
-/**
- * Reports whether at least one live validation check produced a result.
- *
- * Framework discovery-only entries use the synthetic `all` scenario and do not prove Test Optimization behavior.
- *
- * @param {object[]} results validation results
- * @returns {boolean} whether live validation ran
- */
-function didRunLiveValidation (results) {
-  return results.some(result => result.scenario !== 'all')
 }
 
 /**
@@ -686,7 +712,7 @@ function logValidationProgress (message) {
 function getScenarioDisplayName (scenario) {
   return {
     'basic-reporting': 'Basic Reporting',
-    'ci-wiring': 'CI Wiring',
+    'ci-wiring': 'CI Configuration Audit',
     efd: 'Early Flake Detection',
     atr: 'Auto Test Retries',
     'test-management': 'Test Management',
@@ -709,6 +735,24 @@ function getStaticFailure (framework, blocker, staticDiagnosisPath) {
 
 function getFrameworkStatusResult (framework) {
   const evidence = getFrameworkStatusEvidence(framework)
+
+  if (framework.supportLevel === 'dd_trace_supported_but_validator_missing_adapter') {
+    const frameworkName = getDisplayFrameworkName(framework.framework)
+    return {
+      frameworkId: framework.id,
+      scenario: 'all',
+      status: 'skip',
+      diagnosis: `${frameworkName} was detected and is supported by dd-trace, but this local validator does not ` +
+        `yet provide a live ${frameworkName} adapter. No project test command was run.`,
+      evidence: {
+        ...evidence,
+        validatorAdapterUnavailable: true,
+        recommendation: 'Use the static diagnostic evidence for this framework. Live local validation currently ' +
+          'supports Jest, Mocha, and Vitest.',
+      },
+      artifacts: [],
+    }
+  }
 
   if (framework.status === 'unsupported_by_validator') {
     const frameworkName = getDisplayFrameworkName(framework.framework)
@@ -800,6 +844,7 @@ function getFrameworkStatusEvidence (framework) {
   return {
     frameworkStatus: framework.status,
     frameworkVersion: framework.frameworkVersion,
+    supportLevel: framework.supportLevel,
     manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
     directDependency: root ? getDirectDependency(root, framework.framework) : undefined,
     frameworkScripts: root ? findFrameworkScripts(root, framework.framework) : [],

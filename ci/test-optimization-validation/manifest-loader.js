@@ -82,6 +82,9 @@ function getManifestPaths (manifest) {
     for (const [index, configFile] of (framework.project?.configFiles || []).entries()) {
       paths.push([`${prefix}.project.configFiles[${index}]`, configFile])
     }
+    for (const [index, candidate] of (framework.localTestCandidates || []).entries()) {
+      paths.push([`${prefix}.localTestCandidates[${index}].sourceFile`, candidate.sourceFile])
+    }
     for (const [name, command] of getCommands(framework)) {
       paths.push([`${prefix}.${name}.cwd`, command.cwd])
       for (const [outputIndex, outputPath] of (command.outputPaths || []).entries()) {
@@ -111,11 +114,13 @@ function getManifestPaths (manifest) {
 
 function getCommands (framework) {
   const commands = []
-  for (const name of ['existingTestCommand', 'ciWiringCommand']) {
+  for (const name of ['existingTestCommand']) {
     if (framework[name]) commands.push([name, framework[name]])
   }
-  for (const [index, command] of (framework.setup?.commands || []).entries()) {
-    commands.push([`setup.commands[${index}]`, command])
+  for (const [index, candidate] of (framework.localTestCandidates || []).entries()) {
+    if (candidate?.command) {
+      commands.push([`localTestCandidates[${index}].command`, candidate.command])
+    }
   }
   for (const [index, scenario] of (framework.generatedTestStrategy?.scenarios || []).entries()) {
     if (scenario?.runCommand) {

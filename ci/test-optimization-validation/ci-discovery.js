@@ -86,7 +86,7 @@ function getFrameworkCiDiscoveryContradiction (framework, manifest) {
     reason: 'CI workflow files were found by validator static diagnosis, but this manifest entry says no CI ' +
       'workflow was found. The manifest cannot support a "no CI workflow found" conclusion.',
     recommendation: 'Inspect the discovered CI files with hidden-directory-aware discovery, then update ciWiring, ' +
-      'ciWiringCommand, omittedTestCommands, notes, or unresolved blockers before rerunning live validation.',
+      'ciWiring configuration evidence, omittedTestCommands, notes, or unresolved blockers before validation.',
     ciDiscovery,
   }
 }

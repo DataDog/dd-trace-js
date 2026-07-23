@@ -115,14 +115,13 @@ function renderMarkdown (report) {
     '',
     `Generated at: ${report.generatedAt}`,
     `Validation completed: ${report.runSummary.runCompleted === true ? 'yes' : 'no'}`,
+    `Execution status: ${report.runSummary.executionStatus || 'not recorded'}`,
     `Validator exit code: ${report.runSummary.validatorExitCode ?? 'not recorded'}`,
     `Validation coverage: ${report.runSummary.validationCoverage || 'not recorded'}`,
     '',
     `> ${report.sharingWarning}`,
     '',
     `> ${UNTRUSTED_EVIDENCE_WARNING}`,
-    '',
-    getValidationCoverageSummary(report.runSummary),
     '',
     '## Verdict',
     '',
@@ -132,6 +131,7 @@ function renderMarkdown (report) {
   lines.push('')
   appendMarkdownScope(lines, report)
   appendMarkdownChecks(lines, report.results)
+  lines.push(getValidationCoverageSummary(report.runSummary), '')
   appendMarkdownHowToFix(lines, report.results)
   appendMarkdownCiDiscovery(lines, report.ciDiscovery)
   appendMarkdownStaticDiagnosisNotes(lines, report.staticDiagnosisNotes)
@@ -193,8 +193,6 @@ function buildDiagnosticCheck (result, reportDirectory) {
   if (!definition) return
   const staticOnly = result.scenario === 'all'
   const checkLevelFailure = result.scenario === 'basic-reporting' && isDiagnosticCheckLevelFailure(result)
-  const ciReplayUnavailable = result.scenario === 'ci-wiring' &&
-    (result.evidence?.manifestIncomplete === true || result.evidence?.ciCommandExecution?.fullReplayRan === false)
   const command = readResultCommand(result)
   const incomplete = isIncompleteResult(result)
   const remediation = !incomplete && ['fail', 'error', 'blocked'].includes(result.status)
@@ -205,8 +203,9 @@ function buildDiagnosticCheck (result, reportDirectory) {
     name: definition.name,
     status: incomplete ? 'unknown' : toDiagnosticStatus(result.status),
     reason: staticOnly || ['fail', 'error', 'blocked'].includes(result.status) ? result.diagnosis : undefined,
-    command: staticOnly || checkLevelFailure || ciReplayUnavailable ? undefined : command?.command,
-    exitCode: staticOnly || checkLevelFailure || ciReplayUnavailable || result.evidence?.commandExitCode === undefined
+    command: staticOnly || checkLevelFailure || result.scenario === 'ci-wiring' ? undefined : command?.command,
+    exitCode: staticOnly || checkLevelFailure || result.scenario === 'ci-wiring' ||
+      result.evidence?.commandExitCode === undefined
       ? undefined
       : String(result.evidence.commandExitCode),
     evidence: staticOnly || checkLevelFailure
@@ -296,14 +295,11 @@ function compactResultEvidence (checkId, evidence) {
   }
   if (checkId === 'ci-wiring') {
     return compactDefined({
-      events: getEventCounts(evidence),
-      failureKind: evidence.eventLevelFailure?.kind,
-      fullReplayRan: evidence.ciCommandExecution?.fullReplayRan,
-      initializationProbe: compactInitializationProbe(evidence.initializationProbe),
-      capture: compactDefined({
-        observedEvents: evidence.offlineExporterSummary?.eventsObserved,
-        retainedEvents: evidence.offlineExporterSummary?.eventsRetained,
-      }),
+      conclusion: evidence.conclusion,
+      initializationStatus: evidence.initializationStatus,
+      transport: evidence.transport,
+      apiKeyConfigured: evidence.apiKeyConfigured,
+      nodeOptionsRemoval: evidence.nodeOptionsRemoval,
     })
   }
   if (checkId === 'efd-new-test-detection-and-retry') {
@@ -361,27 +357,6 @@ function compactCiCommandCandidate (candidate, repositoryRoot) {
     command: candidate.command,
     whySelected: candidate.whySelected,
   }
-}
-
-function compactInitializationProbe (probe) {
-  if (!probe) return
-
-  return compactDefined({
-    ran: probe.ran,
-    processCount: probe.processCount,
-    reachedAnyNodeProcess: probe.reachedAnyNodeProcess,
-    reachedTestRunnerProcess: probe.reachedTestRunnerProcess,
-  })
-}
-
-function getEventCounts (evidence) {
-  const events = compactDefined({
-    sessions: evidence.testSessionEvents,
-    modules: evidence.testModuleEvents,
-    suites: evidence.testSuiteEvents,
-    tests: evidence.testEvents,
-  })
-  return Object.keys(events).length > 0 ? events : undefined
 }
 
 function compactArtifacts (artifacts, reportDirectory) {
@@ -526,8 +501,8 @@ function getStaticDiagnosisNotes (diagnosis, validationResults) {
   } else if (diagnosisResults.some(isMissingStaticInitializationResult) && !conclusiveCiWiring) {
     notes.push(
       'Static diagnosis found no Test Optimization initialization in the inspected CI configuration, but the ' +
-      'selected CI replay did not reach a test result. Treat this as context only, not as a confirmed CI-wiring ' +
-      'failure or remediation. Correct the replay command and rerun validation first.'
+      'structured CI configuration audit remains incomplete. Treat this as context only, not as a confirmed ' +
+      'configuration failure or remediation. Complete the missing CI evidence and rerun the audit.'
     )
   } else if (diagnosisResults.some(isMissingStaticInitializationResult)) {
     notes.push(
@@ -730,7 +705,7 @@ function formatCiCommandCandidateDetails (candidate, options = {}) {
 
   const unresolved = formatChain(candidate.unresolved, { format })
   if (unresolved) {
-    details.push(`Unresolved replay details: ${unresolved}`)
+    details.push(`Unresolved CI audit details: ${unresolved}`)
   }
 
   const commandDetails = formatCommandDetails(candidate.commandDetails)
@@ -788,7 +763,7 @@ function getResultDetailLines (result, options = {}) {
     ? markdownCode
     : value => value
   const lines = []
-  const command = readResultCommand(result) || getEvidenceCommand(evidence)
+  const command = readResultCommand(result)
 
   if (command?.command) lines.push(`Command: ${format(command.command)}`)
   if (command?.cwd) lines.push(`Cwd: ${format(command.cwd)}`)
@@ -835,9 +810,7 @@ function getResultDetailLines (result, options = {}) {
   appendExcerptLine(lines, 'Debug lines', evidence.debugRerun?.debugLines, { format })
   appendExcerptLine(lines, 'Debug stdout excerpt', evidence.debugRerun?.stdoutExcerpt, { format })
   appendExcerptLine(lines, 'Debug stderr excerpt', evidence.debugRerun?.stderrExcerpt, { format })
-  appendSetupFailureLines(lines, evidence, { format })
   appendEventFailureLines(lines, evidence, { format })
-  appendInitializationProbeLines(lines, evidence.initializationProbe, { format })
   appendMonorepoFindingLines(lines, evidence.monorepoFindings, { format })
 
   return lines.length > 0 ? lines : ['No additional structured evidence was recorded.']
@@ -885,34 +858,9 @@ function readResultCommand (result) {
   } catch {}
 }
 
-function getEvidenceCommand (evidence) {
-  const setupCommand = evidence.setupCommand
-  if (!setupCommand) return
-
-  return {
-    command: sanitizeString(setupCommand.command),
-    cwd: setupCommand.cwd,
-    exitCode: setupCommand.exitCode,
-    timedOut: setupCommand.timedOut,
-  }
-}
-
 function appendExcerptLine (lines, label, values, { format }) {
   if (!Array.isArray(values) || values.length === 0) return
   lines.push(`${label}: ${formatList(values, { format })}`)
-}
-
-function appendSetupFailureLines (lines, evidence, { format }) {
-  const setupCommand = evidence.setupCommand
-  if (!setupCommand) return
-
-  lines.push(`Setup failed: ${setupCommand.description || setupCommand.id || setupCommand.command}`)
-  if (setupCommand.stdoutSummary) {
-    lines.push(`Setup stdout excerpt: ${format(setupCommand.stdoutSummary)}`)
-  }
-  if (setupCommand.stderrSummary) {
-    lines.push(`Setup stderr excerpt: ${format(setupCommand.stderrSummary)}`)
-  }
 }
 
 function appendEventFailureLines (lines, evidence, { format }) {
@@ -923,41 +871,6 @@ function appendEventFailureLines (lines, evidence, { format }) {
   if (Array.isArray(failure.missingLevels) && failure.missingLevels.length > 0) {
     lines.push(`Missing event levels: ${formatList(failure.missingLevels, { format })}`)
   }
-}
-
-function appendInitializationProbeLines (lines, probe, { format }) {
-  if (!probe) return
-  if (probe.ran !== true) {
-    if (probe.skippedBecauseConfigurationProvesRemoval) {
-      lines.push(`NODE_OPTIONS probe: not needed; ${probe.reason}`)
-    }
-    return
-  }
-
-  lines.push(`NODE_OPTIONS probe: reached Node process ${format(probe.reachedAnyNodeProcess)}, ` +
-    `reached test runner ${format(probe.reachedTestRunnerProcess)}, processes ${format(probe.processCount || 0)}`)
-  if (probe.stoppedAfterRunnerReached) {
-    lines.push('Probe execution: stopped immediately after the selected test runner was reached')
-  }
-  appendToolSignalLine(lines, 'Probe test runner signals', probe.testRunnerSignals, { format })
-  appendToolSignalLine(lines, 'Probe wrapper signals', probe.wrapperSignals, { format })
-  appendToolSignalLine(lines, 'Probe package manager signals', probe.packageManagerSignals, { format })
-  if (probe.recordsPath) lines.push(`Probe records: ${format(probe.recordsPath)}`)
-}
-
-function appendToolSignalLine (lines, label, signals, { format }) {
-  if (!Array.isArray(signals) || signals.length === 0) return
-
-  const values = signals.map(signal => {
-    const processCount = signal.processCount || (signal.pid ? 1 : 0)
-    const parts = [
-      signal.name,
-      processCount && `${processCount} process${processCount === 1 ? '' : 'es'}`,
-      signal.cwd && `cwd ${signal.cwd}`,
-    ].filter(Boolean)
-    return parts.join(' ')
-  })
-  lines.push(`${label}: ${formatList(values, { format })}`)
 }
 
 function appendMonorepoFindingLines (lines, findings, { format }) {
@@ -1031,9 +944,8 @@ function getKeyArtifacts (artifacts) {
 function renderConsoleSummary (results, reportPath, runSummary) {
   const lines = ['', 'Datadog Test Optimization validation summary:']
   if (runSummary?.runCompleted === true) {
-    lines.push(`Validation completed. Validator exit code: ${runSummary.validatorExitCode}.`)
+    lines.push(getExecutionSummary(runSummary))
   }
-  if (runSummary?.validationCoverage) lines.push(getValidationCoverageSummary(runSummary))
   const basicReportingResults = getBasicReportingResults(results)
   const ciWiringResults = getCiWiringResults(results)
   const advancedFeatureResults = getAdvancedFeatureResults(results)
@@ -1052,6 +964,7 @@ function renderConsoleSummary (results, reportPath, runSummary) {
   for (const result of advancedFeatureResults) {
     lines.push(formatCompactConsoleResult(result))
   }
+  if (runSummary?.validationCoverage) lines.push(getValidationCoverageSummary(runSummary))
 
   appendConsoleHowToFix(lines, results)
 
@@ -1062,6 +975,27 @@ function renderConsoleSummary (results, reportPath, runSummary) {
     `Evidence warning: ${UNTRUSTED_EVIDENCE_WARNING}`
   )
   return lines.join('\n')
+}
+
+/**
+ * Explains execution health separately from the diagnostic exit code.
+ *
+ * @param {object} runSummary validation run summary
+ * @returns {string} customer-facing execution summary
+ */
+function getExecutionSummary (runSummary) {
+  const status = runSummary.executionStatus || 'completed'
+  const explanation = {
+    completed: runSummary.validatorExitCode === 1
+      ? 'The validator completed and found at least one confirmed actionable problem.'
+      : runSummary.validatorExitCode === 2
+        ? 'The validator completed, but one or more selected checks remain incomplete.'
+        : 'The validator completed its eligible approved checks.',
+    blocked: 'The validator was blocked by the execution environment before reaching a complete conclusion.',
+    project_setup_required: 'The validator requires additional project setup before it can complete.',
+    validator_error: 'The validator encountered an implementation or orchestration error.',
+  }[status] || `The validator finished with execution status ${status}.`
+  return `${explanation} Exit code: ${runSummary.validatorExitCode}.`
 }
 
 function appendMarkdownScope (lines, report) {
@@ -1111,7 +1045,6 @@ function groupDiagnosticResults (results) {
 function getDiagnosticCategory (result) {
   const evidence = result.evidence || {}
   if (
-    evidence.setupFailed ||
     evidence.blockedByProjectSetup ||
     evidence.frameworkStatus === 'requires_manual_setup' ||
     evidence.frameworkStatus === 'requires_external_service'
@@ -1243,8 +1176,12 @@ function getFallbackRecommendation (result) {
   }
   if (result.scenario === CI_WIRING_SCENARIO) {
     if (isIncompleteResult(result)) {
-      return 'Correct or replace the selected CI replay command so it reaches a test result, then rerun CI wiring ' +
-        'validation before changing Datadog configuration.'
+      if (result.conclusion === 'configured_propagation_unverified') {
+        return 'No CI configuration change is recommended from static evidence. Confirm propagation in the real CI ' +
+          'environment if runtime confirmation is required.'
+      }
+      return result.evidence.recommendation || 'Complete the missing CI configuration evidence, then rerun the ' +
+        'static audit.'
     }
     return 'Set `NODE_OPTIONS=-r dd-trace/ci/init` and `DD_CIVISIBILITY_AGENTLESS_ENABLED=true` in the identified ' +
       'CI test step, and provide `DD_API_KEY` from the CI secret store. If a Datadog Agent is available and ' +
@@ -1266,7 +1203,7 @@ function getFallbackRecommendation (result) {
 function formatScenarioName (scenario) {
   return {
     'basic-reporting': 'Basic Reporting',
-    'ci-wiring': 'CI Wiring',
+    'ci-wiring': 'CI Configuration Audit',
     efd: 'Early Flake Detection',
     atr: 'Auto Test Retries',
     'test-management': 'Test Management',
@@ -1336,7 +1273,8 @@ function getScenarioExecutionExplanation (result) {
 function getFrameworkVerdicts (results) {
   const liveResults = getLiveValidationResults(results)
   const frameworkResults = new Map()
-  for (const result of liveResults) {
+  for (const result of results) {
+    if (isDiagnosticOnlyResult(result) && result.evidence?.blockedByProjectSetup !== true) continue
     const entries = frameworkResults.get(result.frameworkId) || []
     entries.push(result)
     frameworkResults.set(result.frameworkId, entries)
@@ -1347,22 +1285,67 @@ function getFrameworkVerdicts (results) {
     const label = getResultFrameworkLabel(entries[0])
     const basic = entries.find(result => result.scenario === 'basic-reporting')
     const ciWiring = entries.find(result => result.scenario === CI_WIRING_SCENARIO)
-    if (basic?.status === 'pass' && ciWiring?.status === 'fail') {
-      verdicts.push(`${label}: dd-trace successfully reports this test suite, but the selected CI job does not ` +
-        'load dd-trace when it runs the tests.')
+    const setupBlocker = entries.find(result => result.evidence?.blockedByProjectSetup === true) ||
+      (basic?.domain === 'project_setup' ? basic : undefined)
+    const advancedFailures = entries.filter(result => {
+      return ['efd', 'atr', 'test-management'].includes(result.scenario) && result.status === 'fail'
+    })
+    const ciTarget = ciWiring?.evidence?.ciWiring?.job || ciWiring?.evidence?.ciWiring?.step ||
+      ciWiring?.evidence?.ciCommandCandidate?.job || ciWiring?.evidence?.ciCommandCandidate?.step ||
+      ciWiring?.evidence?.ciRemediation?.job || ciWiring?.evidence?.ciRemediation?.step ||
+      /identified CI (?:test )?job/i.test(ciWiring?.diagnosis || '')
+      ? 'identified CI job'
+      : 'inspected CI configuration'
+    let verdict
+    if (setupBlocker) {
+      verdict = `${label}: local validation could not run because required project setup is unavailable. ` +
+        'No Test Optimization reporting conclusion was reached.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
+          'Optimization configuration.'
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration could not be verified completely.'
+      }
+    } else if (basic?.domain === 'execution_environment') {
+      verdict = basic.evidence?.commandFailure?.kind === 'playwright-browser-launch-blocked'
+        ? `${label}: Playwright could not run because the current agent sandbox did not allow it to launch the ` +
+          'project browser. No Test Optimization reporting conclusion was reached.'
+        : `${label}: local validation was blocked by the execution environment. ` +
+          'No Test Optimization reporting conclusion was reached.'
+      if (ciWiring?.status === 'fail') {
+        verdict += ` Separately, static inspection confirmed that the ${ciTarget} is missing required Test ` +
+          'Optimization configuration.'
+      } else if (isIncompleteResult(ciWiring)) {
+        verdict += ' CI configuration could not be verified completely.'
+      }
+    } else if (basic?.status === 'pass' && ciWiring?.status === 'fail') {
+      verdict = `${label}: dd-trace successfully reports this test suite, but the ${ciTarget} does not ` +
+        'configure the required Test Optimization initialization or reporting transport.'
     } else if (basic?.status === 'pass' && isIncompleteResult(ciWiring)) {
-      verdicts.push(`${label}: dd-trace successfully reports this test suite, but the selected CI command did ` +
-        'not reach a test result. No live CI-wiring conclusion was reached.')
+      verdict = ciWiring?.conclusion === 'configured_propagation_unverified'
+        ? `${label}: dd-trace successfully reports this test suite. The ${ciTarget} contains the required ` +
+          'configuration, but static analysis cannot prove that it reaches the final test process.'
+        : `${label}: dd-trace successfully reports this test suite, but CI configuration could not be verified ` +
+          'completely.'
     } else if (basic?.status === 'pass' && ciWiring?.status === 'pass') {
-      verdicts.push(`${label}: this test suite reports successfully, including from the selected CI job.`)
+      verdict = `${label}: this test suite reports successfully, including from the selected CI job.`
     } else if (basic && basic.status !== 'pass') {
-      verdicts.push(`${label}: the selected tests did not report successfully, so no CI wiring conclusion was ` +
-        'reached.')
+      verdict = ciWiring?.status === 'fail'
+        ? `${label}: the selected tests did not report when dd-trace was initialized directly. Separately, ` +
+          `static inspection confirmed that the ${ciTarget} is missing required Test Optimization configuration.`
+        : `${label}: the selected tests did not report successfully, and CI configuration remains unverified.`
     } else if (basic?.status === 'pass') {
-      verdicts.push(`${label}: this test suite reports successfully when dd-trace is initialized.`)
+      verdict = `${label}: this test suite reports successfully when dd-trace is initialized.`
     }
+    if (verdict && advancedFailures.length > 0) {
+      const checks = advancedFailures.map(result => formatScenarioName(result.scenario))
+      verdict += checks.length === 1
+        ? ` ${checks[0]} did not pass.`
+        : ` The following advanced checks did not pass: ${checks.join(', ')}.`
+    }
+    if (verdict) verdicts.push(verdict)
   }
-  if (liveResults.length === 0) {
+  if (verdicts.length === 0 && liveResults.length === 0) {
     verdicts.push('No live Test Optimization validation ran. This result is incomplete; no Basic Reporting, CI ' +
       'wiring, or advanced-feature conclusion was reached.')
   }
@@ -1372,7 +1355,7 @@ function getFrameworkVerdicts (results) {
 function getCheckQuestion (result) {
   return {
     'basic-reporting': 'Can these tests report to Datadog? (Basic Reporting)',
-    'ci-wiring': 'Does the selected CI job initialize Datadog? (CI Wiring)',
+    'ci-wiring': 'Does the selected CI job initialize Datadog? (CI Configuration Audit)',
     'generated-test-verification': 'Can the temporary validation test run?',
     efd: 'Are new tests retried? (Early Flake Detection)',
     atr: 'Are failed tests retried? (Auto Test Retries)',
@@ -1386,13 +1369,7 @@ function getCompactResultMeaning (result) {
     return 'Tests emitted session, module, suite, and test data.'
   }
   if (result.scenario === CI_WIRING_SCENARIO && result.status === 'fail') {
-    if (result.evidence?.nodeOptionsRemoval) {
-      return 'CI ran tests, but a package script removed the dd-trace preload before the test runner started.'
-    }
-    if (result.evidence?.lateInitialization?.length > 0) {
-      return 'CI initializes dd-trace after the test runner starts, so no test data was reported.'
-    }
-    return 'CI ran tests without initializing dd-trace, so no test data was reported.'
+    return result.diagnosis
   }
   if (result.scenario === CI_WIRING_SCENARIO && isIncompleteResult(result)) {
     return result.diagnosis
@@ -1408,7 +1385,8 @@ function formatCompactConsoleResult (result) {
 }
 
 function isIncompleteResult (result) {
-  return result?.evidence?.manifestIncomplete === true || result?.evidence?.validationIncomplete === true
+  return ['configured_propagation_unverified', 'incomplete'].includes(result?.conclusion) ||
+    result?.evidence?.manifestIncomplete === true || result?.evidence?.validationIncomplete === true
 }
 
 function getDisplayResultStatus (result) {
@@ -1430,9 +1408,11 @@ function addNotSelectedResults ({ manifest, results, runSummary }) {
   if (omittedScenarios.length === 0) return results
 
   const selected = formatScenarioList(runSummary.checkedScenarios || [])
+  const selectedFrameworkIds = new Set(runSummary.selectedFrameworkIds || [])
   const additions = []
   for (const framework of manifest.frameworks || []) {
     if (framework.status !== 'runnable') continue
+    if (selectedFrameworkIds.size > 0 && !selectedFrameworkIds.has(framework.id)) continue
     for (const scenario of omittedScenarios) {
       if (results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) continue
       additions.push({
@@ -1456,7 +1436,7 @@ function addNotSelectedResults ({ manifest, results, runSummary }) {
  */
 function getValidationCoverageSummary (runSummary) {
   if (runSummary.validationCoverage === 'complete') {
-    return 'Validation coverage: complete. All checks selected by the full workflow produced a result.'
+    return 'Validation coverage: complete. Every selected check reached a conclusive pass or fail result.'
   }
   const checked = formatScenarioList(runSummary.checkedScenarios || [])
   const omitted = formatScenarioList(runSummary.omittedScenarios || [])
@@ -1502,7 +1482,7 @@ function isDiagnosticOnlyResult (result) {
   if (result.scenario !== 'all') return false
   return result.evidence?.frameworkStatus ||
     result.evidence?.staticDiagnosis ||
-    result.evidence?.setupFailed
+    result.evidence?.blockedByProjectSetup
 }
 
 module.exports = { writePendingReport, writeReport }

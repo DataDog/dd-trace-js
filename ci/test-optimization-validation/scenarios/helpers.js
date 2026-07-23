@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('path')
 
 const { getArtifactId } = require('../artifact-id')
-const { buildCiWiringEnv, buildDatadogEnv, runCommand } = require('../command-runner')
+const { buildDatadogEnv, buildOfflineCaptureEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
   findGeneratedScenario,
@@ -34,7 +34,7 @@ async function runInstrumentedCommand ({
   options,
   extraEnv,
   fixtureConfig,
-  ciWiring = false,
+  injectInitialization = true,
   allowMissingInitialization = false,
 }) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
@@ -52,9 +52,9 @@ async function runInstrumentedCommand ({
       scenarioName,
       ...fixtureConfig,
     })
-    const validationEnv = ciWiring
-      ? buildCiWiringEnv({ fixture, outputRoot: rawOutputRoot })
-      : buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
+    const validationEnv = injectInitialization
+      ? buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
+      : buildOfflineCaptureEnv({ fixture, outputRoot: rawOutputRoot })
     result = await runCommand(command, {
       env: {
         ...validationEnv,
@@ -82,7 +82,7 @@ async function runInstrumentedCommand ({
       `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
       'scenario result artifact'
     )
-    if (!offline.initialized && !ciWiring && !allowMissingInitialization) {
+    if (!offline.initialized && injectInitialization && !allowMissingInitialization) {
       const stderr = sanitizeString(result.stderr).trim().slice(-2000)
       throw new Error(
         'Offline Test Optimization exporter did not initialize or write completion evidence. ' +

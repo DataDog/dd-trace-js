@@ -314,10 +314,8 @@ function getManifest (root, argv) {
       existingTestCommand: { cwd: root, argv },
       preflight: { ran: false, maxTestCount: 50 },
       ciWiring: {
-        status: 'skip',
-        replayability: 'not_replayable',
-        replayBlocker: 'No CI command selected.',
-        reason: 'No CI command selected.',
+        diagnosis: 'CI initialization evidence has not been completed.',
+        initialization: { status: 'unknown', evidence: [] },
       },
     }],
   }

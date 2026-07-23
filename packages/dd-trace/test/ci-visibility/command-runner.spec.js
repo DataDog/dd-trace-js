@@ -10,8 +10,9 @@ const { PassThrough } = require('node:stream')
 
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
+const { getCommandOutputPaths } = require('../../../../ci/test-optimization-validation/command-output-policy')
 const {
-  buildCiWiringEnv,
+  buildOfflineCaptureEnv,
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,
@@ -146,8 +147,8 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('uses private filesystem routing without adding Datadog initialization to CI replay', () => {
-    const env = buildCiWiringEnv(validationRouting())
+  it('uses private filesystem routing without adding Datadog initialization', () => {
+    const env = buildOfflineCaptureEnv(validationRouting())
 
     assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MODE, '1')
     assert.strictEqual(env._DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE,
@@ -167,7 +168,7 @@ describe('test optimization validation command runner', () => {
   it('keeps validator-controlled offline paths when a command supplies conflicting environment values', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
     const settingsCachePath = path.join(outDir, 'project-selected-settings-cache.json')
-    const env = buildCiWiringEnv(validationRouting())
+    const env = buildOfflineCaptureEnv(validationRouting())
 
     try {
       const result = await runCommand({
@@ -216,7 +217,7 @@ describe('test optimization validation command runner', () => {
 
   it('refuses inline offline routing, NODE_OPTIONS, and environment resets', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
-    const env = buildCiWiringEnv(validationRouting())
+    const env = buildOfflineCaptureEnv(validationRouting())
 
     try {
       await assert.rejects(runCommand({
@@ -263,6 +264,18 @@ describe('test optimization validation command runner', () => {
         usesShell: true,
         shellCommand: '$env:NODE_OPTIONS += " --no-warnings"; npm test',
       }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: "export NO'DE'_OPTIONS=--no-warnings; npm test",
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: "'NODE_OPTIONS'=--no-warnings npm test",
+      }, { env, envMode: 'clean', outDir }), /Refusing inline NODE_OPTIONS changes/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
@@ -301,7 +314,7 @@ describe('test optimization validation command runner', () => {
     const artifactRoot = path.join(repositoryRoot, 'results')
     const outDir = path.join(artifactRoot, 'run')
     const coverage = path.join(repositoryRoot, 'coverage')
-    const env = buildCiWiringEnv(validationRouting())
+    const env = buildOfflineCaptureEnv(validationRouting())
     fs.mkdirSync(artifactRoot)
     fs.mkdirSync(coverage)
     fs.writeFileSync(path.join(coverage, 'original.txt'), 'original')
@@ -647,7 +660,7 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('caps command stdout and stderr artifacts to bounded tails', async () => {
+  it('caps command stdout and stderr artifacts to bounded heads and tails', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
 
     try {
@@ -669,19 +682,23 @@ describe('test optimization validation command runner', () => {
 
       assert.strictEqual(result.stdoutTruncated, true)
       assert.strictEqual(result.stderrTruncated, true)
+      assert.match(result.stdout, /^stdout-start/)
+      assert.match(result.stderr, /^stderr-start/)
       assert.match(result.stdout, /stdout-end$/)
       assert.match(result.stderr, /stderr-end$/)
-      assert.doesNotMatch(result.stdout, /stdout-start/)
-      assert.doesNotMatch(result.stderr, /stderr-start/)
+      assert.ok(result.stdoutOmittedBytes > 0)
+      assert.ok(result.stderrOmittedBytes > 0)
 
       const stdoutArtifact = fs.readFileSync(path.join(outDir, 'stdout.txt'), 'utf8')
       const stderrArtifact = fs.readFileSync(path.join(outDir, 'stderr.txt'), 'utf8')
       const commandArtifact = JSON.parse(fs.readFileSync(path.join(outDir, 'command.json'), 'utf8'))
 
-      assert.match(stdoutArtifact, /output truncated to last 32 bytes/)
-      assert.match(stderrArtifact, /output truncated to last 32 bytes/)
+      assert.match(stdoutArtifact, /\d+ bytes omitted/)
+      assert.match(stderrArtifact, /\d+ bytes omitted/)
       assert.strictEqual(commandArtifact.stdoutTruncated, true)
       assert.strictEqual(commandArtifact.stderrTruncated, true)
+      assert.ok(commandArtifact.stdoutOmittedBytes > 0)
+      assert.ok(commandArtifact.stderrOmittedBytes > 0)
       assert.strictEqual(commandArtifact.maxOutputBytes, 32)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
@@ -767,6 +784,173 @@ describe('test optimization validation command runner', () => {
       fs.rmSync(repositoryRoot, { recursive: true, force: true })
     }
   })
+
+  for (const coverageArguments of [
+    ['--coverageDirectory', 'tmp-coverage'],
+    ['--coverage-directory=tmp-coverage'],
+    ['--coverage.reportsDirectory=tmp-coverage'],
+  ]) {
+    it(`uses explicit coverage output ${coverageArguments.join(' ')}`, async () => {
+      const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+      const artifactRoot = path.join(repositoryRoot, 'results')
+      const outDir = path.join(artifactRoot, 'run')
+      const defaultOutput = path.join(repositoryRoot, 'coverage')
+      const configuredOutput = path.join(repositoryRoot, 'tmp-coverage')
+      fs.mkdirSync(artifactRoot)
+      fs.mkdirSync(defaultOutput)
+      fs.writeFileSync(path.join(defaultOutput, 'original.json'), '{}')
+
+      try {
+        const result = await runCommand({
+          cwd: repositoryRoot,
+          argv: [
+            process.execPath,
+            '-e',
+            'require("node:fs").mkdirSync("tmp-coverage", { recursive: true })',
+            '--',
+            '--coverage',
+            ...coverageArguments,
+          ],
+        }, { artifactRoot, outDir, repositoryRoot })
+
+        assert.strictEqual(result.exitCode, 0)
+        assert.strictEqual(fs.existsSync(configuredOutput), false)
+        assert.strictEqual(fs.existsSync(path.join(defaultOutput, 'original.json')), true)
+        assert.deepStrictEqual(result.commandOutputPaths, [{
+          outputPath: configuredOutput,
+          action: 'removed',
+        }])
+      } finally {
+        fs.rmSync(repositoryRoot, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('removes a newly created nyc output directory recursively', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    fs.mkdirSync(artifactRoot)
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'const fs = require("node:fs"); fs.mkdirSync(".nyc_output", { recursive: true }); ' +
+            'fs.writeFileSync(".nyc_output/process.json", "{}")',
+          'nyc',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(path.join(repositoryRoot, '.nyc_output')), false)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: path.join(repositoryRoot, '.nyc_output'),
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('honors a custom nyc temp directory without touching the default output', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    const defaultOutput = path.join(repositoryRoot, '.nyc_output')
+    const customOutput = path.join(repositoryRoot, 'tmp', 'nyc')
+    fs.mkdirSync(artifactRoot)
+    fs.mkdirSync(defaultOutput)
+    fs.writeFileSync(path.join(defaultOutput, 'original.json'), '{}')
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'require("node:fs").mkdirSync("tmp/nyc", { recursive: true })',
+          'nyc',
+          '--reporter',
+          'text',
+          '--include',
+          'src/**',
+          '--temp-dir',
+          'tmp/nyc',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(customOutput), false)
+      assert.strictEqual(fs.existsSync(path.join(defaultOutput, 'original.json')), true)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: customOutput,
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not treat wrapped runner options as nyc temp-directory options', async () => {
+    const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+    const artifactRoot = path.join(repositoryRoot, 'results')
+    const outDir = path.join(artifactRoot, 'run')
+    fs.mkdirSync(artifactRoot)
+
+    try {
+      const result = await runCommand({
+        cwd: repositoryRoot,
+        argv: [
+          process.execPath,
+          '-e',
+          'require("node:fs").mkdirSync(".nyc_output", { recursive: true })',
+          'nyc',
+          'mocha',
+          '-t',
+          '10000',
+        ],
+      }, { artifactRoot, outDir, repositoryRoot })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.existsSync(path.join(repositoryRoot, '.nyc_output')), false)
+      assert.deepStrictEqual(result.commandOutputPaths, [{
+        outputPath: path.join(repositoryRoot, '.nyc_output'),
+        action: 'removed',
+      }])
+    } finally {
+      fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+
+  for (const argv of [
+    ['npm', 'run', 'test'],
+    ['npm', 'run-script', 'test'],
+    ['npm', 'test'],
+    ['npm', 't'],
+    ['npm', 'tst'],
+  ]) {
+    it(`resolves nyc output from expanded package script ${argv.join(' ')}`, () => {
+      const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-output-'))
+      const packageDirectory = path.join(repositoryRoot, 'packages', 'example')
+      fs.mkdirSync(packageDirectory, { recursive: true })
+      fs.writeFileSync(path.join(repositoryRoot, 'package.json'), JSON.stringify({
+        scripts: {
+          test: 'nyc --temp-dir raw-coverage --cwd packages/example mocha',
+        },
+      }))
+
+      try {
+        assert.deepStrictEqual(getCommandOutputPaths({ cwd: repositoryRoot, argv }), [
+          path.join(packageDirectory, 'raw-coverage'),
+        ])
+      } finally {
+        fs.rmSync(repositoryRoot, { recursive: true, force: true })
+      }
+    })
+  }
 
   it('fails closed when a command replaces an output parent before cleanup', async function () {
     if (process.platform === 'win32') this.skip()

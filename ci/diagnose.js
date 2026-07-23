@@ -34,6 +34,7 @@ const SKIPPED_DIRECTORIES = new Set([
   '.yarn',
   'build',
   'coverage',
+  'dd-test-optimization-validation-results',
   'dist',
   'node_modules',
   'out',
@@ -123,9 +124,8 @@ function getFrameworkDefinitions (ddMajor) {
       commandPatterns: [/\bjest\b/],
       configPatterns: [/^jest\.config\./, /^config-jest\./],
       supportedRange: ddMajor >= 6 ? '>=28.0.0' : '>=24.8.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Jest to >=28.0.0, or use dd-trace v5 for older Jest versions.'
-        : 'Upgrade Jest to >=24.8.0.',
+      recommendation: 'Use a Jest and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Jest ${ddMajor >= 6 ? '>=28.0.0' : '>=24.8.0'}.`,
     },
     {
       id: 'mocha',
@@ -134,9 +134,8 @@ function getFrameworkDefinitions (ddMajor) {
       commandPatterns: [/\bmocha\b/],
       configPatterns: [/^\.mocharc\./],
       supportedRange: ddMajor >= 6 ? '>=8.0.0' : '>=5.2.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Mocha to >=8.0.0, or use dd-trace v5 for older Mocha versions.'
-        : 'Upgrade Mocha to >=5.2.0.',
+      recommendation: 'Use a Mocha and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Mocha ${ddMajor >= 6 ? '>=8.0.0' : '>=5.2.0'}.`,
       notes: [
         'Impacted tests are detected at suite level for Mocha.',
       ],
@@ -158,9 +157,8 @@ function getFrameworkDefinitions (ddMajor) {
       configPatterns: [/^cypress\.config\./, /^cypress\.json$/],
       supportedRange: ddMajor >= 6 ? '>=12.0.0' : '>=6.7.0',
       autoInstrumentationRange: ddMajor >= 6 ? '>=12.0.0' : '>=10.2.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Cypress to >=12.0.0, or use dd-trace v5 for older Cypress versions.'
-        : 'Upgrade Cypress to >=6.7.0.',
+      recommendation: 'Use a Cypress and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Cypress ${ddMajor >= 6 ? '>=12.0.0' : '>=6.7.0'}.`,
     },
     {
       id: 'playwright',
@@ -169,9 +167,8 @@ function getFrameworkDefinitions (ddMajor) {
       commandPatterns: [/\bplaywright\s+test\b/],
       configPatterns: [/^playwright\.config\./],
       supportedRange: ddMajor >= 6 ? '>=1.38.0' : '>=1.18.0',
-      recommendation: ddMajor >= 6
-        ? 'Upgrade Playwright to >=1.38.0, or use dd-trace v5 for older Playwright versions.'
-        : 'Upgrade Playwright to >=1.18.0.',
+      recommendation: 'Use a Playwright and dd-trace combination whose documented support ranges overlap; this ' +
+        `dd-trace version requires Playwright ${ddMajor >= 6 ? '>=1.38.0' : '>=1.18.0'}.`,
       notes: [
         'Test Impact Analysis suite skipping is not supported for Playwright.',
         'Impacted tests are detected at suite level for Playwright.',
@@ -199,7 +196,7 @@ const UNSUPPORTED_FRAMEWORKS = [
     id: 'node-test',
     name: 'Node.js test runner',
     packages: [],
-    commandPatterns: [/\bnode\s+--test\b/, /\bnode\s+--experimental-test-coverage\b/],
+    commandPatterns: [/\bnode\s+--test\b/, /\bnode\s+--experimental-test-coverage\b/, /\bbnt\b/],
   },
   { id: 'ava', name: 'AVA', packages: ['ava'], commandPatterns: [/\bava\b/] },
   { id: 'tap', name: 'tap', packages: ['tap'], commandPatterns: [/\btap\b/] },
@@ -1106,6 +1103,7 @@ function collectScripts (manifests) {
  */
 function detectSupportedFrameworks (root, definitions, manifests, scripts, textFiles) {
   const frameworks = []
+  const projectPreferenceScores = getProjectPreferenceScores(root, manifests)
 
   for (const definition of definitions) {
     const dependencyEntries = findDependencyEntries(manifests, definition.packages)
@@ -1119,6 +1117,7 @@ function detectSupportedFrameworks (root, definitions, manifests, scripts, textF
       dependencyEntries,
       scriptMatches,
       configMatches,
+      projectPreferenceScores,
       locations: unique([
         ...dependencyEntries.map(entry => entry.relativePath),
         ...scriptMatches.map(script => script.relativePath),
@@ -1193,21 +1192,84 @@ function getSupportedVersionDetection (framework, relativePath) {
  * @returns {object|undefined} eligible command match
  */
 function getEligibleCommandMatch (framework) {
-  const scriptMatches = framework.scriptMatches || []
+  const scriptMatches = [...(framework.scriptMatches || [])].sort((left, right) => {
+    return compareProjectPreference(left, right, framework.projectPreferenceScores)
+  })
 
   for (const script of scriptMatches) {
     if (isIneligibleFrameworkCommand(framework.id, script.command)) continue
     return script
   }
 
-  if (scriptMatches.length > 0) return
-
-  if (framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest') {
-    return framework.dependencyEntries?.[0] && {
+  if (framework.id === 'cucumber' || framework.id === 'cypress' || framework.id === 'jest' ||
+    framework.id === 'mocha' || framework.id === 'playwright' || framework.id === 'vitest') {
+    const dependencyEntries = [...(framework.dependencyEntries || [])].sort((left, right) => {
+      return compareProjectPreference(left, right, framework.projectPreferenceScores)
+    })
+    return dependencyEntries[0] && {
       command: `direct ${framework.id} binary`,
-      relativePath: framework.dependencyEntries[0].relativePath,
+      relativePath: dependencyEntries[0].relativePath,
     }
   }
+}
+
+/**
+ * Scores package manifests by how closely their names match the repository directory name.
+ *
+ * @param {string} root repository root
+ * @param {Array<object>} manifests package manifests
+ * @returns {Map<string, number>} preference score by package.json path
+ */
+function getProjectPreferenceScores (root, manifests) {
+  const repositoryTokens = getIdentityTokens(path.basename(root))
+  const scores = new Map()
+
+  for (const manifest of manifests) {
+    const projectName = manifest.json.name || (manifest.relativePath === 'package.json'
+      ? path.basename(root)
+      : path.basename(path.dirname(manifest.relativePath)))
+    const projectTokens = getIdentityTokens(projectName)
+    let score = 0
+    for (const token of projectTokens) {
+      if (repositoryTokens.has(token)) score++
+    }
+    scores.set(manifest.relativePath, score)
+  }
+
+  return scores
+}
+
+/**
+ * Normalizes repository and package names for conservative identity comparison.
+ *
+ * @param {string} value repository or package name
+ * @returns {Set<string>} normalized identity tokens
+ */
+function getIdentityTokens (value) {
+  const tokens = String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  const normalized = new Set()
+  for (const token of tokens) {
+    if (['monorepo', 'package', 'packages', 'project', 'repo', 'root', 'workspace'].includes(token)) continue
+    normalized.add(token.endsWith('js') && token.length > 2 ? token.slice(0, -2) : token)
+  }
+  return normalized
+}
+
+/**
+ * Orders command owners by repository identity, then by scope and stable path.
+ *
+ * @param {object} left first command or dependency entry
+ * @param {object} right second command or dependency entry
+ * @param {Map<string, number>|undefined} scores package preference scores
+ * @returns {number} sort order
+ */
+function compareProjectPreference (left, right, scores) {
+  const scoreDifference = (scores?.get(right.relativePath) || 0) - (scores?.get(left.relativePath) || 0)
+  if (scoreDifference !== 0) return scoreDifference
+
+  const depthDifference = left.relativePath.split('/').length - right.relativePath.split('/').length
+  if (depthDifference !== 0) return depthDifference
+  return left.relativePath.localeCompare(right.relativePath)
 }
 
 /**
@@ -2011,6 +2073,8 @@ function formatLocations (locations) {
  * @returns {object} serializable framework summary
  */
 function serializeSupportedFramework (framework) {
+  const eligibleCommand = getEligibleCommandMatch(framework)
+  const supportedVersion = getSupportedVersionDetection(framework, eligibleCommand?.relativePath)
   return {
     id: framework.id,
     name: framework.name,
@@ -2018,6 +2082,8 @@ function serializeSupportedFramework (framework) {
     supportedRange: framework.supportedRange,
     locations: framework.locations,
     versionDetections: framework.versionDetections,
+    eligibleCommand,
+    supportedVersion,
   }
 }
 

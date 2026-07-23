@@ -1,38 +1,30 @@
 'use strict'
 
-const {
-  getCommandDetails,
-  serializeDisplayCommand,
-} = require('./command-runner')
 const { sanitizeEnv } = require('./redaction')
 
 /**
- * Builds the normalized CI command metadata shape shared by reports and UI payloads.
+ * Builds the normalized static CI configuration metadata shared by reports.
  *
  * @param {object} framework manifest framework entry
- * @returns {object|undefined} CI command candidate context when available
+ * @returns {object|undefined} CI configuration context when available
  */
 function buildCiCommandCandidate (framework) {
   const ciWiring = framework.ciWiring || {}
-  const command = framework.ciWiringCommand
-
-  if (!command && !hasCiWiringContext(ciWiring)) return
+  if (Object.keys(ciWiring).length === 0) return
 
   return removeUndefined({
-    provider: ciWiring.provider || undefined,
-    configFile: ciWiring.configFile || undefined,
-    workflow: ciWiring.workflow || undefined,
-    job: ciWiring.job || undefined,
-    step: ciWiring.step || undefined,
-    runner: ciWiring.runner || undefined,
-    shell: ciWiring.shell || undefined,
-    command: command ? serializeDisplayCommand(command) : ciWiring.command,
-    cwd: command?.cwd || ciWiring.workingDirectory,
+    provider: ciWiring.provider,
+    configFile: ciWiring.configFile,
+    workflow: ciWiring.workflow,
+    job: ciWiring.job,
+    step: ciWiring.step,
+    runner: ciWiring.runner,
+    shell: ciWiring.shell,
+    command: typeof ciWiring.command === 'string' ? ciWiring.command : undefined,
+    cwd: ciWiring.workingDirectory,
     whySelected: ciWiring.whySelected || ciWiring.selectionReason || ciWiring.diagnosis,
-    replayability: ciWiring.replayability,
-    replayBlocker: ciWiring.replayBlocker,
     initialization: ciWiring.initialization,
-    env: buildCiEnvSummary(ciWiring, command),
+    env: buildCiEnvSummary(ciWiring),
     packageScriptExpansionChain: getFirstArray(
       ciWiring.packageScriptExpansionChain,
       ciWiring.scriptExpansionChain,
@@ -45,23 +37,18 @@ function buildCiCommandCandidate (framework) {
     ),
     setupCommandIds: ciWiring.setupCommandIds,
     unresolved: ciWiring.unresolved,
-    commandDetails: command && getCommandDetails(command),
   })
 }
 
-function buildCiEnvSummary (ciWiring, command) {
+function buildCiEnvSummary (ciWiring) {
   const summary = removeUndefined({
     workflow: sanitizeEnv(ciWiring.workflowEnv || ciWiring.env?.workflow),
     job: sanitizeEnv(ciWiring.jobEnv || ciWiring.env?.job),
-    step: sanitizeEnv(ciWiring.stepEnv || command?.env || ciWiring.env?.step),
+    step: sanitizeEnv(ciWiring.stepEnv || ciWiring.env?.step),
     inherited: sanitizeEnv(ciWiring.inheritedEnv),
   })
 
   return Object.keys(summary).length > 0 ? summary : undefined
-}
-
-function hasCiWiringContext (ciWiring) {
-  return Object.keys(ciWiring).length > 0
 }
 
 function getFirstArray (...values) {
@@ -78,6 +65,4 @@ function removeUndefined (object) {
   return result
 }
 
-module.exports = {
-  buildCiCommandCandidate,
-}
+module.exports = { buildCiCommandCandidate }

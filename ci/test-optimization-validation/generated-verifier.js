@@ -62,7 +62,7 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)
       const expected = scenario.expectedWithoutDatadog
       const failOnceStateCreated = scenario.id === 'atr-fail-once'
-        ? hasGeneratedRuntimeFile(strategy)
+        ? getGeneratedRuntimeFileStatus(strategy)
         : undefined
       const scenarioEvidence = {
         id: scenario.id,
@@ -165,22 +165,24 @@ function getVerificationFailure (framework, evidence, artifacts, scenario, timed
 }
 
 /**
- * Checks whether the generated fail-once scenario created a declared runtime state file.
+ * Checks a declared generated runtime state file when the adapter uses one.
  *
  * @param {object} strategy generated test strategy
- * @returns {boolean} whether a regular declared runtime file exists
+ * @returns {boolean|undefined} whether a declared runtime file exists, or undefined when none is required
  */
-function hasGeneratedRuntimeFile (strategy) {
+function getGeneratedRuntimeFileStatus (strategy) {
   const generatedFiles = new Set((strategy.files || []).map(file => path.resolve(file.path)))
+  let expectsRuntimeFile = false
   for (const cleanupPath of strategy.cleanupPaths || []) {
     const filename = path.resolve(cleanupPath)
     if (generatedFiles.has(filename)) continue
+    expectsRuntimeFile = true
     try {
       const stat = fs.lstatSync(filename)
       if (!stat.isSymbolicLink() && stat.isFile()) return true
     } catch {}
   }
-  return false
+  return expectsRuntimeFile ? false : undefined
 }
 
 /**

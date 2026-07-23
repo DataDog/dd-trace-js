@@ -2,8 +2,6 @@
 
 const path = require('node:path')
 
-const { serializeDisplayCommand } = require('./command-runner')
-
 const GITHUB_API_KEY_REFERENCE = '$' + '{{ secrets.DD_API_KEY }}'
 const AGENTLESS_ENV = {
   DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true',
@@ -31,7 +29,7 @@ function buildCiRemediation (framework) {
   const location = getCiLocation(ciWiring)
   const nodeOptions = getNodeOptions(framework)
   const recommendedValues = getRecommendedValues(framework)
-  const variants = getVariants(transport, ciWiring, framework.ciWiringCommand, recommendedValues, nodeOptions)
+  const variants = getVariants(transport, ciWiring, recommendedValues, nodeOptions)
 
   return {
     provider: ciWiring.provider || 'unknown',
@@ -60,7 +58,6 @@ function collectCiEnv (framework) {
     ...ciWiring.jobEnv,
     ...ciWiring.stepEnv,
     ...ciWiring.inheritedEnv,
-    ...framework.ciWiringCommand?.env,
   }
 }
 
@@ -106,12 +103,12 @@ function getAgentAlternative () {
     'DD_CIVISIBILITY_AGENTLESS_ENABLED.'
 }
 
-function getVariants (transport, ciWiring, command, recommendedValues, nodeOptions) {
-  if (transport === 'agent') return [getVariant('agent', ciWiring, command, recommendedValues, nodeOptions)]
-  return [getVariant('agentless', ciWiring, command, recommendedValues, nodeOptions)]
+function getVariants (transport, ciWiring, recommendedValues, nodeOptions) {
+  if (transport === 'agent') return [getVariant('agent', ciWiring, recommendedValues, nodeOptions)]
+  return [getVariant('agentless', ciWiring, recommendedValues, nodeOptions)]
 }
 
-function getVariant (transport, ciWiring, command, recommendedValues, nodeOptions) {
+function getVariant (transport, ciWiring, recommendedValues, nodeOptions) {
   const transportEnv = transport === 'agentless' ? AGENTLESS_ENV : {}
   const requiredEnv = { NODE_OPTIONS: nodeOptions, ...transportEnv }
   const recommendedEnv = Object.fromEntries(recommendedValues.map(({ name, value }) => [name, value]))
@@ -128,7 +125,7 @@ function getVariant (transport, ciWiring, command, recommendedValues, nodeOption
     })),
     recommendedValues,
     optionalValues: OPTIONAL_VALUES[transport],
-    snippet: formatSnippet({ ...requiredEnv, ...recommendedEnv }, ciWiring, command),
+    snippet: formatSnippet({ ...requiredEnv, ...recommendedEnv }, ciWiring),
   }
 }
 
@@ -143,7 +140,6 @@ function getRecommendedValues (framework) {
     framework.ciWiring?.step,
     framework.ciWiring?.job,
     framework.existingTestCommand?.description,
-    framework.ciWiringCommand?.description,
   ].filter(Boolean).join(' ')
   const testKind = /\bunit\b/i.test(context)
     ? 'unit-tests'
@@ -172,9 +168,9 @@ function normalizeName (value) {
     .replaceAll(/^-|-$/g, '') || 'test'
 }
 
-function formatSnippet (env, ciWiring, command) {
+function formatSnippet (env, ciWiring) {
   if (ciWiring.provider === 'github-actions') {
-    const testCommand = getTestCommand(ciWiring, command)
+    const testCommand = getTestCommand(ciWiring)
     return [
       ciWiring.configFile ? `# ${formatPath(ciWiring.configFile)}` : '# GitHub Actions workflow',
       ciWiring.job ? `# Job: ${ciWiring.job}` : '# Selected test job',
@@ -196,8 +192,8 @@ function quoteShellValue (value) {
   return JSON.stringify(String(value))
 }
 
-function getTestCommand (ciWiring, command) {
-  if (command) return serializeDisplayCommand(command)
+function getTestCommand (ciWiring) {
+  if (typeof ciWiring.command === 'string' && ciWiring.command.trim()) return ciWiring.command
   return ciWiring.packageScriptExpansionChain?.[0] || ciWiring.runnerToolChain?.[0] ||
     '# keep the existing test command here'
 }
@@ -207,4 +203,7 @@ function quoteYamlValue (value) {
   return JSON.stringify(String(value))
 }
 
-module.exports = { buildCiRemediation }
+module.exports = {
+  buildCiRemediation,
+  getConfiguredTransport,
+}

@@ -85,19 +85,6 @@ async function runBasicReporting ({ framework, out, options }) {
       )
     }
 
-    if (matchesPreflightExitCode(framework.preflight, result.exitCode)) {
-      evidence.commandFailure = summarizeCommandFailure(result, evidence)
-      evidence.commandExitMatchesPreflight = true
-      return pass(
-        framework,
-        scenarioName,
-        'Basic reporting emitted session, module, suite, and test events. ' +
-          `The command exited ${result.exitCode}, matching the dd-trace-less preflight run.`,
-        evidence,
-        outDir
-      )
-    }
-
     evidence.commandFailure = summarizeCommandFailure(result, evidence)
     evidence.commandExitMatchesPreflight = false
     const cleanConfirmation = await runCleanConfirmation({ command, framework, options, out, scenarioName })
@@ -328,6 +315,7 @@ function summarizeTestOutput (stdout = '', stderr = '') {
     /\b\d+\s+failed\b/i,
     /\btests?\b.*\bpassed\b/i,
     /\btests?\b.*\bfailed\b/i,
+    /\bTests\s*:\s*\d+\b/i,
     /\bSuccessfully ran target\b.*\btest\b/i,
     /\bsuccess:\s*\d+\b/i,
     /\bTasks:\s*\d+\s+successful\b/i,
@@ -336,8 +324,9 @@ function summarizeTestOutput (stdout = '', stderr = '') {
 
 function commandOutputShowsTestsRan (lines) {
   return lines.some(line => {
-    return /\b\d+\s+(?:passing|passed)\b/i.test(line) ||
-      /\btests?\b.*\bpassed\b/i.test(line) ||
+    return /\b\d+\s+(?:passing|passed|failing|failed)\b/i.test(line) ||
+      /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
+      /\bTests\s*:\s*[1-9]\d*\b/i.test(line) ||
       /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
       /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
       /\bfailed:\s*[1-9]\d*\b/i.test(line) ||

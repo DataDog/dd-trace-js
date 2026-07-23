@@ -39,10 +39,7 @@ const PASSING_VALIDATION_PHASES = {
     },
   },
 }
-const APPROVAL_ARGS = [
-  '--offline-fixture-nonce', 'a'.repeat(32),
-  '--approved-plan-sha256', 'a'.repeat(64),
-]
+const APPROVAL_DIGEST = 'a'.repeat(64)
 
 describe('test optimization validation cli', () => {
   it('uses only published files and runtime dependencies', () => {
@@ -147,11 +144,29 @@ describe('test optimization validation cli', () => {
     assert.strictEqual(options.approvedArtifactSha256, digest)
   })
 
-  it('parses the read-only approval digest verification mode', () => {
-    const options = parseArgs(['--offline-fixture-nonce', 'b'.repeat(32), '--print-approval-sha256'])
+  for (const mode of ['--help', '--init-manifest', '--print-plan', '--validate-manifest']) {
+    it(`rejects an approved live run combined with ${mode}`, async () => {
+      const errors = []
+      const originalError = console.error
+      const originalExitCode = process.exitCode
+      console.error = message => errors.push(message)
+      process.exitCode = undefined
 
-    assert.strictEqual(options.printApprovalSha256, true)
-  })
+      try {
+        await runValidationCli([
+          '--run-approved-plan', 'results/approval.json',
+          '--sha256', 'a'.repeat(64),
+          mode,
+        ])
+
+        assert.strictEqual(process.exitCode, 3)
+        assert.match(errors.join('\n'), new RegExp(`cannot be combined with ${mode}`))
+      } finally {
+        console.error = originalError
+        process.exitCode = originalExitCode
+      }
+    })
+  }
 
   it('documents the short approval-file execution command in help output', async () => {
     const logs = []
@@ -177,7 +192,13 @@ describe('test optimization validation cli', () => {
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       './manifest-scaffold': {
         createManifestScaffold ({ root }) {
-          return { schemaVersion: '1.0', repository: { root }, environment: {}, frameworks: [] }
+          return {
+            schemaVersion: '1.0',
+            repository: { root },
+            environment: {},
+            ciDiscovery: { reviewTargets: ['.github/workflows/test.yml'], reviewRequired: false },
+            frameworks: [{ status: 'runnable', ciWiring: { initialization: { status: 'not_configured' } } }],
+          }
         },
       },
     })
@@ -192,8 +213,12 @@ describe('test optimization validation cli', () => {
         'dd-test-optimization-validation-manifest.json'
       )))
       assert.strictEqual(manifest.repository.root, fs.realpathSync(tmpDir))
-      assert.match(logs.join('\n'), /without running project code/)
-      assert.match(logs.join('\n'), /CI files listed in ciDiscovery/)
+      assert.match(logs.join('\n'), /schema-valid validation manifest without running project code/)
+      assert.match(logs.join('\n'), /Do not enumerate other packages, tests, runner configs, workflow files/)
+      assert.match(logs.join('\n'), /\.github\/workflows\/test\.yml/)
+      assert.match(logs.join('\n'), /CI initialization status: not_configured/)
+      assert.match(logs.join('\n'), /Do not open or edit the manifest/)
+      assert.match(logs.join('\n'), /--print-plan/)
       assert.strictEqual(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-validation-results')), false)
     } finally {
       console.log = originalLog
@@ -231,63 +256,6 @@ describe('test optimization validation cli', () => {
     }
   })
 
-  it('prints the approval digest without creating output or starting live validation', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approval-digest-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const digest = 'c'.repeat(64)
-    const nonce = 'd'.repeat(32)
-    const logs = []
-    const digestInputs = []
-    const originalLog = console.log
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      './approval': {
-        assertApprovalDigest () {
-          throw new Error('live approval should not run')
-        },
-        getApprovalDigest (input) {
-          digestInputs.push(input)
-          return digest
-        },
-      },
-      './static-diagnosis': {
-        runStaticDiagnosis () {
-          throw new Error('static diagnosis should not run')
-        },
-      },
-    })
-
-    const manifest = getRunnableManifest(tmpDir)
-    manifest.frameworks.push({
-      ...manifest.frameworks[0],
-      id: 'vitest:other',
-    })
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    console.log = message => logs.push(message)
-
-    try {
-      await main([
-        '--manifest', manifestPath,
-        '--out', out,
-        '--framework', manifest.frameworks[0].id,
-        '--offline-fixture-nonce', nonce,
-        '--print-approval-sha256',
-      ])
-
-      assert.deepStrictEqual(logs, [digest])
-      assert.strictEqual(fs.existsSync(out), false)
-      assert.strictEqual(digestInputs.length, 1)
-      assert.strictEqual(digestInputs[0].offlineFixtureNonce, nonce)
-      assert.deepStrictEqual(digestInputs[0].selectedFrameworkIds, [manifest.frameworks[0].id])
-      assert.deepStrictEqual(digestInputs[0].manifest.frameworks.map(framework => framework.id), [
-        manifest.frameworks[0].id,
-      ])
-    } finally {
-      console.log = originalLog
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
   it('reproduces the hash from a framework-scoped execution plan', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-reproduce-digest-'))
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
@@ -311,27 +279,29 @@ describe('test optimization validation cli', () => {
       ])
       const presentationReminder = logs.pop()
       const executionPlanPath = path.join(out, 'execution-plan.md')
-      const approvalSummaryPath = path.join(out, 'approval-summary.md')
       const plan = fs.readFileSync(executionPlanPath, 'utf8')
-      const approvalSummary = fs.readFileSync(approvalSummaryPath, 'utf8')
       const expectedDigest = plan.match(/Expected SHA-256: `([a-f0-9]{64})`/)?.[1]
       const approvalJsonPath = path.join(out, 'approval.json')
       const coveredFilesPath = path.join(out, 'approval-files.sha256')
 
       assert.strictEqual(fs.existsSync(approvalJsonPath), true)
       assert.strictEqual(fs.existsSync(coveredFilesPath), true)
-      assert.match(presentationReminder, /Customer approval summary written to/)
-      assert.ok(presentationReminder.includes(approvalSummaryPath))
+      assert.match(presentationReminder, /^===== CUSTOMER APPROVAL PLAN =====/)
+      assert.match(presentationReminder, /===== END CUSTOMER APPROVAL PLAN =====/)
       assert.ok(presentationReminder.includes(executionPlanPath))
-      assert.match(presentationReminder, /send its complete contents in a user-facing message/)
-      assert.doesNotMatch(presentationReminder, /--approved-plan-sha256/)
-      assert.doesNotMatch(presentationReminder, /--offline-fixture-nonce [a-f0-9]{32}/)
-      assert.doesNotMatch(presentationReminder, /[a-f0-9]{64}/)
-      assert.match(approvalSummary, /# Test Optimization Validation Approval Summary/)
-      assert.match(approvalSummary, /## Commands/)
-      assert.match(approvalSummary, /## Safety and Outputs/)
-      assert.match(approvalSummary, /## Approval Command/)
-      assert.match(approvalSummary, /--run-approved-plan results\/approval\.json --sha256 [a-f0-9]{64}/)
+      assert.match(presentationReminder, /LIVE VALIDATION HAS NOT RUN\./)
+      assert.match(presentationReminder, /DISCOVERY IS COMPLETE\. STOP TOOL USE NOW\./)
+      assert.match(presentationReminder, /Tool output is not the next user-facing response/)
+      assert.match(presentationReminder, /A response containing only "Awaiting approval".*is invalid/)
+      const displayedSummary = presentationReminder
+        .split('===== CUSTOMER APPROVAL PLAN =====\n')[1]
+        .split('\n===== END CUSTOMER APPROVAL PLAN =====')[0]
+      assert.strictEqual(displayedSummary, plan.trimEnd())
+      assert.match(plan, /# Test Optimization Validation Execution Plan/)
+      assert.match(plan, /## Commands/)
+      assert.match(plan, /## Safety and Outputs/)
+      assert.match(plan, /## Approval Command/)
+      assert.match(plan, /--run-approved-plan results\/approval\.json --sha256 [a-f0-9]{64}/)
       assert.strictEqual(
         crypto.createHash('sha256').update(fs.readFileSync(approvalJsonPath)).digest('hex'),
         expectedDigest
@@ -361,7 +331,7 @@ describe('test optimization validation cli', () => {
     try {
       await main(['--manifest', manifestPath, '--out', out])
 
-      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(process.exitCode, 3)
       assert.strictEqual(fs.existsSync(out), false)
       assert.match(errors.join('\n'), /requires --run-approved-plan and --sha256/)
     } finally {
@@ -416,11 +386,6 @@ describe('test optimization validation cli', () => {
           return getPassingScenarioResult(framework, 'basic-reporting')
         },
       },
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
-        },
-      },
       './static-diagnosis': {
         getStaticBlocker () {},
         runStaticDiagnosis () {
@@ -459,6 +424,7 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': getApprovedPlanStub(manifestPath, out, ['--scenario', 'basic-reporting']),
       './report-writer': {
         async writeReport () {},
       },
@@ -472,11 +438,6 @@ describe('test optimization validation cli', () => {
             evidence: {},
             artifacts: [],
           }
-        },
-      },
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
         },
       },
       './static-diagnosis': {
@@ -494,12 +455,7 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main([
-        '--manifest', manifestPath,
-        '--out', out,
-        '--scenario', 'basic-reporting',
-        ...APPROVAL_ARGS,
-      ])
+      await main(getApprovalArgs(out))
 
       assert.deepStrictEqual(logs, [
         '[test-optimization-validator] jest:root: Test execution without Datadog started.',
@@ -523,6 +479,7 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': getApprovedPlanStub(manifestPath, tmpDir),
     })
 
     fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
@@ -530,9 +487,9 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', tmpDir, ...APPROVAL_ARGS])
+      await main(getApprovalArgs(tmpDir))
 
-      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(process.exitCode, 3)
       assert.match(errors.join('\n'), /dedicated child directory inside repository.root/)
     } finally {
       console.error = originalError
@@ -549,6 +506,7 @@ describe('test optimization validation cli', () => {
     const originalExitCode = process.exitCode
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
       ...PASSING_VALIDATION_PHASES,
+      './approval-artifacts': getApprovedPlanStub(manifestPath, out, ['--scenario', 'efd']),
       './report-writer': {
         async writeReport () {},
       },
@@ -562,11 +520,6 @@ describe('test optimization validation cli', () => {
             evidence: {},
             artifacts: [],
           }
-        },
-      },
-      './setup-runner': {
-        async runSetupCommands () {
-          return { ok: true }
         },
       },
       './static-diagnosis': {
@@ -587,16 +540,16 @@ describe('test optimization validation cli', () => {
     process.exitCode = undefined
 
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'efd', ...APPROVAL_ARGS])
+      await main(getApprovalArgs(out))
 
-      assert.strictEqual(process.exitCode, 1)
+      assert.strictEqual(process.exitCode, 2)
     } finally {
       process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
 
-  it('skips CI wiring when direct-initialization Basic Reporting fails', async () => {
+  it('still audits CI configuration when direct-initialization Basic Reporting fails', async () => {
     const validation = await runCliFixture({
       './scenarios/basic-reporting': {
         async runBasicReporting ({ framework }) {
@@ -611,28 +564,34 @@ describe('test optimization validation cli', () => {
         },
       },
       './scenarios/ci-wiring': {
-        async runCiWiring () {
-          throw new Error('CI wiring should not run until Basic Reporting passes')
+        async runCiWiring ({ framework, basicResult }) {
+          assert.strictEqual(basicResult.status, 'fail')
+          return {
+            frameworkId: framework.id,
+            scenario: 'ci-wiring',
+            status: 'fail',
+            diagnosis: 'Static CI evidence confirms that Test Optimization is not configured.',
+            evidence: {
+              conclusion: 'confirmed_misconfigured',
+              domain: 'ci_configuration',
+              evidenceStrength: 'confirmed_static',
+            },
+            artifacts: [],
+          }
         },
       },
-    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root))
+    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root))
 
     assert.strictEqual(validation.exitCode, 1)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:fail',
-      'ci-wiring:skip',
+      'ci-wiring:fail',
       'efd:skip',
       'atr:skip',
       'test-management:skip',
     ])
-    assert.match(validation.results[1].diagnosis, /Skipped CI wiring validation because Basic Reporting/)
-    assert.strictEqual(validation.results[1].evidence.basicReportingStatus, 'fail')
-    assert.deepStrictEqual(validation.results[1].evidence.featureEligibility, {
-      eligible: false,
-      blockedBy: 'basic-reporting',
-      reasonCode: 'basic-reporting-failed',
-      scenario: 'ci-wiring',
-    })
+    assert.strictEqual(validation.results[1].conclusion, 'confirmed_misconfigured')
+    assert.strictEqual(validation.results[1].evidenceStrength, 'confirmed_static')
     assert.deepStrictEqual(validation.results[2].evidence.featureEligibility, {
       eligible: false,
       blockedBy: 'basic-reporting',
@@ -648,7 +607,7 @@ describe('test optimization validation cli', () => {
           throw new Error('CI wiring should not run when only Basic Reporting is selected')
         },
       },
-    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root), [
+    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root), [
       '--scenario', 'basic-reporting',
     ])
 
@@ -658,7 +617,7 @@ describe('test optimization validation cli', () => {
     ])
   })
 
-  it('reports non-replayable CI wiring as incomplete during full validation', async () => {
+  it('reports statically configured CI as propagation-unverified during full validation', async () => {
     const validation = await runCliFixture({
       './scenarios/early-flake-detection': {
         async runEarlyFlakeDetection ({ framework }) {
@@ -677,14 +636,17 @@ describe('test optimization validation cli', () => {
       },
     }, manifest => {
       manifest.frameworks[0].ciWiring = {
-        status: 'unknown',
-        replayability: 'not_replayable',
-        replayBlocker: 'No replayable CI command was identified.',
-        reason: 'No replayable CI command was identified.',
+        command: 'npm test',
+        initialization: {
+          status: 'configured',
+          evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'],
+        },
+        stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
+        requiredSecretEnvVars: ['DD_API_KEY'],
       }
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:pass',
       'ci-wiring:error',
@@ -692,7 +654,7 @@ describe('test optimization validation cli', () => {
       'atr:pass',
       'test-management:pass',
     ])
-    assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
+    assert.strictEqual(validation.results[1].conclusion, 'configured_propagation_unverified')
     assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
   })
 
@@ -718,34 +680,54 @@ describe('test optimization validation cli', () => {
           return getPassingScenarioResult(framework, 'test-management')
         },
       },
-    }, manifest => setReplayableCiWiring(manifest.frameworks[0], manifest.repository.root))
+    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root))
 
     assert.strictEqual(validation.exitCode, 0)
     assert.strictEqual(validation.runSummary.validationCoverage, 'complete')
     assert.deepStrictEqual(validation.runSummary.omittedScenarios, [])
   })
 
+  it('reports partial coverage when the workflow finishes without conclusive checks', async () => {
+    const validation = await runCliFixture({
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'error',
+            diagnosis: 'The test command could not start.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+    })
+
+    assert.strictEqual(validation.exitCode, 2)
+    assert.strictEqual(validation.runSummary.runCompleted, true)
+    assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
+  })
+
   it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
     const validation = await runCliFixture({}, manifest => {
       manifest.frameworks[0].ciWiring = {
-        status: 'unknown',
-        replayability: 'not_replayable',
-        replayBlocker: 'No replayable CI command was identified.',
-        reason: 'No replayable CI command was identified.',
+        diagnosis: 'CI initialization evidence has not been completed.',
+        initialization: { status: 'unknown', evidence: [] },
       }
     }, ['--scenario', 'ci-wiring'])
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
       'basic-reporting:pass',
       'ci-wiring:error',
     ])
     assert.strictEqual(validation.results[1].diagnosis,
-      'CI wiring was not replayed: No replayable CI command was identified. ' +
-      'No live CI-wiring conclusion was reached.')
-    assert.strictEqual(validation.results[1].evidence.manifestIncomplete, true)
+      'The CI configuration audit could not determine whether the identified test job initializes Test ' +
+      'Optimization. No CI configuration conclusion was reached.')
+    assert.strictEqual(validation.results[1].conclusion, 'incomplete')
     assert.strictEqual(validation.results[1].evidence.recommendation,
-      'Resolve the recorded CI replay blocker, then add ciWiringCommand and rerun validation.')
+      'Record whether the identified CI test job configures NODE_OPTIONS with dd-trace/ci/init and whether it uses ' +
+      'agentless reporting or a reachable Datadog Agent.')
   })
 
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
@@ -801,7 +783,7 @@ describe('test optimization validation cli', () => {
       fs.writeFileSync(path.join(root, '.mocharc.json'), '{}\n')
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results[0].evidence.configFiles, ['.mocharc.json'])
     assert.deepStrictEqual(validation.results[0].evidence.directDependency, {
       field: 'devDependencies',
@@ -843,13 +825,90 @@ describe('test optimization validation cli', () => {
       fs.writeFileSync(path.join(root, 'cucumber.js'), 'module.exports = {}\n')
     })
 
-    assert.strictEqual(validation.exitCode, 1)
+    assert.strictEqual(validation.exitCode, 2)
     assert.deepStrictEqual(validation.results.map(result => result.evidence.configFiles), [
       ['config-jest.js'],
       ['cypress.json'],
       ['cucumber.js'],
     ])
   })
+
+  const decisionCases = [
+    {
+      name: 'returns an actionable result when reporting works but CI initialization is missing',
+      basicStatus: 'pass',
+      ciStatus: 'missing',
+      advancedStatuses: { efd: 'pass', atr: 'pass', 'test-management': 'pass' },
+      exitCode: 1,
+      results: ['basic-reporting:pass', 'ci-wiring:fail', 'efd:pass', 'atr:pass', 'test-management:pass'],
+      coverage: 'complete',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'keeps the CI finding conclusive when direct reporting fails',
+      basicStatus: 'fail',
+      ciStatus: 'missing',
+      advancedStatuses: {},
+      exitCode: 1,
+      results: ['basic-reporting:fail', 'ci-wiring:fail', 'efd:skip', 'atr:skip', 'test-management:skip'],
+      coverage: 'partial',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'returns incomplete when reporting works but configured CI propagation is unverified',
+      basicStatus: 'pass',
+      ciStatus: 'configured',
+      advancedStatuses: { efd: 'pass', atr: 'pass', 'test-management': 'pass' },
+      exitCode: 2,
+      results: ['basic-reporting:pass', 'ci-wiring:error', 'efd:pass', 'atr:pass', 'test-management:pass'],
+      coverage: 'partial',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'returns a confirmed failure when an advanced feature fails after reporting works',
+      basicStatus: 'pass',
+      ciStatus: 'configured',
+      advancedStatuses: { efd: 'pass', atr: 'fail', 'test-management': 'pass' },
+      exitCode: 1,
+      results: ['basic-reporting:pass', 'ci-wiring:error', 'efd:pass', 'atr:fail', 'test-management:pass'],
+      coverage: 'partial',
+      executionStatus: 'completed',
+    },
+    {
+      name: 'reports a sandbox-blocked preflight as an execution-environment blocker',
+      preflightBlocked: true,
+      ciStatus: 'unknown',
+      advancedStatuses: {},
+      exitCode: 2,
+      results: ['basic-reporting:blocked', 'ci-wiring:error', 'efd:skip', 'atr:skip', 'test-management:skip'],
+      coverage: 'partial',
+      executionStatus: 'blocked',
+    },
+  ]
+
+  for (const decisionCase of decisionCases) {
+    it(decisionCase.name, async () => {
+      const validation = await runCliFixture(
+        getDecisionCliStubs(decisionCase),
+        manifest => setDecisionCiWiring(manifest.frameworks[0], manifest.repository.root, decisionCase.ciStatus)
+      )
+
+      assert.strictEqual(validation.exitCode, decisionCase.exitCode)
+      assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`),
+        decisionCase.results)
+      assert.strictEqual(validation.runSummary.validationCoverage, decisionCase.coverage)
+      assert.strictEqual(
+        validation.runSummary.executionStatus,
+        decisionCase.executionStatus,
+        JSON.stringify(validation.results.map(result => ({
+          scenario: result.scenario,
+          status: result.status,
+          conclusion: result.conclusion,
+          domain: result.domain,
+        })))
+      )
+    })
+  }
 })
 
 /**
@@ -870,6 +929,7 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
   let runSummary
   const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
     ...PASSING_VALIDATION_PHASES,
+    './approval-artifacts': getApprovedPlanStub(manifestPath, out, args),
     './generated-files': {
       async cleanupGeneratedFiles () {},
     },
@@ -892,11 +952,6 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
         }
       },
     },
-    './setup-runner': {
-      async runSetupCommands () {
-        return { ok: true }
-      },
-    },
     './static-diagnosis': {
       getStaticBlocker () {},
       runStaticDiagnosis () {
@@ -911,11 +966,41 @@ async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
   process.exitCode = undefined
 
   try {
-    await main(['--manifest', manifestPath, '--out', out, ...args, ...APPROVAL_ARGS])
+    await main(getApprovalArgs(out))
     return { exitCode: process.exitCode, results, runSummary }
   } finally {
     process.exitCode = originalExitCode
     fs.rmSync(root, { recursive: true, force: true })
+  }
+}
+
+function getApprovalArgs (out) {
+  return [
+    '--run-approved-plan', path.join(out, 'approval.json'),
+    '--sha256', APPROVAL_DIGEST,
+  ]
+}
+
+function getApprovedPlanStub (manifestPath, out, args = []) {
+  const scenarioIndex = args.indexOf('--scenario')
+  const scenario = scenarioIndex === -1 ? null : args[scenarioIndex + 1]
+
+  return {
+    loadApprovedPlan () {
+      return {
+        material: {
+          manifest: { path: manifestPath },
+          selection: { frameworks: [], scenario },
+          validation: {
+            outputDirectory: out,
+            offlineFixtureNonce: 'd'.repeat(32),
+            keepTemporaryFiles: false,
+            verbose: false,
+          },
+        },
+        path: path.join(out, 'approval.json'),
+      }
+    },
   }
 }
 
@@ -949,30 +1034,27 @@ function getRunnableManifest (root) {
           maxTestCount: 50,
         },
         ciWiring: {
-          status: 'skip',
-          replayability: 'not_replayable',
-          replayBlocker: 'No CI test job was found in this fixture.',
-          reason: 'No CI test job was found in this fixture.',
+          diagnosis: 'No CI test job was found in this fixture.',
+          initialization: { status: 'unknown', evidence: [] },
         },
       },
     ],
   }
 }
 
-function setReplayableCiWiring (framework, root) {
+function setStaticCiWiring (framework, root) {
   framework.ciWiring = {
-    status: 'fail',
-    replayability: 'replayable',
     provider: 'github-actions',
     configFile: path.join(root, '.github', 'workflows', 'test.yml'),
     job: 'test',
     step: 'Run tests',
     workingDirectory: root,
     whySelected: 'The step runs the selected representative test command.',
-  }
-  framework.ciWiringCommand = {
-    cwd: root,
-    argv: [process.execPath, '-e', 'console.log("1 passing")'],
+    command: 'npm test',
+    initialization: {
+      status: 'not_configured',
+      evidence: ['The selected CI job does not set NODE_OPTIONS.'],
+    },
   }
 }
 
@@ -984,6 +1066,78 @@ function getPassingScenarioResult (framework, scenario) {
     diagnosis: `${scenario} passed.`,
     evidence: {},
     artifacts: [],
+  }
+}
+
+function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, preflightBlocked }) {
+  const stubs = {
+    './scenarios/basic-reporting': {
+      async runBasicReporting ({ framework }) {
+        return {
+          ...getPassingScenarioResult(framework, 'basic-reporting'),
+          status: basicStatus,
+          diagnosis: `Basic Reporting ${basicStatus}.`,
+        }
+      },
+    },
+  }
+  if (preflightBlocked) {
+    stubs['./preflight-runner'] = {
+      async runFrameworkPreflight ({ framework }) {
+        return {
+          ok: false,
+          failure: {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'blocked',
+            diagnosis: 'The execution environment blocked the selected test command.',
+            evidence: { blockedByExecutionEnvironment: true },
+            artifacts: [],
+          },
+        }
+      },
+    }
+  }
+  const modules = {
+    efd: './scenarios/early-flake-detection',
+    atr: './scenarios/auto-test-retries',
+    'test-management': './scenarios/test-management',
+  }
+  const methods = {
+    efd: 'runEarlyFlakeDetection',
+    atr: 'runAutoTestRetries',
+    'test-management': 'runTestManagement',
+  }
+
+  for (const [scenario, status] of Object.entries(advancedStatuses)) {
+    stubs[modules[scenario]] = {
+      async [methods[scenario]] ({ framework }) {
+        return {
+          ...getPassingScenarioResult(framework, scenario),
+          status,
+          diagnosis: `${scenario} ${status}.`,
+        }
+      },
+    }
+  }
+  return stubs
+}
+
+function setDecisionCiWiring (framework, root, status) {
+  if (status === 'missing') {
+    setStaticCiWiring(framework, root)
+    return
+  }
+  if (status !== 'configured') return
+  framework.ciWiring = {
+    provider: 'github-actions',
+    configFile: path.join(root, '.github', 'workflows', 'test.yml'),
+    job: 'test',
+    step: 'Run tests',
+    command: 'npm test',
+    initialization: { status: 'configured', evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'] },
+    stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
+    requiredSecretEnvVars: ['DD_API_KEY'],
   }
 }
 

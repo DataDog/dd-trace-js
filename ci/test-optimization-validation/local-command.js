@@ -98,65 +98,7 @@ function getInlineDatadogInitialization (command) {
   if (INLINE_DATADOG_ENV_PATTERN.test(source)) return 'contains an inline DD_* assignment'
 }
 
-/**
- * Returns the CI wiring command with the replay shell recorded by CI discovery when available.
- *
- * @param {object} framework manifest framework entry
- * @returns {object|undefined} command to run
- */
-function getCiWiringCommand (framework) {
-  const command = framework.ciWiringCommand
-  if (!command || !command.usesShell || command.shell || !framework.ciWiring?.shell) return command
-
-  const replayCommand = getShellReplayCommand(command, framework.ciWiring.shell)
-  if (replayCommand) return inheritApprovedExecutable(command, replayCommand)
-
-  const shell = getReplayShell(framework.ciWiring.shell)
-  if (!shell) return command
-
-  return inheritApprovedExecutable(command, {
-    ...command,
-    shell,
-  })
-}
-
-function getShellReplayCommand (command, shell) {
-  const tokens = tokenizeShellTemplate(shell)
-  const hasTemplate = tokens.includes('{0}')
-  if (tokens.length <= 1 && !hasTemplate) return
-
-  const argv = hasTemplate ? tokens.filter(token => token !== '{0}') : tokens
-  if (!isBourneShell(argv[0])) return
-
-  return {
-    ...command,
-    argv: [...argv, '-c', command.shellCommand],
-    shell: undefined,
-    shellCommand: undefined,
-    usesShell: false,
-  }
-}
-
-function getReplayShell (shell) {
-  const value = String(shell || '').trim()
-  if (!value) return
-
-  const firstToken = value.split(/\s+/)[0]
-  if (firstToken && value.includes('{0}')) return firstToken
-  if (!/\s/.test(value)) return value
-}
-
-function tokenizeShellTemplate (shell) {
-  return String(shell || '').trim().split(/\s+/).filter(Boolean)
-}
-
-function isBourneShell (executable) {
-  const basename = path.basename(String(executable || ''))
-  return basename === 'bash' || basename === 'sh' || basename === 'zsh'
-}
-
 module.exports = {
-  getCiWiringCommand,
   getDatadogCleanCommand,
   getInlineDatadogInitialization,
   getLocalValidationCommand,

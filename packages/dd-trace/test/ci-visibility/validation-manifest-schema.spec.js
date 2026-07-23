@@ -5,7 +5,6 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const jsonSchema = require('../../../../ci/test-optimization-validation-manifest.schema.json')
 const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 const {
   MAX_FRAMEWORKS,
@@ -21,7 +20,6 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks must include at least one framework entry.',
     ])
-    assert.strictEqual(jsonSchema.properties.frameworks.minItems, 1)
   })
 
   it('requires unique framework ids', () => {
@@ -79,7 +77,6 @@ describe('test optimization validation manifest schema', () => {
   it('reports malformed repeated structures without throwing during path validation', () => {
     const manifest = getManifest()
     manifest.frameworks[0].project.configFiles = {}
-    manifest.frameworks[0].setup = { commands: {} }
     manifest.frameworks[0].generatedTestStrategy = {
       status: 'planned',
       files: {},
@@ -90,7 +87,6 @@ describe('test optimization validation manifest schema', () => {
     const errors = validateManifest(manifest)
 
     assert(errors.some(error => /project\.configFiles must be an array/.test(error)))
-    assert(errors.some(error => /setup\.commands must be an array/.test(error)))
     assert(errors.some(error => /generatedTestStrategy\.files must be an array/.test(error)))
     assert(errors.some(error => /generatedTestStrategy\.scenarios must be an array/.test(error)))
   })
@@ -207,94 +203,22 @@ describe('test optimization validation manifest schema', () => {
     manifest.frameworks[0].project.packageJson = '/outside/package.json'
     manifest.frameworks[0].existingTestCommand.cwd = '/outside'
     manifest.frameworks[0].ciWiring = {
-      status: 'unknown',
-      replayability: 'replayable',
-      reason: 'Replay selected.',
       provider: 'github-actions',
       configFile: '/outside/workflow.yml',
       job: 'test',
       step: 'Run tests',
       whySelected: 'Selected by discovery.',
       workingDirectory: '/outside',
-    }
-    manifest.frameworks[0].ciWiringCommand = {
-      cwd: '/outside',
-      argv: ['npm', 'test'],
+      command: 'npm test',
+      diagnosis: 'CI initialization evidence has not been completed.',
+      initialization: { status: 'unknown', evidence: [] },
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].project.packageJson must be inside repository.root.',
       'frameworks[0].existingTestCommand.cwd must be inside repository.root.',
-      'frameworks[0].ciWiringCommand.cwd must be inside repository.root.',
       'frameworks[0].ciWiring.configFile must be inside repository.root.',
       'frameworks[0].ciWiring.workingDirectory must be inside repository.root.',
-    ])
-  })
-
-  it('publishes absolute-path constraints for path fields in the JSON schema', () => {
-    const absolutePathRef = { $ref: '#/$defs/absolutePathString' }
-    const nullableAbsolutePath = {
-      anyOf: [
-        absolutePathRef,
-        { type: 'null' },
-      ],
-    }
-
-    assert.deepStrictEqual(jsonSchema.$defs.repository.properties.root, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.project.properties.root, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.project.properties.packageJson, nullableAbsolutePath)
-    assert.deepStrictEqual(jsonSchema.$defs.project.properties.configFiles.items, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.command.properties.cwd, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.command.properties.outputPaths.items, absolutePathRef)
-    assert.strictEqual(jsonSchema.$defs.framework.properties.forcedLocalCommand, false)
-    assert.deepStrictEqual(jsonSchema.$defs.preflight.properties.maxTestCount, {
-      type: 'integer',
-      minimum: 1,
-      maximum: 1000,
-    })
-    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.testDirectory, nullableAbsolutePath)
-    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.cleanupPaths.items, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.generatedFile.properties.path, absolutePathRef)
-    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.properties.file, nullableAbsolutePath)
-  })
-
-  it('publishes runtime conditional requirements in the JSON schema', () => {
-    const frameworkAllOf = jsonSchema.$defs.framework.allOf
-    const commandAllOf = jsonSchema.$defs.command.allOf
-    const ciWiringAllOf = jsonSchema.$defs.ciWiring.allOf
-    const initializationAllOf = jsonSchema.$defs.ciWiring.properties.initialization.allOf
-
-    assert.ok(frameworkAllOf.some(condition => {
-      return condition.if?.properties?.status?.enum?.includes('requires_manual_setup') &&
-        condition.then?.required?.includes('notes') &&
-        condition.then?.properties?.notes?.minItems === 1
-    }))
-    assert.ok(commandAllOf.some(condition => {
-      return condition.if?.properties?.usesShell?.const === true &&
-        condition.if?.required?.includes('usesShell') &&
-        condition.then?.required?.includes('shellCommand')
-    }))
-    assert.ok(commandAllOf.some(condition => {
-      return condition.if?.required?.includes('shell') &&
-        condition.then?.required?.includes('usesShell') &&
-        condition.then?.properties?.usesShell?.const === true
-    }))
-    assert.ok(frameworkAllOf.some(condition => {
-      return condition.if?.properties?.ciWiring?.properties?.replayability?.const === 'replayable' &&
-        condition.then?.required?.includes('ciWiringCommand')
-    }))
-    assert.ok(ciWiringAllOf.some(condition => {
-      return condition.if?.properties?.replayability?.const === 'not_replayable' &&
-        condition.then?.properties?.status?.enum?.includes('unknown') &&
-        condition.then?.properties?.status?.enum?.includes('skip')
-    }))
-    assert.ok(initializationAllOf.some(condition => {
-      return condition.if?.properties?.status?.enum?.includes('not_configured') &&
-        condition.then?.properties?.evidence?.minItems === 1
-    }))
-    assert.deepStrictEqual(jsonSchema.$defs.expectedWithoutDatadog.required, [
-      'exitCode',
-      'observedTestCount',
     ])
   })
 
@@ -412,15 +336,12 @@ describe('test optimization validation manifest schema', () => {
     ])
   })
 
-  it('requires replayable failed CI wiring to include its command', () => {
+  it('requires runnable frameworks to include static CI initialization evidence', () => {
     const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      status: 'fail',
-      replayability: 'replayable',
-    }
+    delete manifest.frameworks[0].ciWiring.initialization
 
     assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiringCommand is required when frameworks[0].ciWiring.replayability is replayable.',
+      'frameworks[0].ciWiring.initialization must record the static CI configuration conclusion.',
     ])
   })
 
@@ -489,31 +410,17 @@ describe('test optimization validation manifest schema', () => {
         'present.',
       'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities[0] must be an object.',
     ])
-    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.required, ['name'])
-    assert.strictEqual(jsonSchema.$defs.testIdentity.properties.name.minLength, 1)
   })
 
-  it('requires CI command metadata and matching working directories', () => {
+  it('requires recorded CI commands to be inert text', () => {
     const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      status: 'unknown',
-      replayability: 'replayable',
-      reason: 'Replayable command selected.',
-    }
-    manifest.frameworks[0].ciWiringCommand = {
+    manifest.frameworks[0].ciWiring.command = {
       cwd: '/repo/packages/app',
       argv: ['npm', 'test'],
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.provider must be a non-empty string.',
-      'frameworks[0].ciWiring.configFile must be a non-empty string.',
-      'frameworks[0].ciWiring.job must be a non-empty string.',
-      'frameworks[0].ciWiring.step must be a non-empty string.',
-      'frameworks[0].ciWiring.whySelected must be a non-empty string.',
-      'frameworks[0].ciWiring.configFile must be an absolute path.',
-      'frameworks[0].ciWiring.workingDirectory must be an absolute path.',
-      'frameworks[0].ciWiringCommand.cwd must match frameworks[0].ciWiring.workingDirectory.',
+      'frameworks[0].ciWiring.command must be a string when present.',
     ])
   })
 
@@ -567,32 +474,11 @@ describe('test optimization validation manifest schema', () => {
 
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].existingTestCommand contains an inline dd-trace preload and must be Datadog-clean for local ' +
-        'validation. Remove the inline initialization; preserve exact CI initialization only in ciWiringCommand.',
+        'validation. Remove the inline initialization; record CI initialization only as static ciWiring evidence.',
       'frameworks[0].generatedTestStrategy.scenarios[0].runCommand contains an inline dd-trace preload and must be ' +
-        'Datadog-clean for local validation. Remove the inline initialization; preserve exact CI initialization ' +
-        'only in ciWiringCommand.',
+        'Datadog-clean for local validation. Remove the inline initialization; record CI initialization only as ' +
+        'static ciWiring evidence.',
     ])
-  })
-
-  it('preserves inline Datadog initialization in the exact CI wiring replay', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      status: 'unknown',
-      replayability: 'replayable',
-      reason: 'Replay selected.',
-      provider: 'github-actions',
-      configFile: '/repo/.github/workflows/test.yml',
-      job: 'test',
-      step: 'Run tests',
-      whySelected: 'Selected by discovery.',
-      workingDirectory: '/repo',
-    }
-    manifest.frameworks[0].ciWiringCommand = {
-      cwd: '/repo',
-      argv: ['env', 'NODE_OPTIONS=-r dd-trace/ci/init', 'npm', 'test'],
-    }
-
-    assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
   it('requires inline secret-like command values to move into the env object', () => {
@@ -612,7 +498,6 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].existingTestCommand.displayCommand is not an allowed command field.',
     ])
-    assert.strictEqual(jsonSchema.$defs.command.additionalProperties, false)
   })
 
   it('allows an explicit executable for shell commands', () => {
@@ -625,9 +510,6 @@ describe('test optimization validation manifest schema', () => {
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [])
-    assert.deepStrictEqual(jsonSchema.$defs.command.properties.shell, {
-      $ref: '#/$defs/executableString',
-    })
   })
 
   it('rejects ambiguous command types, environment names, and excessive timeouts', () => {
@@ -652,30 +534,15 @@ describe('test optimization validation manifest schema', () => {
 
   it('allows only a fixed dummy value for secret-like command environment variables', () => {
     const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      status: 'unknown',
-      replayability: 'replayable',
-      reason: 'Replay selected.',
-      provider: 'github-actions',
-      configFile: '/repo/.github/workflows/test.yml',
-      job: 'test',
-      step: 'Run tests',
-      whySelected: 'Selected by discovery.',
-      workingDirectory: '/repo',
-    }
-    manifest.frameworks[0].ciWiringCommand = {
-      cwd: '/repo',
-      argv: ['npm', 'test'],
-      env: { DD_API_KEY: 'real-secret-must-not-run' },
-    }
+    manifest.frameworks[0].existingTestCommand.env = { NPM_TOKEN: 'real-secret-must-not-run' }
 
     assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiringCommand.env.DD_API_KEY must use the safe placeholder ' +
+      'frameworks[0].existingTestCommand.env.NPM_TOKEN must use the safe placeholder ' +
         '"dd-validation-placeholder".',
     ])
 
-    manifest.frameworks[0].ciWiringCommand.env.DD_API_KEY = 'dd-validation-placeholder'
-    manifest.frameworks[0].ciWiringCommand.env.HAS_BUILDPULSE_SECRETS = 'false'
+    manifest.frameworks[0].existingTestCommand.env.NPM_TOKEN = 'dd-validation-placeholder'
+    manifest.frameworks[0].existingTestCommand.env.HAS_BUILDPULSE_SECRETS = 'false'
     assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
@@ -687,9 +554,6 @@ describe('test optimization validation manifest schema', () => {
       env: { SAFE_NAME: 'before\u2060after' },
     }
     manifest.frameworks[0].ciWiring = {
-      status: 'unknown',
-      replayability: 'replayable',
-      reason: 'Replay selected.',
       provider: 'github-actions',
       configFile: '/repo/.github/workflows/test.yml',
       job: 'test',
@@ -697,11 +561,9 @@ describe('test optimization validation manifest schema', () => {
       whySelected: 'Selected by discovery.',
       workingDirectory: '/repo',
       shell: 'bash\u001B',
-    }
-    manifest.frameworks[0].ciWiringCommand = {
-      cwd: '/repo',
-      usesShell: true,
-      shellCommand: 'npm test',
+      command: 'npm test',
+      diagnosis: 'CI initialization evidence has not been completed.',
+      initialization: { status: 'unknown', evidence: [] },
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [
@@ -738,10 +600,8 @@ function getManifest (frameworkOverrides = {}) {
           maxTestCount: 50,
         },
         ciWiring: {
-          status: 'unknown',
-          replayability: 'not_replayable',
-          replayBlocker: 'No replayable CI command was identified.',
-          reason: 'No replayable CI command was identified.',
+          diagnosis: 'CI initialization evidence has not been completed.',
+          initialization: { status: 'unknown', evidence: [] },
         },
         notes: [],
         ...frameworkOverrides,

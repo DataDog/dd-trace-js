@@ -1,5 +1,9 @@
 'use strict'
 
+const cypressAdapter = require('./framework-adapters/cypress')
+const cucumberAdapter = require('./framework-adapters/cucumber')
+const playwrightAdapter = require('./framework-adapters/playwright')
+
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
 /**
@@ -12,15 +16,13 @@ const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*
  */
 function getObservedTestCount (framework, stdout = '', stderr = '') {
   const output = `${stdout}\n${stderr}`.replaceAll(ANSI_PATTERN, '')
+  if (framework === 'cucumber') return cucumberAdapter.getObservedTestCount(output)
+  if (framework === 'cypress') return cypressAdapter.getObservedTestCount(output)
+  if (framework === 'playwright') return playwrightAdapter.getObservedTestCount(output)
   if (framework === 'jest') return getJestObservedTestCount(output)
   if (framework === 'vitest') return getVitestObservedTestCount(output)
-  if (framework === 'playwright') return getPlaywrightObservedTestCount(output)
 
-  const totalPatterns = framework === 'node:test'
-    ? [/^# tests\s+(\d+)\s*$/gim]
-    : framework === 'cucumber'
-      ? [/\b(\d+)\s+scenarios?\b/gi]
-      : []
+  const totalPatterns = framework === 'node:test' ? [/^# tests\s+(\d+)\s*$/gim] : []
 
   for (const pattern of totalPatterns) {
     const count = getLastMatchCount(output, pattern)
@@ -36,22 +38,6 @@ function getObservedTestCount (framework, stdout = '', stderr = '') {
   }
 
   return getLastMatchCount(output, /\b(\d+)\s+tests?\s+(?:passed|failed)\b/gi)
-}
-
-/**
- * Counts Playwright tests that completed instead of treating skipped tests as executions.
- *
- * @param {string} output test output without ANSI codes
- * @returns {number|null} executed test count
- */
-function getPlaywrightObservedTestCount (output) {
-  const observed = sumLastMatchCounts(output, [
-    /^\s*(\d+)\s+passed\b/gim,
-    /^\s*(\d+)\s+failed\b/gim,
-    /^\s*(\d+)\s+flaky\b/gim,
-  ])
-  if (observed !== null) return observed
-  return /^\s*\d+\s+skipped\b/im.test(output) ? 0 : null
 }
 
 /**
