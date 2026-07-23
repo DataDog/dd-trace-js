@@ -2,6 +2,7 @@
 
 const util = require('node:util')
 
+const { AUTO_KEEP } = require('../../../../ext/priority')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const {
@@ -33,6 +34,7 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   LLMOBS_SUBMITTED_TAG_KEY,
+  LLMOBS_META_STRUCT_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
 } = require('./constants/tags')
@@ -96,6 +98,11 @@ class LLMObsSpanProcessor {
       const routing = {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
+      }
+
+      if (this.#shouldAttachMetaStruct(span, routing)) {
+        this.#attachMetaStruct(span, formattedEvent, mlObsTags)
+        return
       }
 
       const enqueued = this.#writer.append(formattedEvent, routing)
@@ -260,6 +267,110 @@ class LLMObsSpanProcessor {
     return llmObsSpanEvent
   }
 
+  /**
+   * The meta_struct path replaces the EVP proxy path only when the APM trace is expected to reach the agent.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {{ apiKey?: string, site?: string }} routing
+   * @returns {boolean}
+   */
+  #shouldAttachMetaStruct (span, routing) {
+    return this.#writer._agentless === false && !routing.apiKey && !this.#isPredictedAgentDrop(span)
+  }
+
+  /**
+   * Predicts whether the local agent would drop this trace by priority sampling.
+   *
+   * @param {import('../opentracing/span')} span
+   * @returns {boolean}
+   */
+  #isPredictedAgentDrop (span) {
+    const context = span.context()
+    context._ensureSamplingPriority?.()
+
+    const priority = context._sampling?.priority
+    return priority !== undefined && priority < AUTO_KEEP
+  }
+
+  /**
+   * Adds the LLMObs payload to the span structured metadata for APM trace submission.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {Record<string, unknown>} mlObsTags
+   */
+  #attachMetaStruct (span, event, mlObsTags) {
+    span.meta_struct ??= {}
+    span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(event, mlObsTags)
+  }
+
+  /**
+   * Converts the LLMObs span event payload into the meta_struct shape consumed by the trace intake.
+   *
+   * @param {object} event
+   * @param {Record<string, unknown>} mlObsTags
+   * @returns {object}
+   */
+  #formatMetaStruct (event, mlObsTags) {
+    const tags = this.#stringArrayTagsToObjectTags(event.tags)
+    const dd = {}
+
+    if (mlObsTags[SAMPLE_RATE] !== undefined) dd.sample_rate = mlObsTags[SAMPLE_RATE]
+    if (mlObsTags[SAMPLING_DECISION] !== undefined) dd.sampling_decision = mlObsTags[SAMPLING_DECISION]
+
+    const metaStruct = {
+      trace_id: event.trace_id,
+      tags,
+      meta: this.#formatMetaStructMeta(event.meta),
+      metrics: event.metrics,
+      _dd: dd,
+    }
+
+    if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
+    if (event.name !== undefined) metaStruct.name = event.name
+    if (mlObsTags[ML_APP]) metaStruct.ml_app = mlObsTags[ML_APP]
+    if (event.session_id) metaStruct.session_id = event.session_id
+
+    return metaStruct
+  }
+
+  /**
+   * Converts the writer event meta shape to the LLMObs meta_struct shape.
+   *
+   * @param {object} eventMeta
+   * @returns {object}
+   */
+  #formatMetaStructMeta (eventMeta) {
+    const meta = {}
+
+    for (const [key, value] of Object.entries(eventMeta)) {
+      if (key === 'span.kind') {
+        meta.span = { kind: value }
+      } else if (key === ERROR_MESSAGE) {
+        this.#getMetaStructError(meta).message = value
+      } else if (key === ERROR_TYPE) {
+        this.#getMetaStructError(meta).type = value
+      } else if (key === ERROR_STACK) {
+        this.#getMetaStructError(meta).stack = value
+      } else {
+        meta[key] = value
+      }
+    }
+
+    return meta
+  }
+
+  /**
+   * Returns `meta.error`, initializing it once.
+   *
+   * @param {object} meta
+   * @returns {object}
+   */
+  #getMetaStructError (meta) {
+    if (!meta.error) meta.error = {}
+    return meta.error
+  }
+
   // For now, this only applies to metadata, as we let users annotate this field with any object
   // However, we want to protect against circular references or BigInts (unserializable)
   // This function can be reused for other fields if needed
@@ -352,6 +463,23 @@ class LLMObsSpanProcessor {
       } else {
         out.push(`${key}:${value ?? ''}`)
       }
+    }
+    return out
+  }
+
+  /**
+   * Converts LLMObs intake tags to the tag object used in span meta_struct.
+   *
+   * @param {string[]} tags
+   * @returns {Record<string, string>}
+   */
+  #stringArrayTagsToObjectTags (tags) {
+    const out = {}
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      out[tag.slice(0, separatorIndex)] = tag.slice(separatorIndex + 1)
     }
     return out
   }

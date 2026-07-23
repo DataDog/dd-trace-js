@@ -4,6 +4,7 @@ const util = require('node:util')
 const assert = require('node:assert')
 const { inspect } = require('node:util')
 const { before, beforeEach, afterEach, after } = require('mocha')
+const msgpack = require('@msgpack/msgpack')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
@@ -446,23 +447,44 @@ function useLlmObs ({
 
   return {
     getEvents: async function (numLlmObsSpans = 1) {
-      // get apm spans from the agent
-      const apmSpans = await apmTracesPromise
-      resetTracesPromises()
-
-      // get llmobs span events requests from the agent
-      // because llmobs process spans on span finish and submits periodically,
-      // we need to aggregate all of the span events
-      // tests should know how many spans they expect to see, otherwise tests will timeout
+      // LLMObs spans can arrive either on the sampled APM trace's meta_struct or through the
+      // LLMObs writer fallback. Poll writer requests while waiting for APM so writer-only tests
+      // do not block on an unrelated trace assertion.
+      const apmSpans = []
       const llmobsSpans = []
+      let apmError
+      let apmTracesReceived = false
+      let apmTraces = waitForApmTraces()
 
       while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
-        await new Promise(resolve => setImmediate(resolve))
+        await Promise.race([apmTraces, new Promise(resolve => setImmediate(resolve))])
+
         const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
         llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+
+        if (apmError && llmobsSpans.length < numLlmObsSpans) throw apmError
+
+        if (apmTracesReceived && llmobsSpans.length < numLlmObsSpans) {
+          apmTracesReceived = false
+          apmTraces = waitForApmTraces()
+        }
       }
 
+      await new Promise(resolve => setImmediate(resolve))
+
       return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+
+      function waitForApmTraces () {
+        return apmTracesPromise.then(spans => {
+          apmSpans.push(...spans)
+          llmobsSpans.push(...getLlmObsSpansFromApmSpans(spans))
+          apmTracesReceived = true
+          resetTracesPromises()
+        }, error => {
+          apmError = error
+          apmTracesReceived = true
+        })
+      }
     },
 
     /**
@@ -481,11 +503,17 @@ function useLlmObs ({
       }
     },
 
-    getEvaluationMetrics: function () {
-      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
-      return evaluationMetricsRequests
-        .flatMap(request => request.data.attributes.metrics)
-        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
+    getEvaluationMetrics: async function () {
+      const deadline = Date.now() + 5000
+      let evaluationMetrics = []
+
+      while (evaluationMetrics.length === 0 && Date.now() < deadline && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+        evaluationMetrics = evaluationMetricsRequests.flatMap(request => request.data.attributes.metrics)
+      }
+
+      return evaluationMetrics.sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     },
   }
 }
@@ -494,6 +522,70 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
   return llmobsSpanEventsRequests
     .flatMap(request => request)
     .map(request => request.spans[0])
+}
+
+function getLlmObsSpansFromApmSpans (apmSpans) {
+  const llmobsSpans = []
+  for (const apmSpan of apmSpans) {
+    const llmobsMetaStruct = decodeMetaStructValue(apmSpan.meta_struct?._llmobs)
+    if (!llmobsMetaStruct) continue
+
+    llmobsSpans.push(formatLlmObsSpanFromMetaStruct(apmSpan, llmobsMetaStruct))
+  }
+  return llmobsSpans
+}
+
+function decodeMetaStructValue (value) {
+  if (!value) return
+  if (value instanceof Uint8Array) return msgpack.decode(value)
+  return value
+}
+
+function formatLlmObsSpanFromMetaStruct (apmSpan, llmobsMetaStruct) {
+  const spanId = fromBuffer(apmSpan.span_id)
+  const traceId = llmobsMetaStruct.trace_id
+  const llmobsSpan = {
+    trace_id: traceId,
+    span_id: spanId,
+    parent_id: llmobsMetaStruct.parent_id ?? 'undefined',
+    name: llmobsMetaStruct.name ?? apmSpan.name,
+    tags: Object.entries(llmobsMetaStruct.tags ?? {}).map(([key, value]) => `${key}:${value ?? ''}`),
+    start_ns: fromBuffer(apmSpan.start, true),
+    duration: fromBuffer(apmSpan.duration, true),
+    status: apmSpan.error ? 'error' : 'ok',
+    meta: getLlmObsSpanEventMeta(llmobsMetaStruct.meta ?? {}),
+    metrics: llmobsMetaStruct.metrics ?? {},
+    _dd: {
+      ...(llmobsMetaStruct._dd ?? {}),
+      span_id: spanId,
+      trace_id: traceId,
+      apm_trace_id: traceId,
+    },
+  }
+
+  if (llmobsMetaStruct.session_id) llmobsSpan.session_id = llmobsMetaStruct.session_id
+  if (llmobsMetaStruct.config) llmobsSpan.config = llmobsMetaStruct.config
+  if (llmobsMetaStruct.span_links) llmobsSpan.span_links = llmobsMetaStruct.span_links
+
+  return llmobsSpan
+}
+
+function getLlmObsSpanEventMeta (llmobsMeta) {
+  const meta = {}
+
+  for (const [key, value] of Object.entries(llmobsMeta)) {
+    if (key === 'span') {
+      meta['span.kind'] = value.kind
+    } else if (key === 'error') {
+      meta[ERROR_MESSAGE] = value.message
+      meta[ERROR_TYPE] = value.type
+      meta[ERROR_STACK] = value.stack
+    } else {
+      meta[key] = value
+    }
+  }
+
+  return meta
 }
 
 /**
@@ -557,6 +649,7 @@ module.exports = {
   assertLlmObsEvaluationMetric,
   assertLlmObsSpanEvent,
   assertPromptTracking,
+  getLlmObsSpansFromApmSpans,
   removeDestroyHandler,
   useLlmObs,
   MOCK_NOT_NULLISH,
