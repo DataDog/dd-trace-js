@@ -29,12 +29,20 @@ update_central_configurations_version_range_v2:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
+  # Compare changes to the repository's agent instructions against master.
+  - project: "DataDog/llm-validation-platform"
+    ref: pabloerhard/add-ignore-failure
+    file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
     ref: "main"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
     ref: "main"
+
+"llm validation":
+  variables:
+    LLMVAL_PLATFORM_REF: "pabloerhard/add-ignore-failure"
 
 workflow:
   auto_cancel:

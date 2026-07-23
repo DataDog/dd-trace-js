@@ -35,7 +35,7 @@ dd-trace is the Datadog client library for Node.js.
 
 ## Testing Instructions
 
-**IMPORTANT**: The root `npm test` is intentionally disabled. Always run a specific `*.spec.js` file, or a targeted `npm run test:<area>` script.
+**IMPORTANT**: Always run the root `npm test` command before any targeted test.
 
 **Integration Tests**: Tests in `integration-tests/` require `required_permissions: ["all"]` when run in Cursor's AI environment.
 
