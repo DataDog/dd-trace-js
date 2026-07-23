@@ -236,6 +236,14 @@ class LLMObsSpanProcessor {
       meta.input.prompt = prompt
     }
 
+    const dd = {
+      span_id: span.context().toSpanId(),
+      trace_id: span.context().toTraceId(true),
+      sample_rate: mlObsTags[SAMPLE_RATE],
+      sampling_decision: mlObsTags[SAMPLING_DECISION],
+    }
+    if (tags.experiment_id) dd.scope = 'experiments'
+
     const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
       span_id: span.context().toSpanId(),
@@ -247,12 +255,7 @@ class LLMObsSpanProcessor {
       status: error ? 'error' : 'ok',
       meta,
       metrics,
-      _dd: {
-        span_id: span.context().toSpanId(),
-        trace_id: span.context().toTraceId(true),
-        sample_rate: mlObsTags[SAMPLE_RATE],
-        sampling_decision: mlObsTags[SAMPLING_DECISION],
-      },
+      _dd: dd,
     }
 
     if (sessionId) llmObsSpanEvent.session_id = sessionId

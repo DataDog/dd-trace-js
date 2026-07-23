@@ -207,6 +207,8 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(ds.records()[0].input, { q: '2+2' })
       assert.equal(ds.records()[0].expectedOutput, '4')
       assert.deepEqual(ds.records()[0].metadata, { a: 1 })
+      assert.equal(ds.records()[0].id, 'r1')
+      assert.equal(ds.records()[1].id, 'r2')
     })
 
     it('passes explicit dataset version when reading records', async () => {

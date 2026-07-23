@@ -22,13 +22,24 @@ class Row {
   }
 }
 
-// Returned by Experiment.run().
-class ExperimentResult {
-  constructor (experimentId, rows, url) {
-    this.experimentId = experimentId
-    this.rows = rows
-    this.url = url
+class ExperimentRun {
+  constructor (fields) {
+    this.runId = fields.runId
+    this.runIteration = fields.runIteration
+    this.rows = fields.rows
+    this.summaryEvaluations = fields.summaryEvaluations
   }
 }
 
-module.exports = { Row, ExperimentResult }
+// Returned by Experiment.run().
+class ExperimentResult {
+  constructor (experimentId, rows, url, runs = [], summaryEvaluations = {}) {
+    this.experimentId = experimentId
+    this.rows = rows
+    this.url = url
+    this.runs = runs
+    this.summaryEvaluations = summaryEvaluations
+  }
+}
+
+module.exports = { Row, ExperimentRun, ExperimentResult }

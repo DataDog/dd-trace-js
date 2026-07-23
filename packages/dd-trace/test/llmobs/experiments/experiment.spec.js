@@ -5,7 +5,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
-const { Dataset } = require('../../../src/llmobs/experiments/dataset')
+const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
 // Routes the control-plane + events calls a run makes, recording each request.
@@ -143,6 +143,44 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(dataset.recordIds().length, 2)
   })
 
+  it('runs task inside an LLMObs experiment span when the SDK is available', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
+    const callsToLlmobs = []
+    const llmobs = {
+      enabled: true,
+      annotationContext: (options, fn) => {
+        callsToLlmobs.push(['annotationContext', options])
+        return fn()
+      },
+      trace: (options, fn) => {
+        callsToLlmobs.push(['trace', options])
+        return fn({ name: 'span' })
+      },
+      exportSpan: () => ({ spanId: '000000000000abcd', traceId: '0000000000000000000000000000abcd' }),
+      annotate: (_span, options) => callsToLlmobs.push(['annotate', options]),
+    }
+
+    await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: (i) => i.q,
+      evaluators: { ok: () => true },
+    }, llmobs).run()
+
+    assert.deepEqual(callsToLlmobs[0][0], 'annotationContext')
+    assert.equal(callsToLlmobs[0][1].tags.experiment_id, 'exp')
+    assert.equal(callsToLlmobs[0][1].tags.dataset_id, 'ds')
+    assert.equal(callsToLlmobs[0][1].tags.dataset_record_id, 'rec-0')
+    assert.equal(callsToLlmobs[1][1].kind, 'experiment')
+    assert.equal(callsToLlmobs[1][1].name, 'task')
+    assert.equal(callsToLlmobs[2][1].tags.experiment_id, 'exp')
+    assert.equal(callsToLlmobs[2][1].tags.dataset_record_id, 'rec-0')
+    assert.equal(eventsBody().data.attributes.spans, undefined)
+    const metric = eventsBody().data.attributes.metrics[0]
+    assert.equal(metric.span_id, '000000000000abcd')
+    assert.equal(metric.trace_id, '0000000000000000000000000000abcd')
+  })
+
   it('posts events with type "experiments", one span per row, auto tags and raw metadata', async () => {
     const dataset = new Dataset(client, 'demo').addRecord({ q: 'apple' }, 'true', { row: 0 })
     await new Experiment(client, {
@@ -185,6 +223,76 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(byLabel('s').score_value, 0.5)
     assert.equal(byLabel('c').metric_type, 'categorical')
     assert.equal(byLabel('c').categorical_value, 'label')
+  })
+
+  it('runs summary evaluators and emits summary metrics', async () => {
+    const dataset = new Dataset(client, 'demo')
+      .addRecord('a', 'A', { row: 0 })
+      .addRecord('b', 'B', { row: 1 })
+
+    const result = await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: (input) => input.toUpperCase(),
+      evaluators: [function exactMatch (_input, output, expected) { return output === expected }],
+      summaryEvaluators: {
+        pass_rate: (_inputs, _outputs, _expectedOutputs, evaluatorResults, metadata) => {
+          assert.deepEqual(metadata.map(item => item.row), [0, 1])
+          assert.deepEqual(metadata.map(item => item.experiment_config), [{}, {}])
+          const values = evaluatorResults.exactMatch
+          return values.filter(Boolean).length / values.length
+        },
+      },
+    }).run()
+
+    assert.equal(result.summaryEvaluations.pass_rate.value, 1)
+    assert.equal(result.runs.length, 1)
+    assert.equal(result.runs[0].summaryEvaluations.pass_rate.value, 1)
+    const summaryMetric = eventsBody().data.attributes.metrics.find(m => m.label === 'pass_rate')
+    assert.equal(summaryMetric.metric_source, 'summary')
+    assert.equal(summaryMetric.span_id, '')
+    assert.equal(summaryMetric.score_value, 1)
+  })
+
+  it('retries task and evaluator failures before capturing errors', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('row')
+    let taskCalls = 0
+    let evaluatorCalls = 0
+
+    const result = await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: () => {
+        taskCalls++
+        if (taskCalls === 1) throw new Error('try task again')
+        return 'output'
+      },
+      evaluators: {
+        flaky: () => {
+          evaluatorCalls++
+          if (evaluatorCalls === 1) throw new Error('try evaluator again')
+          return true
+        },
+      },
+    }).run({ maxRetries: 1, retryDelay: () => 0 })
+
+    assert.equal(taskCalls, 2)
+    assert.equal(evaluatorCalls, 2)
+    assert.equal(result.rows[0].evaluations.flaky, true)
+    assert.equal(result.rows[0].isError, false)
+  })
+
+  it('rejects on row errors when raiseErrors is true', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await assert.rejects(
+      () => new Experiment(client, {
+        name: 'exp-demo',
+        dataset,
+        task: () => { throw new Error('fatal') },
+      }).run({ raiseErrors: true }),
+      /fatal/
+    )
+    assert.ok(calls.some(c => c.method === 'PATCH' && c.body?.data?.attributes?.status === 'failed'))
   })
 
   it('captures a task error per row without aborting the run, but marks the experiment failed', async () => {
@@ -240,7 +348,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('experiment create body carries project_id, dataset_id, dataset_version, config and ensure_unique', async () => {
-    const { DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
     const dataset = Dataset.fromExisting(
       client,
       'demo',
@@ -272,11 +379,20 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.throws(() => new Experiment(client, { dataset, task: (i) => i }), /name/)
     assert.throws(() => new Experiment(client, { name: 'n', task: (i) => i }), /dataset/)
     assert.throws(() => new Experiment(client, { name: 'n', dataset }), /task/)
+    assert.throws(
+      () => new Experiment(client, { name: 'n', dataset, task: (i) => i, evaluators: { 'bad name': () => true } }),
+      /invalid/
+    )
+    assert.throws(
+      () => new Experiment(client, { name: 'n', dataset, task: (i) => i, summaryEvaluators: [true] }),
+      /summary evaluator must be a function/
+    )
   })
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
-    const { DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
-    const dataset = new Dataset(client, 'my-name', 'desc').addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+    const dataset = new Dataset(client, 'my-name', 'desc')
+      .addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+      .addRecord({ inputData: 'payload' }, 'expected', { explicit: true })
     assert.equal(dataset.name(), 'my-name')
     assert.equal(dataset.id(), null)
     assert.equal(dataset.url(), null)
@@ -284,6 +400,9 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.input, 'in')
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
+    assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
+    assert.equal(dataset.records()[1].expectedOutput, 'expected')
+    assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
   })
 
   it('pads record ids when the push response is not an array', async () => {
@@ -297,6 +416,29 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   it('resolves with the pushed/total record counts on a successful push', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
     const result = await dataset.push()
+    assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
+  })
+
+  it('submits custom record ids and keeps ids from JSON:API push responses', async () => {
+    installFetch(calls, {
+      'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': {
+        data: [
+          { id: 'custom-a', attributes: { valid_from_version: 2 } },
+          { id: 'custom-b', attributes: { valid_from_version: 2 } },
+        ],
+      },
+    })
+    const dataset = new Dataset(client, 'demo')
+      .addRecord(new DatasetRecord('a', null, {}, 'custom-a'))
+      .addRecord(new DatasetRecord('b', null, {}, 'custom-b'))
+
+    const result = await dataset.push()
+
+    const recordsCall = calls.find(call => call.path === '/api/v2/llm-obs/v1/proj/datasets/ds/records')
+    assert.deepEqual(recordsCall.body.data.attributes.records.map(record => record.id), ['custom-a', 'custom-b'])
+    assert.deepEqual(dataset.recordIds(), ['custom-a', 'custom-b'])
+    assert.equal(dataset.version(), 2)
+    assert.equal(dataset.latestVersion(), 2)
     assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
   })
 
