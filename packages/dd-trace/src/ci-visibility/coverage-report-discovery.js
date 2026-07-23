@@ -46,23 +46,40 @@ function discoverCoverageReports (rootDir) {
     return []
   }
 
+  let resolvedRoot
+  try {
+    resolvedRoot = path.resolve(rootDir)
+    const rootStats = fs.lstatSync(resolvedRoot, { throwIfNoEntry: false })
+    if (rootStats?.isSymbolicLink() || !rootStats?.isDirectory()) {
+      log.debug('Coverage report root is not a regular directory: %s', resolvedRoot)
+      return []
+    }
+  } catch (error) {
+    log.debug('Error checking coverage report root %s: %s', rootDir, error.message)
+    return []
+  }
+
   const discoveredReports = []
 
   for (const pattern of COVERAGE_REPORT_PATTERNS) {
     const fullPath = path.join(rootDir, pattern.path)
 
     try {
-      if (fs.existsSync(fullPath)) {
-        const stats = fs.statSync(fullPath)
+      let currentPath = resolvedRoot
+      let stats
+      for (const pathSegment of pattern.path.split('/')) {
+        currentPath = path.join(currentPath, pathSegment)
+        stats = fs.lstatSync(currentPath, { throwIfNoEntry: false })
+        if (!stats || stats.isSymbolicLink()) break
+      }
 
-        // Only include regular files, not directories or symlinks
-        if (stats.isFile()) {
-          discoveredReports.push({
-            filePath: fullPath,
-            format: pattern.format,
-          })
-          log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
-        }
+      // Only include regular files, not directories or symlinks
+      if (stats?.isFile()) {
+        discoveredReports.push({
+          filePath: fullPath,
+          format: pattern.format,
+        })
+        log.debug('Found coverage report: %s (format: %s)', fullPath, pattern.format)
       }
     } catch (err) {
       // Log but don't fail if we can't access a file

@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -124,6 +127,102 @@ describe('CiPlugin', () => {
     assert.strictEqual(plugin.skippableSuitesCoverage, undefined)
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
+  })
+
+  it('uploads regular coverage reports', () => {
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const regularReportPath = path.join(rootDir, 'lcov.info')
+
+    fs.writeFileSync(regularReportPath, 'regular coverage')
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.calledOnce(uploadCoverageReport)
+      assert.deepStrictEqual(uploadCoverageReport.firstCall.args[0], {
+        filePath: regularReportPath,
+        format: 'lcov',
+        testEnvironmentMetadata: plugin.testEnvironmentMetadata,
+      })
+    } finally {
+      fs.rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores invalid coverage report roots', () => {
+    const invalidRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    fs.rmSync(invalidRoot, { recursive: true })
+
+    const plugin = createPlugin('jest_worker')
+    const uploadCoverageReport = sinon.stub().yields()
+    plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+    try {
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      fs.writeFileSync(invalidRoot, 'not a directory')
+      plugin.uploadCoverageReports({ rootDir: invalidRoot })
+      plugin.uploadCoverageReports({ rootDir: Symbol('invalid-root') })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(invalidRoot, { force: true })
+    }
+  })
+
+  it('excludes coverage reports reached through linked directories', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideDir = path.join(fixtureDir, 'outside')
+    const linkedRootDir = path.join(fixtureDir, 'linked-root')
+    const outsideReportPath = path.join(outsideDir, 'lcov.info')
+    const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+    fs.mkdirSync(rootDir)
+    fs.mkdirSync(outsideDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideDir, path.join(rootDir, 'coverage'), directoryLinkType)
+    fs.symlinkSync(outsideDir, linkedRootDir, directoryLinkType)
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+      plugin.uploadCoverageReports({ rootDir: linkedRootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
+  })
+
+  it('excludes symlinked coverage report files', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
+    const rootDir = path.join(fixtureDir, 'root')
+    const outsideReportPath = path.join(fixtureDir, 'outside.info')
+
+    fs.mkdirSync(rootDir)
+    fs.writeFileSync(outsideReportPath, 'outside coverage')
+    fs.symlinkSync(outsideReportPath, path.join(rootDir, 'lcov.info'))
+
+    try {
+      const plugin = createPlugin('jest_worker')
+      const uploadCoverageReport = sinon.stub().yields()
+      plugin.tracer._exporter.uploadCoverageReport = uploadCoverageReport
+
+      plugin.uploadCoverageReports({ rootDir })
+
+      sinon.assert.notCalled(uploadCoverageReport)
+    } finally {
+      fs.rmSync(fixtureDir, { recursive: true, force: true })
+    }
   })
 
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
