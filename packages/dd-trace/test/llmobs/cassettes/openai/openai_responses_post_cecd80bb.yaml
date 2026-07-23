@@ -1,0 +1,128 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4","instructions":"You are a test agent","input":[{"role":"user","content":"hello"}],"include":[],"tools":[],"stream":false}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '138'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - Agents/JavaScript 0.7.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 6.32.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v25.2.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_0bc715f27ef7a52b0169c41cdb729481a1a267646efc815202\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1774460123,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"completed_at\": 1774460124,\n  \"error\": null,\n
+        \ \"frequency_penalty\": 0.0,\n  \"incomplete_details\": null,\n  \"instructions\":
+        \"You are a test agent\",\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"gpt-4-0613\",\n  \"output\": [\n    {\n      \"id\":
+        \"msg_0bc715f27ef7a52b0169c41cdc7a0881a18e350c2c5951716f\",\n      \"type\":
+        \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n
+        \         \"type\": \"output_text\",\n          \"annotations\": [],\n          \"logprobs\":
+        [],\n          \"text\": \"Hello! How can I assist you today?\"\n        }\n
+        \     ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\":
+        true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\":
+        null,\n  \"prompt_cache_retention\": null,\n  \"reasoning\": {\n    \"effort\":
+        null,\n    \"summary\": null\n  },\n  \"safety_identifier\": null,\n  \"service_tier\":
+        \"default\",\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n
+        \   \"format\": {\n      \"type\": \"text\"\n    },\n    \"verbosity\": \"medium\"\n
+        \ },\n  \"tool_choice\": \"auto\",\n  \"tools\": [],\n  \"top_logprobs\":
+        0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\":
+        16,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n
+        \   \"output_tokens\": 11,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\":
+        0\n    },\n    \"total_tokens\": 27\n  },\n  \"user\": null,\n  \"metadata\":
+        {}\n}"
+    headers:
+      CF-RAY:
+      - 9e1fabf99f43d648-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 25 Mar 2026 17:35:24 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-4
+      openai-processing-ms:
+      - '1260'
+      openai-project:
+      - proj_6cMiry5CHgK3zKotG0LtMb9H
+      openai-version:
+      - '2020-10-01'
+      set-cookie:
+      - __cf_bm=MqXpjdBpiNZGV_0goWMs2folVRrXakVjrvRbNz22DPE-1774460123.1357949-1.0.1.1-kaJVP3kL8q5lHEvOra6c3IE4kzLbeiJotp2HkLYSLleSUVmr1lhDLn3fsoZd9Gt5xhvNJ8cN51Ie_pHSENQARBh.XM5GzxonJQt48ATUpDimpPfu9k8Kyy_chWKwESMI;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 25 Mar 2026
+        18:05:24 GMT
+      x-ratelimit-limit-requests:
+      - '1000'
+      x-ratelimit-limit-tokens:
+      - '600000'
+      x-ratelimit-remaining-requests:
+      - '999'
+      x-ratelimit-remaining-tokens:
+      - '599979'
+      x-ratelimit-reset-requests:
+      - 60ms
+      x-ratelimit-reset-tokens:
+      - 2ms
+      x-request-id:
+      - req_936f8cbf19144abb8262322211040648
+    status:
+      code: 200
+      message: OK
+version: 1
