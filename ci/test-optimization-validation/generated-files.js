@@ -97,7 +97,7 @@ function getMissingDirectories (root, directory) {
  */
 function cleanupCreatedDirectories (root) {
   const resolvedRoot = path.resolve(root)
-  const directories = [...createdGeneratedDirectories.entries()]
+  const directories = [...createdGeneratedDirectories]
     .filter(([directory, authorization]) => {
       return isPathInside(resolvedRoot, directory) && isCleanupAuthorizationValid(directory, authorization)
     })

@@ -174,7 +174,7 @@ async function processModule ({ path, internal = false, context, excludeDefault 
   for (const n of exportNames) {
     if (n === 'default' && excludeDefault) continue
 
-    if (isStarExportLine(n) === true) {
+    if (isStarExportLine(n)) {
       // export * from 'wherever'
       const [, modFile] = n.split('* from ')
 

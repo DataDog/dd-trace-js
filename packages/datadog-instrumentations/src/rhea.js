@@ -222,7 +222,7 @@ function beforeFinish (delivery, state) {
 }
 
 function getStateFromData (stateData) {
-  if (stateData && stateData.descriptor && stateData.descriptor) {
+  if (stateData?.descriptor) {
     switch (stateData.descriptor.value) {
       case 0x24: return 'accepted'
       case 0x25: return 'rejected'

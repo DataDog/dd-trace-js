@@ -406,7 +406,7 @@ function appendApprovalSummaryFramework (lines, framework, requestedScenario, re
     lines.push('**Temporary test source:**', '')
     for (const file of strategy.files || []) {
       lines.push(
-        `${inlineCode(getRepositoryRelativePath(repositoryRoot, file.path))}`,
+        inlineCode(getRepositoryRelativePath(repositoryRoot, file.path)),
         '',
         codeBlock(file.contentLines.join('\n')),
         ''

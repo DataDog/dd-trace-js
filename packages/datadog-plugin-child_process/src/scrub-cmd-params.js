@@ -22,7 +22,7 @@ function extractVarNames (expression) {
   }
 
   const varNamesObject = {}
-  for (const varName of varNames.keys()) {
+  for (const varName of varNames) {
     varNamesObject[varName] = `$${varName}`
   }
   return varNamesObject

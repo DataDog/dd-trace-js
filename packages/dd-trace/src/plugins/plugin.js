@@ -103,7 +103,7 @@ module.exports = class Plugin {
    * @returns {void}
    */
   enter (span, store) {
-    store = store || legacyStorage.getStore()
+    store ||= legacyStorage.getStore()
     legacyStorage.enterWith({ ...store, span })
   }
 

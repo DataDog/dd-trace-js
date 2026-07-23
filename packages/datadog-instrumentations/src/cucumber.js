@@ -342,7 +342,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
   }
 
   const testFileAbsolutePath = pickle.uri
-  const finished = pickleResultByFile[testFileAbsolutePath] || (pickleResultByFile[testFileAbsolutePath] = [])
+  const finished = (pickleResultByFile[testFileAbsolutePath] ||= [])
 
   if (isEarlyFlakeDetectionEnabled && isNew) {
     const testFullname = `${pickle.uri}:${pickle.name}`
@@ -793,6 +793,7 @@ function wrapRun (pl, isLatestVersion, version) {
       testFnCh.runStores(ctx, () => {
         promise = run.apply(this, args)
       })
+      // eslint-disable-next-line unicorn/no-async-promise-finally -- Detached finalizer preserves Cucumber's result.
       promise.finally(async () => {
         if (!canAwaitRetries) {
           this.eventBroadcaster.removeListener('envelope', onEnvelope)

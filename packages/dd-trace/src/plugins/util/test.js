@@ -1917,8 +1917,8 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   }
 
   result.executions++
-  result.isDisabled = result.isDisabled || !!isDisabled
-  result.isQuarantined = result.isQuarantined || !!isQuarantined
+  result.isDisabled ||= !!isDisabled
+  result.isQuarantined ||= !!isQuarantined
 
   if (status === 'fail') {
     result.failedCount++

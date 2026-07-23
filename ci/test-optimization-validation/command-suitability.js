@@ -257,9 +257,7 @@ function readLiteralStringArray (config, offset) {
       }
       patterns.push(value)
       quote = ''
-    } else if (character.charCodeAt(0) === 92) {
-      return []
-    } else if (character === '\r' || character === '\n') {
+    } else if (character.charCodeAt(0) === 92 || character === '\r' || character === '\n') {
       return []
     } else {
       value += character

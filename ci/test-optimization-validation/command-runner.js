@@ -215,12 +215,12 @@ function runCommand (command, options = {}) {
     child.stdout.on('data', chunk => {
       const capture = appendCapturedOutput(result.stdout, chunk, maxOutputBytes)
       result.stdout = capture.output
-      result.stdoutTruncated = result.stdoutTruncated || capture.truncated
+      result.stdoutTruncated ||= capture.truncated
     })
     child.stderr.on('data', chunk => {
       const capture = appendCapturedOutput(result.stderr, chunk, maxOutputBytes)
       result.stderr = capture.output
-      result.stderrTruncated = result.stderrTruncated || capture.truncated
+      result.stderrTruncated ||= capture.truncated
     })
     child.on('error', err => {
       result.stderr += `${err.stack || err}\n`

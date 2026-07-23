@@ -268,7 +268,7 @@ ${build.initialOptions.banner.js}`
       let pathToPackageJson
       try {
         // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
-        pathToPackageJson = require.resolve(`${extracted.pkg}`, { paths: [args.resolveDir] })
+        pathToPackageJson = require.resolve(extracted.pkg, { paths: [args.resolveDir] })
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
@@ -340,7 +340,7 @@ ${build.initialOptions.banner.js}`
 
       if (data.isESM) {
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
-          args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
+          args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
           if (data.internal) {
             args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)

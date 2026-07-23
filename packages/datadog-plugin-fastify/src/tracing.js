@@ -27,7 +27,7 @@ class FastifyTracingPlugin extends RouterPlugin {
 }
 
 function getParentStore (ctx) {
-  ctx.parentStore = ctx.parentStore ?? storage('legacy').getStore()
+  ctx.parentStore ??= storage('legacy').getStore()
   return ctx.parentStore
 }
 

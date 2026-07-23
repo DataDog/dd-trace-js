@@ -97,9 +97,23 @@ const REDACTED_IDENTIFIERS = new Set(
     'XSRF-TOKEN',
     ...config.dynamicInstrumentation.redactedIdentifiers,
   ]
-    .map((name) => normalizeName(name))
-    .filter((name) => excludedIdentifiers.has(name) === false)
+    .map(normalizeIdentifier)
+    .filter(isIncludedIdentifier)
 )
+
+/**
+ * @param {string} name
+ */
+function normalizeIdentifier (name) {
+  return normalizeName(name)
+}
+
+/**
+ * @param {string} name
+ */
+function isIncludedIdentifier (name) {
+  return !excludedIdentifiers.has(name)
+}
 
 function normalizeName (name, isSymbol) {
   if (isSymbol) name = name.slice(7, -1) // Remove `Symbol(` and `)`

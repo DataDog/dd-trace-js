@@ -127,7 +127,7 @@ class PrismaPlugin extends DatabasePlugin {
 
 function formatResourceName (resource, attributes) {
   if (attributes?.name) {
-    return `${attributes.name}`.trim()
+    return attributes.name.trim()
   }
   if (attributes?.model && attributes.method) {
     return `${attributes.model}.${attributes.method}`.trim()

@@ -93,7 +93,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
 
             const { usage } = chunk
             if (usage) {
-              const responseUsage = response.usage ?? (response.usage = { input_tokens: 0, output_tokens: 0 })
+              const responseUsage = (response.usage ??= { input_tokens: 0, output_tokens: 0 })
               responseUsage.output_tokens = usage.output_tokens
 
               const cacheCreationTokens = usage.cache_creation_input_tokens

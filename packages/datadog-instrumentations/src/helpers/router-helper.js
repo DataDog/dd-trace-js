@@ -88,7 +88,7 @@ function collectRoutesFromRouter (router, prefix) {
 function normalizeRoutePaths (path) {
   if (path == null) return []
 
-  if (Array.isArray(path) === false) {
+  if (!Array.isArray(path)) {
     const normalized = normalizeRoutePath(path)
     return [normalized]
   }

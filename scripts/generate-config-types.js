@@ -260,7 +260,7 @@ function generateEnvVarConfigTypes (supportedConfigurations) {
     }
   }
 
-  const body = [...envVarTypes.entries()]
+  const body = [...envVarTypes]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, type]) => `  ${renderPropertyName(name)}: ${type};`)
     .join('\n')

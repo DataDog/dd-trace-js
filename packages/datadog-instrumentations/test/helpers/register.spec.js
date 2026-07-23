@@ -82,4 +82,19 @@ describe('register', () => {
     sinon.assert.notCalled(hooksMock['@confluentinc/kafka-javascript'].fn)
     sinon.assert.notCalled(hooksMock['mongodb-core'].fn)
   })
+
+  for (const disabledName of ['fs', 'node:fs']) {
+    it(`should disable both builtin hook names when ${disabledName} is disabled`, () => {
+      hooksMock.fs = { fn: sinon.stub() }
+      hooksMock['node:fs'] = { fn: sinon.stub() }
+
+      loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: disabledName })
+
+      const registeredNames = []
+      for (const [names] of HookMock.args) {
+        registeredNames.push(names[0])
+      }
+      assert.deepStrictEqual(registeredNames.sort(), ['@confluentinc/kafka-javascript', 'mongodb-core'])
+    })
+  }
 })

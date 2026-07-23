@@ -24,7 +24,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     // Subscribe to streaming chunk events
     this.addSub('apm:google:genai:request:chunk', ({ ctx, chunk, done }) => {
       ctx.isStreaming = true
-      ctx.chunks = ctx.chunks || []
+      ctx.chunks ||= []
 
       if (chunk) ctx.chunks.push(chunk)
       if (!done) return

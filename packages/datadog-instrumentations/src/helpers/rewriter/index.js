@@ -39,6 +39,7 @@ for (const matcher of [matcherCjs, matcherEsm]) {
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
+// eslint-disable-next-line unicorn/no-useless-concat -- Keep the source-map marker non-contiguous.
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 function rewrite (content, filename, format) {

@@ -140,7 +140,7 @@ class PrioritySampler {
       samplers[key] = new Sampler(rates[key])
     }
 
-    samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
+    samplers[DEFAULT_KEY] ||= defaultSampler
 
     this._samplers = samplers
 
@@ -257,8 +257,11 @@ class PrioritySampler {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
-    if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
-    if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+    if (rule.provenance === 'customer') {
+      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
+    } else if (rule.provenance === 'dynamic') {
+      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+    }
 
     return rule.sample(context) && this._isSampledByRateLimit(context)
       ? USER_KEEP
