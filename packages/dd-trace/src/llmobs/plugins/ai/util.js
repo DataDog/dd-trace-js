@@ -407,7 +407,7 @@ function getToolCallResultContent (content) {
     }
     if (result !== undefined) {
       return typeof result === 'string' ? result : stringifyToolCallResult(result)
-}
+    }
 
     return UNSUPPORTED_TOOL_RESULT
   } catch {
