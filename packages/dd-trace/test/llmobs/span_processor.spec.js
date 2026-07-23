@@ -75,13 +75,14 @@ describe('span processor', () => {
         '_ml_obs.llmobs_parent_id': '1234',
         '_ml_obs.sample_rate': '1',
         '_ml_obs.sampling_decision': '1',
+        '_ml_obs.trace_id': 'mlob123',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       assert.deepStrictEqual(payload, {
-        trace_id: '123',
+        trace_id: 'mlob123',
         span_id: '456',
         parent_id: '1234',
         name: 'test',
@@ -116,6 +117,7 @@ describe('span processor', () => {
           span_id: '456',
           sample_rate: '1',
           sampling_decision: '1',
+          apm_trace_id: '123',
         },
       })
 
