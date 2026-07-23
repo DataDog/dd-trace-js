@@ -155,4 +155,54 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(16), '000000000000abcd')
     assert.strictEqual(spanId.toString(10), '43981')
   })
+
+  describe('reseed()', () => {
+    let freshId
+    let randomFillSyncStub
+
+    beforeEach(() => {
+      randomFillSyncStub = sinon.stub().callsFake(buf => {
+        for (let i = 0; i < buf.length; i++) {
+          buf[i] = 0xAB
+        }
+      })
+
+      freshId = proxyquire('../src/id', {
+        crypto: { randomFillSync: randomFillSyncStub },
+      })
+    })
+
+    it('should reset the batch cursor to 0', () => {
+      // Call id() several times to advance the batch counter
+      freshId()
+      freshId()
+      freshId()
+      randomFillSyncStub.resetHistory()
+
+      freshId.reseed()
+      // After reseed, batch = 0, so the next call must refill from randomFillSync
+      freshId()
+
+      sinon.assert.called(randomFillSyncStub)
+    })
+
+    it('should force a fresh randomFillSync() call on the very next id() after reseed', () => {
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+
+    it('should be safe to call repeatedly', () => {
+      freshId.reseed()
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+  })
 })

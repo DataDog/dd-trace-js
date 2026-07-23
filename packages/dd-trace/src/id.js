@@ -255,6 +255,16 @@ function writeUInt32BE (buffer, value, offset) {
 }
 
 /**
+ * Resets the batch cursor, forcing the next ID batch to draw a fresh
+ * randomFillSync() call on MicroVM clone resume. Node's crypto RNG is
+ * re-seeded from the kernel CSPRNG on snapshot resume, so re-invoking it
+ * is sufficient — no need to read /dev/urandom directly.
+ */
+function reseed () {
+  batch = 0
+}
+
+/**
  * @param {string} [value]
  * @param {number} [radix]
  * @returns {Identifier}
@@ -264,3 +274,4 @@ module.exports = function createIdentifier (value, radix) {
 }
 
 module.exports.Identifier = Identifier
+module.exports.reseed = reseed
