@@ -115,7 +115,7 @@ class Experiments {
               attrs?.input ?? null,
               attrs?.expected_output ?? null,
               attrs?.metadata ?? {},
-              recordId === '' ? null : recordId
+              recordId
             ))
             ids.push(recordId)
           }

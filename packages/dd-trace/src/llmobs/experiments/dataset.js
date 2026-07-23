@@ -175,22 +175,15 @@ class Dataset {
     // ids are preserved for experiment row tagging.
     const created = createdRecordsFromResponse(response)
     const pushedVersion = versionFromCreatedRecords(created)
-    if (pushedVersion === null) {
-      // The dataset contents changed, but the backend did not report the new
-      // version. Avoid pinning later experiments to the pre-append create version.
-      this.#version = null
-    } else {
+    if (pushedVersion !== null) {
       this.#version = pushedVersion
       this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
     }
 
     let pushedCount = 0
-    for (const [index, node] of created.entries()) {
+    for (const node of created) {
       const recordId = recordIdFromCreatedRecord(node)
-      if (recordId !== '') {
-        pushedCount++
-        pending[index].id = recordId
-      }
+      if (recordId !== '') pushedCount++
       this.#recordIds.push(recordId)
     }
     for (let i = created.length; i < pending.length; i++) this.#recordIds.push('')
