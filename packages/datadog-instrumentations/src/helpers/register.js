@@ -166,7 +166,6 @@ function logAbortedIntegrations () {
       const parts = nameVersion.split('@')
       const version = parts.pop()
       const name = parts.join('@')
-      nameVersion.split('@')
       telemetry('abort.integration', [
         `integration:${name}`,
         `integration_version:${version}`,
