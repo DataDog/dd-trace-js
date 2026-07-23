@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../log')
+const { getApiOwner } = require('../opentelemetry/api')
 
 const METER_NAME = 'dd-trace-js/openfeature'
 const COUNTER_NAME = 'feature_flag.evaluations'
@@ -53,7 +54,7 @@ class EvalMetricsHook {
     if (this.#counter) return this.#counter
 
     try {
-      const { metrics } = require('@opentelemetry/api')
+      const { metrics } = getApiOwner()
       const meter = metrics.getMeter(METER_NAME)
       this.#counter = meter.createCounter(COUNTER_NAME, {
         description: COUNTER_DESCRIPTION,

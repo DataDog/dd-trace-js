@@ -181,8 +181,8 @@
     "@datadog/openfeature-node-server": "2.0.0",
     "@datadog/pprof": "5.15.1",
     "@datadog/wasm-js-rewriter": "5.0.1",
-    "@opentelemetry/api": ">=1.0.0 <1.10.0",
-    "@opentelemetry/api-logs": "<1.0.0",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.212.0",
     "oxc-parser": "^0.132.0"
   },
   "devDependencies": {
@@ -230,6 +230,9 @@
     "node-preload": "^0.2.1",
     "nyc": "^18.0.0",
     "octokit": "^5.0.3",
+    "otel-api-logs-v033": "https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.33.0.tgz",
+    "otel-api-logs-v034": "https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.34.0.tgz",
+    "otel-api-v14": "https://registry.npmjs.org/@opentelemetry/api/-/api-1.4.1.tgz",
     "p-limit": "^7.2.0",
     "proxyquire": "^2.1.3",
     "retry": "^0.13.1",

@@ -400,6 +400,16 @@ const tracerProvider = new tracer.TracerProvider()
 tracerProvider.register()
 ```
 
+dd-trace captures application copies of `@opentelemetry/api` from 1.4.1 through 1.9.x and
+`@opentelemetry/api-logs` from 0.33.0 through 0.x for bridge operations. Provider registration stays
+on dd-trace's optional compatibility-max copies so every supported application copy can consume the
+providers through OpenTelemetry's global API.
+
+The `dd-trace/esbuild` and `dd-trace/webpack` plugins keep dd-trace's API copies inside relocated
+bundles even when application imports are configured as external. Application imports otherwise
+follow the bundler's normal external configuration and must remain resolvable after deployment when
+externalized.
+
 The following attributes are available to override Datadog-specific options:
 
 * `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.

@@ -1,6 +1,5 @@
 'use strict'
 
-const { context } = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
 
@@ -23,6 +22,7 @@ const { VERSION: packageVersion } = require('../../../../../version')
  * @class Logger
  */
 class Logger {
+  #apiBinding
   #instrumentationScope
 
   /**
@@ -38,8 +38,10 @@ class Logger {
    *  `name` defaults to 'dd-trace-js';
    *  `version` defaults to tracer version;
    *  `schemaUrl` defaults to '';
+   * @param {import('../api').ApiBinding} apiBinding
    */
-  constructor (loggerProvider, instrumentationScope, instrumentationLibrary) {
+  constructor (loggerProvider, instrumentationScope, instrumentationLibrary, apiBinding) {
+    this.#apiBinding = apiBinding
     this.loggerProvider = loggerProvider
 
     // Support both newer instrumentationScope and legacy instrumentationLibrary
@@ -72,8 +74,8 @@ class Logger {
     }
 
     if (!logRecord.context) {
-      // Store span context in the log record context for trace correlation
-      logRecord.context = context.active()
+      // Store span context in the log record context for trace correlation.
+      logRecord.context = this.#apiBinding.current.context.active()
     }
 
     this.loggerProvider.processor.onEmit(logRecord, this.#instrumentationScope)

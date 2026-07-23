@@ -1,7 +1,6 @@
 'use strict'
 
 const { performance } = require('perf_hooks')
-const api = require('@opentelemetry/api')
 
 const { timeOrigin } = performance
 
@@ -13,17 +12,21 @@ const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
+const { getApi } = require('./api')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
 const spanEndingHook = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
+// SpanKind is a fixed spec enum available from every supported API copy.
+const { SpanKind } = getApi()
+
 const spanKindNames = {
-  [api.SpanKind.INTERNAL]: kinds.INTERNAL,
-  [api.SpanKind.SERVER]: kinds.SERVER,
-  [api.SpanKind.CLIENT]: kinds.CLIENT,
-  [api.SpanKind.PRODUCER]: kinds.PRODUCER,
-  [api.SpanKind.CONSUMER]: kinds.CONSUMER,
+  [SpanKind.INTERNAL]: kinds.INTERNAL,
+  [SpanKind.SERVER]: kinds.SERVER,
+  [SpanKind.CLIENT]: kinds.CLIENT,
+  [SpanKind.PRODUCER]: kinds.PRODUCER,
+  [SpanKind.CONSUMER]: kinds.CONSUMER,
 }
 
 /**
@@ -45,7 +48,7 @@ function spanNameMapper (spanName, kind, attributes) {
   const opName = attributes['operation.name']
   if (opName) return opName
 
-  const { INTERNAL, SERVER, CLIENT } = api.SpanKind
+  const { INTERNAL, SERVER, CLIENT } = SpanKind
 
   // HTTP server and client requests
   // TODO: Drop http.method when http.request.method is supported.
@@ -249,7 +252,7 @@ class Span extends BridgeSpanBase {
    */
   end (timeInput) {
     if (this.ended) {
-      api.diag.error('You can only call end() on a span once.')
+      getApi().diag.error('You can only call end() on a span once.')
       return
     }
 

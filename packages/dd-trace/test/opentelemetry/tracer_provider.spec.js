@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 const { trace } = require('@opentelemetry/api')
 
 require('../setup/core')
@@ -18,6 +19,37 @@ describe('OTel TracerProvider', () => {
     provider.register()
 
     assert.strictEqual(trace.getTracerProvider().getDelegate(), provider)
+  })
+
+  it('registers through the compatibility-max owner only once', () => {
+    const api = {
+      trace: {
+        getTracerProvider: () => ({ setDelegate () {} }),
+        setGlobalTracerProvider: sinon.stub().returns(true),
+      },
+      context: { setGlobalContextManager: sinon.spy() },
+      propagation: { setGlobalPropagator: sinon.spy() },
+    }
+    const getApiBinding = sinon.stub().returns({ current: api })
+    const getApiOwner = sinon.stub().returns(api)
+    const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
+      './api': { getApiBinding, getApiOwner },
+      '../../': {},
+      './context_manager': class {},
+      './tracer': class {},
+      './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
+    })
+    const provider = new FreshTracerProvider()
+    const propagator = {}
+
+    provider.register({ propagator })
+    provider.register()
+
+    sinon.assert.calledOnce(getApiBinding)
+    sinon.assert.calledOnce(getApiOwner)
+    sinon.assert.calledOnce(api.trace.setGlobalTracerProvider)
+    sinon.assert.calledOnce(api.context.setGlobalContextManager)
+    sinon.assert.calledOnceWithExactly(api.propagation.setGlobalPropagator, propagator)
   })
 
   it('should get tracer', () => {
