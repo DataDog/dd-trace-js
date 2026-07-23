@@ -1,12 +1,19 @@
 'use strict'
 
 const os = require('os')
+const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
+const JsSpanProcessor = require('../js_span_processor')
+const getExporter = require('../exporter')
+const exporters = require('../../../../ext/exporters')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
-const getExporter = require('../exporter')
+const NativeExporter = require('../exporters/native')
+const defaults = require('../config/defaults')
+const { getIsAWSLambda } = require('../serverless')
+const pkg = require('../../../../package.json')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -15,6 +22,22 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
+
+// Lazy-loaded so the libdatadog initialization cost is only paid the first
+// time native spans are selected. A corrupt native install still fails hard;
+// an omitted optional @datadog/libdatadog can fall back to JS agent export.
+let nativeModule
+function getNativeModule () {
+  if (nativeModule === undefined) {
+    nativeModule = require('../native')
+  }
+  return nativeModule
+}
+
+function isMissingLibdatadog (error) {
+  return error?.code === 'MODULE_NOT_FOUND' &&
+    /^Cannot find module ['"]@datadog\/libdatadog['"]/.test(String(error.message))
+}
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -30,30 +53,138 @@ class DatadogTracer {
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
-
-    // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
-    // exporter when the tracer is running in Test Optimization mode. Test spans
-    // (test_session/test_module/ test_suite/test) belong on the citestcycle
-    // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
-    // vars set in their environment (e.g. for a separate telemetry integration)
-    // silently lose all test spans.
-    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
-      const { createOtlpTraceExporter } = require('../opentelemetry/trace')
-      this._exporter = createOtlpTraceExporter(config)
-    } else {
-      const Exporter = getExporter(config.experimental.exporter)
-      this._exporter = new Exporter(config, this._prioritySampler)
-    }
-
-    let otlpStatsExporter
-    if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-      const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
-      otlpStatsExporter = createOtlpSpanStatsExporter(config)
-    }
-    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
-    this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
+
+    // Test Optimization / CI Visibility has its own event model and intake and
+    // cannot ride the native (WASM) pipeline, so it runs on the JS span path:
+    // plain JS spans, the JS span processor (span_format), and a CI-vis
+    // exporter (agentless / agent-proxy / test-worker) selected by getExporter.
+    // The electron APM exporter also rides the JS pipeline: it consumes
+    // JS-formatted spans and publishes them over the electron diagnostic
+    // channel instead of shipping to the agent, so it can't use native spans.
+    // AWS Lambda layers intentionally omit optional dependencies such as
+    // @datadog/libdatadog, so they keep using the legacy JS agent pipeline.
+    const configuredExporter = config.experimental?.exporter
+    const useElectronExporter = configuredExporter === exporters.ELECTRON
+    const useLambdaJsPipeline = getIsAWSLambda() && !config.isCiVisibility && !useElectronExporter
+    const unsupportedApmExporter = configuredExporter &&
+      configuredExporter !== exporters.AGENT &&
+      !useElectronExporter &&
+      !useLambdaJsPipeline &&
+      !config.isCiVisibility
+
+    if (config.isCiVisibility || useElectronExporter || useLambdaJsPipeline) {
+      this._useJsSpans = true
+      this._isCiVisibility = config.isCiVisibility === true
+      const Exporter = useElectronExporter
+        ? require('../exporters/electron')
+        : useLambdaJsPipeline
+          ? require('../exporters/agent')
+          : getExporter(configuredExporter)
+      this._exporter = new Exporter(config, this._prioritySampler)
+      this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config)
+      this._url = this._exporter._url
+
+      log.debug(useElectronExporter
+        ? 'Electron exporter enabled (JS span pipeline)'
+        : useLambdaJsPipeline
+          ? 'AWS Lambda environment detected (JS span pipeline)'
+          : 'CI Visibility mode enabled (JS span pipeline)')
+    } else {
+      if (unsupportedApmExporter) {
+        log.warn(
+          'Native spans mode ignores unsupported experimental exporter "%s"; using native agent exporter',
+          configuredExporter
+        )
+      }
+      this._useJsSpans = false
+      let NativeSpansInterface
+      try {
+        NativeSpansInterface = getNativeModule().NativeSpansInterface
+      } catch (e) {
+        if (isMissingLibdatadog(e) && config.OTEL_TRACES_EXPORTER !== 'otlp') {
+          this._useJsSpans = true
+          this._isCiVisibility = false
+          let otlpStatsExporter
+          if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+            const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+            otlpStatsExporter = createOtlpSpanStatsExporter(config)
+          }
+          const Exporter = require('../exporters/agent')
+          this._exporter = new Exporter(config, this._prioritySampler)
+          this._processor = new JsSpanProcessor(
+            this._exporter,
+            this._prioritySampler,
+            config,
+            otlpStatsExporter
+          )
+          this._url = this._exporter._url
+          log.warn(
+            'Native spans unavailable because optional dependency %s is not installed; using JS span pipeline',
+            '@datadog/libdatadog'
+          )
+        } else {
+          throw e
+        }
+      }
+
+      if (!this._useJsSpans) {
+        const { url, hostname = defaults.hostname, port } = config
+        const agentUrl = url || new URL(format({
+          protocol: 'http:',
+          hostname,
+          port,
+        }))
+
+        this._nativeSpans = new NativeSpansInterface({
+          agentUrl: agentUrl.toString(),
+          tracerVersion: pkg.version,
+          lang: 'nodejs',
+          langVersion: process.version,
+          // Bun runs on JavaScriptCore; match the legacy agent writer's
+          // Datadog-Meta-Lang-Interpreter (process.versions.bun ? 'JavaScriptCore' : 'v8').
+          langInterpreter: process.versions.bun ? 'JavaScriptCore' : (process.jsEngine || 'v8'),
+          pid: process.pid,
+          tracerService: config.service,
+          // Native v0.6 client stats and OTLP trace metrics are mutually exclusive
+          // (system-tests FR02): when OTLP trace metrics are enabled, config forces
+          // DD_TRACE_STATS_COMPUTATION_ENABLED=true so the OTLP stats exporter runs,
+          // but the native concentrator must NOT also ship v0.6 stats. Route stats
+          // to OTLP only in that case by leaving the native concentrator disabled.
+          statsEnabled: (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+          !config.OTEL_TRACES_SPAN_METRICS_ENABLED) || false,
+          hostname: config.hostname || os.hostname(),
+          env: config.env || '',
+          appVersion: config.version || '',
+          runtimeId: config.tags?.['runtime-id'] || '',
+          otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
+          // Advertise Datadog-Client-Computed-Stats when we compute stats
+          // client-side or run in APM-standalone (apmTracingEnabled=false), so the
+          // agent skips its own APM stats/sampling for these traces.
+          clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
+        })
+
+        let otlpStatsExporter
+        if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+          const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+          otlpStatsExporter = createOtlpSpanStatsExporter(config)
+        }
+
+        this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
+        this._processor = new SpanProcessor(
+          this._exporter,
+          this._prioritySampler,
+          config,
+          this._nativeSpans,
+          otlpStatsExporter
+        )
+        this._url = agentUrl
+
+        log.debug('Native spans mode enabled')
+      }
+    }
+
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
@@ -71,7 +202,7 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
-    const span = new Span(this, this._processor, this._prioritySampler, {
+    const fields = {
       operationName: options.operationName || name,
       parent,
       startTime: options.startTime,
@@ -79,7 +210,23 @@ class DatadogTracer {
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
       integrationName: options.integrationName,
       links: options.links,
-    }, this._debug)
+    }
+
+    let span
+    if (this._useJsSpans) {
+      // CI Visibility + the electron exporter use plain JS spans (see the constructor).
+      span = new Span(this, this._processor, this._prioritySampler, fields, this._debug)
+    } else {
+      const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
+      span = new NativeDatadogSpan(
+        this,
+        this._processor,
+        this._prioritySampler,
+        fields,
+        this._debug,
+        this._nativeSpans
+      )
+    }
 
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
@@ -95,7 +242,17 @@ class DatadogTracer {
       ctx.setTag('service.name', this._service)
     }
 
-    span.addTags(this._config.tags)
+    // As per unified service tagging, a span whose service differs from the
+    // global service must not inherit the global version. The JS formatter
+    // dropped the `undefined` version override at format time; the native tag
+    // sync skips undefined values (it can't clear an already-synced meta), so
+    // omit version from the config tags up front instead.
+    if (options.tags?.service && options.tags.service !== this._service) {
+      const { version, ...configTagsWithoutVersion } = this._config.tags
+      span.addTags(configTagsWithoutVersion)
+    } else {
+      span.addTags(this._config.tags)
+    }
     span.addTags(options.tags)
 
     return span

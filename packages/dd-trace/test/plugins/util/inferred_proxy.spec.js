@@ -593,7 +593,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             },
           })
 
-          assert.strictEqual(spans[0].error, 0)
+          assert.strictEqual(spans[0].error ?? 0, 0)
         })
       })
 
@@ -624,7 +624,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             },
           })
 
-          assert.strictEqual(spans[0].error, 0)
+          assert.strictEqual(spans[0].error ?? 0, 0)
         })
       })
     })

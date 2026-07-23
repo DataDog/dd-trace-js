@@ -269,8 +269,33 @@ function applyHttpOtelSemantics (formattedSpan) {
   formattedSpan.metrics = newMetrics
 }
 
+// The meta/metric keys `applyHttpOtelSemantics` can emit. The native path syncs
+// only these from the remapped view (the rest of the span's tags are already in
+// the WASM store), so it must know the exact output set.
+const OTEL_OUTPUT_META_KEYS = [
+  HTTP_REQUEST_METHOD,
+  HTTP_REQUEST_METHOD_ORIGINAL,
+  URL_FULL,
+  URL_PATH,
+  URL_SCHEME,
+  URL_QUERY,
+  SERVER_ADDRESS,
+  USER_AGENT_ORIGINAL,
+  CLIENT_ADDRESS,
+  ERROR_TYPE,
+]
+const OTEL_OUTPUT_METRIC_KEYS = [HTTP_RESPONSE_STATUS_CODE, SERVER_PORT]
+
 module.exports = {
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
   applyHttpOtelSemantics,
+  // Consumed by the native span path (packages/dd-trace/src/native): the DD HTTP
+  // meta keys + network.destination.port are held out of the WASM store under
+  // OTEL semantics (they'd otherwise be un-removable), and the OTel output keys
+  // are synced from the remapped view at finish.
+  DD_HTTP_META_KEYS,
+  NETWORK_DESTINATION_PORT,
+  OTEL_OUTPUT_META_KEYS,
+  OTEL_OUTPUT_METRIC_KEYS,
 }

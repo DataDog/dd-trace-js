@@ -265,7 +265,52 @@ function unformatSpanEvents (span) {
     })
   }
 
+  // Native pipeline (DD_TRACE_NATIVE_SPAN_EVENTS enabled): span events land in
+  // the top-level v0.4 `span_events` field instead of the legacy `meta.events`
+  // JSON string. Attributes arrive as typed OTLP wrappers (including
+  // `array_value` for arrays), so decode them back to the same
+  // `{ name, startTime, attributes }` shape the plugin specs assert against.
+  if (Array.isArray(span.span_events)) {
+    return span.span_events.map(event => {
+      return {
+        name: event.name,
+        // `time_unix_nano` decodes as a BigInt (msgpack `useBigInt64`).
+        startTime: Number(event.time_unix_nano) / 1e6,
+        attributes: decodeNativeSpanEventAttributes(event.attributes),
+      }
+    })
+  }
+
   return [] // Return an empty array if no events are found
+}
+
+// Unwrap a native span-event attribute value from its typed OTLP wrapper
+// (`{ type, string_value | bool_value | int_value | double_value | array_value }`)
+// to a plain JS value. Keyed off the value field (not `type`) so an omitted/zero
+// discriminant is tolerated and an attribute literally named `type` can't collide.
+function unwrapSpanEventAttributeValue (wrapper) {
+  if (wrapper === null || typeof wrapper !== 'object') return wrapper
+  if ('string_value' in wrapper) return wrapper.string_value
+  if ('bool_value' in wrapper) return wrapper.bool_value
+  if ('int_value' in wrapper) return Number(wrapper.int_value) // decodes as BigInt (i64)
+  if ('double_value' in wrapper) return wrapper.double_value
+  if ('array_value' in wrapper) return (wrapper.array_value?.values ?? []).map(unwrapSpanEventAttributeValue)
+  return wrapper
+}
+
+// Decode a native span-event attribute map, unwrapping each typed OTLP value
+// (arrays arrive as `array_value` and unwrap to real arrays) so the shape
+// matches the legacy `meta.events` attributes.
+function decodeNativeSpanEventAttributes (attributes) {
+  if (!attributes || typeof attributes !== 'object') return undefined
+  const keys = Object.keys(attributes)
+  if (keys.length === 0) return undefined
+
+  const out = {}
+  for (const key of keys) {
+    out[key] = unwrapSpanEventAttributeValue(attributes[key])
+  }
+  return out
 }
 
 /**
@@ -274,8 +319,18 @@ function unformatSpanEvents (span) {
  */
 function handleTraceRequest (req, res) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  const trace = req.body
+  // libdatadog's v0.4 msgpack encoder omits `error` and `parent_id` when they
+  // are 0 (the agent protocol treats an absent field as its default, and the
+  // real agent does the same). The legacy JS AgentWriter always emitted both, so
+  // backfill them here for the native exporter. This only fills the 0 default —
+  // an expected non-zero value that arrived absent stays absent and still fails
+  // its assertion. `parent_id` is decoded as BigInt (useBigInt64), so backfill 0n.
+  for (const span of trace.flat(Infinity)) {
+    if (span && span.error === undefined) span.error = 0
+    if (span && span.parent_id === undefined) span.parent_id = 0n
+  }
   for (const { handler, spanResourceMatch } of traceHandlers) {
-    const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
@@ -630,6 +685,15 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', handleTraceRequest)
+
+    // The native (libdatadog) exporter sends traces via POST, whereas the
+    // legacy JS AgentWriter uses PUT. Handle both so `assertSomeTraces` works
+    // regardless of which exporter produced the payload.
+    agent.post('/v0.5/traces', (req, res) => {
+      res.status(404).end()
+    })
+
+    agent.post('/v0.4/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 

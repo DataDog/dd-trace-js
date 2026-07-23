@@ -1,5 +1,7 @@
 'use strict'
 
+require('./openfeature/register')
+
 if (!global._ddtrace) {
   const ddTraceSymbol = Symbol.for('dd-trace')
 

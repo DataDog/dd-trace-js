@@ -107,15 +107,16 @@ describe('msgpack/encode', () => {
     assert.strictEqual(msgpack.decode(buffer), 'Symbol(pipeline)')
   })
 
-  it('falls back to msgpack null for unsupported value types (functions, undefined)', () => {
-    // `typeof undefined === 'undefined'` and `typeof () => {} === 'function'`
-    // both hit the dispatcher's `default` arm. Encoding them as `nil` keeps
-    // the surrounding payload well-formed instead of letting the chunk
-    // emit zero bytes for the value, which would desync the map header
-    // count from the actual entries.
-    const buffer = encode({ fn: () => {}, missing: undefined })
+  it('omits undefined-valued keys and falls back to null for other unsupported types (functions)', () => {
+    // msgpack has no `undefined`; encoding it as `nil` would diverge from JSON
+    // semantics and from the legacy v0.4 encoder (which omits such keys), and
+    // it corrupts meta_struct payloads such as AppSec's truncated request body
+    // where a dropped child is left as an `undefined`-valued key. So undefined
+    // keys are omitted (with the map header counting only the kept entries),
+    // while a function still falls back to `nil` rather than emitting nothing.
+    const buffer = encode({ fn: () => {}, missing: undefined, kept: 1 })
 
-    assert.deepStrictEqual(msgpack.decode(buffer), { fn: null, missing: null })
+    assert.deepStrictEqual(msgpack.decode(buffer), { fn: null, kept: 1 })
   })
 
   it('emits an array32 header for arrays with 16 or more entries', () => {

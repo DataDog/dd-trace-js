@@ -18,11 +18,11 @@ const tracer = require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
+const DatadogSpan = require('../../src/opentracing/span')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
-const spanFormat = require('../../src/span_format')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -46,6 +46,22 @@ describe('OTel Span', () => {
     const context = span._ddSpan.context()
     assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
     assert.strictEqual(context._hostname, tracer._hostname)
+  })
+
+  it('should use plain Datadog spans when the tracer uses the JS span pipeline', () => {
+    const ddTracer = tracer._tracer
+    const originalUseJsSpans = ddTracer._useJsSpans
+    const originalNativeSpans = ddTracer._nativeSpans
+
+    ddTracer._useJsSpans = true
+    ddTracer._nativeSpans = undefined
+    try {
+      const span = makeSpan('name')
+      assert.strictEqual(span._ddSpan.constructor, DatadogSpan)
+    } finally {
+      ddTracer._useJsSpans = originalUseJsSpans
+      ddTracer._nativeSpans = originalNativeSpans
+    }
   })
 
   it('should apply global config tags (DD_TAGS / OTEL_RESOURCE_ATTRIBUTES) to bridged spans', () => {
@@ -413,13 +429,11 @@ describe('OTel Span', () => {
 
     span.end()
 
-    const formatted = spanFormat(span._ddSpan)
-    assert.ok(
-      Object.hasOwn(formatted.meta, '_dd.span_links'),
-      `Available keys: ${inspect(Object.keys(formatted.meta))}`
-    )
+    // After end(), NativeDatadogSpan serializes links into `_dd.span_links`.
+    const serialized = span._ddSpan.context().getTag('_dd.span_links')
+    assert.ok(serialized, 'expected `_dd.span_links` tag to be set on finish')
 
-    const links = JSON.parse(formatted.meta['_dd.span_links'])
+    const links = JSON.parse(serialized)
     assert.strictEqual(links.length, 1)
     assert.deepStrictEqual(links[0], {
       trace_id: otelSpanContext.traceId,
@@ -501,23 +515,23 @@ describe('OTel Span', () => {
       startTime: datenow,
     }])
 
-    let formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.error, 0)
-    assert.ok(!('doNotSetTraceError' in formatted.meta))
+    // Native exporter computes `error = 1` when ERROR_TYPE is set on the span
+    // *and* IGNORE_OTEL_ERROR is not truthy. Up to this point only
+    // recordException ran, which sets IGNORE_OTEL_ERROR=true → no trace error.
+    assert.strictEqual(span._ddSpan.context().getTag(IGNORE_OTEL_ERROR), true)
 
-    // Set error code
+    // Set error code via OTel status — clears IGNORE_OTEL_ERROR so the native
+    // exporter will surface `error = 1`.
     span.setStatus({ code: 2, message: 'error' })
-
-    formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.error, 1)
+    assert.strictEqual(span._ddSpan.context().getTag(IGNORE_OTEL_ERROR), false)
+    assert.strictEqual(span._ddSpan.context().getTag(ERROR_TYPE), error.name)
 
     span.recordException(new Error('foobar'), Date.now())
 
-    // Keep the error set to 1
-    formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.error, 1)
-    assert.ok(Object.hasOwn(formatted, 'meta'), `Available keys: ${inspect(Object.keys(formatted))}`)
-    assert.strictEqual(formatted.meta['error.message'], 'foobar')
+    // recordException updates ERROR_* meta but must not clobber the status-driven
+    // IGNORE_OTEL_ERROR=false — error stays surfaced.
+    assert.strictEqual(span._ddSpan.context().getTag(IGNORE_OTEL_ERROR), false)
+    assert.strictEqual(span._ddSpan.context().getTag(ERROR_MESSAGE), 'foobar')
   })
 
   it('should record exception without passing in time', () => {
@@ -690,8 +704,9 @@ describe('OTel Span', () => {
     span.addEvent('date-as-second-arg', date)
     span.addEvent('attrs-and-hr-time', { code: 42 }, hrTime)
 
-    // Numeric startTime (not hrTime array) guarantees span_format's Math.round(startTime * 1e6)
-    // is finite; absent `attributes` key guarantees no { '0': s, '1': n } leak.
+    // Numeric startTime (not hrTime array) guarantees the native serializer's
+    // Math.round(startTime * 1e6) is finite; absent `attributes` key guarantees
+    // no { '0': s, '1': n } leak.
     assert.deepStrictEqual(span._ddSpan._events, [
       { name: 'hr-time-as-second-arg', startTime: hrTimeMs },
       { name: 'date-as-second-arg', startTime: date.getTime() },

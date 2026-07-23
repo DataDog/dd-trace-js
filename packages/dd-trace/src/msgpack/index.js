@@ -87,7 +87,12 @@ function writeArray (bytes, value) {
  * @param {Record<string, unknown>} value
  */
 function writeMap (bytes, value) {
-  const keys = Object.keys(value)
+  // Skip keys whose value is `undefined`: msgpack has no `undefined`, and
+  // encoding it as `null` would diverge from the legacy v0.4 encoder (which
+  // omits such keys) and from JSON semantics. This matters for meta_struct
+  // payloads such as AppSec's truncated request body, where a dropped child is
+  // left as an `undefined`-valued key.
+  const keys = Object.keys(value).filter(key => value[key] !== undefined)
 
   bytes.writeMapPrefix(keys.length)
 

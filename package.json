@@ -38,7 +38,7 @@
     "test:debugger": "mocha \"packages/dd-trace/test/debugger/**/*.spec.js\"",
     "test:debugger:ci": "node scripts/c8-ci.js test:debugger",
     "test:eslint-rules": "node eslint-rules/*.test.mjs",
-    "test:trace:core": "node scripts/mocha-parallel-files.js --expose-gc --timeout 30000 -- \"packages/dd-trace/test/*.spec.js\" \"packages/dd-trace/test/{agent,ci-visibility,config,crashtracking,datastreams,encode,exporters,msgpack,opentelemetry,opentracing,payload-tagging,plugins,remote_config,service-naming,standalone,telemetry,external-logger}/**/*.spec.js\"",
+    "test:trace:core": "node scripts/mocha-parallel-files.js --expose-gc --timeout 30000 -- \"packages/dd-trace/test/*.spec.js\" \"packages/dd-trace/test/{agent,ci-visibility,config,crashtracking,datastreams,encode,exporters,msgpack,native,opentelemetry,opentracing,payload-tagging,plugins,remote_config,service-naming,standalone,telemetry,external-logger}/**/*.spec.js\"",
     "test:trace:core:ci": "node scripts/c8-ci.js test:trace:core",
     "test:trace:guardrails": "mocha \"packages/dd-trace/test/guardrails/**/*.spec.js\"",
     "test:trace:guardrails:ci": "node scripts/c8-ci.js test:trace:guardrails",
@@ -174,7 +174,7 @@
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {
-    "@datadog/libdatadog": "0.9.4",
+    "@datadog/libdatadog": "0.18.1",
     "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.2.0",
     "@datadog/native-metrics": "3.1.2",

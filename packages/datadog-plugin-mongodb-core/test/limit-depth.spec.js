@@ -11,7 +11,7 @@ const MongodbCorePlugin = require('../src/query')
 // The sanitisation helpers are module-private; exercise them through `bindStart`,
 // which surfaces their output as `meta['mongodb.query']`.
 function callBindStart (ctx, configOverride) {
-  const startSpan = sinon.stub().returns({ finish () {} })
+  const startSpan = sinon.stub().returns({ finish () {}, setTag () {} })
   const self = {
     config: {
       heartbeatEnabled: true,

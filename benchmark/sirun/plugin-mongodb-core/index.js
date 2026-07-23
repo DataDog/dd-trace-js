@@ -24,7 +24,9 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // `Object.create`) is required because `DatabasePlugin` uses private methods
 // that demand a real instance.
 let lastMeta
-const FAKE_SPAN = { finish () {} }
+// bindStart calls span.setTag('peer.service', ...) (query.js), so the stub must
+// implement setTag alongside finish (matching the other plugin benchmarks).
+const FAKE_SPAN = { finish () {}, setTag () {} }
 const SERVICE_RESULT = { name: 'mongo-prod', source: 'mongodb' }
 class BenchedMongoPlugin extends MongodbCorePlugin {
   addTraceSubs () { /* skip diagnostic-channel subscriptions */ }

@@ -368,8 +368,14 @@
 /packages/datadog-core/ @DataDog/lang-platform-js
 /packages/datadog-shimmer/ @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
+/benchmark/sirun/native-spans/ @DataDog/lang-platform-js
+/packages/dd-trace/src/native/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/native/ @DataDog/lang-platform-js
+/packages/dd-trace/test/native/ @DataDog/lang-platform-js
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
+/packages/dd-trace/src/js_span_processor.js @DataDog/lang-platform-js
+/packages/dd-trace/test/js_span_processor.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/src/proxy.js @DataDog/lang-platform-js
