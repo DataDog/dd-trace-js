@@ -168,9 +168,13 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     }, llmobs).run()
 
     assert.deepEqual(callsToLlmobs[0][0], 'annotationContext')
+    assert.equal(callsToLlmobs[0][1].tags.experiment_id, 'exp')
+    assert.equal(callsToLlmobs[0][1].tags.dataset_id, 'ds')
+    assert.equal(callsToLlmobs[0][1].tags.dataset_record_id, 'rec-0')
     assert.equal(callsToLlmobs[1][1].kind, 'experiment')
     assert.equal(callsToLlmobs[1][1].name, 'task')
     assert.equal(callsToLlmobs[2][1].tags.experiment_id, 'exp')
+    assert.equal(callsToLlmobs[2][1].tags.dataset_record_id, 'rec-0')
     assert.equal(eventsBody().data.attributes.spans, undefined)
     const metric = eventsBody().data.attributes.metrics[0]
     assert.equal(metric.span_id, '000000000000abcd')
@@ -412,6 +416,29 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   it('resolves with the pushed/total record counts on a successful push', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
     const result = await dataset.push()
+    assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
+  })
+
+  it('submits custom record ids and keeps ids from JSON:API push responses', async () => {
+    installFetch(calls, {
+      'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': {
+        data: [
+          { id: 'custom-a', attributes: { valid_from_version: 2 } },
+          { id: 'custom-b', attributes: { valid_from_version: 2 } },
+        ],
+      },
+    })
+    const dataset = new Dataset(client, 'demo')
+      .addRecord(new DatasetRecord('a', null, {}, 'custom-a'))
+      .addRecord(new DatasetRecord('b', null, {}, 'custom-b'))
+
+    const result = await dataset.push()
+
+    const recordsCall = calls.find(call => call.path === '/api/v2/llm-obs/v1/proj/datasets/ds/records')
+    assert.deepEqual(recordsCall.body.data.attributes.records.map(record => record.id), ['custom-a', 'custom-b'])
+    assert.deepEqual(dataset.recordIds(), ['custom-a', 'custom-b'])
+    assert.equal(dataset.version(), 2)
+    assert.equal(dataset.latestVersion(), 2)
     assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
   })
 

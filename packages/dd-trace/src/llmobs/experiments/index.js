@@ -200,8 +200,14 @@ class Experiments {
           )
           for (const item of resp?.data ?? []) {
             const attrs = item?.attributes ?? item
-            recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
-            ids.push(String(item?.id ?? ''))
+            const recordId = String(item?.id ?? attrs?.id ?? '')
+            recs.push(new DatasetRecord(
+              attrs?.input ?? null,
+              attrs?.expected_output ?? null,
+              attrs?.metadata ?? {},
+              recordId
+            ))
+            ids.push(recordId)
           }
           cursor = resp?.meta?.after ?? ''
           if (!cursor) break
