@@ -25,7 +25,10 @@ describe('check-require-cache', () => {
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
+    content = rewriter.rewrite(content, filename, format, {
+      moduleName: name,
+      filePath: 'index.js',
+    })
 
     mod.filename = filename
     mod.paths = Module._nodeModulePaths(dirname(filename))
@@ -40,7 +43,10 @@ describe('check-require-cache', () => {
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
-    content = rewriter.rewrite(content, filename, format)
+    content = rewriter.rewrite(content, filename, format, {
+      moduleName: 'test',
+      filePath: `${name}.js`,
+    })
 
     mod.filename = filename
     mod.paths = Module._nodeModulePaths(dirname(filename))
