@@ -93,9 +93,9 @@ describe('register', () => {
     const integrationName = '@confluentinc/kafka-javascript'
     const moduleVersion = '0.1.0'
     const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === integrationName)
-    const callback = hookCall.args[2]
+    const hook = hookCall.args[2]
 
-    callback('original', integrationName, '/path/to/module', moduleVersion)
+    hook('original', integrationName, '/path/to/module', moduleVersion)
     channel('dd-trace:exporter:first-flush').publish()
 
     sinon.assert.calledOnceWithExactly(telemetryMock, 'abort.integration', [
