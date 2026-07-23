@@ -5,8 +5,8 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 /**
  * Build the mysql query span and inject DBM propagation into the SQL.
  *
- * Pure span/DBM logic shared by the legacy plugin base (mysql2/mariadb) and the
- * Orchestrion Connection_query subplugin. This helper subscribes to no channels.
+ * Span/DBM logic used by the retained legacy plugin base for mysql2 and mariadb.
+ * This helper subscribes to no channels.
  *
  * The caller must populate `ctx.sql` (the original query text) and `ctx.conf`
  * (the connection config) before calling. On return, `ctx.sql` holds the
