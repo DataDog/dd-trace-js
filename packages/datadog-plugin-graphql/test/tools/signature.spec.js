@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const Module = require('node:module')
+const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, before, after } = require('mocha')
@@ -16,9 +17,14 @@ const sinon = require('sinon')
 const loadableModule = /** @type {LoadableModule} */ (Module)
 
 // The transforms module reads `globalThis[Symbol.for('dd-trace')].graphql_*`
-// at require time, so populate them before requiring the tools.
-const visitor = require('graphql/language/visitor')
-const printer = require('graphql/language/printer')
+// at require time, so populate them before requiring the tools. Requiring by
+// absolute path (rather than the `graphql/language/visitor` subpath) bypasses
+// graphql's package.json `exports` map, so this always gets the mutable CJS
+// module instead of the read-only ES module namespace object that the
+// `module-sync` export condition resolves to on Node >=22.
+const graphqlRoot = path.dirname(require.resolve('graphql'))
+const visitor = require(path.join(graphqlRoot, 'language/visitor.js'))
+const printer = require(path.join(graphqlRoot, 'language/printer.js'))
 const ddGlobal = globalThis[Symbol.for('dd-trace')]
 ddGlobal.graphql_visitor = visitor
 ddGlobal.graphql_printer = printer

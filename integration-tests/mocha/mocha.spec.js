@@ -312,6 +312,59 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     ])
   })
 
+  /**
+   * @param {boolean} runInParallel
+   * @returns {Promise<void>}
+   */
+  async function assertProgrammaticRunWaitsForFinalPayload (runInParallel) {
+    const completionOrder = []
+    const completedMessage = 'programmatic Mocha run completed'
+    receiver.setWaitingTime(500)
+
+    const intakePromise = (async () => {
+      await receiver.payloadReceived(({ url, payload }) => (
+        url === '/api/v2/citestcycle' &&
+        payload.events.some(event => event.type === 'test_session_end')
+      ))
+      completionOrder.push('intake')
+    })()
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          REPORT_RUN_CALLBACK: '1',
+          ...(runInParallel && { RUN_IN_PARALLEL: '1' }),
+        },
+      }
+    )
+    childProcess.stdout?.on('data', (chunk) => {
+      const output = chunk.toString()
+      testOutput += output
+      if (output.includes(completedMessage)) completionOrder.push('run')
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      intakePromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.deepStrictEqual(completionOrder, ['intake', 'run'], testOutput)
+  }
+
+  for (const runInParallel of [false, true]) {
+    const mode = runInParallel ? 'parallel' : 'serial'
+    onlyLatestIt(`waits for the final payload before invoking the programmatic run callback (${mode})`, async () => {
+      await assertProgrammaticRunWaitsForFinalPayload(runInParallel)
+    })
+  }
+
   const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
@@ -4539,6 +4592,129 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('reinstalls a probe for a later failure from the same location', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const testNamesWithDebugInfo = new Set()
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(retriedTests.length, 4)
+          for (const retriedTest of retriedTests) {
+            if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+              testNamesWithDebugInfo.add(retriedTest.meta[TEST_NAME])
+            }
+          }
+          assert.strictEqual(testNamesWithDebugInfo.size, 2)
+          assert.ok(testNamesWithDebugInfo.has(
+            'dynamic-instrumentation exhausts retries for the first failure with DI'
+          ))
+          assert.ok(testNamesWithDebugInfo.has(
+            'dynamic-instrumentation retries a later failure from the same location with DI'
+          ))
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-reinstall-probe',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    onlyLatestIt('cancels a queued probe while a prior removal is pending', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      let retriedTests = []
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r ./ci-visibility/dynamic-instrumentation/hold-probe-removal -r dd-trace/ci/init',
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-cancel-pending-probe',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TRACE_DEBUG: 'true',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.strictEqual(testOutput.includes('Unknown probe id'), false)
+      assert.strictEqual(retriedTests.length, 2)
+      for (const retriedTest of retriedTests) {
+        assert.strictEqual(retriedTest.meta[TEST_STATUS], 'fail')
+      }
     })
 
     onlyLatestIt('drains in-flight dynamic instrumentation hits before the next retry', async () => {

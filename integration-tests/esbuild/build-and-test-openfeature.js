@@ -40,7 +40,7 @@ async function main () {
       target: 'node18',
       plugins: [ddPlugin],
       external: [
-        'pg', 'mysql2', 'better-sqlite3', 'sqlite3', 'mysql', 'oracledb', 'pg-query-stream', 'tedious',
+        'pg', 'mysql2', 'better-sqlite3', 'sqlite3', 'mysql', 'mariadb', 'oracledb', 'pg-query-stream', 'tedious',
         '@yaacovcr/transform',
         '@datadog/native-appsec', '@datadog/native-iast-taint-tracking', '@datadog/native-metrics',
         '@datadog/pprof', '@datadog/libdatadog',

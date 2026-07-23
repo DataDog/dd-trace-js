@@ -22,7 +22,7 @@ import {
   iitmExclusionRegExp,
   load as hookLoad,
   resolve as hookResolve,
-} from './loader-hook.mjs'
+} from './loader-hook.mjs?initialize'
 
 let hasInsertedInit = false
 const initJsUrl = new URL('init.js', import.meta.url).href

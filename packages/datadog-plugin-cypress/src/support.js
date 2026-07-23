@@ -1,7 +1,7 @@
 'use strict'
 
-const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 let rumFlushWaitMillis = 500
+let rumTestExecutionIdCookieName
 
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
@@ -129,6 +129,89 @@ function runBeforeEachTask (test) {
   })
 }
 
+/**
+ * @param {string} message
+ * @param {unknown} error
+ * @returns {false}
+ */
+function logRumCorrelationCookieError (message, error) {
+  try {
+    Cypress.log({
+      name: 'dd-trace',
+      message,
+      consoleProps: () => ({ Error: error }),
+    })
+  } catch (loggingError) {
+    // eslint-disable-next-line no-console
+    console.error(message, error, loggingError)
+  }
+  return false
+}
+
+/**
+ * @param {unknown} error
+ * @returns {false}
+ */
+function handleRumCorrelationCookieError (error) {
+  return logRumCorrelationCookieError('Could not set the RUM correlation cookie', error)
+}
+
+/**
+ * @param {unknown} error
+ * @returns {false}
+ */
+function handleRumCorrelationCookieCleanupError (error) {
+  return logRumCorrelationCookieError('Could not clear the previous RUM correlation cookie', error)
+}
+
+/**
+ * @param {string} traceId
+ * @returns {Promise<boolean>}
+ */
+function setRumCorrelationCookie (traceId) {
+  if (typeof cy.now !== 'function') {
+    return Cypress.Promise.resolve(handleRumCorrelationCookieError(new Error('Cypress cy.now is not available')))
+  }
+
+  let clearCookiePromise = Cypress.Promise.resolve()
+  if (!isTestIsolationEnabled) {
+    clearCookiePromise = Cypress.Promise.try(() => {
+      return cy.now('clearCookie', rumTestExecutionIdCookieName, { log: false })
+    }).then(undefined, handleRumCorrelationCookieCleanupError)
+  }
+
+  return clearCookiePromise.then(() => {
+    return Cypress.Promise.try(() => {
+      return cy.now('setCookie', rumTestExecutionIdCookieName, traceId, { log: false })
+    })
+  }).then(() => true, handleRumCorrelationCookieError)
+}
+
+/**
+ * @param {boolean} isCookieSet
+ * @returns {void}
+ */
+function restartRumSession (isCookieSet) {
+  if (!isCookieSet || isTestIsolationEnabled || !originalWindow) {
+    return
+  }
+
+  const rum = safeGetRum(originalWindow)
+  if (rum) {
+    try {
+      const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
+      // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
+      // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
+      // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
+      Object.defineProperty(evt, '__ddIsTrusted', { value: true })
+      originalWindow.dispatchEvent(evt)
+    } catch {}
+    if (rum.startView) {
+      rum.startView()
+    }
+  }
+}
+
 // Catch test failures for quarantined tests and suppress them
 // By not re-throwing the error, Cypress marks the test as passed
 // This allows quarantined tests to run but not affect the exit code
@@ -150,6 +233,8 @@ Cypress.on('fail', (err, runnable) => {
   // If command:end fired for all commands (none in-flight) but the last command
   // has no error, it means command:end fired before the error was attached to it.
   if (!hadInFlightCommands && currentTestCommands.length > 0) {
+    // We have to support very old cypress versions in v5
+    // eslint-disable-next-line unicorn/prefer-at
     const lastCommand = currentTestCommands[currentTestCommands.length - 1]
     if (!lastCommand.error) {
       lastCommand.error = { message: err.message, stack: err.stack, name: err.name }
@@ -316,35 +401,15 @@ beforeEach(function () {
     if (shouldDiscard) {
       this.currentTest._ddShouldDiscard = true
     }
+    let rumCookiePromise
     if (traceId) {
-      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId).then(() => {
-        // When testIsolation:false, the page is not reset between tests, so the RUM session
-        // stopped in afterEach must be explicitly restarted so events in this test are
-        // associated with the new testExecutionId.
-        //
-        // After stopSession(), the RUM SDK creates a new session upon a user interaction
-        // (click, scroll, keydown, or touchstart). We dispatch a synthetic click on the window
-        // to trigger session renewal, then call startView() to establish a view boundary.
-        if (!isTestIsolationEnabled && originalWindow) {
-          const rum = safeGetRum(originalWindow)
-          if (rum) {
-            try {
-              const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
-              // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
-              // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
-              // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
-              Object.defineProperty(evt, '__ddIsTrusted', { value: true })
-              originalWindow.dispatchEvent(evt)
-            } catch {}
-            if (rum.startView) {
-              rum.startView()
-            }
-          }
-        }
-      })
+      rumCookiePromise = setRumCorrelationCookie(traceId)
     }
     if (shouldSkip) {
       this.skip()
+    }
+    if (rumCookiePromise) {
+      return rumCookiePromise.then(restartRumSession)
     }
   }).then(() => {
     // Clear any commands accumulated during DD-owned setup (e.g. setCookie, RUM restart)
@@ -370,6 +435,7 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
       }

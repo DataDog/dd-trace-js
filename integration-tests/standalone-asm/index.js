@@ -23,11 +23,14 @@ tracer.init(options)
 
 const crypto = require('crypto')
 const http = require('http')
+const net = require('net')
 
 const express = require('express')
 const app = express()
 
 const valueToHash = 'iast-showcase-demo'
+let delayedOutboundPort
+let server
 
 async function makeRequest (url) {
   return new Promise((resolve, reject) => {
@@ -64,6 +67,20 @@ app.get('/sdk', (req, res) => {
 app.get('/vulnerableHash', (req, res) => {
   const result = crypto.createHash('sha1').update(valueToHash).digest('hex')
   res.status(200).send(result)
+})
+
+app.get('/late-outbound', (req, res) => {
+  const url = `http://localhost:${delayedOutboundPort}/intake/v2/events`
+  const activeSpan = tracer.scope().active()
+  const rootSpan = activeSpan?.context()._trace.started[0] || activeSpan
+
+  setTimeout(() => {
+    tracer.scope().activate(rootSpan, () => {
+      makeRequest(url).catch(() => {})
+    })
+  }, 250)
+
+  res.status(200).send('late-outbound')
 })
 
 app.get('/propagation-with-event', async (req, res) => {
@@ -109,7 +126,17 @@ app.get('/propagation-after-drop-and-call-sdk', async (req, res) => {
   res.status(200).send(`drop-and-call-sdk ${sdkRes}`)
 })
 
-const server = http.createServer(app).listen(0, () => {
-  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-  process.send?.({ port })
+const delayedOutboundServer = net.createServer(socket => {
+  socket.once('data', () => {
+    socket.end('HTTP/1.1 202 Accepted\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok')
+  })
+})
+
+delayedOutboundServer.listen(0, () => {
+  delayedOutboundPort = (/** @type {import('net').AddressInfo} */ (delayedOutboundServer.address())).port
+
+  server = http.createServer(app).listen(0, () => {
+    const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+    process.send?.({ port })
+  })
 })

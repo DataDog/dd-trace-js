@@ -15,13 +15,16 @@ const {
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   useSandbox([], false, [
     './packages/datadog-plugin-dns/test/integration-test/*'])
 
-  before(async function () {
-    variants = varySandbox('server.mjs', 'dns', 'lookup')
+  const variants = varySandbox('server.mjs', {
+    bindingName: 'dns',
+    packageName: 'dns',
+    defaultExport: true,
+    namedExports: ['lookup'],
+    namedExportBinding: 'namespace',
   })
 
   beforeEach(async () => {
@@ -34,7 +37,7 @@ describe('esm', () => {
   })
 
   context('dns', () => {
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
