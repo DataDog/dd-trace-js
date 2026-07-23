@@ -113,6 +113,29 @@ describe('sdk', () => {
       disabledLLMObs.disable() // unsubscribe
     })
 
+    it('recreates experiments after enabling llmobs', () => {
+      const config = getConfigFresh({})
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+      config.service = 'service'
+      const llmobsModule = {
+        enable: sinon.stub(),
+        disable () {},
+      }
+
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      assert.throws(() => disabledLLMObs.experiments.createDataset('d'), /LLM Observability is not enabled/)
+
+      disabledLLMObs.enable({
+        mlApp: 'mlApp',
+      })
+
+      assert.strictEqual(typeof disabledLLMObs.experiments.createDataset('d').addRecord, 'function')
+
+      disabledLLMObs.disable() // unsubscribe
+    })
+
     it('does not enable llmobs if it is already enabled', () => {
       sinon.spy(llmobs._llmobsModule, 'enable')
       llmobs.enable({})
@@ -158,6 +181,31 @@ describe('sdk', () => {
       enabledLLMObs.disable()
 
       assert.strictEqual(enabledLLMObs.enabled, false)
+      sinon.assert.called(llmobsModule.disable)
+    })
+
+    it('recreates experiments after disabling llmobs', () => {
+      const llmobsModule = {
+        disable: sinon.stub(),
+      }
+
+      const config = getConfigFresh({
+        llmobs: {
+          agentlessEnabled: false,
+          mlApp: 'mlApp',
+        },
+      })
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+      config.service = 'service'
+
+      const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      assert.strictEqual(typeof enabledLLMObs.experiments.createDataset('d').addRecord, 'function')
+
+      enabledLLMObs.disable()
+
+      assert.throws(() => enabledLLMObs.experiments.createDataset('d'), /LLM Observability is not enabled/)
       sinon.assert.called(llmobsModule.disable)
     })
 
