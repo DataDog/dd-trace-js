@@ -2,7 +2,8 @@
 
 const { API_BASE_PATH } = require('./client')
 
-// Immutable dataset record: { input, expectedOutput?, metadata?, id? }.
+// Dataset record: { input, expectedOutput?, metadata?, id? }.
+// `id` may be user-provided before push or filled from the backend-created record.
 class DatasetRecord {
   constructor (input, expectedOutput = null, metadata = {}, id = null) {
     this.input = input
@@ -10,6 +11,24 @@ class DatasetRecord {
     this.metadata = metadata ?? {}
     this.id = id ?? null
   }
+}
+
+function createdRecordsFromResponse (response) {
+  if (Array.isArray(response?.records)) return response.records
+  if (Array.isArray(response?.data)) return response.data
+  return []
+}
+
+function recordIdFromCreatedRecord (record) {
+  return String(record?.id ?? record?.attributes?.id ?? '')
+}
+
+function versionFromCreatedRecords (records) {
+  const versions = records
+    .map(record => Number(record?.attributes?.valid_from_version ?? record?.attributes?.version))
+    .filter(Number.isFinite)
+  if (versions.length === 0) return null
+  return Math.max(...versions)
 }
 
 // A local buffer of dataset records, created remotely and pushed on first run
@@ -115,6 +134,9 @@ class Dataset {
         throw new Error(`Failed to create dataset '${this.#name}': ${err.message}`)
       }
       this.#id = response?.data?.id ?? null
+      if (this.#id === null) {
+        throw new Error(`Failed to create dataset '${this.#name}': backend response is missing dataset id`)
+      }
       this.#projectId = projectId
       this.#version = response?.data?.attributes?.current_version ?? this.#version
       this.#latestVersion = response?.data?.attributes?.current_version ?? this.#latestVersion
@@ -148,20 +170,30 @@ class Dataset {
       throw new Error(`Failed to push records to dataset '${this.#name}': ${err.message}`)
     }
 
-    // The append-records response returns created records under a top-level
-    // `records` field, not the usual `data` envelope.
-    const created = response?.records
-    let pushedCount = 0
-    if (Array.isArray(created)) {
-      for (const node of created) {
-        const recordId = String(node?.id ?? '')
-        if (recordId !== '') pushedCount++
-        this.#recordIds.push(recordId)
-      }
-      for (let i = created.length; i < pending.length; i++) this.#recordIds.push('')
+    // The append-records response has used both a top-level `records` array
+    // and JSON:API `data` resources. Accept either so generated/custom record
+    // ids are preserved for experiment row tagging.
+    const created = createdRecordsFromResponse(response)
+    const pushedVersion = versionFromCreatedRecords(created)
+    if (pushedVersion === null) {
+      // The dataset contents changed, but the backend did not report the new
+      // version. Avoid pinning later experiments to the pre-append create version.
+      this.#version = null
     } else {
-      for (let i = 0; i < pending.length; i++) this.#recordIds.push('')
+      this.#version = pushedVersion
+      this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
     }
+
+    let pushedCount = 0
+    for (const [index, node] of created.entries()) {
+      const recordId = recordIdFromCreatedRecord(node)
+      if (recordId !== '') {
+        pushedCount++
+        pending[index].id = recordId
+      }
+      this.#recordIds.push(recordId)
+    }
+    for (let i = created.length; i < pending.length; i++) this.#recordIds.push('')
 
     // Advance by the snapshotted pending count, not the live records length,
     // so records added while this push was in flight aren't skipped by the next push.

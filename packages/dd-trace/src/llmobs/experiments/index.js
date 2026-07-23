@@ -69,6 +69,7 @@ function recordsFromCsv (csvPath, options) {
     delimiter: csvDelimiter,
     bom: true,
     relaxColumnCount: true,
+    skipEmptyLines: true,
   })
   const header = rows.shift()
   if (!header || header.every(column => column === '')) {
@@ -98,7 +99,7 @@ function recordsFromCsv (csvPath, options) {
     for (let i = 0; i < header.length; i++) row[header[i]] = values[i] ?? ''
     return {
       inputData: selectedColumns(row, inputDataColumns),
-      expectedOutput: selectedColumns(row, expectedOutputColumns),
+      expectedOutput: expectedOutputColumns.length === 0 ? undefined : selectedColumns(row, expectedOutputColumns),
       metadata: selectedColumns(row, metadataColumns),
       id: idColumn === undefined ? undefined : row[idColumn],
     }
@@ -189,7 +190,7 @@ class Experiments {
         for (;;) {
           const query = new URLSearchParams()
           if (cursor) query.set('page[cursor]', cursor)
-          if (version !== undefined && version !== null) query.set('filter[version]', String(version))
+          if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
           const queryString = query.toString() ? `?${query.toString()}` : ''
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
@@ -198,8 +199,14 @@ class Experiments {
           )
           for (const item of resp?.data ?? []) {
             const attrs = item?.attributes ?? item
-            recs.push(new DatasetRecord(attrs?.input ?? null, attrs?.expected_output ?? null, attrs?.metadata ?? {}))
-            ids.push(String(item?.id ?? ''))
+            const recordId = String(item?.id ?? attrs?.id ?? '')
+            recs.push(new DatasetRecord(
+              attrs?.input ?? null,
+              attrs?.expected_output ?? null,
+              attrs?.metadata ?? {},
+              recordId === '' ? null : recordId
+            ))
+            ids.push(recordId)
           }
           cursor = resp?.meta?.after ?? ''
           if (!cursor) break

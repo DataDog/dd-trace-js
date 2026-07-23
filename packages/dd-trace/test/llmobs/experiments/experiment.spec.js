@@ -5,7 +5,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
-const { Dataset } = require('../../../src/llmobs/experiments/dataset')
+const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
 // Routes the control-plane + events calls a run makes, recording each request.
@@ -240,7 +240,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('experiment create body carries project_id, dataset_id, dataset_version, config and ensure_unique', async () => {
-    const { DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
     const dataset = Dataset.fromExisting(
       client,
       'demo',
@@ -267,6 +266,23 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(create.body.data.attributes.config, { approach: 'kw' })
   })
 
+  it('uses the version returned by appending records when creating an experiment', async () => {
+    installFetch(calls, {
+      'POST /api/v2/llm-obs/v1/proj/datasets': { data: { id: 'ds', attributes: { current_version: 1 } } },
+      'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': {
+        data: [{ id: 'rec-0', attributes: { valid_from_version: 2 } }],
+      },
+    })
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+
+    await new Experiment(client, { name: 'exp-demo', dataset, task: (i) => i }).run()
+
+    const create = calls.find(c =>
+      c.method === 'POST' && c.path.endsWith('/experiments') && !c.path.includes('/events')
+    )
+    assert.equal(create.body.data.attributes.dataset_version, 2)
+  })
+
   it('validates required options', () => {
     const dataset = new Dataset(client, 'demo')
     assert.throws(() => new Experiment(client, { dataset, task: (i) => i }), /name/)
@@ -275,7 +291,6 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
   })
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
-    const { DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
     const dataset = new Dataset(client, 'my-name', 'desc').addRecord(new DatasetRecord('in', 'out', { m: 1 }))
     assert.equal(dataset.name(), 'my-name')
     assert.equal(dataset.id(), null)
@@ -292,11 +307,38 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const result = await dataset.push()
     assert.deepEqual(dataset.recordIds(), ['', ''])
     assert.deepEqual(result, { pushedCount: 0, totalCount: 2 })
+    assert.equal(dataset.version(), null)
   })
 
   it('resolves with the pushed/total record counts on a successful push', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
     const result = await dataset.push()
+    assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
+    assert.deepEqual(dataset.recordIds(), ['rec-0', 'rec-1'])
+    assert.deepEqual(dataset.records().map(record => record.id), ['rec-0', 'rec-1'])
+  })
+
+  it('submits custom record ids and keeps ids from JSON:API push responses', async () => {
+    installFetch(calls, {
+      'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': {
+        data: [
+          { id: 'custom-a', attributes: { valid_from_version: 2 } },
+          { id: 'custom-b', attributes: { valid_from_version: 2 } },
+        ],
+      },
+    })
+    const dataset = new Dataset(client, 'demo')
+      .addRecord(new DatasetRecord('a', null, {}, 'custom-a'))
+      .addRecord(new DatasetRecord('b', null, {}, 'custom-b'))
+
+    const result = await dataset.push()
+
+    const recordsCall = calls.find(call => call.path === '/api/v2/llm-obs/v1/proj/datasets/ds/records')
+    assert.deepEqual(recordsCall.body.data.attributes.records.map(record => record.id), ['custom-a', 'custom-b'])
+    assert.deepEqual(dataset.recordIds(), ['custom-a', 'custom-b'])
+    assert.deepEqual(dataset.records().map(record => record.id), ['custom-a', 'custom-b'])
+    assert.equal(dataset.version(), 2)
+    assert.equal(dataset.latestVersion(), 2)
     assert.deepEqual(result, { pushedCount: 2, totalCount: 2 })
   })
 
@@ -308,6 +350,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const result = await dataset.push()
     assert.deepEqual(result, { pushedCount: 1, totalCount: 2 })
     assert.deepEqual(dataset.recordIds(), ['rec-0', ''])
+    assert.deepEqual(dataset.records().map(record => record.id), ['rec-0', null])
+    assert.equal(dataset.version(), null)
   })
 
   it('resolves with zero counts when there is nothing new to push', async () => {
@@ -340,12 +384,12 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(experiment.url(), 'https://app.datadoghq.com/llm/experiments/exp')
   })
 
-  it('throws when the dataset has no id after push', async () => {
+  it('throws when the dataset create response has no id', async () => {
     installFetch(calls, { 'POST /api/v2/llm-obs/v1/proj/datasets': { data: {} } })
     const dataset = new Dataset(client, 'demo').addRecord('x')
     await assert.rejects(
       () => new Experiment(client, { name: 'exp-demo', dataset, task: (i) => i }).run(),
-      /has no id after push/
+      /backend response is missing dataset id/
     )
   })
 

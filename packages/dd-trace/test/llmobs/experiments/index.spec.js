@@ -115,6 +115,47 @@ describe('LLMObs Experiments facade', () => {
       }
     })
 
+    it('omits expected output and skips blank lines for input-only CSV datasets', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-llmobs-csv-'))
+      const csvPath = path.join(dir, 'dataset.csv')
+      fs.writeFileSync(csvPath, 'question\nhello\n\nworld\n')
+
+      const calls = []
+      global.fetch.callsFake(async (url, opts) => {
+        const u = new URL(url)
+        const body = opts.body ? JSON.parse(opts.body) : undefined
+        calls.push({ method: opts.method, path: u.pathname, body })
+        let payload = {}
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: { id: 'ds' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds/records') {
+          payload = { records: [{ id: 'rec-1' }, { id: 'rec-2' }] }
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      try {
+        const dataset = createExperiments(enabledConfig()).createDatasetFromCsv(csvPath, 'csv-dataset', {
+          inputDataColumns: ['question'],
+        })
+        assert.equal(dataset.records().length, 2)
+        assert.deepEqual(dataset.records().map(record => record.input), [{ question: 'hello' }, { question: 'world' }])
+        assert.deepEqual(dataset.records().map(record => record.expectedOutput), [null, null])
+
+        await dataset.push()
+
+        const recordsCall = calls.find(call => call.path === '/api/v2/llm-obs/v1/proj/datasets/ds/records')
+        assert.deepEqual(recordsCall.body.data.attributes.records, [
+          { input: { question: 'hello' } },
+          { input: { question: 'world' } },
+        ])
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
     it('validates CSV headers before creating a dataset', () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-llmobs-csv-'))
       const csvPath = path.join(dir, 'dataset.csv')
@@ -207,6 +248,8 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(ds.records()[0].input, { q: '2+2' })
       assert.equal(ds.records()[0].expectedOutput, '4')
       assert.deepEqual(ds.records()[0].metadata, { a: 1 })
+      assert.equal(ds.records()[0].id, 'r1')
+      assert.equal(ds.records()[1].id, 'r2')
     })
 
     it('passes explicit dataset version when reading records', async () => {
@@ -229,6 +272,28 @@ describe('LLMObs Experiments facade', () => {
       const ds = await createExperiments(enabledConfig()).pullDataset('wanted', { version: 3 })
       assert.equal(ds.version(), 3)
       assert.equal(ds.latestVersion(), 7)
+    })
+
+    it('pins the current version when pulling latest records', async () => {
+      global.fetch.callsFake(async (url) => {
+        const u = new URL(url)
+        let payload
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
+          assert.equal(u.searchParams.get('filter[version]'), '7')
+          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
+        } else {
+          payload = {}
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
+      assert.equal(ds.version(), 7)
+      assert.equal(ds.records().length, 1)
     })
 
     it('waits (backoff) until the expected record count is readable', async () => {
