@@ -77,6 +77,48 @@ describe('Plugin', () => {
     assert.strictEqual(plugin._enabled, true)
   })
 
+  describe('enter', () => {
+    it('should return the store it entered so callers can release it later', () => {
+      const parentSpan = { id: 'parent' }
+      const span = { id: 'child' }
+
+      plugin = new GoodPlugin()
+
+      const entered = plugin.enter(span, { span: parentSpan })
+
+      // The entered store is a fresh object carrying the new active span.
+      assert.strictEqual(typeof entered, 'object')
+      assert.strictEqual(entered.span, span)
+      // It is the same object written into storage, so mutating it later
+      // affects what any async resource captured off that frame retains.
+      assert.strictEqual(storage('legacy').getStore(), entered)
+    })
+  })
+
+  describe('releaseSpan', () => {
+    it('should null the span reference on the given store', () => {
+      const span = { id: 'child' }
+      const store = { span }
+
+      plugin = new GoodPlugin()
+      plugin.releaseSpan(store)
+
+      // Releasing lets a finished span be collected even while an async resource
+      // that captured this store lives on. This is the core of the fix for the
+      // unbounded router.middleware span retention leak.
+      assert.strictEqual(store.span, null)
+    })
+
+    it('should not throw for a missing store or a store without a span', () => {
+      plugin = new GoodPlugin()
+
+      // Executed directly: the test fails if any of these throw.
+      plugin.releaseSpan()
+      plugin.releaseSpan(undefined)
+      plugin.releaseSpan({})
+    })
+  })
+
   it('should run binding transforms with an undefined current store', () => {
     class TestPlugin extends Plugin {
       static id = 'test'

@@ -100,11 +100,47 @@ module.exports = class Plugin {
    *
    * @param {object} span The span to bind as current.
    * @param {object=} store Optional existing store to extend; if omitted, uses current store.
-   * @returns {void}
+   * @returns {object} The store object that was entered, so callers can later
+   * release its `span` reference via {@link Plugin#releaseSpan}.
    */
   enter (span, store) {
     store = store || legacyStorage.getStore()
-    legacyStorage.enterWith({ ...store, span })
+    // The entered store is a fresh object captured by the current async-context
+    // frame (and by any async resource created while this store is active).
+    // Return it so callers can later release its `span` reference once that span
+    // has finished, preventing finished spans from being retained for the life
+    // of any async resource that snapshotted the frame. See `releaseSpan`.
+    const enteredStore = { ...store, span }
+    legacyStorage.enterWith(enteredStore)
+    return enteredStore
+  }
+
+  /**
+   * Release the finished span from a store previously produced by `enter()`.
+   *
+   * `enter()` activates a span by writing a `{ ...store, span }` object into the
+   * current async-context frame. Any async resource created while that store is
+   * active snapshots the frame and therefore keeps the store — and its `span`
+   * property — reachable for the resource's entire lifetime, even after the span
+   * has finished. For never-released resources (subscriptions, un-removed
+   * listeners, queued callbacks) this pins finished spans forever, leaking the
+   * whole parent chain via each span's own captured store.
+   *
+   * Callers must only release a store once no further work can legitimately read
+   * its span as the active span — i.e. after the operation and any of its
+   * in-scope async continuation is done. Releasing too early (e.g. while a
+   * callback scheduled by the operation is still pending) would orphan that
+   * callback's spans and break log correlation. Once it is safe, nulling the
+   * reference lets the finished span (and its parent chain) be garbage collected
+   * while the capturing resource lives on.
+   *
+   * @param {object=} store A store object returned by `enter()`.
+   * @returns {void}
+   */
+  releaseSpan (store) {
+    if (store && store.span) {
+      store.span = null
+    }
   }
 
   /**
