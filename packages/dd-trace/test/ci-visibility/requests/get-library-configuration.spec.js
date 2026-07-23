@@ -62,10 +62,14 @@ describe('get-library-configuration', () => {
         isItrEnabled: true,
         requireGit: false,
         isEarlyFlakeDetectionEnabled: true,
-        earlyFlakeDetectionNumRetries: 4,
-        earlyFlakeDetectionSlowTestRetries: {
-          '5s': 4,
-          '10s': 3,
+        earlyFlakeDetectionRetryPolicy: {
+          durationRetryCounts: [
+            { durationLimitMs: 5000, retryCount: 4 },
+            { durationLimitMs: 10_000, retryCount: 3 },
+            { durationLimitMs: 30_000, retryCount: 0 },
+            { durationLimitMs: 300_000, retryCount: 0 },
+          ],
+          schedulingRetryCount: 4,
         },
         earlyFlakeDetectionFaultyThreshold: 12,
         isFlakyTestRetriesEnabled: true,
@@ -94,10 +98,24 @@ describe('get-library-configuration', () => {
       assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
     })
 
-    it('defaults missing EFD retry budgets without replacing an explicit zero', () => {
+    it('normalizes missing, empty, sparse, and all-zero EFD retry budgets', () => {
       const missingRetryBudget = parseLibraryConfigurationResponse({
         early_flake_detection: {
           enabled: true,
+        },
+      })
+      const emptyRetryBudget = parseLibraryConfigurationResponse({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {},
+        },
+      })
+      const sparseRetryBudget = parseLibraryConfigurationResponse({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '10s': 3,
+          },
         },
       })
       const zeroRetryBudget = parseLibraryConfigurationResponse({
@@ -105,12 +123,15 @@ describe('get-library-configuration', () => {
           enabled: true,
           slow_test_retries: {
             '5s': 0,
+            '10s': 0,
           },
         },
       })
 
-      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionNumRetries, 2)
-      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionNumRetries, 0)
+      assert.strictEqual(missingRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 10)
+      assert.strictEqual(emptyRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 0)
+      assert.strictEqual(sparseRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 3)
+      assert.strictEqual(zeroRetryBudget.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 0)
     })
 
     it('validates complete cached settings attributes', () => {

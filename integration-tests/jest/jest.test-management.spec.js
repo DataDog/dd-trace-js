@@ -2411,6 +2411,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         jest: {
           'ci-visibility/test-impacted-test/test-impacted-1.js': [
             'impacted tests can pass normally',
+            'impacted tests use their duration retry budget',
           ],
           'ci-visibility/test-impacted-test/test-impacted-2.js': [
             'impacted tests 2 can pass normally',
@@ -2418,6 +2419,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           'ci-visibility/test-impacted-test/test-impacted-concurrent.js': [
             'impacted concurrent tests can pass normally',
             'impacted concurrent tests parameterized row can pass normally',
+            'impacted concurrent tests uses its duration retry budget',
           ],
         },
       })
@@ -2437,6 +2439,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           })
           it('can fail', () => {
             assert.strictEqual(1 + 2, 4)
+          })
+          const slowIt = process.env.RUN_SLOW_IMPACTED_TEST ? it : it.skip
+          slowIt('use their duration retry budget', (done) => {
+            setTimeout(done, 5_100)
           })
         })`
       )
@@ -2466,6 +2472,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         impactedConcurrentTest
           .replace("const label = 'sum'", "const label = 'result'")
           .replace("const eachLabel = 'each-sum'", "const eachLabel = 'each-result'")
+          .replace("const slowLabel = 'slow'", "const durationLabel = 'slow'")
+          .replace('expect(slowLabel)', 'expect(durationLabel)')
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
@@ -2477,14 +2485,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
     })
 
-    const getTestAssertions = ({ isModified, isEfd, isNew, isParallel }) =>
+    /**
+     * @param {object} options
+     * @param {boolean} options.isModified
+     * @param {boolean} [options.isEfd]
+     * @param {boolean} [options.isEfdEnabled]
+     * @param {boolean} [options.isNew]
+     * @param {boolean} [options.isParallel]
+     */
+    const getTestAssertions = ({ isModified, isEfd, isEfdEnabled = isEfd, isNew, isParallel }) =>
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const testSession = events.find(event => event.type === 'test_session_end').content
 
-          if (isEfd) {
+          if (isEfdEnabled) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
@@ -2553,12 +2569,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           }
         })
 
+    /**
+     * @param {Mocha.Done} done
+     * @param {object} options
+     * @param {boolean} options.isModified
+     * @param {boolean} [options.isEfd]
+     * @param {boolean} [options.isEfdEnabled]
+     * @param {boolean} [options.isNew]
+     * @param {boolean} [options.isParallel]
+     * @param {Record<string, string>} [extraEnvVars]
+     */
     const runImpactedTest = (
       done,
-      { isModified, isEfd = false, isParallel = false, isNew = false },
+      { isModified, isEfd = false, isEfdEnabled = isEfd, isParallel = false, isNew = false },
       extraEnvVars = {}
     ) => {
-      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+      const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isEfdEnabled, isParallel, isNew })
 
       childProcess = exec(
         runTestsCommand,
@@ -2584,6 +2610,87 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         runImpactedTest(done, { isModified: true })
       })
+
+      for (const isParallel of [false, true]) {
+        it(`does not retry impacted tests when the EFD retry budget is zero${
+          isParallel ? ' in parallel' : ''
+        }`, (done) => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '10s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          const extraEnvVars = isParallel
+            ? {
+                TESTS_TO_RUN: 'test-impacted-test/test-impacted',
+                RUN_IN_PARALLEL: 'true',
+              }
+            : {}
+          runImpactedTest(done, { isModified: true, isEfdEnabled: true, isParallel }, extraEnvVars)
+        })
+      }
+
+      for (const isParallel of [false, true]) {
+        it(`selects the impacted test retry budget after its first execution${
+          isParallel ? ' in parallel' : ''
+        }`, async () => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 2,
+                '10s': 0,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const tests = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test =>
+                  test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-1.js' &&
+                  test.meta[TEST_NAME] === 'impacted tests use their duration retry budget'
+                )
+
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+              assert.strictEqual(tests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+              assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+            }, 30_000)
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: isParallel
+                  ? 'test-impacted-test/test-impacted'
+                  : 'test-impacted-test/test-impacted-1',
+                GITHUB_BASE_REF: '',
+                RUN_IN_PARALLEL: isParallel ? 'true' : '',
+                RUN_SLOW_IMPACTED_TEST: '1',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+        })
+      }
 
       it('attempt to fix takes precedence over EFD for impacted tests', async () => {
         const NUM_RETRIES_EFD = 2
@@ -2758,6 +2865,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               for (const retryTest of retryTests) {
                 assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
               }
+              assert.strictEqual(
+                impactedConcurrentTests.filter(test => test.meta[TEST_FINAL_STATUS] === 'pass').length,
+                1
+              )
             }
           })
 
@@ -2777,6 +2888,63 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           output += chunk.toString()
         })
         childProcess.stderr?.on('data', (chunk) => {
+          output += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.doesNotMatch(output, /I am running concurrent hooks/)
+        assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('discards surplus concurrent impacted test retries after measuring duration', async () => {
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+              '10s': 0,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const testName = 'impacted concurrent tests uses its duration retry budget'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+            assert.strictEqual(tests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+          }, 30_000)
+
+        let output = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
+              RUN_SLOW_CONCURRENT_IMPACTED_TEST: '1',
+              GITHUB_BASE_REF: '',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => {
+          output += chunk.toString()
+        })
+        childProcess.stderr?.on('data', chunk => {
           output += chunk.toString()
         })
 

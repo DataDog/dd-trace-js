@@ -25,4 +25,16 @@ describe('impacted concurrent tests', () => {
 
     expect(`${eachLabel}:${result}`).toBe(`${eachLabel}:${expected}`)
   })
+
+  if (process.env.RUN_SLOW_CONCURRENT_IMPACTED_TEST) {
+    test.concurrent('uses its duration retry budget', () => {
+      const slowLabel = 'slow'
+      return new Promise(resolve => {
+        setTimeout(() => {
+          expect(slowLabel).toBe('slow')
+          resolve()
+        }, 5100)
+      })
+    })
+  }
 })

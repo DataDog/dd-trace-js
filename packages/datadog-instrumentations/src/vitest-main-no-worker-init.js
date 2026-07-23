@@ -8,7 +8,6 @@ const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestSuitePath,
   logAttemptToFixTestExecution,
   recordAttemptToFixExecution,
@@ -144,7 +143,7 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 }
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
-  const { getConfiguredEfdRetryCount, state } = options
+  const { state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
 
   const {
@@ -160,12 +159,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
-      earlyFlakeDetectionRetries: getConfiguredEfdRetryCount(
-        state.earlyFlakeDetectionSlowTestRetries,
-        state.earlyFlakeDetectionNumRetries
-      ),
-      earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-      earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
+      earlyFlakeDetectionRetryPolicy: state.earlyFlakeDetectionRetryPolicy,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},

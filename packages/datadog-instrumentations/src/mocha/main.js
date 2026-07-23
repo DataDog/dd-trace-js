@@ -529,8 +529,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     config.repositoryRoot = repositoryRoot
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-    config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+    config.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -1170,8 +1169,7 @@ addHook({
     if (config.isKnownTestsEnabled) {
       if (config.knownTests?.mocha) {
         const testSuiteKnownTests = config.knownTests.mocha[testPath] || []
-        newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
-        newWorkerArgs._ddEfdSlowTestRetries = config.earlyFlakeDetectionSlowTestRetries
+        newWorkerArgs._ddEfdRetryPolicy = config.earlyFlakeDetectionRetryPolicy
         newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
         newWorkerArgs._ddIsKnownTestsEnabled = true
         newWorkerArgs._ddKnownTests = {

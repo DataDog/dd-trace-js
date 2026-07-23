@@ -120,12 +120,6 @@ const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
-const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
-  { limitMs: 5 * 1000, key: '5s' },
-  { limitMs: 10 * 1000, key: '10s' },
-  { limitMs: 30 * 1000, key: '30s' },
-  { limitMs: 5 * 60 * 1000, key: '5m' },
-]
 const CI_APP_ORIGIN = 'ciapp-test'
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
@@ -511,9 +505,6 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -1497,46 +1488,6 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
-}
-
-/**
- * Given a test's first-execution duration (ms) and the slow_test_retries map
- * from the backend, return how many EFD retries to run.
- *
- * Returns 0 when the test is too slow to retry (≥ 5 min).
- *
- * @param {number} durationMs
- * @param {Record<string, number>} slowTestRetries e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
- * @returns {number}
- */
-function getEfdRetryCount (durationMs, slowTestRetries) {
-  for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
-    if (durationMs < limitMs) {
-      return slowTestRetries[key] ?? 0
-    }
-  }
-  return 0 // ≥ 5 min — abort
-}
-
-/**
- * Returns the maximum retry count configured by the backend for EFD.
- *
- * @param {Record<string, number> | undefined} slowTestRetries
- * @returns {number | undefined}
- */
-function getMaxEfdRetryCount (slowTestRetries) {
-  if (slowTestRetries === undefined) return
-
-  const retryCounts = Object.values(slowTestRetries)
-  if (retryCounts.length === 0) return
-
-  let maxRetries = 0
-  for (const retryCount of retryCounts) {
-    if (retryCount > maxRetries) {
-      maxRetries = retryCount
-    }
-  }
-  return maxRetries
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

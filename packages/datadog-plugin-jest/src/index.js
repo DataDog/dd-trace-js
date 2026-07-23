@@ -197,7 +197,7 @@ class JestPlugin extends CiPlugin {
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
+        config._ddEarlyFlakeDetectionRetryPolicy = this.libraryConfig?.earlyFlakeDetectionRetryPolicy
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false

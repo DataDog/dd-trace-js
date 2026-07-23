@@ -386,8 +386,15 @@ describe('CI Visibility Exporter', () => {
   describe('filterConfiguration', () => {
     const remoteConfiguration = {
       isEarlyFlakeDetectionEnabled: true,
-      earlyFlakeDetectionNumRetries: 10,
-      earlyFlakeDetectionSlowTestRetries: { '5s': 10, '10s': 5, '30s': 3, '5m': 2 },
+      earlyFlakeDetectionRetryPolicy: {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 10 },
+          { durationLimitMs: 10_000, retryCount: 5 },
+          { durationLimitMs: 30_000, retryCount: 3 },
+          { durationLimitMs: 300_000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 10,
+      },
     }
 
     it('preserves the backend EFD retry configuration when the local retry count is unset', () => {
@@ -395,10 +402,9 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 10)
       assert.deepStrictEqual(
-        configuration.earlyFlakeDetectionSlowTestRetries,
-        remoteConfiguration.earlyFlakeDetectionSlowTestRetries
+        configuration.earlyFlakeDetectionRetryPolicy,
+        remoteConfiguration.earlyFlakeDetectionRetryPolicy
       )
     })
 
@@ -410,12 +416,14 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 2)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
-        '5s': 2,
-        '10s': 2,
-        '30s': 2,
-        '5m': 2,
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 2 },
+          { durationLimitMs: 10_000, retryCount: 2 },
+          { durationLimitMs: 30_000, retryCount: 2 },
+          { durationLimitMs: 300_000, retryCount: 2 },
+        ],
+        schedulingRetryCount: 2,
       })
     })
 
@@ -427,12 +435,14 @@ describe('CI Visibility Exporter', () => {
 
       const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
 
-      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 0)
-      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
-        '5s': 0,
-        '10s': 0,
-        '30s': 0,
-        '5m': 0,
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionRetryPolicy, {
+        durationRetryCounts: [
+          { durationLimitMs: 5000, retryCount: 0 },
+          { durationLimitMs: 10_000, retryCount: 0 },
+          { durationLimitMs: 30_000, retryCount: 0 },
+          { durationLimitMs: 300_000, retryCount: 0 },
+        ],
+        schedulingRetryCount: 0,
       })
     })
   })

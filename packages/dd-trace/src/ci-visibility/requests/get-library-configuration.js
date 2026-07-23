@@ -3,6 +3,7 @@
 const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
+const { createEfdRetryPolicy } = require('../efd-retry-policy')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -15,7 +16,6 @@ const { writeSettingsToCache } = require('../test-optimization-cache')
 const { validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
-const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 
@@ -42,16 +42,16 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
     coverage_report_upload_enabled: isCoverageReportUploadEnabled,
   } = parsedResponse?.data?.attributes ?? parsedResponse
 
+  const earlyFlakeDetectionRetriesByDuration =
+    earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES
+  const earlyFlakeDetectionRetryPolicy = createEfdRetryPolicy(earlyFlakeDetectionRetriesByDuration)
   const settings = {
     isCodeCoverageEnabled,
     isSuitesSkippingEnabled,
     isItrEnabled,
     requireGit,
     isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
-    earlyFlakeDetectionNumRetries:
-      earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] ?? DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
-    earlyFlakeDetectionSlowTestRetries:
-      earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
+    earlyFlakeDetectionRetryPolicy,
     earlyFlakeDetectionFaultyThreshold:
       earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
     isFlakyTestRetriesEnabled,

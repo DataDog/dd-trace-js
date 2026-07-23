@@ -16,7 +16,6 @@ const getConfig = require('../../../src/config')
 const Span = require('../../../src/opentracing/span')
 
 const {
-  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestParametersString,
   getTestLevelsMetadataTags,
   getTestSuitePath,
@@ -33,8 +32,6 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
@@ -1337,51 +1334,6 @@ describe('getIsFaultyEarlyFlakeDetection', () => {
       faultyThreshold
     )
     assert.strictEqual(isFaulty, true)
-  })
-})
-
-describe('getEfdRetryCount', () => {
-  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
-
-  it('exports the retry thresholds used to select slow test retry buckets', () => {
-    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS, [
-      { limitMs: 5_000, key: '5s' },
-      { limitMs: 10_000, key: '10s' },
-      { limitMs: 30_000, key: '30s' },
-      { limitMs: 300_000, key: '5m' },
-    ])
-  })
-
-  it('returns retries for the matching duration bucket', () => {
-    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
-    assert.strictEqual(getEfdRetryCount(4_999, slowTestRetries), 10)
-    assert.strictEqual(getEfdRetryCount(5_000, slowTestRetries), 5)
-    assert.strictEqual(getEfdRetryCount(9_999, slowTestRetries), 5)
-    assert.strictEqual(getEfdRetryCount(10_000, slowTestRetries), 3)
-    assert.strictEqual(getEfdRetryCount(30_000, slowTestRetries), 2)
-  })
-
-  it('returns 0 when the matching bucket is 0, no buckets are configured, or the test is too slow', () => {
-    assert.strictEqual(getEfdRetryCount(5_000, { '5s': 3, '10s': 0 }), 0)
-    assert.strictEqual(getEfdRetryCount(0, {}), 0)
-    assert.strictEqual(getEfdRetryCount(300_000, slowTestRetries), 0)
-    assert.strictEqual(getEfdRetryCount(300_001, slowTestRetries), 0)
-  })
-})
-
-describe('getMaxEfdRetryCount', () => {
-  it('returns the largest retry count from slow test retry buckets', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 10, '10s': 5, '30s': 3, '5m': 2 }), 10)
-  })
-
-  it('preserves an explicit all-zero configuration and selects a nonzero sibling', () => {
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 0 }), 0)
-    assert.strictEqual(getMaxEfdRetryCount({ '5s': 0, '10s': 3 }), 3)
-  })
-
-  it('returns undefined when no slow test retry buckets are configured', () => {
-    assert.strictEqual(getMaxEfdRetryCount({}), undefined)
-    assert.strictEqual(getMaxEfdRetryCount(undefined), undefined)
   })
 })
 

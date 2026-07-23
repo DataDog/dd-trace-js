@@ -9,6 +9,12 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const satisfies = require('../../../vendor/dist/semifies')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const {
+  createEfdRetryPolicy,
+  getEfdRetryCountForDuration,
+  hasEfdRetries,
+  shouldSkipEfdRetry,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
   TEST_STATUS,
   setRumTestTags,
   TEST_CODE_OWNERS,
@@ -75,8 +81,6 @@ const {
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
-  getEfdRetryCount,
-  getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
@@ -136,6 +140,7 @@ const {
 } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 let hasWarnedDeprecatedCypressVersion = false
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
@@ -465,8 +470,7 @@ class CypressPlugin {
   isEarlyFlakeDetectionEnabled = false
   isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
-  earlyFlakeDetectionNumRetries = 0
-  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   efdRetryCountByTest = {}
   efdSlowAbortedTests = {}
   earlyFlakeDetectionFaultyThreshold = 0
@@ -554,8 +558,7 @@ class CypressPlugin {
     this.isEarlyFlakeDetectionEnabled = false
     this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
-    this.earlyFlakeDetectionNumRetries = 0
-    this.earlyFlakeDetectionSlowTestRetries = {}
+    this.earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
     this.efdRetryCountByTest = {}
     this.efdSlowAbortedTests = {}
     this.earlyFlakeDetectionFaultyThreshold = 0
@@ -835,8 +838,7 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isCoverageReportUploadEnabled,
               isEarlyFlakeDetectionEnabled,
-              earlyFlakeDetectionNumRetries,
-              earlyFlakeDetectionSlowTestRetries,
+              earlyFlakeDetectionRetryPolicy,
               earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
@@ -851,8 +853,7 @@ class CypressPlugin {
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-          this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
+          this.earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
           this.earlyFlakeDetectionFaultyThreshold = earlyFlakeDetectionFaultyThreshold
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
@@ -906,11 +907,7 @@ class CypressPlugin {
    * @returns {number}
    */
   getConfiguredEfdRetryCount () {
-    const { earlyFlakeDetectionSlowTestRetries } = this
-    if (!earlyFlakeDetectionSlowTestRetries || !Object.keys(earlyFlakeDetectionSlowTestRetries).length) {
-      return this.earlyFlakeDetectionNumRetries
-    }
-    return getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
+    return this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
   }
 
   /**
@@ -940,7 +937,7 @@ class CypressPlugin {
     if (!this.efdRetryCountByTest[testSuite]) {
       this.efdRetryCountByTest[testSuite] = {}
     }
-    const retryCount = getEfdRetryCount(duration ?? 0, this.earlyFlakeDetectionSlowTestRetries)
+    const retryCount = getEfdRetryCountForDuration(duration ?? 0, this.earlyFlakeDetectionRetryPolicy)
     this.efdRetryCountByTest[testSuite][testName] = retryCount
     if (retryCount === 0) {
       if (!this.efdSlowAbortedTests[testSuite]) {
@@ -961,7 +958,7 @@ class CypressPlugin {
    */
   shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
-    return testSuiteRetries?.[testName] !== undefined && efdRetryIndex > testSuiteRetries[testName]
+    return shouldSkipEfdRetry(efdRetryIndex, testSuiteRetries?.[testName])
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -1671,10 +1668,10 @@ class CypressPlugin {
     return {
       'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
         const suitePayload = {
-          isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionEnabled:
+            this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionNumRetries: this.getConfiguredEfdRetryCount(),
-          earlyFlakeDetectionSlowTestRetries: this.earlyFlakeDetectionSlowTestRetries,
+          earlyFlakeDetectionRetryPolicy: this.earlyFlakeDetectionRetryPolicy,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,
@@ -1784,7 +1781,10 @@ class CypressPlugin {
           }
           this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
-        const isEfdManagedTest = (isNew || isModified) && this.isEarlyFlakeDetectionEnabled && !isAttemptToFix
+        const isEfdManagedTest = (isNew || isModified) &&
+          this.isEarlyFlakeDetectionEnabled &&
+          hasEfdRetries(this.earlyFlakeDetectionRetryPolicy) &&
+          !isAttemptToFix
         let testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
         let didAbortSlowEfdRetries = false
         if (isEfdManagedTest && !isEfdRetry && this.efdRetryCountByTest[testSuite]?.[testName] === undefined) {
