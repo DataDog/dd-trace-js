@@ -201,7 +201,7 @@
     "pino-pretty": "13.1.3",
     "playwright": "1.61.0",
     "playwright-core": "1.61.0",
-    "pnpm": "11.15.0",
+    "pnpm": "11.15.1",
     "prisma": "7.8.0",
     "promise": "8.3.0",
     "promise-js": "0.0.7",
