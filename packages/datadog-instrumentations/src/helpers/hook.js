@@ -82,7 +82,7 @@ function Hook (modules, hookOptions, onrequire) {
       moduleVersion ||= getVersion(moduleBaseDir)
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)
-      return
+      return moduleExports
     }
 
     if (
