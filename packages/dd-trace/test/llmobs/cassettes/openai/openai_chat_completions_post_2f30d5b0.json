@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/6.0.233 ai-sdk/provider-utils/4.0.40 runtime/node.js/24",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "530"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"store\":false,\"messages\":[{\"role\":\"user\",\"content\":\"Run the test tool\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_ivr6y32ed6IgA8Df696Hq5TV\",\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_ivr6y32ed6IgA8Df696Hq5TV\",\"content\":\"Approval rejected\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"description\":\"Run the test tool and return its result\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 22 Jul 2026 20:13:47 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a1f51b9ffcc2b12a-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "671",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999987",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_bb636c69889f421ebeb27db9c20067c4",
+      "set-cookie": "__cf_bm=ZMhjVUg40xaXkK7Cqo9uwGDTJnyo1LcFvmtnDVi5bMs-1784751226.8730886-1.0.1.1-x2.ptX1ozk34O9cFNEdm0YXBxxOQ47GrxlaNBvx8tf2xjueKr3zMXrYDVdjRqVn1PwM47L_FnWv_IgQfeDy2nVx4QYbz20H5ZHqXoAGYol9XeQ5zNRoMjJeFuJQd8A5Q; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 22 Jul 2026 20:43:47 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-E4Xc3RJysabFeBmjZucvAdNS6kdQE\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784751227,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"It seems that the test tool execution was rejected. If you have any other requests or need assistance with something else, feel free to let me know!\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 64,\n    \"completion_tokens\": 31,\n    \"total_tokens\": 95,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_67faaa3b02\"\n}\n"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/5.0.218 ai-sdk/provider-utils/3.0.30 runtime/node.js/24",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "1139"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"store\":false,\"messages\":[{\"role\":\"user\",\"content\":\"Run the test tool\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_6CIsJhzx7yJcZ0igevQZacnB\",\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_6CIsJhzx7yJcZ0igevQZacnB\",\"content\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"before\\\"},{\\\"type\\\":\\\"media\\\",\\\"mediaType\\\":\\\"image/png\\\",\\\"data\\\":\\\"private-image-data\\\"},{\\\"type\\\":\\\"media\\\",\\\"mediaType\\\":\\\"application/pdf\\\",\\\"data\\\":\\\"private-file-data\\\"},{\\\"type\\\":\\\"file-data\\\",\\\"mediaType\\\":\\\"application/pdf\\\",\\\"data\\\":\\\"private-file-data\\\"},{\\\"type\\\":\\\"file-id\\\",\\\"fileId\\\":\\\"private-file-id\\\"},{\\\"type\\\":\\\"image-data\\\",\\\"mediaType\\\":\\\"image/png\\\",\\\"data\\\":\\\"private-image-data\\\"},{\\\"type\\\":\\\"image-file-id\\\",\\\"fileId\\\":\\\"private-image-id\\\"},{\\\"type\\\":\\\"custom\\\",\\\"providerOptions\\\":{\\\"secret\\\":\\\"provider-data\\\"}},{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"after\\\"}]\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"description\":\"Run the test tool and return its result\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"strict\":false}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 22 Jul 2026 20:13:28 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a1f51b1cbdc5fef2-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "2094",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999862",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_d45d4c4aa6154079acb9ba3e5d1fd06d",
+      "set-cookie": "__cf_bm=mpYZZ398HYHntWHmVHBRj2nndk7WrFG6l6J.2wlnq5U-1784751205.878469-1.0.1.1-yChyq3Mi4NV7U0iWTlk6tuCCRNLe.JT_WNOh7msyOjs32yBJIXSCVCaDM8hKkuF3WwsIHx0f2F3nGsQscd6FdYlyJqJ6TZu0GO6Cs6QsH5vaSbELNSmy0ZpKdCCiuas9; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 22 Jul 2026 20:43:28 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-E4Xbi4NNoi2wHb7RGCRHZ6lyDUfPn\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784751206,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The test tool has been executed, and here are the results:\\n\\n1. **Text**: \\\"before\\\"\\n2. **Media (Image)**: PNG data (private)\\n3. **Media (PDF)**: PDF data (private)\\n4. **File Data (PDF)**: PDF file data (private)\\n5. **File ID**: private-file-id\\n6. **Image Data**: PNG image data (private)\\n7. **Image File ID**: private-image-id\\n8. **Custom**: Provider options with secret (private data)\\n9. **Text**: \\\"after\\\"\\n\\nIf you need any specific information or further actions based on these results, let me know!\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 185,\n    \"completion_tokens\": 141,\n    \"total_tokens\": 326,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_67faaa3b02\"\n}\n"
+  }
+}

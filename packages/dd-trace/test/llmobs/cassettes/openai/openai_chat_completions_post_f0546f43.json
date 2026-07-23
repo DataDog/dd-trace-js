@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/5.0.218 ai-sdk/provider-utils/3.0.30 runtime/node.js/24",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "543"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"store\":false,\"messages\":[{\"role\":\"user\",\"content\":\"Run the test tool\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_6CIsJhzx7yJcZ0igevQZacnB\",\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_6CIsJhzx7yJcZ0igevQZacnB\",\"content\":\"{\\\"answer\\\":42}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"description\":\"Run the test tool and return its result\",\"parameters\":{\"type\":\"object\",\"properties\":{}},\"strict\":false}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 22 Jul 2026 20:13:29 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a1f51b2ea8e54ba5-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "377",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999987",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_3da9f65def934135b9911152252e0b1b",
+      "set-cookie": "__cf_bm=nJBTYPDabmHNdR5pg59YNxg5nn6XjReam076HODmcFE-1784751208.743452-1.0.1.1-Ax7siAdtZeXIKEYNyCMsupm5A77y34C8uQJhqvEZhlComB_QQ8CUy2wkbvOXh4xRkE1ES7Qv9kX7noEGxPn99aQgXIC1O8M0XQFDx2nrrsxIGzDjDVo_NeBPC8TpXwNb; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 22 Jul 2026 20:43:29 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-E4XbkThLDPnMm8iH15p8PmVQrvYcU\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784751208,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The test tool returned the answer: 42.\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 67,\n    \"completion_tokens\": 11,\n    \"total_tokens\": 78,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_67faaa3b02\"\n}\n"
+  }
+}

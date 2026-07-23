@@ -1,0 +1,50 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/6.0.233 ai-sdk/provider-utils/4.0.40 runtime/node.js/24",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "1133"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"store\":false,\"messages\":[{\"role\":\"user\",\"content\":\"Run the test tool\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_ivr6y32ed6IgA8Df696Hq5TV\",\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_ivr6y32ed6IgA8Df696Hq5TV\",\"content\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"before\\\"},{\\\"type\\\":\\\"image-data\\\",\\\"data\\\":\\\"private-image-data\\\",\\\"mediaType\\\":\\\"image/png\\\"},{\\\"type\\\":\\\"file-data\\\",\\\"data\\\":\\\"private-file-data\\\",\\\"mediaType\\\":\\\"application/pdf\\\"},{\\\"type\\\":\\\"file-data\\\",\\\"mediaType\\\":\\\"application/pdf\\\",\\\"data\\\":\\\"private-file-data\\\"},{\\\"type\\\":\\\"file-id\\\",\\\"fileId\\\":\\\"private-file-id\\\"},{\\\"type\\\":\\\"image-data\\\",\\\"mediaType\\\":\\\"image/png\\\",\\\"data\\\":\\\"private-image-data\\\"},{\\\"type\\\":\\\"image-file-id\\\",\\\"fileId\\\":\\\"private-image-id\\\"},{\\\"type\\\":\\\"custom\\\",\\\"providerOptions\\\":{\\\"secret\\\":\\\"provider-data\\\"}},{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"after\\\"}]\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"testTool\",\"description\":\"Run the test tool and return its result\",\"parameters\":{\"type\":\"object\",\"properties\":{}}}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 22 Jul 2026 20:13:43 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a1f51b7f79d67ca5-EWR",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "1487",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-openai-proxy-wasm": "v0.1",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999860",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_f1074054fab048ac88b4f01d5461905f",
+      "set-cookie": "__cf_bm=qBNnt.uECmOeSxrkl_3ZCpnjm1b5zpZPzmRGakuGWao-1784751221.6794298-1.0.1.1-g8L6H0EzVOE8NZlhs8UZtRHdwNST_K2e6nHv1TpoMPoQm6rQU0CX5yz1rh1yRbwqP8ytaGX.zn__P1SA46l2uofMycarwBN8xNxAd2w3E.bQb6CA01.USW14X553L0ik; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 22 Jul 2026 20:43:43 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-E4XbxdCpE8KaPfAWKuODz61iYL525\",\n  \"object\": \"chat.completion\",\n  \"created\": 1784751221,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"The test tool has been executed successfully. Here are the results:\\n\\n1. **Text**: \\\"before\\\"\\n2. **Image Data**: (Image data in PNG format)\\n3. **File Data**: (PDF file data)\\n4. **File Data**: (PDF file data)\\n5. **File ID**: (ID for a private file)\\n6. **Image Data**: (Image data in PNG format)\\n7. **Image File ID**: (ID for a private image)\\n8. **Custom Data**: (Includes provider options with secret)\\n9. **Text**: \\\"after\\\"\\n\\nIf you need further assistance or specific details about these results, let me know!\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 187,\n    \"completion_tokens\": 143,\n    \"total_tokens\": 330,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": \"fp_67faaa3b02\"\n}\n"
+  }
+}
