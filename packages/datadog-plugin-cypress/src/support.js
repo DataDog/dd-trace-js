@@ -6,7 +6,7 @@ let rumTestExecutionIdCookieName
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
-let earlyFlakeDetectionRetryPolicy
+let earlyFlakeDetectionNumRetries = 0
 let isTestManagementEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
@@ -299,7 +299,6 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   // We copy the tests array and add retries to it, then assign it back to suite.tests
   // to avoid modifying the array while iterating over it
   const testsWithRetries = []
-  const efdRetryCount = earlyFlakeDetectionRetryPolicy?.schedulingRetryCount ?? 0
 
   for (let testIndex = 0; testIndex < suite.tests.length; testIndex++) {
     const test = suite.tests[testIndex]
@@ -337,7 +336,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     } else if (isModified && isEarlyFlakeDetectionEnabled) {
       disableFrameworkRetries(test)
       retryMessage = 'to detect flakes because it is modified'
-      retriedTests = getRetriedTests(test, efdRetryCount, [
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, [
         '_ddIsModified',
         '_ddIsEfdRetry',
         isKnownTestsEnabled && isNewTest(test) && '_ddIsNew',
@@ -345,7 +344,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     } else if (isNew && isEarlyFlakeDetectionEnabled) {
       disableFrameworkRetries(test)
       retryMessage = 'to detect flakes because it is new'
-      retriedTests = getRetriedTests(test, efdRetryCount, ['_ddIsNew', '_ddIsEfdRetry'])
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
     }
 
     testsWithRetries.push(...retriedTests)
@@ -429,7 +428,7 @@ before(function () {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
       isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
-      earlyFlakeDetectionRetryPolicy = suiteConfig.earlyFlakeDetectionRetryPolicy
+      earlyFlakeDetectionNumRetries = suiteConfig.earlyFlakeDetectionNumRetries
       isTestManagementEnabled = suiteConfig.isTestManagementEnabled
       testManagementAttemptToFixRetries = suiteConfig.testManagementAttemptToFixRetries
       testManagementTests = suiteConfig.testManagementTests

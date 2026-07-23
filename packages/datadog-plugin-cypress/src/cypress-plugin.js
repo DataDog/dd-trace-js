@@ -1700,7 +1700,7 @@ class CypressPlugin {
           isEarlyFlakeDetectionEnabled:
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
-          earlyFlakeDetectionRetryPolicy: this.earlyFlakeDetectionRetryPolicy,
+          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
           testManagementAttemptToFixRetries: this.testManagementAttemptToFixRetries,

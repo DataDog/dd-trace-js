@@ -11,6 +11,7 @@ const {
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
+const { createEfdRetryPolicy } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
@@ -59,6 +60,7 @@ const {
 require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 const patched = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
@@ -71,7 +73,9 @@ let skippableSuitesCoverage = {}
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
-const config = {}
+const config = {
+  earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -489,7 +493,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     config.repositoryRoot = repositoryRoot
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-    config.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy
+    config.earlyFlakeDetectionRetryPolicy =
+      libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
     config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
     config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled

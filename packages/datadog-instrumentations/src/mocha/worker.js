@@ -2,6 +2,7 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { createEfdRetryPolicy } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const log = require('../../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../../version')
@@ -31,11 +32,14 @@ const {
 require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 
-const config = {}
+const config = {
+  earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
+}
 const runnerToFiles = new WeakMap()
 const runnerToFailedHooks = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
