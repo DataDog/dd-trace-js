@@ -39,12 +39,6 @@ function findExportByName (pkg, name) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, frameworkVersion, payload) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ ...payload, onDone: resolve, frameworkVersion })
-  })
-}
-
 function getTestRunnerExport (testPackage) {
   return findExportByName(testPackage, 'VitestTestRunner') || findExportByName(testPackage, 'TestRunner')
 }
@@ -239,7 +233,6 @@ module.exports = {
   workerReportLogsCh,
   codeCoverageReportCh,
   findExportByName,
-  getChannelPromise,
   getTestRunnerExport,
   getTypeTasks,
   getTestName,
