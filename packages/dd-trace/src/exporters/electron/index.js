@@ -35,6 +35,7 @@ class ElectronExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
+    // eslint-disable-next-line unicorn/no-unnecessary-splice -- The removed entries are the batch being flushed.
     const traces = this.#traces.splice(0)
 
     if (traces.length > 0 && traceChannel.hasSubscribers) {

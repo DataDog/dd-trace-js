@@ -54,7 +54,7 @@ function buildTracerHooks (sessionCtx) {
     sessionCtx.cwd = input.cwd
     sessionCtx.transcriptPath = input.transcript_path
     sessionCtx.agentType = input.agent_type
-    sessionCtx.permissionMode = sessionCtx.permissionMode || input.permission_mode
+    sessionCtx.permissionMode ||= input.permission_mode
     return {}
   }
 
@@ -64,8 +64,8 @@ function buildTracerHooks (sessionCtx) {
   }
 
   function onUserPromptSubmit (input) {
-    sessionCtx.sessionId = sessionCtx.sessionId || input.session_id
-    sessionCtx.prompt = sessionCtx.prompt || input.prompt
+    sessionCtx.sessionId ||= input.session_id
+    sessionCtx.prompt ||= input.prompt
     return {}
   }
 
@@ -254,7 +254,7 @@ function createStreamLookup (chunks) {
     scanLocalLifecycle(chunks, startIndex, toolUseId, localLifecycle)
     if (localLifecycle.toolResultIndex !== undefined) return localLifecycle
 
-    streamIndex = streamIndex || buildStreamIndex(chunks)
+    streamIndex ||= buildStreamIndex(chunks)
     const indexedLifecycle = streamIndex.get(toolUseId)
     return {
       taskStartedChunk: localLifecycle.taskStartedChunk || indexedLifecycle?.taskStartedChunk,

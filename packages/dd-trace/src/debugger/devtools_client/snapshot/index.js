@@ -61,7 +61,7 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
   // Delay calling `processRawState` so caller can resume the main thread before processing `rawState`
   return {
     processLocalState () {
-      processedState = processedState ?? processRawState(rawState, maxLength)
+      processedState ??= processRawState(rawState, maxLength)
       return processedState
     },
     fatalErrors: ctx.fatalErrors,

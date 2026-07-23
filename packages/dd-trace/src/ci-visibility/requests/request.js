@@ -42,7 +42,7 @@ function request (data, options, callback) {
     if (url.protocol === 'unix:') {
       opts.socketPath = url.pathname
     } else {
-      opts.path = opts.path ?? url.path
+      opts.path ??= url.path
       opts.protocol = url.protocol
       opts.hostname = url.hostname
       opts.port = url.port

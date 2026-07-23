@@ -96,7 +96,7 @@ const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-even
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
-const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
+const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
@@ -1192,9 +1192,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.testParameters = testParameters
         ctx.frameworkVersion = jestVersion
         ctx.isNew = isNewTest
-        ctx.isEfdRetry = ctx.isEfdRetry || numEfdRetry > 0
+        ctx.isEfdRetry ||= numEfdRetry > 0
         ctx.isAttemptToFix = isAttemptToFix
-        ctx.isAttemptToFixRetry = ctx.isAttemptToFixRetry || numOfAttemptsToFixRetries > 0
+        ctx.isAttemptToFixRetry ||= numOfAttemptsToFixRetries > 0
         ctx.isJestRetry = isJestRetry
         ctx.isDisabled = isDisabled
         ctx.isQuarantined = isQuarantined
@@ -3034,9 +3034,7 @@ function wrapJestObject (jestObject, suiteFilePath) {
 
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
     // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-    }
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
     recordMockedFile(suiteFilePath, moduleName)
     return mock.apply(this, arguments)
   })

@@ -342,7 +342,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult) {
   }
 
   const testFileAbsolutePath = pickle.uri
-  const finished = pickleResultByFile[testFileAbsolutePath] || (pickleResultByFile[testFileAbsolutePath] = [])
+  const finished = (pickleResultByFile[testFileAbsolutePath] ||= [])
 
   if (isEarlyFlakeDetectionEnabled && isNew) {
     const testFullname = `${pickle.uri}:${pickle.name}`

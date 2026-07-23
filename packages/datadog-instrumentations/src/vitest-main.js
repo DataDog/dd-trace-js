@@ -773,10 +773,7 @@ function normalizeProjectName (name) {
 }
 
 function addConfig (entries, config, projectName) {
-  if (
-    config &&
-    entries.every(entry => !(entry.config === config || (projectName && entry.projectName === projectName)))
-  ) {
+  if (config && !entries.some(entry => entry.config === config || (projectName && entry.projectName === projectName))) {
     entries.push({ config, projectName })
   }
 }
