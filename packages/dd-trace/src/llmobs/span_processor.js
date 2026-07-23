@@ -9,6 +9,7 @@ const {
   ERROR_TYPE,
   ERROR_STACK,
 } = require('../constants')
+const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../plugins/util/tags')
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -39,6 +40,7 @@ const {
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+const resolveLLMObsGitMetadata = require('./git-metadata')
 
 class LLMObservabilitySpan {
   /**
@@ -69,8 +71,19 @@ class LLMObsSpanProcessor {
   /** @type {import('./writers/spans')} */
   #writer
 
+  /** @type {string | undefined} */
+  #gitCommitSHA
+
+  /** @type {string | undefined} */
+  #gitRepositoryUrl
+
   constructor (config) {
     this.#config = config
+
+    // Resolved once at LLMObs enable so the git-CLI fallback never runs per span.
+    const { commitSHA, repositoryUrl } = resolveLLMObsGitMetadata(config)
+    this.#gitCommitSHA = commitSHA
+    this.#gitRepositoryUrl = repositoryUrl
   }
 
   setUserSpanProcessor (userSpanProcessor) {
@@ -321,6 +334,11 @@ class LLMObsSpanProcessor {
       error: Number(!!error) || 0,
       language: 'javascript',
     }
+
+    // Git tags sit below the user tags spread below, so user-supplied
+    // `git.*` tags win on conflict.
+    if (this.#gitCommitSHA) tags[GIT_COMMIT_SHA] = this.#gitCommitSHA
+    if (this.#gitRepositoryUrl) tags[GIT_REPOSITORY_URL] = this.#gitRepositoryUrl
 
     const errType = span.context().getTag(ERROR_TYPE) || error?.name
     if (errType) tags.error_type = errType

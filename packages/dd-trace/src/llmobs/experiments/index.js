@@ -1,6 +1,8 @@
 'use strict'
 
 const log = require('../../log')
+const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
+const resolveLLMObsGitMetadata = require('../git-metadata')
 const { ExperimentsClient, API_BASE_PATH } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
 const { Experiment } = require('./experiment')
@@ -27,6 +29,7 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
 class Experiments {
   #client
   #projectName
+  #gitTags
 
   constructor (config) {
     this.#projectName = config.llmobs?.mlApp || config.service
@@ -36,6 +39,12 @@ class Experiments {
       site: config.site,
       projectName: this.#projectName,
     })
+
+    // Resolved once for all experiments; applied as defaults that user tags override.
+    const { commitSHA, repositoryUrl } = resolveLLMObsGitMetadata(config)
+    this.#gitTags = {}
+    if (commitSHA) this.#gitTags[GIT_COMMIT_SHA] = commitSHA
+    if (repositoryUrl) this.#gitTags[GIT_REPOSITORY_URL] = repositoryUrl
   }
 
   // Create a local dataset buffer. Pushed remotely on first experiment run.
@@ -124,7 +133,7 @@ class Experiments {
 
   // Build an experiment: { name, dataset, task, evaluators, description?, config?, tags? }.
   experiment (options) {
-    return new Experiment(this.#client, options)
+    return new Experiment(this.#client, options, this.#gitTags)
   }
 }
 

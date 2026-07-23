@@ -168,6 +168,47 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(span.meta.metadata, { row: 0 })
   })
 
+  it('applies git metadata as default tags on both spans and metrics', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord({ q: 'apple' }, 'true')
+    await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: (i) => ({ answer: i.q }),
+      evaluators: { ok: () => true },
+    }, {
+      'git.commit.sha': 'abc123',
+      'git.repository_url': 'https://github.com/example/repo',
+    }).run()
+
+    const body = eventsBody()
+    const span = body.data.attributes.spans[0]
+    assert.ok(span.tags.includes('git.commit.sha:abc123'))
+    assert.ok(span.tags.includes('git.repository_url:https://github.com/example/repo'))
+
+    const metric = body.data.attributes.metrics[0]
+    assert.ok(metric.tags.includes('git.commit.sha:abc123'))
+    assert.ok(metric.tags.includes('git.repository_url:https://github.com/example/repo'))
+  })
+
+  it('lets user-supplied tags override git metadata defaults', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord({ q: 'apple' }, 'true')
+    await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: (i) => ({ answer: i.q }),
+      evaluators: { ok: () => true },
+      tags: { 'git.commit.sha': 'user-override' },
+    }, {
+      'git.commit.sha': 'abc123',
+      'git.repository_url': 'https://github.com/example/repo',
+    }).run()
+
+    const span = eventsBody().data.attributes.spans[0]
+    assert.ok(span.tags.includes('git.commit.sha:user-override'))
+    assert.ok(!span.tags.includes('git.commit.sha:abc123'))
+    assert.ok(span.tags.includes('git.repository_url:https://github.com/example/repo'))
+  })
+
   it('infers metric type from the evaluator return value', async () => {
     const dataset = new Dataset(client, 'demo').addRecord('x')
     await new Experiment(client, {

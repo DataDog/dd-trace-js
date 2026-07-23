@@ -102,7 +102,7 @@ class Experiment {
   #tags
   #experimentId
 
-  constructor (client, options = {}) {
+  constructor (client, options = {}, gitTags = {}) {
     if (!options.name) throw new Error('Experiment name is required')
     if (!options.dataset) throw new Error('Experiment dataset is required')
     if (typeof options.task !== 'function') throw new Error('Experiment task is required')
@@ -114,7 +114,8 @@ class Experiment {
     this.#task = options.task
     this.#evaluators = new Map(Object.entries(options.evaluators ?? {}))
     this.#config = { ...options.config }
-    this.#tags = { ...options.tags }
+    // Git tags are defaults; user-supplied tags with the same key win.
+    this.#tags = { ...gitTags, ...options.tags }
     this.#experimentId = null
   }
 

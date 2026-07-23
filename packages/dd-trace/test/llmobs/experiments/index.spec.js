@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { createExperiments } = require('../../../src/llmobs/experiments')
@@ -67,6 +68,40 @@ describe('LLMObs Experiments facade', () => {
       const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
       assert.ok(exp instanceof NoopExperiments)
       assert.throws(() => exp.createDataset('d'), /DD_LLMOBS_ML_APP.*DD_SERVICE/)
+    })
+  })
+
+  describe('git metadata wiring', () => {
+    it('resolves git metadata once and forwards it as default tags to experiments', async () => {
+      const resolveLLMObsGitMetadata = sinon.stub().returns({
+        commitSHA: 'abc123',
+        repositoryUrl: 'https://github.com/example/repo',
+      })
+      const { createExperiments: create } = proxyquire('../../../src/llmobs/experiments', {
+        '../git-metadata': Object.assign(resolveLLMObsGitMetadata, { '@noCallThru': true }),
+      })
+
+      global.fetch.callsFake(async (url, opts) => {
+        const u = new URL(url)
+        const body = opts.body ? JSON.parse(opts.body) : undefined
+        let payload = {}
+        if (u.pathname.endsWith('/projects')) payload = { data: { id: 'proj' } }
+        else if (u.pathname.endsWith('/datasets/ds/records')) {
+          payload = { records: body.data.attributes.records.map((_, i) => ({ id: `rec-${i}` })) }
+        } else if (u.pathname.endsWith('/datasets')) payload = { data: { id: 'ds' } }
+        else if (u.pathname.endsWith('/experiments')) payload = { data: { id: 'exp' } }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const exp = create(enabledConfig())
+      const dataset = exp.createDataset('d').addRecord({ q: 'a' }, 'true')
+      await exp.experiment({ name: 'n', dataset, task: (i) => i, evaluators: { ok: () => true } }).run()
+
+      sinon.assert.calledOnce(resolveLLMObsGitMetadata)
+      const eventsCall = global.fetch.getCalls().find(c => new URL(c.args[0]).pathname.endsWith('/exp/events'))
+      const span = JSON.parse(eventsCall.args[1].body).data.attributes.spans[0]
+      assert.ok(span.tags.includes('git.commit.sha:abc123'))
+      assert.ok(span.tags.includes('git.repository_url:https://github.com/example/repo'))
     })
   })
 
