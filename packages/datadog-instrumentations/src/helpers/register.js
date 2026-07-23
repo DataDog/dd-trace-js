@@ -108,14 +108,6 @@ for (const name of names) {
     }
 
     for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
-      if (isIitm && patchDefault === !!moduleExports.default) {
-        if (patchDefault) {
-          moduleExports = moduleExports.default
-        } else {
-          return moduleExports
-        }
-      }
-
       const fullFilename = filename(name, file)
 
       let matchesFile = moduleName === fullFilename
@@ -130,6 +122,14 @@ for (const name of names) {
       }
 
       if (matchesFile && matchVersion(moduleVersion, versions)) {
+        if (isIitm && patchDefault === !!moduleExports.default) {
+          if (patchDefault) {
+            moduleExports = moduleExports.default
+          } else {
+            return moduleExports
+          }
+        }
+
         // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
         instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {

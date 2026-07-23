@@ -14,7 +14,9 @@ const { ANY_STRING, assertObjectContains } = require('../../../integration-tests
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
-const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
+const lowerBound = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
+// mariadb >=3.5 is ESM-only, so it is covered by the ESM integration test instead of this CJS fixture.
+const range = `${lowerBound} <3.5`
 
 // A pool created inside an active span must not attach its connection-setup
 // `tcp.connect` span to that trace. Accumulate span names across every payload
