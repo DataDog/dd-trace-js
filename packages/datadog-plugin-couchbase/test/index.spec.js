@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setTimeout } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
@@ -21,17 +22,25 @@ describe('Plugin', () => {
     let tracer
     let collection
 
-    withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
+    /**
+     * @param {string} versionKey
+     * @param {string} _moduleName
+     * @param {string} resolvedVersion
+     */
+    function registerVersionTests (versionKey, _moduleName, resolvedVersion) {
       describe('without configuration', () => {
         beforeEach(async function () {
           this.timeout(10_000)
           tracer = global.tracer = await agent.load('couchbase')
-          couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
+          couchbase = proxyquire(`../../../versions/couchbase@${versionKey}`, {}).get()
           cluster = await couchbase.connect('couchbase://localhost', {
             username: 'Administrator',
             password: 'password',
           })
           bucket = cluster.bucket('datadog-test')
+          if (semver.gte(resolvedVersion, '4.0.0')) {
+            await waitForBucketConnection(bucket, couchbase)
+          }
           collection = bucket.defaultCollection()
         })
 
@@ -161,7 +170,7 @@ describe('Plugin', () => {
             })
 
             // due to bug in couchbase for these versions (see JSCBC-945)
-            if (!semver.intersects('3.2.0 - 3.2.1', version)) {
+            if (!semver.satisfies(resolvedVersion, '3.2.0 - 3.2.1')) {
               it('should catch errors in callback and report error in trace', done => {
                 const invalidQuery = 'SELECT'
                 const cb = sinon.spy()
@@ -178,6 +187,31 @@ describe('Plugin', () => {
           })
         })
       })
-    })
+    }
+
+    withVersions('couchbase', 'couchbase', '>=3.0.0', registerVersionTests)
   })
 })
+
+/**
+ * Couchbase 4.x resolves connect before bucket() finishes opening its KV connection.
+ *
+ * @param {{
+ *   ping(options: { serviceTypes: string[] }): Promise<{ services: Record<string, Array<{ state: number }>> }>
+ * }} bucket
+ * @param {{ ServiceType: { KeyValue: string }, PingState: { Ok: number } }} couchbase
+ */
+async function waitForBucketConnection (bucket, couchbase) {
+  const deadline = Date.now() + 8_000
+  while (Date.now() < deadline) {
+    const { services } = await bucket.ping({
+      serviceTypes: [couchbase.ServiceType.KeyValue],
+    })
+    const endpoints = services[couchbase.ServiceType.KeyValue] ?? []
+    for (const { state } of endpoints) {
+      if (state === couchbase.PingState.Ok) return
+    }
+    await setTimeout(10)
+  }
+  throw new Error('Couchbase KV connection did not become ready')
+}

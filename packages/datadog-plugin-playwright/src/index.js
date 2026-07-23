@@ -388,7 +388,10 @@ class PlaywrightPlugin extends CiPlugin {
       earlyFlakeAbortReason,
       onDone,
     }) => {
-      if (!span) return
+      if (!span) {
+        onDone?.()
+        return
+      }
 
       const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
 
