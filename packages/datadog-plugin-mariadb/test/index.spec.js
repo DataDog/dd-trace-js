@@ -2,12 +2,14 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const semver = require('semver')
 const ddpv = require('mocha/package.json').version
+const { storage } = require('../../datadog-core')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -38,6 +40,197 @@ function assertNoConnectionSpanLeak () {
 }
 
 describe('Plugin', () => {
+  describe('mariadb event adapter', () => {
+    const legacyStorage = storage('legacy')
+
+    afterEach(() => {
+      legacyStorage.enterWith(undefined)
+    })
+
+    it('keeps query subscriptions in one shared source adapter', () => {
+      const MariadbPlugin = require('../src')
+      const { MariadbSourceAdapter } = require('../src/query')
+      const plugin = new MariadbPlugin({}, {})
+      const adapter = new MariadbSourceAdapter()
+
+      assert.strictEqual(plugin._subscriptions.length, 0)
+      assert.strictEqual(plugin._bindings.length, 0)
+      assert.strictEqual(adapter._subscriptions.length, 6)
+      assert.strictEqual(adapter._bindings.length, 30)
+    })
+
+    it('routes source configuration through the shared database processor', () => {
+      const MariadbPlugin = require('../src')
+      const { sourceRuntime } = require('../src/query')
+      const tracer = {
+        _env: 'test',
+        _service: 'test',
+        _version: '1.0.0',
+      }
+      const plugin = new MariadbPlugin(tracer, {})
+      const config = { enabled: true, dbmPropagationMode: 'disabled' }
+
+      plugin.configure(config)
+      try {
+        assert.strictEqual(plugin._registry.getSource('db.query', 'mariadb').config, config)
+        assert.strictEqual(sourceRuntime.consumers.has(plugin), true)
+      } finally {
+        plugin.configure(false)
+      }
+
+      assert.strictEqual(plugin._registry.getSource('db.query', 'mariadb'), undefined)
+      assert.strictEqual(sourceRuntime.consumers.has(plugin), false)
+    })
+
+    it('normalizes command construction and completes it through semantic events', () => {
+      const { MariadbSourceAdapter } = require('../src/query')
+      const adapter = new MariadbSourceAdapter()
+      const startChannel = dc.channel('tracing:datadog:db:query:start')
+      const finishChannel = dc.channel('tracing:datadog:db:query:finish')
+      const expectedStore = { span: {} }
+      const onFinish = sinon.stub()
+      const command = {
+        opts: { database: 'test' },
+        sql: 'SELECT 1',
+      }
+      const context = { arguments: [], self: command }
+      let received
+
+      startChannel.bindStore(legacyStorage, event => {
+        received = event
+        event.data.statement = '/* injected */ SELECT 1'
+        return expectedStore
+      })
+      finishChannel.subscribe(onFinish)
+
+      try {
+        adapter.startCommand(context, false)
+
+        assert.strictEqual(received, context)
+        assert.strictEqual(context.data.scope, 'command')
+        assert.strictEqual(context.data.connection, command.opts)
+        assert.deepStrictEqual(context.source, { integration: 'mariadb', system: 'mariadb' })
+        assert.strictEqual(command.sql, '/* injected */ SELECT 1')
+
+        adapter.finishCommand({ arguments: [], self: command }, false)
+        sinon.assert.calledOnceWithExactly(onFinish, context, finishChannel.name)
+      } finally {
+        startChannel.unbindStore(legacyStorage)
+        finishChannel.unsubscribe(onFinish)
+      }
+    })
+
+    it('publishes command errors and completion exactly once', () => {
+      const { MariadbSourceAdapter } = require('../src/query')
+      const adapter = new MariadbSourceAdapter()
+      const errorChannel = dc.channel('tracing:datadog:db:query:error')
+      const finishChannel = dc.channel('tracing:datadog:db:query:finish')
+      const onError = sinon.stub()
+      const onFinish = sinon.stub()
+      const command = {
+        opts: { database: 'test' },
+        sql: 'SELECT 1',
+      }
+      const context = { arguments: [], self: command }
+      const error = new Error('query failed')
+
+      errorChannel.subscribe(onError)
+      finishChannel.subscribe(onFinish)
+      try {
+        adapter.startCommand(context, false)
+        adapter.finishCommand({ arguments: [error], self: command }, true)
+        adapter.finishCommand({ arguments: [error], self: command }, true)
+
+        assert.strictEqual(context.error, error)
+        sinon.assert.calledOnceWithExactly(onError, context, errorChannel.name)
+        sinon.assert.calledOnceWithExactly(onFinish, context, finishChannel.name)
+      } finally {
+        errorChannel.unsubscribe(onError)
+        finishChannel.unsubscribe(onFinish)
+      }
+    })
+
+    it('uses raw v2 constructor options for normalized connection metadata', () => {
+      const { MariadbSourceAdapter } = require('../src/query')
+      const adapter = new MariadbSourceAdapter()
+      const connection = { database: 'test', host: 'localhost' }
+      const command = { sql: 'SELECT 1' }
+      const context = {
+        arguments: [undefined, undefined, undefined, connection],
+        self: command,
+      }
+
+      adapter.startCommand(context, true)
+
+      assert.strictEqual(context.data.connection, connection)
+      adapter.finishCommand({ arguments: [], self: command }, false)
+    })
+
+    it('carries a v3 pool callback caller store into command construction', () => {
+      const { MariadbSourceAdapter } = require('../src/query')
+      const adapter = new MariadbSourceAdapter()
+      const parentStore = { span: { id: 'parent' } }
+      let callbackStore
+      const publicContext = {
+        arguments: ['SELECT 1', function callback () {
+          callbackStore = legacyStorage.getStore()
+        }],
+      }
+
+      legacyStorage.run(parentStore, () => adapter.bindUserQuery(publicContext, true))
+
+      const command = {
+        opts: { database: 'test' },
+        sql: 'SELECT 1',
+      }
+      const commandContext = {
+        arguments: [undefined, undefined, undefined, { callback: publicContext.arguments[1] }],
+        self: command,
+      }
+
+      legacyStorage.run({ noop: true }, () => adapter.startCommand(commandContext, false))
+
+      assert.strictEqual(commandContext.parentStore, parentStore)
+      assert.strictEqual(adapter.finishCommand({ arguments: [], self: command }, false), parentStore)
+
+      legacyStorage.run({ noop: true }, () => publicContext.arguments[1]())
+      assert.strictEqual(callbackStore, parentStore)
+    })
+
+    it('correlates a v3 promise pool command without parenting setup queries', () => {
+      const { MariadbSourceAdapter, poolQueryStorage } = require('../src/query')
+      const adapter = new MariadbSourceAdapter()
+      const parentStore = { span: { id: 'parent' } }
+      const noopStore = { noop: true }
+      const correlation = adapter.bindPoolQuery({
+        arguments: ['SELECT 1'],
+        parentStore,
+      })
+      const setupContext = {
+        arguments: [undefined, undefined, undefined, {}],
+        self: { opts: {}, sql: 'SET NAMES utf8mb4' },
+      }
+      const queryContext = {
+        arguments: [undefined, undefined, undefined, {}],
+        self: { opts: {}, sql: 'SELECT 1' },
+      }
+
+      legacyStorage.run(noopStore, () => {
+        poolQueryStorage.run(correlation, () => adapter.startCommand(setupContext, false))
+      })
+      assert.strictEqual(setupContext.parentStore, noopStore)
+      adapter.finishCommand({ arguments: [], self: setupContext.self }, false)
+
+      poolQueryStorage.run(correlation, () => {
+        adapter.correlatePoolRequest({ arguments: [queryContext.arguments[3]] })
+      })
+      legacyStorage.run(noopStore, () => adapter.startCommand(queryContext, false))
+      assert.strictEqual(queryContext.parentStore, parentStore)
+      assert.strictEqual(correlation.consumed, true)
+      adapter.finishCommand({ arguments: [], self: queryContext.self }, false)
+    })
+  })
+
   describe('mariadb', () => {
     withVersions('mariadb', 'mariadb', range, (version, _, resolvedVersion) => {
       let tracer
@@ -802,6 +995,39 @@ describe('Plugin', () => {
                 })
               })
             })
+          })
+        })
+      }
+
+      if (semver.satisfies(resolvedVersion, '<3')) {
+        describe('with a connection pool - v2 promises', () => {
+          let pool
+          let mariadb
+
+          afterEach(async () => {
+            if (pool) await pool.end()
+            await agent.close({ ritmReset: false })
+          })
+
+          beforeEach(async () => {
+            tracer = await agent.load('mariadb')
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+
+            pool = mariadb.createPool({
+              connectionLimit: 1,
+              host: 'localhost',
+              user: 'root',
+            })
+          })
+
+          it('emits one semantic span for the public pool query', async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                const querySpans = traces.flat().filter(span => span.resource === 'SELECT 1')
+                assert.strictEqual(querySpans.length, 1)
+              }, { spanResourceMatch: /SELECT 1/ }),
+              pool.query('SELECT 1'),
+            ])
           })
         })
       }

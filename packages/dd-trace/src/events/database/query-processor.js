@@ -73,6 +73,14 @@ class DatabaseQueryProcessor extends DatabasePlugin {
       config,
     }, event)
 
+    // A source adapter can deliberately observe an operation inside a noop
+    // package context. Once accepted here, its semantic lifecycle must remain
+    // visible to the shared processor's guarded error and finish subscribers.
+    if (event.currentStore?.noop) {
+      const { noop, ...currentStore } = event.currentStore
+      event.currentStore = currentStore
+    }
+
     data.statement = this.injectDbmQuery(span, data.statement, service.name, false, config)
 
     return event.currentStore

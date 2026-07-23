@@ -100,7 +100,11 @@ describe('sql-injection-analyzer', () => {
       sourceRegistry.registerContributor,
       'db.query',
       'iast.sql-injection',
-      { start: sinon.match.func, finish: sinon.match.func }
+      {
+        sources: sinon.match(value => value.has('mariadb') && value.has('mysql')),
+        start: sinon.match.func,
+        finish: sinon.match.func,
+      }
     )
   })
 
@@ -250,9 +254,19 @@ describe('sql-injection-analyzer', () => {
       sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1', store, 'MYSQL')
     })
 
-    it('should ignore normalized events from another database source', () => {
+    it('should analyze a normalized mariadb command event', () => {
       const event = {
         source: { integration: 'mariadb' },
+        data: { scope: 'command', statement: 'SELECT 1' },
+      }
+
+      assert.strictEqual(sqlInjectionAnalyzer.analyzeDatabaseQuery(event, store), store)
+      sinon.assert.calledOnceWithExactly(analyze, 'SELECT 1', store, 'MYSQL')
+    })
+
+    it('should ignore normalized events from another database source', () => {
+      const event = {
+        source: { integration: 'postgres' },
         data: { scope: 'connection', statement: 'SELECT 1' },
       }
 

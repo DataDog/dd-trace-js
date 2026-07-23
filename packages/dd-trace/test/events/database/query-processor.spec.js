@@ -65,6 +65,30 @@ describe('DatabaseQueryProcessor', () => {
     sinon.assert.notCalled(processor.startSpan)
   })
 
+  it('makes an accepted semantic lifecycle observable inside a noop source context', () => {
+    const registry = {
+      getSource: sinon.stub().returns({
+        config: { dbmPropagationMode: 'disabled' },
+      }),
+    }
+    const processor = new DatabaseQueryProcessor({}, {}, registry)
+    const event = createEvent('mariadb')
+    const span = {}
+
+    processor.serviceName = sinon.stub().returns({ name: 'mariadb-service' })
+    processor.operationName = sinon.stub().returns('mariadb.query')
+    processor.startSpan = sinon.stub().callsFake((name, options, event) => {
+      event.currentStore = { noop: true, span }
+      return span
+    })
+    processor.injectDbmQuery = sinon.stub().callsFake((span, statement) => statement)
+
+    const store = processor.bindStart(event)
+
+    assert.deepStrictEqual(store, { span })
+    assert.deepStrictEqual(event.currentStore, { span })
+  })
+
   it('processes concurrent package sources through one semantic store binding', () => {
     const tracer = {
       _env: 'test',

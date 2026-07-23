@@ -1,8 +1,14 @@
 'use strict'
 
+const { DatabaseQueryProcessor } = require('../../dd-trace/src/events/database')
+const { getEventDomainRegistry } = require('../../dd-trace/src/events/registry')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const connectionPlugins = require('./connection')
-const queryPlugins = require('./query')
+const {
+  MARIADB_SOURCE,
+  mariadbAdapter,
+  sourceRegistry,
+} = require('./query')
 
 const [
   CreateConnectionPlugin,
@@ -14,14 +20,6 @@ const [
   V2PoolBaseGetConnectionPlugin,
 ] = connectionPlugins
 
-const [
-  MariadbQueryContextPlugin,
-  V2PoolQueryPlugin,
-  QueryCommandPlugin,
-  V2QueryCommandPlugin,
-  CommandCompletionPlugin,
-] = queryPlugins
-
 class MariadbPlugin extends CompositePlugin {
   static id = 'mariadb'
   static plugins = {
@@ -32,11 +30,47 @@ class MariadbPlugin extends CompositePlugin {
     v2Connection: V2ConnectionPlugin,
     v2PoolBase: V2PoolBasePlugin,
     v2PoolGetConnection: V2PoolBaseGetConnectionPlugin,
-    queryContext: MariadbQueryContextPlugin,
-    v2PoolQuery: V2PoolQueryPlugin,
-    queryCommand: QueryCommandPlugin,
-    v2QueryCommand: V2QueryCommandPlugin,
-    commandCompletion: CommandCompletionPlugin,
+  }
+
+  /**
+   * @param {object} tracer Tracer instance.
+   * @param {object} tracerConfig Global tracer configuration.
+   */
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
+
+    this._registry = getEventDomainRegistry(tracer, tracerConfig)
+    this._registry.registerProcessor({
+      operation: DatabaseQueryProcessor.eventOperation,
+      Processor: DatabaseQueryProcessor,
+    })
+    this._registry.registerSource({
+      operation: DatabaseQueryProcessor.eventOperation,
+      source: MARIADB_SOURCE.integration,
+      adapter: mariadbAdapter,
+    })
+  }
+
+  /**
+   * Configure MariaDB processing while sharing one database span processor.
+   *
+   * @param {boolean|object} config MariaDB plugin configuration.
+   * @returns {void}
+   */
+  configure (config) {
+    const enabled = typeof config === 'boolean' ? config : config?.enabled !== false
+    const operation = DatabaseQueryProcessor.eventOperation
+    const source = MARIADB_SOURCE.integration
+
+    if (enabled) {
+      this._registry.configureSource(operation, source, config)
+      sourceRegistry.acquireSource(operation, source, this)
+    } else {
+      sourceRegistry.releaseSource(operation, source, this)
+      this._registry.configureSource(operation, source, config)
+    }
+
+    super.configure(config)
   }
 }
 

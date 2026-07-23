@@ -3,91 +3,55 @@
 const { channel } = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
-const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const { startQuerySpan } = require('../../datadog-plugin-mysql/src/shared')
+const { SemanticLifecycleBridge } = require('../../dd-trace/src/events/bridge')
+const {
+  channels: databaseChannels,
+  DatabaseQueryProcessor,
+} = require('../../dd-trace/src/events/database')
+const { getEventSourceRegistry } = require('../../dd-trace/src/events/source-registry')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
 
 const DD_CONF = '__ddConf'
-const DD_SPAN = Symbol('dd-mariadb-span')
-
-// Stash caller's async-context store on the Command instance so completion
-// channels can restore it inside the user callback. Needed because v2's
-// _queryCallback is an arrow assigned to a this-property; orchestrion's
-// arrow wrap misroutes (sql, cb) calls to the promise path, dropping
-// :asyncStart. Binding at successEnd / throwError re-establishes context
-// synchronously around the this.resolve / this.reject call.
-const DD_PARENT_STORE = Symbol('dd-mariadb-parent-store')
+const DD_CALLBACK_STORE = Symbol('dd-mariadb-callback-store')
+const DD_POOL_QUERY = Symbol('dd-mariadb-pool-query')
+const DD_PUBLIC_QUERY = Symbol('dd-mariadb-public-query')
+const DD_QUERY_CONTEXT = Symbol('dd-mariadb-query-context')
 
 const legacyStorage = storage('legacy')
+const poolQueryStorage = storage('mariadb-pool-query')
+const sourceRegistry = getEventSourceRegistry()
 
-/**
- * Store binding that intentionally bypasses Plugin's noop-store guard.
- *
- * Command completion can run on a pool socket async resource that was marked
- * noop to suppress connection-establishment spans. User query commands still
- * need to finish their already-created spans, so this binding restores only
- * the store stashed on those Command instances.
- */
-class DirectStoreBinding {
-  /**
-   * @param {string} event - Diagnostic channel event name
-   * @param {(ctx: object) => object | undefined} transform - Store transform
-   */
-  constructor (event, transform) {
-    this._channel = channel(event)
-    this._transform = transform
-  }
+const MARIADB_SOURCE = Object.freeze({
+  integration: 'mariadb',
+  system: 'mariadb',
+})
 
-  /**
-   * Enables this store binding.
-   *
-   * @returns {void}
-   */
-  enable () {
-    this._channel.bindStore(legacyStorage, this._transform)
-  }
-
-  /**
-   * Disables this store binding.
-   *
-   * @returns {void}
-   */
-  disable () {
-    this._channel.unbindStore(legacyStorage)
-  }
+const channels = {
+  start: databaseChannels.queryStart,
+  error: databaseChannels.queryError,
+  finish: databaseChannels.queryFinish,
 }
 
-class DirectSubscription {
-  /**
-   * @param {string} event - Diagnostic channel event name
-   * @param {(ctx: object) => void} handler - Event handler
-   */
-  constructor (event, handler) {
-    this._channel = channel(event)
-    this._handler = handler
-  }
+const commandLifecycle = new SemanticLifecycleBridge({
+  operation: DatabaseQueryProcessor.eventOperation,
+  channels,
+  normalize: normalizeCommandQuery,
+  shouldPublishSemantic: context => !context[DD_PUBLIC_QUERY],
+  sourceRegistry,
+})
 
-  /**
-   * Enables this subscription.
-   *
-   * @returns {void}
-   */
-  enable () {
-    this._channel.subscribe(this._handler)
-  }
+const v2PoolLifecycle = new SemanticLifecycleBridge({
+  operation: DatabaseQueryProcessor.eventOperation,
+  channels,
+  normalize: normalizeV2PoolQuery,
+  sourceRegistry,
+})
 
-  /**
-   * Disables this subscription.
-   *
-   * @returns {void}
-   */
-  disable () {
-    this._channel.unsubscribe(this._handler)
-  }
-}
+const mariadbAdapter = Object.freeze({
+  normalizeCommandQuery,
+  normalizeV2PoolQuery,
+})
 
-// User-facing API channels that only need context propagation (no spans).
-// A single plugin instance subscribes to all of them rather than one class
-// per channel.
 const USER_FACING_CHANNELS = [
   'ConnectionCallback_query',
   'ConnectionCallback_execute',
@@ -103,215 +67,396 @@ const USER_FACING_CHANNELS = [
   'PrepareResultPacket_execute',
 ]
 
-// Subscribes to all user-facing query/execute channels and handles only
-// context propagation — capturing parentStore at :start so that
-// wrapCallback's asyncStart.runStores can restore it inside user callbacks.
-// currentStore is a compatibility marker for restores that happen while the
-// current async resource is intentionally marked noop.
-// Span lifecycle is owned by the Command-level plugins below.
-class MariadbQueryContextPlugin extends DatabasePlugin {
+/**
+ * Bind a user callback to its caller store and expose that store to commands.
+ *
+ * @param {Function} callback User callback.
+ * @param {object|undefined} parentStore Caller store.
+ * @returns {Function} Context-bound callback.
+ */
+function createContextBoundCallback (callback, parentStore) {
+  function wrappedUserCallback (...callbackArgs) {
+    return legacyStorage.run(parentStore, () => callback.apply(this, callbackArgs))
+  }
+
+  wrappedUserCallback[DD_CALLBACK_STORE] = parentStore
+  return wrappedUserCallback
+}
+
+/**
+ * Store binding that restores command context through an intentional noop store.
+ */
+class DirectStoreBinding {
+  /**
+   * @param {string} event Diagnostic channel event name.
+   * @param {(context: object) => object|undefined} transform Store transform.
+   * @param {object} [store] Storage namespace to bind.
+   */
+  constructor (event, transform, store = legacyStorage) {
+    this._channel = channel(event)
+    this._store = store
+    this._transform = transform
+  }
+
+  /**
+   * Enable this store binding.
+   *
+   * @returns {void}
+   */
+  enable () {
+    this._channel.bindStore(this._store, this._transform)
+  }
+
+  /**
+   * Disable this store binding.
+   *
+   * @returns {void}
+   */
+  disable () {
+    this._channel.unbindStore(this._store)
+  }
+}
+
+/**
+ * Subscription that observes user commands even when pool internals use noop.
+ */
+class DirectSubscription {
+  /**
+   * @param {string} event Diagnostic channel event name.
+   * @param {(context: object) => void} handler Event handler.
+   */
+  constructor (event, handler) {
+    this._channel = channel(event)
+    this._handler = handler
+  }
+
+  /**
+   * Enable this subscription.
+   *
+   * @returns {void}
+   */
+  enable () {
+    this._channel.subscribe(this._handler)
+  }
+
+  /**
+   * Disable this subscription.
+   *
+   * @returns {void}
+   */
+  disable () {
+    this._channel.unsubscribe(this._handler)
+  }
+}
+
+/**
+ * Translate package-scoped MariaDB events into the normalized database lifecycle.
+ */
+class MariadbSourceAdapter extends Plugin {
   static id = 'mariadb'
-  static system = 'mariadb'
-  static operation = 'query'
 
   constructor () {
-    super(...arguments)
+    super()
+
     for (const name of USER_FACING_CHANNELS) {
       const prefix = `tracing:orchestrion:mariadb:${name}`
-      this.addBind(`${prefix}:start`, ctx => {
-        ctx.parentStore = legacyStorage.getStore()
-        ctx.currentStore = ctx.parentStore
-        return ctx.parentStore
-      })
-      this.addBind(`${prefix}:asyncStart`, ctx => ctx.parentStore)
+      const wrapCallback = name === 'PoolCallback_query' || name === 'PoolCallback_execute'
+      this.addBind(`${prefix}:start`, context => this.bindUserQuery(context, wrapCallback))
+      if (name === 'PoolPromise_query' || name === 'PoolPromise_execute') {
+        this._bindings.push(new DirectStoreBinding(
+          `${prefix}:start`,
+          context => this.bindPoolQuery(context),
+          poolQueryStorage
+        ))
+      }
+      this.addBind(`${prefix}:asyncStart`, context => this.bindUserQueryAsyncStart(context))
+    }
+
+    const v2PoolPrefix = 'tracing:orchestrion:mariadb:v2PoolBase_query'
+    this.addBind(`${v2PoolPrefix}:start`, context => this.bindV2PoolQuery(context))
+    this.addBind(`${v2PoolPrefix}:asyncStart`, context => this.bindV2PoolQueryAsyncStart(context))
+    this.addSub(`${v2PoolPrefix}:error`, context => this.errorV2PoolQuery(context))
+    this.addSub(`${v2PoolPrefix}:asyncEnd`, context => this.endV2PoolQuery(context))
+
+    this._subscriptions.push(
+      new DirectSubscription(
+        'tracing:orchestrion:mariadb:Query_construct:end',
+        context => this.startCommand(context, false)
+      ),
+      new DirectSubscription(
+        'tracing:orchestrion:mariadb:Execute_construct:end',
+        context => this.startCommand(context, false)
+      ),
+      new DirectSubscription(
+        'tracing:orchestrion:mariadb:v2Query_construct:end',
+        context => this.startCommand(context, true)
+      ),
+      new DirectSubscription(
+        'tracing:orchestrion:mariadb:Pool_getConnection:start',
+        context => this.correlatePoolRequest(context)
+      )
+    )
+
+    this.addDirectBind(
+      'tracing:orchestrion:mariadb:Command_successEnd:start',
+      context => this.finishCommand(context, false)
+    )
+    this.addDirectBind(
+      'tracing:orchestrion:mariadb:Command_throwError:start',
+      context => this.finishCommand(context, true)
+    )
+  }
+
+  /**
+   * Capture caller context for user-facing callback and promise APIs.
+   *
+   * @param {object} context Orchestrion query context.
+   * @param {boolean} wrapCallback Whether this API lacks an asyncStart callback phase.
+   * @returns {object|undefined} Caller store.
+   */
+  bindUserQuery (context, wrapCallback = false) {
+    context.parentStore = legacyStorage.getStore()
+    context.currentStore = context.parentStore
+
+    if (wrapCallback) {
+      this.wrapUserCallback(context, context.parentStore)
+    }
+
+    return context.parentStore
+  }
+
+  /**
+   * Preserve caller context for v3 pool callbacks that run after a sync end.
+   *
+   * @param {object} context Orchestrion query context.
+   * @param {object|undefined} parentStore Caller store.
+   * @returns {void}
+   */
+  wrapUserCallback (context, parentStore) {
+    const args = context.arguments
+    if (!args) return
+
+    for (let index = args.length - 1; index >= 0; index--) {
+      const callback = args[index]
+      if (typeof callback !== 'function') continue
+
+      args[index] = createContextBoundCallback(callback, parentStore)
+      return
     }
   }
-}
-
-class V2PoolQueryPlugin extends DatabasePlugin {
-  static id = 'mariadb'
-  static system = 'mariadb'
-  static operation = 'query'
-  static prefix = 'tracing:orchestrion:mariadb:v2PoolBase_query'
 
   /**
-   * Starts the public v2 pool query span before pool internals enter noop.
+   * Restore caller context around user callback and promise continuations.
    *
-   * @param {object} ctx - Orchestrion channel context
-   * @returns {object | undefined} Store containing the query span
+   * @param {object} context Orchestrion query context.
+   * @returns {object|undefined} Caller store.
    */
-  bindStart (ctx) {
-    ctx.parentStore = legacyStorage.getStore()
-    ctx.sql = ctx.arguments?.[0]?.sql || ctx.arguments?.[0]
-    ctx.conf = ctx.self?.[DD_CONF] || {}
-    startQuerySpan(this, ctx)
-
-    return ctx.currentStore
+  bindUserQueryAsyncStart (context) {
+    return context.parentStore
   }
 
   /**
-   * Restores the caller context for promise continuations.
+   * Correlate a promise pool call after pool internals clear legacy storage.
    *
-   * @param {object} ctx - Orchestrion channel context
-   * @returns {object | undefined} Parent store captured at start
+   * @param {object} context Orchestrion query context.
+   * @returns {object} Package-local correlation store.
    */
-  bindAsyncStart (ctx) {
-    return ctx.parentStore
+  bindPoolQuery (context) {
+    const query = context.arguments?.[0]
+
+    return {
+      consumed: false,
+      parentStore: context.parentStore ?? legacyStorage.getStore(),
+      statement: query?.sql || query,
+    }
   }
 
   /**
-   * Finishes the public v2 pool query span.
+   * Carry a pool query token through MariaDB's internal callback resource.
    *
-   * @param {object} ctx - Orchestrion channel context
+   * @param {object} context Orchestrion getConnection context.
    * @returns {void}
    */
-  asyncEnd (ctx) {
-    this.finish(ctx)
-  }
-}
+  correlatePoolRequest (context) {
+    const correlation = poolQueryStorage.getStore()
+    const commandParameters = context.arguments?.[0]
 
-class MariadbCommandPlugin extends DatabasePlugin {
-  static id = 'mariadb'
-  static system = 'mariadb'
-  static operation = 'query'
-  static directCommandSubscription = true
-
-  constructor () {
-    super(...arguments)
-    const prefix = this.constructor.prefix
-    // Wire span creation to :end so ctx.self (the Command instance) is
-    // populated — this.sql and this.opts are set by the time super() returns.
-    this.addCommandSub(`${prefix}:end`, ctx => this.startSpanFromCommand(ctx))
+    if (correlation && commandParameters && typeof commandParameters === 'object') {
+      commandParameters[DD_POOL_QUERY] = correlation
+    }
   }
 
   /**
-   * Adds a command-constructor subscription.
+   * Start the public v2 pool query before pool internals enter noop.
    *
-   * @param {string} event - Diagnostic channel event name
-   * @param {(ctx: object) => void} handler - Event handler
-   * @returns {void}
+   * @param {object} context Orchestrion pool query context.
+   * @returns {object|undefined} Semantic database operation store.
    */
-  addCommandSub (event, handler) {
-    if (this.constructor.directCommandSubscription) {
-      this._subscriptions.push(new DirectSubscription(event, handler))
+  bindV2PoolQuery (context) {
+    const query = context.arguments[0]
+    const store = v2PoolLifecycle.start(context)
+
+    if (query?.sql) {
+      query.sql = context.data.statement
     } else {
-      this.addSub(event, handler)
+      context.arguments[0] = context.data.statement
     }
-  }
 
-  // Returns the connection config for span metadata.
-  // V2QueryCommandPlugin overrides this because v2's configAssign strips
-  // host/user/database/port from cmd.opts.
-  getConf (ctx, cmd) {
-    return cmd.opts || {}
-  }
-
-  startSpanFromCommand (ctx) {
-    const cmd = ctx.self
-    if (!cmd) return
-
-    ctx.sql = cmd.sql
-    ctx.conf = this.getConf(ctx, cmd)
-    startQuerySpan(this, ctx, { childOf: this.activeSpan })
-
-    cmd.sql = ctx.sql
-    cmd[DD_SPAN] = ctx.currentStore?.span
-    cmd[DD_PARENT_STORE] = ctx.parentStore?.noop ? undefined : ctx.parentStore
-  }
-}
-
-// Handles both Query and Execute constructors — same span logic, different channel.
-class QueryCommandPlugin extends MariadbCommandPlugin {
-  static id = 'mariadb'
-  static prefix = 'tracing:orchestrion:mariadb:Query_construct'
-
-  constructor () {
-    super(...arguments)
-    this.addCommandSub('tracing:orchestrion:mariadb:Execute_construct:end', ctx => this.startSpanFromCommand(ctx))
-  }
-}
-
-class V2QueryCommandPlugin extends MariadbCommandPlugin {
-  static id = 'mariadb'
-  static prefix = 'tracing:orchestrion:mariadb:v2Query_construct'
-  static directCommandSubscription = false
-
-  // v2 configAssign strips host/user/database/port from this.opts;
-  // the raw connOpts is passed as constructor argument index 3.
-  getConf (ctx) {
-    return ctx.arguments?.[3] || {}
-  }
-}
-
-// Handles both Command.successEnd and Command.throwError in one plugin.
-// addBind restores the caller's store (so user callbacks fire in the right
-// async context); addSub finishes the span and tags errors.
-class CommandCompletionPlugin extends DatabasePlugin {
-  static id = 'mariadb'
-  static system = 'mariadb'
-  static operation = 'query'
-
-  constructor () {
-    super(...arguments)
-    const SUCCESS = 'tracing:orchestrion:mariadb:Command_successEnd'
-    const THROW = 'tracing:orchestrion:mariadb:Command_throwError'
-    this.addDirectBind(`${SUCCESS}:start`, ctx => this.restoreCommandStore(ctx))
-    this.addSub(`${SUCCESS}:start`, ctx => this.finishSpan(ctx, false))
-    this.addDirectBind(`${THROW}:start`, ctx => this.restoreCommandStore(ctx))
-    this.addSub(`${THROW}:start`, ctx => this.finishSpan(ctx, true))
+    return { ...store, [DD_PUBLIC_QUERY]: true }
   }
 
   /**
-   * Adds a command-completion store binding that can restore through noop.
+   * Restore caller context around v2 pool query continuations.
    *
-   * @param {string} event - Diagnostic channel event name
-   * @param {(ctx: object) => object | undefined} transform - Store transform
+   * @param {object} context Orchestrion pool query context.
+   * @returns {object|undefined} Caller store.
+   */
+  bindV2PoolQueryAsyncStart (context) {
+    return context.parentStore
+  }
+
+  /**
+   * Publish a v2 pool query error without completing it twice.
+   *
+   * @param {object} context Orchestrion pool query context.
+   * @returns {void}
+   */
+  errorV2PoolQuery (context) {
+    v2PoolLifecycle.error(context)
+  }
+
+  /**
+   * Finish a v2 pool query after callback or promise completion.
+   *
+   * @param {object} context Orchestrion pool query context.
+   * @returns {void}
+   */
+  endV2PoolQuery (context) {
+    v2PoolLifecycle.finish(context)
+  }
+
+  /**
+   * Start a v2 or v3 command lifecycle after its constructor initializes SQL.
+   *
+   * @param {object} context Orchestrion command constructor context.
+   * @param {boolean} version2 Whether the command uses the v2 constructor shape.
+   * @returns {void}
+   */
+  startCommand (context, version2) {
+    const command = context.self
+    if (!command) return
+
+    const callback = version2 ? undefined : context.arguments?.[3]?.callback
+    const poolQuery = context.arguments?.[3]?.[DD_POOL_QUERY] || poolQueryStorage.getStore()
+    let currentStore = legacyStorage.getStore()
+
+    if (poolQuery && !poolQuery.consumed && poolQuery.statement === command.sql) {
+      poolQuery.consumed = true
+      currentStore = poolQuery.parentStore
+    }
+    if (callback && Object.hasOwn(callback, DD_CALLBACK_STORE)) {
+      currentStore = callback[DD_CALLBACK_STORE]
+    }
+
+    context.connection = version2 ? context.arguments?.[3] : command.opts
+    context.currentStore = currentStore
+    context[DD_PUBLIC_QUERY] = currentStore?.[DD_PUBLIC_QUERY] === true
+    legacyStorage.run(currentStore, () => commandLifecycle.start(context))
+
+    command.sql = context.data.statement
+    command[DD_QUERY_CONTEXT] = context
+  }
+
+  /**
+   * Complete a command and return the store used by its user callback.
+   *
+   * @param {object} context Orchestrion command completion context.
+   * @param {boolean} isError Whether the command is completing with an error.
+   * @returns {object|undefined} Store restored around command completion.
+   */
+  finishCommand (context, isError) {
+    const command = context.self
+    const queryContext = command?.[DD_QUERY_CONTEXT]
+    if (!queryContext) return legacyStorage.getStore()
+
+    if (isError) {
+      queryContext.error = context.arguments?.[0]
+      commandLifecycle.error(queryContext)
+    }
+
+    let store = commandLifecycle.finish(queryContext)
+    if (store?.noop) store = queryContext.parentStore?.noop ? undefined : queryContext.parentStore
+    command[DD_QUERY_CONTEXT] = undefined
+
+    return store
+  }
+
+  /**
+   * Add a command-completion binding that can restore through noop.
+   *
+   * @param {string} event Diagnostic channel event name.
+   * @param {(context: object) => object|undefined} transform Store transform.
    * @returns {void}
    */
   addDirectBind (event, transform) {
     this._bindings.push(new DirectStoreBinding(event, transform))
   }
-
-  /**
-   * Restores the store for command completion.
-   *
-   * A command with a Datadog span but no parent store is a root query span; it
-   * must complete under an undefined store, not the active noop pool store.
-   * Commands without Datadog spans are pool-internal work and should preserve
-   * the active store.
-   *
-   * @param {{ self?: object }} ctx - Orchestrion channel context
-   * @returns {object | undefined}
-   */
-  restoreCommandStore (ctx) {
-    const cmd = ctx.self
-    if (cmd?.[DD_SPAN]) {
-      return cmd[DD_PARENT_STORE]
-    }
-    return legacyStorage.getStore()
-  }
-
-  finishSpan (ctx, isError) {
-    const cmd = ctx.self
-    if (!cmd) return
-    const span = cmd[DD_SPAN]
-    if (!span) return
-    cmd[DD_SPAN] = undefined
-    cmd[DD_PARENT_STORE] = undefined
-
-    if (isError && ctx.arguments?.[0]) {
-      this.addError(ctx.arguments[0], span)
-    }
-
-    this.tagPeerService(span)
-    span.finish()
-  }
 }
 
-module.exports = [
-  MariadbQueryContextPlugin,
-  V2PoolQueryPlugin,
-  QueryCommandPlugin,
-  V2QueryCommandPlugin,
-  CommandCompletionPlugin,
-]
+/**
+ * Normalize a v2 or v3 command query in place.
+ *
+ * @param {object} context Orchestrion command constructor context.
+ * @returns {object} Normalized database query event.
+ */
+function normalizeCommandQuery (context) {
+  context.v = 1
+  context.kind = 'database'
+  context.operation = 'query'
+  context.source = MARIADB_SOURCE
+  context.data = {
+    scope: 'command',
+    statement: context.self.sql,
+    connection: context.connection || {},
+  }
+
+  return context
+}
+
+/**
+ * Normalize a public v2 pool query in place.
+ *
+ * @param {object} context Orchestrion pool query context.
+ * @returns {object} Normalized database query event.
+ */
+function normalizeV2PoolQuery (context) {
+  const query = context.arguments[0]
+
+  context.v = 1
+  context.kind = 'database'
+  context.operation = 'query'
+  context.source = MARIADB_SOURCE
+  context.data = {
+    scope: 'pool',
+    statement: query?.sql || query,
+    connection: context.self?.[DD_CONF] || {},
+  }
+
+  return context
+}
+
+const sourceRuntime = sourceRegistry.registerSource({
+  operation: DatabaseQueryProcessor.eventOperation,
+  source: MARIADB_SOURCE.integration,
+  owner: 'datadog-plugin-mariadb',
+  create: () => new MariadbSourceAdapter(),
+})
+
+module.exports = {
+  MARIADB_SOURCE,
+  MariadbSourceAdapter,
+  mariadbAdapter,
+  poolQueryStorage,
+  sourceRegistry,
+  sourceRuntime,
+}
