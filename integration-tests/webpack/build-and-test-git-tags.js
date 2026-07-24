@@ -9,6 +9,7 @@ const { spawnSync } = require('child_process')
 const assert = require('assert')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
+const experiments = require('./webpack-experiments')
 
 const OUTFILE = path.join(__dirname, 'git-tags-out.js')
 
@@ -17,6 +18,7 @@ const compiler = webpack({
   entry: path.join(__dirname, 'basic-test.js'),
   target: 'node',
   externalsType: 'commonjs',
+  ...(experiments && { experiments }),
   output: {
     filename: 'git-tags-out.js',
     path: __dirname,

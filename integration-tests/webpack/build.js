@@ -6,12 +6,14 @@
 const path = require('path')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
+const experiments = require('./webpack-experiments')
 
 const compiler = webpack({
   mode: 'development',
   entry: path.join(__dirname, 'basic-test.js'),
   target: 'node',
   externalsType: 'commonjs',
+  ...(experiments && { experiments }),
   output: {
     filename: 'out.js',
     path: __dirname,
