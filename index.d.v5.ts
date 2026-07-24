@@ -3940,20 +3940,35 @@ declare namespace tracer {
       flush (): void
     }
 
+    /** JSON-serializable value accepted by LLMObs Experiments. */
+    type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
     /**
      * A task run over each dataset record during an experiment.
      */
-    type ExperimentTask = (input: any, config: Record<string, any>) => any | Promise<any>
+    type ExperimentTask = (
+      input: JSONType,
+      config: Record<string, JSONType>
+    ) => JSONType | Promise<JSONType>
 
     /**
      * Scores a single task output. The return type selects the metric:
      * `boolean` -> boolean, `number` -> score, anything else -> categorical.
      */
-    type ExperimentEvaluator = (input: any, output: any, expectedOutput: any) => any | Promise<any>
+    type ExperimentEvaluator = (
+      input: JSONType,
+      output: JSONType,
+      expectedOutput: JSONType
+    ) => JSONType | Promise<JSONType>
 
     interface CreateDatasetOptions {
       description?: string
-      records?: Array<{ id?: string, inputData: any, expectedOutput?: any, metadata?: Record<string, any> }>
+      records?: Array<{
+        id?: string,
+        inputData: JSONType,
+        expectedOutput?: JSONType,
+        metadata?: Record<string, JSONType>
+      }>
     }
 
     interface CreateDatasetFromCsvOptions {
@@ -3972,7 +3987,7 @@ declare namespace tracer {
       /** Evaluators keyed by metric label. */
       evaluators?: Record<string, ExperimentEvaluator>
       description?: string
-      config?: Record<string, any>
+      config?: Record<string, JSONType>
       tags?: Record<string, string>
     }
 
@@ -3991,13 +4006,13 @@ declare namespace tracer {
       traceId: string
       startNs: number
       durationNs: number
-      input: any
-      output: any
-      expectedOutput: any
+      input: JSONType
+      output: JSONType
+      expectedOutput: JSONType
       readonly isError: boolean
       errorType: string | null
       errorMessage: string | null
-      evaluations: Record<string, any>
+      evaluations: Record<string, JSONType>
       evaluationErrors: Record<string, string>
     }
 
@@ -4016,7 +4031,7 @@ declare namespace tracer {
     }
 
     interface Dataset {
-      addRecord (input: any, expectedOutput?: any, metadata?: Record<string, any>): Dataset
+      addRecord (input: JSONType, expectedOutput?: JSONType, metadata?: Record<string, JSONType>): Dataset
       /** Creates the dataset remotely if needed and pushes any unpushed records. */
       push (): Promise<DatasetPushResult>
       name (): string
@@ -4024,7 +4039,12 @@ declare namespace tracer {
       projectId (): string | null
       version (): number | null
       latestVersion (): number | null
-      records (): Array<{ id: string | null, input: any, expectedOutput: any, metadata: Record<string, any> }>
+      records (): Array<{
+        id: string | null,
+        input: JSONType,
+        expectedOutput: JSONType,
+        metadata: Record<string, JSONType>
+      }>
       /** Dashboard URL for the dataset, or null until pushed. */
       url (): string | null
     }
