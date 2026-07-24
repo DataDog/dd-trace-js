@@ -5,8 +5,9 @@ const { join } = require('path')
 const { pathToFileURL } = require('url')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-const { waitForAsyncEnd } = require('./transforms')
 const instrumentations = require('./instrumentations')
+const { getRewriteTarget } = require('./targets')
+const { waitForAsyncEnd } = require('./transforms')
 
 // `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
 // (ESM) statements that the transformer splices into the rewritten module.
@@ -41,18 +42,23 @@ for (const matcher of [matcherCjs, matcherEsm]) {
 // string literals as this file's own inline map.
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
-function rewrite (content, filename, format) {
+/**
+ * @param {string|Buffer|ArrayBuffer|Uint8Array} content
+ * @param {string} filename
+ * @param {string} [format]
+ * @param {{ moduleName: string, filePath: string }} [target]
+ * @returns {string|Buffer|ArrayBuffer|Uint8Array}
+ */
+function rewrite (content, filename, format, target) {
   if (!content) return content
-  if (!filename.includes('node_modules')) return content
+
+  target ||= getRewriteTarget(filename)
+  if (!target) return content
 
   filename = filename.replace('file://', '')
 
   const moduleType = format === 'module' ? 'esm' : 'cjs'
-  const [modulePath] = filename.split('/node_modules/').reverse()
-  const moduleParts = modulePath.split('/')
-  const splitIndex = moduleParts[0].startsWith('@') ? 2 : 1
-  const moduleName = moduleParts.slice(0, splitIndex).join('/')
-  const filePath = moduleParts.slice(splitIndex).join('/')
+  const { moduleName, filePath } = target
   const version = getVersion(filename, filePath)
 
   if (disabled.has(moduleName)) return content
