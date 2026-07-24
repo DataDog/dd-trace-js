@@ -72,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      onDone,
     }) => {
       this._exportPendingWorkerTraces()
       const {
@@ -127,7 +128,7 @@ class CucumberPlugin extends CiPlugin {
       })
 
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:cucumber:test-suite:start', ({

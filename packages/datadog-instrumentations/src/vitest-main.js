@@ -16,6 +16,7 @@ const {
   getTestSuitePath,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook } = require('./helpers/instrument')
 const noWorkerInit = require('./vitest-main-no-worker-init')
 const {
@@ -38,7 +39,6 @@ const {
   workerReportLogsCh,
   codeCoverageReportCh,
   findExportByName,
-  getChannelPromise,
   getTypeTasks,
   getWorkspaceProject,
   setProvidedContext,
@@ -433,7 +433,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       err,
       libraryConfig,
       requestErrorTags: receivedRequestErrorTags = {},
-    } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
+    } = await getChannelPromise(libraryConfigurationCh, {
+      frameworkVersion,
       isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
     })
     requestErrorTags = receivedRequestErrorTags
@@ -450,7 +451,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   resetMainProcessProvidedContext(ctx)
 
   if (testSessionConfigurationCh.hasSubscribers) {
-    testSessionConfiguration = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    testSessionConfiguration = await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     const {
       testSessionId,
       testModuleId,
@@ -494,7 +495,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
 
   if (isKnownTestsEnabled) {
     const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
-    if (currentKnownTestsResponse.err) {
+    if (!currentKnownTestsResponse || currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
     } else {
       knownTests = currentKnownTestsResponse.knownTests
@@ -538,12 +539,13 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   }
 
   if (isTestManagementTestsEnabled) {
-    const { err, testManagementTests: receivedTestManagementTests } =
+    const testManagementResponse =
       testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
-    if (err) {
+    if (!testManagementResponse || testManagementResponse.err) {
       isTestManagementTestsEnabled = false
       log.error('Could not get test management tests.')
     } else {
+      const { testManagementTests: receivedTestManagementTests } = testManagementResponse
       testManagementTests = receivedTestManagementTests
       testManagementTestsBySuite = getTestManagementTestsBySuite(receivedTestManagementTests)
       shouldSendTestProperties = true
@@ -558,8 +560,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
 
   if (isImpactedTestsEnabled) {
     const modifiedFilesResponse = await getChannelPromise(modifiedFilesCh)
-    const { err } = modifiedFilesResponse
-    if (err) {
+    if (!modifiedFilesResponse || modifiedFilesResponse.err) {
       log.error('Could not get modified tests.')
     } else {
       modifiedFiles = modifiedFilesResponse.modifiedFiles
@@ -812,18 +813,13 @@ function getFinishWrapper (exitOrClose) {
       return exitOrClose.apply(this, arguments)
     }
 
-    let onFinish
-
-    const flushPromise = new Promise(resolve => {
-      onFinish = resolve
-    })
     const failedSuites = this.state.getFailedFilepaths()
     let error
     if (failedSuites.length) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
-    testSessionFinishCh.publish({
+    const flushPromise = getChannelPromise(testSessionFinishCh, {
       status: getSessionStatus(this.state),
       testCodeCoverageLinesTotal,
       error,
@@ -833,7 +829,6 @@ function getFinishWrapper (exitOrClose) {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
-      onFinish,
     })
 
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
@@ -842,9 +837,7 @@ function getFinishWrapper (exitOrClose) {
 
     // If coverage was generated, publish coverage report channel for upload
     if (coverageRootDir && codeCoverageReportCh.hasSubscribers) {
-      await new Promise((resolve) => {
-        codeCoverageReportCh.publish({ rootDir: coverageRootDir, onDone: resolve })
-      })
+      await getChannelPromise(codeCoverageReportCh, { rootDir: coverageRootDir })
     }
 
     return exitOrClose.apply(this, arguments)
@@ -1213,16 +1206,11 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
     testSuiteErrorCh.runStores(testSuiteCtx, () => {})
   }
 
-  let onFinish
-  const onFinishPromise = new Promise(resolve => {
-    onFinish = resolve
-  })
-  testSuiteFinishCh.publish({
+  await getChannelPromise(testSuiteFinishCh, {
+    frameworkVersion,
     status: getTypecheckTaskStatus(file),
-    onFinish,
     ...testSuiteCtx.currentStore,
   })
-  await onFinishPromise
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
@@ -1234,7 +1222,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
   }
   const providedContext = getMainProcessProvidedContext(ctx)
   const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
-    ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    ? await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     : {}
 
   await Promise.all(result.files.map(file => reportTypecheckFile(

@@ -182,6 +182,14 @@ function withNamingSchema (
   })
 }
 
+/**
+ * @param {() => import('../../src/proxy')} tracer
+ * @param {string} pluginName
+ * @param {((callback: (error?: Error) => void) => unknown) | (() => Promise<unknown>)} spanGenerationFn
+ * @param {string | (() => string)} service
+ * @param {string} serviceSource
+ * @param {{ component?: string, desc?: string, resource?: string | (() => string) }} [opts]
+ */
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
     this.timeout(10000)
@@ -199,32 +207,72 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     })
 
     it('should compute peer service', async () => {
-      const useCallback = spanGenerationFn.length === 1
-      const spanGenerationPromise = useCallback
-        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
-          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
-          // Some callback based methods are a mixture of callback and promise,
-          // depending on the module version. Await the promises as well.
-          if (util.types.isPromise(result)) {
-            result.then?.(resolve, reject)
+      const currentTracer = global._ddtrace
+      const parentSpan = currentTracer.startSpan('peer-service.test')
+      const traceId = BigInt(parentSpan.context().toTraceId())
+      const component = opts.component ?? pluginName
+      let traceAssertion
+
+      /**
+       * @param {Array<Array<{ trace_id: bigint, resource: string, meta: Record<string, string> }>>} traces
+       */
+      function assertPeerServiceSpan (traces) {
+        const expectedService = typeof service === 'function' ? service() : service
+        const expectedResource = typeof opts.resource === 'function' ? opts.resource() : opts.resource
+
+        for (const trace of traces) {
+          for (const span of trace) {
+            if (
+              span.trace_id === traceId &&
+              span.meta.component === component &&
+              (expectedResource === undefined || span.resource === expectedResource) &&
+              span.meta['peer.service'] === expectedService &&
+              span.meta['_dd.peer.service.source'] === serviceSource
+            ) {
+              return
+            }
           }
+        }
+
+        assert.fail(
+          `No ${component} span in trace ${traceId} had peer.service=${expectedService} and ` +
+          `_dd.peer.service.source=${serviceSource}.\n\nCandidate Traces:\n${util.inspect(traces, { depth: null })}`
+        )
+      }
+
+      try {
+        traceAssertion = getAgent().assertSomeTraces(assertPeerServiceSpan, { timeoutMs: 9000 })
+        const useCallback = spanGenerationFn.length === 1
+        const spanGenerationPromise = currentTracer.scope().activate(parentSpan, () => {
+          return useCallback
+            ? new Promise(/** @type {() => void} */ (resolve, reject) => {
+              const result = spanGenerationFn((error) => error ? reject(error) : resolve())
+              // Some callback based methods are a mixture of callback and promise,
+              // depending on the module version. Await the promises as well.
+              if (util.types.isPromise(result)) {
+                result.then?.(resolve, reject)
+              }
+            })
+            : spanGenerationFn()
         })
-        : spanGenerationFn()
 
-      assert.strictEqual(
-        typeof spanGenerationPromise?.then, 'function',
-        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
-          util.inspect(spanGenerationPromise, { depth: 1 }),
-      )
+        assert.strictEqual(
+          typeof spanGenerationPromise?.then, 'function',
+          'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+            util.inspect(spanGenerationPromise, { depth: 1 }),
+        )
 
-      await Promise.all([
-        getAgent().assertSomeTraces(traces => {
-          const span = traces[0][0]
-          assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
-          assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
-        }),
-        spanGenerationPromise,
-      ])
+        await Promise.all([
+          traceAssertion,
+          (async () => {
+            await spanGenerationPromise
+            parentSpan.finish()
+          })(),
+        ])
+      } finally {
+        parentSpan.finish()
+        traceAssertion?.cancel()
+      }
     })
   })
 }

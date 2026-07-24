@@ -814,6 +814,24 @@ versions.forEach((version) => {
       })
     })
 
+    if (version === latest) {
+      it('finishes if the plugin is re-enabled after test start', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-plugin-lifecycle',
+            },
+          }
+        )
+
+        const [exitCode] = await once(proc, 'exit')
+        assert.strictEqual(exitCode, 0)
+      })
+    }
+
     const fullyParallelConfigValue = [true, false]
 
     fullyParallelConfigValue.forEach((parallelism) => {
