@@ -235,7 +235,7 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 
-  it('should add APM disabled marker to first span in a chunk when APM tracing is disabled', () => {
+  it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
     config.flushMinSpans = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -249,7 +249,7 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     assert.strictEqual(firstFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
-    assert.ok(!Object.hasOwn(secondFormatted.metrics, APM_TRACING_ENABLED_KEY))
+    assert.strictEqual(secondFormatted.metrics[APM_TRACING_ENABLED_KEY], 0)
     sinon.assert.calledWith(exporter.export, [firstFormatted, secondFormatted])
   })
 
