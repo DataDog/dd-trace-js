@@ -8,16 +8,19 @@ const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { fail, incomplete } = require('./helpers')
 
 const MAX_CI_FILE_BYTES = 512 * 1024
-const DYNAMIC_COMMAND_PATTERN = /(?:\$\{\{|\$\(|`|&&|\|\||[;|\r\n])/
+const DYNAMIC_COMMAND_PATTERN = /[$`;&|\r\n]|%[^%\s]+%|![^!\s]+!/
+const LITERAL_ENVIRONMENT_PREFIX =
+  /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s]*)\s+)*/
 const WRAPPER_PATTERN =
   /\b(?:npm|pnpm|yarn|yarnpkg)\s+(?:run\s+)?[A-Za-z0-9:_-]+\b|\bnpx(?:\.cmd)?\b|\b(?:nx|turbo|lerna|mise)\b/
 const RUNNER_PATTERNS = {
-  cucumber: /(?:^|\s|[/\\])cucumber(?:-js)?(?:\s|$)/,
-  cypress: /(?:^|\s|[/\\])cypress\s+run(?:\s|$)/,
-  jest: /(?:^|\s|[/\\])jest(?:\.js)?(?:\s|$)/,
-  mocha: /(?:^|\s|[/\\])mocha(?:\.js)?(?:\s|$)/,
-  playwright: /(?:^|\s|[/\\])playwright\s+test(?:\s|$)/,
-  vitest: /(?:^|\s|[/\\])vitest\s+run(?:\s|$)/,
+  cucumber:
+    /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?cucumber(?:-js)?(?:\.js)?(?:\s|$)/,
+  cypress: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?cypress(?:\.js)?\s+run(?:\s|$)/,
+  jest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?jest(?:\.js)?(?:\s|$)/,
+  mocha: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?mocha(?:\.js)?(?:\s|$)/,
+  playwright: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?playwright(?:\.js)?\s+test(?:\s|$)/,
+  vitest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?vitest(?:\.js)?\s+run(?:\s|$)/,
 }
 
 /**
@@ -82,8 +85,9 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   const command = ci.command.trim()
+  const runner = getDirectRunner(command, framework.framework)
   if (DYNAMIC_COMMAND_PATTERN.test(command) || WRAPPER_PATTERN.test(command) ||
-    !RUNNER_PATTERNS[framework.framework]?.test(command)) {
+    !runner) {
     return getIncomplete(
       framework,
       'The selected CI command is dynamic or reaches the test runner through a wrapper. This validator deliberately ' +
@@ -180,7 +184,7 @@ function runCiWiring ({ manifest, framework }) {
  * @returns {boolean} whether the final assignment clears NODE_OPTIONS
  */
 function commandExplicitlyClearsNodeOptions (command, framework) {
-  const runner = RUNNER_PATTERNS[framework]?.exec(command)
+  const runner = getDirectRunner(command, framework)
   if (!runner) return false
 
   const assignments = [...command.slice(0, runner.index).matchAll(
@@ -190,6 +194,19 @@ function commandExplicitlyClearsNodeOptions (command, framework) {
 
   const effective = assignments.at(-1)
   return (effective[1] ?? effective[2] ?? effective[3]) === ''
+}
+
+/**
+ * Locates a direct runner only at the executable position after literal environment assignments.
+ *
+ * @param {string} command selected CI command
+ * @param {string} framework framework name
+ * @returns {{index: number}|undefined} direct runner location
+ */
+function getDirectRunner (command, framework) {
+  const prefix = LITERAL_ENVIRONMENT_PREFIX.exec(command)?.[0] || ''
+  if (!RUNNER_PATTERNS[framework]?.test(command.slice(prefix.length))) return
+  return { index: prefix.length }
 }
 
 /**

@@ -418,6 +418,25 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('requires setup instead of interpreting Cypress inline configuration', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cypress',
+      script: 'cypress run --config baseUrl=http://localhost:3000 --browser chrome',
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cypress']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /--config/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('requires setup when every Cypress representative needs a localhost application', () => {
     const fixture = createRepositoryFixture({
       framework: 'cypress',

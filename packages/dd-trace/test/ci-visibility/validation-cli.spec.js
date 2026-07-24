@@ -198,6 +198,37 @@ describe('test optimization validation CLI', () => {
     }
   })
 
+  it('reports missing CI evidence as incomplete instead of an orchestration failure', function () {
+    this.timeout(20_000)
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    try {
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+      const manifest = JSON.parse(fs.readFileSync(manifestPath))
+      delete manifest.frameworks[0].ciWiring
+      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+
+      const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
+      assert.strictEqual(planned.status, 0, planned.stderr)
+
+      const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+      const approvalPath = path.join(out, 'approval.json')
+      const approval = fs.readFileSync(approvalPath)
+      const digest = require('node:crypto').createHash('sha256').update(approval).digest('hex')
+      const executed = runCli(fixture.root, [
+        '--run-approved-plan', approvalPath,
+        '--sha256', digest,
+      ])
+      const report = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+
+      assert.strictEqual(executed.status, 2, executed.stderr)
+      assert.match(report, /CI audit is incomplete because it is missing CI file, job, exact command/)
+      assert.doesNotMatch(report, /validator orchestration error/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('requires the checksum-bound approval command for live validation', () => {
     const fixture = createRepositoryFixture({ framework: 'mocha' })
     try {

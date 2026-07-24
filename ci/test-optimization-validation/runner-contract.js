@@ -55,6 +55,7 @@ const MODULE_OPTIONS = new Set([
 const FILE_OPTIONS = new Set(['-c', '--config', '--config-file'])
 const DIRECTORY_OPTIONS = new Set(['--root'])
 const UNSUPPORTED_CONFIGURATION_OPTIONS = {
+  cypress: new Set(['--config']),
   jest: new Set(['--projects']),
 }
 const BUILTIN_MODULE_VALUES = new Map([
@@ -92,7 +93,7 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
   if (unsupportedOption) {
     return {
       environment: {},
-      error: `${unsupportedOption} requires project orchestration that the validator does not perform`,
+      error: `${unsupportedOption} has configuration semantics that the validator does not preserve`,
       inputFiles: [],
       runnerArgs: [],
     }

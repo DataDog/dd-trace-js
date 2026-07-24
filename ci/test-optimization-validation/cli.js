@@ -225,7 +225,7 @@ async function main (argv) {
  */
 async function validateFramework ({ framework, manifest, options, out, results, staticDiagnosis }) {
   let ciResult
-  if (options.scenarios.has(CI_WIRING) && framework.ciWiring) {
+  if (options.scenarios.has(CI_WIRING)) {
     logPhase(framework, 'CI configuration audit', 'start')
     ciResult = runCiWiring({ manifest, framework })
     logPhase(framework, 'CI configuration audit', ciResult.status)

@@ -56,6 +56,9 @@ describe('test optimization validation CI audit', () => {
     'yarn test',
     'nx test project',
     'node ./scripts/test.js && echo done',
+    `echo ${command}`,
+    `${command} & wait`,
+    `NODE_OPTIONS=$NODE_OPTIONS ${command}`,
   ]) {
     it(`fails closed for wrapper or dynamic command: ${wrapped}`, () => {
       fs.writeFileSync(workflow, workflowSource({ command: wrapped }))
