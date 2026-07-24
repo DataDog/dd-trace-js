@@ -213,7 +213,7 @@ function getWebdriverioSuiteResults (runner) {
     }
     if (test.state === 'failed' || test.timedOut || test._ddHookFailed) {
       result.status = 'fail'
-    } else if (!test.isPending()) {
+    } else if (test.state === 'passed') {
       result.hasPassingTest = true
     }
   })
@@ -276,6 +276,37 @@ addHook({
       return run.apply(this, args)
     }
 
+    const isUserDelayed = this.options.delay
+    const rootSuite = this.suite
+    const rootSuiteRun = rootSuite.run
+    const hasOwnRootSuiteRun = Object.hasOwn(rootSuite, 'run')
+    let configurationReady = false
+    let userReady = !isUserDelayed
+
+    /**
+     * Restores the root suite method after both delayed-mode gates are open.
+     *
+     * @returns {void}
+     */
+    function restoreRootSuiteRun () {
+      if (hasOwnRootSuiteRun) {
+        rootSuite.run = rootSuiteRun
+      } else {
+        delete rootSuite.run
+      }
+    }
+
+    if (isUserDelayed) {
+      rootSuite.run = function (...args) {
+        userReady = true
+        if (!configurationReady) {
+          return
+        }
+        restoreRootSuiteRun()
+        return rootSuiteRun.apply(this, args)
+      }
+    }
+
     this.options.delay = true
     const files = [...this.files]
     const runner = run.apply(this, args)
@@ -292,7 +323,13 @@ addHook({
       if (isFailedTestReplayEnabled()) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
-      runner.suite.run()
+      configurationReady = true
+      if (userReady) {
+        if (isUserDelayed) {
+          restoreRootSuiteRun()
+        }
+        rootSuite.run()
+      }
     })
 
     return runner
@@ -316,7 +353,7 @@ addHook({
     if (isFailedTestReplayEnabled()) {
       patchFailedTestReplayHookUp(Runner)
     }
-    // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
+    // Flush after the worker finishes its Mocha run, including grouped spec files.
     this.once('end', () => {
       workerFinishCh.publish()
       reportWebdriverioSuiteResults(this)

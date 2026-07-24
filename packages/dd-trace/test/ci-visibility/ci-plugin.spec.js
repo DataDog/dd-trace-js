@@ -157,6 +157,43 @@ describe('CiPlugin', () => {
     }
   })
 
+  it('disables advanced features for basic-reporting library configuration requests', () => {
+    const libraryConfig = {
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      basicReportingOnly: true,
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {})
+    assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
     const plugin = createPlugin('jest_worker')
     const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()

@@ -1,23 +1,11 @@
 'use strict'
 
+const { AsyncResource } = require('node:async_hooks')
 const { fileURLToPath } = require('node:url')
 
-const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const log = require('../../dd-trace/src/log')
-const {
-  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
-  collectTestOptimizationSummariesFromTraces,
-  getIsFaultyEarlyFlakeDetection,
-  getTestOptimizationRequestResults,
-  getTestSuitePath,
-  logTestOptimizationSummary,
-} = require('../../dd-trace/src/plugins/util/test')
+const { MOCHA_WORKER_TRACE_PAYLOAD_CODE } = require('../../dd-trace/src/plugins/util/test')
 const { channel, tracingChannel } = require('./helpers/instrument')
-const {
-  attemptToFixExecutions,
-  loggedAttemptToFixTests,
-  newTestsWithDynamicNames,
-} = require('./mocha/utils')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
@@ -31,12 +19,7 @@ const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
-const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
-const knownTestsCh = channel('ci:mocha:known-tests')
-const modifiedFilesCh = channel('ci:mocha:modified-files')
-const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
-const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
@@ -69,28 +52,28 @@ const coordinatorStates = new WeakMap()
  * @property {Map<string, object>} suiteContexts
  * @property {boolean|undefined} hasTests
  * @property {number|undefined} exitCode
+ * @property {number|undefined} retries
  */
 
 /**
  * @typedef {object} CoordinatorState
  * @property {WebdriverioLocalRunner} localRunner
- * @property {object} config
- * @property {Promise<object>|undefined} initializationPromise
+ * @property {AsyncResource} asyncResource
+ * @property {object} configuration
+ * @property {boolean} initialized
+ * @property {boolean} initializing
+ * @property {Array<(configuration: object) => void>} initializationCallbacks
  * @property {boolean} sessionStarted
  * @property {boolean} finished
  * @property {string|undefined} frameworkVersion
  * @property {Set<WorkerRecord>} workers
- * @property {Set<string>} scheduledFiles
- * @property {Set<string>} skippedSuites
- * @property {Set<string>} unskippableSuites
- * @property {string[]} suitesToSkip
- * @property {string} itrCorrelationId
  * @property {Map<object, string>} suiteStatuses
- * @property {boolean} hasForcedToRunSuites
  */
 
 /**
- * Creates the configuration consumed by Mocha's worker instrumentation.
+ * Creates the basic-reporting configuration consumed by Mocha workers.
+ *
+ * Advanced Test Optimization features remain disabled until they have WebdriverIO-specific coverage.
  *
  * @returns {object}
  */
@@ -103,7 +86,6 @@ function createWorkerConfiguration () {
     isCoverageReportUploadEnabled: false,
     isDiEnabled: false,
     isEarlyFlakeDetectionEnabled: false,
-    isEarlyFlakeDetectionFaulty: false,
     isFlakyTestRetriesEnabled: false,
     isImpactedTestsEnabled: false,
     isItrEnabled: false,
@@ -143,19 +125,16 @@ function getCoordinatorState (localRunner) {
 
   state = {
     localRunner,
-    config: createWorkerConfiguration(),
-    initializationPromise: undefined,
+    asyncResource: new AsyncResource('dd-trace-webdriverio-coordinator'),
+    configuration: createWorkerConfiguration(),
+    initialized: false,
+    initializing: false,
+    initializationCallbacks: [],
     sessionStarted: false,
     finished: false,
     frameworkVersion: undefined,
     workers: new Set(),
-    scheduledFiles: new Set(),
-    skippedSuites: new Set(),
-    unskippableSuites: new Set(),
-    suitesToSkip: [],
-    itrCorrelationId: '',
     suiteStatuses: new Map(),
-    hasForcedToRunSuites: false,
   }
   coordinatorStates.set(localRunner, state)
 
@@ -173,190 +152,6 @@ function normalizeFile (file) {
 }
 
 /**
- * Requests data through a Test Optimization diagnostic channel.
- *
- * @param {import('node:diagnostics_channel').Channel} requestChannel
- * @param {object} [context]
- * @returns {Promise<object>}
- */
-function getChannelPromise (requestChannel, context = {}) {
-  return new Promise(resolve => {
-    requestChannel.runStores({ ...context, onDone: resolve }, () => {})
-  })
-}
-
-/**
- * Applies the library configuration fields used by Mocha workers.
- *
- * @param {CoordinatorState} state
- * @param {object} libraryConfig
- * @param {boolean} isTestDynamicInstrumentationEnabled
- * @returns {void}
- */
-function applyLibraryConfiguration (state, libraryConfig, isTestDynamicInstrumentationEnabled) {
-  const { config } = state
-
-  config.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
-  config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-  config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
-  config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
-  config.isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
-  config.isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
-  config.isDiEnabled = libraryConfig.isDiEnabled
-  config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-  config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-  config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-  config.isItrEnabled = libraryConfig.isItrEnabled
-  config.isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-  config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
-  config.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
-  config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
-  config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
-}
-
-/**
- * Applies known-tests request results to worker configuration.
- *
- * @param {CoordinatorState} state
- * @param {object|undefined} response
- * @returns {void}
- */
-function applyKnownTestsResponse (state, response) {
-  if (!response) {
-    return
-  }
-  if (response.err) {
-    state.config.isEarlyFlakeDetectionEnabled = false
-    state.config.isKnownTestsEnabled = false
-    state.config.knownTests = {}
-  } else {
-    state.config.knownTests = response.knownTests
-  }
-}
-
-/**
- * Applies test-management request results to worker configuration.
- *
- * @param {CoordinatorState} state
- * @param {object|undefined} response
- * @returns {void}
- */
-function applyTestManagementResponse (state, response) {
-  if (!response) {
-    return
-  }
-  if (response.err) {
-    state.config.isTestManagementTestsEnabled = false
-    state.config.testManagementAttemptToFixRetries = 0
-    state.config.testManagementTests = {}
-  } else {
-    state.config.testManagementTests = response.testManagementTests
-  }
-}
-
-/**
- * Applies skippable-suite request results to coordinator state.
- *
- * @param {CoordinatorState} state
- * @param {object|undefined} response
- * @returns {void}
- */
-function applySkippableSuitesResponse (state, response) {
-  if (!response || response.err) {
-    state.suitesToSkip = []
-    return
-  }
-
-  state.suitesToSkip = response.skippableSuites || []
-  state.itrCorrelationId = response.itrCorrelationId || ''
-}
-
-/**
- * Fetches all Test Optimization settings required by WebdriverIO Mocha workers.
- *
- * @param {CoordinatorState} state
- * @returns {Promise<object>}
- */
-function getExecutionConfiguration (state) {
-  const context = {
-    frameworkVersion: state.frameworkVersion,
-    isParallel: true,
-  }
-
-  return getChannelPromise(libraryConfigurationCh, context).then(({
-    err,
-    isTestDynamicInstrumentationEnabled,
-    libraryConfig,
-    repositoryRoot,
-  }) => {
-    if (err || !libraryConfig) {
-      return state.config
-    }
-
-    state.config.repositoryRoot = repositoryRoot
-    applyLibraryConfiguration(state, libraryConfig, isTestDynamicInstrumentationEnabled)
-
-    return getTestOptimizationRequestResults({
-      isKnownTestsEnabled: state.config.isKnownTestsEnabled,
-      isTestManagementTestsEnabled: state.config.isTestManagementTestsEnabled,
-      isSuitesSkippingEnabled: state.config.isSuitesSkippingEnabled,
-      getKnownTests: () => getChannelPromise(knownTestsCh, context),
-      getSkippableSuites: () => getChannelPromise(skippableSuitesCh, context),
-      getTestManagementTests: () => getChannelPromise(testManagementTestsCh, context),
-    }).then(({
-      knownTestsResponse,
-      skippableSuitesResponse,
-      testManagementTestsResponse,
-    }) => {
-      applyKnownTestsResponse(state, knownTestsResponse)
-      applySkippableSuitesResponse(state, skippableSuitesResponse)
-      applyTestManagementResponse(state, testManagementTestsResponse)
-
-      if (!state.config.isImpactedTestsEnabled) {
-        return state.config
-      }
-
-      return getChannelPromise(modifiedFilesCh, context).then(({ err, modifiedFiles }) => {
-        if (err) {
-          state.config.isImpactedTestsEnabled = false
-          state.config.modifiedFiles = []
-        } else {
-          state.config.modifiedFiles = modifiedFiles
-        }
-        return state.config
-      })
-    })
-  })
-}
-
-/**
- * Checks whether the known-tests response is faulty for the currently scheduled specs.
- *
- * @param {CoordinatorState} state
- * @returns {void}
- */
-function checkKnownTestsResponse (state) {
-  if (!state.config.isKnownTestsEnabled) {
-    return
-  }
-
-  const localSuites = []
-  for (const file of state.scheduledFiles) {
-    localSuites.push(getTestSuitePath(file, process.cwd()))
-  }
-
-  if (getIsFaultyEarlyFlakeDetection(
-    localSuites,
-    state.config.knownTests?.mocha || {},
-    state.config.earlyFlakeDetectionFaultyThreshold
-  )) {
-    state.config.isEarlyFlakeDetectionEnabled = false
-    state.config.isEarlyFlakeDetectionFaulty = true
-    state.config.isKnownTestsEnabled = false
-  }
-}
-
-/**
  * Starts the single Mocha session owned by the WebdriverIO launcher.
  *
  * @param {CoordinatorState} state
@@ -366,7 +161,6 @@ function startSession (state) {
   if (state.sessionStarted) {
     return
   }
-
   const processArgv = process.argv.slice(2).join(' ')
   const command = processArgv ? `wdio ${processArgv}` : 'wdio'
   const rootDir = getRunnerConfiguration(state.localRunner)?.rootDir || process.cwd()
@@ -380,87 +174,95 @@ function startSession (state) {
 }
 
 /**
- * Initializes configuration and session state once for all workers.
+ * Completes coordinator initialization and releases waiting workers.
  *
  * @param {CoordinatorState} state
- * @param {string} frameworkVersion
- * @returns {Promise<object>}
+ * @param {object|undefined} response
+ * @returns {void}
  */
-function initializeCoordinator (state, frameworkVersion) {
-  if (state.initializationPromise) {
-    return state.initializationPromise
+function completeCoordinatorInitialization (state, response) {
+  if (state.initialized) {
+    return
   }
 
-  state.frameworkVersion = frameworkVersion
-  state.initializationPromise = getExecutionConfiguration(state)
-    .catch((error) => {
-      log.error('WebdriverIO Test Optimization configuration error', error)
-      return state.config
-    })
-    .then((configuration) => {
-      checkKnownTestsResponse(state)
-      startSession(state)
-      return configuration
-    })
+  state.configuration.repositoryRoot = response?.repositoryRoot
+  state.initialized = true
+  state.initializing = false
+  startSession(state)
 
-  return state.initializationPromise
+  const callbacks = state.initializationCallbacks
+  state.initializationCallbacks = []
+  for (const callback of callbacks) {
+    callback(state.configuration)
+  }
 }
 
 /**
- * Determines and publishes suite selection for one worker.
+ * Requests settings once so the launcher owns initialization for every worker.
+ *
+ * Settings for advanced features are intentionally ignored while WebdriverIO support is basic-reporting only.
  *
  * @param {CoordinatorState} state
+ * @param {string} frameworkVersion
+ * @param {(configuration: object) => void} [onDone]
+ * @returns {void}
+ */
+function initializeCoordinator (state, frameworkVersion, onDone) {
+  if (state.initialized) {
+    onDone?.(state.configuration)
+    return
+  }
+  if (onDone) {
+    state.initializationCallbacks.push(onDone)
+  }
+  if (state.initializing) {
+    return
+  }
+
+  state.initializing = true
+  state.frameworkVersion = frameworkVersion
+
+  if (!libraryConfigurationCh.hasSubscribers) {
+    completeCoordinatorInitialization(state)
+    return
+  }
+
+  try {
+    libraryConfigurationCh.runStores({
+      basicReportingOnly: true,
+      frameworkVersion,
+      isParallel: true,
+      onDone: response => state.asyncResource.runInAsyncScope(
+        completeCoordinatorInitialization,
+        undefined,
+        state,
+        response
+      ),
+    }, () => {})
+  } catch (error) {
+    log.error('WebdriverIO Test Optimization configuration error', error)
+    completeCoordinatorInitialization(state)
+  }
+}
+
+/**
+ * Starts basic-reporting suites for one worker.
+ *
  * @param {WorkerRecord} workerRecord
  * @param {string[]} files
- * @returns {string[]}
+ * @returns {void}
  */
-function startWorkerSuites (state, workerRecord, files) {
-  const suitesToSkip = new Set(state.suitesToSkip)
-  const skippedFiles = []
-  const newlySkippedSuites = []
-
+function startWorkerSuites (workerRecord, files) {
   for (const rawFile of files) {
     const file = normalizeFile(rawFile)
-    const testSuite = getTestSuitePath(file, process.cwd())
-    const isUnskippable = isMarkedAsUnskippable({ path: file })
-    const shouldSkip = state.config.isSuitesSkippingEnabled && suitesToSkip.has(testSuite)
-
-    if (isUnskippable) {
-      state.unskippableSuites.add(file)
-    }
-    if (shouldSkip && !isUnskippable) {
-      skippedFiles.push(file)
-      if (!state.skippedSuites.has(testSuite)) {
-        state.skippedSuites.add(testSuite)
-        newlySkippedSuites.push(testSuite)
-      }
-      continue
-    }
     if (workerRecord.suiteContexts.has(file)) {
       continue
     }
 
-    const suiteContext = {
-      testSuiteAbsolutePath: file,
-      isUnskippable,
-      isForcedToRun: shouldSkip && isUnskippable,
-      itrCorrelationId: state.itrCorrelationId,
-    }
-    if (suiteContext.isForcedToRun) {
-      state.hasForcedToRunSuites = true
-    }
+    const suiteContext = { testSuiteAbsolutePath: file }
     testSuiteStartCh.runStores(suiteContext, () => {})
     workerRecord.suiteContexts.set(file, suiteContext)
   }
-
-  if (newlySkippedSuites.length) {
-    itrSkippedSuitesCh.publish({
-      skippedSuites: newlySkippedSuites,
-      frameworkVersion: state.frameworkVersion,
-    })
-  }
-
-  return skippedFiles
 }
 
 /**
@@ -528,15 +330,14 @@ function sendWorkerMessage (workerRecord, message) {
 function handleConfigurationRequest (state, workerRecord, message) {
   const { files = [], frameworkVersion, requestId } = message.content || {}
 
-  initializeCoordinator(state, frameworkVersion).then(() => {
-    const skippedFiles = startWorkerSuites(state, workerRecord, files)
+  initializeCoordinator(state, frameworkVersion, (configuration) => {
+    startWorkerSuites(workerRecord, files)
     sendWorkerMessage(workerRecord, {
       origin: 'datadog',
       name: CONFIGURATION_RESPONSE,
       content: {
-        configuration: state.config,
+        configuration,
         requestId,
-        skippedFiles,
       },
     })
   })
@@ -569,10 +370,6 @@ function handleWorkerMessage (state, workerRecord, message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-      collectTestOptimizationSummariesFromTraces(payload, {
-        attemptToFixExecutions,
-        newTestsWithDynamicNames,
-      })
       workerReportTraceCh.publish(payload)
     }
     return
@@ -593,8 +390,8 @@ function handleWorkerMessage (state, workerRecord, message) {
   if (message.name === 'testFrameworkInit') {
     workerRecord.hasTests = message.content?.hasTests
     if (!workerRecord.hasTests && state.frameworkVersion) {
-      initializeCoordinator(state, state.frameworkVersion).then(() => {
-        startWorkerSuites(state, workerRecord, workerRecord.specs)
+      initializeCoordinator(state, state.frameworkVersion, () => {
+        startWorkerSuites(workerRecord, workerRecord.specs)
         finishAllWorkerSuites(state, workerRecord, 'skip')
       })
     }
@@ -611,6 +408,7 @@ function handleWorkerMessage (state, workerRecord, message) {
  */
 function handleWorkerExit (state, workerRecord, exit) {
   workerRecord.exitCode = exit.exitCode
+  workerRecord.retries = exit.retries
   if (!state.sessionStarted) {
     return
   }
@@ -630,9 +428,7 @@ function handleWorkerExit (state, workerRecord, exit) {
 function registerWorker (state, worker, specs) {
   const normalizedSpecs = []
   for (const spec of specs) {
-    const file = normalizeFile(spec)
-    normalizedSpecs.push(file)
-    state.scheduledFiles.add(file)
+    normalizedSpecs.push(normalizeFile(spec))
   }
 
   const workerRecord = {
@@ -641,6 +437,7 @@ function registerWorker (state, worker, specs) {
     suiteContexts: new Map(),
     hasTests: undefined,
     exitCode: undefined,
+    retries: undefined,
   }
   state.workers.add(workerRecord)
 
@@ -657,12 +454,18 @@ function registerWorker (state, worker, specs) {
 function getSessionStatus (state) {
   let hasPassingSuite = false
 
-  for (const status of state.suiteStatuses.values()) {
-    if (status === 'fail') {
-      return 'fail'
+  for (const workerRecord of state.workers) {
+    if (workerRecord.exitCode !== 0 && workerRecord.retries > 0) {
+      continue
     }
-    if (status === 'pass') {
-      hasPassingSuite = true
+    for (const suiteContext of workerRecord.suiteContexts.values()) {
+      const status = state.suiteStatuses.get(suiteContext)
+      if (status === 'fail') {
+        return 'fail'
+      }
+      if (status === 'pass') {
+        hasPassingSuite = true
+      }
     }
   }
 
@@ -674,11 +477,13 @@ function getSessionStatus (state) {
  *
  * @param {CoordinatorState} state
  * @param {unknown} error
- * @returns {Promise<void>}
+ * @param {() => void} onDone
+ * @returns {void}
  */
-function finishCoordinator (state, error) {
+function finishCoordinator (state, error, onDone) {
   if (state.finished || !state.sessionStarted) {
-    return Promise.resolve()
+    onDone()
+    return
   }
   state.finished = true
 
@@ -689,28 +494,16 @@ function finishCoordinator (state, error) {
     finishAllWorkerSuites(state, workerRecord, status)
   }
 
-  const status = error ? 'fail' : getSessionStatus(state)
   if (!testSessionFinishCh.hasSubscribers) {
-    return Promise.resolve()
+    onDone()
+    return
   }
 
-  return new Promise(resolve => {
-    testSessionFinishCh.publish({
-      status,
-      isSuitesSkipped: state.skippedSuites.size > 0,
-      numSkippedSuites: state.skippedSuites.size,
-      hasForcedToRunSuites: state.hasForcedToRunSuites,
-      hasUnskippableSuites: state.unskippableSuites.size > 0,
-      error,
-      isEarlyFlakeDetectionEnabled: state.config.isEarlyFlakeDetectionEnabled,
-      isEarlyFlakeDetectionFaulty: state.config.isEarlyFlakeDetectionFaulty,
-      isTestManagementEnabled: state.config.isTestManagementTestsEnabled,
-      isParallel: state.workers.size > 1,
-      onDone: resolve,
-    })
-
-    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
-    loggedAttemptToFixTests.clear()
+  testSessionFinishCh.publish({
+    status: error ? 'fail' : getSessionStatus(state),
+    error,
+    isParallel: state.workers.size > 1,
+    onDone,
   })
 }
 
@@ -751,7 +544,13 @@ localRunnerShutdownCh.subscribe({
       return
     }
 
-    context.asyncEndPromise = (state.initializationPromise || Promise.resolve())
-      .then(() => finishCoordinator(state, context.error))
+    // Orchestrion waits for this promise before returning from LocalRunner.shutdown.
+    context.asyncEndPromise = new Promise(resolve => {
+      if (state.initializing) {
+        state.initializationCallbacks.push(() => finishCoordinator(state, context.error, resolve))
+      } else {
+        finishCoordinator(state, context.error, resolve)
+      }
+    })
   },
 })

@@ -39,38 +39,47 @@ describe('webdriverio instrumentation', () => {
 
   it('coordinates two Mocha workers under one session', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')
+    const knownTestsCh = channel('ci:mocha:known-tests')
     const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const modifiedFilesCh = channel('ci:mocha:modified-files')
+    const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
     const testSessionStartCh = channel('ci:mocha:session:start')
     const testSessionFinishCh = channel('ci:mocha:session:finish')
     const testSuiteStartCh = channel('ci:mocha:test-suite:start')
     const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 
     const sessionStarts = []
     const sessionFinishes = []
     const suiteStarts = []
     const suiteFinishes = []
+    let advancedFeatureRequests = 0
     let configurationRequests = 0
 
     function onTestFinish () {}
+    function onAdvancedFeatureRequest (request) {
+      advancedFeatureRequests++
+      request.onDone({})
+    }
     function onLibraryConfiguration (request) {
       configurationRequests++
       request.onDone({
-        isTestDynamicInstrumentationEnabled: false,
+        isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
-          earlyFlakeDetectionNumRetries: 0,
-          earlyFlakeDetectionSlowTestRetries: {},
-          flakyTestRetriesCount: 0,
-          isCodeCoverageEnabled: false,
-          isCoverageReportUploadEnabled: false,
-          isDiEnabled: false,
-          isEarlyFlakeDetectionEnabled: false,
-          isFlakyTestRetriesEnabled: false,
-          isImpactedTestsEnabled: false,
-          isItrEnabled: false,
-          isKnownTestsEnabled: false,
-          isSuitesSkippingEnabled: false,
-          isTestManagementEnabled: false,
-          testManagementAttemptToFixRetries: 0,
+          earlyFlakeDetectionNumRetries: 5,
+          earlyFlakeDetectionSlowTestRetries: { '5s': 5 },
+          flakyTestRetriesCount: 5,
+          isCodeCoverageEnabled: true,
+          isCoverageReportUploadEnabled: true,
+          isDiEnabled: true,
+          isEarlyFlakeDetectionEnabled: true,
+          isFlakyTestRetriesEnabled: true,
+          isImpactedTestsEnabled: true,
+          isItrEnabled: true,
+          isKnownTestsEnabled: true,
+          isSuitesSkippingEnabled: true,
+          isTestManagementEnabled: true,
+          testManagementAttemptToFixRetries: 5,
         },
         repositoryRoot: process.cwd(),
       })
@@ -90,11 +99,15 @@ describe('webdriverio instrumentation', () => {
     }
 
     testFinishCh.subscribe(onTestFinish)
+    knownTestsCh.subscribe(onAdvancedFeatureRequest)
     libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    modifiedFilesCh.subscribe(onAdvancedFeatureRequest)
+    skippableSuitesCh.subscribe(onAdvancedFeatureRequest)
     testSessionStartCh.subscribe(onSessionStart)
     testSessionFinishCh.subscribe(onSessionFinish)
     testSuiteStartCh.subscribe(onSuiteStart)
     testSuiteFinishCh.subscribe(onSuiteFinish)
+    testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
 
     try {
       require('../src/webdriverio')
@@ -138,33 +151,62 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
       assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
+      assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: {},
+        flakyTestRetriesCount: 0,
+        isCodeCoverageEnabled: false,
+        isCoverageReportUploadEnabled: false,
+        isDiEnabled: false,
+        isEarlyFlakeDetectionEnabled: false,
+        isFlakyTestRetriesEnabled: false,
+        isImpactedTestsEnabled: false,
+        isItrEnabled: false,
+        isKnownTestsEnabled: false,
+        isSuitesSkippingEnabled: false,
+        isTestDynamicInstrumentationEnabled: false,
+        isTestManagementTestsEnabled: false,
+        knownTests: {},
+        modifiedFiles: [],
+        repositoryRoot: process.cwd(),
+        testManagementAttemptToFixRetries: 0,
+        testManagementTests: {},
+      })
 
-      reportSuiteFinish(firstWorker, firstFile)
+      reportSuiteFinish(firstWorker, firstFile, 'fail')
       reportSuiteFinish(secondWorker, secondFile)
-      firstWorker.emit('exit', { exitCode: 0 })
-      secondWorker.emit('exit', { exitCode: 0 })
+      firstWorker.emit('exit', { exitCode: 1, retries: 1 })
+      secondWorker.emit('exit', { exitCode: 0, retries: 0 })
 
       const shutdownContext = { self: localRunner }
       tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
       await shutdownContext.asyncEndPromise
 
       assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(advancedFeatureRequests, 0)
       assert.strictEqual(sessionStarts.length, 1)
       assert.strictEqual(sessionFinishes.length, 1)
       assert.strictEqual(sessionFinishes[0].status, 'pass')
       assert.strictEqual(sessionFinishes[0].isParallel, true)
+      assert.strictEqual('isEarlyFlakeDetectionEnabled' in sessionFinishes[0], false)
+      assert.strictEqual('isSuitesSkipped' in sessionFinishes[0], false)
+      assert.strictEqual('isTestManagementEnabled' in sessionFinishes[0], false)
       assert.deepStrictEqual(suiteStarts.map(({ testSuiteAbsolutePath }) => testSuiteAbsolutePath), [
         firstFile,
         secondFile,
       ])
-      assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['pass', 'pass'])
+      assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
+      knownTestsCh.unsubscribe(onAdvancedFeatureRequest)
       libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      modifiedFilesCh.unsubscribe(onAdvancedFeatureRequest)
+      skippableSuitesCh.unsubscribe(onAdvancedFeatureRequest)
       testSessionStartCh.unsubscribe(onSessionStart)
       testSessionFinishCh.unsubscribe(onSessionFinish)
       testSuiteStartCh.unsubscribe(onSuiteStart)
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
+      testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
     }
   })
 })
@@ -226,17 +268,18 @@ function requestConfiguration (worker, file, requestId) {
 }
 
 /**
- * Reports a passing suite to the coordinator.
+ * Reports a suite result to the coordinator.
  *
  * @param {EventEmitter} worker
  * @param {string} file
+ * @param {string} [status]
  * @returns {void}
  */
-function reportSuiteFinish (worker, file) {
+function reportSuiteFinish (worker, file, status = 'pass') {
   worker.emit('message', {
     name: SUITE_FINISH,
     content: {
-      results: [{ file, status: 'pass' }],
+      results: [{ file, status }],
     },
   })
 }

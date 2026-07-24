@@ -13,7 +13,12 @@ const {
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   MOCHA_IS_PARALLEL,
+  TEST_CODE_COVERAGE_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_FRAMEWORK,
+  TEST_IS_RETRY,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_MANAGEMENT_ENABLED,
   TEST_STATUS,
   TEST_SUITE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -24,18 +29,33 @@ const versions = requestedVersion
   ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
   : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
 
-const disabledSettings = {
-  code_coverage: false,
-  tests_skipping: false,
-  itr_enabled: false,
+const advancedSettings = {
+  code_coverage: true,
+  tests_skipping: true,
+  itr_enabled: true,
   require_git: false,
-  early_flake_detection: { enabled: false },
-  flaky_test_retries_enabled: false,
-  known_tests_enabled: false,
-  test_management: { enabled: false },
-  impacted_tests_enabled: false,
-  coverage_report_upload_enabled: false,
+  early_flake_detection: {
+    enabled: true,
+    slow_test_retries: {
+      '5s': 5,
+    },
+  },
+  flaky_test_retries_enabled: true,
+  di_enabled: true,
+  known_tests_enabled: true,
+  test_management: {
+    enabled: true,
+    attempt_to_fix_retries: 5,
+  },
+  impacted_tests_enabled: true,
+  coverage_report_upload_enabled: true,
 }
+
+const advancedRequestPaths = [
+  '/api/v2/ci/libraries/tests',
+  '/api/v2/ci/tests/skippable',
+  '/api/v2/test/libraries/test-management/tests',
+]
 
 /**
  * Starts the minimal W3C WebDriver endpoint required by WebdriverIO workers.
@@ -128,6 +148,61 @@ function assertEventHierarchy (session, module, suites, tests) {
   }
 }
 
+/**
+ * Extracts events and verifies the WebdriverIO run stayed in basic-reporting mode.
+ *
+ * @param {object[]} payloads
+ * @returns {{session: object, module: object, suites: object[], tests: object[]}}
+ */
+function getBasicReportingEvents (payloads) {
+  const settingsRequests = payloads.filter(({ url }) =>
+    url.endsWith('/api/v2/libraries/tests/services/setting'))
+  const advancedRequests = payloads.filter(({ url }) =>
+    advancedRequestPaths.some(path => url.endsWith(path)))
+  const cyclePayloads = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+  const events = cyclePayloads.flatMap(({ payload }) => payload.events)
+  const sessions = events.filter(event => event.type === 'test_session_end').map(event => event.content)
+  const modules = events.filter(event => event.type === 'test_module_end').map(event => event.content)
+  const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+  assert.strictEqual(settingsRequests.length, 1)
+  assert.strictEqual(advancedRequests.length, 0)
+  assert.strictEqual(sessions.length, 1, JSON.stringify({
+    events: events.map(event => ({
+      name: event.content?.name,
+      spanType: event.content?.meta?.['span.type'],
+      type: event.type,
+    })),
+    urls: payloads.map(({ url }) => url),
+  }))
+  assert.strictEqual(modules.length, 1)
+  assert.strictEqual(sessions[0].meta[TEST_ITR_SKIPPING_ENABLED], 'false')
+  assert.strictEqual(sessions[0].meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+  assert.strictEqual(sessions[0].meta[TEST_EARLY_FLAKE_ENABLED], undefined)
+  assert.strictEqual(sessions[0].meta[TEST_MANAGEMENT_ENABLED], undefined)
+
+  const metadata = cyclePayloads.flatMap(({ payload }) => payload.metadata || [])
+  assert.ok(metadata.length > 0)
+  for (const metadataEntry of metadata) {
+    const capabilities = Object.keys(metadataEntry.test || {})
+      .filter(tag => tag.startsWith('_dd.library_capabilities.'))
+    assert.deepStrictEqual(capabilities, [])
+  }
+
+  for (const test of tests) {
+    assert.strictEqual(test.meta[TEST_FRAMEWORK], 'mocha')
+  }
+  assertEventHierarchy(sessions[0], modules[0], suites, tests)
+
+  return {
+    session: sessions[0],
+    module: modules[0],
+    suites,
+    tests,
+  }
+}
+
 for (const version of versions) {
   describe(`webdriverio@${version}`, function () {
     this.timeout(60_000)
@@ -155,7 +230,7 @@ for (const version of versions) {
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-      receiver.setSettings(disabledSettings)
+      receiver.setSettings(advancedSettings)
     })
 
     afterEach(async function () {
@@ -164,15 +239,24 @@ for (const version of versions) {
       await receiver.stop()
     })
 
-    it('reports multiple Mocha workers as one test session', async () => {
+    /**
+     * Runs one WebdriverIO configuration scenario.
+     *
+     * @param {string} scenario
+     * @param {number} expectedWebDriverSessions
+     * @param {(events: ReturnType<typeof getBasicReportingEvents>) => void} assertEvents
+     * @param {number} [expectedExitCode]
+     * @returns {Promise<void>}
+     */
+    async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0) {
+      const initialWebDriverSessionCount = webDriver.getSessionCount()
       childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
-          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
           DD_TEST_SESSION_NAME: 'webdriverio-integration-test',
-          DD_TRACE_DISABLED_INSTRUMENTATIONS: 'url',
+          WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
         },
       })
@@ -186,50 +270,133 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        payloads => {
-          const settingsRequests = payloads.filter(({ url }) =>
-            url.endsWith('/api/v2/libraries/tests/services/setting'))
-          const events = payloads
-            .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
-            .flatMap(({ payload }) => payload.events)
-          const sessions = events.filter(event => event.type === 'test_session_end').map(event => event.content)
-          const modules = events.filter(event => event.type === 'test_module_end').map(event => event.content)
-          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-          assert.strictEqual(settingsRequests.length, 1)
-          assert.strictEqual(sessions.length, 1)
-          assert.strictEqual(modules.length, 1)
-          assert.strictEqual(suites.length, 2)
-          assert.strictEqual(tests.length, 2)
-          assert.strictEqual(sessions[0].meta[MOCHA_IS_PARALLEL], 'true')
-          assert.strictEqual(sessions[0].meta[TEST_STATUS], 'pass')
-          assert.deepStrictEqual(
-            suites.map(suite => suite.meta[TEST_SUITE]).sort(),
-            ['first.e2e.js', 'second.e2e.js']
-          )
-          assert.deepStrictEqual(
-            tests.map(test => test.meta['test.webdriverio.worker']).sort(),
-            ['first', 'second']
-          )
-          assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
-          for (const test of tests) {
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'mocha')
-            assert.strictEqual(test.meta[MOCHA_IS_PARALLEL], 'true')
-            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-          }
-          assertEventHierarchy(sessions[0], modules[0], suites, tests)
-        },
+        payloads => assertEvents(getBasicReportingEvents(payloads)),
         { hardTimeout: 45_000 }
       )
 
-      const [[exitCode]] = await Promise.all([
-        once(childProcess, 'exit'),
-        payloadsPromise,
-      ])
+      let exitCode
+      try {
+        [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
+      } catch (error) {
+        error.message += `\n${testOutput}`
+        throw error
+      }
 
-      assert.strictEqual(exitCode, 0, testOutput)
-      assert.strictEqual(webDriver.getSessionCount(), 2)
+      assert.strictEqual(exitCode, expectedExitCode, testOutput)
+      assert.strictEqual(
+        webDriver.getSessionCount() - initialWebDriverSessionCount,
+        expectedWebDriverSessions
+      )
+    }
+
+    it('reports parallel workers as one basic-reporting session', async () => {
+      await runScenario('parallel', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], 'true')
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.deepStrictEqual(
+          suites.map(suite => suite.meta[TEST_SUITE]).sort(),
+          ['first.e2e.js', 'second.e2e.js']
+        )
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['first', 'second']
+        )
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+      })
+    })
+
+    it('reports sequential workers as one session', async () => {
+      await runScenario('serial', 2, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+      })
+    })
+
+    it('reports grouped specs from one worker', async () => {
+      await runScenario('grouped', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
+      })
+    })
+
+    it('marks a spec filtered by mochaOpts.grep as skipped', async () => {
+      await runScenario('grep', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 1)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['first.e2e.js', 'pass'],
+            ['second.e2e.js', 'skip'],
+          ]
+        )
+      })
+    })
+
+    it('reports mochaOpts.bail without leaving grouped suites open', async () => {
+      await runScenario('bail', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 1)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['fail.e2e.js', 'fail'],
+            ['second.e2e.js', 'skip'],
+          ]
+        )
+      }, 1)
+    })
+
+    it('coordinates mochaOpts.delay with configuration loading', async () => {
+      await runScenario('delay', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'delay')
+      })
+    })
+
+    it('reports native Mocha retries', async () => {
+      await runScenario('retries', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
+        assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 1)
+      })
+    })
+
+    it('supports the Mocha TDD interface', async () => {
+      await runScenario('tdd', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'tdd')
+      })
+    })
+
+    it('reports whole-spec retries in one session', async () => {
+      await runScenario('specFileRetries', 2, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
+      })
+    })
+
+    it('reports multiple capabilities in one session', async () => {
+      await runScenario('multipleCapabilities', 2, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+      })
     })
   })
 }

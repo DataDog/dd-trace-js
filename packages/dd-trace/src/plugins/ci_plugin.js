@@ -173,13 +173,14 @@ module.exports = class CiPlugin extends Plugin {
     this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
-      const { onDone, frameworkVersion } = ctx
+      const { basicReportingOnly, onDone, frameworkVersion } = ctx
       ctx.currentStore = legacyStorage.getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
+        const effectiveLibraryConfig = err ? undefined : basicReportingOnly ? {} : libraryConfig
         if (err) {
           this.libraryConfig = undefined
           this.itrCorrelationId = undefined
@@ -187,7 +188,7 @@ module.exports = class CiPlugin extends Plugin {
           log.error('Library configuration could not be fetched. %s', err.message)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
-          this.libraryConfig = libraryConfig
+          this.libraryConfig = effectiveLibraryConfig
           setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
@@ -201,7 +202,7 @@ module.exports = class CiPlugin extends Plugin {
         onDone({
           err,
           isTestDynamicInstrumentationEnabled: this.config.isTestDynamicInstrumentationEnabled,
-          libraryConfig,
+          libraryConfig: effectiveLibraryConfig,
           repositoryRoot: this.repositoryRoot,
           requestErrorTags: this._getCurrentRequestErrorTags(),
         })
@@ -469,9 +470,14 @@ module.exports = class CiPlugin extends Plugin {
   /**
    * Returns library capability metadata tags for this test framework.
    * @param {string} frameworkVersion - The test framework version.
+   * @param {object} [ctx] - Diagnostic channel context.
+   * @param {boolean} [ctx.basicReportingOnly] - Whether advanced capabilities must be omitted.
    * @returns {Record<string, string|undefined>}
    */
-  getLibraryCapabilitiesTags (frameworkVersion) {
+  getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
+    if (ctx.basicReportingOnly) {
+      return {}
+    }
     return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
   }
 
