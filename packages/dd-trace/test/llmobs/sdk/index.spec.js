@@ -135,7 +135,7 @@ describe('sdk', () => {
 
       const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
 
-      assert.throws(() => disabledLLMObs.experiments.createDataset('d'), /LLM Observability is not enabled/)
+      assert.strictEqual(disabledLLMObs.experiments.createDataset('d').name(), 'd')
 
       disabledLLMObs.enable({
         mlApp: 'mlApp',
@@ -215,7 +215,7 @@ describe('sdk', () => {
 
       enabledLLMObs.disable()
 
-      assert.throws(() => enabledLLMObs.experiments.createDataset('d'), /LLM Observability is not enabled/)
+      assert.strictEqual(enabledLLMObs.experiments.createDataset('d').name(), 'd')
       sinon.assert.called(llmobsModule.disable)
     })
 
