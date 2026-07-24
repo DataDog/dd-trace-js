@@ -10,6 +10,7 @@ module.exports = [
   ...require('./langgraph'),
   ...require('./mercurius'),
   ...require('./modelcontextprotocol-sdk'),
+  ...require('./mysql'),
   ...require('./playwright'),
   ...require('./aws-durable-execution-sdk-js'),
 ]

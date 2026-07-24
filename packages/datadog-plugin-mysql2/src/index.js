@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const MySQLPlugin = require('../../datadog-plugin-mysql/src')
+const MySQLPlugin = require('../../datadog-plugin-mysql/src/legacy')
 
 class MySQL2Plugin extends MySQLPlugin {
   static id = 'mysql2'
