@@ -6,6 +6,7 @@ const { getBasicCommand } = require('../runner-command')
 
 const {
   basicEventEvidence,
+  error: scenarioError,
   failWithDebugRerun,
   frameworkOutDir,
   hasAllBasicEventTypes,
@@ -167,14 +168,10 @@ async function runBasicReporting ({ framework, out, options }) {
       scenarioName,
     })
   } catch (error) {
-    return {
-      frameworkId: framework.id,
-      scenario: scenarioName,
-      status: 'error',
-      diagnosis: `Basic Reporting could not complete: ${error?.message || error}`,
-      evidence: { validationIncomplete: true },
-      artifacts: outDir ? [outDir] : [],
-    }
+    const failure = scenarioError(framework, scenarioName, error, outDir || error?.artifactDirectory)
+    failure.diagnosis = `Basic Reporting could not complete: ${error?.message || error}`
+    failure.evidence.validationIncomplete = true
+    return failure
   }
 }
 

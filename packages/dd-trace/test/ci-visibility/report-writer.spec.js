@@ -81,6 +81,19 @@ describe('test optimization validation report', () => {
     assert.match(report, /Run the exact approved command in a normal project terminal/)
   })
 
+  it('reports a confirmed CI problem when no local check ran', () => {
+    write([
+      result('ci-wiring', 'fail', 'Test Optimization is not initialized in the selected CI job.', {
+        conclusion: 'confirmed_misconfigured',
+        evidenceStrength: 'confirmed_static',
+      }),
+    ])
+    const report = readReport()
+
+    assert.match(report, /customer CI configuration has a confirmed static problem/)
+    assert.match(report, /Local library behavior was not validated/)
+  })
+
   it('makes a possible library bug suitable for an engineering debugging session', () => {
     const artifact = path.join(out, 'mocha-root', 'basic-reporting', 'debug', 'command.json')
     fs.mkdirSync(path.dirname(artifact), { recursive: true })
@@ -122,6 +135,20 @@ describe('test optimization validation report', () => {
     assert.ok(report.split('\n').length < 200)
     assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
     assert.ok(consoleLog.lastCall.args[0].split('\n').length < 20)
+  })
+
+  it('escapes Markdown fences in untrusted structured evidence', () => {
+    write([
+      result('basic-reporting', 'fail', 'The command failed.', {
+        commandOutputSummary: ['```', '# injected heading'],
+        possibleLibraryBug: true,
+      }),
+    ])
+    const report = readReport()
+
+    assert.strictEqual((report.match(/```/g) || []).length, 2)
+    assert.match(report, /\\u0060\\u0060\\u0060/)
+    assert.doesNotMatch(report, /\n# injected heading\n/)
   })
 
   it('writes a clear pending report before project code executes', () => {

@@ -65,6 +65,21 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
     assert.match(result.diagnosis, /clean baseline changed/)
   })
 
+  it('preserves run artifacts when instrumented validation throws', async () => {
+    const artifactDirectory = path.join('/tmp', 'basic-error')
+    const { runBasicReporting } = getBasicReporting({
+      artifactDirectory,
+      complete: false,
+      initialized: false,
+      settingsLoaded: false,
+    })
+    const result = await runBasicReporting(getInput())
+
+    assert.strictEqual(result.status, 'error')
+    assert.ok(result.artifacts.includes(path.join(artifactDirectory, 'stdout.txt')))
+    assert.ok(result.artifacts.includes(path.join(artifactDirectory, 'stderr.txt')))
+  })
+
   it('flags a repeatable initialized-only failure as a possible compatibility bug', async () => {
     const { runBasicReporting } = getBasicReporting({
       cleanExitCode: 0,
@@ -98,6 +113,7 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
  * Loads Basic Reporting with deterministic command and event evidence.
  *
  * @param {object} options simulated evidence
+ * @param {string} [options.artifactDirectory] directory attached to a simulated runner error
  * @param {number} [options.cleanExitCode] clean confirmation exit code
  * @param {boolean} options.complete whether the complete event hierarchy exists
  * @param {number} [options.exitCode] initialized command exit code
@@ -106,6 +122,7 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
  * @returns {object} module under test
  */
 function getBasicReporting ({
+  artifactDirectory,
   cleanExitCode = 0,
   complete,
   exitCode = 0,
@@ -135,6 +152,17 @@ function getBasicReporting ({
     './helpers': {
       basicEventEvidence () {
         return evidence
+      },
+      error (framework, scenario, err, outDir = err?.artifactDirectory) {
+        return {
+          artifacts: ['command.json', 'stdout.txt', 'stderr.txt', 'events.ndjson', 'result.json']
+            .map(filename => path.join(outDir, filename)),
+          diagnosis: err.message,
+          evidence: {},
+          frameworkId: framework.id,
+          scenario,
+          status: 'error',
+        }
       },
       async failWithDebugRerun (input) {
         return {
@@ -173,6 +201,11 @@ function getBasicReporting ({
         }
       },
       async runInstrumentedCommand () {
+        if (artifactDirectory) {
+          const error = new Error('simulated instrumented failure')
+          error.artifactDirectory = artifactDirectory
+          throw error
+        }
         return {
           events: [],
           offline: {

@@ -199,10 +199,13 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     ...projectFiles.filter(filename => CONFIG_PATTERNS[framework]?.test(path.basename(filename))).slice(0, 5),
   ])].slice(0, 20)
   const runnerDescription = projectRunner ? 'repository test wrapper' : `installed ${framework} runner`
+  const browserRequired = framework === 'cypress' ||
+    framework === 'playwright' ||
+    (framework === 'vitest' && runnerContract.runnerArgs.includes('--browser'))
 
   return {
     ...base,
-    browserRequired: framework === 'cypress' || framework === 'playwright',
+    browserRequired,
     language: /\.[cm]?tsx?$/.test(candidate.path) ? 'typescript' : 'javascript',
     localSocketRequired: candidate.requiresLocalSocket,
     status: 'runnable',
@@ -217,7 +220,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       runner,
       runnerArgs: runnerContract.runnerArgs,
       testFile: candidate.path,
-      timeoutMs: framework === 'cypress' || framework === 'playwright' ? 300_000 : 180_000,
+      timeoutMs: browserRequired ? 300_000 : 180_000,
     },
     preflight: { status: 'pending' },
     generatedTestStrategy,

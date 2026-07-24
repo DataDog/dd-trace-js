@@ -619,12 +619,19 @@ function getValidationCoverage (results) {
  * @returns {object} result
  */
 function getFrameworkStatusResult (framework) {
+  const requiresProjectSetup = framework.status === 'requires_manual_setup'
   return {
     frameworkId: framework.id,
     scenario: 'all',
     status: 'skip',
     diagnosis: framework.notes?.[0] || `Framework status is ${framework.status}.`,
-    evidence: { frameworkStatus: framework.status, validationIncomplete: true },
+    evidence: {
+      frameworkStatus: framework.status,
+      validationIncomplete: true,
+      ...(requiresProjectSetup
+        ? { blockedByProjectSetup: true }
+        : { validatorAdapterUnavailable: true }),
+    },
     artifacts: [],
   }
 }
@@ -642,7 +649,7 @@ function getUnavailableRunnerResult (framework, unavailable) {
     scenario: 'all',
     status: 'skip',
     diagnosis: `The direct runner is unavailable: ${unavailable}. Complete normal project setup and retry.`,
-    evidence: { unavailableRunner: unavailable, validationIncomplete: true },
+    evidence: { blockedByProjectSetup: true, unavailableRunner: unavailable, validationIncomplete: true },
     artifacts: [],
   }
 }

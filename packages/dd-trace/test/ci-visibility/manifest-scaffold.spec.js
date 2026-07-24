@@ -224,6 +224,25 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('marks retained Vitest browser mode as browser-required', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest run --browser',
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.browserRequired, true)
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--browser'])
+      assert.strictEqual(framework.validation.timeoutMs, 300_000)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('keeps Jest suffixes and disables retained leak detection for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'jest',

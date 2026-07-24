@@ -100,6 +100,23 @@ describe('test optimization validation result semantics', () => {
       ],
     },
     {
+      name: 'reports a missing local runner as required project setup',
+      results: [
+        getResult('all', 'skip', {
+          blockedByProjectSetup: true,
+          unavailableRunner: '/repo/node_modules/.bin/vitest',
+          validationIncomplete: true,
+        }),
+        getResult('basic-reporting', 'skip', { validationIncomplete: true }),
+      ],
+      executionStatus: 'project_setup_required',
+      exitCode: 2,
+      resultSemantics: [
+        { conclusion: 'incomplete', domain: 'project_setup' },
+        { conclusion: 'incomplete', domain: 'test_optimization' },
+      ],
+    },
+    {
       name: 'returns two when the execution environment blocks local validation',
       results: [
         getResult('basic-reporting', 'blocked', { blockedByExecutionEnvironment: true }),

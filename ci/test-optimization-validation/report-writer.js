@@ -150,7 +150,7 @@ function renderReport ({ manifest, out, reportPath, results, runSummary, staticD
           '<details><summary>Structured evidence</summary>',
           '',
           '```json',
-          JSON.stringify(evidence, null, 2),
+          fencedJson(evidence),
           '```',
           '',
           '</details>',
@@ -196,6 +196,9 @@ function getVerdicts (results) {
     } else if (basic?.evidence?.possibleLibraryBug) {
       text = 'The clean test worked, but controlled Datadog initialization did not. This is a possible library bug ' +
         'and the recorded debug artifacts are suitable for engineering investigation.'
+    } else if ((!basic || isIncomplete(basic)) && ci?.status === 'fail') {
+      text = 'The customer CI configuration has a confirmed static problem. Local library behavior was not ' +
+        'validated because the direct test or its environment was unavailable.'
     } else if (isIncomplete(basic) || !basic) {
       text = 'Local library behavior was not validated because the direct test or its environment was unavailable.'
     } else {
@@ -302,6 +305,16 @@ function compactEvidence (evidence = {}) {
   if (evidence.ciCommandCandidate) compact.ciCommandCandidate = evidence.ciCommandCandidate
   if (evidence.ciWiring?.unresolved) compact.unresolved = evidence.ciWiring.unresolved
   return sanitizeForReport(compact)
+}
+
+/**
+ * Renders JSON without allowing evidence strings to close the Markdown fence.
+ *
+ * @param {object} value structured evidence
+ * @returns {string} fenced JSON body
+ */
+function fencedJson (value) {
+  return JSON.stringify(value, null, 2).replaceAll('```', String.raw`\u0060\u0060\u0060`)
 }
 
 /**
