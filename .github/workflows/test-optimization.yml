@@ -202,6 +202,30 @@ jobs:
         with:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
 
+  integration-webdriverio:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node-version: oldest
+            webdriverio-version: oldest
+          - node-version: latest
+            webdriverio-version: latest
+    name: integration-webdriverio (${{ matrix.webdriverio-version }}, node-${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: npm run test:integration:webdriverio:coverage
+        env:
+          WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
+
   integration-jest:
     strategy:
       fail-fast: false

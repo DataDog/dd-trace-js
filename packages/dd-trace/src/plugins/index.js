@@ -36,6 +36,7 @@ const plugins = {
   get '@smithy/core' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
+  get '@wdio/local-runner' () { return require('../../../datadog-plugin-mocha/src') },
   get '@langchain/langgraph' () { return require('../../../datadog-plugin-langgraph/src') },
   get '@openai/agents' () { return require('../../../datadog-plugin-openai-agents/src') },
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
