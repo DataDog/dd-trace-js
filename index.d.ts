@@ -3575,22 +3575,6 @@ declare namespace tracer {
       experiments: Experiments,
 
       /**
-       * Create a local dataset buffer; pushed on the first experiment run.
-       */
-      createDataset (name: string, description?: string): Dataset
-      createDataset (name: string, options?: CreateDatasetOptions): Dataset
-
-      /**
-       * Create a local dataset buffer from a CSV file.
-       */
-      createDatasetFromCsv (csvPath: string, name: string, options: CreateDatasetFromCsvOptions): Dataset
-
-      /**
-       * Pull an existing dataset (with records) by name.
-       */
-      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
-
-      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.

@@ -69,18 +69,6 @@ class LLMObs extends NoopLLMObs {
     return this.#experiments
   }
 
-  createDataset (name, descriptionOrOptions) {
-    return this.experiments.createDataset(name, descriptionOrOptions)
-  }
-
-  createDatasetFromCsv (csvPath, name, options) {
-    return this.experiments.createDatasetFromCsv(csvPath, name, options)
-  }
-
-  pullDataset (name, options) {
-    return this.experiments.pullDataset(name, options)
-  }
-
   enable (options = {}) {
     logger.warn(
       'Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
