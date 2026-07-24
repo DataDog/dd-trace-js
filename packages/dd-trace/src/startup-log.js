@@ -108,6 +108,9 @@ function configInfo () {
     profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
     appsec_enabled: config.appsec.enabled,
     data_streams_enabled: !!config.dsmEnabled,
+    otlp_traces_export_enabled: config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility,
+    otlp_metrics_export_enabled: !!config.DD_METRICS_OTEL_ENABLED,
+    otlp_logs_export_enabled: !!config.DD_LOGS_OTEL_ENABLED,
   }
 }
 
