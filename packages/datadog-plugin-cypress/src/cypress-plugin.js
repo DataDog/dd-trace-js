@@ -1922,7 +1922,9 @@ class CypressPlugin {
             })
             if (command.error) {
               const errorObj = new Error(command.error.message || String(command.error))
+              // eslint-disable-next-line unicorn/no-error-property-assignment -- Preserve Cypress's error type.
               if (command.error.name) errorObj.name = command.error.name
+              // eslint-disable-next-line unicorn/no-error-property-assignment -- Preserve Cypress's original stack.
               if (command.error.stack) errorObj.stack = command.error.stack
               stepSpan.setTag('error', errorObj)
             }

@@ -35,8 +35,9 @@ class ElectronExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
 
-    // eslint-disable-next-line unicorn/no-unnecessary-splice -- The removed entries are the batch being flushed.
-    const traces = this.#traces.splice(0)
+    // eslint-disable-next-line unicorn/prefer-spread -- Avoid invoking a user-overridden array iterator.
+    const traces = this.#traces.slice()
+    this.#traces.length = 0
 
     if (traces.length > 0 && traceChannel.hasSubscribers) {
       const formattedTraces = traces.map(spans => spans.map(span => normalizeSpan(truncateSpan(span))))

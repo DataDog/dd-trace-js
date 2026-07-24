@@ -560,6 +560,7 @@ function getErrorFromCucumberResult (cucumberResult) {
   if (cucumberResult.exception) {
     error.type = cucumberResult.exception.type
   }
+  // eslint-disable-next-line unicorn/no-error-property-assignment -- Preserve Cucumber's original stack.
   error.stack = cucumberResult.message
   return error
 }

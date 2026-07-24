@@ -592,6 +592,7 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // Many errors
       'unicorn/name-replacements': 'off', // Many errors | naming churn (split out of prevent-abbreviations)
+      'unicorn/no-negated-comparison': ['error', { checkLogicalExpressions: true }],
       'unicorn/prevent-abbreviations': 'off', // Many errors
 
       // These rules require a newer Node.js version than we support
@@ -613,13 +614,11 @@ export default [
       'unicorn/class-reference-in-static-methods': 'off', // 6 errors
       'unicorn/consistent-class-member-order': 'off', // 55 errors | ordering churn
       'unicorn/consistent-conditional-object-spread': 'off', // 3 errors
-      'unicorn/consistent-optional-chaining': 'off', // 3 errors
       'unicorn/explicit-length-check': 'off', // Not a big advantage
       'unicorn/explicit-timer-delay': 'off', // Covered by our own timer lint rules
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-computed-property-existence-check': 'off', // 160 errors | needs an audit
       'unicorn/no-declarations-before-early-exit': 'off', // 62 errors
-      'unicorn/no-error-property-assignment': 'off', // 6 errors
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
       'unicorn/no-invalid-argument-count': 'off', // 98 errors | high false-positive risk, worth a focused pass
       'unicorn/no-nonstandard-builtin-properties': 'off', // 34 errors | needs an audit
@@ -681,7 +680,6 @@ export default [
       // These remaining rules need focused rewrites before activation (counts from the v72 run).
       'unicorn/no-confusing-array-splice': 'off', // 1 error
       'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
-      'unicorn/no-negated-comparison': 'off', // 1 error
       'unicorn/no-subtraction-comparison': 'off', // 2 errors
       'unicorn/no-unnecessary-global-this': 'off', // 3 errors | explicit globals are clearer
       'unicorn/no-useless-continue': 'off', // 1 error
