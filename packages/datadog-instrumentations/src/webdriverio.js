@@ -3,6 +3,7 @@
 const { AsyncResource } = require('node:async_hooks')
 const { fileURLToPath } = require('node:url')
 
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const { MOCHA_WORKER_TRACE_PAYLOAD_CODE } = require('../../dd-trace/src/plugins/util/test')
 const { channel, tracingChannel } = require('./helpers/instrument')
@@ -518,10 +519,23 @@ localRunnerRunCh.subscribe({
 
     const state = getCoordinatorState(context.self)
     const workerOptions = context.arguments?.[0]
-    const runnerEnv = runnerConfiguration.runnerEnv || {}
+    let workerEnvironment = runnerConfiguration.runnerEnv || {}
+    const launcherNodeOptions = getEnvironmentVariable('NODE_OPTIONS')
+    const workerNodeOptions = workerEnvironment.NODE_OPTIONS
+
+    if (launcherNodeOptions &&
+      workerNodeOptions !== undefined &&
+      !workerNodeOptions.includes(launcherNodeOptions)) {
+      workerEnvironment = {
+        ...workerEnvironment,
+        NODE_OPTIONS: workerNodeOptions
+          ? `${launcherNodeOptions} ${workerNodeOptions}`
+          : launcherNodeOptions,
+      }
+    }
 
     runnerConfiguration.runnerEnv = {
-      ...runnerEnv,
+      ...workerEnvironment,
       MOCHA_WORKER_ID: 'webdriverio',
       [WEBDRIVERIO_WORKER_ENV]: 'true',
     }

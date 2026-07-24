@@ -76,6 +76,13 @@ const scenarioConfig = {
     },
     specs: ['./retry.e2e.js'],
   },
+  runnerEnvNodeOptions: {
+    maxInstances: 1,
+    runnerEnv: {
+      NODE_OPTIONS: '--require ./runner-env-preload.js',
+    },
+    specs: ['./runner-env.e2e.js'],
+  },
   serial: {
     maxInstances: 1,
   },

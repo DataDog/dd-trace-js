@@ -55,6 +55,8 @@ describe('webdriverio instrumentation', () => {
     const suiteFinishes = []
     let advancedFeatureRequests = 0
     let configurationRequests = 0
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    process.env.NODE_OPTIONS = '--require dd-trace/ci/init'
 
     function onTestFinish () {}
     function onAdvancedFeatureRequest (request) {
@@ -116,7 +118,10 @@ describe('webdriverio instrumentation', () => {
         _config: {
           framework: 'mocha',
           rootDir: process.cwd(),
-          runnerEnv: { USER_ENV: 'preserved' },
+          runnerEnv: {
+            NODE_OPTIONS: '--no-warnings',
+            USER_ENV: 'preserved',
+          },
         },
       }
       const firstFile = path.join(process.cwd(), 'first.spec.js')
@@ -129,6 +134,7 @@ describe('webdriverio instrumentation', () => {
 
       assert.deepStrictEqual(localRunner._config.runnerEnv, {
         USER_ENV: 'preserved',
+        NODE_OPTIONS: '--require dd-trace/ci/init --no-warnings',
         MOCHA_WORKER_ID: 'webdriverio',
         [WEBDRIVERIO_WORKER_ENV]: 'true',
       })
@@ -207,6 +213,11 @@ describe('webdriverio instrumentation', () => {
       testSuiteStartCh.unsubscribe(onSuiteStart)
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
       testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
     }
   })
 })

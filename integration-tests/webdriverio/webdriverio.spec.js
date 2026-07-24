@@ -374,6 +374,14 @@ for (const version of versions) {
       })
     })
 
+    it('preserves tracer preload with runnerEnv.NODE_OPTIONS', async () => {
+      await runScenario('runnerEnvNodeOptions', 1, ({ suites, tests }) => {
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'runner-env-node-options')
+      })
+    })
+
     it('supports the Mocha TDD interface', async () => {
       await runScenario('tdd', 1, ({ suites, tests }) => {
         assert.strictEqual(suites.length, 1)
