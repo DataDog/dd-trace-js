@@ -1,8 +1,13 @@
 'use strict'
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
+const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { withRequest } = require('../../dd-trace/src/appsec/store')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+
+const legacyStorage = storage('legacy')
 
 class Http2ServerPlugin extends ServerPlugin {
   constructor (tracer, config) {
@@ -51,7 +56,18 @@ class Http2ServerPlugin extends ServerPlugin {
     // single-listener request, which never adopts.
     if (ctx.adoptable) web.linkContextToStream(req.stream, context)
 
-    instrumentWriteHead(context)
+    if (!ctx.isStream) instrumentWriteHead(context)
+
+    if (incomingHttpRequestStart.hasSubscribers) {
+      // AppSec and IAST observe both HTTP/2 APIs through the same bridge the
+      // plain `http` plugin publishes; they read `req` off the async store.
+      // The bind enters `currentStore` only after this returns, so enter it
+      // here first — subscribers resolve their context from the active store.
+      ctx.currentStore = withRequest(ctx.currentStore, req)
+      legacyStorage.enterWith(ctx.currentStore)
+      ctx.abortController = new AbortController()
+      incomingHttpRequestStart.publish(ctx)
+    }
 
     return ctx.currentStore
   }
@@ -82,6 +98,10 @@ class Http2ServerPlugin extends ServerPlugin {
     const context = web.getContext(req)
 
     if (!context || !context.res) return // Not created by a http.Server instance.
+
+    if (incomingHttpRequestEnd.hasSubscribers) {
+      incomingHttpRequestEnd.publish({ req, res: context.res })
+    }
 
     web.finishAll(context)
 

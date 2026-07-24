@@ -1,20 +1,32 @@
 'use strict'
 
+const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
+const shimmer = require('../../../datadog-shimmer')
+const { FOREIGN_HTTP2_SERVER } = require('../../../dd-trace/src/constants')
 const {
   channel,
   addHook,
 } = require('../helpers/instrument')
-const shimmer = require('../../../datadog-shimmer')
-const { FOREIGN_HTTP2_SERVER } = require('../../../dd-trace/src/constants')
 
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const adoptServerCh = channel('apm:http2:server:request:adopt')
 const emitCh = channel('apm:http2:server:response:emit')
+// Reuse the `http` response-sink channels so the existing AppSec/IAST analyzers
+// fire for HTTP/2 too. `Http2ServerResponse` and `Http2Stream` do not share the
+// `http.ServerResponse` prototype the `http` instrumentation wraps, so without
+// these republications every response-side sink is dead for both HTTP/2 APIs.
+const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
+const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
+const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
+// Node.js started preserving duplicate response header pairs in 20.12.0 and 21.7.0.
+const PRESERVES_DUPLICATE_HEADERS = NODE_MAJOR >= 22 ||
+  (NODE_MAJOR === 21 && NODE_MINOR >= 7) ||
+  (NODE_MAJOR === 20 && NODE_MINOR >= 12)
 
 // Streams whose server span was already created from the 'stream' event. The
 // compatibility layer synthesizes 'request' from that same stream, so the
@@ -24,6 +36,17 @@ const tracedStreams = new WeakSet()
 addHook({ name: 'http2' }, http2 => {
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
+
+  const responseProto = http2.Http2ServerResponse?.prototype
+  if (responseProto) {
+    shimmer.wrap(responseProto, 'end', wrapEnd)
+    shimmer.wrap(responseProto, 'setHeader', wrapSetHeader)
+    if (responseProto.appendHeader) shimmer.wrap(responseProto, 'appendHeader', wrapSetHeader)
+    shimmer.wrap(responseProto, 'write', wrapWrite)
+    shimmer.wrap(responseProto, 'writeHead', wrapWriteHead)
+  }
+
+  return http2
 })
 
 function wrapCreateServer (createServer) {
@@ -90,8 +113,17 @@ function wrapEmit (originalEmit) {
         ctx.adoptable = requestListenerCount !== 0
         tracedStreams.add(stream)
 
+        shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
         return traceServerRequest(ctx, () => {
-          shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
+          if (finishSetHeaderCh.hasSubscribers || startWriteHeadCh.hasSubscribers) {
+            shimmer.wrap(stream, 'respond', respond => wrapStreamResponse(respond, ctx, 0))
+            shimmer.wrap(stream, 'respondWithFD', respond => wrapStreamResponse(respond, ctx, 1))
+            shimmer.wrap(stream, 'respondWithFile', respond => wrapStreamResponse(respond, ctx, 1))
+            if (startWriteHeadCh.hasSubscribers) {
+              shimmer.wrap(stream, 'end', end => wrapStreamEnd(end, ctx))
+              shimmer.wrap(stream, 'write', write => wrapStreamWrite(write, ctx))
+            }
+          }
           return Reflect.apply(originalEmit, this, args)
         })
       }
@@ -110,15 +142,226 @@ function wrapEmit (originalEmit) {
         adoptServerCh.publish({ req, res })
       } else {
         const ctx = { req, res }
-        return traceServerRequest(ctx, () => {
-          shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
-          return Reflect.apply(originalEmit, this, args)
-        })
+        shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
+        return traceServerRequest(ctx, () => Reflect.apply(originalEmit, this, args))
       }
     }
 
     return Reflect.apply(originalEmit, this, args)
   }
+}
+
+/**
+ * @param {Function} setHeader
+ */
+function wrapSetHeader (setHeader) {
+  return function (...args) {
+    if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
+      return Reflect.apply(setHeader, this, args)
+    }
+
+    if (startSetHeaderCh.hasSubscribers) {
+      const abortController = new AbortController()
+      startSetHeaderCh.publish({ res: this, abortController })
+      if (abortController.signal.aborted) return
+    }
+
+    const result = Reflect.apply(setHeader, this, args)
+
+    if (finishSetHeaderCh.hasSubscribers) {
+      finishSetHeaderCh.publish({ name: args[0], value: args[1], res: this })
+    }
+
+    return result
+  }
+}
+
+/**
+ * @param {Function} writeHead
+ */
+function wrapWriteHead (writeHead) {
+  return function (...args) {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return Reflect.apply(writeHead, this, args)
+    }
+
+    const abortController = new AbortController()
+    const headers = typeof args[1] === 'string' ? args[2] : args[1]
+    const responseHeaders = addResponseHeaders(this.getHeaders(), headers)
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: args[0],
+      responseHeaders,
+    })
+    if (abortController.signal.aborted) return this
+
+    const result = Reflect.apply(writeHead, this, args)
+
+    if (finishSetHeaderCh.hasSubscribers) {
+      for (const name of Object.keys(responseHeaders)) {
+        finishSetHeaderCh.publish({ name, value: responseHeaders[name], res: this })
+      }
+    }
+
+    return result
+  }
+}
+
+/**
+ * @param {Function} write
+ */
+function wrapWrite (write) {
+  return function (...args) {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return Reflect.apply(write, this, args)
+    }
+
+    const abortController = new AbortController()
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: this.statusCode,
+      responseHeaders: this.getHeaders(),
+    })
+    if (abortController.signal.aborted) return true
+
+    return Reflect.apply(write, this, args)
+  }
+}
+
+/**
+ * @param {Function} end
+ */
+function wrapEnd (end) {
+  return function (...args) {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return Reflect.apply(end, this, args)
+    }
+
+    const abortController = new AbortController()
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: this.statusCode,
+      responseHeaders: this.getHeaders(),
+    })
+    if (abortController.signal.aborted) return this
+
+    return Reflect.apply(end, this, args)
+  }
+}
+
+/**
+ * @param {Function} respond
+ * @param {StreamRequestContext} ctx
+ * @param {number} headersIndex
+ */
+function wrapStreamResponse (respond, ctx, headersIndex) {
+  return function (...args) {
+    const responseHeaders = addResponseHeaders({}, args[headersIndex])
+    let abortController
+    if (startWriteHeadCh.hasSubscribers) {
+      abortController = new AbortController()
+      startWriteHeadCh.publish({
+        req: ctx.req,
+        res: ctx.res,
+        abortController,
+        statusCode: responseHeaders[HTTP2_HEADER_STATUS] ?? 200,
+        responseHeaders,
+      })
+      if (abortController.signal.aborted) return this
+    }
+
+    const result = Reflect.apply(respond, this, args)
+
+    if (finishSetHeaderCh.hasSubscribers) {
+      for (const name of Object.keys(responseHeaders)) {
+        finishSetHeaderCh.publish({ name, value: responseHeaders[name], res: ctx.res })
+      }
+    }
+
+    return result
+  }
+}
+
+/**
+ * @param {Function} write
+ * @param {StreamRequestContext} ctx
+ */
+function wrapStreamWrite (write, ctx) {
+  return function (...args) {
+    if (publishStreamResponse(ctx, this)) return true
+    return Reflect.apply(write, this, args)
+  }
+}
+
+/**
+ * @param {Function} end
+ * @param {StreamRequestContext} ctx
+ */
+function wrapStreamEnd (end, ctx) {
+  return function (...args) {
+    if (publishStreamResponse(ctx, this)) return this
+    return Reflect.apply(end, this, args)
+  }
+}
+
+/**
+ * @param {StreamRequestContext} ctx
+ * @param {import('node:http2').ServerHttp2Stream} stream
+ */
+function publishStreamResponse (ctx, stream) {
+  const responseHeaders = stream.sentHeaders ?? {}
+  const abortController = new AbortController()
+  startWriteHeadCh.publish({
+    req: ctx.req,
+    res: ctx.res,
+    abortController,
+    statusCode: responseHeaders[HTTP2_HEADER_STATUS] ?? 200,
+    responseHeaders,
+  })
+  return abortController.signal.aborted
+}
+
+/**
+ * @param {Record<string, unknown>} responseHeaders
+ * @param {object | unknown[]} [headers]
+ */
+function addResponseHeaders (responseHeaders, headers) {
+  if (Array.isArray(headers)) {
+    const entriesArePairs = Array.isArray(headers[0])
+    let addedNames
+    if (PRESERVES_DUPLICATE_HEADERS) addedNames = new Set()
+    const increment = entriesArePairs ? 1 : 2
+    for (let i = 0; i < headers.length; i += increment) {
+      const entry = headers[i]
+      const name = entriesArePairs ? entry[0] : entry
+      const value = entriesArePairs ? entry[1] : headers[i + 1]
+      if (addedNames?.has(name)) {
+        const previous = responseHeaders[name]
+        const values = Array.isArray(previous) ? [...previous] : [previous]
+        if (Array.isArray(value)) {
+          values.push(...value)
+        } else {
+          values.push(value)
+        }
+        responseHeaders[name] = values
+      } else {
+        responseHeaders[name] = value
+        addedNames?.add(name)
+      }
+    }
+  } else if (headers) {
+    for (const name of Object.keys(headers)) {
+      responseHeaders[name] = headers[name]
+    }
+  }
+
+  return responseHeaders
 }
 
 // Enter the request context and run `emitEvent` (the original `emit`, wrapped to
@@ -130,6 +373,8 @@ function wrapEmit (originalEmit) {
  */
 function traceServerRequest (ctx, emitEvent) {
   return startServerCh.runStores(ctx, () => {
+    if (ctx.abortController?.signal.aborted) return true
+
     try {
       return emitEvent()
     } catch (error) {
@@ -138,6 +383,61 @@ function traceServerRequest (ctx, emitEvent) {
       throw error
     }
   })
+}
+
+class Http2StreamResponse {
+  /** @type {import('node:http2').ServerHttp2Stream} */
+  #stream
+
+  /**
+   * @param {import('node:http2').ServerHttp2Stream} stream
+   * @param {object} req
+   */
+  constructor (stream, req) {
+    this.#stream = stream
+    this.req = req
+  }
+
+  get headersSent () {
+    return this.#stream.headersSent
+  }
+
+  get statusCode () {
+    return this.#stream.sentHeaders?.[HTTP2_HEADER_STATUS] ?? 200
+  }
+
+  /**
+   * @param {string} name
+   */
+  getHeader (name) {
+    return this.#stream.sentHeaders?.[name]
+  }
+
+  getHeaderNames () {
+    return Object.keys(this.#stream.sentHeaders ?? {})
+  }
+
+  removeHeader () {}
+
+  /**
+   * @param {number} statusCode
+   * @param {Record<string, string | string[]>} [headers]
+   */
+  writeHead (statusCode, headers) {
+    this.#stream.respond({
+      ...headers,
+      [HTTP2_HEADER_STATUS]: statusCode,
+    })
+    return this
+  }
+
+  /**
+   * @param {string | Buffer} [body]
+   */
+  end (body) {
+    this.#stream.end(body)
+    return this
+  }
 }
 
 /**
@@ -177,19 +477,7 @@ function createStreamAdapter (stream, headers) {
     url: headers[HTTP2_HEADER_PATH],
     socket: stream.session?.socket,
   }
-  const res = {
-    req,
-    get statusCode () {
-      // A stream aborted before `stream.respond()` has no `:status`. The
-      // compatibility `Http2ServerResponse.statusCode` defaults to 200 in that
-      // case, so match it rather than report `undefined` (which `validateStatus`
-      // would treat as an error and which drops the `http.status_code` tag).
-      return stream.sentHeaders?.[HTTP2_HEADER_STATUS] ?? 200
-    },
-    getHeader (name) {
-      return stream.sentHeaders?.[name]
-    },
-  }
+  const res = new Http2StreamResponse(stream, req)
 
-  return { req, res }
+  return { req, res, isStream: true }
 }
