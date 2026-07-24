@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const log = require('../../../src/log')
 const { createExperiments } = require('../../../src/llmobs/experiments')
 const NoopExperiments = require('../../../src/llmobs/experiments/noop')
 
@@ -30,9 +31,15 @@ describe('LLMObs Experiments facade', () => {
 
   describe('createExperiments gating', () => {
     it('returns a no-op when LLM Obs is disabled', () => {
+      const warn = sinon.spy(log, 'warn')
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
       assert.ok(exp instanceof NoopExperiments)
-      assert.throws(() => exp.createDataset('d'), /unavailable/)
+
+      const dataset = exp.createDataset('d', { records: [{ inputData: 'in' }] })
+
+      assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.records()[0].input, 'in')
+      sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
     })
 
     it('returns a no-op when app key is missing', () => {
@@ -77,18 +84,32 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('returns a no-op with actionable steps when neither mlApp nor service is set', () => {
+      const warn = sinon.spy(log, 'warn')
       const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
       assert.ok(exp instanceof NoopExperiments)
-      assert.throws(() => exp.createDataset('d'), /DD_LLMOBS_ML_APP.*DD_SERVICE/)
+
+      exp.createDataset('d')
+
+      sinon.assert.calledWith(warn, sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/))
     })
   })
 
   describe('no-op (disabled / missing keys)', () => {
-    it('throws on every operation with a clear message', async () => {
+    it('warns and returns inert objects for every operation', async () => {
+      const warn = sinon.spy(log, 'warn')
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
-      assert.throws(() => exp.createDataset('d'), /unavailable/)
-      assert.throws(() => exp.experiment({}), /unavailable/)
-      await assert.rejects(() => exp.pullDataset('d'), /unavailable/)
+
+      const dataset = exp.createDataset('d')
+      assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
+      assert.equal(dataset.url(), null)
+
+      const pulled = await exp.pullDataset('d')
+      assert.equal(pulled.name(), 'd')
+
+      const experiment = exp.experiment({ name: 'exp' })
+      assert.equal(experiment.name(), 'exp')
+      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      sinon.assert.calledThrice(warn)
     })
   })
 
