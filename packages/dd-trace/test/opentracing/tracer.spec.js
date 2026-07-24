@@ -58,6 +58,7 @@ describe('Tracer', () => {
 
     agentExporter = {
       export: sinon.spy(),
+      flush: sinon.stub().callsArg(0),
     }
     AgentExporter = sinon.stub().returns(agentExporter)
 
@@ -437,6 +438,45 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
 
       tracer.extract()
+    })
+  })
+
+  describe('flush', () => {
+    it('should delegate to the exporter and forward the done callback', () => {
+      tracer = new Tracer(config)
+      const done = sinon.spy()
+
+      tracer.flush(done)
+
+      sinon.assert.calledWith(agentExporter.flush, done)
+      sinon.assert.calledOnce(done)
+    })
+
+    it('should call done synchronously when the exporter has no flush method', () => {
+      delete agentExporter.flush
+      tracer = new Tracer(config)
+      const done = sinon.spy()
+
+      tracer.flush(done)
+
+      sinon.assert.calledOnce(done)
+    })
+
+    it('should not throw when called without a callback', () => {
+      tracer = new Tracer(config)
+
+      tracer.flush()
+    })
+
+    it('should call done and log instead of throwing when the exporter flush throws synchronously', () => {
+      agentExporter.flush = sinon.stub().throws(new Error('boom'))
+      tracer = new Tracer(config)
+      const done = sinon.spy()
+
+      tracer.flush(done)
+
+      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnce(log.error)
     })
   })
 })
