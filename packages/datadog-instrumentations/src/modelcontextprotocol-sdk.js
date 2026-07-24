@@ -9,11 +9,12 @@ for (const hook of getHooks('@modelcontextprotocol/sdk')) {
 }
 
 const serverRequestCh = tracingChannel('apm:mcp:server:request')
+const clientInitializeCh = tracingChannel('apm:mcp:client:initialize')
 const clientRequestInjectCh = channel('apm:mcp:client:request:inject')
 const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
-const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
+const TRACED_METHOD = /^(?:initialize$|(?:tools|resources|prompts)\/)/
 
 // Maps Protocol instance → Map<requestId, ctx>. Shares the ctx object between
 // _onrequest (span start, in the correct HTTP async context), the SDK request
@@ -36,6 +37,19 @@ function addTraceContextToRequest (request, traceContext) {
   }
 }
 
+function addTraceContextIfAvailable (request) {
+  if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD.test(request?.method)) {
+    return request
+  }
+
+  const ctx = {}
+  clientRequestInjectCh.publish(ctx)
+
+  if (!ctx.traceContext) return request
+
+  return addTraceContextToRequest(request, ctx.traceContext)
+}
+
 function getPendingContext (protocol, requestId) {
   return pendingContexts.get(protocol)?.get(requestId)
 }
@@ -55,6 +69,8 @@ function wrapRequestHandler (protocol, handler) {
   const wrappedHandler = function requestHandlerWithTrace (request, extra) {
     const ctx = getPendingContext(protocol, extra?.requestId)
     if (!ctx) return handler.apply(this, arguments)
+
+    if (typeof extra?.sessionId === 'string' && extra.sessionId) ctx.sessionId = extra.sessionId
 
     let result
     try {
@@ -118,23 +134,52 @@ function wrapAbortControllers (protocol) {
   })
 }
 
+function traceClientInitializeRequest (protocol, original, request, resultSchema, options) {
+  const ctx = { request, self: protocol }
+  return clientInitializeCh.start.runStores(ctx, () => {
+    try {
+      const result = original.call(protocol, addTraceContextIfAvailable(request), resultSchema, options)
+      if (result && typeof result.then === 'function') {
+        return result.then(result => {
+          ctx.result = result
+          clientInitializeCh.asyncEnd.publish(ctx)
+          return result
+        }, err => {
+          ctx.error = err
+          clientInitializeCh.asyncEnd.publish(ctx)
+          throw err
+        })
+      }
+
+      ctx.result = result
+      clientInitializeCh.asyncEnd.publish(ctx)
+      return result
+    } catch (err) {
+      ctx.error = err
+      clientInitializeCh.asyncEnd.publish(ctx)
+      throw err
+    } finally {
+      clientInitializeCh.end.publish(ctx)
+    }
+  })
+}
+
 function wrapProtocol (Protocol) {
   // Inject trace context into MCP request metadata so out-of-process MCP servers
   // can parent server spans to the client operation span.
   shimmer.wrap(Protocol.prototype, 'request', function (original) {
     return function requestWithTraceContext (request, resultSchema, options) {
-      if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
+      if (clientInitializeCh.hasSubscribers && request?.method === 'initialize') {
+        return traceClientInitializeRequest(this, original, request, resultSchema, options)
+      }
+
+      const tracedRequest = addTraceContextIfAvailable(request)
+
+      if (tracedRequest === request) {
         return original.apply(this, arguments)
       }
 
-      const ctx = {}
-      clientRequestInjectCh.publish(ctx)
-
-      if (!ctx.traceContext) {
-        return original.apply(this, arguments)
-      }
-
-      return original.call(this, addTraceContextToRequest(request, ctx.traceContext), resultSchema, options)
+      return original.call(this, tracedRequest, resultSchema, options)
     }
   })
 
@@ -142,7 +187,7 @@ function wrapProtocol (Protocol) {
   // async context, so ALS correctly parents server spans under the HTTP span.
   shimmer.wrap(Protocol.prototype, '_onrequest', function (original) {
     return function _onrequestWithTrace (request, extra) {
-      if (!serverRequestCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request.method)) {
+      if (!serverRequestCh.hasSubscribers || !TRACED_METHOD.test(request?.method)) {
         return original.call(this, request, extra)
       }
 
@@ -156,12 +201,19 @@ function wrapProtocol (Protocol) {
         }
         pending.set(request.id, ctx)
 
+        let error
         try {
           original.call(this, request, extra)
         } catch (err) {
           ctx.error = err
+          error = err
+        } finally {
+          serverRequestCh.end.publish(ctx)
+        }
+
+        if (error) {
           finishServerRequest(this, request.id)
-          throw err
+          throw error
         }
 
         // The SDK registers an AbortController only when it actually dispatches a handler.
