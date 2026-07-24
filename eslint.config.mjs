@@ -619,6 +619,7 @@ export default [
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-computed-property-existence-check': 'off', // 160 errors | needs an audit
       'unicorn/no-declarations-before-early-exit': 'off', // 62 errors
+      'unicorn/no-error-property-assignment': 'off', // 6 errors | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
       'unicorn/no-invalid-argument-count': 'off', // 98 errors | high false-positive risk, worth a focused pass
       'unicorn/no-nonstandard-builtin-properties': 'off', // 34 errors | needs an audit

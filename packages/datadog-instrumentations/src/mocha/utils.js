@@ -838,7 +838,6 @@ function getOnFailHandler (isMain, config) {
         const testSuiteError = new Error(
           `"${testOrHook.parent.fullTitle()}" failed with message "${err.message}"`
         )
-        // eslint-disable-next-line unicorn/no-error-property-assignment -- Preserve the failed test's stack.
         testSuiteError.stack = err.stack
         testSuiteContext.error = testSuiteError
         testSuiteErrorCh.runStores(testSuiteContext, () => {})

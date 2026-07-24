@@ -1629,10 +1629,8 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
 function getFormattedError (error, repositoryRoot) {
   const newError = new Error(error.message)
   if (error.stack) {
-    // eslint-disable-next-line unicorn/no-error-property-assignment -- Keep only repository stack frames.
     newError.stack = error.stack.split('\n').filter(line => line.includes(repositoryRoot)).join('\n')
   }
-  // eslint-disable-next-line unicorn/no-error-property-assignment -- Preserve the source error type.
   newError.name = error.name
 
   return newError
