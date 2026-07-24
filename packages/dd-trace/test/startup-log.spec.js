@@ -324,12 +324,15 @@ describe('profiling_enabled', () => {
 describe('otlp export flags', () => {
   function clearOtlpEnv () {
     delete process.env.OTEL_TRACES_EXPORTER
+    delete process.env.OTEL_METRICS_EXPORTER
+    delete process.env.OTEL_LOGS_EXPORTER
     delete process.env.DD_METRICS_OTEL_ENABLED
     delete process.env.DD_LOGS_OTEL_ENABLED
   }
 
-  // Clear before each test too: this repo's dev shells export OTEL_TRACES_EXPORTER=otlp,
-  // which would otherwise leak into the default-state assertion.
+  // Datadog-instrumented dev shells export the OTEL_*_EXPORTER selectors: a leaked
+  // OTEL_TRACES_EXPORTER=otlp corrupts the default-state assertion, and OTEL_METRICS_EXPORTER=none
+  // makes config force DD_METRICS_OTEL_ENABLED back to false, breaking the metrics positive case.
   beforeEach(clearOtlpEnv)
   afterEach(clearOtlpEnv)
 
