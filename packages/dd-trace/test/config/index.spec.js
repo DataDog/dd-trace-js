@@ -5257,3 +5257,21 @@ rules:
     })
   })
 })
+
+describe('RUNTIME_ID lazy init', () => {
+  it('does not call uuid at module load and memoizes on first config build', () => {
+    const uuidStub = sinon.stub().returns('fake-runtime-id')
+    const getConfig = proxyquire('../../src/config', {
+      '../../../../vendor/dist/crypto-randomuuid': uuidStub,
+    })
+
+    assert.ok(uuidStub.notCalled, 'uuid must not be called at module load (global-scope RNG)')
+
+    const config = getConfig({})
+    assert.strictEqual(uuidStub.callCount, 1, 'uuid called once on first config build')
+    assert.strictEqual(config.tags['runtime-id'], 'fake-runtime-id')
+
+    getConfig({})
+    assert.strictEqual(uuidStub.callCount, 1, 'subsequent getConfig() reuses the cached config; uuid not called again')
+  })
+})
