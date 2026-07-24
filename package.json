@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "6.6.0",
+  "version": "6.7.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -198,7 +198,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.106",
     "@types/sinon": "^22.0.0",
-    "@vercel/nft": "^0.29.4",
+    "@vercel/nft": "^1.10.2",
     "axios": "^1.18.1",
     "benchmark": "^2.1.4",
     "body-parser": "^2.3.0",

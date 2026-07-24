@@ -1,11 +1,16 @@
 'use strict'
 
+const id = require('../id')
 const log = require('../log')
 const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
 } = require('./constants/tags')
+
+const DECIMAL_TRACE_ID_REGEX = /^\d+$/
+const HEX_TRACE_ID_REGEX = /^[0-9a-f]{32}$/i
+const MAX_UINT_64 = (1n << 64n) - 1n
 
 // LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
 // looking for the first non-ASCII char; if there is none, hand the input
@@ -312,12 +317,12 @@ function safeJsonParse (value, fallback) {
 // LLMObs root and hoists the gen_ai ancestors under it, inverting the trace.
 /**
  * @param {import('../opentracing/span')} span
- * @param {{ includeParentId?: boolean }} [opts]
+ * @param {{ includeParentId?: boolean, llmobsTraceId?: string }} [opts]
  */
-function writeBridgeTags (span, { includeParentId = true } = {}) {
+function writeBridgeTags (span, { includeParentId = true, llmobsTraceId } = {}) {
   const traceTags = span?.context?.()._trace?.tags
   if (!traceTags || traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) return
-  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+  traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = llmobsTraceId ?? span.context().toTraceId(true)
   if (includeParentId) {
     traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
   }
@@ -362,6 +367,51 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
+/**
+ * Generate a 128-bit LLMObs trace ID with the span start time encoded in its high bits.
+ * @param {number} startTime
+ * @returns {string}
+ */
+function generateLlmObsTraceId (startTime) {
+  const identifier = id()
+  const traceIdHigh = Math.floor(startTime / 1000)
+    .toString(16)
+    .padStart(8, '0')
+    .padEnd(16, '0')
+
+  return identifier.toTraceIdHex(traceIdHigh).padStart(32, '0')
+}
+
+/**
+ * Convert an internally stored hexadecimal LLMObs trace ID to its distributed wire representation.
+ * @param {string | undefined} traceId
+ * @returns {string | undefined}
+ */
+function llmObsTraceIdToWire (traceId) {
+  if (!traceId) return
+  if (!HEX_TRACE_ID_REGEX.test(traceId)) return traceId
+
+  return BigInt(`0x${traceId}`).toString(10)
+}
+
+/**
+ * Normalize a distributed LLMObs trace ID to the representation expected by LLMObs span events.
+ * @param {string | undefined} traceId
+ * @returns {string | undefined}
+ */
+function normalizeLlmObsTraceId (traceId) {
+  if (!traceId) return
+
+  if (HEX_TRACE_ID_REGEX.test(traceId) && (traceId[0] === '0' || !DECIMAL_TRACE_ID_REGEX.test(traceId))) {
+    return traceId
+  }
+
+  if (!DECIMAL_TRACE_ID_REGEX.test(traceId)) return traceId
+
+  const identifier = BigInt(traceId)
+  return identifier > MAX_UINT_64 ? identifier.toString(16).padStart(32, '0') : traceId
+}
+
 // Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to `audio/wav` when the
 // format is missing. Provider-specific overrides (e.g. OpenAI's mp3 -> audio/mpeg) are passed in
 // via `mimeTypeLookup` so this stays provider-agnostic. A non-string `format` is treated as missing
@@ -396,6 +446,9 @@ module.exports = {
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  generateLlmObsTraceId,
+  llmObsTraceIdToWire,
+  normalizeLlmObsTraceId,
   formatAudioPart,
   validateCostTags,
   validateKind,
