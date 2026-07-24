@@ -1,333 +1,202 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
+const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
+const {
+  createLoadedManifest,
+  createRepositoryFixture,
+  removeFixture,
+} = require('./validation-test-helpers')
 
 describe('test optimization validation manifest schema', () => {
-  it('rejects unresolved placeholders in executable command env', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].existingTestCommand.env = { NODE_OPTIONS: '$' + '{NODE_OPTIONS}' }
+  let fixture
+  let manifest
 
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].existingTestCommand.env.NODE_OPTIONS contains an unresolved placeholder. ' +
-        'Resolve it before live validation.',
-    ])
+  beforeEach(() => {
+    fixture = createRepositoryFixture({ framework: 'mocha' })
+    manifest = JSON.parse(JSON.stringify(createLoadedManifest(fixture.root, 'mocha')))
+    delete manifest.__path
   })
 
-  it('accepts explicitly inherited non-secret project environment names', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].existingTestCommand.requiredEnvVars = ['NODE_ENV', 'PROJECT_TEST_MODE']
+  afterEach(() => removeFixture(fixture.root))
+
+  it('accepts the data-only scaffold', () => {
+    assert.deepStrictEqual(validateManifest(manifest), [])
+    assert.strictEqual(JSON.stringify(manifest).includes('"argv"'), false)
+  })
+
+  it('accepts a detected framework that the validator does not support', () => {
+    const unsupported = structuredClone(manifest.frameworks[0])
+    unsupported.id = 'karma:root'
+    unsupported.framework = 'karma'
+    unsupported.status = 'unsupported_by_validator'
+    delete unsupported.validation
+    delete unsupported.preflight
+    delete unsupported.generatedTestStrategy
+    manifest.frameworks = [unsupported]
 
     assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
-  it('rejects dangerous, secret-like, Datadog, duplicate, and explicit inherited environment names', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].existingTestCommand.env = { PROJECT_TEST_MODE: 'integration' }
-    manifest.frameworks[0].existingTestCommand.requiredEnvVars = [
-      'NODE_OPTIONS',
-      'SERVICE_TOKEN',
-      'DD_API_KEY',
-      'PROJECT_TEST_MODE',
-      'NODE_ENV',
-      'NODE_ENV',
-    ]
+  for (const [label, mutate, expected] of [
+    [
+      'an embedded argv',
+      value => { value.frameworks[0].argv = ['npm', 'test'] },
+      /argv is not supported/,
+    ],
+    [
+      'an embedded generated command',
+      value => { value.frameworks[0].generatedTestStrategy.scenarios[0].runCommand = { shell: 'npm test' } },
+      /runCommand is not supported/,
+    ],
+    [
+      'a shell field',
+      value => { value.frameworks[0].shellCommand = 'npm test' },
+      /shellCommand is not supported/,
+    ],
+    [
+      'a setup recipe',
+      value => { value.frameworks[0].setup = { commands: ['npm install'] } },
+      /setup is not supported/,
+    ],
+    [
+      'an outside runner',
+      value => { value.frameworks[0].validation.runner = path.join(os.tmpdir(), 'outside-runner.js') },
+      /validation\.runner must be inside repository\.root/,
+    ],
+    [
+      'an outside test',
+      value => { value.frameworks[0].validation.testFile = path.join(os.tmpdir(), 'outside-test.js') },
+      /validation\.testFile must be inside repository\.root/,
+    ],
+    [
+      'an unsupported runner argument',
+      value => { value.frameworks[0].validation.runnerArgs = ['--eval', 'process.exit()'] },
+      /runnerArgs contain unsupported option --eval/,
+    ],
+    [
+      'runner shell control syntax',
+      value => { value.frameworks[0].validation.runnerArgs = ['--require', 'safe; unsafe'] },
+      /runnerArgs contain a missing or unsafe value for --require/,
+    ],
+    [
+      'a runner-controlled NODE_OPTIONS value',
+      value => { value.frameworks[0].validation.environment = { NODE_OPTIONS: '--require ./unsafe.js' } },
+      /environment contains unsupported variable NODE_OPTIONS/,
+    ],
+    [
+      'a Datadog environment dependency',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['DD_API_KEY'] },
+      /must not inherit Datadog/,
+    ],
+    [
+      'NODE_OPTIONS inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['NODE_OPTIONS'] },
+      /must not inherit Datadog, OpenTelemetry, or NODE_OPTIONS/,
+    ],
+    [
+      'secret environment inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['NPM_TOKEN'] },
+      /must not inherit secret-like environment variables/,
+    ],
+    [
+      'executable-loading environment inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['NODE_PATH'] },
+      /must not inherit executable-loading environment variables/,
+    ],
+    [
+      'an excessive timeout',
+      value => { value.frameworks[0].validation.timeoutMs = 1_800_001 },
+      /timeoutMs must be an integer between/,
+    ],
+    [
+      'rewritten generated source',
+      value => { value.frameworks[0].generatedTestStrategy.files[0].contentLines = ['process.exit(0)'] },
+      /source differs from the validator-owned mocha recipe/,
+    ],
+    [
+      'a generated file omitted from cleanup',
+      value => { value.frameworks[0].generatedTestStrategy.cleanupPaths.shift() },
+      /must be included in generatedTestStrategy\.cleanupPaths/,
+    ],
+    [
+      'an executable-shaped CI command',
+      value => { value.frameworks[0].ciWiring.command = { argv: ['npm', 'test'] } },
+      /ciWiring\.command must be a string or null/,
+    ],
+    [
+      'an outside CI file',
+      value => { value.frameworks[0].ciWiring.configFile = path.join(os.tmpdir(), 'workflow.yml') },
+      /ciWiring\.configFile must be inside repository\.root/,
+    ],
+    [
+      'a non-boolean review result',
+      value => { value.frameworks[0].ciWiring.reviewComplete = 'yes' },
+      /reviewComplete must be a boolean/,
+    ],
+  ]) {
+    it(`rejects ${label}`, () => {
+      mutate(manifest)
+      assert.match(validateManifest(manifest).join('\n'), expected)
+    })
+  }
 
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].existingTestCommand.requiredEnvVars[0] may alter executable or configuration loading and must ' +
-        'not be inherited.',
-      'frameworks[0].existingTestCommand.requiredEnvVars[1] must not inherit a secret-like variable.',
-      'frameworks[0].existingTestCommand.requiredEnvVars[2] must not inherit a DD_* or _DD_* variable.',
-      'frameworks[0].existingTestCommand.requiredEnvVars[2] must not inherit a secret-like variable.',
-      'frameworks[0].existingTestCommand.requiredEnvVars[3] duplicates an explicit command.env entry.',
-      'frameworks[0].existingTestCommand.requiredEnvVars[5] duplicates another requiredEnvVars entry.',
-    ])
+  it('rejects generated-path ownership collisions across frameworks', () => {
+    const duplicate = structuredClone(manifest.frameworks[0])
+    duplicate.id = 'mocha:second'
+    manifest.frameworks.push(duplicate)
+
+    assert.match(validateManifest(manifest).join('\n'), /conflicts with another framework/)
   })
 
-  it('rejects Windows environment aliases that configure Datadog or Node.js outputs', () => {
-    const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
-    const manifest = getManifest()
-    manifest.frameworks[0].existingTestCommand.env = {
-      dd_api_key: 'placeholder',
-      Node_Options: '-r dd-trace/ci/init',
-    }
+  it('rejects a retained preload that is not approval-bound', () => {
+    const preload = path.join(fixture.root, 'test', 'preload.js')
+    fs.writeFileSync(preload, 'void 0\n')
+    manifest.frameworks[0].validation.runnerArgs = ['--require', preload]
+
+    assert.match(validateManifest(manifest).join('\n'), /input that is not approval-bound/)
+  })
+
+  it('rejects a retained preload outside the repository', () => {
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-outside-loader-')))
+    const preload = path.join(outside, 'preload.js')
+    fs.writeFileSync(preload, 'void 0\n')
+    manifest.frameworks[0].validation.runnerArgs = ['--require', preload]
 
     try {
-      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-      assert.deepStrictEqual(validateManifest(manifest), [
-        'frameworks[0].existingTestCommand.env.dd_api_key must not configure Datadog initialization for local ' +
-          'validation.',
-        'frameworks[0].existingTestCommand.env.Node_Options must not configure Datadog initialization for local ' +
-          'validation.',
-      ])
+      assert.match(validateManifest(manifest).join('\n'), /resolves outside the repository/)
     } finally {
-      Object.defineProperty(process, 'platform', platformDescriptor)
+      fs.rmSync(outside, { force: true, recursive: true })
     }
   })
 
-  it('rejects the removed forced local command role', () => {
-    const errors = validateManifest(getManifest({
-      forcedLocalCommand: { cwd: '/repo', argv: ['npm', 'test'] },
-    }))
+  it('rejects a manifest symlink', () => {
+    const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+    const linkedPath = path.join(fixture.root, 'linked-manifest.json')
+    fs.symlinkSync(manifestPath, linkedPath)
 
-    assert.deepStrictEqual(errors, [
-      'frameworks[0].forcedLocalCommand is not supported. Use the focused existingTestCommand for Basic ' +
-        'Reporting and record CI initialization only as static ciWiring evidence.',
-    ])
+    assert.throws(() => loadManifest(linkedPath), /must be a regular file, not a symbolic link/)
   })
 
-  it('accepts structured static CI initialization evidence', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.initialization = {
-      status: 'not_configured',
-      evidence: ['The selected job has no NODE_OPTIONS configuration.'],
+  it('rejects paths that lexically look contained but physically escape', () => {
+    const external = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-outside-')))
+    const linkedDirectory = path.join(fixture.root, 'linked')
+    fs.symlinkSync(external, linkedDirectory, 'dir')
+    const escaped = path.join(linkedDirectory, 'runner.js')
+    fs.writeFileSync(path.join(external, 'runner.js'), 'process.exit(0)\n')
+    manifest.frameworks[0].validation.runner = escaped
+    const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
+
+    try {
+      assert.throws(() => loadManifest(manifestPath), /validation\.runner resolves outside/)
+    } finally {
+      fs.rmSync(external, { force: true, recursive: true })
     }
-
-    assert.deepStrictEqual(validateManifest(manifest), [])
-  })
-
-  it('accepts unknown CI transport without evidence', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.transport = { mode: 'unknown', evidence: [] }
-
-    assert.deepStrictEqual(validateManifest(manifest), [])
-  })
-
-  it('requires evidence for a conclusive CI transport mode', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.transport = { mode: 'agent', evidence: [] }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.transport.evidence must explain the agent conclusion.',
-    ])
-  })
-
-  it('rejects unsupported CI transport modes', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.transport = { mode: 'sidecar', evidence: ['A sidecar was found.'] }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.transport.mode must be exactly agentless, agent, none, or unknown.',
-    ])
-  })
-
-  it('requires structured CI job evidence before recording a conclusive transport mode', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      diagnosis: 'No reporting transport was found.',
-      initialization: { status: 'unknown', evidence: [] },
-      transport: { mode: 'none', evidence: ['The selected job has no Agent or agentless reporting.'] },
-      unresolved: ['The selected CI test job still requires review.'],
-    }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.configFile must be populated before setting ' +
-        'frameworks[0].ciWiring.transport.mode to none.',
-      'frameworks[0].ciWiring.job must be populated before setting frameworks[0].ciWiring.transport.mode to none.',
-      'frameworks[0].ciWiring.command must be populated before setting ' +
-        'frameworks[0].ciWiring.transport.mode to none.',
-    ])
-  })
-
-  it('requires structured CI job evidence before recording a conclusive initialization status', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      configFile: null,
-      job: null,
-      command: null,
-      diagnosis: 'The selected CI job does not configure Test Optimization.',
-      initialization: {
-        status: 'not_configured',
-        evidence: ['No initialization was found.'],
-      },
-      transport: { mode: 'unknown', evidence: [] },
-      unresolved: ['The selected CI test job still requires review.'],
-    }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.configFile must be populated before setting ' +
-        'frameworks[0].ciWiring.initialization.status to not_configured.',
-      'frameworks[0].ciWiring.job must be populated before setting ' +
-        'frameworks[0].ciWiring.initialization.status to not_configured.',
-      'frameworks[0].ciWiring.command must be populated before setting ' +
-        'frameworks[0].ciWiring.initialization.status to not_configured.',
-    ])
-  })
-
-  it('requires structured CI job evidence before clearing unresolved review items', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring = {
-      configFile: null,
-      job: null,
-      command: null,
-      diagnosis: 'CI initialization evidence has not been completed.',
-      initialization: { status: 'unknown', evidence: [] },
-      transport: { mode: 'unknown', evidence: [] },
-      unresolved: [],
-    }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.configFile must be populated before clearing frameworks[0].ciWiring.unresolved.',
-      'frameworks[0].ciWiring.job must be populated before clearing frameworks[0].ciWiring.unresolved.',
-      'frameworks[0].ciWiring.command must be populated before clearing frameworks[0].ciWiring.unresolved.',
-    ])
-  })
-
-  it('requires the CI review flag to be boolean', () => {
-    const manifest = getManifest()
-    manifest.ciDiscovery = { reviewRequired: 'no' }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'ciDiscovery.reviewRequired must be a boolean when present.',
-    ])
-  })
-
-  it('explains the exact CI initialization status for natural-language aliases', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.initialization = {
-      status: 'missing',
-      evidence: ['The selected job has no NODE_OPTIONS configuration.'],
-    }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.initialization.status must be exactly configured, not_configured, or unknown. ' +
-        'Use not_configured when the selected CI job does not initialize Test Optimization; do not use missing, ' +
-        'absent, unconfigured, or other natural-language values.',
-    ])
-  })
-
-  it('rejects execution instructions on a non-runnable framework', () => {
-    const manifest = getManifest({
-      status: 'detected_not_runnable',
-      notes: ['The installed runner version is unsupported.'],
-      setup: { commands: [{ cwd: '/repo', argv: ['npm', 'test'] }] },
-      generatedTestStrategy: { status: 'not_possible', reason: 'Unsupported runner version.' },
-    })
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].existingTestCommand must be omitted when frameworks[0].status is not runnable.',
-      'frameworks[0].preflight must be omitted when frameworks[0].status is not runnable.',
-      'frameworks[0].generatedTestStrategy must be omitted when frameworks[0].status is not runnable.',
-      'frameworks[0].setup.commands is not supported. Record the concrete project-setup blocker and run setup as ' +
-        'a separate, explicitly approved workflow before creating a fresh validation plan.',
-    ])
-  })
-
-  it('rejects conclusive CI initialization status without evidence', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.initialization = { status: 'configured', evidence: [] }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.initialization.evidence must explain the configured conclusion.',
-    ])
-  })
-
-  it('requires static CI initialization evidence for runnable frameworks', () => {
-    const manifest = getManifest()
-    delete manifest.frameworks[0].ciWiring.initialization
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.initialization must record the static CI configuration conclusion.',
-    ])
-  })
-
-  it('rejects executable CI command fields', () => {
-    const manifest = getManifest({
-      ciWiringCommand: { cwd: '/repo', argv: ['npm', 'test'] },
-    })
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiringCommand is not supported. Record the CI command as inert text in ' +
-        'frameworks[0].ciWiring.command.',
-    ])
-  })
-
-  it('requires CI commands to remain inert text', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.command = { cwd: '/repo', argv: ['npm', 'test'] }
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.command must be a string when present.',
-    ])
-  })
-
-  it('requires execution capability flags to be boolean', () => {
-    const manifest = getManifest({
-      browserRequired: 'yes',
-      localSocketRequired: 1,
-    })
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].browserRequired must be a boolean when present.',
-      'frameworks[0].localSocketRequired must be a boolean when present.',
-    ])
-  })
-
-  it('requires each isolation command to match its project-command fallback', () => {
-    const manifest = getManifest({
-      localTestCandidates: [
-        {
-          command: { cwd: '/repo', argv: ['npm', 'test', '--', '/repo/test/first.test.js'] },
-          maxTestCount: 1,
-          origin: 'project',
-          sourceFile: '/repo/test/first.test.js',
-        },
-        {
-          command: { cwd: '/repo', argv: ['npm', 'test', '--', '/repo/test/second.test.js'] },
-          maxTestCount: 1,
-          origin: 'project',
-          sourceFile: '/repo/test/second.test.js',
-        },
-      ],
-      isolationTestCandidates: [{
-        command: {
-          cwd: '/repo',
-          argv: ['node', '/repo/node_modules/vitest/vitest.mjs', 'run', '/repo/test/first.test.js'],
-        },
-        equivalence: {
-          configurationArgs: [],
-          framework: 'jest',
-          mode: 'test',
-          sourceFile: '/repo/test/first.test.js',
-        },
-        maxTestCount: 1,
-        origin: 'validator-direct',
-        primaryCandidateIndex: 1,
-        sourceFile: '/repo/test/first.test.js',
-      }],
-    })
-
-    const errors = validateManifest(manifest)
-
-    assert.ok(errors.includes(
-      'frameworks[0].isolationTestCandidates[0].sourceFile must match its selected localTestCandidates sourceFile.'
-    ))
   })
 })
-
-function getManifest (frameworkFields) {
-  return {
-    schemaVersion: '1.0',
-    repository: { root: '/repo' },
-    environment: {},
-    frameworks: [{
-      id: 'jest:root',
-      framework: 'jest',
-      status: 'runnable',
-      project: { root: '/repo' },
-      existingTestCommand: { cwd: '/repo', argv: ['npm', 'test'] },
-      preflight: { ran: true, exitCode: 0, maxTestCount: 50 },
-      ciWiring: {
-        configFile: '/repo/.github/workflows/test.yml',
-        job: 'test',
-        command: 'npm test',
-        diagnosis: 'CI initialization evidence has not been completed.',
-        initialization: { status: 'unknown', evidence: [] },
-        transport: { mode: 'unknown', evidence: [] },
-        unresolved: [],
-      },
-      ...frameworkFields,
-    }],
-  }
-}

@@ -6,8 +6,6 @@ const FILESYSTEM_PERMISSION_PATTERN = /\b(?:EACCES|EPERM|Operation not permitted
 const LOCAL_SOCKET_PATTERN = /\b(?:127\.0\.0\.1|localhost|listen)\b/i
 const MODULE_OR_TRANSFORM_PATTERN =
   /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath\b[\s\S]*\bnot defined by "exports"|Could not resolve|transform failed)\b/i
-const PACKAGE_MANAGER_PATH_PATTERN = /(?:^|[/\\.])(?:corepack|npm|pnpm|yarn)(?:$|[/\\.])/i
-const WATCHMAN_PATTERN = /\bwatchman\b/i
 const CYPRESS_BINARY_PATTERN =
   /(?:Cypress executable not found|Cypress binary is missing|Cypress failed to start|Please reinstall Cypress)/i
 const PLAYWRIGHT_BROWSER_PATTERN = new RegExp(
@@ -49,33 +47,6 @@ function getCommandBlocker (result, options = {}) {
       toolchainBlocked: true,
     }
   }
-  const yarnVersions = output.match(
-    /defines "packageManager": "(yarn@[^"]+)"[\s\S]*?current global version of Yarn is ([0-9][0-9.]*)\./i
-  )
-  if (yarnVersions) {
-    return {
-      kind: 'package-manager-version-mismatch',
-      summary: `The test command did not start because it resolved Yarn ${yarnVersions[2]}, but package.json ` +
-        `requires ${yarnVersions[1]}. No Test Optimization conclusion was reached.`,
-      recommendation: 'Run the approved command through the project-declared Yarn version, using its configured ' +
-        '`yarnPath` or locally installed matching package manager, then render and approve a fresh plan.',
-      signals: getMatchingLines(output, /packageManager|current global version of Yarn/i),
-      toolchainBlocked: true,
-    }
-  }
-
-  if (WATCHMAN_PATTERN.test(output) && FILESYSTEM_PERMISSION_PATTERN.test(output)) {
-    return {
-      kind: 'watchman-filesystem-blocked',
-      summary: 'The execution environment blocked Watchman state access before tests started. No CI wiring or ' +
-        'Test Optimization conclusion was reached.',
-      recommendation: 'Rerun in an environment where Watchman can access its state directory. If the CI job ' +
-        'itself disables Watchman, preserve that exact setting in the replay command.',
-      signals: getMatchingLines(output, /watchman|EACCES|EPERM|Operation not permitted|Permission denied/i),
-      blockedByExecutionEnvironment: true,
-    }
-  }
-
   if (LOCAL_SOCKET_PATTERN.test(output) && FILESYSTEM_PERMISSION_PATTERN.test(output)) {
     return {
       kind: 'local-test-socket-blocked',
@@ -128,22 +99,6 @@ function getCommandBlocker (result, options = {}) {
         /browserType\.launch: Target page, context or browser has been closed|signal=SIGABRT|Received signal 6|Abort trap: 6/i
       ),
       localRuntimeBlocked: true,
-    }
-  }
-
-  const permissionLines = getMatchingLines(
-    output,
-    /EACCES|EPERM|Operation not permitted|Permission denied/i
-  )
-  if (permissionLines.some(line => PACKAGE_MANAGER_PATH_PATTERN.test(line))) {
-    return {
-      kind: 'package-manager-filesystem-blocked',
-      summary: 'The test command did not start because the package manager could not write to its tool or cache ' +
-        'directory in this execution environment. No Test Optimization conclusion was reached.',
-      recommendation: 'Rerun with the project package manager already installed and a writable package-manager ' +
-        'home or cache directory. Do not interpret this launcher failure as a Test Optimization problem.',
-      signals: permissionLines,
-      blockedByExecutionEnvironment: true,
     }
   }
 

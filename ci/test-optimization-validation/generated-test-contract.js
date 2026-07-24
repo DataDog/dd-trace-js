@@ -8,15 +8,21 @@ const playwrightAdapter = require('./framework-adapters/playwright')
 
 const GENERATED_SCENARIOS = {
   'basic-pass': {
+    expectedWithoutDatadog: { exitCode: 0, observedTestCount: 1 },
     purpose: 'basic_reporting|efd_candidate',
+    suiteName: 'dd-test-optimization-validation',
     testName: 'basic-pass',
   },
   'atr-fail-once': {
+    expectedWithoutDatadog: { exitCode: 1, observedTestCount: 1 },
     purpose: 'auto_test_retries_candidate',
+    suiteName: 'dd-test-optimization-validation',
     testName: 'atr-fail-once',
   },
   'test-management-target': {
+    expectedWithoutDatadog: { exitCode: 0, observedTestCount: 1 },
     purpose: 'test_management_candidate',
+    suiteName: 'dd-test-optimization-validation',
     testName: 'test-management-target',
   },
 }
@@ -119,10 +125,6 @@ function getGeneratedTestContractError (framework) {
   if (!strategy || !['planned', 'verified'].includes(strategy.status)) return
 
   if (!['cucumber', 'cypress', 'jest', 'mocha', 'playwright', 'vitest'].includes(framework.framework)) return
-  if (strategy.adapter !== framework.framework) {
-    return `must retain generatedTestStrategy.adapter ${JSON.stringify(framework.framework)} so the installed ` +
-      'validator, rather than the agent, owns the temporary test source.'
-  }
   if (!['commonjs', 'esm'].includes(strategy.moduleSystem)) {
     return 'must retain generatedTestStrategy.moduleSystem as "commonjs" or "esm".'
   }
@@ -179,9 +181,6 @@ function getGeneratedTestContractError (framework) {
     if (!cleanupPaths.has(path.normalize(filename))) {
       return `scenario ${scenarioId} file must be included in generatedTestStrategy.cleanupPaths.`
     }
-    if (!commandReferencesFile(scenario.runCommand, filename)) {
-      return `scenario ${scenarioId} runCommand does not select its declared generated test file.`
-    }
   }
 
   if (framework.framework === 'cucumber') {
@@ -193,9 +192,6 @@ function getGeneratedTestContractError (framework) {
     if (!cleanupPaths.has(path.normalize(stepsFile))) {
       return 'must include the isolated Cucumber step definitions in cleanupPaths.'
     }
-    if (scenarios.some(scenario => !commandReferencesFile(scenario.runCommand, stepsFile))) {
-      return 'each Cucumber scenario runCommand must select the isolated generated step definitions.'
-    }
   }
 
   if (framework.framework === 'playwright') {
@@ -206,9 +202,6 @@ function getGeneratedTestContractError (framework) {
     }
     if (!cleanupPaths.has(path.normalize(configPath))) {
       return 'must include the isolated Playwright config in generatedTestStrategy.cleanupPaths.'
-    }
-    if (scenarios.some(scenario => !commandReferencesFile(scenario.runCommand, configPath))) {
-      return 'each Playwright scenario runCommand must select the isolated generated config.'
     }
   }
 
@@ -255,27 +248,6 @@ function getAdditionalGeneratedFileDescription (framework) {
 function isPathInside (root, filename) {
   const relative = path.relative(path.resolve(root), path.resolve(filename))
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
-}
-
-/**
- * Reports whether a structured command visibly selects a generated file.
- *
- * @param {object} command structured command
- * @param {string} filename generated file
- * @returns {boolean} whether the command selects the file
- */
-function commandReferencesFile (command, filename) {
-  const values = command?.usesShell
-    ? String(command.shellCommand || '').match(/"[^"]*"|'[^']*'|[^\s]+/g)?.map(value => {
-      return value.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
-    }) || []
-    : command?.argv || []
-  return values.some(value => {
-    if (typeof value !== 'string') return false
-    let pathValue = value.startsWith('--') && value.includes('=') ? value.slice(value.indexOf('=') + 1) : value
-    pathValue = pathValue.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
-    return path.resolve(command.cwd, pathValue) === path.resolve(filename)
-  })
 }
 
 /**

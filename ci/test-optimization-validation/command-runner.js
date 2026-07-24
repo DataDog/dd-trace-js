@@ -9,11 +9,7 @@ const {
   cleanupCommandOutputs,
   prepareCommandOutputs,
 } = require('./command-output-policy')
-const {
-  getExecutableForSpawn,
-  isEnvExecutable,
-  parseArgv,
-} = require('./executable')
+const { getExecutableForSpawn } = require('./executable')
 const {
   environmentNamesEqual,
   getEnvironmentValue,
@@ -165,23 +161,14 @@ function runCommand (command, options = {}) {
     try {
       const executable = getExecutableForSpawn(command, { requireApproval: requireExecutableApproval })
       const argv0 = process.platform === 'win32' ? {} : { argv0: executable.argv0 }
-      child = command.usesShell
-        ? spawn(command.shellCommand, {
-          ...argv0,
-          cwd: command.cwd,
-          detached: useProcessGroup,
-          env: childEnv,
-          shell: executable.path,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-        : spawn(executable.path, command.argv.slice(1), {
-          ...argv0,
-          cwd: command.cwd,
-          detached: useProcessGroup,
-          env: childEnv,
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+      child = spawn(executable.path, command.argv.slice(1), {
+        ...argv0,
+        cwd: command.cwd,
+        detached: useProcessGroup,
+        env: childEnv,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
     } catch (error) {
       result.stderr = `${error.stack || error}\n`
       result.durationMs = Date.now() - startedAt
@@ -255,6 +242,8 @@ function runCommand (command, options = {}) {
     child.on('close', (code, signal) => {
       if (processGroupCleanupPending) {
         pendingCloseResult = { code, signal }
+        signalChild(child, 'SIGKILL', useProcessGroup)
+        finishProcessGroupCleanup(signal)
         return
       }
       finalize(code, signal)
@@ -513,169 +502,13 @@ function buildOfflineValidationEnv ({ fixture, outputRoot }) {
  */
 function assertNoInlineValidationEnvOverrides (command, env) {
   if (!env[VALIDATION_MODE_ENV]) return
-  const reservedEnvNames = new Set([
-    ...VALIDATION_RESERVED_ENV_NAMES,
-    ...Object.keys(env).filter(name => {
-      return isDatadogEnvironmentName(name) ||
-        (process.platform === 'win32' ? name.toUpperCase() : name).startsWith('OTEL_')
-    }),
-  ])
-
-  if (command.usesShell) {
-    rejectReservedShellAssignments(command.shellCommand, reservedEnvNames)
-    return
-  }
-
-  const parsed = parseArgv(command.argv)
-  rejectReservedEnvSplitStrings(command.argv, reservedEnvNames)
-  if (parsed.ignoreEnvironment) throwEnvironmentReset()
-  if (parsed.unsupportedEnvOption) throwUnsupportedEnvOption(parsed.unsupportedEnvOption)
-  for (const name of Object.keys(parsed.prefixEnv)) {
-    if (hasEnvironmentName(reservedEnvNames, name)) throwReservedEnvOverride(name)
-  }
-  for (const name of parsed.unsetEnvNames) {
-    if (hasEnvironmentName(reservedEnvNames, name)) throwReservedEnvOverride(name)
-  }
-
-  if (isPosixShellExecutable(command.argv[parsed.commandIndex])) {
-    for (let index = parsed.commandIndex + 1; index < command.argv.length - 1; index++) {
-      const value = command.argv[index]
-      if (isShellCommandFlag(value) && typeof command.argv[index + 1] === 'string') {
-        rejectReservedShellAssignments(command.argv[index + 1], reservedEnvNames)
-      }
+  for (const name of Object.keys(command.env || {})) {
+    const normalized = process.platform === 'win32' ? name.toUpperCase() : name
+    if (VALIDATION_RESERVED_ENV_NAMES.some(reserved => environmentNamesEqual(reserved, name)) ||
+      isDatadogEnvironmentName(name) || normalized.startsWith('OTEL_')) {
+      throw new Error(`Direct-runner adapter must not override validator-controlled environment variable ${name}.`)
     }
   }
-}
-
-/**
- * Checks a reserved environment-name set using child-platform name semantics.
- *
- * @param {Set<string>} names reserved names
- * @param {string} candidate candidate name
- * @returns {boolean} whether the candidate is reserved
- */
-function hasEnvironmentName (names, candidate) {
-  for (const name of names) {
-    if (environmentNamesEqual(name, candidate)) return true
-  }
-  return false
-}
-
-/**
- * Rejects reserved variable assignments and removals in shell source.
- *
- * @param {string} shellCommand shell source
- * @param {Set<string>} reservedEnvNames validator-controlled environment names
- */
-function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
-  const source = normalizeShellVariableNames(String(shellCommand || ''))
-  const environmentReset =
-    /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-(?=\s|$)|-i\b|--ignore-environment\b)/i
-
-  if (environmentReset.test(source)) throwEnvironmentReset()
-
-  for (const name of reservedEnvNames) {
-    const escapedName = escapeRegExp(name)
-    const assignment = new RegExp(
-      String.raw`(?:^|[\s;&|()'"])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*\+?=`,
-      'i'
-    )
-    const removal = new RegExp(
-      String.raw`(?:\bunset(?:\s+(?:-[A-Za-z]+|[A-Za-z_][A-Za-z0-9_]*))*\s+|` +
-      String.raw`\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-u\s*|--unset(?:=|\s+))|` +
-      String.raw`\bRemove-Item\s+(?:[^;&|]*\s)?env:)${escapedName}\b`,
-      'i'
-    )
-
-    if (assignment.test(source) || removal.test(source)) throwReservedEnvOverride(name)
-  }
-}
-
-/**
- * Joins quoted identifier fragments so shell quoting cannot hide a reserved variable name.
- *
- * @param {string} source shell source
- * @returns {string} source normalized for assignment-name detection only
- */
-function normalizeShellVariableNames (source) {
-  let normalized = source
-  let previous
-  do {
-    previous = normalized
-    normalized = normalized
-      .replaceAll(/(['"])([A-Za-z_][A-Za-z0-9_]*)\1/g, '$2')
-      .replaceAll(/([A-Za-z0-9_])['"](?=[A-Za-z0-9_])/g, '$1')
-  } while (normalized !== previous)
-  return normalized
-}
-
-/**
- * Rejects reserved environment changes hidden inside env --split-string arguments.
- *
- * @param {string[]} argv structured command arguments
- * @param {Set<string>} reservedEnvNames validator-controlled environment names
- * @returns {void}
- */
-function rejectReservedEnvSplitStrings (argv, reservedEnvNames) {
-  if (!Array.isArray(argv) || !isEnvExecutable(argv[0])) return
-
-  for (let index = 1; index < argv.length; index++) {
-    const argument = argv[index]
-    if (argument === '-S' || argument === '--split-string') {
-      if (typeof argv[index + 1] === 'string') {
-        rejectReservedShellAssignments(`env ${argv[index + 1]}`, reservedEnvNames)
-      }
-      index++
-      continue
-    }
-
-    const splitString = /^(?:-S|--split-string=)(.+)$/.exec(argument)?.[1]
-    if (splitString !== undefined) rejectReservedShellAssignments(`env ${splitString}`, reservedEnvNames)
-  }
-}
-
-function isShellCommandFlag (value) {
-  return /^-[A-Za-z]*c[A-Za-z]*$/.test(value)
-}
-
-function isPosixShellExecutable (value) {
-  return /^(?:a|ba|da|k|z)?sh$/.test(path.basename(String(value || '')).toLowerCase())
-}
-
-/**
- * Throws a customer-facing error for unsafe inline validation environment changes.
- *
- * @param {string} name reserved environment variable
- */
-function throwReservedEnvOverride (name) {
-  throw new Error(
-    `Refusing inline ${name} changes during live validation because they can bypass the offline validation mode. ` +
-    'Record CI-provided values in command.env so the validator can apply its private diagnostic settings.'
-  )
-}
-
-function throwEnvironmentReset () {
-  throw new Error(
-    'Refusing to clear the command environment during live validation because this would remove the offline ' +
-    'validation and Datadog initialization settings.'
-  )
-}
-
-function throwUnsupportedEnvOption (option) {
-  throw new Error(
-    `Refusing unsupported env option ${option} during live validation because its environment effects cannot be ` +
-    'verified safely.'
-  )
-}
-
-/**
- * Escapes a literal for use in a regular expression.
- *
- * @param {string} value literal value
- * @returns {string} escaped value
- */
-function escapeRegExp (value) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 function withCiPreloads (nodeOptions = '', framework) {
@@ -713,7 +546,7 @@ function formatNodeRequire (filename) {
 }
 
 function serializeCommand (command) {
-  return command.usesShell ? command.shellCommand : command.argv.join(' ')
+  return command.argv.join(' ')
 }
 
 /**
@@ -723,7 +556,6 @@ function serializeCommand (command) {
  * @returns {string} unambiguous customer-facing command
  */
 function serializeApprovalCommand (command) {
-  if (command.usesShell) return command.shellCommand
   return command.argv.map(formatApprovalArgument).join(' ')
 }
 
@@ -741,47 +573,14 @@ function formatApprovalArgument (value) {
 }
 
 function serializeDisplayCommand (command) {
-  if (typeof command.displayCommand === 'string' && command.displayCommand.trim()) {
-    return command.displayCommand.trim()
-  }
-
-  if (command.usesShell) return command.shellCommand
-
-  return getDisplayArgv(command.argv).join(' ')
+  return command.argv.join(' ')
 }
 
 function getCommandDetails (command) {
-  if (command.usesShell) return
-
-  const details = getDisplayDetails(command.argv)
-  if (!details.exactCommandCollapsed) return
-
-  return details
-}
-
-function getDisplayArgv (argv) {
-  const { prefixAssignments, commandIndex, corepackIndex } = parseArgv(argv)
-  if (corepackIndex !== -1) return [...prefixAssignments, ...argv.slice(corepackIndex + 1)]
-  return [...prefixAssignments, ...argv.slice(commandIndex)]
-}
-
-function getDisplayDetails (argv) {
-  const { commandIndex, corepackIndex, pathAdjusted } = parseArgv(argv)
-  const displayArgv = getDisplayArgv(argv)
-  const details = {
-    exactCommandCollapsed: displayArgv.join(' ') !== argv.join(' '),
+  return {
+    executionBoundary: 'validator-owned-direct-runner',
+    runner: command.argv[1],
   }
-
-  if (pathAdjusted) details.pathAdjusted = true
-
-  if (corepackIndex !== -1) {
-    details.runtimeWrapper = 'node/corepack'
-    details.packageManager = argv[corepackIndex + 1]
-  } else if (commandIndex > 0) {
-    details.runtimeWrapper = 'env'
-  }
-
-  return details
 }
 
 module.exports = {

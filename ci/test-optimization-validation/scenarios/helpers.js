@@ -14,10 +14,10 @@ const {
   eventsOfType,
   findTestsByIdentity,
 } = require('../payload-normalizer')
-const { getLocalValidationCommand } = require('../local-command')
 const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
 const { readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport, sanitizeString } = require('../redaction')
+const { getGeneratedCommand } = require('../runner-command')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
@@ -180,11 +180,11 @@ async function prepareGeneratedScenario (framework, scenarioId) {
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) return { scenario: null, written: [] }
   cleanupGeneratedRuntimeFiles(framework)
-  const written = await writeGeneratedFiles(framework)
+  const written = await writeGeneratedFiles(framework, scenario)
   return {
     scenario: {
       ...scenario,
-      runCommand: getLocalValidationCommand(framework, scenario.runCommand),
+      runCommand: getGeneratedCommand(framework, scenario),
     },
     written,
   }

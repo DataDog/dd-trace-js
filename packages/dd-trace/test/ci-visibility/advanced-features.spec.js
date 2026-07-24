@@ -33,16 +33,21 @@ describe('test optimization validation advanced features', () => {
         findGeneratedScenario () {
           return { id: 'atr-fail-once' }
         },
-        writeGeneratedFiles () {
-          calls.push('write')
+        writeGeneratedFiles (framework, scenario) {
+          calls.push(`write:${scenario.id}`)
           return ['/repo/dd-test-optimization-validation.test.js']
+        },
+      },
+      '../runner-command': {
+        getGeneratedCommand () {
+          return { argv: [process.execPath, '/repo/runner.js', '/repo/generated.test.js'] }
         },
       },
     })
 
     await helpers.prepareGeneratedScenario({ generatedTestStrategy: {} }, 'atr-fail-once')
 
-    assert.deepStrictEqual(calls, ['cleanup', 'write'])
+    assert.deepStrictEqual(calls, ['cleanup', 'write:atr-fail-once'])
   })
 
   it('discovers a generated test by name and file when the manifest suite is wrong', async () => {

@@ -8,10 +8,7 @@ const {
   cleanupGeneratedRuntimeFiles,
   writeGeneratedFiles,
 } = require('./generated-files')
-const {
-  getDatadogCleanCommand,
-  getLocalValidationCommand,
-} = require('./local-command')
+const { getGeneratedCommand } = require('./runner-command')
 const { frameworkOutDir } = require('./scenarios/helpers')
 const { getObservedTestCount } = require('./test-output')
 
@@ -42,11 +39,11 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
 
   try {
     cleanupGeneratedRuntimeFiles(framework)
-    writeGeneratedFiles(framework)
 
     for (const scenario of getScenariosToVerify(strategy.scenarios, options.scenarios)) {
       cleanupGeneratedRuntimeFiles(framework)
-      const command = getDatadogCleanCommand(getLocalValidationCommand(framework, scenario.runCommand))
+      writeGeneratedFiles(framework, scenario)
+      const command = getGeneratedCommand(framework, scenario)
       const outDir = frameworkOutDir(out, framework, `generated-verification-${scenario.id}`)
       // Generated commands run serially because fail-once state and cleanup are scenario-local.
       // eslint-disable-next-line no-await-in-loop
@@ -77,8 +74,10 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       evidence.scenarios.push(scenarioEvidence)
       artifacts.push(...Object.values(result.artifacts))
 
+      const observedWrongTestCount = observedTestCount !== null &&
+        observedTestCount !== expected.observedTestCount
       if (result.timedOut || result.exitCode !== expected.exitCode ||
-        observedTestCount !== expected.observedTestCount || failOnceStateCreated === false) {
+        observedWrongTestCount || failOnceStateCreated === false) {
         cleanupGeneratedRuntimeFiles(framework)
         return getVerificationFailure(framework, evidence, artifacts, scenarioEvidence, result.timedOut)
       }

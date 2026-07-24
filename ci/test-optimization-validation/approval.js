@@ -9,6 +9,7 @@ const { getCommandExecutionSettings } = require('./command-runner')
 const { bindManifestExecutables, getManifestCommands } = require('./executable')
 const { getFixtureRecipeDigests } = require('./offline-fixtures')
 const { sanitizeForReport } = require('./redaction')
+const { getManifestInputFiles } = require('./runner-command')
 
 const APPROVAL_DIGEST_PATTERN = /^[a-f0-9]{64}$/
 const OFFLINE_FIXTURE_NONCE_PATTERN = /^[a-f0-9]{32}$/
@@ -85,7 +86,8 @@ function getApprovalMaterial ({
     out,
     path.join(packageRoot, '.junit-tmp'),
   ])
-  const executableIdentities = bindManifestExecutables(manifest)
+  const includeLocal = requestedScenario !== 'ci-wiring'
+  const executableIdentities = includeLocal ? bindManifestExecutables(manifest) : []
 
   return {
     schemaVersion: 1,
@@ -103,6 +105,10 @@ function getApprovalMaterial ({
       path: path.resolve(manifest.__path),
       sha256: getManifestDigest(manifest),
     },
+    projectFiles: getManifestInputFiles(manifest, { includeLocal }).map(filename => ({
+      path: filename,
+      sha256: getFileDigest(filename),
+    })),
     selection: {
       frameworks: [...selectedFrameworkIds],
       scenario: requestedScenario,
@@ -113,13 +119,16 @@ function getApprovalMaterial ({
       keepTemporaryFiles: keepTempFiles,
       verbose,
     },
-    fixtureRecipeDigests: getFixtureRecipeDigests({
-      frameworks: manifest.frameworks || [],
-      selectedFrameworkIds,
-      requestedScenario,
-    }),
-    commands: getManifestCommands(manifest).map(([id, command]) => getApprovalCommand(id, command)),
-    generatedFiles: getGeneratedFileMaterial(manifest),
+    fixtureRecipeDigests: includeLocal
+      ? getFixtureRecipeDigests({
+        frameworks: manifest.frameworks || [],
+        selectedFrameworkIds,
+        requestedScenario,
+      })
+      : [],
+    commands: getManifestCommands(manifest, requestedScenario)
+      .map(([id, command]) => getApprovalCommand(id, command)),
+    generatedFiles: getGeneratedFileMaterial(manifest, requestedScenario),
     executables: executableIdentities,
   }
 }
@@ -169,12 +178,7 @@ function getApprovalCommand (id, command) {
     inheritedEnvironmentNames: command.requiredEnvVars || [],
     ...getCommandExecutionSettings(command),
     outputPaths: getCommandOutputPaths(command),
-  }
-  if (command.usesShell) {
-    shape.shell = command.shell || null
-    shape.shellCommand = command.shellCommand
-  } else {
-    shape.argv = command.argv
+    argv: command.argv,
   }
   return sanitizeForReport(shape)
 }
@@ -183,13 +187,16 @@ function getApprovalCommand (id, command) {
  * Returns exact generated test source and cleanup policy covered by the manifest digest.
  *
  * @param {object} manifest loaded manifest
+ * @param {string|null} requestedScenario selected validator scenario
  * @returns {object[]} generated file approval material
  */
-function getGeneratedFileMaterial (manifest) {
+function getGeneratedFileMaterial (manifest, requestedScenario) {
   const files = []
   for (const framework of manifest.frameworks || []) {
     const strategy = framework.generatedTestStrategy
+    const selectedPaths = getSelectedGeneratedPaths(strategy, requestedScenario)
     for (const file of strategy?.files || []) {
+      if (!selectedPaths.has(path.resolve(file.path))) continue
       const content = `${file.contentLines.join('\n')}\n`
       files.push(sanitizeForReport({
         frameworkId: framework.id,
@@ -203,6 +210,35 @@ function getGeneratedFileMaterial (manifest) {
     }
   }
   return files
+}
+
+/**
+ * Returns generated and support files used by the selected feature.
+ *
+ * @param {object|undefined} strategy generated strategy
+ * @param {string|null} requestedScenario selected validator scenario
+ * @returns {Set<string>} selected absolute paths
+ */
+function getSelectedGeneratedPaths (strategy, requestedScenario) {
+  if (!strategy || requestedScenario === 'basic-reporting' || requestedScenario === 'ci-wiring') return new Set()
+  const generatedId = {
+    atr: 'atr-fail-once',
+    efd: 'basic-pass',
+    'test-management': 'test-management-target',
+  }[requestedScenario]
+  const scenarioPaths = new Set((strategy.scenarios || []).map(scenario => {
+    return path.resolve(scenario.testIdentities[0].file)
+  }))
+  const selectedPaths = new Set()
+  for (const file of strategy.files || []) {
+    const filename = path.resolve(file.path)
+    if (!requestedScenario || !scenarioPaths.has(filename)) selectedPaths.add(filename)
+  }
+  if (generatedId) {
+    const scenario = strategy.scenarios?.find(candidate => candidate.id === generatedId)
+    if (scenario) selectedPaths.add(path.resolve(scenario.testIdentities[0].file))
+  }
+  return selectedPaths
 }
 
 /**

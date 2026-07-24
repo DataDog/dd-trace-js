@@ -1,1404 +1,248 @@
 'use strict'
 
-/* eslint-disable no-console */
-
 const assert = require('node:assert/strict')
-const crypto = require('node:crypto')
 const fs = require('node:fs')
 const { builtinModules } = require('node:module')
-const os = require('node:os')
 const path = require('node:path')
-
-const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
+const { spawnSync } = require('node:child_process')
 
 const {
   filterFrameworks,
-  main: runValidationCli,
   normalizeFrameworkTarget,
   parseArgs,
 } = require('../../../../ci/test-optimization-validation/cli')
+const {
+  createRepositoryFixture,
+  removeFixture,
+} = require('./validation-test-helpers')
 
-const PASSING_VALIDATION_PHASES = {
-  './approval': {
-    assertApprovalDigest () {},
-  },
-  './generated-verifier': {
-    async verifyGeneratedTestStrategy () {
-      return { ok: true }
-    },
-  },
-  './preflight-runner': {
-    async runFrameworkPreflight ({ framework }) {
-      framework.preflight = {
-        ran: true,
-        source: 'validator',
-        exitCode: 0,
-        observedTestCount: 1,
-      }
-      return { ok: true, preflight: framework.preflight }
-    },
-  },
-}
-const APPROVAL_DIGEST = 'a'.repeat(64)
+const PACKAGE_ROOT = path.resolve(__dirname, '../../../..')
+const VALIDATOR = path.join(PACKAGE_ROOT, 'ci', 'validate-test-optimization.js')
 
-describe('test optimization validation cli', () => {
+describe('test optimization validation CLI', () => {
   it('uses only published files and runtime dependencies', () => {
-    const packageRoot = path.resolve(__dirname, '../../../..')
-    const packageJson = require(path.join(packageRoot, 'package.json'))
+    const packageJson = require(path.join(PACKAGE_ROOT, 'package.json'))
     const runtimePackages = new Set([
       packageJson.name,
-      ...Object.keys(packageJson.dependencies ?? {}),
-      ...Object.keys(packageJson.optionalDependencies ?? {}),
+      ...Object.keys(packageJson.dependencies || {}),
+      ...Object.keys(packageJson.optionalDependencies || {}),
     ])
     const builtins = new Set(builtinModules.map(name => name.replace(/^node:/, '')))
     const sourceFiles = [
-      path.join(packageRoot, 'ci', 'diagnose.js'),
-      path.join(packageRoot, 'ci', 'init.js'),
-      path.join(packageRoot, 'ci', 'validate-test-optimization.js'),
-      path.join(packageRoot, 'register.js'),
-      ...listJavaScriptFiles(path.join(packageRoot, 'ci', 'test-optimization-validation')),
+      path.join(PACKAGE_ROOT, 'ci', 'diagnose.js'),
+      path.join(PACKAGE_ROOT, 'ci', 'init.js'),
+      path.join(PACKAGE_ROOT, 'ci', 'validate-test-optimization.js'),
+      path.join(PACKAGE_ROOT, 'register.js'),
+      ...listJavaScriptFiles(path.join(PACKAGE_ROOT, 'ci', 'test-optimization-validation')),
     ]
-    const developmentOnlyImports = []
-    const unpublishedImports = []
-    const requirePattern = /\brequire(?:\.resolve)?\(\s*['"]([^'"]+)['"]/g
+    const failures = []
 
     for (const sourceFile of sourceFiles) {
       const source = fs.readFileSync(sourceFile, 'utf8')
-      let match
-
-      while ((match = requirePattern.exec(source)) !== null) {
+      for (const match of source.matchAll(/\brequire(?:\.resolve)?\(\s*['"]([^'"]+)['"]/g)) {
         const specifier = match[1]
-
         if (specifier.startsWith('.')) {
-          let resolved
-
           try {
-            resolved = require.resolve(path.resolve(path.dirname(sourceFile), specifier))
+            const resolved = require.resolve(path.resolve(path.dirname(sourceFile), specifier))
+            const relative = path.relative(PACKAGE_ROOT, resolved).split(path.sep).join('/')
+            if (!isPublishedValidationPath(relative)) failures.push(`${sourceFile} -> ${relative}`)
           } catch {
-            unpublishedImports.push(`${path.relative(packageRoot, sourceFile)} -> ${specifier} (missing)`)
-            continue
+            failures.push(`${sourceFile} -> ${specifier} (missing)`)
           }
-
-          const relativeTarget = path.relative(packageRoot, resolved).split(path.sep).join('/')
-          if (!isPublishedValidationPath(relativeTarget)) {
-            unpublishedImports.push(`${path.relative(packageRoot, sourceFile)} -> ${relativeTarget}`)
-          }
-          continue
-        }
-
-        const normalizedSpecifier = specifier.replace(/^node:/, '')
-        if (builtins.has(normalizedSpecifier)) continue
-
-        const packageName = getPackageName(specifier)
-        if (!runtimePackages.has(packageName)) {
-          developmentOnlyImports.push(`${path.relative(packageRoot, sourceFile)} -> ${specifier}`)
+        } else if (!builtins.has(specifier.replace(/^node:/, '')) &&
+          !runtimePackages.has(getPackageName(specifier))) {
+          failures.push(`${sourceFile} -> ${specifier} (development dependency)`)
         }
       }
     }
 
-    assert.deepStrictEqual(developmentOnlyImports, [])
-    assert.deepStrictEqual(unpublishedImports, [])
+    assert.deepStrictEqual(failures, [])
   })
 
-  it('normalizes copied framework targets with a trailing colon', () => {
-    assert.strictEqual(normalizeFrameworkTarget(' vitest:root-unit: '), 'vitest:root-unit')
-
-    const options = parseArgs(['--framework', 'vitest:root-unit:'])
-
-    assert.deepStrictEqual([...options.frameworks], ['vitest:root-unit'])
+  it('normalizes selection and makes Basic Reporting a prerequisite for advanced checks', () => {
+    assert.strictEqual(normalizeFrameworkTarget(' vitest:root: '), 'vitest:root')
+    assert.deepStrictEqual([...parseArgs(['--scenario', 'efd']).scenarios], ['basic-reporting', 'efd'])
+    assert.deepStrictEqual([...parseArgs(['--scenario', 'ci-wiring']).scenarios], ['ci-wiring'])
+    assert.throws(() => parseArgs(['--scenario', 'unknown']), /Unknown scenario/)
+    assert.throws(() => parseArgs(['--unknown']), /Unknown argument/)
   })
 
-  it('selects entries by exact id or framework kind', () => {
+  it('selects frameworks by exact id or framework kind', () => {
     const frameworks = [
-      { id: 'vitest:root-unit', framework: 'vitest' },
-      { id: 'mocha:cjs-module', framework: 'mocha' },
-      { id: 'vitest:integration', framework: 'vitest' },
+      { id: 'vitest:root', framework: 'vitest' },
+      { id: 'mocha:root', framework: 'mocha' },
+      { id: 'vitest:workspace', framework: 'vitest' },
     ]
 
-    assert.deepStrictEqual(filterFrameworks(frameworks, new Set(['vitest:root-unit'])), [
-      { id: 'vitest:root-unit', framework: 'vitest' },
-    ])
-    assert.deepStrictEqual(filterFrameworks(frameworks, new Set(['vitest'])), [
-      { id: 'vitest:root-unit', framework: 'vitest' },
-      { id: 'vitest:integration', framework: 'vitest' },
-    ])
+    assert.deepStrictEqual(filterFrameworks(frameworks, new Set(['mocha:root'])), [frameworks[1]])
+    assert.deepStrictEqual(filterFrameworks(frameworks, new Set(['vitest'])), [frameworks[0], frameworks[2]])
+    assert.throws(() => filterFrameworks(frameworks, new Set(['jest'])), /No framework matched/)
   })
 
-  it('adds basic reporting as a prerequisite for advanced scenario selection', () => {
-    const options = parseArgs(['--scenario', 'efd'])
-
-    assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'efd'])
-  })
-
-  it('selects only the CI configuration audit for CI wiring scenario selection', () => {
-    const options = parseArgs(['--scenario', 'ci-wiring'])
-
-    assert.deepStrictEqual([...options.scenarios], ['ci-wiring'])
-  })
-
-  it('parses a plan approval digest for live validation', () => {
-    const digest = 'a'.repeat(64)
-    const options = parseArgs(['--run-approved-plan', 'results/approval.json', '--sha256', digest])
-
-    assert.strictEqual(options.runApprovedPlan, 'results/approval.json')
-    assert.strictEqual(options.approvedArtifactSha256, digest)
-  })
-
-  for (const mode of ['--help', '--init-manifest', '--print-plan', '--validate-manifest']) {
-    it(`rejects an approved live run combined with ${mode}`, async () => {
-      const errors = []
-      const originalError = console.error
-      const originalExitCode = process.exitCode
-      console.error = message => errors.push(message)
-      process.exitCode = undefined
-
-      try {
-        await runValidationCli([
-          '--run-approved-plan', 'results/approval.json',
-          '--sha256', 'a'.repeat(64),
-          mode,
-        ])
-
-        assert.strictEqual(process.exitCode, 3)
-        assert.match(errors.join('\n'), new RegExp(`cannot be combined with ${mode}`))
-      } finally {
-        console.error = originalError
-        process.exitCode = originalExitCode
-      }
-    })
-  }
-
-  it('documents the short approval-file execution command in help output', async () => {
-    const logs = []
-    const originalLog = console.log
-    console.log = message => logs.push(message)
+  it('initializes, validates, and prints one complete approval plan without executing project code', function () {
+    this.timeout(20_000)
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    const marker = path.join(fixture.root, 'should-not-run')
+    fs.writeFileSync(
+      fixture.runner,
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'runner executed')\n`
+    )
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.scripts.test =
+      `node -e "require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'script executed')"`
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
 
     try {
-      await runValidationCli(['--help'])
+      const initialized = runCli(fixture.root, ['--init-manifest', '--framework', 'mocha'])
+      assert.strictEqual(initialized.status, 0, initialized.stderr)
+      assert.match(initialized.stdout, /Created a data-only validation manifest/)
+      assert.match(initialized.stdout, /No project code ran/)
 
-      assert.match(logs.join('\n'), /--run-approved-plan/)
-      assert.match(logs.join('\n'), /--sha256 <digest>/)
-      assert.doesNotMatch(logs.join('\n'), /--approved-plan-sha256|--offline-fixture-nonce/)
-    } finally {
-      console.log = originalLog
-    }
-  })
+      const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+      const manifest = JSON.parse(fs.readFileSync(manifestPath))
+      assert.strictEqual(manifest.schemaVersion, '2.0')
+      assert.strictEqual(JSON.stringify(manifest).includes('"argv"'), false)
+      assert.strictEqual(fs.existsSync(marker), false)
 
-  it('initializes a manifest scaffold without starting live validation', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-init-manifest-'))
-    const originalCwd = process.cwd()
-    const logs = []
-    const originalLog = console.log
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      './manifest-scaffold': {
-        createManifestScaffold ({ root }) {
-          return {
-            schemaVersion: '1.0',
-            repository: { root },
-            environment: {},
-            ciDiscovery: { reviewTargets: ['.github/workflows/test.yml'], reviewRequired: true },
-            frameworks: [{
-              status: 'runnable',
-              ciWiring: {
-                initialization: { status: 'unknown' },
-                transport: { mode: 'unknown', evidence: [] },
-              },
-            }],
-          }
-        },
-      },
-    })
+      const validated = runCli(fixture.root, ['--validate-manifest'])
+      assert.strictEqual(validated.status, 0, validated.stderr)
+      assert.match(validated.stdout, /manifest is valid/)
 
-    process.chdir(tmpDir)
-    console.log = message => logs.push(message)
-    try {
-      await main(['--init-manifest'])
-
-      const manifest = JSON.parse(fs.readFileSync(path.join(
-        tmpDir,
-        'dd-test-optimization-validation-manifest.json'
+      const planned = runCli(fixture.root, ['--print-plan'])
+      assert.strictEqual(planned.status, 0, planned.stderr)
+      assert.match(planned.stdout, /===== CUSTOMER APPROVAL PLAN =====/)
+      assert.match(planned.stdout, /only the displayed `node <repository-contained-runner> <one-test-file>`/)
+      assert.match(planned.stdout, /Approve executing exactly the plan above\?/)
+      assert.match(planned.stdout, /--run-approved-plan .*approval\.json --sha256 [a-f0-9]{64}/)
+      assert.strictEqual((planned.stdout.match(/CUSTOMER APPROVAL PLAN/g) || []).length, 2)
+      assert.strictEqual(fs.existsSync(marker), false)
+      assert.ok(fs.existsSync(path.join(
+        fixture.root,
+        'dd-test-optimization-validation-results',
+        'execution-plan.md'
       )))
-      assert.strictEqual(manifest.repository.root, fs.realpathSync(tmpDir))
-      assert.match(logs.join('\n'), /schema-valid validation manifest without running project code/)
-      assert.match(logs.join('\n'), /Do not enumerate other packages, tests, runner configs, workflow files/)
-      assert.match(logs.join('\n'), /\.github\/workflows\/test\.yml/)
-      assert.match(logs.join('\n'), /CI initialization status: unknown/)
-      assert.match(logs.join('\n'), /populate ciWiring\.configFile, ciWiring\.job, and ciWiring\.command/)
-      assert.match(logs.join('\n'), /record ciWiring\.transport mode and evidence/)
-      assert.match(logs.join('\n'), /keep unknowns in ciWiring\.unresolved/)
-      assert.strictEqual(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-validation-results')), false)
     } finally {
-      console.log = originalLog
-      process.chdir(originalCwd)
-      fs.rmSync(tmpDir, { recursive: true, force: true })
+      fs.rmSync(marker, { force: true })
+      removeFixture(fixture.root)
     }
   })
 
-  it('explains a denied declared pre-live write without retrying it', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-init-permission-'))
-    const originalCwd = process.cwd()
-    const originalError = console.error
-    const originalExitCode = process.exitCode
-    const errors = []
-    let writeAttempts = 0
-    const fsStub = Object.create(fs)
-    fsStub.writeFileSync = () => {
-      writeAttempts++
-      const error = new Error('operation not permitted')
-      error.code = 'EPERM'
-      throw error
-    }
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      fs: fsStub,
-      './manifest-scaffold': {
-        createManifestScaffold ({ root }) {
-          return {
-            schemaVersion: '1.0',
-            repository: { root },
-            environment: {},
-            ciDiscovery: { reviewTargets: [], reviewRequired: false },
-            frameworks: [],
-          }
-        },
-      },
-    })
-
-    process.chdir(tmpDir)
-    console.error = message => errors.push(message)
-    process.exitCode = undefined
+  it('prints a usable plan when a runner disappears after manifest creation', function () {
+    this.timeout(20_000)
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
     try {
-      await main(['--init-manifest'])
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      fs.rmSync(fixture.runner)
+      const planned = runCli(fixture.root, ['--print-plan'])
 
-      const output = errors.join('\n')
-      assert.strictEqual(process.exitCode, 3)
-      assert.strictEqual(writeAttempts, 1)
-      assert.match(output, /Pre-live write denied during --init-manifest \(EPERM\)/)
-      assert.ok(output.includes(path.join(
-        tmpDir,
-        'dd-test-optimization-validation-manifest.json'
+      assert.strictEqual(planned.status, 0, planned.stderr)
+      assert.match(planned.stdout, /local validation will be incomplete/)
+      assert.match(planned.stdout, /Run exactly this command after approval/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('prints a CI-only plan with no approved project command', function () {
+    this.timeout(20_000)
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    try {
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
+      const approval = JSON.parse(fs.readFileSync(path.join(
+        fixture.root,
+        'dd-test-optimization-validation-results',
+        'approval.json'
       )))
-      assert.match(output, /will not retry or request permissions itself/)
-      assert.match(output, /native permission control scoped to this exact command and these declared paths/)
-      assert.match(output, /may request it once and retry the unchanged command once/)
-      assert.match(output, /raw EACCES or EPERM error does not prove/)
-      assert.match(output, /If no narrowly scoped platform permission is offered.*stop/s)
-      assert.match(output, /Do not use sudo, change filesystem permissions, enable bypass mode/)
+
+      assert.strictEqual(planned.status, 0, planned.stderr)
+      assert.match(planned.stdout, /static CI audit only; no project test command is selected/)
+      assert.doesNotMatch(planned.stdout, /Basic Reporting command/)
+      assert.deepStrictEqual(approval.commands, [])
+      assert.deepStrictEqual(approval.executables, [])
+      assert.deepStrictEqual(approval.generatedFiles, [])
     } finally {
-      console.error = originalError
-      process.exitCode = originalExitCode
-      process.chdir(originalCwd)
-      fs.rmSync(tmpDir, { recursive: true, force: true })
+      removeFixture(fixture.root)
     }
   })
 
-  it('identifies the declared output when plan artifact writes are denied', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-plan-permission-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const originalError = console.error
-    const originalExitCode = process.exitCode
-    const errors = []
-    let writeAttempts = 0
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      './manifest-loader': {
-        loadManifest () {
-          return getRunnableManifest(tmpDir)
-        },
-      },
-      './plan-writer': {
-        formatExecutionPlanArtifacts () {
-          writeAttempts++
-          const error = new Error('permission denied')
-          error.code = 'EACCES'
-          throw error
-        },
-        getExecutionPlanPath () {
-          throw new Error('execution plan path should not be requested after a failed write')
-        },
-      },
-    })
-
-    console.error = message => errors.push(message)
-    process.exitCode = undefined
+  it('does not evaluate local runner availability during a CI-only run', function () {
+    this.timeout(20_000)
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
     try {
-      await main(['--manifest', manifestPath, '--out', out, '--print-plan'])
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      fs.rmSync(fixture.runner)
+      const planned = runCli(fixture.root, ['--print-plan', '--scenario', 'ci-wiring'])
+      assert.strictEqual(planned.status, 0, planned.stderr)
 
-      const output = errors.join('\n')
-      assert.strictEqual(process.exitCode, 3)
-      assert.strictEqual(writeAttempts, 1)
-      assert.match(output, /Pre-live write denied during --print-plan \(EACCES\)/)
-      assert.ok(output.includes(`Declared write target: ${out}`))
-      assert.match(output, /will not retry or request permissions itself/)
-      assert.match(output, /may request it once and retry the unchanged command once/)
-    } finally {
-      console.error = originalError
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('validates a manifest without creating output or starting live validation', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const logs = []
-    const originalLog = console.log
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './static-diagnosis': {
-        runStaticDiagnosis () {
-          throw new Error('static diagnosis should not run')
-        },
-      },
-    })
-
-    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
-    console.log = message => logs.push(message)
-
-    try {
-      await main(['--manifest', manifestPath, '--out', out, '--validate-manifest'])
-
-      assert.strictEqual(fs.existsSync(out), false)
-      assert.deepStrictEqual(logs, [`Validation manifest is valid: ${manifestPath}`])
-    } finally {
-      console.log = originalLog
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('reproduces the hash from a framework-scoped execution plan', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-reproduce-digest-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const logs = []
-    const originalLog = console.log
-    const manifest = getRunnableManifest(tmpDir)
-    manifest.frameworks.push({
-      ...manifest.frameworks[0],
-      id: 'jest:other',
-    })
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
-      scripts: { test: 'node jest-runner.js' },
-    }))
-    fs.writeFileSync(path.join(tmpDir, 'jest-runner.js'), 'process.exit(0)\n')
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    console.log = message => logs.push(message)
-
-    try {
-      await runValidationCli([
-        '--manifest', manifestPath,
-        '--out', out,
-        '--framework', manifest.frameworks[0].id,
-        '--print-plan',
+      const out = path.join(fixture.root, 'dd-test-optimization-validation-results')
+      const approvalPath = path.join(out, 'approval.json')
+      const approval = fs.readFileSync(approvalPath)
+      const digest = require('node:crypto').createHash('sha256').update(approval).digest('hex')
+      const executed = runCli(fixture.root, [
+        '--run-approved-plan', approvalPath,
+        '--sha256', digest,
       ])
-      const presentationReminder = logs.pop()
-      const executionPlanPath = path.join(out, 'execution-plan.md')
-      const plan = fs.readFileSync(executionPlanPath, 'utf8')
-      const expectedDigest = plan.match(/Expected SHA-256: `([a-f0-9]{64})`/)?.[1]
-      const approvalJsonPath = path.join(out, 'approval.json')
-      const coveredFilesPath = path.join(out, 'approval-files.sha256')
+      const report = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
-      assert.strictEqual(fs.existsSync(approvalJsonPath), true)
-      assert.strictEqual(fs.existsSync(coveredFilesPath), true)
-      assert.match(presentationReminder, /^===== CUSTOMER APPROVAL PLAN =====/)
-      assert.match(presentationReminder, /===== END CUSTOMER APPROVAL PLAN =====/)
-      assert.ok(presentationReminder.includes(executionPlanPath))
-      assert.match(presentationReminder, /LIVE VALIDATION HAS NOT RUN\./)
-      assert.match(presentationReminder, /DISCOVERY IS COMPLETE\. STOP TOOL USE NOW\./)
-      assert.match(presentationReminder, /Tool output is not the next user-facing response/)
-      assert.match(presentationReminder, /A response containing only "Awaiting approval".*is invalid/)
-      const displayedSummary = presentationReminder
-        .split('===== CUSTOMER APPROVAL PLAN =====\n')[1]
-        .split('\n===== END CUSTOMER APPROVAL PLAN =====')[0]
-      assert.strictEqual(displayedSummary, plan.trimEnd())
-      assert.match(plan, /# Test Optimization Validation Execution Plan/)
-      assert.match(plan, /## Commands/)
-      assert.match(plan, /## Safety and Outputs/)
-      assert.match(plan, /## Approval Command/)
-      assert.match(plan, /--run-approved-plan results\/approval\.json --sha256 [a-f0-9]{64}/)
-      assert.strictEqual(
-        crypto.createHash('sha256').update(fs.readFileSync(approvalJsonPath)).digest('hex'),
-        expectedDigest
-      )
-      assert.strictEqual(fs.existsSync(out), true)
+      assert.strictEqual(executed.status, 2, executed.stderr)
+      assert.doesNotMatch(report, /direct runner is unavailable|runner-unavailable/)
+      assert.match(report, /CI audit is incomplete/)
     } finally {
-      console.log = originalLog
-      fs.rmSync(tmpDir, { recursive: true, force: true })
+      removeFixture(fixture.root)
     }
   })
 
-  it('fails closed before live validation when no approved plan digest is supplied', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const errors = []
-    const originalError = console.error
-    const originalExitCode = process.exitCode
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-    })
-
-    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
-    console.error = error => errors.push(String(error))
-    process.exitCode = undefined
-
+  it('requires the checksum-bound approval command for live validation', () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
     try {
-      await main(['--manifest', manifestPath, '--out', out])
+      assert.strictEqual(runCli(fixture.root, ['--init-manifest']).status, 0)
+      const attempted = runCli(fixture.root, [])
 
-      assert.strictEqual(process.exitCode, 3)
-      assert.strictEqual(fs.existsSync(out), false)
-      assert.match(errors.join('\n'), /requires --run-approved-plan and --sha256/)
+      assert.strictEqual(attempted.status, 3)
+      assert.match(attempted.stderr, /requires the checksum-bound command/)
     } finally {
-      console.error = originalError
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
+      removeFixture(fixture.root)
     }
   })
-
-  it('reconstructs live scope from a hash-verified approval file', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-approved-cli-'))
-    const manifestPath = path.join(root, 'dd-test-optimization-validation-manifest.json')
-    const approvalPath = path.join(root, 'results', 'approval.json')
-    const out = path.join(root, 'results')
-    const digest = 'c'.repeat(64)
-    const originalExitCode = process.exitCode
-    let approvedInput
-    let writtenReport
-    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(root), null, 2)}\n`)
-
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './approval-artifacts': {
-        loadApprovedPlan (filename, sha256) {
-          approvedInput = { filename, sha256 }
-          return {
-            material: {
-              manifest: { path: manifestPath },
-              selection: { frameworks: ['jest:root'], scenario: 'basic-reporting' },
-              validation: {
-                outputDirectory: out,
-                offlineFixtureNonce: 'd'.repeat(32),
-                keepTemporaryFiles: false,
-                verbose: false,
-              },
-            },
-            path: approvalPath,
-          }
-        },
-      },
-      './generated-files': {
-        async cleanupGeneratedFiles () {},
-      },
-      './report-writer': {
-        writePendingReport () {},
-        async writeReport (report) {
-          writtenReport = report
-        },
-      },
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return getPassingScenarioResult(framework, 'basic-reporting')
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {},
-        runStaticDiagnosis () {
-          return { report: {} }
-        },
-      },
-    })
-
-    process.exitCode = undefined
-    try {
-      await main(['--run-approved-plan', approvalPath, '--sha256', digest])
-
-      assert.deepStrictEqual(approvedInput, { filename: approvalPath, sha256: digest })
-      assert.strictEqual(process.exitCode, 0)
-      assert.strictEqual(writtenReport.out, out)
-      assert.deepStrictEqual(writtenReport.results.map(result => result.scenario), ['basic-reporting'])
-      assert.strictEqual(writtenReport.runSummary.validationCoverage, 'complete')
-      assert.deepStrictEqual(writtenReport.runSummary.omittedScenarios, [
-        'ci-wiring',
-        'efd',
-        'atr',
-        'test-management',
-      ])
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(root, { recursive: true, force: true })
-    }
-  })
-
-  it('prints phase progress during live validation without requiring verbose mode', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-progress-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const logs = []
-    const originalLog = console.log
-    const originalExitCode = process.exitCode
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './approval-artifacts': getApprovedPlanStub(manifestPath, out, ['--scenario', 'basic-reporting']),
-      './report-writer': {
-        async writeReport () {},
-      },
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'pass',
-            diagnosis: 'Basic Reporting passed.',
-            evidence: {
-              foundationalReportingEstablished: true,
-              reportingPath: 'project-command',
-            },
-            artifacts: [],
-          }
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          return { report: {} }
-        },
-      },
-    })
-
-    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
-    console.log = message => logs.push(message)
-    process.exitCode = undefined
-
-    try {
-      await main(getApprovalArgs(out))
-
-      assert.deepStrictEqual(logs, [
-        '[test-optimization-validator] jest:root: Test execution without Datadog started.',
-        '[test-optimization-validator] jest:root: Test execution without Datadog pass.',
-        '[test-optimization-validator] jest:root: Basic Reporting started.',
-        '[test-optimization-validator] jest:root: Basic Reporting pass.',
-      ])
-      assert.strictEqual(process.exitCode, 0)
-    } finally {
-      console.log = originalLog
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('refuses to use repository.root itself as the validation output directory', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const errors = []
-    const originalError = console.error
-    const originalExitCode = process.exitCode
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './approval-artifacts': getApprovedPlanStub(manifestPath, tmpDir),
-    })
-
-    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
-    console.error = error => errors.push(String(error))
-    process.exitCode = undefined
-
-    try {
-      await main(getApprovalArgs(tmpDir))
-
-      assert.strictEqual(process.exitCode, 3)
-      assert.match(errors.join('\n'), /dedicated child directory inside repository.root/)
-    } finally {
-      console.error = originalError
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('exits unsuccessfully when a selected advanced feature has only a proposed strategy', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
-    const out = path.join(tmpDir, 'results')
-    const manifest = getRunnableManifest(tmpDir)
-    const originalExitCode = process.exitCode
-    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-      ...PASSING_VALIDATION_PHASES,
-      './approval-artifacts': getApprovedPlanStub(manifestPath, out, ['--scenario', 'efd']),
-      './report-writer': {
-        async writeReport () {},
-      },
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'pass',
-            diagnosis: 'Basic Reporting passed.',
-            evidence: {
-              foundationalReportingEstablished: true,
-              reportingPath: 'project-command',
-            },
-            artifacts: [],
-          }
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker () {
-          return null
-        },
-        runStaticDiagnosis () {
-          return { report: {} }
-        },
-      },
-    })
-
-    manifest.frameworks[0].generatedTestStrategy = {
-      status: 'proposed',
-      reason: 'The generated test command has not been verified.',
-    }
-    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-    process.exitCode = undefined
-
-    try {
-      await main(getApprovalArgs(out))
-
-      assert.strictEqual(process.exitCode, 2)
-    } finally {
-      process.exitCode = originalExitCode
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
-  it('still audits CI configuration when direct-initialization Basic Reporting fails', async () => {
-    const validation = await runCliFixture({
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'fail',
-            diagnosis: 'Basic Reporting did not emit events with direct Datadog initialization.',
-            evidence: {},
-            artifacts: [],
-          }
-        },
-      },
-      './scenarios/ci-wiring': {
-        async runCiWiring ({ framework, basicResult }) {
-          assert.strictEqual(basicResult, undefined)
-          return {
-            frameworkId: framework.id,
-            scenario: 'ci-wiring',
-            status: 'fail',
-            diagnosis: 'Static CI evidence confirms that Test Optimization is not configured.',
-            evidence: {
-              conclusion: 'confirmed_misconfigured',
-              domain: 'ci_configuration',
-              evidenceStrength: 'confirmed_static',
-            },
-            artifacts: [],
-          }
-        },
-      },
-    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root))
-
-    assert.strictEqual(validation.exitCode, 1)
-    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
-      'basic-reporting:fail',
-      'ci-wiring:fail',
-      'efd:skip',
-      'atr:skip',
-      'test-management:skip',
-    ])
-    assert.strictEqual(validation.results[1].conclusion, 'confirmed_misconfigured')
-    assert.strictEqual(validation.results[1].evidenceStrength, 'confirmed_static')
-    assert.deepStrictEqual(validation.results[2].evidence.featureEligibility, {
-      eligible: false,
-      blockedBy: 'basic-reporting',
-      reasonCode: 'foundational-reporting-not-established',
-      scenario: 'efd',
-    })
-  })
-
-  it('does not run CI wiring when only Basic Reporting is selected', async () => {
-    const validation = await runCliFixture({
-      './scenarios/ci-wiring': {
-        async runCiWiring () {
-          throw new Error('CI wiring should not run when only Basic Reporting is selected')
-        },
-      },
-    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root), [
-      '--scenario', 'basic-reporting',
-    ])
-
-    assert.strictEqual(validation.exitCode, 0)
-    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
-      'basic-reporting:pass',
-    ])
-  })
-
-  it('reports statically configured CI as propagation-unverified during full validation', async () => {
-    const validation = await runCliFixture({
-      './scenarios/early-flake-detection': {
-        async runEarlyFlakeDetection ({ framework }) {
-          return getPassingScenarioResult(framework, 'efd')
-        },
-      },
-      './scenarios/auto-test-retries': {
-        async runAutoTestRetries ({ framework }) {
-          return getPassingScenarioResult(framework, 'atr')
-        },
-      },
-      './scenarios/test-management': {
-        async runTestManagement ({ framework }) {
-          return getPassingScenarioResult(framework, 'test-management')
-        },
-      },
-    }, manifest => {
-      manifest.frameworks[0].ciWiring = {
-        command: 'npm test',
-        configFile: path.join(manifest.repository.root, '.github', 'workflows', 'test.yml'),
-        initialization: {
-          status: 'configured',
-          evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'],
-        },
-        job: 'test',
-        stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
-        requiredSecretEnvVars: ['DD_API_KEY'],
-        transport: {
-          mode: 'agentless',
-          evidence: ['The selected test step enables agentless reporting.'],
-        },
-        unresolved: [],
-      }
-    })
-
-    assert.strictEqual(validation.exitCode, 2)
-    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
-      'basic-reporting:pass',
-      'ci-wiring:error',
-      'efd:pass',
-      'atr:pass',
-      'test-management:pass',
-    ])
-    assert.strictEqual(validation.results[1].conclusion, 'configured_propagation_unverified')
-    assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
-  })
-
-  it('reports complete coverage when every default check produces a result', async () => {
-    const validation = await runCliFixture({
-      './scenarios/ci-wiring': {
-        async runCiWiring ({ framework }) {
-          return getPassingScenarioResult(framework, 'ci-wiring')
-        },
-      },
-      './scenarios/early-flake-detection': {
-        async runEarlyFlakeDetection ({ framework }) {
-          return getPassingScenarioResult(framework, 'efd')
-        },
-      },
-      './scenarios/auto-test-retries': {
-        async runAutoTestRetries ({ framework }) {
-          return getPassingScenarioResult(framework, 'atr')
-        },
-      },
-      './scenarios/test-management': {
-        async runTestManagement ({ framework }) {
-          return getPassingScenarioResult(framework, 'test-management')
-        },
-      },
-    }, manifest => setStaticCiWiring(manifest.frameworks[0], manifest.repository.root))
-
-    assert.strictEqual(validation.exitCode, 0)
-    assert.strictEqual(validation.runSummary.validationCoverage, 'complete')
-    assert.deepStrictEqual(validation.runSummary.omittedScenarios, [])
-  })
-
-  it('reports partial coverage when the workflow finishes without conclusive checks', async () => {
-    const validation = await runCliFixture({
-      './scenarios/basic-reporting': {
-        async runBasicReporting ({ framework }) {
-          return {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'error',
-            diagnosis: 'The test command could not start.',
-            evidence: {},
-            artifacts: [],
-          }
-        },
-      },
-    })
-
-    assert.strictEqual(validation.exitCode, 2)
-    assert.strictEqual(validation.runSummary.runCompleted, true)
-    assert.strictEqual(validation.runSummary.validationCoverage, 'partial')
-  })
-
-  it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
-    const validation = await runCliFixture({}, manifest => {
-      manifest.frameworks[0].ciWiring = {
-        diagnosis: 'CI initialization evidence has not been completed.',
-        initialization: { status: 'unknown', evidence: [] },
-        transport: { mode: 'unknown', evidence: [] },
-      }
-    }, ['--scenario', 'ci-wiring'])
-
-    assert.strictEqual(validation.exitCode, 2)
-    assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`), [
-      'ci-wiring:error',
-    ])
-    assert.match(validation.results[0].diagnosis,
-      /did not resolve the complete test job and wrapper chain.*No confirmed CI misconfiguration was reported/s)
-    assert.strictEqual(validation.results[0].conclusion, 'incomplete')
-    assert.match(validation.results[0].evidence.recommendation,
-      /Resolve the actual CI test job, exact command, and wrapper chain/)
-  })
-
-  it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
-    const validation = await runCliFixture({}, manifest => {
-      const root = manifest.repository.root
-      manifest.frameworks.unshift({
-        id: 'jest:fixture',
-        framework: 'jest',
-        frameworkVersion: '29.7.0',
-        status: 'requires_manual_setup',
-        project: { root },
-        notes: ['The fixture requires package-specific install and build steps.'],
-      }, {
-        id: 'node-test:root',
-        framework: 'node:test',
-        frameworkVersion: '22.0.0',
-        status: 'unsupported_by_validator',
-        project: { root },
-        notes: ['node:test is detected for diagnosis only.'],
-      })
-    }, ['--scenario', 'basic-reporting'])
-
-    assert.strictEqual(validation.exitCode, 2)
-    assert.deepStrictEqual(validation.results.map(result => {
-      return `${result.frameworkId}:${result.scenario}:${result.status}`
-    }), [
-      'jest:fixture:all:skip',
-      'jest:fixture:basic-reporting:skip',
-      'node-test:root:all:skip',
-      'node-test:root:basic-reporting:skip',
-      'jest:root:basic-reporting:pass',
-    ])
-    assert.match(validation.results[0].diagnosis, /no runnable validation command/)
-    assert.strictEqual(validation.results[0].evidence.frameworkStatus, 'requires_manual_setup')
-    assert.match(validation.results[2].diagnosis, /not supported/)
-    assert.strictEqual(validation.results[2].evidence.frameworkStatus, 'unsupported_by_validator')
-  })
-
-  it('audits CI independently of local framework and execution eligibility', async () => {
-    const audited = []
-    const validation = await runCliFixture({
-      './preflight-runner': {
-        async runFrameworkPreflight ({ framework }) {
-          return {
-            ok: false,
-            failure: {
-              frameworkId: framework.id,
-              scenario: 'basic-reporting',
-              status: 'blocked',
-              diagnosis: 'The clean project test could not run in this execution environment.',
-              evidence: { blockedByExecutionEnvironment: true },
-              artifacts: [],
-            },
-          }
-        },
-      },
-      './scenarios/ci-wiring': {
-        async runCiWiring ({ framework }) {
-          audited.push(framework.id)
-          return getPassingScenarioResult(framework, 'ci-wiring')
-        },
-      },
-      './static-diagnosis': {
-        getStaticBlocker (framework) {
-          if (framework.id === 'vitest:static-blocked') {
-            return {
-              reason: 'Static project evidence blocks local execution.',
-              recommendation: 'Resolve the project blocker.',
-            }
-          }
-        },
-        runStaticDiagnosis () {
-          return { report: {}, reportPath: 'static-diagnosis.json' }
-        },
-      },
-    }, manifest => {
-      const root = manifest.repository.root
-      const staticBlocked = JSON.parse(JSON.stringify(manifest.frameworks[0]))
-      staticBlocked.id = 'vitest:static-blocked'
-      staticBlocked.framework = 'vitest'
-      staticBlocked.frameworkVersion = '4.0.0'
-      const manualSetup = {
-        id: 'cypress:manual-setup',
-        framework: 'cypress',
-        frameworkVersion: '15.0.0',
-        status: 'requires_manual_setup',
-        project: { root },
-        notes: ['The browser prerequisite is unavailable.'],
-      }
-      const unsupported = {
-        id: 'node-test:unsupported',
-        framework: 'node:test',
-        frameworkVersion: '22.0.0',
-        status: 'unsupported_by_validator',
-        project: { root },
-        notes: ['node:test is diagnostic-only.'],
-      }
-      for (const framework of [manifest.frameworks[0], staticBlocked, manualSetup, unsupported]) {
-        setStaticCiWiring(framework, root)
-      }
-      manifest.frameworks = [manualSetup, unsupported, staticBlocked, manifest.frameworks[0]]
-    })
-
-    assert.strictEqual(validation.exitCode, 1)
-    assert.deepStrictEqual(audited, [
-      'cypress:manual-setup',
-      'node-test:unsupported',
-      'vitest:static-blocked',
-      'jest:root',
-    ])
-  })
-
-  it('includes Mocha rc files in non-runnable status evidence', async () => {
-    const validation = await runCliFixture({}, manifest => {
-      const root = manifest.repository.root
-      manifest.frameworks = [{
-        id: 'mocha:root',
-        framework: 'mocha',
-        frameworkVersion: '10.0.0',
-        status: 'requires_manual_setup',
-        project: {
-          root,
-        },
-        notes: [
-          'No small representative Mocha command was selected.',
-        ],
-      }]
-      fs.writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({
-        devDependencies: {
-          mocha: '10.0.0',
-        },
-      }, null, 2)}\n`)
-      fs.writeFileSync(path.join(root, '.mocharc.json'), '{}\n')
-    })
-
-    assert.strictEqual(validation.exitCode, 2)
-    assert.deepStrictEqual(validation.results[0].evidence.configFiles, ['.mocharc.json'])
-    assert.deepStrictEqual(validation.results[0].evidence.directDependency, {
-      field: 'devDependencies',
-      version: '10.0.0',
-    })
-  })
-
-  it('uses static diagnosis framework config patterns in non-runnable status evidence', async () => {
-    const validation = await runCliFixture({}, manifest => {
-      const root = manifest.repository.root
-      manifest.frameworks = [
-        {
-          id: 'jest:root',
-          framework: 'jest',
-          frameworkVersion: '29.7.0',
-          status: 'requires_manual_setup',
-          project: { root },
-          notes: ['No representative Jest command was selected.'],
-        },
-        {
-          id: 'cypress:root',
-          framework: 'cypress',
-          frameworkVersion: '13.0.0',
-          status: 'requires_manual_setup',
-          project: { root },
-          notes: ['No representative Cypress command was selected.'],
-        },
-        {
-          id: 'cucumber:root',
-          framework: 'cucumber',
-          frameworkVersion: '10.0.0',
-          status: 'requires_manual_setup',
-          project: { root },
-          notes: ['No representative Cucumber command was selected.'],
-        },
-      ]
-      fs.writeFileSync(path.join(root, 'config-jest.js'), 'module.exports = {}\n')
-      fs.writeFileSync(path.join(root, 'cypress.json'), '{}\n')
-      fs.writeFileSync(path.join(root, 'cucumber.js'), 'module.exports = {}\n')
-    })
-
-    assert.strictEqual(validation.exitCode, 2)
-    assert.deepStrictEqual(validation.results
-      .filter(result => result.scenario === 'all')
-      .map(result => result.evidence.configFiles), [
-      ['config-jest.js'],
-      ['cypress.json'],
-      ['cucumber.js'],
-    ])
-  })
-
-  const decisionCases = [
-    {
-      name: 'returns an actionable result when reporting works but CI initialization is missing',
-      basicStatus: 'pass',
-      ciStatus: 'missing',
-      advancedStatuses: { efd: 'pass', atr: 'pass', 'test-management': 'pass' },
-      exitCode: 1,
-      results: ['basic-reporting:pass', 'ci-wiring:fail', 'efd:pass', 'atr:pass', 'test-management:pass'],
-      coverage: 'complete',
-      executionStatus: 'completed',
-    },
-    {
-      name: 'keeps the CI finding conclusive when direct reporting fails',
-      basicStatus: 'fail',
-      ciStatus: 'missing',
-      advancedStatuses: {},
-      exitCode: 1,
-      results: ['basic-reporting:fail', 'ci-wiring:fail', 'efd:skip', 'atr:skip', 'test-management:skip'],
-      coverage: 'partial',
-      executionStatus: 'completed',
-    },
-    {
-      name: 'returns incomplete when reporting works but configured CI propagation is unverified',
-      basicStatus: 'pass',
-      ciStatus: 'configured',
-      advancedStatuses: { efd: 'pass', atr: 'pass', 'test-management': 'pass' },
-      exitCode: 2,
-      results: ['basic-reporting:pass', 'ci-wiring:error', 'efd:pass', 'atr:pass', 'test-management:pass'],
-      coverage: 'partial',
-      executionStatus: 'completed',
-    },
-    {
-      name: 'returns a confirmed failure when an advanced feature fails after reporting works',
-      basicStatus: 'pass',
-      ciStatus: 'configured',
-      advancedStatuses: { efd: 'pass', atr: 'fail', 'test-management': 'pass' },
-      exitCode: 1,
-      results: ['basic-reporting:pass', 'ci-wiring:error', 'efd:pass', 'atr:fail', 'test-management:pass'],
-      coverage: 'partial',
-      executionStatus: 'completed',
-    },
-    {
-      name: 'reports a sandbox-blocked preflight as an execution-environment blocker',
-      preflightBlocked: true,
-      ciStatus: 'unknown',
-      advancedStatuses: {},
-      exitCode: 2,
-      results: ['basic-reporting:blocked', 'ci-wiring:error', 'efd:skip', 'atr:skip', 'test-management:skip'],
-      coverage: 'partial',
-      executionStatus: 'blocked',
-    },
-  ]
-
-  for (const decisionCase of decisionCases) {
-    it(decisionCase.name, async () => {
-      const validation = await runCliFixture(
-        getDecisionCliStubs(decisionCase),
-        manifest => setDecisionCiWiring(manifest.frameworks[0], manifest.repository.root, decisionCase.ciStatus)
-      )
-
-      assert.strictEqual(validation.exitCode, decisionCase.exitCode)
-      assert.deepStrictEqual(validation.results.map(result => `${result.scenario}:${result.status}`),
-        decisionCase.results)
-      assert.strictEqual(validation.runSummary.validationCoverage, decisionCase.coverage)
-      assert.strictEqual(
-        validation.runSummary.executionStatus,
-        decisionCase.executionStatus,
-        JSON.stringify(validation.results.map(result => ({
-          scenario: result.scenario,
-          status: result.status,
-          conclusion: result.conclusion,
-          domain: result.domain,
-        })))
-      )
-    })
-  }
 })
 
 /**
- * Runs the live CLI against an isolated manifest while replacing external phases.
+ * Runs the packaged validator in a fixture repository.
  *
- * @param {object} stubs proxyquire overrides
- * @param {(manifest: object) => void} [prepare] manifest fixture customization
- * @param {string[]} [args] additional CLI arguments
- * @returns {Promise<{exitCode: number|undefined, results: object[], runSummary: object}>} captured result
+ * @param {string} cwd fixture root
+ * @param {string[]} args CLI arguments
+ * @returns {import('node:child_process').SpawnSyncReturns<string>} process result
  */
-async function runCliFixture (stubs = {}, prepare = () => {}, args = []) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
-  const manifestPath = path.join(root, 'dd-test-optimization-validation-manifest.json')
-  const out = path.join(root, 'results')
-  const manifest = getRunnableManifest(root)
-  const originalExitCode = process.exitCode
-  let results
-  let runSummary
-  const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
-    ...PASSING_VALIDATION_PHASES,
-    './approval-artifacts': getApprovedPlanStub(manifestPath, out, args),
-    './generated-files': {
-      async cleanupGeneratedFiles () {},
-    },
-    './report-writer': {
-      writePendingReport () {},
-      async writeReport (report) {
-        results = report.results
-        runSummary = report.runSummary
-      },
-    },
-    './scenarios/basic-reporting': {
-      async runBasicReporting ({ framework }) {
-        return {
-          frameworkId: framework.id,
-          scenario: 'basic-reporting',
-          status: 'pass',
-          diagnosis: 'Basic Reporting passed.',
-          evidence: {
-            foundationalReportingEstablished: true,
-            reportingPath: 'project-command',
-          },
-          artifacts: [],
-        }
-      },
-    },
-    './static-diagnosis': {
-      getStaticBlocker () {},
-      runStaticDiagnosis () {
-        return { report: {} }
-      },
-    },
-    ...stubs,
+function runCli (cwd, args) {
+  return spawnSync(process.execPath, [VALIDATOR, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env },
+    timeout: 20_000,
   })
-
-  prepare(manifest)
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
-  process.exitCode = undefined
-
-  try {
-    await main(getApprovalArgs(out))
-    return { exitCode: process.exitCode, results, runSummary }
-  } finally {
-    process.exitCode = originalExitCode
-    fs.rmSync(root, { recursive: true, force: true })
-  }
-}
-
-function getApprovalArgs (out) {
-  return [
-    '--run-approved-plan', path.join(out, 'approval.json'),
-    '--sha256', APPROVAL_DIGEST,
-  ]
-}
-
-function getApprovedPlanStub (manifestPath, out, args = []) {
-  const scenarioIndex = args.indexOf('--scenario')
-  const scenario = scenarioIndex === -1 ? null : args[scenarioIndex + 1]
-
-  return {
-    loadApprovedPlan () {
-      return {
-        material: {
-          manifest: { path: manifestPath },
-          selection: { frameworks: [], scenario },
-          validation: {
-            outputDirectory: out,
-            offlineFixtureNonce: 'd'.repeat(32),
-            keepTemporaryFiles: false,
-            verbose: false,
-          },
-        },
-        path: path.join(out, 'approval.json'),
-      }
-    },
-  }
-}
-
-function getRunnableManifest (root) {
-  return {
-    schemaVersion: '1.0',
-    repository: {
-      root,
-      packageManager: 'npm',
-      workspaceManager: 'none',
-    },
-    environment: {
-      os: 'darwin',
-    },
-    frameworks: [
-      {
-        id: 'jest:root',
-        framework: 'jest',
-        frameworkVersion: '30.1.3',
-        status: 'runnable',
-        project: {
-          root,
-        },
-        existingTestCommand: {
-          cwd: root,
-          argv: ['npm', 'test'],
-        },
-        preflight: {
-          ran: true,
-          exitCode: 0,
-          maxTestCount: 50,
-        },
-        ciWiring: {
-          diagnosis: 'No CI test job was found in this fixture.',
-          initialization: { status: 'unknown', evidence: [] },
-          transport: { mode: 'unknown', evidence: [] },
-        },
-      },
-    ],
-  }
-}
-
-function setStaticCiWiring (framework, root) {
-  framework.ciWiring = {
-    provider: 'github-actions',
-    configFile: path.join(root, '.github', 'workflows', 'test.yml'),
-    job: 'test',
-    step: 'Run tests',
-    workingDirectory: root,
-    whySelected: 'The step runs the selected representative test command.',
-    command: 'npm test',
-    unresolved: [],
-    initialization: {
-      status: 'not_configured',
-      evidence: ['The selected CI job does not set NODE_OPTIONS.'],
-    },
-    transport: { mode: 'unknown', evidence: [] },
-  }
-}
-
-function getPassingScenarioResult (framework, scenario) {
-  return {
-    frameworkId: framework.id,
-    scenario,
-    status: 'pass',
-    diagnosis: `${scenario} passed.`,
-    evidence: scenario === 'basic-reporting'
-      ? {
-          foundationalReportingEstablished: true,
-          reportingPath: 'project-command',
-        }
-      : {},
-    artifacts: [],
-  }
-}
-
-function getDecisionCliStubs ({ basicStatus = 'pass', advancedStatuses, preflightBlocked }) {
-  const stubs = {
-    './scenarios/basic-reporting': {
-      async runBasicReporting ({ framework }) {
-        return {
-          ...getPassingScenarioResult(framework, 'basic-reporting'),
-          status: basicStatus,
-          diagnosis: `Basic Reporting ${basicStatus}.`,
-          evidence: basicStatus === 'pass'
-            ? {
-                foundationalReportingEstablished: true,
-                reportingPath: 'project-command',
-              }
-            : {
-                foundationalReportingEstablished: false,
-                reportingPath: 'none',
-              },
-        }
-      },
-    },
-  }
-  if (preflightBlocked) {
-    stubs['./preflight-runner'] = {
-      async runFrameworkPreflight ({ framework }) {
-        return {
-          ok: false,
-          failure: {
-            frameworkId: framework.id,
-            scenario: 'basic-reporting',
-            status: 'blocked',
-            diagnosis: 'The execution environment blocked the selected test command.',
-            evidence: { blockedByExecutionEnvironment: true },
-            artifacts: [],
-          },
-        }
-      },
-    }
-  }
-  const modules = {
-    efd: './scenarios/early-flake-detection',
-    atr: './scenarios/auto-test-retries',
-    'test-management': './scenarios/test-management',
-  }
-  const methods = {
-    efd: 'runEarlyFlakeDetection',
-    atr: 'runAutoTestRetries',
-    'test-management': 'runTestManagement',
-  }
-
-  for (const [scenario, status] of Object.entries(advancedStatuses)) {
-    stubs[modules[scenario]] = {
-      async [methods[scenario]] ({ framework }) {
-        return {
-          ...getPassingScenarioResult(framework, scenario),
-          status,
-          diagnosis: `${scenario} ${status}.`,
-        }
-      },
-    }
-  }
-  return stubs
-}
-
-function setDecisionCiWiring (framework, root, status) {
-  if (status === 'missing') {
-    setStaticCiWiring(framework, root)
-    return
-  }
-  if (status !== 'configured') return
-  framework.ciWiring = {
-    provider: 'github-actions',
-    configFile: path.join(root, '.github', 'workflows', 'test.yml'),
-    job: 'test',
-    step: 'Run tests',
-    command: 'npm test',
-    initialization: { status: 'configured', evidence: ['NODE_OPTIONS includes dd-trace/ci/init.'] },
-    stepEnv: { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' },
-    requiredSecretEnvVars: ['DD_API_KEY'],
-    transport: {
-      mode: 'agentless',
-      evidence: ['The selected test step enables agentless reporting.'],
-    },
-  }
 }
 
 /**
- * Returns every JavaScript file below a directory.
+ * Lists JavaScript files below a directory.
  *
- * @param {string} directory
- * @returns {string[]}
+ * @param {string} directory directory
+ * @returns {string[]} files
  */
 function listJavaScriptFiles (directory) {
-  const files = []
-
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const entryPath = path.join(directory, entry.name)
-
-    if (entry.isDirectory()) {
-      files.push(...listJavaScriptFiles(entryPath))
-    } else if (entry.name.endsWith('.js')) {
-      files.push(entryPath)
-    }
-  }
-
-  return files
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const filename = path.join(directory, entry.name)
+    if (entry.isDirectory()) return listJavaScriptFiles(filename)
+    return entry.isFile() && entry.name.endsWith('.js') ? [filename] : []
+  })
 }
 
 /**
- * Returns the installable package name for a module specifier.
+ * Returns a package name from a module specifier.
  *
- * @param {string} specifier
- * @returns {string}
+ * @param {string} specifier module specifier
+ * @returns {string} package name
  */
 function getPackageName (specifier) {
   const parts = specifier.split('/')
@@ -1406,14 +250,18 @@ function getPackageName (specifier) {
 }
 
 /**
- * Reports whether a path is covered by package.json's published file patterns.
+ * Checks whether a relative file is shipped in the package.
  *
- * @param {string} relativePath
- * @returns {boolean}
+ * @param {string} filename package-relative file
+ * @returns {boolean} whether published
  */
-function isPublishedValidationPath (relativePath) {
-  return relativePath.startsWith('ci/') ||
-    relativePath.startsWith('vendor/dist/') ||
-    /^packages\/[^/]+\/(?:index\.js|lib\/|src\/)/.test(relativePath) ||
-    ['loader-hook.mjs', 'register.js', 'version.js'].includes(relativePath)
+function isPublishedValidationPath (filename) {
+  return filename === 'package.json' ||
+    filename === 'loader-hook.mjs' ||
+    filename === 'register.js' ||
+    filename === 'version.js' ||
+    filename.startsWith('ci/') ||
+    filename.startsWith('ext/') ||
+    filename.startsWith('packages/dd-trace/') ||
+    filename.startsWith('vendor/dist/')
 }

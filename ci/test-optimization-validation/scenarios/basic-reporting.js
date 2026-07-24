@@ -1,1011 +1,258 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
-
+const { getCommandBlocker } = require('../command-blocker')
 const { runCommand } = require('../command-runner')
-const { getDatadogCleanCommand, getLocalValidationCommand } = require('../local-command')
+const { getBasicCommand } = require('../runner-command')
 
 const {
   basicEventEvidence,
-  error,
   failWithDebugRerun,
-  findInterestingLines,
   frameworkOutDir,
   hasAllBasicEventTypes,
   inconclusive,
   pass,
   runInstrumentedCommand,
-  tailInterestingLines,
 } = require('./helpers')
 
+/**
+ * Checks whether controlled initialization reports one real project test.
+ *
+ * @param {object} input scenario inputs
+ * @param {object} input.framework framework manifest entry
+ * @param {string} input.out validation output directory
+ * @param {object} input.options validator options
+ * @returns {Promise<object>} scenario result
+ */
 async function runBasicReporting ({ framework, out, options }) {
-  const primaryResult = await runPrimaryBasicReporting({ framework, out, options })
-  if (primaryResult.evidence?.foundationalReportingEstablished) return primaryResult
-  const isolationTestCandidate = getSelectedIsolationTestCandidate(framework)
-  if (primaryResult.evidence?.isolationEligible !== true || !isolationTestCandidate) return primaryResult
-
-  const { runIsolationPreflight } = require('../preflight-runner')
-  const isolationPreflight = await runIsolationPreflight({ framework, isolationTestCandidate, out, options })
-  primaryResult.evidence ||= {}
-  primaryResult.evidence.isolationPreflight = isolationPreflight.preflight
-  if (!isolationPreflight.ok) {
-    primaryResult.evidence.foundationalReportingEstablished = false
-    primaryResult.evidence.reportingPath = 'none'
-    primaryResult.evidence.isolationUnavailable = true
-    return primaryResult
-  }
-
-  const isolationResult = await runIsolationBasicReporting({
-    framework,
-    isolationPreflight: isolationPreflight.preflight,
-    isolationTestCandidate,
-    out,
-    options,
-  })
-  primaryResult.artifacts ||= []
-  primaryResult.artifacts.push(...(isolationResult.artifacts || []))
-  primaryResult.evidence.isolation = isolationResult.evidence
-  primaryResult.evidence.isolationDiagnosis = isolationResult.diagnosis
-  primaryResult.evidence.isolationStatus = isolationResult.status
-  primaryResult.evidence.foundationalReportingEstablished =
-    isolationResult.evidence?.foundationalReportingEstablished === true
-  primaryResult.evidence.reportingPath = primaryResult.evidence.foundationalReportingEstablished
-    ? 'validator-direct-isolation'
-    : 'none'
-
-  if (primaryResult.evidence.foundationalReportingEstablished) {
-    primaryResult.status = 'fail'
-    primaryResult.diagnosis = 'The selected project test command passed without Datadog but did not produce a ' +
-      'complete Test Optimization event hierarchy when initialized. The equivalent direct test-runner command ' +
-      'reported session, module, suite, and test events for the same file and runner mode. dd-trace and the ' +
-      `${framework.framework} adapter can report in this project; the project wrapper likely does not propagate ` +
-      'the required initialization to the final test process.'
-  } else if (isCucumberSourceCheckoutIsolation(framework, isolationTestCandidate)) {
-    primaryResult.evidence.isolationRepresentativeness = {
-      representative: false,
-      reason: 'The Cucumber runner is loaded from the framework repository source tree rather than node_modules.',
-    }
-    primaryResult.diagnosis = 'The selected project command and its direct-runner isolation did not establish Basic ' +
-      'Reporting, but this repository is the Cucumber framework source checkout and its runner is not loaded as an ' +
-      'installed dependency under node_modules. This topology is not a reliable reproduction of customer Cucumber ' +
-      'instrumentation. Reproduce with @cucumber/cucumber installed under node_modules before treating the result as ' +
-      'a dd-trace adapter bug.'
-  } else if (isolationResult.diagnosis) {
-    const completeIsolationEvents = isolationResult.evidence?.testSessionEvents > 0 &&
-      isolationResult.evidence?.testModuleEvents > 0 &&
-      isolationResult.evidence?.testSuiteEvents > 0 &&
-      isolationResult.evidence?.testEvents > 0
-    primaryResult.diagnosis = completeIsolationEvents
-      ? 'The selected project command did not establish Basic Reporting. The equivalent direct-runner isolation ' +
-        `emitted a complete event hierarchy but failed its compatibility contract. ${isolationResult.diagnosis}`
-      : 'The selected project command did not establish Basic Reporting, and the equivalent direct-runner isolation ' +
-        `check did not report a complete event hierarchy either. ${isolationResult.diagnosis} This may indicate a ` +
-        'dd-trace adapter or compatibility issue; inspect the recorded debug evidence.'
-  }
-
-  return primaryResult
-}
-
-async function runPrimaryBasicReporting ({ framework, out, options }) {
   const scenarioName = 'basic-reporting'
+  const command = getBasicCommand(framework)
+  let outDir
+
   try {
-    const command = getBasicReportingCommand(framework)
-    const { result, events, offline, outDir } = await runInstrumentedCommand({
+    const run = await runInstrumentedCommand({
+      allowMissingInitialization: true,
+      command,
       framework,
+      options,
       out,
       scenarioName,
-      command,
-      options,
-      allowMissingInitialization: true,
     })
-
+    outDir = run.outDir
+    const complete = hasAllBasicEventTypes(run.events)
     const evidence = {
-      commandExitCode: result.exitCode,
-      commandTimedOut: result.timedOut,
-      commandDescription: command?.description,
-      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
-      manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
+      ...basicEventEvidence(run.events),
+      commandExitCode: run.result.exitCode,
+      commandOutputSummary: summarizeTestOutput(run.result.stdout, run.result.stderr),
+      commandTimedOut: run.result.timedOut,
+      foundationalReportingEstablished: complete &&
+        run.offline.initialized &&
+        run.offline.inputs.settings?.status === 'loaded' &&
+        run.result.exitCode === 0 &&
+        !run.result.timedOut,
+      offlineExporterInitialized: run.offline.initialized,
       preflight: summarizePreflight(framework.preflight),
-      offlineExporterInitialized: offline.initialized,
-      settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
-      offlineExporterSummary: offline.summary,
-      foundationalReportingEstablished: false,
-      isolationEligible: result.exitCode === 0 && result.timedOut !== true,
-      reportingPath: 'none',
-      ...basicEventEvidence(events),
+      reportingPath: complete ? 'validator-direct-runner' : 'none',
+      settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
     }
 
-    if (!evidence.offlineExporterInitialized || !evidence.settingsLoadedFromCache) {
-      const reason = evidence.offlineExporterInitialized
-        ? 'Basic Reporting settings were not loaded from the authoritative offline cache fixture.'
-        : 'The offline Test Optimization exporter did not initialize during Basic Reporting.'
-      return diagnoseInitializationFailure({
-        command,
-        diagnosis: reason,
-        evidence,
-        framework,
-        scenarioName,
-        options,
-        out,
-        outDir,
-      })
-    }
-
-    const complete = hasAllBasicEventTypes(events)
-    evidence.foundationalReportingEstablished = complete &&
-      evidence.offlineExporterInitialized &&
-      evidence.settingsLoadedFromCache &&
-      result.exitCode === 0 &&
-      result.timedOut !== true
-    evidence.reportingPath = evidence.foundationalReportingEstablished ? 'project-command' : 'none'
-
-    if (result.timedOut) {
-      evidence.commandFailure = summarizeCommandFailure(result, evidence)
+    if (run.result.timedOut) {
       return inconclusive(
         framework,
         scenarioName,
-        'The initialized project command timed out. No wrapper-propagation or Test Optimization compatibility ' +
-          'conclusion was reached.',
-        evidence,
+        'The initialized direct test exceeded its approved timeout. Basic Reporting remains incomplete.',
+        { ...evidence, commandFailure: classifyFailure(framework, run.result) },
         outDir
       )
-    }
-
-    if (result.exitCode !== 0) {
-      if (!complete) {
-        evidence.commandFailure = summarizeCommandFailure(result, evidence)
-        evidence.eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
-      }
-      return handleInstrumentedExitMismatch({
-        command,
-        complete,
-        evidence,
-        framework,
-        options,
-        out,
-        outDir,
-        result,
-        scenarioName,
-      })
-    }
-
-    if (!complete) {
-      const eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
-      evidence.eventLevelFailure = eventLevelFailure
-      evidence.isolationEligible = evidence.offlineExporterInitialized &&
-        evidence.settingsLoadedFromCache &&
-        result.timedOut !== true
-
-      return failBasicReportingWithDebugRerun({
-        command,
-        diagnosis: eventLevelFailure.summary,
-        evidence,
-        framework,
-        options,
-        out,
-        outDir,
-        scenarioName,
-        skipDebug: evidence.commandFailure?.buildErrors?.length > 0 ||
-          !shouldRunDebugRerun(eventLevelFailure, result),
-      })
     }
 
     if (evidence.foundationalReportingEstablished) {
       return pass(
         framework,
         scenarioName,
-        'Basic reporting emitted session, module, suite, and test events.',
+        'The direct test emitted session, module, suite, and test events.',
         evidence,
         outDir
       )
     }
 
-    throw new Error('Basic Reporting reached an unexpected result state.')
-  } catch (err) {
-    return error(framework, scenarioName, err)
-  }
-}
-
-/**
- * Detects a framework-development checkout that is not equivalent to a customer-installed Cucumber package.
- *
- * @param {object} framework framework manifest entry
- * @param {object} isolationTestCandidate selected direct-runner candidate
- * @returns {boolean} whether the isolation runner comes from the Cucumber source tree
- */
-function isCucumberSourceCheckoutIsolation (framework, isolationTestCandidate) {
-  if (framework.framework !== 'cucumber' || framework.project?.name !== '@cucumber/cucumber') return false
-  const source = isolationTestCandidate.command?.usesShell
-    ? isolationTestCandidate.command.shellCommand
-    : (isolationTestCandidate.command?.argv || []).join(' ')
-  return !String(source || '').replaceAll('\\', '/').includes('/node_modules/')
-}
-
-/**
- * Runs the approved direct-runner isolation command after its clean preflight succeeds.
- *
- * @param {object} input validation inputs
- * @param {object} input.framework framework manifest entry
- * @param {object} input.isolationPreflight successful isolation preflight
- * @param {object} input.isolationTestCandidate approved isolation candidate
- * @param {string} input.out validation output directory
- * @param {object} input.options validator options
- * @returns {Promise<object>} isolation result
- */
-async function runIsolationBasicReporting ({
-  framework,
-  isolationPreflight,
-  isolationTestCandidate,
-  out,
-  options,
-}) {
-  const scenarioName = 'basic-reporting-isolation'
-  const command = getLocalValidationCommand(framework, isolationTestCandidate.command)
-  try {
-    const { result, events, offline, outDir } = await runInstrumentedCommand({
-      allowMissingInitialization: true,
-      command,
-      framework,
-      options,
-      out,
-      scenarioName,
-    })
-    const complete = hasAllBasicEventTypes(events)
-    const evidence = {
-      commandExitCode: result.exitCode,
-      commandTimedOut: result.timedOut,
-      commandDescription: command?.description,
-      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
-      equivalence: isolationTestCandidate.equivalence,
-      foundationalReportingEstablished: false,
-      offlineExporterInitialized: offline.initialized,
-      offlineExporterSummary: offline.summary,
-      preflight: summarizePreflight(isolationPreflight),
-      reportingPath: 'none',
-      settingsLoadedFromCache: offline.inputs.settings?.status === 'loaded',
-      ...basicEventEvidence(events),
-    }
-
-    if (!evidence.offlineExporterInitialized || !evidence.settingsLoadedFromCache) {
-      const reason = evidence.offlineExporterInitialized
-        ? 'Direct-runner isolation did not load settings from the authoritative offline cache fixture.'
-        : 'The offline Test Optimization exporter did not initialize during direct-runner isolation.'
-      return diagnoseInitializationFailure({
+    if (!run.offline.initialized || !evidence.settingsLoadedFromCache) {
+      return failWithDebugRerun({
         command,
-        diagnosis: reason,
-        evidence,
+        diagnosis: run.offline.initialized
+          ? 'The clean test passed, but Test Optimization did not load the validator-owned offline settings.'
+          : 'The clean test passed, but the offline Test Optimization exporter did not initialize.',
+        evidence: {
+          ...evidence,
+          possibleLibraryBug: true,
+          recommendation: 'Inspect the debug artifact for dd-trace initialization errors and report it with the ' +
+            'framework and dd-trace versions.',
+        },
         framework,
-        scenarioName,
         options,
         out,
         outDir,
+        scenarioName,
       })
     }
 
-    if (result.timedOut) {
-      evidence.commandFailure = summarizeCommandFailure(result, evidence)
-      return inconclusive(
-        framework,
-        scenarioName,
-        'The direct-runner isolation command timed out. It did not establish foundational reporting.',
-        evidence,
-        outDir
-      )
-    }
-
-    if (result.exitCode !== 0) {
-      if (!complete) {
-        evidence.commandFailure = summarizeCommandFailure(result, evidence)
-        evidence.eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
+    if (run.result.exitCode !== 0) {
+      evidence.commandFailure = classifyFailure(framework, run.result)
+      const confirmation = await runCleanConfirmation({ command, framework, options, out })
+      evidence.cleanConfirmation = confirmation.evidence
+      if (!confirmation.evidence.matchesPreflight) {
+        return inconclusive(
+          framework,
+          scenarioName,
+          'The clean baseline changed between runs, so the initialized failure cannot be attributed to dd-trace.',
+          evidence,
+          outDir,
+          confirmation.artifacts
+        )
       }
-      return handleInstrumentedExitMismatch({
+      const result = await failWithDebugRerun({
         command,
-        complete,
-        evidence,
+        diagnosis: complete
+          ? `The test passed twice without Datadog but exited ${run.result.exitCode} when initialized, after ` +
+            'emitting ' +
+            'the complete event hierarchy. This is a possible dd-trace compatibility bug.'
+          : `The test passed twice without Datadog but exited ${run.result.exitCode} when initialized and did not ` +
+            'emit the complete event hierarchy. This is a possible dd-trace adapter or compatibility bug.',
+        evidence: {
+          ...evidence,
+          possibleLibraryBug: true,
+          recommendation: 'Attach the debug run, clean confirmations, framework version, and dd-trace version to ' +
+            'the engineering investigation.',
+        },
         framework,
         options,
         out,
         outDir,
-        preflight: isolationPreflight,
-        result,
         scenarioName,
       })
+      result.artifacts.push(...confirmation.artifacts)
+      return result
     }
 
-    if (complete && result.timedOut !== true) {
-      evidence.foundationalReportingEstablished = true
-      evidence.reportingPath = 'validator-direct-isolation'
-      return pass(
-        framework,
-        scenarioName,
-        'The equivalent direct test-runner command emitted session, module, suite, and test events.',
-        evidence,
-        outDir
-      )
-    }
-
-    evidence.eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
-    const failure = await failBasicReportingWithDebugRerun({
+    const missing = getMissingLevels(evidence)
+    return failWithDebugRerun({
       command,
-      diagnosis: evidence.eventLevelFailure.summary,
-      evidence,
+      diagnosis: 'The direct test passed cleanly and while initialized, but no complete Test Optimization event ' +
+        `hierarchy was captured. Missing levels: ${missing.join(', ')}. This is a possible dd-trace adapter bug.`,
+      evidence: {
+        ...evidence,
+        missingEventLevels: missing,
+        possibleLibraryBug: true,
+        recommendation: 'Inspect the debug artifact for initialization and adapter errors. Include it with the ' +
+          'framework and dd-trace versions in an engineering investigation.',
+      },
       framework,
       options,
       out,
       outDir,
       scenarioName,
     })
-    failure.evidence.foundationalReportingEstablished = false
-    failure.evidence.reportingPath = 'none'
-    return failure
-  } catch (err) {
-    const result = error(framework, scenarioName, err)
-    result.evidence ||= {}
-    result.evidence.foundationalReportingEstablished = false
-    result.evidence.reportingPath = 'none'
-    return result
+  } catch (error) {
+    return {
+      frameworkId: framework.id,
+      scenario: scenarioName,
+      status: 'error',
+      diagnosis: `Basic Reporting could not complete: ${error?.message || error}`,
+      evidence: { validationIncomplete: true },
+      artifacts: outDir ? [outDir] : [],
+    }
   }
 }
 
 /**
- * Reconciles an instrumented nonzero exit with a second clean execution.
- *
- * @param {object} input mismatch inputs
- * @param {object} input.command selected command
- * @param {boolean} input.complete whether all required event levels were emitted
- * @param {object} input.evidence collected scenario evidence
- * @param {object} input.framework framework manifest entry
- * @param {object} input.options validator options
- * @param {string} input.out validation output directory
- * @param {string} input.outDir scenario artifact directory
- * @param {object} [input.preflight] matching clean preflight
- * @param {object} input.result instrumented command result
- * @param {string} input.scenarioName scenario identifier
- * @returns {Promise<object>} reconciled result
- */
-async function handleInstrumentedExitMismatch ({
-  command,
-  complete,
-  evidence,
-  framework,
-  options,
-  out,
-  outDir,
-  preflight = framework.preflight,
-  result,
-  scenarioName,
-}) {
-  evidence.commandFailure ||= summarizeCommandFailure(result, evidence)
-  evidence.commandExitMatchesPreflight = false
-  const cleanConfirmation = await runCleanConfirmation({
-    command,
-    framework,
-    options,
-    out,
-    preflight,
-    scenarioName,
-  })
-  evidence.cleanConfirmation = cleanConfirmation.evidence
-
-  if (!cleanConfirmation.evidence.exitMatchesPreflight) {
-    return inconclusive(
-      framework,
-      scenarioName,
-      getUnstableBaselineDiagnosis(preflight, result, cleanConfirmation.result),
-      evidence,
-      outDir,
-      cleanConfirmation.artifacts
-    )
-  }
-
-  const failure = await failBasicReportingWithDebugRerun({
-    command,
-    diagnosis: complete
-      ? getPossibleCompatibilityDiagnosis(preflight, result)
-      : evidence.eventLevelFailure.summary,
-    evidence,
-    framework,
-    options,
-    out,
-    outDir,
-    scenarioName,
-    skipDebug: evidence.commandFailure?.buildErrors?.length > 0 ||
-      !shouldRunDebugRerun(evidence.eventLevelFailure || {}, result),
-  })
-  failure.evidence.foundationalReportingEstablished = false
-  failure.evidence.reportingPath = 'none'
-  failure.artifacts.push(...cleanConfirmation.artifacts)
-  return failure
-}
-
-/**
- * Repeats the selected command without Datadog after an instrumented exit-code mismatch.
+ * Repeats the direct clean command after an initialized-only failure.
  *
  * @param {object} input confirmation inputs
- * @param {object} input.command selected project command
- * @param {object} input.framework manifest framework entry
+ * @param {object} input.command direct command
+ * @param {object} input.framework framework entry
  * @param {object} input.options validator options
- * @param {string} input.out validation output directory
- * @param {object} input.preflight matching clean preflight
- * @param {string} input.scenarioName scenario identifier
- * @returns {Promise<{artifacts: string[], evidence: object, result: object}>} clean confirmation outcome
+ * @param {string} input.out output root
+ * @returns {Promise<{artifacts: string[], evidence: object}>} confirmation evidence
  */
-async function runCleanConfirmation ({
-  command,
-  framework,
-  options,
-  out,
-  preflight = framework.preflight,
-  scenarioName,
-}) {
-  const outDir = frameworkOutDir(out, framework, `${scenarioName}-clean-confirmation`)
-  const result = await runCommand(getDatadogCleanCommand(command), {
+async function runCleanConfirmation ({ command, framework, options, out }) {
+  const outDir = frameworkOutDir(out, framework, 'basic-reporting-clean-confirmation')
+  const result = await runCommand(command, {
     artifactRoot: out,
     envMode: 'clean',
-    label: `${framework.id}:${scenarioName}:clean-confirmation`,
+    label: `${framework.id}:basic-reporting:clean-confirmation`,
     outDir,
     repositoryRoot: options.repositoryRoot,
     requireExecutableApproval: options.requireExecutableApproval,
     verbose: options.verbose,
   })
-  const exitMatchesPreflight = !result.timedOut && matchesPreflightExitCode(preflight, result.exitCode)
   return {
     artifacts: Object.values(result.artifacts),
-    result,
     evidence: {
-      ran: true,
       exitCode: result.exitCode,
+      matchesPreflight: !result.timedOut &&
+        framework.preflight?.exitCode === result.exitCode,
       timedOut: result.timedOut,
-      exitMatchesPreflight,
-      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
     },
   }
 }
 
 /**
- * Returns the isolation candidate approved for the project candidate selected by clean preflight.
+ * Returns a compact preflight summary.
  *
- * @param {object} framework framework manifest entry
- * @returns {object|undefined} matching isolation candidate
+ * @param {object} preflight preflight evidence
+ * @returns {object} compact evidence
  */
-function getSelectedIsolationTestCandidate (framework) {
-  const selectedCandidateIndex = framework.preflight?.selectedCandidateIndex ?? 0
-  const candidates = framework.isolationTestCandidates
-  if (Array.isArray(candidates)) {
-    return candidates.find(candidate => candidate.primaryCandidateIndex === selectedCandidateIndex)
-  }
-  return selectedCandidateIndex === 0 ? framework.isolationTestCandidate : undefined
-}
-
-/**
- * Describes an exit mismatch that cannot be attributed because clean executions disagreed.
- *
- * @param {object} preflight initial clean preflight evidence
- * @param {object} instrumented instrumented command result
- * @param {object} cleanConfirmation repeated clean command result
- * @returns {string} customer-facing diagnosis
- */
-function getUnstableBaselineDiagnosis (preflight, instrumented, cleanConfirmation) {
-  const confirmation = cleanConfirmation.timedOut
-    ? 'timed out'
-    : `exited ${cleanConfirmation.exitCode}`
-  return `The selected command exited ${preflight.exitCode} during the initial clean preflight, exited ` +
-    `${instrumented.exitCode} with Datadog initialized, and ${confirmation} during a second clean run. The ` +
-    'non-Datadog baseline was not stable, so no Test Optimization compatibility conclusion was reached.'
-}
-
-/**
- * Describes an instrumented-only exit mismatch after the clean baseline was reproduced.
- *
- * @param {object} preflight initial clean preflight evidence
- * @param {object} instrumented instrumented command result
- * @returns {string} customer-facing diagnosis
- */
-function getPossibleCompatibilityDiagnosis (preflight, instrumented) {
-  return `The selected command exited ${preflight.exitCode} in both runs without Datadog, but exited ` +
-    `${instrumented.exitCode} with Datadog initialized after reporting Test Optimization events. This may indicate ` +
-    'a dd-trace compatibility issue rather than a project baseline failure.'
-}
-
-function getBasicReportingCommand (framework) {
-  return getLocalValidationCommand(framework, framework.existingTestCommand)
-}
-
-async function failBasicReportingWithDebugRerun (options) {
-  const failure = await failWithDebugRerun(options)
-  return refineBasicReportingFailure(failure)
-}
-
-async function diagnoseInitializationFailure ({
-  command,
-  diagnosis,
-  evidence,
-  framework,
-  options,
-  out,
-  outDir,
-  scenarioName,
-}) {
-  const localDiagnosis = {
-    kind: evidence.offlineExporterInitialized
-      ? 'offline-settings-not-loaded'
-      : 'offline-exporter-not-initialized',
-    summary: `${diagnosis} The validator supplied controlled initialization and offline fixtures, so this may ` +
-      'indicate ' +
-      'a dd-trace initialization or validator integration problem.',
-    recommendation: 'Inspect the recorded debug rerun for tracer initialization or offline exporter errors. If the ' +
-      'same failure reproduces with the approved command, provide its debug artifacts to Datadog Support or the ' +
-      'dd-trace maintainers.',
-  }
-  evidence.domain = 'test_optimization'
-  evidence.localDiagnosis = localDiagnosis
-  const failure = await failWithDebugRerun({
-    command,
-    diagnosis: localDiagnosis.summary,
-    evidence,
-    framework,
-    options,
-    out,
-    outDir,
-    scenarioName,
-  })
-  failure.status = 'error'
-  return failure
-}
-
-function refineBasicReportingFailure (failure) {
-  const evidence = failure.evidence || {}
-  if (['dd-trace-preload-failed', 'command-setup-failed'].includes(evidence.eventLevelFailure?.kind)) {
-    failure.status = 'error'
-    evidence.localDiagnosis = evidence.eventLevelFailure
-    return failure
-  }
-
-  const diagnosis = getDebugAwareDiagnosis(failure.diagnosis, evidence)
-  if (!diagnosis) return failure
-
-  failure.diagnosis = diagnosis.summary
-  evidence.localDiagnosis = diagnosis
-
-  if (evidence.eventLevelFailure) {
-    evidence.eventLevelFailure = {
-      ...evidence.eventLevelFailure,
-      summary: diagnosis.summary,
-      recommendation: diagnosis.recommendation,
-      signals: diagnosis.signals,
-    }
-  }
-
-  return failure
-}
-
-function getDebugAwareDiagnosis (currentDiagnosis, evidence) {
-  if (evidence.eventLevelFailure?.kind !== 'no-test-optimization-events') return null
-
-  const debugRerun = evidence.debugRerun
-  if (!debugRerun || debugRerun.ran !== true) return null
-
-  const testOutputSummary = summarizeTestOutput(
-    (evidence.commandOutputSummary || []).join('\n'),
-    (debugRerun.stdoutExcerpt || []).join('\n')
-  )
-  const testsRan = commandOutputShowsTestsRan(testOutputSummary)
-  const debugLine = findDebugLine(debugRerun, /dd-trace is not initialized in a package manager/i)
-  const noDebugEvents = !hasAnyTestOptimizationEvent(debugRerun)
-
-  if (testsRan && debugLine && noDebugEvents) {
-    return {
-      kind: 'tests-ran-tracer-not-initialized',
-      summary: 'The selected command ran tests, but no Test Optimization events reached the offline event artifact. ' +
-        `The debug rerun printed "${debugLine}", which means the preload executed in the package-manager ` +
-        'wrapper without producing Test Optimization events from the test process.',
-      recommendation: 'Try a direct test-runner command, or verify NODE_OPTIONS with dd-trace/ci/init reaches the ' +
-        'final test process rather than only the package-manager wrapper.',
-      signals: getDebugSignals({
-        debugLine,
-        debugRerun,
-        testOutputSummary,
-      }),
-    }
-  }
-
-  if (testsRan && noDebugEvents) {
-    return {
-      kind: 'tests-ran-no-test-optimization-events',
-      summary: 'The selected command ran tests, but no Test Optimization events reached the offline event artifact. ' +
-        'The debug rerun did not emit Test Optimization events either.',
-      recommendation: 'Inspect the debug rerun excerpt for tracer initialization or offline exporter errors, then ' +
-        'verify NODE_OPTIONS with dd-trace/ci/init reaches the final test process.',
-      signals: getDebugSignals({
-        debugRerun,
-        testOutputSummary,
-      }),
-    }
-  }
-
-  if (debugLine && noDebugEvents) {
-    return {
-      kind: 'tracer-not-initialized',
-      summary: `${currentDiagnosis} The debug rerun printed "${debugLine}".`,
-      recommendation: 'Verify NODE_OPTIONS with dd-trace/ci/init reaches the final test process.',
-      signals: getDebugSignals({
-        debugLine,
-        debugRerun,
-        testOutputSummary,
-      }),
-    }
-  }
-}
-
-function shouldRunDebugRerun (eventLevelFailure, result) {
-  return result.timedOut !== true &&
-    eventLevelFailure.kind !== 'vitest-benchmark' &&
-    eventLevelFailure.kind !== 'custom-jest-runner'
-}
-
-function matchesPreflightExitCode (preflight, exitCode) {
-  return preflight?.ran === true &&
-    Number.isInteger(preflight.exitCode) &&
-    preflight.exitCode === exitCode
-}
-
-function summarizePreflight (preflight) {
-  if (!preflight || preflight.ran !== true) {
-    return {
-      ran: false,
-      reason: 'No dd-trace-less preflight result was recorded in the manifest.',
-    }
-  }
-
+function summarizePreflight (preflight = {}) {
   return {
-    ran: true,
+    durationMs: preflight.durationMs,
     exitCode: preflight.exitCode,
     observedTestCount: preflight.observedTestCount,
-    testCountKnown: preflight.testCountKnown,
-    origin: preflight.origin,
-    selectedCandidateIndex: preflight.selectedCandidateIndex,
-    sourceFile: preflight.sourceFile,
-    stdoutSummary: preflight.stdoutSummary,
-    stderrSummary: preflight.stderrSummary,
+    ran: preflight.ran === true,
+    timedOut: preflight.timedOut === true,
   }
 }
 
-function summarizeTestOutput (stdout = '', stderr = '') {
-  return findInterestingLines(`${stdout}\n${stderr}`, [
-    /\b\d+\s+passing\b/i,
-    /\b\d+\s+pending\b/i,
-    /\b\d+\s+failing\b/i,
-    /\b\d+\s+passed\b/i,
-    /\b\d+\s+failed\b/i,
-    /\btests?\b.*\bpassed\b/i,
-    /\btests?\b.*\bfailed\b/i,
-    /\bTests\s*:\s*\d+\b/i,
-    /\bSuccessfully ran target\b.*\btest\b/i,
-    /\bsuccess:\s*\d+\b/i,
-    /\bTasks:\s*\d+\s+successful\b/i,
-  ], 8)
-}
-
-function commandOutputShowsTestsRan (lines) {
-  return lines.some(line => {
-    return /\b\d+\s+(?:passing|passed|failing|failed)\b/i.test(line) ||
-      /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
-      /\bTests\s*:\s*[1-9]\d*\b/i.test(line) ||
-      /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
-      /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
-      /\bfailed:\s*[1-9]\d*\b/i.test(line) ||
-      /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)
+/**
+ * Classifies a direct command failure.
+ *
+ * @param {object} framework framework entry
+ * @param {object} result command result
+ * @returns {object|undefined} blocker
+ */
+function classifyFailure (framework, result) {
+  return getCommandBlocker(result, {
+    browserRequired: framework.browserRequired,
+    framework: framework.framework,
   })
 }
 
-function findDebugLine (debugRerun, pattern) {
-  const lines = [
-    ...(debugRerun.debugLines || []),
-    ...(debugRerun.stdoutExcerpt || []),
-    ...(debugRerun.stderrExcerpt || []),
-  ]
-  return lines.find(line => pattern.test(line))
-}
-
-function getDebugSignals ({ debugLine, debugRerun, testOutputSummary }) {
-  return {
-    debugLine,
-    debugLines: debugRerun.debugLines || [],
-    stdoutExcerpt: debugRerun.stdoutExcerpt || [],
-    stderrExcerpt: debugRerun.stderrExcerpt || [],
-    testOutputSummary,
-  }
-}
-
-function summarizeCommandFailure (result, evidence) {
-  const output = `${result.stdout}\n${result.stderr}`
-  const buildErrors = findInterestingLines(output, [
-    /Could not resolve /,
-    /Cannot find module/,
-    /Module not found/,
-    /Error \[ERR_MODULE_NOT_FOUND\]/,
-  ])
-  const assertionFailures = findInterestingLines(output, [
-    /AssertionError/,
-    /Timed out retrying/,
-    /^\s+\d+\) /,
-  ])
-  const testEventsWereReported = evidence.testSessionEvents > 0 &&
-    evidence.testModuleEvents > 0 &&
-    evidence.testSuiteEvents > 0 &&
-    evidence.testEvents > 0
-  const summary = getFailureSummary({
-    buildErrors,
-    assertionFailures,
-    exitCode: result.exitCode,
-    testEventsWereReported,
-    timedOut: result.timedOut,
-  })
-
-  return {
-    assertionFailures,
-    buildErrors,
-    stderrExcerpt: tailInterestingLines(result.stderr),
-    stdoutExcerpt: tailInterestingLines(result.stdout),
-    summary,
-    testEventsWereReported,
-  }
-}
-
-function getMissingEventDiagnosis ({ framework, result, evidence }) {
-  const missingLevels = getMissingLevels(evidence)
-  const commandFailure = evidence.commandFailure
-  const vitestBenchmark = detectVitestBenchmark(framework, result)
-  const frameworkSourceTreeRunner = detectFrameworkSourceTreeRunner(framework, result)
-  const customJestRunner = detectCustomJestRunner(framework)
-
-  if (commandFailure?.buildErrors?.length > 0 && !hasAnyTestOptimizationEvent(evidence)) {
-    const preloadFailed = /(?:ci\/init\.js|internal\/preload)/.test(`${result.stdout}\n${result.stderr}`)
-    return {
-      kind: preloadFailed ? 'dd-trace-preload-failed' : 'command-setup-failed',
-      missingLevels,
-      signals: commandFailure.buildErrors,
-      summary: preloadFailed
-        ? `The Test Optimization preload failed before tests started: ${commandFailure.buildErrors[0]}. ` +
-          'No Test Optimization conclusion was reached.'
-        : `${commandFailure.summary} No Test Optimization conclusion was reached.`,
-      recommendation: preloadFailed
-        ? 'Repair or reinstall dd-trace so its declared dependencies resolve, then rerun validation.'
-        : 'Fix the selected project command or its setup, then rerun validation.',
-    }
-  }
-
-  if (vitestBenchmark) {
-    return {
-      kind: 'vitest-benchmark',
-      missingLevels,
-      signals: vitestBenchmark.signals,
-      summary: 'The selected Vitest command appears to run benchmark mode, not normal tests. ' +
-        'Test Optimization reported session/module/suite events, but Vitest benchmark mode did not emit ' +
-        'per-test events. Choose a normal Vitest test command such as "vitest run <test-file>" for validation.',
-      recommendation: 'Replace the selected command with a normal Vitest test command; do not use `vitest bench` ' +
-        'or benchmark-only `*.bench.*` files for Test Optimization validation.',
-    }
-  }
-
-  if (frameworkSourceTreeRunner && !hasAnyTestOptimizationEvent(evidence)) {
-    return {
-      kind: 'framework-source-tree-runner',
-      missingLevels,
-      signals: frameworkSourceTreeRunner.signals,
-      summary: 'The selected command ran tests from the test framework source tree, but no Test Optimization ' +
-        'events reached the offline event artifact. This command is not equivalent to a customer project running an ' +
-        'installed test-runner package.',
-      recommendation: 'Choose a project test command that uses an installed supported framework package. If this ' +
-        'repository is the framework itself, treat this entry as not runnable for Test Optimization validation.',
-    }
-  }
-
-  if (!hasAnyTestOptimizationEvent(evidence)) {
-    return {
-      kind: 'no-test-optimization-events',
-      missingLevels,
-      summary: 'No Test Optimization test events reached the offline event artifact. The tracer may not have ' +
-        'initialized in the test process, or the selected command may not have executed tests.',
-      recommendation: 'Check the debug rerun output for tracer initialization or offline exporter errors.',
-    }
-  }
-
-  if (evidence.testEvents === 0) {
-    if (customJestRunner) {
-      return {
-        kind: 'custom-jest-runner',
-        missingLevels,
-        customTestRunner: customJestRunner,
-        signals: customJestRunner.signals,
-        summary: `We detected a custom Jest-compatible runner: \`${customJestRunner.name}\`. The test command ` +
-          'executes tests, but it does not use a currently supported Jest entrypoint. Test Optimization ' +
-          'initialized, but this runner did not emit the Jest lifecycle events needed to report individual ' +
-          'suites and tests.',
-        recommendation: 'Try a standard Jest runner command for validation, or choose a test command that does not ' +
-          'use the custom runner. If this project must use the custom runner, dd-trace may need explicit support ' +
-          'for that runner before per-test reporting and advanced Test Optimization features can work.',
-      }
-    }
-
-    return {
-      kind: 'missing-test-events',
-      missingLevels,
-      summary: 'Test Optimization initialized and emitted higher-level events, but per-test events were missing. ' +
-        'This usually points to an unsupported runner mode, unsupported framework configuration, or per-test hooks ' +
-        'not firing for the selected command.',
-      recommendation: 'Choose a smaller standard test command, then inspect the debug rerun output for hook or ' +
-        'exporter errors.',
-    }
-  }
-
-  return {
-    kind: 'missing-event-levels',
-    missingLevels,
-    summary: `The command ran, but these required Test Optimization event levels were missing: ${
-      missingLevels.join(', ')
-    }.`,
-    recommendation: 'Inspect the debug rerun output for tracer initialization, hook, or exporter errors.',
-  }
-}
-
+/**
+ * Returns missing Test Optimization hierarchy levels.
+ *
+ * @param {object} evidence event evidence
+ * @returns {string[]} missing levels
+ */
 function getMissingLevels (evidence) {
-  const missing = []
-  if (evidence.testSessionEvents === 0) missing.push('test_session_end')
-  if (evidence.testModuleEvents === 0) missing.push('test_module_end')
-  if (evidence.testSuiteEvents === 0) missing.push('test_suite_end')
-  if (evidence.testEvents === 0) missing.push('test')
-  return missing
+  return [
+    ['session', evidence.testSessionEvents],
+    ['module', evidence.testModuleEvents],
+    ['suite', evidence.testSuiteEvents],
+    ['test', evidence.testEvents],
+  ].filter(([, count]) => count < 1).map(([level]) => level)
 }
 
-function hasAnyTestOptimizationEvent (evidence) {
-  return evidence.testSessionEvents > 0 ||
-    evidence.testModuleEvents > 0 ||
-    evidence.testSuiteEvents > 0 ||
-    evidence.testEvents > 0
+/**
+ * Extracts bounded useful test output lines.
+ *
+ * @param {string} [stdout] command stdout
+ * @param {string} [stderr] command stderr
+ * @returns {string[]} output summary
+ */
+function summarizeTestOutput (stdout = '', stderr = '') {
+  const lines = `${stdout}\n${stderr}`.split(/\r?\n/)
+  const interesting = lines.filter(line => {
+    return /\b(?:error|fail|pass|scenario|suite|test|timed out|warning)\b/i.test(line)
+  })
+  return [...new Set(interesting.map(line => line.trim()).filter(Boolean))].slice(-12)
 }
 
-function detectVitestBenchmark (framework, result) {
-  if (framework.framework !== 'vitest') return null
-
-  const command = result.command || ''
-  const output = `${result.stdout}\n${result.stderr}`
-  const signals = []
-
-  if (/\bvitest\s+bench\b/.test(command)) signals.push('command contains `vitest bench`')
-  if (/\.bench\.[cm]?[jt]sx?\b/.test(command)) signals.push('command targets a `*.bench.*` file')
-  if (/^\s*BENCH\s+Summary\b/m.test(output)) signals.push('stdout contains a Vitest BENCH summary')
-  if (/Benchmarking is an experimental feature/.test(output)) {
-    signals.push('stderr says Vitest benchmarking is experimental')
-  }
-
-  return signals.length > 0 ? { signals } : null
-}
-
-function detectCustomJestRunner (framework) {
-  if (framework.framework !== 'jest') return null
-
-  const configRunner = findJestRunnerInConfigFiles(framework.project?.configFiles || [])
-  if (configRunner && isCustomJestRunner(configRunner.name)) return configRunner
-
-  const packageRunner = findJestRunnerInPackageJson(framework.project?.packageJson)
-  if (packageRunner && isCustomJestRunner(packageRunner.name)) return packageRunner
-}
-
-function findJestRunnerInConfigFiles (configFiles) {
-  for (const configFile of configFiles) {
-    const content = readFile(configFile)
-    if (!content) continue
-
-    const match = /(?:^|[,{]\s*)runner\s*:\s*['"]([^'"]+)['"]/.exec(content)
-    if (!match) continue
-
-    return {
-      name: match[1],
-      source: configFile,
-      sourceType: 'config',
-      signals: [
-        `Jest config ${configFile} sets runner: ${match[1]}`,
-      ],
-    }
-  }
-}
-
-function findJestRunnerInPackageJson (packageJsonPath) {
-  if (!packageJsonPath) return
-
-  try {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    const runner = packageJson.jest?.runner
-    if (typeof runner !== 'string' || runner.length === 0) return
-
-    return {
-      name: runner,
-      source: packageJsonPath,
-      sourceType: 'package.json',
-      signals: [
-        `package.json jest.runner is ${runner}`,
-      ],
-    }
-  } catch {}
-}
-
-function isCustomJestRunner (runner) {
-  return runner !== 'jest-runner'
-}
-
-function detectFrameworkSourceTreeRunner (framework, result) {
-  if (framework.framework !== 'mocha') return null
-
-  const projectName = framework.project?.name || ''
-  const commandAndOutput = [
-    result.command || '',
-    result.stdout || '',
-    result.stderr || '',
-  ].join('\n')
-  const signals = []
-
-  if (projectName === 'mocha') {
-    signals.push('repository package name is `mocha`')
-  }
-  if (/\bnode\s+\.\/bin\/mocha\.js\b/.test(commandAndOutput) ||
-    /\bnode\s+bin\/mocha\.js\b/.test(commandAndOutput)) {
-    signals.push('selected command invokes the repository-local `bin/mocha.js` source-tree runner')
-  }
-  if (fileExists(framework.project?.root, 'lib/mocha.cjs') && fileExists(framework.project?.root, 'lib/runner.cjs')) {
-    signals.push('repository contains Mocha source files `lib/mocha.cjs` and `lib/runner.cjs`')
-  }
-
-  return signals.length >= 2 ? { signals } : null
-}
-
-function fileExists (root, filename) {
-  if (!root) return false
-
-  try {
-    return fs.existsSync(path.join(root, filename))
-  } catch {
-    return false
-  }
-}
-
-function readFile (filename) {
-  try {
-    return fs.readFileSync(filename, 'utf8')
-  } catch {}
-}
-
-function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEventsWereReported, timedOut }) {
-  if (timedOut) {
-    return 'The selected test command timed out before payload validation could pass.'
-  }
-
-  if (buildErrors.length > 0) {
-    if (testEventsWereReported) {
-      return 'The selected test command reported Datadog test events, but project setup/build errors made it fail.'
-    }
-
-    return 'The selected test command failed during project setup/build before payload validation could pass.'
-  }
-
-  if (assertionFailures.length > 0 && testEventsWereReported) {
-    return 'The selected test command reported Datadog test events, but the tests failed.'
-  }
-
-  if (testEventsWereReported) {
-    return `The selected test command reported Datadog test events, but exited ${exitCode}.`
-  }
-
-  return `The selected test command exited ${exitCode} before payload validation could pass.`
-}
-
-module.exports = {
-  getDebugAwareDiagnosis,
-  getBasicReportingCommand,
-  getMissingEventDiagnosis,
-  refineBasicReportingFailure,
-  runBasicReporting,
-  shouldRunDebugRerun,
-  summarizeTestOutput,
-}
+module.exports = { runBasicReporting, summarizeTestOutput }

@@ -193,7 +193,7 @@ function getRecommendedValues (framework) {
   const context = [
     framework.ciWiring?.step,
     framework.ciWiring?.job,
-    framework.existingTestCommand?.description,
+    framework.ciWiring?.command,
   ].filter(Boolean).join(' ')
   const testKind = /\bunit\b/i.test(context)
     ? 'unit-tests'

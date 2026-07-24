@@ -15,7 +15,7 @@ const initializedCleanupStrategies = new WeakSet()
 const authorizedRuntimeCleanupFiles = new Map()
 const writtenGeneratedFiles = new Map()
 
-function writeGeneratedFiles (framework) {
+function writeGeneratedFiles (framework, scenario) {
   const strategy = framework.generatedTestStrategy
   if (!strategy || !['planned', 'verified'].includes(strategy.status)) {
     return []
@@ -26,8 +26,9 @@ function writeGeneratedFiles (framework) {
   initializeRuntimeCleanupFiles(framework, strategy)
 
   const written = []
+  const files = getScenarioFiles(strategy, scenario)
   try {
-    for (const file of strategy.files || []) {
+    for (const file of files) {
       const filename = validateGeneratedFilePath(framework, file.path)
       validateContentLines(file.contentLines, filename)
       const content = `${file.contentLines.join('\n')}\n`
@@ -60,6 +61,25 @@ function writeGeneratedFiles (framework) {
     throw err
   }
   return written
+}
+
+/**
+ * Returns one scenario file plus adapter support files, or every file when no scenario is selected.
+ *
+ * @param {object} strategy generated strategy
+ * @param {object|undefined} scenario selected generated scenario
+ * @returns {object[]} generated files to write
+ */
+function getScenarioFiles (strategy, scenario) {
+  if (!scenario) return strategy.files || []
+  const scenarioPaths = new Set((strategy.scenarios || []).map(candidate => {
+    return path.resolve(candidate.testIdentities[0].file)
+  }))
+  const selectedPath = path.resolve(scenario.testIdentities[0].file)
+  return (strategy.files || []).filter(file => {
+    const filename = path.resolve(file.path)
+    return filename === selectedPath || !scenarioPaths.has(filename)
+  })
 }
 
 function cleanupGeneratedFiles (manifest, { keep = false } = {}) {

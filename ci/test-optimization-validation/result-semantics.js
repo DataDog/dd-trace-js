@@ -38,6 +38,7 @@ function getValidatorExitCode (results, executionStatus) {
 }
 
 function getConclusion (result) {
+  if (result.evidence?.validationIncomplete || result.evidence?.manifestIncomplete) return 'incomplete'
   if (result.status === 'pass') return 'confirmed_working'
   if (result.status === 'fail') {
     return result.scenario === 'ci-wiring' ? 'confirmed_misconfigured' : 'confirmed_not_working'
