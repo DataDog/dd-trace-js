@@ -343,6 +343,13 @@ class Config extends ConfigBase {
       }
     }
 
+    const configurationSource = this.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
+    if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
+        configurationSource !== 'agentless' &&
+        configurationSource !== 'remote_config') {
+      setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
+    }
+
     if (this.url ||
         os.type() !== 'Windows_NT' &&
         !trackedConfigOrigins.has('hostname') &&

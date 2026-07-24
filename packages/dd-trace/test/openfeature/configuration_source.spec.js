@@ -225,6 +225,18 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(AgentlessConfigurationSource)
   })
 
+  for (const source of ['offline', 'invalid']) {
+    it(`does not create a source for the unsupported ${source} source`, () => {
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = source
+
+      const resolved = configurationSource.create(config, sinon.spy())
+
+      assert.strictEqual(resolved, undefined)
+      sinon.assert.notCalled(AgentlessConfigurationSource)
+      sinon.assert.notCalled(log.error)
+    })
+  }
+
   it('does not create an agentless source when Feature Flags are disabled', () => {
     config.featureFlags.DD_FEATURE_FLAGS_ENABLED = false
     delete config.site

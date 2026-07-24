@@ -22,9 +22,9 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled || source !== 'agentless') {
-    return
-  }
+  if (!enabled || source !== 'agentless') return
+
+  const hasCustomEndpoint = Boolean(baseUrl?.trim())
 
   const hasCustomEndpoint = Boolean(baseUrl?.trim())
 

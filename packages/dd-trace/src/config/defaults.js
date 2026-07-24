@@ -32,13 +32,14 @@ const parseErrors = new Map()
  * @param {string} source - The source of the value.
  * @param {string} baseMessage - The base message to use for the warning.
  * @param {Error} [error] - An error that was thrown while parsing the value.
+ * @param {boolean} [pickedDefault] - Whether the invalid value was discarded in favor of a fallback.
  */
-function warnInvalidValue (value, optionName, source, baseMessage, error) {
+function warnInvalidValue (value, optionName, source, baseMessage, error, pickedDefault = true) {
   const canonicalName = (optionsTable[optionName]?.canonicalName ?? optionName) + source
   // Lazy load log module to avoid circular dependency
   if (!parseErrors.has(canonicalName)) {
-    // TODO: Rephrase: It will fallback to former source (or default if not set)
-    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source}), picked default`
+    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source})`
+    if (pickedDefault) message += ', picked default'
     if (error) {
       error.stack = error.toString()
       message += `\n\n${util.inspect(error)}`
