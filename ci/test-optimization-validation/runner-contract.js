@@ -41,6 +41,7 @@ const RUNNER_ENVIRONMENT_NAMES = new Set([
 ])
 const MODULE_OPTIONS = new Set([
   '-r',
+  '-u',
   '--env',
   '--environment',
   '--import',
@@ -49,10 +50,17 @@ const MODULE_OPTIONS = new Set([
   '--require-module',
   '--runner',
   '--testEnvironment',
+  '--ui',
 ])
 const FILE_OPTIONS = new Set(['-c', '--config', '--config-file'])
 const DIRECTORY_OPTIONS = new Set(['--root'])
-const BUILTIN_MODULE_VALUES = new Set(['node'])
+const BUILTIN_MODULE_VALUES = new Map([
+  ['-u', new Set(['bdd', 'exports', 'qunit', 'tdd'])],
+  ['--env', new Set(['node'])],
+  ['--environment', new Set(['node'])],
+  ['--testEnvironment', new Set(['node'])],
+  ['--ui', new Set(['bdd', 'exports', 'qunit', 'tdd'])],
+])
 const CONTROL_PATTERN = /[\0\r\n;&|`]|\$\(|\$\{/
 
 /**
@@ -336,7 +344,7 @@ function getRunnerInputs (args, environment, projectRoot, repositoryRoot) {
       if (directoryError) return { error: directoryError, files: [] }
       continue
     }
-    if (input.module && BUILTIN_MODULE_VALUES.has(input.value)) continue
+    if (input.module && BUILTIN_MODULE_VALUES.get(input.label)?.has(input.value)) continue
     const filename = resolveInputFile(input, projectRoot)
     if (!filename) return { error: `${input.label} does not resolve to a repository-contained file`, files: [] }
     try {

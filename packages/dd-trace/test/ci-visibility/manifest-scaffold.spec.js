@@ -113,6 +113,49 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('retains a built-in Mocha interface without treating it as a code-loading input', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'mocha',
+      script: 'mocha --ui bdd test/example.spec.js',
+    })
+    try {
+      const manifest = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      })
+      const framework = manifest.frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--ui', 'bdd'])
+      assert.deepStrictEqual(validateManifest(manifest), [])
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('does not retain a custom Mocha interface outside the repository', () => {
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-outside-ui-')))
+    const ui = path.join(outside, 'ui.js')
+    fs.writeFileSync(ui, 'module.exports = () => {}\n')
+    const fixture = createRepositoryFixture({
+      framework: 'mocha',
+      script: `mocha --ui ${ui} test/example.spec.js`,
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /resolves outside the repository/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+      fs.rmSync(outside, { force: true, recursive: true })
+    }
+  })
+
   it('does not retain a runner preload outside the repository', () => {
     const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-outside-loader-')))
     const preload = path.join(outside, 'preload.js')

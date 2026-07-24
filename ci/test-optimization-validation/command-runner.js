@@ -2,8 +2,9 @@
 
 /* eslint-disable no-console, eslint-rules/eslint-process-env */
 
+const fs = require('node:fs')
 const path = require('path')
-const { spawn } = require('child_process')
+const { spawn, spawnSync } = require('child_process')
 
 const {
   cleanupCommandOutputs,
@@ -84,6 +85,7 @@ const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 const EARLY_STOP_KILL_GRACE_MS = 500
 const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
+const WINDOWS_TASKKILL_TIMEOUT_MS = 10_000
 
 function runCommand (command, options = {}) {
   const {
@@ -142,7 +144,7 @@ function runCommand (command, options = {}) {
 
   return new Promise((resolve) => {
     let finalized = false
-    let processGroupCleanupPending = false
+    let processTreeCleanupPending = false
     let pendingCloseResult
     const childEnv = { ...getBaseEnv(envMode, command.requiredEnvVars) }
     mergeEnvironment(childEnv, command.env)
@@ -157,6 +159,20 @@ function runCommand (command, options = {}) {
     }
 
     const useProcessGroup = shouldUseProcessGroup()
+    const windowsTaskkillPath = getWindowsTaskkillPath()
+    if (process.platform === 'win32' && !windowsTaskkillPath) {
+      result.stderr = 'Validation cannot safely bound test processes because the Windows process-tree cleanup ' +
+        'executable is unavailable.\n'
+      result.durationMs = Date.now() - startedAt
+      try {
+        finishCommandOutputCleanup(result, outputStates)
+      } catch (cleanupError) {
+        result.outputCleanupError = cleanupError?.message || String(cleanupError)
+      }
+      resolve(result)
+      return
+    }
+    const managesProcessTree = useProcessGroup || Boolean(windowsTaskkillPath)
     let child
     try {
       const executable = getExecutableForSpawn(command, { requireApproval: requireExecutableApproval })
@@ -194,11 +210,11 @@ function runCommand (command, options = {}) {
     let stderrCapture
     const timeout = setTimeout(() => {
       result.timedOut = true
-      processGroupCleanupPending = useProcessGroup
-      signalChild(child, 'SIGTERM', useProcessGroup)
+      processTreeCleanupPending = managesProcessTree
+      signalChild(child, 'SIGTERM', useProcessGroup, windowsTaskkillPath)
       killTimer = setTimeout(() => {
-        signalChild(child, 'SIGKILL', useProcessGroup)
-        finishProcessGroupCleanup('SIGKILL')
+        signalChild(child, 'SIGKILL', useProcessGroup, windowsTaskkillPath)
+        finishProcessTreeCleanup('SIGKILL')
       }, timeoutKillGraceMs)
     }, timeoutMs)
 
@@ -212,11 +228,11 @@ function runCommand (command, options = {}) {
 
         clearInterval(stopTimer)
         result.stoppedEarly = true
-        processGroupCleanupPending = useProcessGroup
-        signalChild(child, 'SIGTERM', useProcessGroup)
+        processTreeCleanupPending = managesProcessTree
+        signalChild(child, 'SIGTERM', useProcessGroup, windowsTaskkillPath)
         killTimer = setTimeout(() => {
-          signalChild(child, 'SIGKILL', useProcessGroup)
-          finishProcessGroupCleanup('SIGKILL')
+          signalChild(child, 'SIGKILL', useProcessGroup, windowsTaskkillPath)
+          finishProcessTreeCleanup('SIGKILL')
         }, EARLY_STOP_KILL_GRACE_MS)
       }, 25)
     }
@@ -240,17 +256,17 @@ function runCommand (command, options = {}) {
       finalize(null, null)
     })
     child.on('close', (code, signal) => {
-      if (processGroupCleanupPending) {
+      if (processTreeCleanupPending) {
         pendingCloseResult = { code, signal }
-        signalChild(child, 'SIGKILL', useProcessGroup)
-        finishProcessGroupCleanup(signal)
+        signalChild(child, 'SIGKILL', useProcessGroup, windowsTaskkillPath)
+        finishProcessTreeCleanup(signal)
         return
       }
       finalize(code, signal)
     })
 
-    function finishProcessGroupCleanup (fallbackSignal) {
-      processGroupCleanupPending = false
+    function finishProcessTreeCleanup (fallbackSignal) {
+      processTreeCleanupPending = false
       if (pendingCloseResult) {
         finalize(pendingCloseResult.code, pendingCloseResult.signal || fallbackSignal)
         return
@@ -403,7 +419,44 @@ function shouldUseProcessGroup () {
   return process.platform !== 'win32'
 }
 
-function signalChild (child, signal, useProcessGroup) {
+/**
+ * Resolves the fixed Windows process-tree cleanup executable without PATH lookup.
+ *
+ * @returns {string|undefined} physical taskkill executable
+ */
+function getWindowsTaskkillPath () {
+  if (process.platform !== 'win32') return
+
+  const systemRoot = getEnvironmentValue(process.env, 'SystemRoot') ||
+    getEnvironmentValue(process.env, 'WINDIR')
+  if (!systemRoot || !path.win32.isAbsolute(systemRoot)) return
+
+  try {
+    const root = fs.realpathSync(systemRoot)
+    const candidate = path.win32.join(root, 'System32', 'taskkill.exe')
+    const stat = fs.lstatSync(candidate)
+    const physical = fs.realpathSync(candidate)
+    const relative = path.win32.relative(root, physical)
+    if (!stat.isFile() || stat.isSymbolicLink() ||
+      relative.startsWith('..') || path.win32.isAbsolute(relative)) return
+    return physical
+  } catch {}
+}
+
+function signalChild (child, signal, useProcessGroup, windowsTaskkillPath) {
+  if (windowsTaskkillPath) {
+    try {
+      const args = ['/PID', String(child.pid), '/T', '/F']
+      const outcome = spawnSync(windowsTaskkillPath, args, {
+        shell: false,
+        stdio: 'ignore',
+        timeout: WINDOWS_TASKKILL_TIMEOUT_MS,
+        windowsHide: true,
+      })
+      if (!outcome.error && outcome.status === 0) return
+    } catch {}
+  }
+
   try {
     if (useProcessGroup) {
       process.kill(-child.pid, signal)

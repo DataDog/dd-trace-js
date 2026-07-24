@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const childProcess = require('node:child_process')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 const {
   buildDatadogEnv,
@@ -177,6 +179,58 @@ describe('test optimization validation execution boundary', () => {
     assert.ok(fs.existsSync(result.artifacts.stderr))
   })
 
+  it('terminates the Windows process tree through the fixed system taskkill executable', async function () {
+    this.timeout(8000)
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    const systemRoot = process.env.SystemRoot
+    const taskkill = 'C:\\Windows\\System32\\taskkill.exe'
+    const calls = []
+    fs.writeFileSync(fixture.runner, 'setInterval(() => {}, 1000)\n')
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32' })
+      process.env.SystemRoot = 'C:\\Windows'
+      const windowsRunner = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+        'node:fs': {
+          lstatSync: filename => {
+            if (filename === taskkill) {
+              return { isFile: () => true, isSymbolicLink: () => false }
+            }
+            return fs.lstatSync(filename)
+          },
+          realpathSync: filename => filename === 'C:\\Windows' || filename === taskkill
+            ? filename
+            : fs.realpathSync(filename),
+        },
+        child_process: {
+          spawn: childProcess.spawn,
+          spawnSync: (filename, args) => {
+            calls.push({ args, filename })
+            try {
+              process.kill(Number(args[1]), 'SIGKILL')
+            } catch {}
+            return { status: 0 }
+          },
+        },
+      })
+      const command = { ...getBasicCommand(framework), timeoutMs: 50 }
+      const result = await windowsRunner.runCommand(command, {
+        artifactRoot: out,
+        outDir: path.join(out, 'windows-timeout'),
+        repositoryRoot: fixture.root,
+      })
+
+      assert.strictEqual(result.timedOut, true)
+      assert.ok(calls.length >= 1)
+      assert.strictEqual(calls[0].filename, taskkill)
+      assert.deepStrictEqual(calls[0].args.slice(0, 3), ['/PID', calls[0].args[1], '/T'])
+      assert.ok(calls[0].args.includes('/F'))
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+      restoreEnv('SystemRoot', systemRoot)
+    }
+  })
+
   it('bounds retained output while keeping the beginning and end', async () => {
     fs.writeFileSync(fixture.runner, "process.stdout.write('HEAD' + 'x'.repeat(5000) + 'TAIL')\n")
     const result = await execute({ ...getBasicCommand(framework), maxOutputBytes: 128 }, 'output')
@@ -255,9 +309,13 @@ describe('test optimization validation execution boundary', () => {
   })
 
   it('renders unambiguous approval commands and owns Test Optimization preloads', () => {
+    const expectedCommand = process.platform === 'win32'
+      ? '"/path with spaces/node" "a\'b" --flag'
+      : '\'/path with spaces/node\' \'a\'"\'"\'b\' --flag'
+
     assert.strictEqual(
       serializeApprovalCommand({ argv: ['/path with spaces/node', 'a\'b', '--flag'] }),
-      "'/path with spaces/node' 'a'\"'\"'b' --flag"
+      expectedCommand
     )
     assert.match(withCiPreloads('', framework), /dd-trace-js\/ci\/init\.js/)
   })

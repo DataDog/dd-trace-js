@@ -102,7 +102,7 @@ describe('test optimization validation report', () => {
     const report = readReport()
 
     assert.match(report, /possible library bug/)
-    assert.match(report, /Artifacts: `mocha-root\/basic-reporting\/debug`/)
+    assert.ok(report.includes(`Artifacts: \`${path.join('mocha-root', 'basic-reporting', 'debug')}\``))
     assert.match(report, /"missingEventLevels"/)
     assert.match(report, /Attach the debug artifact/)
   })

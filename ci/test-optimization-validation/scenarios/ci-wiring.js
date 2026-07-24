@@ -8,7 +8,7 @@ const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { fail, incomplete } = require('./helpers')
 
 const MAX_CI_FILE_BYTES = 512 * 1024
-const DYNAMIC_COMMAND_PATTERN = /(?:\$\{\{|\$\(|`|&&|\|\||[;|])/
+const DYNAMIC_COMMAND_PATTERN = /(?:\$\{\{|\$\(|`|&&|\|\||[;|\r\n])/
 const WRAPPER_PATTERN = /\b(?:npm|pnpm|yarn|yarnpkg)\s+(?:run\s+)?[A-Za-z0-9:_-]+\b|\b(?:nx|turbo|lerna|mise)\b/
 const RUNNER_PATTERNS = {
   cucumber: /(?:^|\s|[/\\])cucumber(?:-js)?(?:\s|$)/,
@@ -97,10 +97,7 @@ function runCiWiring ({ manifest, framework }) {
 
   const normalizedSource = source.replaceAll('\\', '/')
   const hasInitialization = /dd-trace\/ci\/init(?:\.js)?\b/.test(normalizedSource)
-  const selectedStep = `${ci.step || ''}\n${ci.command}`
-  const explicitlyRemovesInitialization =
-    /\bNODE_OPTIONS\s*[:=]\s*(?:["']{2}|null\b|~\s*$)/im.test(selectedStep) ||
-    /\bunset\s+NODE_OPTIONS\b|\bRemove-Item\s+env:NODE_OPTIONS\b/i.test(selectedStep)
+  const explicitlyRemovesInitialization = commandExplicitlyClearsNodeOptions(command, framework.framework)
   const remediation = buildCiRemediation(framework)
 
   if (explicitlyRemovesInitialization) {
@@ -172,6 +169,26 @@ function runCiWiring ({ manifest, framework }) {
         'runner.',
     }
   )
+}
+
+/**
+ * Returns whether the effective inline NODE_OPTIONS assignment before a direct runner is empty.
+ *
+ * @param {string} command selected direct-runner command
+ * @param {string} framework framework name
+ * @returns {boolean} whether the final assignment clears NODE_OPTIONS
+ */
+function commandExplicitlyClearsNodeOptions (command, framework) {
+  const runner = RUNNER_PATTERNS[framework]?.exec(command)
+  if (!runner) return false
+
+  const assignments = [...command.slice(0, runner.index).matchAll(
+    /(?:^|\s)NODE_OPTIONS=(?:"([^"]*)"|'([^']*)'|([^\s]*))/gi
+  )]
+  if (assignments.length === 0) return false
+
+  const effective = assignments.at(-1)
+  return (effective[1] ?? effective[2] ?? effective[3]) === ''
 }
 
 /**

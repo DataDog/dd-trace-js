@@ -114,7 +114,10 @@ describe('test optimization validation CLI', () => {
       assert.match(planned.stdout, /===== CUSTOMER APPROVAL PLAN =====/)
       assert.match(planned.stdout, /only the displayed `node <repository-contained-runner> <one-test-file>`/)
       assert.match(planned.stdout, /Approve executing exactly the plan above\?/)
-      assert.match(planned.stdout, /--run-approved-plan .*approval\.json --sha256 [a-f0-9]{64}/)
+      assert.match(
+        planned.stdout,
+        /--run-approved-plan (?:"[^"\r\n]*approval\.json"|\S*approval\.json) --sha256 [a-f0-9]{64}/
+      )
       assert.strictEqual((planned.stdout.match(/CUSTOMER APPROVAL PLAN/g) || []).length, 2)
       assert.strictEqual(fs.existsSync(marker), false)
       assert.ok(fs.existsSync(path.join(

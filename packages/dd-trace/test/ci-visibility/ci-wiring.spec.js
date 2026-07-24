@@ -91,6 +91,63 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.diagnosis, /explicitly clears NODE_OPTIONS/)
   })
 
+  it('does not treat text in the selected step label as an effective reset', () => {
+    const step = 'NODE_OPTIONS="" diagnostic'
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    env:',
+      '      NODE_OPTIONS: -r dd-trace/ci/init',
+      '    steps:',
+      `      - name: ${step}`,
+      `        run: ${command}`,
+      '',
+    ].join('\n'))
+    completeReview({ initialization: 'configured', transport: 'agent' })
+    framework.ciWiring.step = step
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
+  })
+
+  it('uses the final inline NODE_OPTIONS assignment before the selected runner', () => {
+    const restoredCommand = `NODE_OPTIONS="" NODE_OPTIONS="-r dd-trace/ci/init" ${command}`
+    fs.writeFileSync(workflow, workflowSource({ command: restoredCommand }))
+    completeReview({ command: restoredCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
+  })
+
+  it('does not treat NODE_OPTIONS text inside another assignment as a reset', () => {
+    const textCommand = `NOTE=NODE_OPTIONS="" ${command}`
+    fs.writeFileSync(workflow, workflowSource({
+      command: textCommand,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ command: textCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
+  })
+
+  it('fails closed when NODE_OPTIONS changes through multiline shell flow', () => {
+    const multilineCommand = `NODE_OPTIONS=""\nNODE_OPTIONS="-r dd-trace/ci/init" ${command}`
+    fs.writeFileSync(workflow, workflowSource({ command: multilineCommand }))
+    completeReview({ command: multilineCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.match(result.diagnosis, /dynamic/)
+  })
+
   it('does not trust a fabricated selected step', () => {
     completeReview({ initialization: 'configured', transport: 'agent' })
     framework.ciWiring.step = `run: NODE_OPTIONS="" ${command}`
