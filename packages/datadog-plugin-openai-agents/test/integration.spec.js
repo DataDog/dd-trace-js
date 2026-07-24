@@ -3,8 +3,11 @@
 const assert = require('node:assert/strict')
 const sinon = require('sinon')
 
+const { storage } = require('../../datadog-core')
 const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
-const { OpenAIAgentsIntegration } = require('../src/integration')
+const { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration } = require('../src/integration')
+
+const legacyStorage = storage('legacy')
 
 function makeFakeSpan (spanId = 'dd-span-id') {
   const context = {
@@ -40,37 +43,20 @@ function build ({
   return { integration, tracer }
 }
 
-afterEach(() => sinon.restore())
+afterEach(() => {
+  legacyStorage.enterWith(undefined)
+  sinon.restore()
+})
 
 describe('OpenAIAgentsIntegration', () => {
   describe('enabled flag', () => {
-    it('starts disabled and flips via setEnabled', () => {
+    it('starts disabled and follows plugin configuration', () => {
       const { integration } = build()
       assert.strictEqual(integration.enabled, false)
-      integration.setEnabled(true)
+      integration.configure({ enabled: true })
       assert.strictEqual(integration.enabled, true)
-      integration.setEnabled(false)
+      integration.configure({ enabled: false })
       assert.strictEqual(integration.enabled, false)
-    })
-  })
-
-  describe('setClientBaseURL', () => {
-    it('ignores non-string baseURL values', () => {
-      const { integration, tracer } = build()
-      integration.setClientBaseURL(undefined)
-      integration.setClientBaseURL(null)
-      integration.setClientBaseURL(123)
-      sinon.assert.notCalled(tracer.startSpan)
-    })
-
-    it('ignores the empty string', () => {
-      const { integration } = build()
-      integration.setClientBaseURL('')
-    })
-
-    it('accepts a recognised URL', () => {
-      const { integration } = build()
-      integration.setClientBaseURL('https://my-resource.openai.azure.com/openai')
     })
   })
 
@@ -94,6 +80,19 @@ describe('OpenAIAgentsIntegration', () => {
       assert.strictEqual(tracer.startSpan.firstCall.args[0], 'My workflow')
     })
 
+    it('parents the workflow to the active Datadog span and applies the configured service', () => {
+      const parentSpan = makeFakeSpan('parent')
+      const { integration, tracer } = build()
+      integration.configure({ enabled: true, service: 'agents-service' })
+
+      legacyStorage.run({ span: parentSpan }, () => {
+        integration.startTrace({ traceId: 't1' })
+      })
+
+      assert.strictEqual(tracer.startSpan.firstCall.args[1].childOf, parentSpan)
+      assert.strictEqual(tracer.startSpan.firstCall.args[1].tags.service, 'agents-service')
+    })
+
     it('registers LLMObs spans when DD_LLMOBS_ENABLED is true', () => {
       const workflowSpan = makeFakeSpan()
       const { integration } = build({
@@ -110,6 +109,22 @@ describe('OpenAIAgentsIntegration', () => {
       integration.startTrace({ traceId: 't1' })
 
       assert.strictEqual(LLMObsTagger.tagMap.get(workflowSpan)['_ml_obs.meta.span.kind'], 'workflow')
+    })
+
+    it('registers spans after LLMObs is enabled at runtime', () => {
+      const config = { llmobs: { DD_LLMOBS_ENABLED: false, mlApp: 'test', sampleRate: 1 } }
+      const disabledSpan = makeFakeSpan()
+      const enabledSpan = makeFakeSpan()
+      const { integration } = build({ tracerSpans: [disabledSpan, enabledSpan], config })
+
+      integration.startTrace({ traceId: 'disabled' })
+      assert.strictEqual(LLMObsTagger.tagMap.get(disabledSpan), undefined)
+      integration.endTrace({ traceId: 'disabled' })
+
+      config.llmobs.DD_LLMOBS_ENABLED = true
+      integration.startTrace({ traceId: 'enabled' })
+
+      assert.strictEqual(LLMObsTagger.tagMap.get(enabledSpan)['_ml_obs.meta.span.kind'], 'workflow')
     })
   })
 
@@ -198,6 +213,17 @@ describe('OpenAIAgentsIntegration', () => {
       sinon.assert.notCalled(tracer.startSpan)
     })
 
+    it('does not start a duplicate span when the processor observes a tool after invoke', () => {
+      const { integration, tracer } = build()
+      const oaiSpan = { spanId: 's1', traceId: 't1', spanData: { type: 'function' } }
+
+      const toolSpan = integration.getOrStartToolSpan(oaiSpan)
+      integration.startSpan(oaiSpan, 'tool')
+
+      assert.strictEqual(integration.getDDSpan('s1'), toolSpan)
+      sinon.assert.calledOnce(tracer.startSpan)
+    })
+
     it('defaults span.kind to internal for unknown LLMObs kinds', () => {
       const { integration, tracer } = build()
       integration.startSpan(
@@ -226,6 +252,47 @@ describe('OpenAIAgentsIntegration', () => {
       )
       const tags = tracer.startSpan.firstCall.args[1].tags
       assert.strictEqual(tags['span.kind'], 'internal')
+    })
+
+    it('applies the configured service to child spans', () => {
+      const { integration, tracer } = build()
+      integration.configure({ enabled: true, service: 'agents-service' })
+      integration.startSpan(
+        { spanId: 's1', traceId: 't1', spanData: { type: 'agent' } },
+        'agent'
+      )
+      assert.strictEqual(tracer.startSpan.firstCall.args[1].tags.service, 'agents-service')
+    })
+
+    it('resolves model provider from each model invocation store', () => {
+      const azureSpan = makeFakeSpan('azure')
+      const deepseekSpan = makeFakeSpan('deepseek')
+      const { integration } = build({
+        tracerSpans: [azureSpan, deepseekSpan],
+        config: {
+          llmobs: {
+            DD_LLMOBS_ENABLED: true,
+            mlApp: 'test',
+            sampleRate: 1,
+          },
+        },
+      })
+
+      legacyStorage.run({ [MODEL_BASE_URL_STORE_KEY]: 'https://resource.openai.azure.com' }, () => {
+        integration.startSpan(
+          { spanId: 'azure', traceId: 't1', spanData: { type: 'response' } },
+          'llm'
+        )
+      })
+      legacyStorage.run({ [MODEL_BASE_URL_STORE_KEY]: 'https://api.deepseek.com' }, () => {
+        integration.startSpan(
+          { spanId: 'deepseek', traceId: 't2', spanData: { type: 'response' } },
+          'llm'
+        )
+      })
+
+      assert.strictEqual(LLMObsTagger.tagMap.get(azureSpan)['_ml_obs.meta.model_provider'], 'azure_openai')
+      assert.strictEqual(LLMObsTagger.tagMap.get(deepseekSpan)['_ml_obs.meta.model_provider'], 'deepseek')
     })
   })
 
@@ -260,6 +327,49 @@ describe('OpenAIAgentsIntegration', () => {
       integration.endSpan(oaiSpan)
 
       sinon.assert.calledWith(ddSpan.setOperationName, 'transfer_to_agent_b')
+    })
+
+    it('tags Chat Completions generation data', () => {
+      const ddSpan = makeFakeSpan()
+      const { integration } = build({
+        tracerSpans: [ddSpan],
+        config: {
+          llmobs: {
+            DD_LLMOBS_ENABLED: true,
+            mlApp: 'test',
+            sampleRate: 1,
+          },
+        },
+      })
+      const oaiSpan = {
+        spanId: 's1',
+        traceId: 't1',
+        spanData: {
+          type: 'generation',
+          model: 'gpt-4o',
+          model_config: { temperature: 0.2 },
+          input: [{ role: 'user', content: 'hello' }],
+          output: [{
+            choices: [{ message: { role: 'assistant', content: 'hi' } }],
+            usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+          }],
+        },
+      }
+
+      integration.startSpan(oaiSpan, 'llm')
+      integration.endSpan(oaiSpan)
+
+      const tags = LLMObsTagger.tagMap.get(ddSpan)
+      assert.strictEqual(tags['_ml_obs.meta.model_name'], 'gpt-4o')
+      assert.strictEqual(tags['_ml_obs.meta.model_provider'], 'openai')
+      assert.deepStrictEqual(tags['_ml_obs.meta.input.messages'], [{ role: 'user', content: 'hello' }])
+      assert.deepStrictEqual(tags['_ml_obs.meta.output.messages'], [{ role: 'assistant', content: 'hi' }])
+      assert.deepStrictEqual(tags['_ml_obs.meta.metadata'], { temperature: 0.2 })
+      assert.deepStrictEqual(tags['_ml_obs.metrics'], {
+        input_tokens: 2,
+        output_tokens: 1,
+        total_tokens: 3,
+      })
     })
   })
 

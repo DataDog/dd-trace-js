@@ -1,5 +1,7 @@
 'use strict'
 
+const { extractTextFromContentItem } = require('../openai/utils')
+
 /**
  * Extracts input messages for an LLM span. agents-openai stores only
  * `request.input` on `spanData._input` (string or message-array), and the
@@ -20,16 +22,19 @@ function extractInputMessages (input, instructions) {
     messages.push({ role: 'user', content: input })
   } else if (Array.isArray(input)) {
     for (const item of input) {
-      if (item.type === 'message') {
+      if (!item) continue
+      if (item.type === 'message' || item.role) {
         const role = item.role
         if (!role) continue
 
         let content = ''
         if (Array.isArray(item.content)) {
-          const textParts = item.content
-            .filter(c => c.type === 'input_text' || c.type === 'text')
-            .map(c => c.text)
-          content = textParts.join('')
+          const contentParts = []
+          for (const contentItem of item.content) {
+            const text = extractTextFromContentItem(contentItem)
+            if (text) contentParts.push(text)
+          }
+          content = contentParts.join('')
         } else if (typeof item.content === 'string') {
           content = item.content
         }
@@ -83,12 +88,16 @@ function extractOutputMessages (result) {
 
   if (result?.output) {
     for (const item of result.output) {
+      if (!item) continue
       if (item.type === 'message') {
         let content = ''
         if (Array.isArray(item.content)) {
-          const textParts = item.content
-            .filter(c => c.type === 'output_text')
-            .map(c => c.text)
+          const textParts = []
+          for (const contentItem of item.content) {
+            if (contentItem?.type === 'output_text' && contentItem.text) {
+              textParts.push(contentItem.text)
+            }
+          }
           content = textParts.join('')
         } else if (typeof item.content === 'string') {
           content = item.content
@@ -121,6 +130,33 @@ function extractOutputMessages (result) {
 }
 
 /**
+ * Extracts output messages from an OpenAI Chat Completions response.
+ *
+ * @param {Array<{ choices?: Array<{ message?: object }> }>} result - The model responses
+ * @returns {Array<object>}
+ */
+function extractGenerationOutputMessages (result) {
+  const messages = []
+
+  if (Array.isArray(result)) {
+    for (const response of result) {
+      if (!Array.isArray(response?.choices)) continue
+      for (const choice of response.choices) {
+        const message = choice?.message
+        if (!message) continue
+        messages.push({
+          ...message,
+          role: message.role || 'assistant',
+          content: message.content ?? '',
+        })
+      }
+    }
+  }
+
+  return messages.length > 0 ? messages : [{ content: '', role: '' }]
+}
+
+/**
  * Extracts token usage metrics from the model response. Returns `undefined`
  * when there's nothing to tag, so callers can skip the tagger call without
  * allocating an Object.keys array.
@@ -134,8 +170,8 @@ function extractMetrics (result) {
   const usage = result?.usage
   if (!usage) return
 
-  const inputTokens = usage.inputTokens ?? usage.input_tokens
-  const outputTokens = usage.outputTokens ?? usage.output_tokens
+  const inputTokens = usage.inputTokens ?? usage.input_tokens ?? usage.prompt_tokens
+  const outputTokens = usage.outputTokens ?? usage.output_tokens ?? usage.completion_tokens
   const totalTokens = usage.totalTokens ?? usage.total_tokens
   const reasoningTokens = usage.outputTokensDetails?.reasoningTokens ??
     usage.output_tokens_details?.reasoning_tokens
@@ -206,6 +242,7 @@ function extractMetadata (response) {
 module.exports = {
   extractInputMessages,
   extractOutputMessages,
+  extractGenerationOutputMessages,
   extractMetrics,
   extractMetadata,
 }

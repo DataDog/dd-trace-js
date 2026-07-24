@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const {
   extractInputMessages,
   extractOutputMessages,
+  extractGenerationOutputMessages,
   extractMetrics,
   extractMetadata,
 } = require('../../src/llmobs/plugins/openai-agents/utils')
@@ -40,6 +41,30 @@ describe('openai-agents utils', () => {
       assert.deepStrictEqual(
         extractInputMessages(input),
         [{ role: 'user', content: 'foo bar' }]
+      )
+    })
+
+    it('ignores null items and preserves image and file input parts', () => {
+      const input = [
+        null,
+        undefined,
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            null,
+            { type: 'input_text', text: 'inspect ' },
+            { type: 'input_image', image_url: 'https://example.com/image.png' },
+            { type: 'input_file', file_id: 'file-123' },
+            { type: 'input_image' },
+            { type: 'input_file' },
+          ],
+        },
+      ]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [{ role: 'user', content: 'inspect https://example.com/image.pngfile-123[image][file]' }]
       )
     })
 
@@ -138,6 +163,50 @@ describe('openai-agents utils', () => {
       assert.deepStrictEqual(
         extractInputMessages([]),
         [{ role: 'user', content: '' }]
+      )
+    })
+
+    it('ignores null output items and content parts', () => {
+      const result = {
+        output: [
+          null,
+          undefined,
+          {
+            type: 'message',
+            content: [null, { type: 'output_text', text: 'hello' }],
+          },
+        ],
+      }
+
+      assert.deepStrictEqual(
+        extractOutputMessages(result),
+        [{ role: 'assistant', content: 'hello' }]
+      )
+    })
+  })
+
+  describe('extractGenerationOutputMessages', () => {
+    it('extracts assistant messages from Chat Completions output', () => {
+      const output = [
+        null,
+        {
+          choices: [
+            null,
+            { message: { role: 'assistant', content: 'hello' } },
+          ],
+        },
+      ]
+
+      assert.deepStrictEqual(
+        extractGenerationOutputMessages(output),
+        [{ role: 'assistant', content: 'hello' }]
+      )
+    })
+
+    it('returns a placeholder when no message is available', () => {
+      assert.deepStrictEqual(
+        extractGenerationOutputMessages(undefined),
+        [{ content: '', role: '' }]
       )
     })
   })

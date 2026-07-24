@@ -14,16 +14,16 @@ const patchedMods = new WeakSet()
 // any cross-package import from the plugin.
 const agentsCoreLoadedCh = channel('apm:openai-agents:agents-core:loaded')
 
-// Plugin subscribes here to keep track of the OpenAI-compatible client's
-// baseURL — used to resolve `model_provider` (openai / azure_openai /
-// deepseek / unknown).
-const responseClientCh = channel('apm:openai-agents:response:client')
-
 // Plugin uses addBind on this channel so that legacyStorage.run(store, fn) wraps
 // the model call — including async iterator advancement for streaming responses.
 // This ensures the active dd-trace span is visible to the openai plugin when it
 // creates its openai.request span, correctly parenting it under the agent span.
 const modelStartCh = channel('apm:openai-agents:model:start')
+
+// Tool.invoke runs inside agents-core's public function-span context. Bind the
+// corresponding dd-trace tool span around that public invocation boundary so
+// spans created by user tool code inherit it.
+const toolStartCh = channel('apm:openai-agents:tool:start')
 
 // Reference to the loaded @openai/agents module, captured in the first hook
 // so that wrapResponseMethod can call getCurrentSpan() without an additional
@@ -36,13 +36,17 @@ let agentsMod
 //   provider.getCurrentSpan()              (replaces getCurrentSpan)
 // Both APIs are tried so this file works across the full supported version range.
 // The plugin subscriber (index.js) handles processor registration via the channel.
-function getCurrentSpanId (mod) {
-  if (typeof mod?.getCurrentSpan === 'function') {
-    return mod.getCurrentSpan()?.spanId
+function getCurrentSpan () {
+  if (typeof agentsMod?.getCurrentSpan === 'function') {
+    return agentsMod.getCurrentSpan()
   }
-  if (typeof mod?.getGlobalTraceProvider === 'function') {
-    return mod.getGlobalTraceProvider().getCurrentSpan()?.spanId
+  if (typeof agentsMod?.getGlobalTraceProvider === 'function') {
+    return agentsMod.getGlobalTraceProvider().getCurrentSpan()
   }
+}
+
+function getCurrentSpanId () {
+  return getCurrentSpan()?.spanId
 }
 
 addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
@@ -50,46 +54,66 @@ addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
   if (typeof mod?.addTraceProcessor !== 'function' && typeof mod?.getGlobalTraceProvider !== 'function') return mod
   patchedMods.add(mod)
   agentsMod = mod
+  if (typeof mod.tool === 'function') {
+    shimmer.wrap(mod, 'tool', wrapToolFactory, { replaceGetter: true })
+  }
   agentsCoreLoadedCh.publish({ mod })
   return mod
 })
 
+function wrapToolFactory (original) {
+  return function (...args) {
+    const tool = original.apply(this, args)
+    if (typeof tool?.invoke === 'function') {
+      shimmer.wrap(tool, 'invoke', wrapToolInvoke)
+    }
+    return tool
+  }
+}
+
+function wrapToolInvoke (original) {
+  return function (...args) {
+    const agentsCoreSpan = getCurrentSpan()
+    return toolStartCh.runStores({ agentsCoreSpan }, () => original.apply(this, args))
+  }
+}
+
 function wrapResponseMethod (original) {
   return function (...args) {
-    const agentsCoreSpanId = getCurrentSpanId(agentsMod)
-    publishClientBaseURL(this)
-    return modelStartCh.runStores({ agentsCoreSpanId }, () => original.apply(this, args))
+    const agentsCoreSpanId = getCurrentSpanId()
+    const baseURL = getClientBaseURL(this)
+    return modelStartCh.runStores({ agentsCoreSpanId, baseURL }, () => original.apply(this, args))
   }
 }
 
 function wrapStreamedResponseMethod (original) {
   return function (...args) {
-    const agentsCoreSpanId = getCurrentSpanId(agentsMod)
-    publishClientBaseURL(this)
-    const iterator = modelStartCh.runStores({ agentsCoreSpanId }, () => original.apply(this, args))
-    return wrapAsyncIterator(iterator, agentsCoreSpanId)
+    const agentsCoreSpanId = getCurrentSpanId()
+    const baseURL = getClientBaseURL(this)
+    const context = { agentsCoreSpanId, baseURL }
+    const iterator = modelStartCh.runStores(context, () => original.apply(this, args))
+    return wrapAsyncIterator(iterator, context)
   }
 }
 
-function publishClientBaseURL (model) {
-  const baseURL = model?.client?.baseURL ?? model?._client?.baseURL
-  if (baseURL) responseClientCh.publish({ baseURL })
+function getClientBaseURL (model) {
+  return model?.client?.baseURL ?? model?._client?.baseURL
 }
 
-function wrapAsyncIterator (iterator, agentsCoreSpanId) {
+function wrapAsyncIterator (iterator, context) {
   if (!iterator || typeof iterator !== 'object') return iterator
 
   return {
     next () {
-      return modelStartCh.runStores({ agentsCoreSpanId }, () => iterator.next.apply(iterator, arguments))
+      return modelStartCh.runStores(context, () => iterator.next.apply(iterator, arguments))
     },
     throw () {
       if (typeof iterator.throw !== 'function') return Promise.reject(arguments[0])
-      return modelStartCh.runStores({ agentsCoreSpanId }, () => iterator.throw.apply(iterator, arguments))
+      return modelStartCh.runStores(context, () => iterator.throw.apply(iterator, arguments))
     },
     return () {
       if (typeof iterator.return !== 'function') return Promise.resolve({ done: true, value: arguments[0] })
-      return modelStartCh.runStores({ agentsCoreSpanId }, () => iterator.return.apply(iterator, arguments))
+      return modelStartCh.runStores(context, () => iterator.return.apply(iterator, arguments))
     },
     [Symbol.asyncIterator] () {
       return this
@@ -99,11 +123,18 @@ function wrapAsyncIterator (iterator, agentsCoreSpanId) {
 
 addHook({ name: '@openai/agents-openai', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
-  const proto = mod?.OpenAIResponsesModel?.prototype
-  if (!proto) return mod
+  const responseProto = mod?.OpenAIResponsesModel?.prototype
+  const chatCompletionsProto = mod?.OpenAIChatCompletionsModel?.prototype
+  if (!responseProto && !chatCompletionsProto) return mod
 
   patchedMods.add(mod)
-  shimmer.wrap(proto, 'getResponse', wrapResponseMethod)
-  shimmer.wrap(proto, 'getStreamedResponse', wrapStreamedResponseMethod)
+  for (const proto of [responseProto, chatCompletionsProto]) {
+    if (typeof proto?.getResponse === 'function') {
+      shimmer.wrap(proto, 'getResponse', wrapResponseMethod)
+    }
+    if (typeof proto?.getStreamedResponse === 'function') {
+      shimmer.wrap(proto, 'getStreamedResponse', wrapStreamedResponseMethod)
+    }
+  }
   return mod
 })
