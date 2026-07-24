@@ -42,6 +42,7 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecurity = require('./api_security')
+const { normalizeRoute } = require('./api_security/normalized-route')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
@@ -241,6 +242,17 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
+
+  if (config.appsec.DD_API_SECURITY_ENABLED) {
+    try {
+      const normalized = normalizeRoute(req)
+      if (normalized !== null) {
+        web.root(req)?.setTag('_dd.appsec.normalized_route', normalized)
+      }
+    } catch (e) {
+      log.debug('[ASM] Unable to compute normalized route: %s', e.message)
+    }
+  }
 
   const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
   if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
