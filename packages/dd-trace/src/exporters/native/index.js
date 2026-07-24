@@ -203,6 +203,16 @@ class NativeExporter {
       !this._config.OTEL_TRACES_SPAN_METRICS_ENABLED
   }
 
+  _discardNativeSpans (spans) {
+    if (this.#disabled || this.#nativeStatsEnabled() || !spans?.length) return false
+    const discard = this._nativeSpans.discardSpansGrouped
+    if (typeof discard !== 'function') return false
+
+    const groups = this.#groupsFromSpanChunks([spans], false)
+    if (groups.length === 0) return false
+    return discard.call(this._nativeSpans, groups) > 0
+  }
+
   _resetNativeStateWhenIdle () {
     if (this.#disabled || this.#nativeStatsEnabled()) return
     this.#urlUpdateCallbacks.push(() => {
@@ -450,34 +460,7 @@ class NativeExporter {
     // spans from different export calls together: those calls are already the
     // JS processor's chunk boundaries, and the legacy writer preserves them even
     // when flushInterval coalesces HTTP sends.
-    const groups = []
-    for (const spans of spanChunks) {
-      const byTrace = new Map()
-      for (const span of spans) {
-        const trace = span.context()._trace
-        let group = byTrace.get(trace)
-        if (group === undefined) { group = []; byTrace.set(trace, group) }
-        group.push(span)
-      }
-
-      for (const group of byTrace.values()) {
-        // The local root leads the chunk so the pipeline treats it as chunk root.
-        const root = group.find(span => this.#isLocalRoot(span))
-        const firstIsLocalRoot = root !== undefined
-        let ordered = group
-        if (firstIsLocalRoot) {
-          // Emit this trace's trace-level tags on its own local root.
-          this.#syncTraceTags(root)
-          if (group[0] !== root) {
-            ordered = [root, ...group.filter(span => span !== root)]
-          }
-        }
-        groups.push({
-          spanIds: ordered.map(span => span.context()._nativeSpanId),
-          firstIsLocalRoot,
-        })
-      }
-    }
+    const groups = this.#groupsFromSpanChunks(spanChunks, true)
 
     // prepareChunk is synchronous — extract spans from native storage now.
     // sendPreparedChunk is async (HTTP send). We serialize sends so that
@@ -568,6 +551,37 @@ class NativeExporter {
     }
   }
 
+  #groupsFromSpanChunks (spanChunks, syncTraceTags) {
+    const groups = []
+    for (const spans of spanChunks) {
+      const byTrace = new Map()
+      for (const span of spans) {
+        const trace = span.context()._trace
+        let group = byTrace.get(trace)
+        if (group === undefined) { group = []; byTrace.set(trace, group) }
+        group.push(span)
+      }
+
+      for (const group of byTrace.values()) {
+        // The local root leads the chunk so the pipeline treats it as chunk root.
+        const root = group.find(span => this.#isLocalRoot(span))
+        const firstIsLocalRoot = root !== undefined
+        let ordered = group
+        if (firstIsLocalRoot) {
+          if (syncTraceTags) this.#syncTraceTags(root)
+          if (group[0] !== root) {
+            ordered = [root, ...group.filter(span => span !== root)]
+          }
+        }
+        groups.push({
+          spanIds: ordered.map(span => span.context()._nativeSpanId),
+          firstIsLocalRoot,
+        })
+      }
+    }
+    return groups
+  }
+
   /**
    * Sync trace-level tags to a span.
    * Trace tags are stored on the trace object and should be added to the
@@ -581,8 +595,8 @@ class NativeExporter {
 
     if (!traceTags) return
 
-    // Add each trace tag to the span's tags
-    // This uses the span's tag proxy which syncs to native storage
+    // Keep the JS tag cache aligned with legacy writer debug/observer paths;
+    // native trace tags are mirrored by SpanProcessor before export.
     for (const [key, value] of Object.entries(traceTags)) {
       if (value !== undefined && value !== null && // Don't overwrite existing span tags
         !context.hasTag(key)) {

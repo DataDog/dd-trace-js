@@ -611,6 +611,23 @@ describe('NativeDatadogSpan', () => {
       sinon.assert.notCalled(nativeSpans.setMetaStruct)
     })
 
+    it('skips native direct writes and duration sync after native storage has discarded the span', () => {
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
+      span.meta_struct = { obj: { a: 1 } }
+      span._events.push({ name: 'late', startTime: 1, attributes: { k: 'v' } })
+      span.context().markExported()
+      nativeSpans.queueOp.resetHistory()
+      nativeSpans.setMetaStruct.resetHistory()
+      nativeSpans.addSpanEvent.resetHistory()
+
+      span.finish()
+
+      sinon.assert.notCalled(nativeSpans.queueOp)
+      sinon.assert.notCalled(nativeSpans.setMetaStruct)
+      sinon.assert.notCalled(nativeSpans.addSpanEvent)
+      sinon.assert.calledOnce(processor._exporter._trackSpanFinish)
+    })
+
     it('forwards each span event to the native setter when DD_TRACE_NATIVE_SPAN_EVENTS is enabled', () => {
       tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
       span._events.push({

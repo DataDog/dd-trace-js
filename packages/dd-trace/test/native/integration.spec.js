@@ -150,6 +150,45 @@ describe('Native Spans Integration', () => {
     })
   })
 
+  it('syncs final tag state without stale meta or metric representations', () => {
+    const span = tracer.startSpan('final-tags')
+
+    span.setTag('dynamic.tag', 'first')
+    span.setTag('dynamic.tag', 42)
+    span.setTag('removed.tag', 'present')
+    span.setTag('removed.tag', undefined)
+    span.addTags({ obj: { a: 1, b: 'x' } })
+    span.context().clearTags()
+    span.setTag('dynamic.tag', 42)
+    span.finish()
+
+    tracer._nativeSpans.flushChangeQueue()
+    const nativeId = span.context().toBigIntSpanId()
+    const state = tracer._nativeSpans._state
+
+    assert.equal(state.getMetaAttr(nativeId, 'dynamic.tag'), null)
+    assert.strictEqual(state.getMetricAttr(nativeId, 'dynamic.tag'), 42)
+    assert.equal(state.getMetaAttr(nativeId, 'removed.tag'), null)
+    assert.equal(state.getMetricAttr(nativeId, 'obj.a'), null)
+    assert.equal(state.getMetaAttr(nativeId, 'obj.b'), null)
+  })
+
+  it('syncs the final error bit so OK-style clears override earlier error tags', () => {
+    const span = tracer.startSpan('final-error')
+
+    span.setTag('error.message', 'first')
+    span.context().deleteTag('error.message')
+    span.setTag('error', 0)
+    span.finish()
+
+    tracer._nativeSpans.flushChangeQueue()
+    const nativeId = span.context().toBigIntSpanId()
+    const state = tracer._nativeSpans._state
+
+    assert.strictEqual(state.getError(nativeId), 0)
+    assert.equal(state.getMetaAttr(nativeId, 'error.message'), null)
+  })
+
   it('propagates errors thrown inside tracer.trace callbacks', () => {
     const error = new Error('test')
     assert.throws(() => tracer.trace('erroring', {}, () => { throw error }), /^Error: test$/)

@@ -313,14 +313,32 @@ describe('NativeSpansInterface', () => {
     })
 
     it('swallows a "span not found" error (orphaned span) instead of crashing the host', () => {
-      // An op referenced a span missing from native storage. The batch is
-      // dropped (spans lost) but this must never throw into application code.
+      // An op referenced a span missing from native storage. If the offending
+      // span cannot be found in the JS buffer, the batch is dropped but this
+      // must never throw into application code.
       mockState.flushChangeQueue = sinon.stub().throws(new Error('span not found: 12345'))
       nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
 
       nativeSpans.flushChangeQueue() // must not throw
 
       assert.strictEqual(nativeSpans._cqbCount, 0) // batch was reset
+    })
+
+    it('preserves sibling ops queued after a span-not-found operation', () => {
+      const id1 = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
+      const id2 = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
+      const id3 = new Uint8Array([3, 0, 0, 0, 0, 0, 0, 0])
+      mockState.flushChangeQueue = sinon.stub()
+      mockState.flushChangeQueue.onFirstCall().throws(new Error('span not found: 2'))
+
+      nativeSpans.queueOp(OpCode.SetName, id1, 'first')
+      nativeSpans.queueOp(OpCode.SetName, id2, 'missing')
+      nativeSpans.queueOp(OpCode.SetName, id3, 'third')
+
+      nativeSpans.flushChangeQueue()
+
+      assert.strictEqual(nativeSpans._cqbCount, 0)
+      sinon.assert.calledTwice(mockState.flushChangeQueue)
     })
 
     it('rethrows errors other than "span not found"', () => {
@@ -515,6 +533,62 @@ describe('NativeSpansInterface', () => {
       sinon.assert.calledOnce(mockState.prepareChunk)
       sinon.assert.notCalled(mockState.sendPreparedChunk)
       assert.strictEqual(result, 'no spans to flush')
+    })
+
+    it('evicts string table entries after spans are prepared for export', async () => {
+      nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, 'unique.key', 'unique.value')
+      assert.ok(nativeSpans._stringMap.size > 0)
+
+      await nativeSpans.flushSpansGrouped([{ spanIds: [spanId], firstIsLocalRoot: true }])
+
+      assert.strictEqual(nativeSpans._stringMap.size, 0)
+      sinon.assert.called(mockState.stringTableEvict)
+    })
+
+    it('discardSpansGrouped extracts spans without sending and clears interned strings', () => {
+      nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, 'drop.key', 'drop.value')
+      assert.ok(nativeSpans._stringMap.size > 0)
+
+      const discarded = nativeSpans.discardSpansGrouped([{ spanIds: [spanId], firstIsLocalRoot: true }])
+
+      assert.strictEqual(discarded, 1)
+      assert.strictEqual(nativeSpans._stringMap.size, 0)
+      sinon.assert.calledTwice(mockState.prepareChunk)
+      assert.strictEqual(mockState.prepareChunk.getCall(0).args[0], 1)
+      assert.strictEqual(mockState.prepareChunk.getCall(1).args[0], 0)
+      sinon.assert.notCalled(mockState.sendPreparedChunk)
+      sinon.assert.called(mockState.stringTableEvict)
+    })
+
+    it('discardSpansGrouped resets the string id counter even when idle eviction already cleared the map', () => {
+      nativeSpans._stringIdCounter = 7
+      nativeSpans._stringMap.clear()
+
+      const discarded = nativeSpans.discardSpansGrouped([{ spanIds: [spanId], firstIsLocalRoot: true }])
+
+      assert.strictEqual(discarded, 1)
+      assert.strictEqual(nativeSpans.getStringId('after-discard'), 0)
+    })
+
+    it('discardSpansGrouped clears already-staged discarded chunks when a later group fails', () => {
+      const idA = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
+      const idB = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
+      mockState.prepareChunk = sinon.stub()
+      mockState.prepareChunk.onFirstCall().returns(true)
+      mockState.prepareChunk.onSecondCall().throws(new Error('prep failed'))
+      mockState.prepareChunk.onThirdCall().returns(true)
+
+      const discarded = nativeSpans.discardSpansGrouped([
+        { spanIds: [idA], firstIsLocalRoot: true },
+        { spanIds: [idB], firstIsLocalRoot: false },
+      ])
+
+      assert.strictEqual(discarded, 1)
+      sinon.assert.calledThrice(mockState.prepareChunk)
+      assert.strictEqual(mockState.prepareChunk.getCall(0).args[0], 1)
+      assert.strictEqual(mockState.prepareChunk.getCall(1).args[0], 1)
+      assert.strictEqual(mockState.prepareChunk.getCall(2).args[0], 0)
+      sinon.assert.notCalled(mockState.sendPreparedChunk)
     })
   })
 

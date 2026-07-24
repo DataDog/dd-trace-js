@@ -243,6 +243,15 @@ class SpanProcessor {
     }
   }
 
+  _discardNativeSpans (spans) {
+    if (spans.length === 0) return
+    this._exporter._discardNativeSpans?.(spans)
+    for (const span of spans) {
+      const context = span.context()
+      if (typeof context.markExported === 'function') context.markExported()
+    }
+  }
+
   process (span) {
     const spanContext = span.context()
     const trace = spanContext._trace
@@ -250,11 +259,13 @@ class SpanProcessor {
     const { started, finished } = trace
 
     if (trace.record === false) {
+      this._discardNativeSpans(started)
       this._erase(trace, [])
       this._exporter._resetNativeStateWhenIdle?.()
       return
     }
     if (DD_TRACE_ENABLED === false) {
+      this._discardNativeSpans(started)
       this._erase(trace, [])
       this._exporter._resetNativeStateWhenIdle?.()
       return
@@ -291,27 +302,33 @@ class SpanProcessor {
             context.setTag(APM_TRACING_ENABLED_KEY, 0)
           }
 
-          // OTLP trace metrics remain a JS-side stats feature. Build the same
-          // formatted span the legacy JS processor used, before OTel HTTP tag
-          // remapping, because SpanStatsProcessor keys on Datadog HTTP tag names
-          // (`http.method`, `http.route`, `http.status_code`, ...). Native trace
-          // export still sends the raw span to WASM below.
-          if (this._stats) {
-            const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
-            this._stats.onSpanFinished(formattedSpan)
+          if (trace.isRecording !== false) {
+            // Build the same final formatted span the legacy JS processor used.
+            // Native storage has no delete/clear op, so all mutable tags are
+            // materialized from this final snapshot rather than synced eagerly.
+            let formattedSpan
+            if (this._stats) {
+              formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+              this._stats.onSpanFinished(formattedSpan)
+            }
+
+            if (typeof context.syncFinalTagsToNative === 'function') {
+              formattedSpan ??= spanFormat(span, isFirstSpanInChunk, this._processTags)
+              context.syncFinalTagsToNative(formattedSpan)
+            }
+
+            // Remap Datadog HTTP tags to OpenTelemetry names on the native span
+            // before export. Done after final DD snapshot sync because the remap
+            // reads JS tags and writes only OTel output names.
+            if (otelSemantics && typeof context.applyOtelHttpSemantics === 'function') {
+              context.applyOtelHttpSemantics()
+            }
+            const serviceName = context.getTag('service.name')
+            if (typeof serviceName === 'string' && serviceName.length > 0) {
+              registerExtraService(serviceName)
+            }
           }
           isFirstSpanInChunk = false
-
-          // Remap Datadog HTTP tags to OpenTelemetry names on the native span
-          // before export. Done at finish (not per setTag) because the remap
-          // needs the full tag set (URL decomposition, status -> error).
-          if (otelSemantics && typeof context.applyOtelHttpSemantics === 'function') {
-            context.applyOtelHttpSemantics()
-          }
-          const serviceName = context.getTag('service.name')
-          if (typeof serviceName === 'string' && serviceName.length > 0) {
-            registerExtraService(serviceName)
-          }
         }
       }
 
@@ -322,25 +339,14 @@ class SpanProcessor {
           this._syncProcessTagsToNative(chunkRootContext, chunkRootContext._nativeSpanId)
         }
 
-        for (const span of finishedSpansToExport) {
-          const context = span.context()
-          if (typeof context.syncErrorMetaToNative === 'function') context.syncErrorMetaToNative()
-        }
-
         this._exporter.export(finishedSpansToExport)
         // The exporter has taken these spans; their native Create is (or is about
         // to be) removed from the change-buffer map. Mark each context exported
-        // so a late `setTag`/`addTags` can't queue an op for a now-missing span,
-        // which would make `flush_change_buffer` drop the whole next batch.
-        //
-        // Invariant this relies on: every OTHER native write for these spans
-        // (`_syncTraceTagsToNative`, `_syncSamplingToNative`, `applyOtelHttpSemantics`,
-        // `syncErrorMetaToNative`, span-sampler metrics, finish-time span events/meta_struct)
-        // runs earlier in this same synchronous pass, and `_erase` drops exported spans from
-        // `trace.started` so nothing revisits them. Only externally-driven
-        // `setTag`/`addTags`/name writes can still arrive after export — those are
-        // the ones `#exported` guards. Keep markExported here (after export), not
-        // earlier, or that invariant breaks.
+        // so late writes skip native sync for a now-missing span. All required
+        // native writes for these spans (`_syncTraceTagsToNative`,
+        // `_syncSamplingToNative`, `syncFinalTagsToNative`,
+        // `applyOtelHttpSemantics`, span-sampler metrics, finish-time span
+        // events/meta_struct) ran earlier in this same synchronous pass.
         for (const span of finishedSpansToExport) {
           const context = span.context()
           if (typeof context.markExported === 'function') context.markExported()
@@ -349,6 +355,7 @@ class SpanProcessor {
 
       this._erase(trace, active)
       if (trace.isRecording === false) {
+        this._discardNativeSpans(finishedSpansToExport)
         this._exporter._resetNativeStateWhenIdle?.()
       }
     }

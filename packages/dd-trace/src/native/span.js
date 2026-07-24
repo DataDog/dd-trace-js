@@ -491,20 +491,26 @@ class NativeDatadogSpan extends DatadogSpan {
   finish (finishTime) {
     if (this._duration !== undefined) return
 
-    this.#serializeSpanLinks()
-    this.#serializeSpanEvents()
-    this.#serializeMetaStruct()
+    const exported = typeof this._spanContext.isExported === 'function' && this._spanContext.isExported()
+
+    if (!exported) {
+      this.#serializeSpanLinks()
+      this.#serializeSpanEvents()
+      this.#serializeMetaStruct()
+    }
 
     // Mirror the parent's normalization (opentracing/span.js line 292).
     const resolvedFinishTime = finishTime === undefined
       ? this._getTime()
       : (Number.parseFloat(finishTime) || this._getTime())
 
-    this._nativeSpans.queueOp(
-      OpCode.SetDuration,
-      this._spanContext._nativeSpanId,
-      ['ns', resolvedFinishTime - this._startTime]
-    )
+    if (!exported) {
+      this._nativeSpans.queueOp(
+        OpCode.SetDuration,
+        this._spanContext._nativeSpanId,
+        ['ns', resolvedFinishTime - this._startTime]
+      )
+    }
 
     try {
       super.finish(resolvedFinishTime)

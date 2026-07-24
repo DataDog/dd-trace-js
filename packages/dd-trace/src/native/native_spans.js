@@ -10,10 +10,16 @@ function isSpanNotFoundError (e) {
   return /span not found/.test(String(e != null && e.message != null ? e.message : e))
 }
 
+function spanNotFoundId (e) {
+  const match = /span not found[^0-9]*(\d+)/.exec(String(e != null && e.message != null ? e.message : e))
+  return match ? BigInt(match[1]) : null
+}
+
 // Default buffer sizes
 const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
+const EMPTY_FLUSH_BUFFER = Buffer.alloc(0)
 
 const COLLAPSED_SPANS_HEALTH_METRIC = 'datadog.tracer.stats.collapsed_spans'
 const COLLAPSED_SPANS_WHOLE_KEY_TAG = 'collapsed_spans:whole_key'
@@ -175,7 +181,9 @@ class NativeSpansInterface {
     // spans (stored on the shared `_trace` object by span.js).
     this._nextSegment = 0
 
-    // String table state
+    // String table state. `_stringMap` only represents strings still needed by
+    // queued/native state; completed chunks evict the WASM entries and reset the
+    // JS cache so cardinality follows live work instead of process lifetime.
     this._stringMap = new Map()
     this._stringIdCounter = 0
 
@@ -359,19 +367,22 @@ class NativeSpansInterface {
       this.#checkDetach()
       this.resetChangeQueue()
     } catch (e) {
-      // The Rust side may have consumed an unknown prefix of queued ops
-      // before throwing, so we cannot tell which ops landed. Reset JS-side
-      // state so subsequent queue writes don't clobber a corrupt buffer,
-      // refresh views in case memory grew during the partial drain, and
-      // surface the failure to the caller.
+      const preserved = this.#copyOpsAfterSpanNotFound(e)
       this.resetChangeQueue()
       this.#checkDetach()
+      if (preserved !== null) {
+        this.#restoreQueuedOps(preserved)
+        if (preserved.count > 0) this.flushChangeQueue()
+        log.warn(
+          'Native spans: dropped one orphaned span operation after "span not found"; preserved %d later operation(s)',
+          preserved.count,
+          e
+        )
+        return
+      }
       // "span not found" means a queued op referenced a span missing from native
-      // storage — an orphaned span whose Create never landed (a known upstream
-      // defect under heavy span churn; see the native-spans change-buffer
-      // investigation). Resetting drops the remainder of this batch, losing
-      // those spans, but that must NOT crash the host application — so swallow
-      // this specific error. Every other error is a real fault and propagates.
+      // storage. If we cannot identify the offending op, fall back to dropping
+      // the batch so the host application still does not crash.
       if (isSpanNotFoundError(e)) {
         log.warn('Native spans: dropped a change-queue batch after "span not found"; affected spans were lost', e)
         return
@@ -379,6 +390,93 @@ class NativeSpansInterface {
       log.error('Error flushing change queue to native spans:', e)
       throw e
     }
+  }
+
+  #copyOpsAfterSpanNotFound (error) {
+    const missing = spanNotFoundId(error)
+    if (missing === null) return null
+
+    try {
+      let offset = 8
+      for (let i = 0; i < this._cqbCount; i++) {
+        const start = offset
+        const spanId = this._cqbView.getBigUint64(start + 2, true)
+        offset = this.#nextOpOffset(offset)
+        if (spanId === missing) {
+          const remaining = this._cqbCount - i - 1
+          if (remaining <= 0) return { bytes: null, count: 0 }
+          return {
+            bytes: this._cqbBytes.slice(offset, this._cqbIndex),
+            count: remaining,
+          }
+        }
+      }
+    } catch {
+      return null
+    }
+    return null
+  }
+
+  #nextOpOffset (offset) {
+    const op = this._cqbView.getUint16(offset, true)
+    offset += 10
+    switch (op) {
+      case 1: // SetMetaAttr
+      case 10: // SetTraceMetaAttr
+        return offset + 8
+      case 2: // SetMetricAttr
+      case 11: // SetTraceMetricsAttr
+        return offset + 12
+      case 3: // SetServiceName
+      case 4: // SetResourceName
+      case 8: // SetType
+      case 9: // SetName
+      case 12: // SetTraceOrigin
+        return offset + 4
+      case 5: // SetError
+        return offset + 4
+      case 6: // SetStart
+      case 7: // SetDuration
+        return offset + 8
+      case 13: // CreateSpan
+        return offset + 44
+      case 15: { // BatchSetMeta
+        const count = this._cqbView.getUint32(offset, true)
+        return offset + 4 + count * 8
+      }
+      case 16: { // BatchSetMetric
+        const count = this._cqbView.getUint32(offset, true)
+        return offset + 4 + count * 12
+      }
+      default:
+        throw new Error(`unknown native span op ${op}`)
+    }
+  }
+
+  #restoreQueuedOps ({ bytes, count }) {
+    if (count === 0 || bytes === null) return
+    this._cqbBytes.set(bytes, 8)
+    this._cqbIndex = 8 + bytes.length
+    this._cqbCount = count
+    this._cqbView.setUint32(0, count, true)
+    this._cqbView.setUint32(4, 0, true)
+  }
+
+  #evictStringTable (resetCounter = false) {
+    if (resetCounter) this._stringIdCounter = 0
+    if (this._stringMap.size === 0) return
+
+    const evict = this._state.stringTableEvict
+    if (typeof evict === 'function') {
+      for (const id of this._stringMap.values()) {
+        evict.call(this._state, id)
+      }
+    }
+    this._stringMap.clear()
+  }
+
+  #evictIdleStringTable () {
+    if (this._cqbCount === 0) this.#evictStringTable(false)
   }
 
   /**
@@ -396,7 +494,7 @@ class NativeSpansInterface {
     // Insert into WASM first; only commit to the JS map if the WASM call
     // succeeds. If `stringTableInsertOne` throws (e.g. OOM during memory
     // grow), we must NOT leave the JS map claiming `str` is interned at
-    // `id` — a future `queueOp` would emit a dangling string-id reference.
+    // `id` — a future queue write would emit a dangling string-id reference.
     // This WASM call may trigger memory growth, detaching the ArrayBuffer.
     this._state.stringTableInsertOne(id, str)
     this.#checkDetach()
@@ -429,6 +527,7 @@ class NativeSpansInterface {
     // Refresh if a prior call grew memory (e.g. the async stats flush); growth
     // *during* this method is handled by getStringId before the view snapshot.
     this.#checkDetach()
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
 
     if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -572,6 +671,7 @@ class NativeSpansInterface {
     // is already interned, getStringId is a cache hit and makes no wasm call,
     // so this is the only refresh point (see the detach-safety invariant).
     this.#checkDetach()
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
 
     if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -653,6 +753,7 @@ class NativeSpansInterface {
     if (tags.length === 0) return
 
     this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 8
 
@@ -703,6 +804,7 @@ class NativeSpansInterface {
     if (count === 0) return
 
     this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
     const needed = 16 + count * 8
 
@@ -750,6 +852,7 @@ class NativeSpansInterface {
     if (tags.length === 0) return
 
     this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 12
 
@@ -799,6 +902,7 @@ class NativeSpansInterface {
     if (count === 0) return
 
     this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
+    this.#evictIdleStringTable()
     let idx = this._cqbIndex
     const needed = 16 + count * 12
 
@@ -899,6 +1003,69 @@ class NativeSpansInterface {
   }
 
   /**
+   * Remove finished spans from native storage without sending them. This is the
+   * closest protocol available in the current WASM API: `prepareChunk` drains
+   * the change queue, materializes deferred tags, removes the span slots, and
+   * feeds native stats; we then replace the staged discarded chunk with an empty
+   * prepared chunk so a later real send cannot transmit discarded spans.
+   *
+   * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
+   * @returns {number} number of non-empty groups discarded
+   */
+  discardSpansGrouped (groups) {
+    this.flushChangeQueue()
+
+    let discarded = 0
+    try {
+      for (const group of groups) {
+        const spanIds = group.spanIds
+        if (!spanIds || spanIds.length === 0) continue
+        this.#prepareGroup(group)
+        discarded++
+      }
+
+      if (discarded > 0) {
+        this._state.prepareChunk(0, true, EMPTY_FLUSH_BUFFER)
+        this.#checkDetach()
+      }
+      this.#evictStringTable(true)
+      return discarded
+    } catch (e) {
+      this.resetChangeQueue()
+      this.#checkDetach()
+      if (discarded > 0) {
+        try {
+          this._state.prepareChunk(0, true, EMPTY_FLUSH_BUFFER)
+          this.#checkDetach()
+        } catch {
+          // Best-effort cleanup: the caller will still fall back to the idle
+          // whole-state reset path when possible.
+        }
+      }
+      log.warn('Native spans: failed to discard dropped spans from native storage:', e)
+      return discarded
+    }
+  }
+
+  #prepareGroup (group) {
+    const spanIds = group.spanIds
+    const requiredSize = spanIds.length * 8
+    if (requiredSize > this._flushBuffer.length) {
+      this._flushBuffer = Buffer.alloc(requiredSize)
+    }
+
+    let index = 0
+    for (const spanId of spanIds) {
+      this._flushBuffer.set(spanId, index)
+      index += 8
+    }
+
+    const has = this._state.prepareChunk(spanIds.length, group.firstIsLocalRoot, this._flushBuffer)
+    this.#checkDetach()
+    return has
+  }
+
+  /**
    * Prepare one chunk per trace and send them as a single multi-trace request.
    *
    * Each group is `{ spanIds, firstIsLocalRoot }` for exactly one trace
@@ -920,29 +1087,10 @@ class NativeSpansInterface {
       const spanIds = group.spanIds
       if (!spanIds || spanIds.length === 0) continue
 
-      // Ensure flush buffer is large enough (8 bytes per u64 span id). The
-      // buffer is reused across groups: prepareChunk is synchronous and copies
-      // the ids out before returning, so overwriting it next iteration is safe.
-      const requiredSize = spanIds.length * 8
-      if (requiredSize > this._flushBuffer.length) {
-        this._flushBuffer = Buffer.alloc(requiredSize)
-      }
-
-      // Write span ids to the flush buffer as u64 LE (the ids are already LE)
-      let index = 0
-      for (const spanId of spanIds) {
-        this._flushBuffer.set(spanId, index)
-        index += 8
-      }
-
       try {
         // prepareChunk extracts this trace's spans and stages a chunk; multiple
         // calls accumulate in native storage until sendPreparedChunk.
-        const has = this._state.prepareChunk(spanIds.length, group.firstIsLocalRoot, this._flushBuffer)
-        // prepareChunk (flush_change_buffer + flush_chunk) can allocate and grow
-        // WASM memory, detaching our cached views; refresh before the next write.
-        this.#checkDetach()
-        if (has) prepared++
+        if (this.#prepareGroup(group)) prepared++
       } catch (e) {
         // prepareChunk may throw partway through, after consuming some of the
         // change queue or growing WASM memory. Reset JS-side queue state and
@@ -955,6 +1103,7 @@ class NativeSpansInterface {
         return Promise.reject(e)
       }
     }
+    this.#evictStringTable(true)
 
     if (prepared === 0) {
       return Promise.resolve('no spans to flush')
