@@ -101,6 +101,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('preserves application externals and bundles API fallbacks after relocation', () => {
+      execSync('node ./build-and-test-otel-api.js', {
+        timeout,
+      })
+    })
+
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
         timeout,

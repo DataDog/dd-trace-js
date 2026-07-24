@@ -2,6 +2,7 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
+const path = require('node:path')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
@@ -11,6 +12,8 @@ const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
+const DD_TRACE_DIRECTORY = path.resolve(__dirname, '../..').replaceAll('\\', '/')
+const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
 for (const hook of Object.values(hooks)) {
   if (hook !== null && typeof hook === 'object') {
@@ -23,6 +26,8 @@ for (const hook of Object.values(hooks)) {
 const modulesOfInterest = new Set()
 
 for (const [name, instrumentation] of Object.entries(instrumentations)) {
+  if (OTEL_API_PACKAGE_PATTERN.test(name)) continue
+
   for (const entry of instrumentation) {
     if (entry.file) {
       modulesOfInterest.add(`${name}/${entry.file}`) // e.g. "redis/my/file.js"
@@ -64,6 +69,85 @@ function getGitMetadata () {
   return gitMetadata
 }
 
+/**
+ * @param {unknown} request
+ * @returns {string | undefined}
+ */
+function getOtelApiPackageName (request) {
+  if (typeof request !== 'string') return
+  return OTEL_API_PACKAGE_PATTERN.exec(request)?.[1]
+}
+
+/**
+ * @param {string | undefined} context
+ * @param {unknown} request
+ * @returns {boolean}
+ */
+function isOtelApiFallback (context, request) {
+  if (!getOtelApiPackageName(request)) return false
+  return context?.replaceAll('\\', '/').startsWith(`${DD_TRACE_DIRECTORY}/`) === true
+}
+
+/**
+ * @param {object} external
+ * @param {string | undefined} layer
+ * @returns {object}
+ */
+function resolveExternalLayer (external, layer) {
+  // dd-trace cannot import internals from the application-owned Webpack installation.
+  if (!Object.hasOwn(external, 'byLayer')) return external
+
+  const { byLayer, ...base } = external
+  const selected = typeof byLayer === 'function'
+    ? byLayer(layer)
+    : byLayer?.[layer] ?? byLayer?.default
+  if (selected === null || typeof selected !== 'object' || Array.isArray(selected)) return base
+
+  return { ...base, ...resolveExternalLayer(selected, layer) }
+}
+
+/**
+ * Keeps configured application externals unchanged while preventing them from externalizing an API
+ * import inside dd-trace's fallback graph.
+ *
+ * @param {unknown} external
+ * @returns {unknown}
+ */
+function protectOtelApiFallback (external) {
+  if (Array.isArray(external)) return external.map(protectOtelApiFallback)
+
+  if (typeof external === 'function') {
+    if (external.length === 3) {
+      return (context, request, callback) => {
+        if (isOtelApiFallback(context, request)) return callback()
+        return external(context, request, callback)
+      }
+    }
+
+    return (data, callback) => {
+      if (isOtelApiFallback(data.context, data.request)) return callback()
+      return external(data, callback)
+    }
+  }
+
+  return (data, callback) => {
+    const { context, contextInfo, request } = data
+    if (isOtelApiFallback(context, request)) return callback()
+
+    if (typeof external === 'string') {
+      return callback(null, request === external ? external : undefined)
+    }
+    if (external instanceof RegExp) {
+      return callback(null, typeof request === 'string' && external.test(request) ? request : undefined)
+    }
+    if (external !== null && typeof external === 'object') {
+      const definition = resolveExternalLayer(external, contextInfo?.issuerLayer)
+      return callback(null, Object.hasOwn(definition, request) ? definition[request] : undefined)
+    }
+    callback()
+  }
+}
+
 class DatadogWebpackPlugin {
   /**
    * @param {object} compiler
@@ -80,6 +164,11 @@ class DatadogWebpackPlugin {
         )
       }
     })
+
+    const configuredExternals = Array.isArray(compiler.options.externals)
+      ? compiler.options.externals
+      : [compiler.options.externals].filter(Boolean)
+    compiler.options.externals = configuredExternals.map(protectOtelApiFallback)
 
     const gitMetadata = getGitMetadata()
     if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {

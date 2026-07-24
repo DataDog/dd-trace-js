@@ -1,11 +1,20 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
+
 const { describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
 const optionalPeerLoader = require('../src/optional-peer-loader')
+
+/**
+ * @typedef {(
+ *   data: { context?: string, contextInfo?: { issuerLayer?: string }, request?: string },
+ *   callback: (error?: Error | null, result?: string | boolean) => void
+ * ) => void} WebpackExternal
+ */
 
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
@@ -48,6 +57,136 @@ describe('DatadogWebpackPlugin', () => {
 
       plugin.apply(compiler)
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
+    })
+
+    /**
+     * @param {string | object | WebpackExternal | Array<string | object | WebpackExternal>} [externals]
+     * @returns {Array<string | object | WebpackExternal>}
+     */
+    function applyToExternals (externals) {
+      const compiler = {
+        options: {
+          optimization: {},
+          externals,
+        },
+        hooks: {
+          environment: { tap: () => {} },
+          thisCompilation: { tap: () => {} },
+          normalModuleFactory: { tap: () => {} },
+        },
+      }
+      new DatadogWebpackPlugin().apply(compiler)
+      return compiler.options.externals
+    }
+
+    /**
+     * @param {WebpackExternal} external
+     * @param {string} context
+     * @param {string | undefined} request
+     * @param {string} [issuerLayer]
+     * @returns {string | boolean | undefined}
+     */
+    function resolveExternal (external, context, request, issuerLayer) {
+      let resolved
+      const callback = (error, result) => {
+        if (error) throw error
+        resolved = result
+      }
+      if (external.length === 3) external(context, request, callback)
+      else external({ context, contextInfo: { issuerLayer }, request }, callback)
+      return resolved
+    }
+
+    it('bundles API fallbacks imported by dd-trace', () => {
+      const externals = applyToExternals({ '@opentelemetry/api': 'module @opentelemetry/api' })
+      const holderDirectory = path.dirname(require.resolve('../../dd-trace/src/opentelemetry/api'))
+      const vendorDirectory = path.dirname(require.resolve('../../../vendor/dist/@opentelemetry/core'))
+
+      assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api'), undefined)
+      assert.strictEqual(resolveExternal(externals[0], vendorDirectory, '@opentelemetry/api'), undefined)
+      assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api-logs'), undefined)
+      assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api/experimental'), undefined)
+    })
+
+    it('normalizes Windows separators when identifying the fallback graph', () => {
+      const externals = applyToExternals('@opentelemetry/api')
+      const holderDirectory = path.dirname(require.resolve('../../dd-trace/src/opentelemetry/api'))
+        .replaceAll('/', '\\')
+
+      assert.strictEqual(resolveExternal(externals[0], holderDirectory, '@opentelemetry/api'), undefined)
+    })
+
+    it('preserves normal external behavior outside dd-trace', () => {
+      const userExternals = ['pg', { '@opentelemetry/api': 'module @opentelemetry/api' }]
+      const externals = applyToExternals(userExternals)
+
+      assert.strictEqual(resolveExternal(externals[0], '/app', 'pg'), 'pg')
+      assert.strictEqual(
+        resolveExternal(externals[1], '/app', '@opentelemetry/api'),
+        'module @opentelemetry/api'
+      )
+    })
+
+    it('preserves RegExp, function, and layered object externals', () => {
+      const modern = ({ request }, callback) => {
+        callback(null, request === 'modern' || request === '@opentelemetry/api' ? `commonjs ${request}` : undefined)
+      }
+      const legacy = (context, request, callback) => {
+        callback(null, request === 'legacy' || request === '@opentelemetry/api' ? `commonjs ${request}` : undefined)
+      }
+      const fallbackDirectory = path.dirname(require.resolve('../../dd-trace/src/opentelemetry/api'))
+      const externals = applyToExternals([
+        /^regex$/,
+        modern,
+        legacy,
+        {
+          pg: 'commonjs pg',
+          byLayer: {
+            worker: {
+              '@opentelemetry/api': 'commonjs @opentelemetry/api',
+              worker: 'commonjs worker',
+            },
+          },
+        },
+      ])
+
+      assert.strictEqual(resolveExternal(externals[0], '/app', 'regex'), 'regex')
+      assert.strictEqual(resolveExternal(externals[1], '/app', 'modern'), 'commonjs modern')
+      assert.strictEqual(resolveExternal(externals[2], '/app', 'legacy'), 'commonjs legacy')
+      assert.strictEqual(resolveExternal(externals[1], fallbackDirectory, '@opentelemetry/api'), undefined)
+      assert.strictEqual(resolveExternal(externals[2], fallbackDirectory, '@opentelemetry/api'), undefined)
+      assert.strictEqual(resolveExternal(externals[3], '/app', 'pg', 'worker'), 'commonjs pg')
+      assert.strictEqual(resolveExternal(externals[3], '/app', 'worker', 'worker'), 'commonjs worker')
+      assert.strictEqual(
+        resolveExternal(externals[3], '/app', '@opentelemetry/api', 'worker'),
+        'commonjs @opentelemetry/api'
+      )
+    })
+
+    it('preserves every supported static external shape', () => {
+      const externals = applyToExternals([
+        'pg',
+        /^regex$/,
+        { byLayer: layer => ({ [layer]: `commonjs ${layer}` }) },
+        { byLayer: { default: { fallback: 'commonjs fallback' } } },
+        { pg: 'commonjs pg', byLayer: { worker: null } },
+        { pg: 'commonjs pg', byLayer: { worker: 'commonjs worker' } },
+        { pg: 'commonjs pg', byLayer: { worker: [] } },
+        [['nested']],
+        true,
+      ])
+
+      assert.strictEqual(resolveExternal(externals[0], '/app', 'missing'), undefined)
+      assert.strictEqual(resolveExternal(externals[1], '/app', undefined), undefined)
+      assert.strictEqual(resolveExternal(externals[1], '/app', 'missing'), undefined)
+      assert.strictEqual(resolveExternal(externals[2], '/app', 'worker', 'worker'), 'commonjs worker')
+      assert.strictEqual(resolveExternal(externals[3], '/app', 'fallback'), 'commonjs fallback')
+      assert.strictEqual(resolveExternal(externals[4], '/app', 'pg', 'worker'), 'commonjs pg')
+      assert.strictEqual(resolveExternal(externals[4], '/app', 'missing', 'worker'), undefined)
+      assert.strictEqual(resolveExternal(externals[5], '/app', 'pg', 'worker'), 'commonjs pg')
+      assert.strictEqual(resolveExternal(externals[6], '/app', 'pg', 'worker'), 'commonjs pg')
+      assert.strictEqual(resolveExternal(externals[7][0][0], '/app', 'nested'), 'nested')
+      assert.strictEqual(resolveExternal(externals[8], '/app', 'anything'), undefined)
     })
   })
 

@@ -1,7 +1,7 @@
 'use strict'
-const { logs } = require('@opentelemetry/api-logs')
-const { context } = require('@opentelemetry/api')
+
 const log = require('../../log')
+const { getApiBinding, getApiLogsOwner, getApiOwner } = require('../api')
 const ContextManager = require('../context_manager')
 const Logger = require('./logger')
 
@@ -20,8 +20,10 @@ const Logger = require('./logger')
  * @implements {import('@opentelemetry/api-logs').LoggerProvider}
  */
 class LoggerProvider {
+  #apiBinding
   #loggers
   #contextManager
+  #registered = false
 
   /**
    * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
@@ -33,7 +35,6 @@ class LoggerProvider {
   constructor (options = {}) {
     this.processor = options.processor
     this.#loggers = new Map()
-    this.#contextManager = new ContextManager()
     this.isShutdown = false
   }
 
@@ -64,7 +65,12 @@ class LoggerProvider {
     const key = `${name}@${loggerVersion}`
 
     if (!this.#loggers.has(key)) {
-      this.#loggers.set(key, new Logger(this, { name, version: loggerVersion, schemaUrl: loggerSchemaUrl }))
+      this.#loggers.set(key, new Logger(
+        this,
+        { name, version: loggerVersion, schemaUrl: loggerSchemaUrl },
+        undefined,
+        this.#getApiBinding()
+      ))
     }
     return this.#loggers.get(key)
   }
@@ -77,9 +83,23 @@ class LoggerProvider {
       log.warn('Cannot register after shutdown')
       return
     }
-    // Set context manager, this is required to correlate logs to spans
-    context.setGlobalContextManager(this.#contextManager)
-    logs.setGlobalLoggerProvider(this)
+    if (this.#registered) return
+
+    this.#registered = true
+    this.#getApiBinding()
+    getApiOwner().context.setGlobalContextManager(this.#contextManager)
+    getApiLogsOwner().logs.setGlobalLoggerProvider(this)
+  }
+
+  /**
+   * @returns {import('../api').ApiBinding}
+   */
+  #getApiBinding () {
+    if (!this.#apiBinding) {
+      this.#apiBinding = getApiBinding()
+      this.#contextManager = new ContextManager(this.#apiBinding)
+    }
+    return this.#apiBinding
   }
 
   /**

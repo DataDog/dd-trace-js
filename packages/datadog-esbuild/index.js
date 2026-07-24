@@ -18,6 +18,9 @@ const log = require('./src/log')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+const DD_TRACE_DIRECTORY = path.resolve(__dirname, '../..').replaceAll('\\', '/')
+const OTEL_API_PACKAGES = ['@opentelemetry/api', '@opentelemetry/api-logs']
+const OTEL_API_PACKAGE_PATTERN = /^(@opentelemetry\/api(?:-logs)?)(?:\/.*)?$/
 
 let rewriter
 
@@ -48,6 +51,8 @@ function addModuleOfInterest (name, file) {
 const modulesOfInterest = new Set()
 
 for (const [name, instrumentation] of Object.entries(instrumentations)) {
+  if (OTEL_API_PACKAGE_PATTERN.test(name)) continue
+
   for (const entry of instrumentation) {
     addModuleOfInterest(name, entry.file)
   }
@@ -64,6 +69,16 @@ for (const builtin of builtinModules) {
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+
+/**
+ * @param {string} pattern
+ * @returns {RegExp}
+ */
+function externalPatternToRegExp (pattern) {
+  const escaped = pattern.replaceAll(/[|\\{}()[\]^$+?.]/g, String.raw`\$&`).replaceAll('*', '.*')
+  const matchesPackageSubpaths = !pattern.includes('*') && !pattern.startsWith('.') && !path.isAbsolute(pattern)
+  return new RegExp(`^${escaped}${matchesPackageSubpaths ? '(?:/.*)?' : ''}$`)
+}
 
 module.exports.name = 'datadog-esbuild'
 
@@ -123,7 +138,19 @@ module.exports.setup = function (build) {
 
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
-  const externalModules = new Set(build.initialOptions.external || [])
+  const externalModules = new Set()
+  const deferredExternalPatterns = []
+  if (build.initialOptions.external) {
+    build.initialOptions.external = build.initialOptions.external.filter(name => {
+      const pattern = externalPatternToRegExp(name)
+      if (OTEL_API_PACKAGES.some(packageName => pattern.test(packageName))) {
+        deferredExternalPatterns.push(pattern)
+        return false
+      }
+      externalModules.add(name)
+      return true
+    })
+  }
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
   if (DD_IAST_ENABLED) {
@@ -201,7 +228,29 @@ ${build.initialOptions.banner.js}`
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
 
+  // User externals still apply to application imports, but dd-trace's fallback graph must remain
+  // in a relocated bundle.
+  /** @param {import('esbuild').OnResolveArgs} args */
+  function resolveOtelApi (args) {
+    const importer = args.importer.replaceAll('\\', '/')
+    if (importer.startsWith(`${DD_TRACE_DIRECTORY}/`)) return
+
+    for (const pattern of deferredExternalPatterns) {
+      if (pattern.test(args.path)) {
+        log.debug('EXTERNAL: %s', args.path)
+        return { path: args.path, external: true }
+      }
+    }
+  }
+  build.onResolve({ filter: OTEL_API_PACKAGE_PATTERN }, resolveOtelApi)
+
   build.onResolve({ filter: /.*/ }, args => {
+    if (!OTEL_API_PACKAGE_PATTERN.test(args.path)) {
+      for (const pattern of deferredExternalPatterns) {
+        if (pattern.test(args.path)) return { path: args.path, external: true }
+      }
+    }
+
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       log.debug('EXTERNAL: %s', args.path)
@@ -239,7 +288,7 @@ ${build.initialOptions.banner.js}`
       }
     }
 
-    const extracted = extractPackageAndModulePath(fullPathToModule)
+    const extracted = extractPackageAndModulePath(fullPathToModule.replaceAll('\\', '/'))
 
     const internal = builtins.has(args.path)
 

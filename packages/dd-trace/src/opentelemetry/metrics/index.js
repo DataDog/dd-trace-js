@@ -2,10 +2,9 @@
 
 const os = require('os')
 
-const { metrics } = require('@opentelemetry/api')
-
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
+const { getApiOwner } = require('../api')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
@@ -75,7 +74,7 @@ function initializeOpenTelemetryMetrics (config) {
   )
 
   const meterProvider = new MeterProvider({ reader })
-  metrics.setGlobalMeterProvider(meterProvider)
+  getApiOwner().metrics.setGlobalMeterProvider(meterProvider)
 }
 
 function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {

@@ -1,6 +1,5 @@
 'use strict'
 
-const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
@@ -9,13 +8,23 @@ const id = require('../id')
 const log = require('../log')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
+const { getApiBinding } = require('./api')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
 const { normalizeLinkContext } = require('./span-helpers')
 
 class Tracer {
-  constructor (library, config, tracerProvider) {
+  #apiBinding
+
+  /**
+   * @param {import('@opentelemetry/core').InstrumentationLibrary} library
+   * @param {object} config
+   * @param {import('./tracer_provider')} tracerProvider
+   * @param {import('./api').ApiBinding} [apiBinding]
+   */
+  constructor (library, config, tracerProvider, apiBinding = getApiBinding()) {
+    this.#apiBinding = apiBinding
     this._sampler = new Sampler()
     this._config = config
     this._tracerProvider = tracerProvider
@@ -91,7 +100,11 @@ class Tracer {
     return spanContext
   }
 
-  startSpan (name, options = {}, context = api.context.active()) {
+  startSpan (name, options = {}, context) {
+    const api = this.#apiBinding.current
+    if (context === undefined) {
+      context = api.context.active()
+    }
     // remove span from context in case a root span is requested via options
     if (options.root) {
       context = api.trace.deleteSpan(context)
@@ -157,6 +170,7 @@ class Tracer {
       return
     }
 
+    const api = this.#apiBinding.current
     const parentContext = context || api.context.active()
     const span = this.startSpan(name, options, parentContext)
     const contextWithSpanSet = api.trace.setSpan(parentContext, span)
