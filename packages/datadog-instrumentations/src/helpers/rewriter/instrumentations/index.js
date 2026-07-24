@@ -11,5 +11,6 @@ module.exports = [
   ...require('./mercurius'),
   ...require('./modelcontextprotocol-sdk'),
   ...require('./playwright'),
+  ...require('./webdriverio'),
   ...require('./aws-durable-execution-sdk-js'),
 ]
