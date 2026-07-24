@@ -116,6 +116,66 @@ function wrapModelWithLifecycle (model) {
   }
 }
 
+/**
+ * Wraps an OTel span without changing its method receivers.
+ *
+ * OTel spans may use private fields, so methods must run against the original
+ * span. A per-invocation wrapper also preserves `ctx` without mutating the AI
+ * SDK's shared no-op span.
+ *
+ * @param {import('@opentelemetry/api').Span} span
+ * @param {object} ctx
+ * @returns {import('@opentelemetry/api').Span}
+ */
+function createDelegatingSpan (span, ctx) {
+  return {
+    spanContext () {
+      return span.spanContext.apply(span, arguments)
+    },
+    setAttribute () {
+      span.setAttribute.apply(span, arguments)
+      return this
+    },
+    setAttributes (attributes) {
+      vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
+      span.setAttributes.apply(span, arguments)
+      return this
+    },
+    addEvent () {
+      span.addEvent.apply(span, arguments)
+      return this
+    },
+    addLink () {
+      span.addLink.apply(span, arguments)
+      return this
+    },
+    addLinks () {
+      span.addLinks.apply(span, arguments)
+      return this
+    },
+    setStatus () {
+      span.setStatus.apply(span, arguments)
+      return this
+    },
+    updateName () {
+      span.updateName.apply(span, arguments)
+      return this
+    },
+    isRecording () {
+      return span.isRecording.apply(span, arguments)
+    },
+    recordException (exception) {
+      ctx.error = exception
+      vercelAiTracingChannel.error.publish(ctx)
+      return span.recordException.apply(span, arguments)
+    },
+    end () {
+      vercelAiTracingChannel.asyncEnd.publish(ctx)
+      return span.end.apply(span, arguments)
+    },
+  }
+}
+
 function wrapTracer (tracer) {
   if (tracers.has(tracer)) {
     return
@@ -136,40 +196,7 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // A plain delegating wrapper is used instead of Object.create(span) because
-          // Object.create (and Proxy) cannot cross private-field brand checks — any span
-          // method that reads a private field (e.g. BridgeSpanBase#statusCode) would throw
-          // "Cannot read private member" on a prototype clone. Every method here calls
-          // through to the real span instance so private fields always resolve correctly.
-          const freshSpan = {
-            spanContext () { return span.spanContext() },
-            setAttribute (key, value) { span.setAttribute(key, value); return freshSpan },
-            setAttributes (attributes) {
-              vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              span.setAttributes(attributes)
-              return freshSpan
-            },
-            addEvent (name, attributesOrStartTime, startTime) {
-              span.addEvent(name, attributesOrStartTime, startTime)
-              return freshSpan
-            },
-            addLink (link, attrs) { span.addLink(link, attrs); return freshSpan },
-            addLinks (links) { span.addLinks(links); return freshSpan },
-            setStatus (status) { span.setStatus(status); return freshSpan },
-            updateName (spanName) { span.updateName(spanName); return freshSpan },
-            isRecording () { return span.isRecording() },
-            recordException (exception, timeInput) {
-              ctx.error = exception
-              vercelAiTracingChannel.error.publish(ctx)
-              span.recordException(exception, timeInput)
-            },
-            end (...endArgs) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              span.end(...endArgs)
-            },
-          }
-
-          return originalCb.call(this, freshSpan)
+          return originalCb.call(this, createDelegatingSpan(span, ctx))
         }
       })
 

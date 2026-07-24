@@ -36,10 +36,9 @@ function withAiSdkOpenAiVersions (versionRange, callback) {
   })
 }
 
-// making a different reference from the default no-op tracer in the instrumentation
-// attempted to use the DD tracer provider, but it double-traces the request
-// in practice, there is no need to pass in the DD OTel tracer provider, so this
-// case shouldn't be an issue in practice
+// Use a distinct tracer without creating additional dd-trace spans in tests that
+// only exercise custom-tracer behavior. The error-path regression below uses the
+// real dd-trace OTel provider because its private span fields are part of the bug.
 const myTracer = {
   startActiveSpan () {
     const fn = arguments[arguments.length - 1]
@@ -86,6 +85,40 @@ describe('Plugin', () => {
     })
 
     describe('patching behavior with experimental_telemetry options', () => {
+      if (semifies(realVersion, '>=6.0.0')) {
+        it('preserves the original model error with a dd-trace OTel tracer', async () => {
+          const originalError = new Error('original model error')
+          const model = {
+            specificationVersion: 'v3',
+            provider: 'test',
+            modelId: 'test',
+            supportedUrls: {},
+            doGenerate () { return Promise.reject(originalError) },
+            doStream () { return Promise.reject(originalError) },
+          }
+          const TracerProvider = require('../../dd-trace/src/opentelemetry/tracer_provider')
+          const otelTracer = new TracerProvider().getTracer('ai')
+          const checkTraces = agent.assertSomeTraces(traces => {
+            const errorSpan = traces.flat().find(span => span.meta?.['error.message'] === originalError.message)
+
+            assert.ok(errorSpan, 'Expected a span for the original model error')
+            assert.strictEqual(errorSpan.error, 1)
+          })
+
+          await assert.rejects(
+            ai.generateText({
+              model,
+              prompt: 'trigger an error',
+              maxRetries: 0,
+              experimental_telemetry: { isEnabled: true, tracer: otelTracer },
+            }),
+            error => error === originalError
+          )
+
+          await checkTraces
+        })
+      }
+
       it('should not error when `isEnabled` is false', async () => {
         const experimentalTelemetry = { isEnabled: false }
         const result = await ai.generateText({
@@ -222,6 +255,89 @@ describe('Plugin', () => {
 
         assert.ok(result.text, 'Expected result to be truthy')
       })
+
+      if (semifies(realVersion, '>=6.0.0')) {
+        it('delegates the complete span interface to the original span', async () => {
+          const calls = []
+          const context = { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 }
+          const originalError = new Error('model error')
+          class RecordingSpan {
+            // eslint-disable-next-line no-unused-private-class-members
+            #statusCode = 0
+
+            spanContext () { calls.push(['spanContext', this, []]); return context }
+            setAttribute (...args) { calls.push(['setAttribute', this, args]); return this }
+            setAttributes (...args) { calls.push(['setAttributes', this, args]); return this }
+            addEvent (...args) { calls.push(['addEvent', this, args]); return this }
+            addLink (...args) { calls.push(['addLink', this, args]); return this }
+            addLinks (...args) { calls.push(['addLinks', this, args]); return this }
+            setStatus (...args) { this.#statusCode = args[0].code; calls.push(['setStatus', this, args]); return this }
+            updateName (...args) { calls.push(['updateName', this, args]); return this }
+            end (...args) { calls.push(['end', this, args]) }
+            isRecording () { calls.push(['isRecording', this, []]); return true }
+            recordException (...args) { calls.push(['recordException', this, args]) }
+          }
+
+          const originalSpan = new RecordingSpan()
+          const tracer = {
+            startActiveSpan (...args) {
+              const fn = args[args.length - 1]
+              return fn(originalSpan)
+            },
+          }
+
+          await assert.rejects(
+            ai.generateText({
+              model: {
+                specificationVersion: 'v3',
+                provider: 'test',
+                modelId: 'test',
+                supportedUrls: {},
+                doGenerate () { return Promise.reject(originalError) },
+                doStream () { return Promise.reject(originalError) },
+              },
+              prompt: 'trigger an error',
+              maxRetries: 0,
+              experimental_telemetry: { isEnabled: true, tracer },
+            }),
+            error => error === originalError
+          )
+
+          calls.length = 0
+          const delegatedSpan = tracer.startActiveSpan('delegation-check', span => span)
+          const attributes = { key: 'value' }
+          const eventAttributes = { event: 'value' }
+          const exception = new Error('delegated error')
+          const link = { context }
+          const links = [link]
+
+          assert.strictEqual(delegatedSpan.spanContext(), context)
+          assert.strictEqual(delegatedSpan.setAttribute('key', 'value'), delegatedSpan)
+          assert.strictEqual(delegatedSpan.setAttributes(attributes), delegatedSpan)
+          assert.strictEqual(delegatedSpan.addEvent('event', eventAttributes, 123), delegatedSpan)
+          assert.strictEqual(delegatedSpan.addLink(link), delegatedSpan)
+          assert.strictEqual(delegatedSpan.addLinks(links), delegatedSpan)
+          assert.strictEqual(delegatedSpan.setStatus({ code: 1 }), delegatedSpan)
+          assert.strictEqual(delegatedSpan.updateName('renamed'), delegatedSpan)
+          assert.strictEqual(delegatedSpan.isRecording(), true)
+          assert.strictEqual(delegatedSpan.recordException(exception, 456), undefined)
+          delegatedSpan.end(123)
+
+          assert.deepStrictEqual(calls, [
+            ['spanContext', originalSpan, []],
+            ['setAttribute', originalSpan, ['key', 'value']],
+            ['setAttributes', originalSpan, [attributes]],
+            ['addEvent', originalSpan, ['event', eventAttributes, 123]],
+            ['addLink', originalSpan, [link]],
+            ['addLinks', originalSpan, [links]],
+            ['setStatus', originalSpan, [{ code: 1 }]],
+            ['updateName', originalSpan, ['renamed']],
+            ['isRecording', originalSpan, []],
+            ['recordException', originalSpan, [exception, 456]],
+            ['end', originalSpan, [123]],
+          ])
+        })
+      }
 
       it('should use the passed in `tracer`', async () => {
         const checkTraces = agent.assertSomeTraces(traces => {
