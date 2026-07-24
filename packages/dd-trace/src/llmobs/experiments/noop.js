@@ -18,10 +18,6 @@ class NoopExperiments {
     throw this.#unavailable()
   }
 
-  createDatasetFromCsv () {
-    throw this.#unavailable()
-  }
-
   pullDataset () {
     return Promise.reject(this.#unavailable())
   }

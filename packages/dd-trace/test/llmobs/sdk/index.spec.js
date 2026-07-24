@@ -92,10 +92,8 @@ describe('sdk', () => {
   describe('experiments', () => {
     it('exposes dataset operations only through the experiments facade', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
-      assert.strictEqual(typeof llmobs.experiments.createDatasetFromCsv, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
       assert.strictEqual(llmobs.createDataset, undefined)
-      assert.strictEqual(llmobs.createDatasetFromCsv, undefined)
       assert.strictEqual(llmobs.pullDataset, undefined)
     })
   })

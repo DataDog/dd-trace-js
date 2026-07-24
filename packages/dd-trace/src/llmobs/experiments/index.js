@@ -1,9 +1,5 @@
 'use strict'
 
-const fs = require('node:fs')
-
-const { parse: parseCsv } = require('csv-parse/sync')
-
 const log = require('../../log')
 const { ExperimentsClient, API_BASE_PATH } = require('./client')
 const { Dataset, DatasetRecord } = require('./dataset')
@@ -24,86 +20,6 @@ async function retryWithBackoff (attempt, { maxTotalMs = 30_000, baseDelayMs = 2
     await new Promise((resolve) => setTimeout(resolve, Math.min(delay, maxDelayMs, remaining)))
     delay *= 2
   }
-}
-
-function assertColumns (name, columns, allowEmpty = true) {
-  if (!Array.isArray(columns) || (!allowEmpty && columns.length === 0)) {
-    throw new Error(`${name} must be a ${allowEmpty ? '' : 'non-empty '}array of column names`)
-  }
-  for (const column of columns) {
-    if (typeof column !== 'string' || column.length === 0) {
-      throw new Error(`${name} must contain only non-empty column names`)
-    }
-  }
-}
-
-function selectedColumns (row, columns) {
-  const out = {}
-  for (const column of columns) out[column] = row[column]
-  return out
-}
-
-function recordsFromCsv (csvPath, options) {
-  const {
-    inputDataColumns,
-    expectedOutputColumns = [],
-    metadataColumns = [],
-    csvDelimiter = ',',
-    idColumn,
-  } = options
-
-  assertColumns('inputDataColumns', inputDataColumns, false)
-  assertColumns('expectedOutputColumns', expectedOutputColumns)
-  assertColumns('metadataColumns', metadataColumns)
-  if (typeof csvDelimiter !== 'string' || csvDelimiter.length !== 1) {
-    throw new Error('csvDelimiter must be a single character')
-  }
-  if (idColumn !== undefined && (typeof idColumn !== 'string' || idColumn.length === 0)) {
-    throw new Error('idColumn must be a non-empty column name')
-  }
-
-  const content = fs.readFileSync(csvPath, 'utf8')
-  if (content.trim().length === 0) throw new Error('CSV file appears to be empty or header is missing')
-
-  const rows = parseCsv(content, {
-    delimiter: csvDelimiter,
-    bom: true,
-    relaxColumnCount: true,
-    skipEmptyLines: true,
-  })
-  const header = rows.shift()
-  if (!header || header.every(column => column === '')) {
-    throw new Error('CSV file appears to be empty or header is missing')
-  }
-  header[0] = header[0].replace(/^\uFEFF/, '')
-  const headerColumns = new Set(header)
-  const missingInputColumns = inputDataColumns.filter(column => !headerColumns.has(column))
-  const missingOutputColumns = expectedOutputColumns.filter(column => !headerColumns.has(column))
-  const missingMetadataColumns = metadataColumns.filter(column => !headerColumns.has(column))
-
-  if (missingInputColumns.length > 0) {
-    throw new Error(`Input columns not found in CSV header: ${missingInputColumns.join(', ')}`)
-  }
-  if (missingOutputColumns.length > 0) {
-    throw new Error(`Expected output columns not found in CSV header: ${missingOutputColumns.join(', ')}`)
-  }
-  if (missingMetadataColumns.length > 0) {
-    throw new Error(`Metadata columns not found in CSV header: ${missingMetadataColumns.join(', ')}`)
-  }
-  if (idColumn !== undefined && !headerColumns.has(idColumn)) {
-    throw new Error(`ID column '${idColumn}' not found in CSV header`)
-  }
-
-  return rows.map((values) => {
-    const row = {}
-    for (let i = 0; i < header.length; i++) row[header[i]] = values[i] ?? ''
-    return {
-      inputData: selectedColumns(row, inputDataColumns),
-      expectedOutput: expectedOutputColumns.length === 0 ? undefined : selectedColumns(row, expectedOutputColumns),
-      metadata: selectedColumns(row, metadataColumns),
-      id: idColumn === undefined ? undefined : row[idColumn],
-    }
-  })
 }
 
 // Entry point exposed as `tracer.llmobs.experiments`. Builds datasets and runs
@@ -140,13 +56,6 @@ class Experiments {
       dataset.addRecord(new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id))
     }
     return dataset
-  }
-
-  createDatasetFromCsv (csvPath, name, options = {}) {
-    return this.createDataset(name, {
-      description: options.description ?? '',
-      records: recordsFromCsv(csvPath, options),
-    })
   }
 
   // Pull an existing dataset by name (with its records). Polls with exponential

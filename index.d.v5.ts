@@ -3955,15 +3955,6 @@ declare namespace tracer {
       }>
     }
 
-    interface CreateDatasetFromCsvOptions {
-      inputDataColumns: string[]
-      expectedOutputColumns?: string[]
-      metadataColumns?: string[]
-      csvDelimiter?: string
-      description?: string
-      idColumn?: string
-    }
-
     interface ExperimentOptions {
       name: string
       dataset: Dataset
@@ -4044,8 +4035,6 @@ declare namespace tracer {
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
       createDataset (name: string, options?: CreateDatasetOptions): Dataset
-      /** Create a local dataset buffer from a CSV file. */
-      createDatasetFromCsv (csvPath: string, name: string, options: CreateDatasetFromCsvOptions): Dataset
       /** Pull an existing dataset (with records) by name. */
       pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
       /** Build an experiment to run over a dataset. */
