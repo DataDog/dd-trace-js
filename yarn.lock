@@ -245,18 +245,12 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-1.0.2.tgz#bbe12dca5b4ef983a0d0af4b07b9bc90ea0ababa"
   integrity sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==
 
-"@datadog/flagging-core@2.0.1":
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-2.0.1.tgz#be4c8b361629f3dac80b5710b417297856c84212"
-  integrity sha512-UDAVquISiAzubDpP6mWspZF4mXMbKu5eAKWfNIj79qmXPRy2OISbrAI5us3DqUJWLwwiNhmltk/45AQvL65N1A==
+"@datadog/flagging-core@2.0.2":
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-2.0.2.tgz#333d7a5701306f7311861c1c0a3ce0be6138cc38"
+  integrity sha512-2+oWyqz/EMNXtsgyW3NtueFgL0TciWInyMg/6bEUZhfr7UgPzCQ88Nag9FGoPCig19F/tHXE5hLiQccjkRUMWQ==
   dependencies:
-    "@datadog/js-core" "0.0.3"
     spark-md5 "^3.0.2"
-
-"@datadog/js-core@0.0.3":
-  version "0.0.3"
-  resolved "https://registry.yarnpkg.com/@datadog/js-core/-/js-core-0.0.3.tgz#3c19fc6df6f303454ca5f7db5ed24e1cdeebbb0d"
-  integrity sha512-1jdV0/tB/v3H7AJAb1QmN+iOz9CAD6HezaaTrXVh3R9wHLHeDy2gca261/sSKD0HqBhWqgX4gd9BixlpMhKeUA==
 
 "@datadog/libdatadog@0.9.4":
   version "0.9.4"
@@ -285,13 +279,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@2.0.1":
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.0.1.tgz#1bb8c4e9fb859058fa90212db1948a396804ecae"
-  integrity sha512-RQNpzWxXcpwhPSIP6zoBtQ477UafpEgmIDbS+lg+2rrt+kYfHv70P5mXkZP7cacBs25LBltxK/QWif+4wbQYSg==
+"@datadog/openfeature-node-server@2.0.2":
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.0.2.tgz#304b93f12fe63619d5bb140023dfcecf56f38017"
+  integrity sha512-647eJuiOVzCEk50His94wjSlOgJCbHIJv4cAW425eW3GqQJC2Y73qGBYV1/s9oBsAmsUNa90tc+ETunfUH2hKQ==
   dependencies:
-    "@datadog/flagging-core" "2.0.1"
-    "@datadog/js-core" "0.0.3"
+    "@datadog/flagging-core" "2.0.2"
 
 "@datadog/pprof@5.15.1":
   version "5.15.1"
