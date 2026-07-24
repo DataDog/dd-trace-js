@@ -7,7 +7,7 @@ const { getEventSourceRegistry } = require('../../../events/source-registry')
 const { getNodeModulesPaths } = require('../path-line')
 const StoredInjectionAnalyzer = require('./stored-injection-analyzer')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
+const EXCLUDED_PATHS = getNodeModulesPaths('mariadb', 'mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
 const DATABASE_QUERY_OPERATION = 'db.query'
 const DATABASE_CONTRIBUTOR_ID = 'iast.sql-injection'
 
@@ -17,7 +17,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
 
     this._sourceRegistry = getEventSourceRegistry()
     this._databaseContributor = {
-      sources: new Set(['mysql']),
+      sources: new Set(['mariadb', 'mysql']),
       start: (event, store) => this.analyzeDatabaseQuery(event, store),
       finish: (event, store) => this.finishDatabaseQuery(event, store),
     }
@@ -26,6 +26,10 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   onConfigure () {
     this._mysqlEventSubscription = this._getAndRegisterSubscription({
       moduleName: 'mysql',
+      tag: this._type,
+    })
+    this._mariadbEventSubscription = this._getAndRegisterSubscription({
+      moduleName: 'mariadb',
       tag: this._type,
     })
     this.addSub('datadog:mysql2:outerquery:start', ({ sql }) => this.analyze(sql, undefined, 'MYSQL'))
@@ -99,14 +103,21 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
   }
 
   /**
-   * Analyze one normalized MySQL event without subscribing to package channels.
+   * Analyze one normalized MySQL-family event without package subscriptions.
    *
    * @param {object} event Normalized database query event.
    * @param {object|undefined} store Current operation store.
    * @returns {object|undefined} Store composed into the source lifecycle.
    */
   analyzeDatabaseQuery (event, store) {
-    if (event.source?.integration !== 'mysql' || store?.sqlAnalyzed) return store
+    const integration = event.source?.integration
+    let subscription
+    if (integration === 'mysql') {
+      subscription = this._mysqlEventSubscription
+    } else if (integration === 'mariadb') {
+      subscription = this._mariadbEventSubscription
+    }
+    if (!subscription || store?.sqlAnalyzed) return store
 
     return this._execHandlerAndIncMetric({
       handler: () => {
@@ -119,8 +130,8 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
         this.analyze(event.data.statement, store, 'MYSQL')
         return store
       },
-      metric: this._mysqlEventSubscription.executedMetric,
-      tags: this._mysqlEventSubscription.tags,
+      metric: subscription.executedMetric,
+      tags: subscription.tags,
     })
   }
 
@@ -132,7 +143,7 @@ class SqlInjectionAnalyzer extends StoredInjectionAnalyzer {
    * @returns {object|undefined} Parent operation store.
    */
   finishDatabaseQuery (event, store) {
-    if (event.source?.integration !== 'mysql' || !event.iastSqlAnalyzed) return store
+    if (!this._databaseContributor.sources.has(event.source?.integration) || !event.iastSqlAnalyzed) return store
 
     event.iastSqlAnalyzed = false
     return store?.sqlParentStore
