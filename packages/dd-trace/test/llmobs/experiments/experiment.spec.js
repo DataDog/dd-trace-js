@@ -141,8 +141,17 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.throws(() => new Experiment(c, { dataset, task: (input) => input }), /name/)
     assert.throws(() => new Experiment(c, { name: 'n', task: (input) => input }), /dataset/)
     assert.throws(() => new Experiment(c, { name: 'n', dataset }), /task/)
+    const experiment = new Experiment(
+      c,
+      { name: 'n', dataset, task: (input) => input, evaluators: { 'ok_Name-1': () => true } }
+    )
+    assert.equal(experiment.name(), 'n')
     assert.throws(
       () => new Experiment(c, { name: 'n', dataset, task: (input) => input, evaluators: { 'bad name': () => true } }),
+      /invalid/
+    )
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, evaluators: { 'bad.name': () => true } }),
       /invalid/
     )
     assert.throws(

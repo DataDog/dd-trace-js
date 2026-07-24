@@ -4,104 +4,17 @@ const id = require('../../id')
 
 const { API_BASE_PATH } = require('./client')
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
-
-const EVALUATOR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
-
-function isPlainObject (value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function hasEntries (value) {
-  if (!value) return false
-  for (const key of Object.keys(value)) {
-    if (Object.hasOwn(value, key)) return true
-  }
-  return false
-}
-
-function validateEvaluatorName (name) {
-  if (typeof name !== 'string') throw new TypeError('Evaluator name must be a string')
-  if (name.length === 0) throw new Error('Evaluator name cannot be empty')
-  if (!EVALUATOR_NAME_PATTERN.test(name)) {
-    throw new Error(
-      `Evaluator name '${name}' is invalid. Name must contain only alphanumeric characters, underscores, and hyphens.`
-    )
-  }
-}
-
-function functionName (fn, fallback) {
-  return typeof fn.name === 'string' && fn.name.length > 0 ? fn.name : fallback
-}
-
-function normalizeEvaluators (evaluators, kind) {
-  if (evaluators == null) return []
-
-  const normalized = []
-  if (Array.isArray(evaluators)) {
-    for (let i = 0; i < evaluators.length; i++) {
-      const evaluator = evaluators[i]
-      if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator must be a function`)
-      const name = functionName(evaluator, `${kind}_evaluator_${i}`)
-      validateEvaluatorName(name)
-      normalized.push([name, evaluator])
-    }
-    return normalized
-  }
-
-  if (!isPlainObject(evaluators)) {
-    throw new TypeError(`${kind} evaluators must be an array of functions or an object keyed by evaluator name`)
-  }
-
-  for (const [name, evaluator] of Object.entries(evaluators)) {
-    validateEvaluatorName(name)
-    if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator '${name}' must be a function`)
-    normalized.push([name, evaluator])
-  }
-  return normalized
-}
-
-// Mirrors dd-trace-py's _generate_metric_from_evaluation: plain objects are
-// json, everything else falls through to the lowercased categorical fallback.
-function inferMetricType (value) {
-  if (typeof value === 'boolean') return 'boolean'
-  if (typeof value === 'number' && Number.isFinite(value)) return 'score'
-  if (isPlainObject(value)) return 'json'
-  return 'categorical'
-}
-
-function stringify (value) {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value.toLowerCase()
-  if (typeof value === 'object') return JSON.stringify(value).toLowerCase()
-  return String(value).toLowerCase()
-}
-
-// Build the tag list, letting auto tags win over user tags on key conflict.
-function buildTags (userTags, autoTags) {
-  const tags = new Map()
-  for (const [key, value] of Object.entries(userTags ?? {})) {
-    tags.set(key, `${key}:${value}`)
-  }
-  for (const [key, value] of Object.entries(autoTags)) {
-    if (value !== undefined && value !== null && value !== '') tags.set(key, `${key}:${value}`)
-  }
-  return [...tags.values()]
-}
-
-function buildExperimentTagObject (userTags, autoTags) {
-  return userTags ? { ...userTags, ...autoTags } : { ...autoTags }
-}
-
-function sleep (ms) {
-  if (ms <= 0) return Promise.resolve()
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function buildSpanMetadata (recordMetadata, config) {
-  return recordMetadata
-    ? { ...recordMetadata, experiment_config: config }
-    : { experiment_config: config }
-}
+const {
+  buildExperimentTagObject,
+  buildSpanMetadata,
+  buildTags,
+  hasEntries,
+  inferMetricType,
+  normalizeEvaluators,
+  sleep,
+  stringify,
+  validateEvaluatorName,
+} = require('./util')
 
 // One span per experiment row (LLM Obs experiment span wire format).
 function toSpan (row, metadata, ids, spanName, userTags) {

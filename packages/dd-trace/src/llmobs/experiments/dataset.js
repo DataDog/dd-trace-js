@@ -181,9 +181,12 @@ class Dataset {
     }
 
     let pushedCount = 0
-    for (const node of created) {
-      const recordId = recordIdFromCreatedRecord(node)
-      if (recordId !== '') pushedCount++
+    for (let i = 0; i < created.length; i++) {
+      const recordId = recordIdFromCreatedRecord(created[i])
+      if (recordId !== '') {
+        pushedCount++
+        pending[i].id = recordId
+      }
       this.#recordIds.push(recordId)
     }
     for (let i = created.length; i < pending.length; i++) this.#recordIds.push('')
