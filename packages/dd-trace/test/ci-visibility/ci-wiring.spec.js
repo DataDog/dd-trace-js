@@ -50,6 +50,8 @@ describe('test optimization validation CI audit', () => {
 
   for (const wrapped of [
     'npm test',
+    'npx mocha test/example.spec.js',
+    'npx --no-install mocha test/example.spec.js',
     'pnpm run test:unit',
     'yarn test',
     'nx test project',
@@ -79,6 +81,23 @@ describe('test optimization validation CI audit', () => {
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.conclusion, 'incomplete')
     assert.notStrictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
+  })
+
+  it('confirms the selected reviewed job is unconfigured when another job initializes dd-trace', () => {
+    fs.writeFileSync(workflow, [
+      workflowSource({ command }),
+      '  unrelated:',
+      '    env:',
+      '      NODE_OPTIONS: -r dd-trace/ci/init',
+      '    steps:',
+      '      - run: node other.js',
+    ].join('\n'))
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
+    assert.match(result.diagnosis, /not initialized/)
   })
 
   it('confirms a reset in the selected direct command', () => {

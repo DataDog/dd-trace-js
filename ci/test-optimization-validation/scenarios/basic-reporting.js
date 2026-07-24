@@ -75,6 +75,21 @@ async function runBasicReporting ({ framework, out, options }) {
       )
     }
 
+    if (framework.preflight?.observedTestCount === null && evidence.testEvents === 0) {
+      return inconclusive(
+        framework,
+        scenarioName,
+        'The clean runner exited successfully without a parseable test count, and the initialized run emitted no ' +
+          'test event. Basic Reporting remains incomplete because the validator cannot prove that a test executed.',
+        {
+          ...evidence,
+          recommendation: 'Use a representative test command that reports an executed-test count, or inspect the ' +
+            'runner output and debug artifact before attributing the missing event to dd-trace.',
+        },
+        outDir
+      )
+    }
+
     if (!run.offline.initialized || !evidence.settingsLoadedFromCache) {
       return failWithDebugRerun({
         command,

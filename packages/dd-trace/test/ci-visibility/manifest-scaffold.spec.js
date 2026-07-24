@@ -227,7 +227,7 @@ describe('test optimization validation manifest scaffold', () => {
   it('keeps Jest suffixes and disables retained leak detection for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'jest',
-      script: 'jest tests_jest --detectLeaks',
+      script: 'jest tests_jest --detectLeaks=true',
     })
     const representative = path.join(fixture.root, 'tests_jest', 'memory_leak.spec.js')
     fs.rmSync(fixture.testFile)
@@ -242,12 +242,66 @@ describe('test optimization validation manifest scaffold', () => {
       const command = getGeneratedCommand(framework, scenario)
 
       assert.match(scenario.testIdentities[0].file, /\.spec\.js$/)
-      assert.ok(command.argv.includes('--detectLeaks'))
+      assert.ok(command.argv.includes('--detectLeaks=true'))
       assert.ok(command.argv.includes('--detectLeaks=false'))
     } finally {
       removeFixture(fixture.root)
     }
   })
+
+  it('retains Cypress configuration for generated checks', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cypress',
+      script: 'cypress run --browser chrome --config-file cypress.custom.js --e2e',
+    })
+    fs.writeFileSync(path.join(fixture.root, 'cypress.custom.js'), 'module.exports = {}\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cypress']),
+      }).frameworks[0]
+      const scenario = framework.generatedTestStrategy.scenarios[0]
+      const command = getGeneratedCommand(framework, scenario)
+
+      assert.deepStrictEqual(framework.validation.runnerArgs, [
+        '--browser',
+        'chrome',
+        '--config-file',
+        'cypress.custom.js',
+        '--e2e',
+      ])
+      assert.deepStrictEqual(command.argv.slice(2, 8), [
+        'run',
+        '--browser',
+        'chrome',
+        '--config-file',
+        'cypress.custom.js',
+        '--e2e',
+      ])
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  for (const value of ['$NODE_ENV', '$' + '{NODE_ENV}', '$?', '%NODE_ENV%', '!NODE_ENV!']) {
+    it(`rejects dynamic runner environment assignment ${value}`, () => {
+      const fixture = createRepositoryFixture({
+        framework: 'mocha',
+        script: `NODE_ENV=${value} mocha test/example.spec.js`,
+      })
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set(['mocha']),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.match(framework.notes[0], /runner environment contains an unsafe value for NODE_ENV/)
+      } finally {
+        removeFixture(fixture.root)
+      }
+    })
+  }
 
   it('selects non-suffixed Mocha files from a literal test root', () => {
     const fixture = createRepositoryFixture({

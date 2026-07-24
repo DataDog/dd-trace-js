@@ -62,6 +62,7 @@ const BUILTIN_MODULE_VALUES = new Map([
   ['--ui', new Set(['bdd', 'exports', 'qunit', 'tdd'])],
 ])
 const CONTROL_PATTERN = /[\0\r\n;&|`]|\$\(|\$\{/
+const ENVIRONMENT_EXPANSION_PATTERN = /\$|%[^%]+%|![^!]+!/
 
 /**
  * Extracts bounded runner configuration from a detected package script.
@@ -78,10 +79,18 @@ const CONTROL_PATTERN = /[\0\r\n;&|`]|\$\(|\$\{/
  * }} runner contract
  */
 function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
+  const dynamicEnvironmentError = getDynamicRunnerEnvironmentError(command)
+  if (dynamicEnvironmentError) {
+    return { environment: {}, error: dynamicEnvironmentError, inputFiles: [], runnerArgs: [] }
+  }
   const invocation = getFrameworkInvocation(command, framework)
   if (!invocation) return { environment: {}, inputFiles: [], runnerArgs: [] }
 
   const environment = getRunnerEnvironment(invocation)
+  const environmentError = getRunnerEnvironmentError(environment)
+  if (environmentError) {
+    return { environment: {}, error: `runner environment ${environmentError}`, inputFiles: [], runnerArgs: [] }
+  }
   const runnerArgs = getRunnerArgs(framework, invocation)
   const inputs = getRunnerInputs(runnerArgs, environment, projectRoot, repositoryRoot)
   if (inputs.error) {
@@ -91,6 +100,23 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
     environment,
     inputFiles: inputs.files,
     runnerArgs,
+  }
+}
+
+/**
+ * Rejects shell-expanded allowlisted environment assignments before command tokenization.
+ *
+ * @param {string} command detected package script
+ * @returns {string|undefined} validation error
+ */
+function getDynamicRunnerEnvironmentError (command) {
+  for (const match of String(command || '').matchAll(
+    /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g
+  )) {
+    const value = match[2] ?? match[3] ?? match[4]
+    if (RUNNER_ENVIRONMENT_NAMES.has(match[1]) && ENVIRONMENT_EXPANSION_PATTERN.test(value)) {
+      return `runner environment contains an unsafe value for ${match[1]}`
+    }
   }
 }
 
@@ -202,7 +228,8 @@ function getRunnerEnvironmentError (environment) {
   if (!environment || typeof environment !== 'object' || Array.isArray(environment)) return 'must be an object'
   for (const [name, value] of Object.entries(environment)) {
     if (!RUNNER_ENVIRONMENT_NAMES.has(name)) return `contains unsupported variable ${name}`
-    if (typeof value !== 'string' || Buffer.byteLength(value) > 4096 || CONTROL_PATTERN.test(value)) {
+    if (typeof value !== 'string' || Buffer.byteLength(value) > 4096 ||
+      CONTROL_PATTERN.test(value) || ENVIRONMENT_EXPANSION_PATTERN.test(value)) {
       return `contains an unsafe value for ${name}`
     }
   }

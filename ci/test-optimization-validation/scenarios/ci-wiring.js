@@ -9,7 +9,8 @@ const { fail, incomplete } = require('./helpers')
 
 const MAX_CI_FILE_BYTES = 512 * 1024
 const DYNAMIC_COMMAND_PATTERN = /(?:\$\{\{|\$\(|`|&&|\|\||[;|\r\n])/
-const WRAPPER_PATTERN = /\b(?:npm|pnpm|yarn|yarnpkg)\s+(?:run\s+)?[A-Za-z0-9:_-]+\b|\b(?:nx|turbo|lerna|mise)\b/
+const WRAPPER_PATTERN =
+  /\b(?:npm|pnpm|yarn|yarnpkg)\s+(?:run\s+)?[A-Za-z0-9:_-]+\b|\bnpx(?:\.cmd)?\b|\b(?:nx|turbo|lerna|mise)\b/
 const RUNNER_PATTERNS = {
   cucumber: /(?:^|\s|[/\\])cucumber(?:-js)?(?:\s|$)/,
   cypress: /(?:^|\s|[/\\])cypress\s+run(?:\s|$)/,
@@ -115,11 +116,11 @@ function runCiWiring ({ manifest, framework }) {
     )
   }
 
-  if (!hasInitialization && ci.initialization?.status === 'not_configured') {
+  if (ci.initialization?.status === 'not_configured') {
     return getFailure(
       framework,
-      'The selected literal direct-runner CI job has no dd-trace/ci/init preload in its checksum-bound CI file. ' +
-        'Test Optimization is not initialized in that job.',
+      'The reviewed selected direct-runner CI job is recorded without a dd-trace/ci/init preload. Test ' +
+        'Optimization is not initialized in that job.',
       {
         ...evidence,
         ciRemediation: remediation,

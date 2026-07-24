@@ -90,6 +90,11 @@ describe('test optimization validation manifest schema', () => {
       /environment contains unsupported variable NODE_OPTIONS/,
     ],
     [
+      'a dynamic runner environment value',
+      value => { value.frameworks[0].validation.environment = { NODE_ENV: '$NODE_ENV' } },
+      /environment contains an unsafe value for NODE_ENV/,
+    ],
+    [
       'a Datadog environment dependency',
       value => { value.frameworks[0].validation.requiredEnvVars = ['DD_API_KEY'] },
       /must not inherit Datadog/,

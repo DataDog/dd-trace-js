@@ -70,6 +70,21 @@ describe('test optimization validation approval', () => {
     assert.deepStrictEqual(material.projectFiles, [])
   })
 
+  it('binds a CI file when local framework validation is unavailable', () => {
+    const workflow = path.join(fixture.root, '.github', 'workflows', 'test.yml')
+    fs.mkdirSync(path.dirname(workflow), { recursive: true })
+    fs.writeFileSync(workflow, 'jobs:\n  test:\n    steps: []\n')
+    input.manifest.frameworks[0].status = 'requires_manual_setup'
+    input.manifest.frameworks[0].ciWiring.configFile = workflow
+    const approvalInput = { ...input, requestedScenario: 'ci-wiring' }
+    const material = getApprovalMaterial(approvalInput)
+    const digest = getApprovalDigest(approvalInput)
+
+    assert.deepStrictEqual(material.projectFiles.map(file => file.path), [workflow])
+    fs.appendFileSync(workflow, '# changed after approval\n')
+    assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
+  })
+
   it('changes the approval digest when the selected test or runner changes', () => {
     const digest = getApprovalDigest(input)
 

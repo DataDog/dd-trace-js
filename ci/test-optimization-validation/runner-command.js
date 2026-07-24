@@ -84,6 +84,7 @@ function getManifestCommands (manifest, requestedScenario = null) {
 function getManifestInputFiles (manifest, { includeLocal = true } = {}) {
   const files = new Set()
   for (const framework of manifest.frameworks || []) {
+    addExistingFile(files, framework.ciWiring?.configFile)
     if (framework.status !== 'runnable') continue
     if (includeLocal) {
       addExistingFile(files, framework.validation?.runner)
@@ -91,7 +92,6 @@ function getManifestInputFiles (manifest, { includeLocal = true } = {}) {
       addExistingFile(files, framework.project?.packageJson)
       for (const filename of framework.project?.configFiles || []) addExistingFile(files, filename)
     }
-    addExistingFile(files, framework.ciWiring?.configFile)
   }
   return [...files].sort()
 }
@@ -156,7 +156,7 @@ function getRunnerArgs (framework, testFile, generated) {
     ]
   }
   if (name === 'cypress') {
-    if (generated) return cypress.getGeneratedTestArgs(testFile, [])
+    if (generated) return cypress.getGeneratedTestArgs(testFile, configuration)
     return [
       'run',
       ...configuration,
@@ -175,6 +175,12 @@ function getRunnerArgs (framework, testFile, generated) {
     return ['test', ...configuration, ...playwright.getFocusedTestArgs(testFile)]
   }
   if (name === 'jest') {
+    const generatedOverrides = []
+    if (generated && configuration.some(argument => {
+      return argument === '--detectLeaks' || argument === '--detectLeaks=true'
+    })) {
+      generatedOverrides.push('--detectLeaks=false')
+    }
     return [
       ...configuration,
       '--runTestsByPath',
@@ -182,7 +188,7 @@ function getRunnerArgs (framework, testFile, generated) {
       '--runInBand',
       '--silent',
       '--no-watchman',
-      ...(generated && configuration.includes('--detectLeaks') ? ['--detectLeaks=false'] : []),
+      ...generatedOverrides,
     ]
   }
   if (name === 'mocha') return [...configuration, '--reporter', 'spec', testFile]

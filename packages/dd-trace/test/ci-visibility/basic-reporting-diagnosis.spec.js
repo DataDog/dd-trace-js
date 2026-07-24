@@ -12,7 +12,9 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
       initialized: true,
       settingsLoaded: true,
     })
-    const result = await runBasicReporting(getInput())
+    const input = getInput()
+    input.framework.preflight.observedTestCount = null
+    const result = await runBasicReporting(input)
 
     assert.strictEqual(result.status, 'pass')
     assert.strictEqual(result.evidence.foundationalReportingEstablished, true)
@@ -30,6 +32,22 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
     assert.strictEqual(result.status, 'fail')
     assert.strictEqual(result.evidence.possibleLibraryBug, true)
     assert.match(result.diagnosis, /exporter did not initialize/)
+  })
+
+  it('stays incomplete when an unknown-count clean run emits no instrumented test event', async () => {
+    const { runBasicReporting } = getBasicReporting({
+      complete: false,
+      initialized: false,
+      settingsLoaded: false,
+    })
+    const input = getInput()
+    input.framework.preflight.observedTestCount = null
+    const result = await runBasicReporting(input)
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.validationIncomplete, true)
+    assert.strictEqual(result.evidence.possibleLibraryBug, undefined)
+    assert.match(result.diagnosis, /cannot prove that a test executed/)
   })
 
   it('stays incomplete when the initialized failure cannot be reproduced cleanly', async () => {
