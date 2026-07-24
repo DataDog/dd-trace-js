@@ -6,6 +6,7 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 
 const log = require('../../dd-trace/src/log')
+const { getSegment } = require('../../dd-trace/src/util')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
@@ -509,8 +510,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       } else {
         if (event === 'task' && isDatadogTaskRegistration(handler)) {
           manualPlugin.detected = true
-          manualPlugin.afterScreenshotHandler =
-            userAfterScreenshotHandlers[userAfterScreenshotHandlers.length - 1]
+          manualPlugin.afterScreenshotHandler = userAfterScreenshotHandlers.at(-1)
         }
         on(event, handler)
       }
@@ -654,7 +654,7 @@ function isTypeScript6OrNewer (projectRoot) {
     // eslint-disable-next-line n/no-unpublished-require
     const packageJsonPath = require.resolve('typescript/package.json', { paths: [projectRoot] })
     const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    const major = Number(String(version).split('.')[0])
+    const major = Number(getSegment(String(version), '.', 0))
     return major >= 6
   } catch {
     return false

@@ -157,6 +157,44 @@ describe(`cucumber@${version} commonJS`, () => {
     ])
   })
 
+  onlyLatestIt('waits for the final payload before the programmatic run resolves', async () => {
+    const completionOrder = []
+    const completedMessage = 'programmatic Cucumber run completed'
+    receiver.setWaitingTime(500)
+
+    const intakePromise = (async () => {
+      await receiver.payloadReceived(({ url, payload }) => (
+        url === '/api/v2/citestcycle' &&
+        payload.events.some(event => event.type === 'test_session_end')
+      ))
+      completionOrder.push('intake')
+    })()
+
+    childProcess = exec(
+      'node ./ci-visibility/run-cucumber-programmatic.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+    childProcess.stdout?.on('data', (chunk) => {
+      const output = chunk.toString()
+      testOutput += output
+      if (output.includes(completedMessage)) completionOrder.push('run')
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      intakePromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+    assert.deepStrictEqual(completionOrder, ['intake', 'run'], testOutput)
+  })
+
   context('with APM protocol (old agents)', () => {
     it('can report tests', async function () {
       receiver.setInfoResponse({ endpoints: [] })

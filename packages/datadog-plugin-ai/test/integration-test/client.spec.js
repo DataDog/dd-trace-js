@@ -33,7 +33,6 @@ function getOpenaiRange (realVersion) {
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('ai', 'ai', (version, _, realVersion) => {
     useSandbox([
@@ -48,8 +47,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'generateText', undefined, 'ai', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'generateText',
+      packageName: 'ai',
+      defaultExport: false,
+      namedExports: ['generateText'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -57,7 +60,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

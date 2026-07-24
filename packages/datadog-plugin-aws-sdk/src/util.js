@@ -120,8 +120,8 @@ const extractQueueMetadata = queueURL => {
 
   if (parts.length < minParts) return null
 
-  const accountId = parts[parts.length - 2]
-  const queueName = parts[parts.length - 1]
+  const accountId = parts.at(-2)
+  const queueName = parts.at(-1)
   const host = hasScheme ? parts[1] : parts[0]
 
   let region = 'us-east-1' // Default region if not found in URL

@@ -390,6 +390,7 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
       isParallel,
+      onDone,
     }) => {
       this._exportPendingWorkerTraces()
       if (this.testSessionSpan) {
@@ -456,7 +457,7 @@ class MochaPlugin extends CiPlugin {
         })
       }
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addBind('ci:mocha:global:run', (ctx) => {
