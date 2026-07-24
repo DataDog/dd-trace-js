@@ -23,6 +23,7 @@ const assert = require('assert')
 const { execFileSync } = require('child_process')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
+const experiments = require('./webpack-experiments')
 
 const ENTRY = path.join(__dirname, 'openfeature-app.js')
 const FLAGGING_PROVIDER = path.join('openfeature', 'flagging_provider')
@@ -49,6 +50,7 @@ function build (outfile, plugins) {
       entry: ENTRY,
       target: 'node',
       externalsType: 'commonjs',
+      ...(experiments && { experiments }),
       output: { filename: path.basename(outfile), path: path.dirname(outfile), hashFunction: 'sha256' },
       externals: EXTERNALS,
       plugins,
