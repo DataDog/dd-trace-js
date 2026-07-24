@@ -54,6 +54,9 @@ const MODULE_OPTIONS = new Set([
 ])
 const FILE_OPTIONS = new Set(['-c', '--config', '--config-file'])
 const DIRECTORY_OPTIONS = new Set(['--root'])
+const UNSUPPORTED_CONFIGURATION_OPTIONS = {
+  jest: new Set(['--projects']),
+}
 const BUILTIN_MODULE_VALUES = new Map([
   ['-u', new Set(['bdd', 'exports', 'qunit', 'tdd'])],
   ['--env', new Set(['node'])],
@@ -85,6 +88,15 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
   }
   const invocation = getFrameworkInvocation(command, framework)
   if (!invocation) return { environment: {}, inputFiles: [], runnerArgs: [] }
+  const unsupportedOption = getUnsupportedConfigurationOption(framework, invocation)
+  if (unsupportedOption) {
+    return {
+      environment: {},
+      error: `${unsupportedOption} requires project orchestration that the validator does not perform`,
+      inputFiles: [],
+      runnerArgs: [],
+    }
+  }
 
   const environment = getRunnerEnvironment(invocation)
   const environmentError = getRunnerEnvironmentError(environment)
@@ -140,22 +152,57 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
     const token = tokens[index]
     if (token.startsWith('-')) {
       const option = token.split('=', 1)[0]
-      if (options.values.has(option) && !token.includes('=')) index++
+      if (DIRECTORY_OPTIONS.has(option)) {
+        const value = token.includes('=') ? token.slice(token.indexOf('=') + 1) : tokens[++index]
+        addRunnerSearchRoot(roots, value, projectRoot, repositoryRoot, true)
+      } else if (options.values.has(option) && !token.includes('=')) {
+        index++
+      }
       continue
     }
     if (['run', 'test'].includes(token)) continue
-    const literal = token.split(/[*?{[]/, 1)[0].replace(/[\\/]+$/, '')
-    if (!literal) continue
-    const candidate = path.resolve(projectRoot, literal)
-    const directory = path.extname(candidate) ? path.dirname(candidate) : candidate
-    try {
-      const physical = fs.realpathSync(directory)
-      if (fs.statSync(physical).isDirectory() &&
-        isPathInside(fs.realpathSync(repositoryRoot), physical)) roots.add(physical)
-    } catch {}
+    addRunnerSearchRoot(roots, token, projectRoot, repositoryRoot, false)
     if (roots.size === 3) break
   }
   return [...roots]
+}
+
+/**
+ * Adds one literal, contained command selector to the representative search roots.
+ *
+ * @param {Set<string>} roots accumulated physical roots
+ * @param {string|undefined} value command selector
+ * @param {string} projectRoot detected project root
+ * @param {string} repositoryRoot repository root
+ * @param {boolean} directory whether the option explicitly requires a directory
+ * @returns {void}
+ */
+function addRunnerSearchRoot (roots, value, projectRoot, repositoryRoot, directory) {
+  if (typeof value !== 'string' || !value) return
+  const literal = value.split(/[*?{[]/, 1)[0].replace(/[\\/]+$/, '')
+  if (!literal) return
+  const candidate = path.resolve(projectRoot, literal)
+  const searchRoot = directory || !path.extname(candidate) ? candidate : path.dirname(candidate)
+  try {
+    const physical = fs.realpathSync(searchRoot)
+    if (fs.statSync(physical).isDirectory() &&
+      isPathInside(fs.realpathSync(repositoryRoot), physical)) roots.add(physical)
+  } catch {}
+}
+
+/**
+ * Returns a configuration-bearing option that the direct-runner contract intentionally rejects.
+ *
+ * @param {string} framework framework name
+ * @param {{runnerIndex: number, tokens: string[]}} invocation parsed invocation
+ * @returns {string|undefined} unsupported option
+ */
+function getUnsupportedConfigurationOption (framework, invocation) {
+  const unsupported = UNSUPPORTED_CONFIGURATION_OPTIONS[framework]
+  if (!unsupported) return
+  return invocation.tokens.slice(invocation.runnerIndex + 1).find(token => {
+    return token.startsWith('-') && unsupported.has(token.split('=', 1)[0])
+  })?.split('=', 1)[0]
 }
 
 /**

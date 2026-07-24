@@ -629,7 +629,10 @@ function getFrameworkStatusResult (framework) {
       frameworkStatus: framework.status,
       validationIncomplete: true,
       ...(requiresProjectSetup
-        ? { blockedByProjectSetup: true }
+        ? {
+            blockedByProjectSetup: true,
+            ...(framework.notes?.[0] ? { recommendation: framework.notes[0] } : {}),
+          }
         : { validatorAdapterUnavailable: true }),
     },
     artifacts: [],

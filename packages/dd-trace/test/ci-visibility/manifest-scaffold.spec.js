@@ -224,6 +224,70 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('rejects a bare source test without an explicit framework import or test directory', () => {
+    const fixture = createRepositoryFixture({ framework: 'vitest', script: 'vitest run' })
+    const sourceTest = path.join(fixture.root, 'src', 'runners', 'test.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(sourceTest), { recursive: true })
+    fs.writeFileSync(sourceTest, "test('source helper', () => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /No single Vitest test file/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  for (const [frameworkName, relativeTest] of [
+    ['vitest', 'test/types/compose.test-d.ts'],
+    ['jest', 'typetests/jest.test.ts'],
+  ]) {
+    it(`rejects the type-only representative ${relativeTest}`, () => {
+      const fixture = createRepositoryFixture({ framework: frameworkName, script: frameworkName })
+      const typeTest = path.join(fixture.root, relativeTest)
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(typeTest), { recursive: true })
+      fs.writeFileSync(typeTest, "test('type-only', () => {})\n")
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set([frameworkName]),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.match(framework.notes[0], /No single/)
+      } finally {
+        removeFixture(fixture.root)
+      }
+    })
+  }
+
+  it('selects a conventional runtime test instead of a nearby type-only file', () => {
+    const fixture = createRepositoryFixture({ framework: 'vitest', script: 'vitest run' })
+    const runtimeTest = path.join(fixture.root, 'src', 'compose.test.ts')
+    const typeTest = path.join(fixture.root, 'src', 'compose.test-d.ts')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(runtimeTest), { recursive: true })
+    fs.writeFileSync(runtimeTest, "test('runtime', () => {})\n")
+    fs.writeFileSync(typeTest, "test('type-only', () => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, runtimeTest)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('marks retained Vitest browser mode as browser-required', () => {
     const fixture = createRepositoryFixture({
       framework: 'vitest',
@@ -242,6 +306,35 @@ describe('test optimization validation manifest scaffold', () => {
       removeFixture(fixture.root)
     }
   })
+
+  for (const rootOption of ['--root packages/foo', '--root=packages/foo']) {
+    it(`selects the representative inside the retained Vitest ${rootOption}`, () => {
+      const fixture = createRepositoryFixture({
+        framework: 'vitest',
+        script: `vitest run ${rootOption}`,
+      })
+      const selected = path.join(fixture.root, 'packages', 'foo', 'src', 'selected.test.ts')
+      const outside = path.join(fixture.root, 'src', 'outside.test.ts')
+      fs.rmSync(fixture.testFile)
+      fs.mkdirSync(path.dirname(selected), { recursive: true })
+      fs.mkdirSync(path.dirname(outside), { recursive: true })
+      fs.writeFileSync(selected, "test('selected', () => {})\n")
+      fs.writeFileSync(outside, "test('outside', () => {})\n")
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set(['vitest']),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.strictEqual(framework.validation.testFile, selected)
+        assert.ok(framework.validation.runnerArgs.includes('--root') ||
+          framework.validation.runnerArgs.includes('--root=packages/foo'))
+      } finally {
+        removeFixture(fixture.root)
+      }
+    })
+  }
 
   it('keeps Jest suffixes and disables retained leak detection for generated checks', () => {
     const fixture = createRepositoryFixture({
@@ -263,6 +356,29 @@ describe('test optimization validation manifest scaffold', () => {
       assert.match(scenario.testIdentities[0].file, /\.spec\.js$/)
       assert.ok(command.argv.includes('--detectLeaks=true'))
       assert.ok(command.argv.includes('--detectLeaks=false'))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('requires setup instead of interpreting Jest projects', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'jest',
+      script: 'jest --projects packages/app',
+    })
+    const selected = path.join(fixture.root, 'packages', 'app', 'example.test.js')
+    fs.rmSync(fixture.testFile)
+    fs.mkdirSync(path.dirname(selected), { recursive: true })
+    fs.writeFileSync(selected, "test('works', () => {})\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /--projects/)
+      assert.strictEqual(framework.validation, undefined)
     } finally {
       removeFixture(fixture.root)
     }
@@ -297,6 +413,50 @@ describe('test optimization validation manifest scaffold', () => {
         'cypress.custom.js',
         '--e2e',
       ])
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('requires setup when every Cypress representative needs a localhost application', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cypress',
+      testSource: [
+        "describe('kitchensink', () => {",
+        "  it('loads the app', () => cy.visit('http://localhost:8080/commands/actions'))",
+        '})',
+      ].join('\n'),
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cypress']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /localhost application/)
+      assert.match(framework.notes[0], /discovery will not start/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('prefers a self-contained Cypress spec over one requiring localhost', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cypress',
+      testSource: "it('loads the app', () => cy.visit('http://127.0.0.1:8080'))\n",
+    })
+    const selfContained = path.join(fixture.root, 'cypress', 'e2e', 'unit.cy.js')
+    fs.writeFileSync(selfContained, "it('works', () => expect(true).to.equal(true))\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cypress']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.strictEqual(framework.validation.testFile, selfContained)
     } finally {
       removeFixture(fixture.root)
     }
@@ -346,7 +506,7 @@ describe('test optimization validation manifest scaffold', () => {
         '--check-leaks',
       ])
       assert.ok(framework.project.configFiles.includes(path.join(fixture.root, 'test', 'before.mjs')))
-      assert.match(framework.generatedTestStrategy.scenarios[0].testIdentities[0].file, /\.test\.js$/)
+      assert.match(framework.generatedTestStrategy.scenarios[0].testIdentities[0].file, /\.test\.mjs$/)
     } finally {
       removeFixture(fixture.root)
     }

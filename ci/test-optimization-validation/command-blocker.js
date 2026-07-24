@@ -4,6 +4,9 @@ const { stripAnsi } = require('./test-output')
 
 const FILESYSTEM_PERMISSION_PATTERN = /\b(?:EACCES|EPERM|Operation not permitted|Permission denied)\b/i
 const LOCAL_SOCKET_PATTERN = /\b(?:127\.0\.0\.1|localhost|listen)\b/i
+const CONNECTION_REFUSED_PATTERN = /\bECONNREFUSED\b|\bconnection refused\b/i
+const NO_TESTS_FOUND_PATTERN =
+  /\b(?:No test files? found|No tests? found|No test files? were found|0 tests? collected)\b/i
 const MODULE_OR_TRANSFORM_PATTERN =
   /\b(?:Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath\b[\s\S]*\bnot defined by "exports"|Could not resolve|transform failed)\b/i
 const CYPRESS_BINARY_PATTERN =
@@ -60,6 +63,30 @@ function getCommandBlocker (result, options = {}) {
         /127\.0\.0\.1|localhost|listen|EACCES|EPERM|Operation not permitted|Permission denied/i
       ),
       blockedByExecutionEnvironment: true,
+    }
+  }
+  if (options.framework === 'cypress' && result.exitCode !== 0 &&
+    CONNECTION_REFUSED_PATTERN.test(output) && LOCAL_SOCKET_PATTERN.test(output)) {
+    return {
+      kind: 'cypress-application-unavailable',
+      summary: 'The selected Cypress spec could not connect to its localhost application. Discovery does not start ' +
+        'customer services, so no Test Optimization conclusion was reached.',
+      recommendation: 'Start the application through the project\'s normal setup, confirm the selected Cypress spec ' +
+        'passes normally, then render and approve a fresh validation plan.',
+      signals: getMatchingLines(output, /ECONNREFUSED|connection refused|127\.0\.0\.1|localhost/i),
+      blockedByProjectSetup: true,
+    }
+  }
+  if (options.testsRan !== true && NO_TESTS_FOUND_PATTERN.test(output)) {
+    return {
+      kind: 'no-tests-collected',
+      summary: 'The selected representative was not collected by the project test runner. No Test Optimization ' +
+        'conclusion was reached.',
+      recommendation: 'Use the project\'s normal configuration to make a single runtime test collectible, then ' +
+        'create a fresh validation plan. Type-only tests and files outside the runner\'s include rules are not valid ' +
+        'representatives.',
+      signals: getMatchingLines(output, NO_TESTS_FOUND_PATTERN),
+      blockedByProjectSetup: true,
     }
   }
 

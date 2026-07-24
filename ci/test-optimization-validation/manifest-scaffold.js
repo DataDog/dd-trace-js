@@ -56,10 +56,14 @@ const CONFIG_PATTERNS = {
   playwright: playwright.CONFIG_PATTERN,
   vitest: /^(?:vite|vitest)\.config\.[cm]?[jt]s$/,
 }
-const TEST_FILE_PATTERN =
-  /^(?:test\.[cm]?[jt]sx?|.+[._-](?:test|spec)\.[cm]?[jt]sx?)$/
+const TEST_FILE_PATTERN = /^.+[._-](?:test|spec)\.[cm]?[jt]sx?$/
+const BARE_TEST_FILE_PATTERN = /^test\.[cm]?[jt]sx?$/
+const TYPE_ONLY_TEST_PATTERN = /\.(?:test|spec)-d\.[cm]?tsx?$|\.d\.[cm]?ts$/i
+const TYPE_ONLY_DIRECTORY_PATTERN = /(?:^|\/)(?:type[-_]?tests?|typetests?|test-dts?)(?:\/|$)/i
 const LOCAL_SOCKET_PATTERN =
   /(?:\bcreateServer\s*\(|\.listen\s*\(|\b(?:localhost|127\.0\.0\.1)\b|\bcy\.(?:visit|request)\s*\()/
+const CYPRESS_LOCAL_ORIGIN_PATTERN =
+  /\bcy\.(?:visit|request)\s*\([\s\S]{0,512}\b(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?=[:/'"`\s}])/i
 
 /**
  * Creates a schema-valid data-only manifest without executing project code.
@@ -154,35 +158,6 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     }
   }
 
-  const commandRoots = getRunnerSearchRoots(framework, detection.command, projectRoot, repositoryRoot)
-  const representativeRoot = commandRoots[0] || findPreferredRepresentativeRoot(projectRoot, repositoryRoot)
-  const representativePackage = readJson(path.join(representativeRoot, 'package.json')) || packageJson.json
-  const projectFiles = collectProjectFiles(projectRoot)
-  const candidateFiles = representativeRoot === projectRoot
-    ? projectFiles
-    : collectProjectFiles(representativeRoot)
-  const candidate = selectRepresentativeTest(
-    candidateFiles,
-    framework,
-    representativeRoot,
-    representativePackage.name
-  )
-  if (!candidate) {
-    return {
-      ...base,
-      status: 'requires_manual_setup',
-      notes: [
-        `No single ${detection.name} test file could be selected confidently. Choose a normal framework-owned ` +
-        'test file or validate this framework manually.',
-      ],
-    }
-  }
-
-  const generatedTestStrategy = buildGeneratedTestStrategy({
-    framework,
-    projectRoot,
-    representative: candidate.path,
-  })
   const runnerContract = getRunnerContract(framework, detection.command, projectRoot, repositoryRoot)
   if (runnerContract.error) {
     return {
@@ -194,6 +169,47 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       ],
     }
   }
+  const commandRoots = getRunnerSearchRoots(framework, detection.command, projectRoot, repositoryRoot)
+  const representativeRoot = commandRoots[0] || findPreferredRepresentativeRoot(projectRoot, repositoryRoot)
+  const representativePackage = readJson(path.join(representativeRoot, 'package.json')) || packageJson.json
+  const projectFiles = collectProjectFiles(projectRoot)
+  const candidateFiles = representativeRoot === projectRoot
+    ? projectFiles
+    : collectProjectFiles(representativeRoot)
+  const candidate = selectRepresentativeTest(
+    candidateFiles,
+    framework,
+    representativeRoot,
+    representativePackage.name,
+    commandRoots.length > 0
+  )
+  if (!candidate) {
+    return {
+      ...base,
+      status: 'requires_manual_setup',
+      notes: [
+        `No single ${detection.name} test file could be selected confidently. Choose a normal framework-owned ` +
+        'test file or validate this framework manually.',
+      ],
+    }
+  }
+  if (candidate.requiresExternalService) {
+    return {
+      ...base,
+      status: 'requires_manual_setup',
+      notes: [
+        `No self-contained ${detection.name} spec could be selected. The available spec accesses a localhost ` +
+        'application that discovery will not start. Start the application through the project\'s normal setup and ' +
+        'validate Cypress manually, or add a self-contained spec before creating a fresh plan.',
+      ],
+    }
+  }
+
+  const generatedTestStrategy = buildGeneratedTestStrategy({
+    framework,
+    projectRoot,
+    representative: candidate.path,
+  })
   const configFiles = [...new Set([
     ...runnerContract.inputFiles,
     ...projectFiles.filter(filename => CONFIG_PATTERNS[framework]?.test(path.basename(filename))).slice(0, 5),
@@ -433,23 +449,30 @@ function buildGeneratedTestStrategy ({ framework, projectRoot, representative })
  * @param {string} framework framework name
  * @param {string} projectRoot project root
  * @param {string} packageName project package name
- * @returns {{path: string, requiresLocalSocket: boolean}|undefined} selected test
+ * @param {boolean} allowDirectoryConvention whether a literal runner selector chose this root
+ * @returns {{path: string, requiresExternalService: boolean, requiresLocalSocket: boolean}|undefined} selected test
  */
-function selectRepresentativeTest (files, framework, projectRoot, packageName) {
+function selectRepresentativeTest (files, framework, projectRoot, packageName, allowDirectoryConvention) {
   const candidates = []
   for (const filename of files) {
-    if (!isTestFile(filename, framework, projectRoot)) continue
     const source = readText(filename)
-    if (source === undefined || hasConflictingFramework(source, framework)) continue
+    if (source === undefined ||
+      !isTestFile(filename, source, framework, projectRoot, allowDirectoryConvention) ||
+      hasConflictingFramework(source, framework)) continue
     if (framework !== 'cucumber' && getStaticTestCount(source) === 0) continue
     if (!hasFrameworkOwnership(filename, source, framework, packageName)) continue
     candidates.push({
       path: filename,
       rank: getTestRank(filename, source, projectRoot),
+      requiresExternalService: framework === 'cypress' && CYPRESS_LOCAL_ORIGIN_PATTERN.test(source),
       requiresLocalSocket: LOCAL_SOCKET_PATTERN.test(source),
     })
   }
-  candidates.sort((left, right) => left.rank - right.rank || left.path.localeCompare(right.path))
+  candidates.sort((left, right) => {
+    return Number(left.requiresExternalService) - Number(right.requiresExternalService) ||
+      left.rank - right.rank ||
+      left.path.localeCompare(right.path)
+  })
   return candidates[0]
 }
 
@@ -457,14 +480,17 @@ function selectRepresentativeTest (files, framework, projectRoot, packageName) {
  * Reports whether a file follows a selected framework's test convention.
  *
  * @param {string} filename candidate file
+ * @param {string} source candidate source
  * @param {string} framework framework name
  * @param {string} projectRoot project root
+ * @param {boolean} allowDirectoryConvention whether a literal runner selector chose this root
  * @returns {boolean} whether the file is a candidate
  */
-function isTestFile (filename, framework, projectRoot) {
+function isTestFile (filename, source, framework, projectRoot, allowDirectoryConvention) {
   const basename = path.basename(filename)
   const normalized = filename.replaceAll('\\', '/')
   if (normalized.includes('/dd-test-optimization-validation-')) return false
+  if (TYPE_ONLY_TEST_PATTERN.test(basename) || TYPE_ONLY_DIRECTORY_PATTERN.test(normalized)) return false
   if (framework === 'cucumber') return cucumber.isTestFile(filename)
   if (framework === 'cypress') return cypress.isTestFile(basename, path.dirname(filename), projectRoot)
   if (framework === 'playwright') return playwright.isTestFile(basename, path.dirname(filename), projectRoot)
@@ -473,8 +499,33 @@ function isTestFile (filename, framework, projectRoot) {
     path.basename(projectRoot),
     ...path.relative(projectRoot, path.dirname(filename)).split(path.sep),
   ]
-  return directories.some(directory => ['__tests__', 'spec', 'test', 'tests'].includes(directory)) &&
-    /\.[cm]?[jt]sx?$/.test(basename)
+  const inTestDirectory = directories.some(directory => {
+    return ['__tests__', 'spec', 'test', 'tests'].includes(directory)
+  })
+  if (BARE_TEST_FILE_PATTERN.test(basename)) {
+    return inTestDirectory || hasExplicitFrameworkImport(source, framework)
+  }
+  return allowDirectoryConvention && inTestDirectory && /\.[cm]?[jt]sx?$/.test(basename)
+}
+
+/**
+ * Reports whether an unconventional test file imports the selected framework directly.
+ *
+ * @param {string} source candidate source
+ * @param {string} framework framework name
+ * @returns {boolean} whether ownership is explicit
+ */
+function hasExplicitFrameworkImport (source, framework) {
+  if (framework === 'vitest') {
+    return /(?:from\s+|require\s*\(\s*)['"]vitest['"]/.test(source)
+  }
+  if (framework === 'jest') {
+    return /(?:from\s+|require\s*\(\s*)['"]@jest\/globals['"]/.test(source)
+  }
+  if (framework === 'mocha') {
+    return /(?:from\s+|require\s*\(\s*)['"]mocha['"]/.test(source)
+  }
+  return false
 }
 
 /**
@@ -715,7 +766,9 @@ function getTestExtension (framework, representative) {
   if (framework === 'cypress') return cypress.getTestExtension(representative)
   if (framework === 'playwright') return playwright.getTestExtension(representative)
   const match = /((?:[.-](?:test|spec))\.[cm]?[jt]sx?)$/.exec(representative)
-  return match?.[1] || '.test.js'
+  if (match) return match[1]
+  const moduleExtension = /\.((?:[cm]js|[cm]ts))$/.exec(representative)?.[1]
+  return moduleExtension ? `.test.${moduleExtension}` : '.test.js'
 }
 
 /**

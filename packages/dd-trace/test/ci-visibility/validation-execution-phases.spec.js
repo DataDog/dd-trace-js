@@ -273,6 +273,47 @@ describe('test optimization validation execution boundary', () => {
     assert.strictEqual(result.preflight.observedTestCount, null)
   })
 
+  it('classifies a representative that the runner does not collect as project setup', async () => {
+    fs.writeFileSync(fixture.runner, "console.error('No tests found')\nprocess.exit(1)\n")
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.failure.evidence.domain, 'project_setup')
+    assert.strictEqual(result.failure.evidence.commandFailure.kind, 'no-tests-collected')
+    assert.match(result.failure.evidence.commandFailure.recommendation, /runtime test collectible/)
+  })
+
+  it('classifies a refused Cypress application connection as project setup', async () => {
+    const cypressFixture = createRepositoryFixture({
+      framework: 'cypress',
+      runnerSource: [
+        "console.error('CypressError: connect ECONNREFUSED 127.0.0.1:8080')",
+        'process.exit(1)',
+      ].join('\n'),
+    })
+    const cypressManifest = createLoadedManifest(cypressFixture.root, 'cypress')
+    const cypressOut = path.join(cypressFixture.root, 'dd-test-optimization-validation-results')
+    fs.mkdirSync(cypressOut, { recursive: true })
+    try {
+      const result = await runFrameworkPreflight({
+        framework: cypressManifest.frameworks[0],
+        options: { repositoryRoot: cypressFixture.root },
+        out: cypressOut,
+      })
+
+      assert.strictEqual(result.ok, false)
+      assert.strictEqual(result.failure.evidence.domain, 'project_setup')
+      assert.strictEqual(result.failure.evidence.commandFailure.kind, 'cypress-application-unavailable')
+      assert.match(result.failure.evidence.commandFailure.recommendation, /Start the application/)
+    } finally {
+      removeFixture(cypressFixture.root)
+    }
+  })
+
   it('accepts an exact generated test when the reporter omits the test count', async () => {
     fs.writeFileSync(fixture.runner, 'process.exit(0)\n')
     const result = await verifyGeneratedTestStrategy({

@@ -125,7 +125,7 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
       const unavailable = getUnavailableExecutable(basic)
       const status = unavailable
         ? `local validation will be incomplete because ${inline(unavailable)} is unavailable`
-        : 'ready'
+        : 'eligible for approved clean preflight; runtime prerequisites are unverified'
       lines.push(
         `Status: ${status}.`,
         `Representative test: ${inline(relative(root, framework.validation.testFile))}`,

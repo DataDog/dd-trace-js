@@ -51,6 +51,11 @@ The scaffold performs bounded static discovery. For each supported framework, it
 
 Live adapters exist for Cucumber, Cypress, Jest, Mocha, Playwright, and Vitest.
 
+The scaffold excludes type declarations and explicit type-test conventions. For Jest, Mocha, and Vitest it prefers
+normal `*.test.*` or `*.spec.*` files. A non-suffixed file is eligible only under a literal conventional test root; a
+bare `test.*` file may also directly import the selected framework. If every confident Cypress representative directly
+accesses a localhost application, that framework requires setup; discovery does not start the application.
+
 The manifest is data, not an execution plan. Do not edit the scaffolded runner, representative test, generated-test
 strategy, or validator settings. Do not add `argv`, shell commands, package scripts, setup commands, fallback tests, or
 wrapper commands. The only agent-edited section is `ciWiring`. If the scaffold cannot select a direct runner or one
@@ -149,6 +154,10 @@ Lead with the strongest actionable conclusion:
   artifact.
 - **Setup or sandbox blocker:** no library conclusion was reached. Name the exact missing prerequisite and ask the
   customer to prepare the repository normally before retrying.
+- **Clean preflight reports no tests:** the representative is not collectible under the project configuration. This is
+  a selection or project-setup blocker, not a `dd-trace` failure.
+- **Cypress clean preflight reports localhost `ECONNREFUSED`:** the project application is unavailable. Start it through
+  the project's normal setup before creating a fresh plan; the validator does not start it.
 
 Advanced checks are useful after Basic Reporting and do not depend on a conclusive CI audit.
 

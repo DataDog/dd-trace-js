@@ -94,6 +94,23 @@ describe('test optimization validation report', () => {
     assert.match(report, /Local library behavior was not validated/)
   })
 
+  it('leads with the specific project setup action', () => {
+    write([
+      result('all', 'skip', 'The selected Cypress spec needs a localhost application.', {
+        blockedByProjectSetup: true,
+        recommendation: 'Start the project application before validating this Cypress spec.',
+        validationIncomplete: true,
+      }),
+    ], {
+      executionStatus: 'project_setup_required',
+      validationCoverage: 'partial',
+      validatorExitCode: 2,
+    })
+    const report = readReport()
+
+    assert.match(report, /Start the project application before validating this Cypress spec/)
+  })
+
   it('makes a possible library bug suitable for an engineering debugging session', () => {
     const artifact = path.join(out, 'mocha-root', 'basic-reporting', 'debug', 'command.json')
     fs.mkdirSync(path.dirname(artifact), { recursive: true })
