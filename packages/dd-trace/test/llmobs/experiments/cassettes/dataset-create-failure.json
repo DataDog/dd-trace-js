@@ -1,0 +1,39 @@
+[
+  {
+    "scope": "https://api.datadoghq.com",
+    "method": "POST",
+    "path": "/api/v2/llm-obs/v1/projects",
+    "body": {
+      "data": {
+        "type": "projects",
+        "attributes": {
+          "name": "my-app"
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "data": {
+        "id": "proj"
+      }
+    },
+    "rawHeaders": ["Content-Type", "application/json"]
+  },
+  {
+    "scope": "https://api.datadoghq.com",
+    "method": "POST",
+    "path": "/api/v2/llm-obs/v1/proj/datasets",
+    "body": {
+      "data": {
+        "type": "datasets",
+        "attributes": {
+          "name": "demo",
+          "description": ""
+        }
+      }
+    },
+    "status": 500,
+    "response": "boom",
+    "rawHeaders": ["Content-Type", "text/plain"]
+  }
+]
