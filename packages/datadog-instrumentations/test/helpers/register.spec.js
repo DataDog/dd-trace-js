@@ -8,6 +8,7 @@ const sinon = require('sinon')
 describe('register', () => {
   let hooksMock
   let HookMock
+  let instrumentationsMock
   let originalModuleProtoRequire
 
   const clearRegisterCache = () => {
@@ -29,6 +30,7 @@ describe('register', () => {
     }
 
     HookMock = sinon.stub()
+    instrumentationsMock = {}
 
     const registerPath = require.resolve('../../src/helpers/register')
     originalModuleProtoRequire = Module.prototype.require
@@ -38,6 +40,7 @@ describe('register', () => {
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
+          './instrumentations': instrumentationsMock,
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }
@@ -81,5 +84,29 @@ describe('register', () => {
 
     sinon.assert.notCalled(hooksMock['@confluentinc/kafka-javascript'].fn)
     sinon.assert.notCalled(hooksMock['mongodb-core'].fn)
+  })
+
+  it('should only unwrap an ESM default export after matching the instrumentation file', () => {
+    const patch = sinon.stub()
+    hooksMock.test = {
+      esmFirst: true,
+      fn: () => {
+        instrumentationsMock.test = [{
+          file: 'target.js',
+          versions: ['>=1'],
+          hook: patch,
+          patchDefault: true,
+        }]
+      },
+    }
+
+    loadRegisterWithEnv()
+
+    const callback = HookMock.lastCall.args[2]
+    const moduleExports = { default: 'default export', named: 'named export' }
+    const result = callback(moduleExports, 'test/other.js', '/path/to/module', '1.0.0', true)
+
+    assert.strictEqual(result, moduleExports)
+    sinon.assert.notCalled(patch)
   })
 })
