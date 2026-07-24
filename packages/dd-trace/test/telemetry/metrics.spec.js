@@ -6,6 +6,8 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+
 require('../setup/core')
 
 describe('metrics', () => {
@@ -58,7 +60,6 @@ describe('metrics', () => {
 
       assert.deepStrictEqual(manager.toJSON(), [
         {
-          distributions: undefined,
           metrics: {
             namespace: 'test1',
             series: [
@@ -74,9 +75,9 @@ describe('metrics', () => {
               },
             ],
           },
+          sketches: undefined,
         },
         {
-          distributions: undefined,
           metrics: {
             namespace: 'test2',
             series: [
@@ -92,6 +93,7 @@ describe('metrics', () => {
               },
             ],
           },
+          sketches: undefined,
         },
       ])
     })
@@ -150,6 +152,43 @@ describe('metrics', () => {
           },
         ],
       })
+    })
+
+    it('should send sketches', () => {
+      const manager = new metrics.NamespaceManager()
+
+      manager.namespace('test').distribution('duration', { foo: 'bar' }).track(42)
+
+      const config = {
+        hostname: 'localhost',
+        port: 12345,
+        tags: {
+          'runtime-id': 'abc123',
+        },
+      }
+      const application = {
+        language_name: 'nodejs',
+        tracer_version: '1.2.3',
+      }
+      const host = {}
+
+      manager.send(config, application, host)
+
+      sinon.assert.calledOnce(sendData)
+      assert.strictEqual(sendData.firstCall.args[3], 'sketches')
+
+      const payload = sendData.firstCall.args[4]
+      assert.strictEqual(payload.namespace, 'test')
+      assert.strictEqual(payload.series.length, 1)
+
+      const [series] = payload.series
+      assert.strictEqual(series.metric, 'duration')
+      assert.strictEqual(series.common, true)
+      assert.deepStrictEqual(series.tags, ['foo:bar'])
+      assert.strictEqual(typeof series.sketch_b64, 'string')
+
+      const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))
+      assert.strictEqual(sketch.count, 1)
     })
 
     it('should not send empty metrics', () => {
@@ -238,7 +277,6 @@ describe('metrics', () => {
       ns.count('foo', { bux: 'bax' }).inc()
 
       assert.deepStrictEqual(ns.toJSON(), {
-        distributions: undefined,
         metrics: {
           namespace: 'test',
           series: [
@@ -264,6 +302,7 @@ describe('metrics', () => {
             },
           ],
         },
+        sketches: undefined,
       })
     })
 
@@ -274,8 +313,8 @@ describe('metrics', () => {
       metric.reset()
 
       assert.deepStrictEqual(ns.toJSON(), {
-        distributions: undefined,
         metrics: undefined,
+        sketches: undefined,
       })
     })
   })
@@ -418,18 +457,16 @@ describe('metrics', () => {
       })
 
       assert.strictEqual(metric.type, 'distribution')
-      const expected = {
-        namespace: 'tracers',
-        metric: 'name',
-        tags: [
-          'foo:bar',
-          'baz:buz',
-        ],
-        common: true,
-        points: [],
-      }
-      Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
-      assert.deepStrictEqual(metric, expected)
+      assert.strictEqual(metric.namespace, 'tracers')
+      assert.strictEqual(metric.metric, 'name')
+      assert.deepStrictEqual(metric.tags, [
+        'foo:bar',
+        'baz:buz',
+      ])
+      assert.strictEqual(metric.common, true)
+      assert.deepStrictEqual(metric.points, [])
+      assert.strictEqual(metric.pointCount, 0)
+      assert.strictEqual(metric.hasPoints(), false)
     })
 
     it('should track', () => {
@@ -440,11 +477,22 @@ describe('metrics', () => {
       metric.track(50)
       metric.track(300)
 
-      assert.deepStrictEqual(metric.points, [
-        100,
-        50,
-        300,
-      ])
+      assert.strictEqual(metric.pointCount, 3)
+      assert.strictEqual(metric.hasPoints(), true)
+      assert.strictEqual(metric.sketch.count, 3)
+    })
+
+    it('should ignore invalid values', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      metric.track('100')
+      metric.track(Number.NaN)
+      metric.track(Number.POSITIVE_INFINITY)
+
+      assert.strictEqual(metric.pointCount, 0)
+      assert.strictEqual(metric.hasPoints(), false)
+      assert.strictEqual(metric.sketch.count, 0)
     })
 
     it('should reset state', () => {
@@ -454,7 +502,9 @@ describe('metrics', () => {
       metric.track(1)
       metric.reset()
 
-      assert.deepStrictEqual(metric.points, [])
+      assert.strictEqual(metric.pointCount, 0)
+      assert.strictEqual(metric.hasPoints(), false)
+      assert.strictEqual(metric.sketch.count, 0)
     })
 
     it('should convert to json', () => {
@@ -465,18 +515,19 @@ describe('metrics', () => {
       })
 
       metric.track(123)
+      metric.track(456)
 
-      assert.deepStrictEqual(metric.toJSON(), {
-        metric: 'name',
-        points: [
-          123,
-        ],
-        common: true,
-        tags: [
-          'foo:bar',
-          'baz:buz',
-        ],
-      })
+      const json = metric.toJSON()
+      const sketch = DDSketch.fromProto(Buffer.from(json.sketch_b64, 'base64'))
+
+      assert.strictEqual(json.metric, 'name')
+      assert.strictEqual(typeof json.sketch_b64, 'string')
+      assert.strictEqual(json.common, true)
+      assert.deepStrictEqual(json.tags, [
+        'foo:bar',
+        'baz:buz',
+      ])
+      assert.strictEqual(sketch.count, 2)
     })
   })
 
