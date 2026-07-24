@@ -265,6 +265,8 @@ ${build.initialOptions.banner.js}`
         }
       }
       // The file namespace is used when requiring files from disk in userland
+      if (extracted.pkg === null) return
+
       let pathToPackageJson
       try {
         // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
