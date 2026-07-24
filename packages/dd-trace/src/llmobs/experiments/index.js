@@ -42,7 +42,7 @@ class Experiments {
   createDataset (name, descriptionOrOptions = '') {
     const options = typeof descriptionOrOptions === 'string'
       ? { description: descriptionOrOptions }
-      : (descriptionOrOptions ? { ...descriptionOrOptions } : {})
+      : (descriptionOrOptions ?? {})
     const dataset = new Dataset(this.#client, name, options.description ?? '')
     const recordIds = new Set()
     for (const record of options.records ?? []) {
