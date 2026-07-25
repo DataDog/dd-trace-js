@@ -37,6 +37,11 @@ const scenarioConfig = {
       './second.e2e.js',
     ]],
   },
+  preFrameworkFailure: {
+    maxInstances: 1,
+    reporters: ['webdriverio-missing-reporter'],
+    specs: ['./first.e2e.js'],
+  },
   delay: {
     maxInstances: 1,
     mochaOpts: {

@@ -296,6 +296,65 @@ describe('webdriverio instrumentation', () => {
       testSessionFinishCh.unsubscribe(onSessionFinish)
     }
   })
+
+  it('reports a worker failure before Mocha loads', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionStarts = []
+    const sessionFinishes = []
+    let configurationRequests = 0
+
+    function onTestFinish () {}
+    function onLibraryConfiguration (request) {
+      configurationRequests++
+      setImmediate(() => request.onDone({ repositoryRoot: process.cwd() }))
+    }
+    function onSessionStart (event) {
+      sessionStarts.push(event)
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, path.join(process.cwd(), 'first.spec.js'))
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      const shutdownContext = { self: localRunner }
+      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
+      await shutdownContext.asyncEndPromise
+
+      assert.strictEqual(configurationRequests, 1)
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].frameworkVersion, undefined)
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
 })
 
 /**

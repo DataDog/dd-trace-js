@@ -214,7 +214,7 @@ function completeCoordinatorInitialization (state, response) {
  * Settings for advanced features are intentionally ignored while WebdriverIO support is basic-reporting only.
  *
  * @param {CoordinatorState} state
- * @param {string} frameworkVersion
+ * @param {string|undefined} frameworkVersion
  * @param {(configuration: object) => void} [onDone]
  * @returns {void}
  */
@@ -507,8 +507,16 @@ function getSessionStatus (state) {
  * @returns {void}
  */
 function finishCoordinator (state, error, onDone) {
-  if (state.finished || !state.sessionStarted) {
+  if (state.finished) {
     onDone()
+    return
+  }
+  if (!state.sessionStarted) {
+    if (!error && getSessionStatus(state) !== 'fail') {
+      onDone()
+      return
+    }
+    initializeCoordinator(state, state.frameworkVersion, () => finishCoordinator(state, error, onDone))
     return
   }
   state.finished = true

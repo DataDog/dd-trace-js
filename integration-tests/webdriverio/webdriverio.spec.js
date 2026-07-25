@@ -324,6 +324,14 @@ for (const version of versions) {
       })
     })
 
+    it('reports failures before Mocha loads', async () => {
+      await runScenario('preFrameworkFailure', 0, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 0)
+        assert.strictEqual(tests.length, 0)
+      }, 1)
+    })
+
     it('reports sequential workers as one session', async () => {
       await runScenario('serial', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)
