@@ -31,6 +31,7 @@ const workerFinishCh = channel('ci:mocha:worker:finish')
 
 const config = {}
 const runnerToFiles = new WeakMap()
+const runnerToFailedHookFiles = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 let configurationRequestId = 0
 
@@ -218,6 +219,13 @@ function getWebdriverioSuiteResults (runner) {
     }
   })
 
+  for (const file of runnerToFailedHookFiles.get(runner) || []) {
+    const result = resultsByFile.get(file)
+    if (result) {
+      result.status = 'fail'
+    }
+  }
+
   const results = []
   let hasFailedSuite = false
   for (const result of resultsByFile.values()) {
@@ -367,6 +375,13 @@ addHook({
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler(config))
 
+    const failedHookFiles = new Set()
+    runnerToFailedHookFiles.set(this, failedHookFiles)
+    this.on('fail', runnable => {
+      if (runnable.type === 'hook' && runnable.file) {
+        failedHookFiles.add(runnable.file)
+      }
+    })
     this.on('fail', getOnFailHandler(false, config))
 
     this.on('pending', getOnPendingHandler())

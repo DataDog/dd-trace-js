@@ -61,6 +61,13 @@ const scenarioConfig = {
       './second.e2e.js',
     ]],
   },
+  hookFailure: {
+    maxInstances: 1,
+    specs: [[
+      './hook-fail.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
   multipleCapabilities: {
     capabilities: [
       { browserName: 'chrome' },

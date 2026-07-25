@@ -34,6 +34,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_FINAL_STATUS,
   TEST_HAS_DYNAMIC_NAME,
+  getTestSuiteExecutionKey,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -88,7 +89,13 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, isUnskippable, isForcedToRun, itrCorrelationId } = ctx
+      const {
+        testSuiteAbsolutePath,
+        testSuiteExecutionId,
+        isUnskippable,
+        isForcedToRun,
+        itrCorrelationId,
+      } = ctx
 
       // If the test module span is undefined, the plugin has not been initialized correctly and we bail out
       if (!this.testModuleSpan) {
@@ -144,8 +151,9 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
-      this._testSuiteSpansByTestSuite.set(testSuite, testSuiteSpan)
-      this._exportPendingWorkerTracesForTestSuite(testSuite)
+      const testSuiteKey = getTestSuiteExecutionKey(testSuite, testSuiteExecutionId)
+      this._testSuiteSpansByTestSuite.set(testSuiteKey, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuiteKey)
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {

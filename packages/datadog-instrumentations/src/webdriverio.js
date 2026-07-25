@@ -5,7 +5,10 @@ const { fileURLToPath } = require('node:url')
 
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
-const { MOCHA_WORKER_TRACE_PAYLOAD_CODE } = require('../../dd-trace/src/plugins/util/test')
+const {
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  TEST_SUITE_EXECUTION_ID,
+} = require('../../dd-trace/src/plugins/util/test')
 const { channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
@@ -51,6 +54,7 @@ const coordinatorStates = new WeakMap()
  * @property {object} worker
  * @property {string[]} specs
  * @property {Map<string, object>} suiteContexts
+ * @property {string} testSuiteExecutionId
  * @property {boolean|undefined} hasTests
  * @property {number|undefined} exitCode
  * @property {number|undefined} retries
@@ -67,6 +71,9 @@ const coordinatorStates = new WeakMap()
  * @property {boolean} sessionStarted
  * @property {boolean} finished
  * @property {string|undefined} frameworkVersion
+ * @property {number} activeWorkers
+ * @property {number} maxActiveWorkers
+ * @property {number} nextWorkerId
  * @property {Set<WorkerRecord>} workers
  * @property {Map<object, string>} suiteStatuses
  */
@@ -134,6 +141,9 @@ function getCoordinatorState (localRunner) {
     sessionStarted: false,
     finished: false,
     frameworkVersion: undefined,
+    activeWorkers: 0,
+    maxActiveWorkers: 0,
+    nextWorkerId: 0,
     workers: new Set(),
     suiteStatuses: new Map(),
   }
@@ -232,7 +242,7 @@ function initializeCoordinator (state, frameworkVersion, onDone) {
     libraryConfigurationCh.runStores({
       basicReportingOnly: true,
       frameworkVersion,
-      isParallel: true,
+      isParallel: state.maxActiveWorkers > 1,
       onDone: response => state.asyncResource.runInAsyncScope(
         completeCoordinatorInitialization,
         undefined,
@@ -260,7 +270,10 @@ function startWorkerSuites (workerRecord, files) {
       continue
     }
 
-    const suiteContext = { testSuiteAbsolutePath: file }
+    const suiteContext = {
+      testSuiteAbsolutePath: file,
+      testSuiteExecutionId: workerRecord.testSuiteExecutionId,
+    }
     testSuiteStartCh.runStores(suiteContext, () => {})
     workerRecord.suiteContexts.set(file, suiteContext)
   }
@@ -371,7 +384,10 @@ function handleWorkerMessage (state, workerRecord, message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-      workerReportTraceCh.publish(payload)
+      workerReportTraceCh.publish({
+        traces: payload,
+        [TEST_SUITE_EXECUTION_ID]: workerRecord.testSuiteExecutionId,
+      })
     }
     return
   }
@@ -408,6 +424,7 @@ function handleWorkerMessage (state, workerRecord, message) {
  * @returns {void}
  */
 function handleWorkerExit (state, workerRecord, exit) {
+  state.activeWorkers--
   workerRecord.exitCode = exit.exitCode
   workerRecord.retries = exit.retries
   if (!state.sessionStarted) {
@@ -436,9 +453,14 @@ function registerWorker (state, worker, specs) {
     worker,
     specs: normalizedSpecs,
     suiteContexts: new Map(),
+    testSuiteExecutionId: String(++state.nextWorkerId),
     hasTests: undefined,
     exitCode: undefined,
     retries: undefined,
+  }
+  state.activeWorkers++
+  if (state.activeWorkers > state.maxActiveWorkers) {
+    state.maxActiveWorkers = state.activeWorkers
   }
   state.workers.add(workerRecord)
 
@@ -456,8 +478,11 @@ function getSessionStatus (state) {
   let hasPassingSuite = false
 
   for (const workerRecord of state.workers) {
-    if (workerRecord.exitCode !== 0 && workerRecord.retries > 0) {
-      continue
+    if (workerRecord.exitCode !== undefined && workerRecord.exitCode !== 0) {
+      if (workerRecord.retries > 0) {
+        continue
+      }
+      return 'fail'
     }
     for (const suiteContext of workerRecord.suiteContexts.values()) {
       const status = state.suiteStatuses.get(suiteContext)
@@ -503,7 +528,7 @@ function finishCoordinator (state, error, onDone) {
   testSessionFinishCh.publish({
     status: error ? 'fail' : getSessionStatus(state),
     error,
-    isParallel: state.workers.size > 1,
+    isParallel: state.maxActiveWorkers > 1,
     onDone,
   })
 }

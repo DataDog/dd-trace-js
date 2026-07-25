@@ -62,6 +62,8 @@ const {
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_SUITE,
+  TEST_SUITE_EXECUTION_ID,
+  getTestSuiteExecutionKey,
   getFileAndLineNumberFromError,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
@@ -170,6 +172,7 @@ module.exports = class CiPlugin extends Plugin {
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
     this._pendingWorkerTracesByTestSuite = new Map()
+    this._workerTraceExecutionIds = new WeakMap()
     this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
@@ -393,10 +396,16 @@ module.exports = class CiPlugin extends Plugin {
       return onDone({ err: new Error('No modified tests could have been retrieved') })
     })
 
-    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, traces => {
+    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, payload => {
+      const { traces, [TEST_SUITE_EXECUTION_ID]: testSuiteExecutionId } = typeof payload === 'string'
+        ? { traces: payload }
+        : payload
       const formattedTraces = JSON.parse(traces)
 
       for (const trace of formattedTraces) {
+        if (testSuiteExecutionId) {
+          this._workerTraceExecutionIds.set(trace, testSuiteExecutionId)
+        }
         this._prepareWorkerTrace(trace)
         this._exportWorkerTraceOrBuffer(trace)
       }
@@ -599,8 +608,10 @@ module.exports = class CiPlugin extends Plugin {
       if (span.name !== 'cucumber.test' && span.name !== 'mocha.test') continue
 
       const testSuite = span.meta[TEST_SUITE]
-      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
-      if (!testSuiteSpan) return testSuite
+      const testSuiteExecutionId = this._workerTraceExecutionIds.get(trace)
+      const testSuiteKey = getTestSuiteExecutionKey(testSuite, testSuiteExecutionId)
+      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuiteKey)
+      if (!testSuiteSpan) return testSuiteKey
 
       const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
       span.meta = {
@@ -609,6 +620,7 @@ module.exports = class CiPlugin extends Plugin {
         ...getSessionRequestErrorTags(this.testSessionSpan),
       }
     }
+    this._workerTraceExecutionIds.delete(trace)
   }
 
   /**

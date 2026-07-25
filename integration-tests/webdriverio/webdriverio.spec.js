@@ -149,6 +149,20 @@ function assertEventHierarchy (session, module, suites, tests) {
 }
 
 /**
+ * Asserts each repeated suite execution owns exactly one test event.
+ *
+ * @param {object[]} suites
+ * @param {object[]} tests
+ * @returns {void}
+ */
+function assertOneTestPerSuiteExecution (suites, tests) {
+  assert.deepStrictEqual(
+    tests.map(test => test.test_suite_id.toString(10)).sort(),
+    suites.map(suite => suite.test_suite_id.toString(10)).sort()
+  )
+}
+
+/**
  * Extracts events and verifies the WebdriverIO run stayed in basic-reporting mode.
  *
  * @param {object[]} payloads
@@ -311,9 +325,10 @@ for (const version of versions) {
     })
 
     it('reports sequential workers as one session', async () => {
-      await runScenario('serial', 2, ({ suites, tests }) => {
+      await runScenario('serial', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)
         assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], undefined)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
       })
     })
@@ -324,6 +339,21 @@ for (const version of versions) {
         assert.strictEqual(tests.length, 2)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
       })
+    })
+
+    it('attributes a hook-only failure to its grouped spec', async () => {
+      await runScenario('hookFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 2)
+        assert.strictEqual(tests.length, 1)
+        assert.deepStrictEqual(
+          suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
+          [
+            ['first.e2e.js', 'pass'],
+            ['hook-fail.e2e.js', 'fail'],
+          ]
+        )
+      }, 1)
     })
 
     it('marks a spec filtered by mochaOpts.grep as skipped', async () => {
@@ -393,17 +423,32 @@ for (const version of versions) {
     it('reports whole-spec retries in one session', async () => {
       await runScenario('specFileRetries', 2, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], undefined)
         assert.strictEqual(suites.length, 2)
         assert.strictEqual(tests.length, 2)
         assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'pass'])
+        assertOneTestPerSuiteExecution(suites, tests)
+
+        const suiteStatusById = new Map(suites.map(suite => [
+          suite.test_suite_id.toString(10),
+          suite.meta[TEST_STATUS],
+        ]))
+        for (const test of tests) {
+          assert.strictEqual(
+            test.meta[TEST_STATUS],
+            suiteStatusById.get(test.test_suite_id.toString(10))
+          )
+        }
       })
     })
 
     it('reports multiple capabilities in one session', async () => {
-      await runScenario('multipleCapabilities', 2, ({ suites, tests }) => {
+      await runScenario('multipleCapabilities', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)
         assert.strictEqual(tests.length, 2)
+        assert.strictEqual(session.meta[MOCHA_IS_PARALLEL], 'true')
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
+        assertOneTestPerSuiteExecution(suites, tests)
       })
     })
   })

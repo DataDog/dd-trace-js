@@ -8,6 +8,10 @@ const path = require('node:path')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const {
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  TEST_SUITE_EXECUTION_ID,
+} = require('../../dd-trace/src/plugins/util/test')
+const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
   SUITE_FINISH,
@@ -48,11 +52,13 @@ describe('webdriverio instrumentation', () => {
     const testSuiteStartCh = channel('ci:mocha:test-suite:start')
     const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
     const testManagementTestsCh = channel('ci:mocha:test-management-tests')
+    const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
     const sessionStarts = []
     const sessionFinishes = []
     const suiteStarts = []
     const suiteFinishes = []
+    const workerTracePayloads = []
     let advancedFeatureRequests = 0
     let configurationRequests = 0
     const originalNodeOptions = process.env.NODE_OPTIONS
@@ -99,6 +105,9 @@ describe('webdriverio instrumentation', () => {
     function onSuiteFinish (event) {
       suiteFinishes.push(event)
     }
+    function onWorkerTrace (event) {
+      workerTracePayloads.push(event)
+    }
 
     testFinishCh.subscribe(onTestFinish)
     knownTestsCh.subscribe(onAdvancedFeatureRequest)
@@ -110,6 +119,7 @@ describe('webdriverio instrumentation', () => {
     testSuiteStartCh.subscribe(onSuiteStart)
     testSuiteFinishCh.subscribe(onSuiteFinish)
     testManagementTestsCh.subscribe(onAdvancedFeatureRequest)
+    workerReportTraceCh.subscribe(onWorkerTrace)
 
     try {
       require('../src/webdriverio')
@@ -152,6 +162,9 @@ describe('webdriverio instrumentation', () => {
       requestConfiguration(firstWorker, firstFile, 'first-request')
       requestConfiguration(secondWorker, secondFile, 'second-request')
       await new Promise(setImmediate)
+
+      firstWorker.emit('message', [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'first-trace'])
+      secondWorker.emit('message', [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'second-trace'])
 
       assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
@@ -201,6 +214,17 @@ describe('webdriverio instrumentation', () => {
         firstFile,
         secondFile,
       ])
+      assert.strictEqual(new Set(suiteStarts.map(({ testSuiteExecutionId }) => testSuiteExecutionId)).size, 2)
+      assert.deepStrictEqual(workerTracePayloads, [
+        {
+          traces: 'first-trace',
+          [TEST_SUITE_EXECUTION_ID]: suiteStarts[0].testSuiteExecutionId,
+        },
+        {
+          traces: 'second-trace',
+          [TEST_SUITE_EXECUTION_ID]: suiteStarts[1].testSuiteExecutionId,
+        },
+      ])
       assert.deepStrictEqual(suiteFinishes.map(({ status }) => status), ['fail', 'pass'])
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
@@ -213,11 +237,63 @@ describe('webdriverio instrumentation', () => {
       testSuiteStartCh.unsubscribe(onSuiteStart)
       testSuiteFinishCh.unsubscribe(onSuiteFinish)
       testManagementTestsCh.unsubscribe(onAdvancedFeatureRequest)
+      workerReportTraceCh.unsubscribe(onWorkerTrace)
       if (originalNodeOptions === undefined) {
         delete process.env.NODE_OPTIONS
       } else {
         process.env.NODE_OPTIONS = originalNodeOptions
       }
+    }
+  })
+
+  it('fails a terminal worker exit without marking sequential workers as parallel', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const firstFile = path.join(process.cwd(), 'first.spec.js')
+      const secondFile = path.join(process.cwd(), 'second.spec.js')
+      const firstWorker = createWorker()
+      const secondWorker = createWorker()
+
+      registerWorker(localRunner, firstWorker, firstFile)
+      requestConfiguration(firstWorker, firstFile, 'first-request')
+      reportSuiteFinish(firstWorker, firstFile)
+      firstWorker.emit('exit', { exitCode: 0, retries: 0 })
+
+      registerWorker(localRunner, secondWorker, secondFile)
+      requestConfiguration(secondWorker, secondFile, 'second-request')
+      reportSuiteFinish(secondWorker, secondFile)
+      secondWorker.emit('exit', { exitCode: 1, retries: 0 })
+
+      const shutdownContext = { self: localRunner }
+      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
+      await shutdownContext.asyncEndPromise
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
     }
   })
 })
