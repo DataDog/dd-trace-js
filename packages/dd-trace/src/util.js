@@ -104,11 +104,9 @@ function getSegment (string, separator, index, fallback) {
 
 /**
  * Return the path portion of a request target, dropping any query string and fragment.
- * Scanning for both delimiters keeps the input string when there is nothing to strip;
- * a `split(/[?#]/)` equivalent allocates an array and a substring on every call.
+ * The two scans avoid the array and substring a `split(/[?#]/)` allocates per call.
  *
  * @param {string} target
- * @returns {string}
  */
 function stripQueryAndFragment (target) {
   let cut = target.indexOf('?')

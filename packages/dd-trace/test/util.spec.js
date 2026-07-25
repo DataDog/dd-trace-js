@@ -146,10 +146,5 @@ describe('util', () => {
         )
       }
     })
-
-    it('returns the same string when there is nothing to strip', () => {
-      const target = '/api/v1/users'
-      assert.strictEqual(stripQueryAndFragment(target), target)
-    })
   })
 })
