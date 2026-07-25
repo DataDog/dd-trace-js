@@ -793,8 +793,7 @@ function wrapRun (pl, isLatestVersion, version) {
       testFnCh.runStores(ctx, () => {
         promise = run.apply(this, args)
       })
-      // eslint-disable-next-line unicorn/no-async-promise-finally -- Detached finalizer preserves Cucumber's result.
-      promise.finally(async () => {
+      const finalize = async () => {
         if (!canAwaitRetries) {
           this.eventBroadcaster.removeListener('envelope', onEnvelope)
         }
@@ -967,6 +966,9 @@ function wrapRun (pl, isLatestVersion, version) {
           ...attemptCtx.currentStore,
           finalStatus,
         })
+      }
+      promise.then(finalize, finalize).catch(error => {
+        log.error('Cucumber test finalization error', error)
       })
       return promise
     } catch (err) {
