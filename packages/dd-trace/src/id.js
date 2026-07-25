@@ -151,7 +151,7 @@ function fromString (str, raddix) {
   while (pos < len) {
     const chr = Number.parseInt(str[pos++], raddix)
 
-    if (Number.isNaN(chr) || chr < 0) break
+    if (!(chr >= 0)) break // NaN
 
     low = low * raddix + chr
     high = high * raddix + Math.floor(low / UINT_MAX)

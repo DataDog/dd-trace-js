@@ -592,7 +592,6 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // Many errors
       'unicorn/name-replacements': 'off', // Many errors | naming churn (split out of prevent-abbreviations)
-      'unicorn/no-negated-comparison': ['error', { checkLogicalExpressions: true }],
       'unicorn/prevent-abbreviations': 'off', // Many errors
 
       // These rules require a newer Node.js version than we support
@@ -652,6 +651,7 @@ export default [
       'unicorn/no-break-in-nested-loop': 'off', // Conflicts with our performance-oriented loops
       'unicorn/no-global-object-property-assignment': 'off', // We use globalThis[Symbol.for('dd-trace')]
       'unicorn/no-negated-array-predicate': 'off', // Predicate inversion is harder to read and creates churn
+      'unicorn/no-negated-comparison': 'off', // Opposite comparisons do not preserve NaN handling
       'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
