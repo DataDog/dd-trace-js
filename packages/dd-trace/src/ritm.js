@@ -41,6 +41,33 @@ function normalizeModuleName (name) {
   return builtinModules.has(stripped) ? stripped : name
 }
 
+// Set by the synchronous loader hooks (helpers/rewriter loader-hook) when they
+// successfully register. While active they rewrite ESM (including require(esm))
+// in place, so the CJS redirect below must stand down to avoid double-loading.
+const SYNC_LOADER_HOOKS = Symbol.for('dd-trace:sync-loader-hooks')
+
+/**
+ * graphql 17+ — and other dual CJS/ESM packages — resolve `require('pkg')` to the
+ * ESM build via the `module-sync` export condition once require(esm) is enabled
+ * (Node `^20.19 || ^22.12 || >=23`). dd-trace can only rewrite that ESM through the
+ * synchronous loader hooks; where those aren't active (older Node, or a plain CJS
+ * init with no `--import`), redirect a hooked package's `.mjs` entry to its
+ * CommonJS sibling so the existing CJS rewriter still instruments it. The package
+ * then loads as CJS throughout via its own relative requires.
+ *
+ * @param {string} filename Resolved absolute filename.
+ * @returns {string | undefined} The CommonJS sibling to load instead, or undefined.
+ */
+function redirectHookedEsmToCjs (filename) {
+  if (!filename.endsWith('.mjs') || globalThis[SYNC_LOADER_HOOKS] === true) return
+
+  const details = parse(filename)
+  if (!details || !moduleHooks[details.name]) return
+
+  const cjs = `${filename.slice(0, -'.mjs'.length)}.js`
+  return fs.existsSync(cjs) ? cjs : undefined
+}
+
 /**
  * @overload
  * @param {string[]} modules list of modules to hook into
@@ -95,6 +122,13 @@ function Hook (modules, options, onrequire) {
       return _origRequire.apply(this, arguments)
     }
 
+    // Redirect a hooked dual-package's ESM entry to its CJS sibling when we can't
+    // rewrite ESM in this process, then load the CJS path (an absolute path
+    // bypasses the package's module-sync export condition).
+    const cjsRedirect = redirectHookedEsmToCjs(filename)
+    if (cjsRedirect !== undefined) filename = cjsRedirect
+    const loadArgs = cjsRedirect === undefined ? arguments : [cjsRedirect]
+
     const builtin = isBuiltinModuleName(filename)
     const moduleId = builtin ? normalizeModuleName(filename) : filename
     let name, basedir, hooks
@@ -114,7 +148,7 @@ function Hook (modules, options, onrequire) {
     const patched = patching[moduleId]
     if (patched) {
       // If it's already patched, just return it as-is.
-      return origRequire.apply(this, arguments)
+      return origRequire.apply(this, loadArgs)
     }
     patching[moduleId] = true
 
@@ -126,7 +160,7 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    let exports = origRequire.apply(this, arguments)
+    let exports = origRequire.apply(this, loadArgs)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
