@@ -40,7 +40,7 @@ function encodeVarintInto (target, offset, value) {
   let i = offset
   const limit = offset + maxVarLen64 - 1
   // if first byte is 1, the number is negative in javascript, but we want to interpret it as positive
-  while ((high !== 0 || low < 0 || low > 0x80) && i < limit) {
+  while ((high !== 0 || low < 0 || low > 0x7F) && i < limit) {
     target[i] = (low & 0x7F) | 0x80
     low >>>= 7
     low |= (high & 0x7F) << 25
