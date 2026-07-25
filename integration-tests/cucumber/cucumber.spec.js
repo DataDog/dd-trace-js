@@ -7,6 +7,9 @@ const { exec, execSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { inspect } = require('node:util')
+
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -84,6 +87,9 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 
+const cucumberWorkerThreadsPreloadPath =
+  '../../packages/datadog-instrumentations/src/cucumber-worker-threads'
+
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
   assert.strictEqual(testSuite.meta[TEST_ITR_SKIPPING_ENABLED], expected)
@@ -102,6 +108,60 @@ const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summa
 const parallelModeCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature --parallel 2'
 const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
+
+/**
+ * @param {(request: string) => object} appRequire
+ * @returns {Array<[object, boolean]>}
+ */
+function loadCucumberWorkerThreadsPreload (appRequire) {
+  const patchCalls = []
+
+  proxyquire(cucumberWorkerThreadsPreloadPath, {
+    'node:module': {
+      createRequire: () => appRequire,
+    },
+    './cucumber': {
+      patchCucumberWorkerRunTestCase: (...args) => patchCalls.push(args),
+    },
+  })
+
+  return patchCalls
+}
+
+describe('cucumber worker threads preload', () => {
+  it('patches the runtime executor used by the newest cucumber version', () => {
+    const runtimeExecutorPackage = { Executor: class {} }
+
+    const patchCalls = loadCucumberWorkerThreadsPreload((request) => {
+      assert.strictEqual(request, '@cucumber/cucumber/lib/runtime/executor')
+      return runtimeExecutorPackage
+    })
+
+    assert.deepStrictEqual(patchCalls, [[runtimeExecutorPackage, true]])
+  })
+
+  it('falls back to the runtime worker used by older cucumber 13 versions', () => {
+    const runtimeWorkerPackage = { Worker: class {} }
+
+    const patchCalls = loadCucumberWorkerThreadsPreload((request) => {
+      if (request === '@cucumber/cucumber/lib/runtime/executor') {
+        throw new Error('executor is not available')
+      }
+      assert.strictEqual(request, '@cucumber/cucumber/lib/runtime/worker')
+      return runtimeWorkerPackage
+    })
+
+    assert.deepStrictEqual(patchCalls, [[runtimeWorkerPackage, true]])
+  })
+
+  it('ignores unavailable cucumber runtime internals', () => {
+    const patchCalls = loadCucumberWorkerThreadsPreload(() => {
+      throw new Error('runtime internals are not available')
+    })
+
+    assert.deepStrictEqual(patchCalls, [])
+  })
+})
 
 // TODO: add esm tests
 describe(`cucumber@${version} commonJS`, () => {
