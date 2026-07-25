@@ -253,9 +253,8 @@ class PeriodicMetricReader {
   #collectAndExport (callback = () => {}) {
     // Atomically drain measurements for export. New measurements can be recorded
     // during export without interfering with this batch.
-    // eslint-disable-next-line unicorn/prefer-spread -- Avoid invoking a user-overridden array iterator.
-    const allMeasurements = this.#measurements.slice()
-    this.#measurements.length = 0
+    const allMeasurements = this.#measurements
+    this.#measurements = []
 
     for (const instrument of this.observableInstruments) {
       const observableMeasurements = instrument.collect()
