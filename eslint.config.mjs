@@ -631,7 +631,6 @@ export default [
       'unicorn/no-useless-recursion': 'off', // 7 errors | iterative rewrites add substantial nesting
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
       'unicorn/prefer-early-return': 'off', // 67 errors | tension with our positive-`if` style
-      'unicorn/prefer-minimal-ternary': 'off', // 24 errors
       'unicorn/prefer-number-is-safe-integer': 'off', // 17 errors
       'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
       'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
@@ -665,6 +664,7 @@ export default [
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-includes-over-repeated-comparisons': 'off', // Bad for performance
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
+      'unicorn/prefer-minimal-ternary': 'off', // Conflicts with our restricted-syntax rule on require(cond ? a : b)
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
       'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat

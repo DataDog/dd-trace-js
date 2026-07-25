@@ -988,9 +988,7 @@ function codeOwnersPatternToRegexSource (pattern) {
 
     if (character === '\\') {
       const escapedCharacter = pattern[i + 1]
-      source += escapedCharacter === undefined
-        ? escapeRegexCharacter(character)
-        : escapeRegexCharacter(escapedCharacter)
+      source += escapeRegexCharacter(escapedCharacter ?? character)
       i++
     } else if (character === '*') {
       if (pattern[i + 1] === '*') {
