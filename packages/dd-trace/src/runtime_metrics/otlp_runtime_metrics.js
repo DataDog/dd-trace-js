@@ -18,6 +18,9 @@ const ATTR_GC_TYPE_MINOR = { 'v8js.gc.type': 'minor' }
 const ATTR_GC_TYPE_MAJOR = { 'v8js.gc.type': 'major' }
 const ATTR_GC_TYPE_INCREMENTAL = { 'v8js.gc.type': 'incremental' }
 const ATTR_GC_TYPE_WEAKCB = { 'v8js.gc.type': 'weakcb' }
+const NORMALIZED_RESOURCE_TYPE_BY_NAME = new Map([
+  ['TCPSocketWrap', 'TCPWrap'],
+])
 
 // Kind 2 is V8's MinorMarkSweep (Node 20+) and not exposed via perf_hooks.constants.
 const GC_ATTR_BY_KIND = new Map([
@@ -42,6 +45,14 @@ function getHeapSpaceAttr (name) {
     HEAP_SPACE_ATTR_CACHE.set(name, attr)
   }
   return attr
+}
+
+/**
+ * @param {string} resourceType
+ * @returns {string}
+ */
+function normalizeResourceType (resourceType) {
+  return NORMALIZED_RESOURCE_TYPE_BY_NAME.get(resourceType) ?? resourceType
 }
 
 // getMeter() returns a cached meter, so without tracking what we registered we'd
@@ -112,7 +123,8 @@ module.exports = {
       // Stable since Node 22.16; available on 18+ as experimental.
       // eslint-disable-next-line n/no-unsupported-features/node-builtins
       for (const resource of process.getActiveResourcesInfo()) {
-        counts.set(resource, (counts.get(resource) ?? 0) + 1)
+        const resourceType = normalizeResourceType(resource)
+        counts.set(resourceType, (counts.get(resourceType) ?? 0) + 1)
       }
       for (const [type, count] of counts) {
         result.observe(count, { 'v8js.resource.type': type })
