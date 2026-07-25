@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { environmentNamesEqual, setEnvironmentValue } = require('./environment')
+
 const RUNNER_OPTIONS = {
   cucumber: {
     flags: new Set(),
@@ -76,6 +78,7 @@ const ENVIRONMENT_EXPANSION_PATTERN = /\$|%[^%]+%|![^!]+!/
  * @param {string} command detected package script
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
+ * @param {string} [platform] target platform
  * @returns {{
  *   environment: Record<string, string>,
  *   error?: string,
@@ -83,7 +86,7 @@ const ENVIRONMENT_EXPANSION_PATTERN = /\$|%[^%]+%|![^!]+!/
  *   runnerArgs: string[]
  * }} runner contract
  */
-function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
+function getRunnerContract (framework, command, projectRoot, repositoryRoot, platform = process.platform) {
   const dynamicEnvironmentError = getDynamicRunnerEnvironmentError(command)
   if (dynamicEnvironmentError) {
     return { environment: {}, error: dynamicEnvironmentError, inputFiles: [], runnerArgs: [] }
@@ -103,8 +106,8 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
     }
   }
 
-  const environment = getRunnerEnvironment(invocation)
-  const environmentError = getRunnerEnvironmentError(environment)
+  const environment = getRunnerEnvironment(invocation, platform)
+  const environmentError = getRunnerEnvironmentError(environment, platform)
   if (environmentError) {
     return { environment: {}, error: `runner environment ${environmentError}`, inputFiles: [], runnerArgs: [] }
   }
@@ -278,12 +281,13 @@ function getRunnerArgsError (framework, args) {
  * Validates the small static environment retained from a runner invocation.
  *
  * @param {unknown} environment runner environment
+ * @param {string} [platform] target platform
  * @returns {string|undefined} validation error
  */
-function getRunnerEnvironmentError (environment) {
+function getRunnerEnvironmentError (environment, platform = process.platform) {
   if (!environment || typeof environment !== 'object' || Array.isArray(environment)) return 'must be an object'
   for (const [name, value] of Object.entries(environment)) {
-    if (!RUNNER_ENVIRONMENT_NAMES.has(name)) return `contains unsupported variable ${name}`
+    if (!getCanonicalRunnerEnvironmentName(name, platform)) return `contains unsupported variable ${name}`
     if (typeof value !== 'string' || Buffer.byteLength(value) > 4096 ||
       CONTROL_PATTERN.test(value) || ENVIRONMENT_EXPANSION_PATTERN.test(value)) {
       return `contains an unsafe value for ${name}`
@@ -324,6 +328,7 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
  */
 function getFrameworkInvocation (command, framework) {
   if (CONTROL_PATTERN.test(String(command || ''))) return
+  if (command === `direct ${framework} binary`) return
   const tokens = tokenizeCommand(command)
   const executable = getRunnerExecutableName(framework)
   const runnerIndex = tokens.findIndex(token => {
@@ -335,7 +340,13 @@ function getFrameworkInvocation (command, framework) {
 
   const prefix = tokens.slice(0, runnerIndex)
   const firstCommand = prefix.find(token => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))
-  if (firstCommand && !RUNNER_LAUNCHERS.has(path.basename(firstCommand).toLowerCase())) return
+  if (firstCommand && !RUNNER_LAUNCHERS.has(path.basename(firstCommand).toLowerCase())) {
+    return {
+      error: `runner launch wrapper ${path.basename(firstCommand)} is not allowlisted`,
+      runnerIndex,
+      tokens,
+    }
+  }
   for (const token of prefix) {
     if (RUNNER_LAUNCHERS.has(path.basename(token).toLowerCase())) continue
     if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
@@ -380,17 +391,25 @@ function getRunnerArgs (framework, invocation) {
  * Extracts allowlisted literal environment assignments before the framework runner.
  *
  * @param {{runnerIndex: number, tokens: string[]}} invocation parsed invocation
+ * @param {string} [platform] target platform
  * @returns {Record<string, string>} retained environment
  */
-function getRunnerEnvironment (invocation) {
+function getRunnerEnvironment (invocation, platform = process.platform) {
   const environment = {}
   for (const token of invocation.tokens.slice(0, invocation.runnerIndex)) {
     const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(token)
-    if (match && RUNNER_ENVIRONMENT_NAMES.has(match[1]) && !CONTROL_PATTERN.test(match[2])) {
-      environment[match[1]] = match[2]
+    const name = match && getCanonicalRunnerEnvironmentName(match[1], platform)
+    if (name && !CONTROL_PATTERN.test(match[2])) {
+      setEnvironmentValue(environment, name, match[2], platform)
     }
   }
   return environment
+}
+
+function getCanonicalRunnerEnvironmentName (name, platform) {
+  return [...RUNNER_ENVIRONMENT_NAMES].find(candidate => {
+    return environmentNamesEqual(candidate, name, platform)
+  })
 }
 
 /**

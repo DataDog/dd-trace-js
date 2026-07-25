@@ -69,7 +69,7 @@ relevant test job for each runnable framework.
 Record only inert evidence in that framework's `ciWiring`:
 
 - `configFile`: absolute path to the CI file;
-- `job` and optional `step`;
+- exact YAML `job` key and optional literal `step`;
 - `command`: exact command text from that job;
 - `workingDirectory`, when explicitly known;
 - `initialization.status` and short evidence;

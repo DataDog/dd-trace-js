@@ -108,6 +108,7 @@ function parseArgs (argv) {
 async function main (argv) {
   let activeManifest
   let activeOut
+  let cleanupOutcome = { status: 'not_started' }
 
   try {
     const options = parseArgs(argv)
@@ -160,9 +161,13 @@ async function main (argv) {
       }
     } finally {
       try {
-        await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+        cleanupOutcome = await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+        if (cleanupOutcome.status === 'incomplete') {
+          results.push(getCleanupFailure(undefined, cleanupOutcome))
+        }
       } catch (error) {
-        results.push(getCleanupFailure(error))
+        cleanupOutcome = { errorCount: 1, status: 'incomplete' }
+        results.push(getCleanupFailure(error, cleanupOutcome))
       }
     }
 
@@ -177,6 +182,7 @@ async function main (argv) {
       staticDiagnosis,
       runSummary: {
         checkedScenarios: [...options.scenarios],
+        cleanup: cleanupOutcome,
         executionStatus,
         omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
         requestedScenario: options.requestedScenario,
@@ -197,6 +203,7 @@ async function main (argv) {
           results: [getOrchestrationFailure(error)],
           runSummary: {
             checkedScenarios: [],
+            cleanup: cleanupOutcome,
             executionStatus: 'validator_error',
             omittedScenarios: getSelectableScenarios(),
             runCompleted: true,
@@ -698,16 +705,20 @@ function getBasicNotReached (framework, diagnosis, reasonCode) {
 /**
  * Builds a cleanup failure.
  *
- * @param {Error} error cleanup error
+ * @param {Error|undefined} error cleanup error
+ * @param {object} cleanup cleanup outcome
  * @returns {object} result
  */
-function getCleanupFailure (error) {
+function getCleanupFailure (error, cleanup) {
+  const retained = (cleanup.filesRetained || 0) + (cleanup.directoriesRetained || 0)
+  const reason = error?.message || error ||
+    `${retained} temporary validation path${retained === 1 ? '' : 's'} remained after safe cleanup`
   return {
     frameworkId: 'validation-cleanup',
     scenario: 'all',
     status: 'error',
-    diagnosis: `Temporary validation files could not be removed safely: ${error?.message || error}`,
-    evidence: { cleanupFailed: true, validationIncomplete: true },
+    diagnosis: `Temporary validation files could not be removed safely: ${reason}`,
+    evidence: { cleanup, cleanupFailed: true, validationIncomplete: true },
     artifacts: [],
   }
 }

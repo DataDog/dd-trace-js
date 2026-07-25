@@ -4,6 +4,7 @@ const path = require('node:path')
 
 const { findEnvironmentEntry } = require('./environment')
 const { splitNodeOptions } = require('./executable')
+const { removeEmptyLiteralEnvironmentAssignments } = require('./literal-environment')
 
 const GITHUB_API_KEY_REFERENCE = '$' + '{{ secrets.DD_API_KEY }}'
 const AGENTLESS_ENV = {
@@ -130,10 +131,7 @@ function getNodeOptions (framework) {
 }
 
 function getEffectiveNodeOptions (ciWiring = {}) {
-  const shellName = path.basename(String(ciWiring.shell || '')).toLowerCase()
-  const platform = ['cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'pwsh', 'pwsh.exe'].includes(shellName)
-    ? 'win32'
-    : process.platform
+  const platform = getCiPlatform(ciWiring)
   let value
   for (const field of ['inheritedEnv', 'workflowEnv', 'jobEnv', 'stepEnv']) {
     const entry = findEnvironmentEntry(ciWiring[field], 'NODE_OPTIONS', platform)
@@ -257,8 +255,21 @@ function quoteShellValue (value) {
 }
 
 function getTestCommand (ciWiring) {
-  if (typeof ciWiring.command === 'string' && ciWiring.command.trim()) return ciWiring.command
+  if (typeof ciWiring.command === 'string' && ciWiring.command.trim()) {
+    return removeEmptyLiteralEnvironmentAssignments(
+      ciWiring.command,
+      'NODE_OPTIONS',
+      getCiPlatform(ciWiring)
+    )
+  }
   return ciWiring.packageScriptExpansionChain?.[0] || ciWiring.runnerToolChain?.[0]
+}
+
+function getCiPlatform (ciWiring) {
+  const shellName = path.basename(String(ciWiring.shell || '')).toLowerCase()
+  return ['cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'pwsh', 'pwsh.exe'].includes(shellName)
+    ? 'win32'
+    : process.platform
 }
 
 function quoteYamlValue (value) {

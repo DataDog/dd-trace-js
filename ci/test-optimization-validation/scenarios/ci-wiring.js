@@ -1,16 +1,17 @@
 'use strict'
 
 const fs = require('node:fs')
+const path = require('node:path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
 const { buildCiRemediation } = require('../ci-remediation')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
+const { environmentNamesEqual } = require('../environment')
+const { parseLiteralEnvironmentPrefix } = require('../literal-environment')
 const { fail, incomplete } = require('./helpers')
 
 const MAX_CI_FILE_BYTES = 512 * 1024
 const DYNAMIC_COMMAND_PATTERN = /[$`;&|\r\n]|%[^%\s]+%|![^!\s]+!/
-const LITERAL_ENVIRONMENT_PREFIX =
-  /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s]*)\s+)*/
 const WRAPPER_PATTERN =
   /\b(?:npm|pnpm|yarn|yarnpkg)\s+(?:run\s+)?[A-Za-z0-9:_-]+\b|\bnpx(?:\.cmd)?\b|\b(?:nx|turbo|lerna|mise)\b/
 const RUNNER_PATTERNS = {
@@ -71,15 +72,18 @@ function runCiWiring ({ manifest, framework }) {
       recommendation: 'Regenerate the manifest from the current checkout and review the CI file again.',
     })
   }
-  if (!containsLiteral(source, ci.command) ||
-    !containsLiteral(source, ci.job) ||
-    (ci.step && !containsLiteral(source, ci.step))) {
+  const jobSource = getSelectedJobSource(source, ci)
+  if (!jobSource ||
+    !containsLiteral(jobSource, ci.command) ||
+    (ci.step && !containsLiteral(jobSource, ci.step))) {
     return getIncomplete(
       framework,
-      'The recorded job, step, or command does not appear literally in the checksum-bound CI file.',
+      'The recorded command and step could not be bound structurally to the selected job in the checksum-bound ' +
+        'CI file.',
       {
         ...evidence,
-        recommendation: 'Record the exact literal job, step, and command from the identified CI file.',
+        recommendation: 'Record the exact YAML job key, literal step, and command from one supported CI job. Leave ' +
+          'the audit incomplete when that job structure cannot be verified.',
       }
     )
   }
@@ -100,7 +104,7 @@ function runCiWiring ({ manifest, framework }) {
     )
   }
 
-  const normalizedSource = source.replaceAll('\\', '/')
+  const normalizedSource = jobSource.replaceAll('\\', '/')
   const hasInitialization = /dd-trace\/ci\/init(?:\.js)?\b/.test(normalizedSource)
   const explicitlyRemovesInitialization = commandExplicitlyClearsNodeOptions(command, framework.framework)
   const remediation = buildCiRemediation(framework)
@@ -148,8 +152,8 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   if (ci.transport?.mode === 'agentless' &&
-    /DD_CIVISIBILITY_AGENTLESS_ENABLED/.test(source) &&
-    !/\b(?:DD_API_KEY|DATADOG_API_KEY)\b/.test(source)) {
+    /DD_CIVISIBILITY_AGENTLESS_ENABLED/.test(jobSource) &&
+    !/\b(?:DD_API_KEY|DATADOG_API_KEY)\b/.test(jobSource)) {
     return getIncomplete(
       framework,
       'The selected job visibly enables agentless reporting but has no Datadog API key reference in the ' +
@@ -187,13 +191,12 @@ function commandExplicitlyClearsNodeOptions (command, framework) {
   const runner = getDirectRunner(command, framework)
   if (!runner) return false
 
-  const assignments = [...command.slice(0, runner.index).matchAll(
-    /(?:^|\s)NODE_OPTIONS=(?:"([^"]*)"|'([^']*)'|([^\s]*))/gi
-  )]
+  const assignments = parseLiteralEnvironmentPrefix(command).assignments.filter(assignment => {
+    return environmentNamesEqual(assignment.name, 'NODE_OPTIONS')
+  })
   if (assignments.length === 0) return false
 
-  const effective = assignments.at(-1)
-  return (effective[1] ?? effective[2] ?? effective[3]) === ''
+  return assignments.at(-1).value === ''
 }
 
 /**
@@ -204,9 +207,75 @@ function commandExplicitlyClearsNodeOptions (command, framework) {
  * @returns {{index: number}|undefined} direct runner location
  */
 function getDirectRunner (command, framework) {
-  const prefix = LITERAL_ENVIRONMENT_PREFIX.exec(command)?.[0] || ''
+  const prefix = parseLiteralEnvironmentPrefix(command)
   if (!RUNNER_PATTERNS[framework]?.test(command.slice(prefix.length))) return
   return { index: prefix.length }
+}
+
+/**
+ * Returns the selected YAML job block, or undefined when structural binding is unsupported.
+ *
+ * @param {string} source CI configuration source
+ * @param {object} ci selected CI evidence
+ * @returns {string|undefined} selected job source
+ */
+function getSelectedJobSource (source, ci) {
+  if (!/\.ya?ml$/i.test(String(ci.configFile || ''))) return
+  const lines = source.replaceAll('\r\n', '\n').split('\n')
+  const jobName = normalizeYamlKey(ci.job)
+  if (!jobName) return
+
+  const jobsIndex = lines.findIndex(line => /^jobs:\s*(?:#.*)?$/.test(line))
+  if (jobsIndex !== -1) {
+    const jobsEnd = findYamlBlockEnd(lines, jobsIndex, 0)
+    const entries = []
+    for (let index = jobsIndex + 1; index < jobsEnd; index++) {
+      const entry = getYamlKeyEntry(lines[index], index)
+      if (entry) entries.push(entry)
+    }
+    const jobIndent = Math.min(...entries.map(entry => entry.indent))
+    const selected = entries.find(entry => entry.indent === jobIndent && entry.key === jobName)
+    if (selected) return getYamlBlock(lines, selected.index, selected.indent)
+    return
+  }
+
+  if (!/^\.gitlab-ci\.ya?ml$/i.test(path.basename(ci.configFile))) return
+  const selected = lines
+    .map((line, index) => getYamlKeyEntry(line, index))
+    .find(entry => entry?.indent === 0 && entry.key === jobName)
+  if (selected) return getYamlBlock(lines, selected.index, selected.indent)
+}
+
+function getYamlKeyEntry (line, index) {
+  if (!line || /^\s*(?:#|$)/.test(line) || /^\s/.test(line) && line.includes('\t')) return
+  const match = /^(\s*)(?:"([^"]+)"|'([^']+)'|([^:#][^:]*)):\s*(?:#.*)?$/.exec(line)
+  if (!match) return
+  return {
+    indent: match[1].length,
+    index,
+    key: String(match[2] ?? match[3] ?? match[4]).trim(),
+  }
+}
+
+function normalizeYamlKey (value) {
+  const key = String(value || '').trim().replace(/:\s*$/, '').trim()
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    return key.slice(1, -1)
+  }
+  return key
+}
+
+function getYamlBlock (lines, start, indent) {
+  return lines.slice(start, findYamlBlockEnd(lines, start, indent)).join('\n')
+}
+
+function findYamlBlockEnd (lines, start, indent) {
+  for (let index = start + 1; index < lines.length; index++) {
+    if (/^\s*(?:#|$)/.test(lines[index])) continue
+    const nextIndent = /^\s*/.exec(lines[index])[0].length
+    if (nextIndent <= indent) return index
+  }
+  return lines.length
 }
 
 /**

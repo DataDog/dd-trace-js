@@ -16,6 +16,7 @@ const {
   getGeneratedCommand,
   getManifestCommands,
 } = require('../../../../ci/test-optimization-validation/runner-command')
+const { getRunnerContract } = require('../../../../ci/test-optimization-validation/runner-contract')
 const {
   FRAMEWORKS,
   createRepositoryFixture,
@@ -518,6 +519,38 @@ describe('test optimization validation manifest scaffold', () => {
     } finally {
       removeFixture(fixture.root)
     }
+  })
+
+  it('requires setup instead of dropping an unrecognized runner launcher', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'jest',
+      script: 'dotenvx run -- jest test/example.test.js',
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /runner launch wrapper dotenvx is not allowlisted/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('canonicalizes allowlisted runner environment names using Windows semantics', () => {
+    const contract = getRunnerContract(
+      'jest',
+      'cross-env ci=true jest test/example.test.js',
+      process.cwd(),
+      process.cwd(),
+      'win32'
+    )
+
+    assert.deepStrictEqual(contract.environment, { CI: 'true' })
+    assert.strictEqual(contract.error, undefined)
   })
 
   for (const selector of ['$SPEC', '%SPEC%', '!SPEC!']) {

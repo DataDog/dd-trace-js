@@ -95,6 +95,7 @@ function renderReport ({ manifest, out, reportPath, results, runSummary, staticD
     '',
     `Coverage: ${runSummary.validationCoverage === 'complete' ? 'complete' : 'partial'}`,
     `Validator exit code: ${runSummary.validatorExitCode ?? 'not recorded'}`,
+    `Cleanup: ${formatCleanupStatus(runSummary.cleanup)}`,
     '',
     `> ${SHARING_WARNING}`,
     '',
@@ -339,6 +340,7 @@ function renderConsole (results, runSummary, reportPath) {
   const lines = [
     `Test Optimization validation: ${formatExecutionStatus(runSummary.executionStatus)}`,
     `Coverage: ${runSummary.validationCoverage === 'complete' ? 'complete' : 'partial'}`,
+    `Cleanup: ${formatCleanupStatus(runSummary.cleanup)}`,
   ]
   for (const result of getVisibleResults(results)) {
     lines.push(
@@ -466,6 +468,19 @@ function isPathInside (root, filename) {
  */
 function formatExecutionStatus (status) {
   return String(status || 'incomplete').replaceAll('_', ' ').toUpperCase()
+}
+
+function formatCleanupStatus (cleanup) {
+  if (cleanup?.status === 'completed') {
+    const removed = (cleanup.filesRemoved || 0) + (cleanup.directoriesRemoved || 0)
+    return `completed${removed > 0 ? ` (${removed} temporary path${removed === 1 ? '' : 's'} removed)` : ''}`
+  }
+  if (cleanup?.status === 'retained_by_request') return 'temporary files retained by approved request'
+  if (cleanup?.status === 'incomplete') {
+    const retained = (cleanup.filesRetained || 0) + (cleanup.directoriesRetained || 0)
+    return `incomplete${retained > 0 ? ` (${retained} temporary path${retained === 1 ? '' : 's'} retained)` : ''}`
+  }
+  return 'not completed'
 }
 
 /**

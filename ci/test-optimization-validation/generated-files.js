@@ -83,13 +83,27 @@ function getScenarioFiles (strategy, scenario) {
 }
 
 function cleanupGeneratedFiles (manifest, { keep = false } = {}) {
-  if (keep) return
+  if (keep) return { status: 'retained_by_request' }
 
+  const outcome = {
+    directoriesRemoved: 0,
+    directoriesRetained: 0,
+    filesRemoved: 0,
+    filesRetained: 0,
+  }
   for (const framework of manifest.frameworks || []) {
     const strategy = framework.generatedTestStrategy
-    cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: true }))
-    cleanupCreatedDirectories(framework.project.root)
+    addCleanupOutcome(
+      outcome,
+      cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: true })),
+      'files'
+    )
+    addCleanupOutcome(outcome, cleanupCreatedDirectories(framework.project.root), 'directories')
   }
+  outcome.status = outcome.filesRetained > 0 || outcome.directoriesRetained > 0
+    ? 'incomplete'
+    : 'completed'
+  return outcome
 }
 
 /**
@@ -116,21 +130,30 @@ function getMissingDirectories (root, directory) {
  * @param {string} root project root
  */
 function cleanupCreatedDirectories (root) {
+  const outcome = { removed: 0, retained: 0 }
   const resolvedRoot = path.resolve(root)
   const directories = [...createdGeneratedDirectories.entries()]
-    .filter(([directory, authorization]) => {
-      return isPathInside(resolvedRoot, directory) && isCleanupAuthorizationValid(directory, authorization)
-    })
+    .filter(([directory]) => isPathInside(resolvedRoot, directory))
     .sort(([left], [right]) => right.length - left.length)
 
-  for (const [directory] of directories) {
+  for (const [directory, authorization] of directories) {
+    if (!isCleanupAuthorizationValid(directory, authorization)) {
+      if (pathExists(directory)) outcome.retained++
+      continue
+    }
     try {
       fs.rmdirSync(directory)
       createdGeneratedDirectories.delete(directory)
+      outcome.removed++
     } catch (error) {
-      if (error.code === 'ENOENT') createdGeneratedDirectories.delete(directory)
+      if (error.code === 'ENOENT') {
+        createdGeneratedDirectories.delete(directory)
+      } else {
+        outcome.retained++
+      }
     }
   }
+  return outcome
 }
 
 function cleanupGeneratedRuntimeFiles (framework) {
@@ -186,17 +209,36 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
 }
 
 function cleanupPaths (cleanupPaths) {
+  const outcome = { removed: 0, retained: 0 }
   for (const cleanupPath of cleanupPaths) {
     try {
       const authorization = writtenGeneratedFiles.get(cleanupPath) ||
         authorizedRuntimeCleanupFiles.get(cleanupPath)
-      if (!authorization || !isCleanupAuthorizationValid(cleanupPath, authorization)) continue
-      if (isDirectory(cleanupPath)) continue
+      if (!authorization || !isCleanupAuthorizationValid(cleanupPath, authorization) || isDirectory(cleanupPath)) {
+        if (pathExists(cleanupPath)) outcome.retained++
+        continue
+      }
       fs.rmSync(cleanupPath, { force: true })
       writtenGeneratedFiles.delete(cleanupPath)
+      outcome.removed++
     } catch {
-      // Cleanup should be best-effort. The report will contain the command artifacts.
+      if (pathExists(cleanupPath)) outcome.retained++
     }
+  }
+  return outcome
+}
+
+function addCleanupOutcome (target, outcome, kind) {
+  target[`${kind}Removed`] += outcome.removed
+  target[`${kind}Retained`] += outcome.retained
+}
+
+function pathExists (filename) {
+  try {
+    fs.lstatSync(filename)
+    return true
+  } catch {
+    return false
   }
 }
 

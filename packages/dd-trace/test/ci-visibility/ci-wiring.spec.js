@@ -103,6 +103,25 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.diagnosis, /not initialized/)
   })
 
+  it('does not bind a selected job to a command found only in another job', () => {
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    steps:',
+      '      - run: node ./scripts/other.js',
+      '  unrelated:',
+      '    steps:',
+      `      - run: ${command}`,
+      '',
+    ].join('\n'))
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
+  })
+
   it('confirms a reset in the selected direct command', () => {
     const resetCommand = `NODE_OPTIONS="" ${command}`
     fs.writeFileSync(workflow, workflowSource({ command: resetCommand }))
@@ -159,6 +178,20 @@ describe('test optimization validation CI audit', () => {
     assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
   })
 
+  it('does not treat NODE_OPTIONS text inside another quoted assignment as a reset', () => {
+    const textCommand = `NOTE="text NODE_OPTIONS=''" ${command}`
+    fs.writeFileSync(workflow, workflowSource({
+      command: textCommand,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ command: textCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
+  })
+
   it('fails closed when NODE_OPTIONS changes through multiline shell flow', () => {
     const multilineCommand = `NODE_OPTIONS=""\nNODE_OPTIONS="-r dd-trace/ci/init" ${command}`
     fs.writeFileSync(workflow, workflowSource({ command: multilineCommand }))
@@ -167,7 +200,7 @@ describe('test optimization validation CI audit', () => {
 
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.conclusion, 'incomplete')
-    assert.match(result.diagnosis, /dynamic/)
+    assert.match(result.diagnosis, /could not be bound structurally|dynamic/)
   })
 
   it('does not trust a fabricated selected step', () => {
@@ -177,7 +210,7 @@ describe('test optimization validation CI audit', () => {
 
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.conclusion, 'incomplete')
-    assert.match(result.diagnosis, /job, step, or command does not appear literally/)
+    assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
   })
 
   it('keeps a missing agentless API key reference incomplete', () => {
@@ -214,7 +247,7 @@ describe('test optimization validation CI audit', () => {
     const result = runCiWiring({ framework, manifest })
 
     assert.strictEqual(result.status, 'error')
-    assert.match(result.diagnosis, /does not appear literally/)
+    assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
   })
 
   /**

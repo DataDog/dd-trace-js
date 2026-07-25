@@ -194,6 +194,24 @@ describe('test optimization validation report', () => {
     assert.match(report, /Do not draw a Test Optimization conclusion/)
   })
 
+  it('reports incomplete temporary-file cleanup explicitly', () => {
+    write([
+      result('basic-reporting', 'pass', 'The direct test emitted the complete event hierarchy.'),
+    ], {
+      cleanup: {
+        directoriesRemoved: 0,
+        directoriesRetained: 1,
+        filesRemoved: 2,
+        filesRetained: 1,
+        status: 'incomplete',
+      },
+    })
+    const report = readReport()
+
+    assert.match(report, /Cleanup: incomplete \(2 temporary paths retained\)/)
+    assert.match(consoleLog.lastCall.args[0], /Cleanup: incomplete \(2 temporary paths retained\)/)
+  })
+
   /**
    * Writes a final report with standard run metadata.
    *
@@ -201,12 +219,19 @@ describe('test optimization validation report', () => {
    * @param {object} [runSummary] run summary
    * @returns {void}
    */
-  function write (results, runSummary = {
-    executionStatus: 'completed_with_findings',
-    validationCoverage: 'complete',
-    validatorExitCode: 1,
-  }) {
-    writeReport({ manifest, out, results, runSummary })
+  function write (results, runSummary = {}) {
+    writeReport({
+      manifest,
+      out,
+      results,
+      runSummary: {
+        cleanup: { filesRemoved: 3, status: 'completed' },
+        executionStatus: 'completed_with_findings',
+        validationCoverage: 'complete',
+        validatorExitCode: 1,
+        ...runSummary,
+      },
+    })
   }
 
   /**

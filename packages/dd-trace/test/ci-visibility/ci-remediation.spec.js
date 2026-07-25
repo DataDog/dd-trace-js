@@ -201,6 +201,26 @@ describe('test optimization CI remediation', () => {
     assert.doesNotMatch(remediation.variants[0].snippet, /- name:|run:|keep the existing test command/)
   })
 
+  it('removes a confirmed inline NODE_OPTIONS reset from a GitHub Actions fix', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'NODE_OPTIONS="" node ./node_modules/jest/bin/jest.js test/example.test.js',
+        job: 'test',
+        step: 'Run tests',
+        transport: { mode: 'agent' },
+      },
+    })
+
+    assert.match(remediation.variants[0].snippet, /NODE_OPTIONS: "-r dd-trace\/ci\/init"/)
+    assert.match(
+      remediation.variants[0].snippet,
+      /run: \|\n {4}node \.\/node_modules\/jest\/bin\/jest\.js test\/example\.test\.js/
+    )
+    assert.doesNotMatch(remediation.variants[0].snippet, /NODE_OPTIONS=""/)
+  })
+
   it('quotes shell values for non-GitHub CI providers', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',

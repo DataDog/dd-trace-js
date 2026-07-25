@@ -193,6 +193,7 @@ describe('test optimization validation CLI', () => {
       assert.strictEqual(executed.status, 2, executed.stderr)
       assert.doesNotMatch(report, /direct runner is unavailable|runner-unavailable/)
       assert.match(report, /CI audit is incomplete/)
+      assert.match(report, /Cleanup: completed/)
     } finally {
       removeFixture(fixture.root)
     }
