@@ -39,6 +39,7 @@ const RUNNER_ENVIRONMENT_NAMES = new Set([
   'TS_NODE_PROJECT',
   'TZ',
 ])
+const RUNNER_LAUNCHERS = new Set(['c8', 'cross-env', 'env', 'npx', 'nyc', 'node'])
 const MODULE_OPTIONS = new Set([
   '-r',
   '-u',
@@ -89,6 +90,9 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
   }
   const invocation = getFrameworkInvocation(command, framework)
   if (!invocation) return { environment: {}, inputFiles: [], runnerArgs: [] }
+  if (invocation.error) {
+    return { environment: {}, error: invocation.error, inputFiles: [], runnerArgs: [] }
+  }
   const unsupportedOption = getUnsupportedConfigurationOption(framework, invocation)
   if (unsupportedOption) {
     return {
@@ -123,13 +127,17 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot) {
  * @returns {string|undefined} validation error
  */
 function getDynamicRunnerEnvironmentError (command) {
-  for (const match of String(command || '').matchAll(
+  const source = String(command || '')
+  for (const match of source.matchAll(
     /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g
   )) {
     const value = match[2] ?? match[3] ?? match[4]
     if (RUNNER_ENVIRONMENT_NAMES.has(match[1]) && ENVIRONMENT_EXPANSION_PATTERN.test(value)) {
       return `runner environment contains an unsafe value for ${match[1]}`
     }
+  }
+  if (ENVIRONMENT_EXPANSION_PATTERN.test(source)) {
+    return 'runner command contains shell-expanded values that the validator does not preserve'
   }
 }
 
@@ -145,7 +153,7 @@ function getDynamicRunnerEnvironmentError (command) {
 function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) {
   const invocation = getFrameworkInvocation(command, framework)
   const options = RUNNER_OPTIONS[framework]
-  if (!invocation || !options) return []
+  if (!invocation || invocation.error || !options) return []
 
   const roots = new Set()
   const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
@@ -312,7 +320,7 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
  *
  * @param {string} command detected package script
  * @param {string} framework framework name
- * @returns {{runnerIndex: number, tokens: string[]}|undefined} parsed invocation
+ * @returns {{error?: string, runnerIndex: number, tokens: string[]}|undefined} parsed invocation
  */
 function getFrameworkInvocation (command, framework) {
   if (CONTROL_PATTERN.test(String(command || ''))) return
@@ -327,12 +335,16 @@ function getFrameworkInvocation (command, framework) {
 
   const prefix = tokens.slice(0, runnerIndex)
   const firstCommand = prefix.find(token => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))
-  const wrapper = path.basename(firstCommand || '').toLowerCase()
-  if (['c8', 'cross-env', 'env', 'npx', 'nyc'].includes(wrapper)) return { runnerIndex, tokens }
+  if (firstCommand && !RUNNER_LAUNCHERS.has(path.basename(firstCommand).toLowerCase())) return
   for (const token of prefix) {
-    if (['c8', 'cross-env', 'env', 'npx', 'nyc', 'node'].includes(path.basename(token).toLowerCase())) continue
+    if (RUNNER_LAUNCHERS.has(path.basename(token).toLowerCase())) continue
     if (/^[A-Za-z_][A-Za-z0-9_]*=[^;&|`]*$/.test(token)) continue
-    return
+    return {
+      error: 'runner launch wrapper contains options or positional arguments whose semantics the validator does not ' +
+        'preserve',
+      runnerIndex,
+      tokens,
+    }
   }
   return { runnerIndex, tokens }
 }

@@ -501,6 +501,46 @@ describe('test optimization validation manifest scaffold', () => {
     })
   }
 
+  it('requires setup instead of dropping env wrapper options', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'jest',
+      script: 'env -C packages/app jest test/example.test.js',
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes[0], /runner launch wrapper contains options or positional arguments/)
+      assert.strictEqual(framework.validation, undefined)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  for (const selector of ['$SPEC', '%SPEC%', '!SPEC!']) {
+    it(`requires setup instead of dropping shell-expanded selector ${selector}`, () => {
+      const fixture = createRepositoryFixture({
+        framework: 'jest',
+        script: `jest ${selector}`,
+      })
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set(['jest']),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.match(framework.notes[0], /runner command contains shell-expanded values/)
+        assert.strictEqual(framework.validation, undefined)
+      } finally {
+        removeFixture(fixture.root)
+      }
+    })
+  }
+
   it('selects non-suffixed Mocha files from a literal test root', () => {
     const fixture = createRepositoryFixture({
       framework: 'mocha',

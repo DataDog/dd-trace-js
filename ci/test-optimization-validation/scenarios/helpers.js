@@ -314,6 +314,63 @@ async function discoverScenarioTests ({ framework, out, scenarioName, scenario, 
   }
 }
 
+/**
+ * Reports a missing generated test without blaming dd-trace when clean execution was unproven.
+ *
+ * @param {object} input missing-test evidence
+ * @param {object} input.command generated scenario command
+ * @param {string} input.diagnosis diagnosis used when clean execution was proven
+ * @param {object} input.discovery instrumented baseline result
+ * @param {object} input.framework framework manifest entry
+ * @param {object} input.options execution options
+ * @param {string} input.out validation output root
+ * @param {object} input.scenario generated scenario
+ * @param {string} input.scenarioName advanced scenario name
+ * @returns {object|Promise<object>} incomplete or confirmed failure result
+ */
+function reportMissingGeneratedTest ({
+  command,
+  diagnosis,
+  discovery,
+  framework,
+  options,
+  out,
+  scenario,
+  scenarioName,
+}) {
+  const verification = framework.generatedTestStrategy?.verification?.observedScenarios
+    ?.find(observed => observed.id === scenario.id)
+  const evidence = {
+    ...discoveryEvidence(discovery),
+    generatedVerificationObservedTestCount: verification?.observedTestCount,
+  }
+  if (verification?.observedTestCount === null) {
+    return inconclusive(
+      framework,
+      scenarioName,
+      'The clean temporary validation command exited as expected without a parseable test count, and the ' +
+        'instrumented baseline emitted no matching test event. The validator cannot prove that the generated test ' +
+        'executed, so no advanced-feature conclusion was reached.',
+      {
+        ...evidence,
+        reasonCode: 'generated-test-execution-unproven',
+      },
+      discovery.outDir
+    )
+  }
+
+  return failWithDebugRerun({
+    command,
+    diagnosis,
+    evidence,
+    framework,
+    options,
+    out,
+    outDir: discovery.outDir,
+    scenarioName,
+  })
+}
+
 function testsForDiscoveredScenario (events, scenario, discovery) {
   if (discovery?.testIdentities?.length > 0) {
     return findTestsByIdentity(events, discovery.testIdentities)
@@ -528,6 +585,7 @@ module.exports = {
   inconclusive,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runDebugInstrumentedCommand,
   runInstrumentedCommand,

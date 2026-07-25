@@ -185,9 +185,19 @@ function getVerdicts (results) {
   for (const [framework, frameworkResults] of grouped) {
     const basic = frameworkResults.find(result => result.scenario === 'basic-reporting')
     const ci = frameworkResults.find(result => result.scenario === 'ci-wiring')
+    const advancedFinding = frameworkResults.find(result => {
+      return !['all', 'basic-reporting', 'ci-wiring'].includes(result.scenario) &&
+        ['error', 'fail'].includes(result.status)
+    })
     let text
     if (basic?.status === 'pass') {
-      text = 'The library reported this project test correctly when initialized by the validator.'
+      if (advancedFinding) {
+        const outcome = advancedFinding.status === 'fail' ? 'failed' : 'was incomplete'
+        text = `Basic Reporting passed, but ${getScenarioName(advancedFinding.scenario)} ${outcome}: ` +
+          advancedFinding.diagnosis
+      } else {
+        text = 'The library reported this project test correctly when initialized by the validator.'
+      }
       if (ci?.status === 'fail') {
         text += ' The customer CI configuration has a confirmed static problem.'
       } else if (isIncomplete(ci)) {

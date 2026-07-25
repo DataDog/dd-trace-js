@@ -7,6 +7,7 @@ const {
   failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runInstrumentedCommand,
   skip,
@@ -42,14 +43,14 @@ async function runAutoTestRetries ({ framework, out, options }) {
     const { scenario } = await prepareGeneratedScenario(framework, 'atr-fail-once')
     const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return failWithDebugRerun({
+      return reportMissingGeneratedTest({
         command: scenario.runCommand,
         diagnosis: 'The fail-once generated test was not reported during baseline identity discovery.',
-        evidence: discoveryEvidence(discovery),
+        discovery,
         framework,
         options,
         out,
-        outDir: discovery.outDir,
+        scenario,
         scenarioName,
       })
     }

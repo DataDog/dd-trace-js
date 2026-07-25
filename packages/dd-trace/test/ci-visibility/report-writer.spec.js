@@ -57,6 +57,23 @@ describe('test optimization validation report', () => {
     assert.doesNotMatch(report, /### .*Early Flake Detection/)
   })
 
+  it('surfaces a confirmed advanced failure ahead of Basic Reporting success', () => {
+    write([
+      result('basic-reporting', 'pass', 'The direct test emitted the complete event hierarchy.', {
+        foundationalReportingEstablished: true,
+      }),
+      result('efd', 'fail', 'The generated test did not receive an Early Flake Detection retry.', {
+        evidenceStrength: 'confirmed_runtime',
+      }),
+    ])
+    const report = readReport()
+
+    assert.match(
+      report,
+      /What This Means[\s\S]*Basic Reporting passed, but Early Flake Detection failed: The generated test did not/
+    )
+  })
+
   it('distinguishes incomplete validation from a tracer failure', () => {
     write([
       result('basic-reporting', 'blocked', 'The browser could not launch in this sandbox.', {

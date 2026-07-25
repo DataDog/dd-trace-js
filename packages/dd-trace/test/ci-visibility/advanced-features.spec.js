@@ -11,6 +11,7 @@ const {
   findTestsByIdentity,
 } = require('../../../../ci/test-optimization-validation/payload-normalizer')
 const {
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
 } = require('../../../../ci/test-optimization-validation/scenarios/helpers')
 
@@ -21,6 +22,37 @@ describe('test optimization validation advanced features', () => {
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.manifestIncomplete, true)
     assert.match(result.diagnosis, /manifest is incomplete/)
+  })
+
+  it('keeps missing generated identity evidence incomplete when the clean count was unknown', async () => {
+    const scenario = { id: 'basic-pass', runCommand: { argv: ['node', 'test.js'] } }
+    const result = await reportMissingGeneratedTest({
+      command: scenario.runCommand,
+      diagnosis: 'The generated test was not reported.',
+      discovery: {
+        outDir: '/tmp/dd-validation-efd-baseline',
+        result: { exitCode: 0 },
+        tests: [],
+      },
+      framework: {
+        id: 'vitest:root',
+        framework: 'vitest',
+        generatedTestStrategy: {
+          verification: {
+            observedScenarios: [{ id: scenario.id, observedTestCount: null }],
+          },
+        },
+      },
+      options: { verbose: false },
+      out: '/tmp/dd-validation-efd',
+      scenario,
+      scenarioName: 'efd',
+    })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.validationIncomplete, true)
+    assert.strictEqual(result.evidence.reasonCode, 'generated-test-execution-unproven')
+    assert.match(result.diagnosis, /cannot prove that the generated test executed/)
   })
 
   it('cleans generated runtime state before recreating generated files', async () => {
