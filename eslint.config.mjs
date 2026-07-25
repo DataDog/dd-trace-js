@@ -587,12 +587,13 @@ export default [
 
       // Overriding recommended unicorn rules.
       // Rules not listed here are left at the `recommended` default. The entries below
-      // document deliberate exceptions (counts are from the v72 run where applicable).
-      'unicorn/catch-error-name': ['off', { name: 'err' }], // Many errors
+      // document deliberate exceptions. Volume markers stay coarse so they do not drift:
+      // `few` is under ten sites, `many` is tens, `lots` is hundreds or more.
+      'unicorn/catch-error-name': ['off', { name: 'err' }], // lots
       'unicorn/expiring-todo-comments': 'off',
-      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // Many errors
-      'unicorn/name-replacements': 'off', // Many errors | naming churn (split out of prevent-abbreviations)
-      'unicorn/prevent-abbreviations': 'off', // Many errors
+      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // lots
+      'unicorn/name-replacements': 'off', // lots | naming churn (split out of prevent-abbreviations)
+      'unicorn/prevent-abbreviations': 'off', // Its replacements moved to name-replacements
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
@@ -604,38 +605,38 @@ export default [
       'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-promise-try': 'off', // Promise.try (Node.js 24)
-      'unicorn/prefer-promise-with-resolvers': 'off', // 6 errors | Promise.withResolvers (Node.js 22)
+      'unicorn/prefer-promise-with-resolvers': 'off', // few | Promise.withResolvers (Node.js 22)
       'unicorn/prefer-set-methods': 'off', // Set methods (Node.js 22)
       'unicorn/prefer-temporal': 'off', // Temporal is not stable on supported Node.js
       'unicorn/prefer-uint8array-base64': 'off', // Uint8Array base64 (Node.js 22)
 
       // These rules could potentially be evaluated again at a much later point
-      'unicorn/class-reference-in-static-methods': 'off', // 6 errors
-      'unicorn/consistent-class-member-order': 'off', // 55 errors | ordering churn
-      'unicorn/consistent-conditional-object-spread': 'off', // 3 errors
+      'unicorn/class-reference-in-static-methods': 'off', // few
+      'unicorn/consistent-class-member-order': 'off', // many | ordering churn
+      'unicorn/consistent-conditional-object-spread': 'off', // few
       'unicorn/explicit-length-check': 'off', // Not a big advantage
       'unicorn/explicit-timer-delay': 'off', // Covered by our own timer lint rules
       'unicorn/no-array-callback-reference': 'off',
-      'unicorn/no-computed-property-existence-check': 'off', // 160 errors | needs an audit
-      'unicorn/no-declarations-before-early-exit': 'off', // 62 errors
-      'unicorn/no-error-property-assignment': 'off', // 6 errors | all preserve upstream error metadata
+      'unicorn/no-computed-property-existence-check': 'off', // lots | needs an audit
+      'unicorn/no-declarations-before-early-exit': 'off', // many
+      'unicorn/no-error-property-assignment': 'off', // few | all preserve upstream error metadata
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
-      'unicorn/no-nonstandard-builtin-properties': 'off', // 34 errors | needs an audit
+      'unicorn/no-nonstandard-builtin-properties': 'off', // many | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
-      'unicorn/no-undeclared-class-members': 'off', // 272 errors | requires declaring every field
-      'unicorn/no-unreadable-array-destructuring': 'off', // 4 errors | not autofixable, needs manual rewrite
-      'unicorn/no-unreadable-for-of-expression': 'off', // 32 errors
-      'unicorn/no-unreadable-object-destructuring': 'off', // 57 errors
-      'unicorn/no-unsafe-string-replacement': 'off', // 16 errors | replacement callbacks reduce readability
-      'unicorn/no-useless-recursion': 'off', // 7 errors | iterative rewrites add substantial nesting
+      'unicorn/no-undeclared-class-members': 'off', // lots | requires declaring every field
+      'unicorn/no-unreadable-array-destructuring': 'off', // few | not autofixable, needs manual rewrite
+      'unicorn/no-unreadable-for-of-expression': 'off', // many
+      'unicorn/no-unreadable-object-destructuring': 'off', // many
+      'unicorn/no-unsafe-string-replacement': 'off', // many | replacement callbacks reduce readability
+      'unicorn/no-useless-recursion': 'off', // few | iterative rewrites add substantial nesting
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
-      'unicorn/prefer-early-return': 'off', // 67 errors | tension with our positive-`if` style
-      'unicorn/prefer-number-is-safe-integer': 'off', // 17 errors
-      'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
+      'unicorn/prefer-early-return': 'off', // many | tension with our positive-`if` style
+      'unicorn/prefer-number-is-safe-integer': 'off', // many
+      'unicorn/prefer-object-iterable-methods': 'off', // many
       'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
-      'unicorn/prefer-simple-condition-first': 'off', // 184 errors | needs a short-circuit behavior audit
-      'unicorn/prefer-then-catch': 'off', // 45 errors | broadens rejection boundaries
-      'unicorn/require-array-sort-compare': 'off', // 28 errors | many intentional lexicographic sorts
+      'unicorn/prefer-simple-condition-first': 'off', // lots | needs a short-circuit behavior audit
+      'unicorn/prefer-then-catch': 'off', // many | broadens rejection boundaries
+      'unicorn/require-array-sort-compare': 'off', // many | many intentional lexicographic sorts
 
       // The following rules should not be activated!
       'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
@@ -667,7 +668,7 @@ export default [
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
       'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat
       'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
-      'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
+      'unicorn/prefer-reflect-apply': 'off', // lots | questionable benefit
       'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
       'unicorn/prefer-split-limit': 'off', // A limit is slower than getSegment; the rest read every segment
       'unicorn/prefer-switch': 'off', // Questionable benefit
@@ -675,14 +676,14 @@ export default [
       'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
       'unicorn/switch-case-braces': 'off', // Questionable benefit
 
-      // These remaining rules need focused rewrites before activation (counts from the v72 run).
-      'unicorn/no-confusing-array-splice': 'off', // 1 error
-      'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
-      'unicorn/no-unnecessary-global-this': 'off', // 3 errors | explicit globals are clearer
-      'unicorn/no-useless-continue': 'off', // 1 error
-      'unicorn/prefer-array-from-map': 'off', // 9 errors | loops avoid callback allocation
-      'unicorn/prefer-continue': 'off', // 52 errors
-      'unicorn/prefer-ternary': 'off', // 16 errors
+      // These remaining rules need focused rewrites before activation.
+      'unicorn/no-confusing-array-splice': 'off', // few
+      'unicorn/no-for-each': 'off', // many | we already prefer for-of in production
+      'unicorn/no-unnecessary-global-this': 'off', // few | explicit globals are clearer
+      'unicorn/no-useless-continue': 'off', // few
+      'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
+      'unicorn/prefer-continue': 'off', // many
+      'unicorn/prefer-ternary': 'off', // many
     },
   },
   {
