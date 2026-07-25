@@ -941,8 +941,7 @@ function getCodeOwnersFileEntries (rootDir) {
   const lines = codeOwnersContent.split('\n')
 
   for (const line of lines) {
-    const [content] = line.split('#')
-    const trimmed = content.trim()
+    const trimmed = getSegment(line, '#', 0).trim()
     if (trimmed === '') continue
     const [pattern, ...owners] = trimmed.split(/\s+/)
     entries.push(setCodeOwnersPatternRegex({ pattern, owners }))

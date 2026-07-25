@@ -635,7 +635,6 @@ export default [
       'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
       'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
       'unicorn/prefer-simple-condition-first': 'off', // 184 errors | needs a short-circuit behavior audit
-      'unicorn/prefer-split-limit': 'off', // 23 errors
       'unicorn/prefer-then-catch': 'off', // 45 errors | broadens rejection boundaries
       'unicorn/require-array-sort-compare': 'off', // 28 errors | many intentional lexicographic sorts
 
@@ -671,6 +670,7 @@ export default [
       'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
       'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
       'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
+      'unicorn/prefer-split-limit': 'off', // A limit is slower than getSegment; the rest read every segment
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit

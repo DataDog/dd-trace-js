@@ -6,6 +6,7 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
@@ -555,8 +556,7 @@ function getErrorFromCucumberResult (cucumberResult) {
     return
   }
 
-  const [message] = cucumberResult.message.split('\n')
-  const error = new Error(message)
+  const error = new Error(getSegment(cucumberResult.message, '\n', 0))
   if (cucumberResult.exception) {
     error.type = cucumberResult.exception.type
   }
