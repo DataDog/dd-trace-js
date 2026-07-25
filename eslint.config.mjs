@@ -631,13 +631,11 @@ export default [
       'unicorn/no-useless-recursion': 'off', // 7 errors | iterative rewrites add substantial nesting
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
       'unicorn/prefer-early-return': 'off', // 67 errors | tension with our positive-`if` style
-      'unicorn/prefer-hoisting-branch-code': 'off', // 2 errors | reshapes branch bodies
       'unicorn/prefer-minimal-ternary': 'off', // 24 errors
       'unicorn/prefer-number-is-safe-integer': 'off', // 17 errors
       'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
       'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
       'unicorn/prefer-simple-condition-first': 'off', // 184 errors | needs a short-circuit behavior audit
-      'unicorn/prefer-smaller-scope': 'off', // 3 errors
       'unicorn/prefer-split-limit': 'off', // 23 errors
       'unicorn/prefer-then-catch': 'off', // 45 errors | broadens rejection boundaries
       'unicorn/require-array-sort-compare': 'off', // 28 errors | many intentional lexicographic sorts
@@ -681,12 +679,10 @@ export default [
       // These remaining rules need focused rewrites before activation (counts from the v72 run).
       'unicorn/no-confusing-array-splice': 'off', // 1 error
       'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
-      'unicorn/no-subtraction-comparison': 'off', // 2 errors
       'unicorn/no-unnecessary-global-this': 'off', // 3 errors | explicit globals are clearer
       'unicorn/no-useless-continue': 'off', // 1 error
       'unicorn/prefer-array-from-map': 'off', // 9 errors | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // 52 errors
-      'unicorn/prefer-logical-operator-over-ternary': 'off', // 3 errors
       'unicorn/prefer-ternary': 'off', // 16 errors
     },
   },

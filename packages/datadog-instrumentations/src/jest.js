@@ -2295,12 +2295,11 @@ function getCliWrapper (isNewJestVersion) {
           } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (err) {
             skippableSuitesCoverage = {}
-            skippedSuitesCoverage = {}
           } else {
             skippableSuites = receivedSkippableSuites
             skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
-            skippedSuitesCoverage = {}
           }
+          skippedSuitesCoverage = {}
         } catch (err) {
           log.error('Jest test-suite skippable error', err)
         }

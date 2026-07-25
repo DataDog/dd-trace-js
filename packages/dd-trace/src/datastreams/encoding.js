@@ -88,7 +88,7 @@ function decodeUvarint64 (
         low |= n << s
       }
       if (s > 0) {
-        high |= s - 32 > 0 ? n << (s - 32) : n >> (32 - s)
+        high |= s > 32 ? n << (s - 32) : n >> (32 - s)
       }
       return [low, high, bytes]
     }
@@ -96,8 +96,7 @@ function decodeUvarint64 (
       low |= (n & 0x7F) << s
     }
     if (s > 0) {
-      high |=
-        s - 32 > 0 ? (n & 0x7F) << (s - 32) : (n & 0x7F) >> (32 - s)
+      high |= s > 32 ? (n & 0x7F) << (s - 32) : (n & 0x7F) >> (32 - s)
     }
     s += 7
   }

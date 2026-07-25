@@ -37,6 +37,22 @@ describe('encoding', () => {
       assert.strictEqual(bytes2.length, 0)
     })
 
+    it('encoding then decoding should be a no op at the largest encodable magnitude', () => {
+      const n = Math.floor(Number.MAX_SAFE_INTEGER / 2)
+
+      const encoded = encodeVarint(n)
+      assert.deepStrictEqual([...encoded], [254, 255, 255, 255, 255, 255, 255, 15])
+      const [decoded, bytes] = decodeVarint(encoded)
+      assert.strictEqual(decoded, n)
+      assert.strictEqual(bytes.length, 0)
+
+      const encodedNegative = encodeVarint(-n)
+      assert.deepStrictEqual([...encodedNegative], [255, 255, 255, 255, 255, 255, 255, 15])
+      const [decodedNegative, negativeBytes] = decodeVarint(encodedNegative)
+      assert.strictEqual(decodedNegative, -n)
+      assert.strictEqual(negativeBytes.length, 0)
+    })
+
     it('encoding a number bigger than Max safe int fails.', () => {
       const n = Number.MAX_SAFE_INTEGER + 10
       const encoded = encodeVarint(n)
