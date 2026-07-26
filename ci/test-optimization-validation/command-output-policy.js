@@ -34,7 +34,8 @@ function prepareCommandOutputs ({ command, artifactRoot, repositoryRoot }) {
     if (pathExists(outputPath)) {
       throw new Error(
         `Command output path already exists and will not be moved or overwritten: ${outputPath}. ` +
-        'Remove it or choose a command that writes to a fresh output path, then render a new approval plan.'
+        'The validator will not delete pre-existing output. Inspect and remove it manually, or choose a fresh ' +
+        'output path, then render a new approval plan.'
       )
     }
     states.push({

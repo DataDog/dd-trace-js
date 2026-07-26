@@ -300,6 +300,35 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
   })
 
+  it('does not bind command text from a comment or step name', () => {
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    steps:',
+      `      # run: ${command}`,
+      `      - name: ${command}`,
+      '        run: echo not-the-test',
+      '',
+    ].join('\n'))
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.diagnosis, /could not be bound structurally/)
+  })
+
+  it('does not expand a package script without an approval-bound working directory', () => {
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+    delete framework.ciWiring.workingDirectory
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.evidence.ciFacts.runnerInvocation.reason, /no approval-bound effective working directory/)
+  })
+
   it('confirms a reset in the selected direct command', () => {
     const resetCommand = `NODE_OPTIONS="" ${command}`
     fs.writeFileSync(workflow, workflowSource({ command: resetCommand }))

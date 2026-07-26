@@ -72,7 +72,7 @@ function runCiWiring ({ manifest, framework }) {
   }
   const jobSource = getSelectedJobSource(source, ci)
   if (!jobSource ||
-    !containsLiteral(jobSource, ci.command) ||
+    !containsExecutionCommand(jobSource, ci.command) ||
     (ci.step && !containsLiteral(jobSource, ci.step))) {
     return getIncomplete(
       framework,
@@ -256,10 +256,12 @@ function getRunnerResolution (command, framework, ci) {
     }
   }
 
-  if (ci.workingDirectory &&
+  if (!ci.workingDirectory ||
     path.resolve(ci.workingDirectory) !== path.resolve(framework.project.root)) {
     return {
-      reason: 'the selected working directory does not match the approval-bound project package',
+      reason: ci.workingDirectory
+        ? 'the selected working directory does not match the approval-bound project package'
+        : 'the selected package-script command has no approval-bound effective working directory',
       source: 'unresolved_wrapper',
       status: 'unresolved',
     }
@@ -505,6 +507,16 @@ function containsLiteral (source, value) {
   const normalizedSource = source.replaceAll('\r\n', '\n')
   const normalizedValue = String(value).replaceAll('\r\n', '\n').trim()
   return normalizedValue !== '' && normalizedSource.includes(normalizedValue)
+}
+
+function containsExecutionCommand (source, value) {
+  const command = String(value).replaceAll('\r\n', '\n').trim()
+  if (!command || command.includes('\n')) return false
+  return source.split(/\r?\n/).some(line => {
+    if (/^\s*#/.test(line)) return false
+    const match = /^\s*(?:-\s*)?(?:run|script):\s*(.*?)\s*$/.exec(line)
+    return match?.[1] === command
+  })
 }
 
 /**

@@ -132,6 +132,43 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('normalizes bounded Vitest mode options and discloses the omission', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'vitest',
+      script: 'vitest --run --typecheck test/example.test.js',
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['vitest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.validation.runnerArgs, [])
+      assert.deepStrictEqual(framework.validation.omittedRunnerOptions, ['--run', '--typecheck'])
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('rejects non-English Cucumber generation instead of interpreting localized Gherkin', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'cucumber',
+      script: 'cucumber-js --language fr features/example.feature',
+    })
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['cucumber']),
+      }).frameworks[0]
+
+      assert.notStrictEqual(framework.status, 'runnable')
+      assert.match(framework.notes.join('\n'), /--language fr is not supported/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('retains Jest configuration from a JavaScript runner entrypoint', () => {
     const fixture = createRepositoryFixture({
       framework: 'jest',
@@ -446,7 +483,7 @@ describe('test optimization validation manifest scaffold', () => {
   it('retains Cypress configuration for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'cypress',
-      script: 'cypress run --browser chrome --config-file cypress.custom.js --e2e',
+      script: 'cypress run --spec cypress/e2e/example.cy.js --browser chrome --config-file cypress.custom.js --e2e',
     })
     fs.writeFileSync(path.join(fixture.root, 'cypress.custom.js'), 'module.exports = {}\n')
     try {
@@ -464,6 +501,8 @@ describe('test optimization validation manifest scaffold', () => {
         'cypress.custom.js',
         '--e2e',
       ])
+      assert.strictEqual(framework.validation.testFile, fixture.testFile)
+      assert.strictEqual(framework.validation.runnerArgs.includes('--spec'), false)
       assert.deepStrictEqual(command.argv.slice(2, 8), [
         'run',
         '--browser',

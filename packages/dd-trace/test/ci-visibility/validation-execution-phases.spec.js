@@ -351,6 +351,32 @@ describe('test optimization validation execution boundary', () => {
     )
   })
 
+  it('classifies a missing Playwright browser during generated verification as setup', async () => {
+    framework.framework = 'playwright'
+    framework.browserRequired = true
+    fs.writeFileSync(fixture.runner, [
+      "console.error(\"browserType.launch: Executable doesn't exist\")",
+      "console.error('Please run the following command to download new browsers: playwright install')",
+      'process.exit(1)',
+      '',
+    ].join('\n'))
+
+    const result = await verifyGeneratedTestStrategy({
+      framework,
+      options: {
+        repositoryRoot: fixture.root,
+        scenarios: new Set(['efd']),
+        verbose: false,
+      },
+      out,
+    })
+
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.failure.status, 'blocked')
+    assert.strictEqual(result.failure.evidence.domain, 'project_setup')
+    assert.strictEqual(result.failure.evidence.commandFailure.kind, 'playwright-browser-missing')
+  })
+
   it('reports a timed-out preflight as incomplete rather than a tracer failure', async function () {
     this.timeout(8000)
     fs.writeFileSync(fixture.runner, 'setInterval(() => {}, 1000)\n')

@@ -134,6 +134,7 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
         ...(Object.keys(basic.env || {}).length > 0
           ? [`Runner environment: ${inline(JSON.stringify(basic.env))}`]
           : []),
+        ...formatOmittedRunnerOptions(framework.validation.omittedRunnerOptions),
         '',
         'Basic Reporting command:',
         '',
@@ -156,6 +157,9 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
           `Temporary file: ${inline(relative(root, scenario.testIdentities[0].file))}`,
           '',
           codeBlock(source),
+          '',
+          'Execution count: one clean generated-test verification, one instrumented identity-discovery run, and ' +
+            'one feature-validation run. One debug rerun may run only after a failure.',
           ''
         )
       }
@@ -227,6 +231,12 @@ function formatApprovalPlan ({ approvalArtifacts, manifest, out, requestedScenar
       'command in a normal project terminal and ask the agent to interpret the generated report.'
   )
   return lines.join('\n')
+}
+
+function formatOmittedRunnerOptions (options = []) {
+  return options.map(option => option === '--run'
+    ? 'Normalized runner option: `--run` is omitted because the validator supplies Vitest `run` itself.'
+    : 'Omitted runner option: `--typecheck` is excluded because validation executes runtime tests only.')
 }
 
 /**

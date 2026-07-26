@@ -232,6 +232,9 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
     },
     validation: {
       environment: runnerContract.environment,
+      ...(runnerContract.omittedOptions?.length > 0
+        ? { omittedRunnerOptions: runnerContract.omittedOptions }
+        : {}),
       requiredEnvVars: [],
       runner,
       runnerArgs: runnerContract.runnerArgs,

@@ -40,6 +40,12 @@ const IGNORED_RUNNER_OPTIONS = {
     values: new Set(['-R', '--reporter']),
   },
 }
+const OMITTED_RUNNER_OPTIONS = {
+  vitest: new Set(['--run', '--typecheck']),
+}
+const SOURCE_SELECTOR_OPTIONS = {
+  cypress: new Set(['--spec']),
+}
 const RUNNER_ENVIRONMENT_NAMES = new Set([
   'BABEL_ENV',
   'CI',
@@ -120,6 +126,18 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
       runnerArgs: [],
     }
   }
+  const omittedOptions = getOmittedRunnerOptions(framework, invocation)
+  if (framework === 'cucumber') {
+    const language = getOptionValue(invocation, '--language')
+    if (language && language !== 'en') {
+      return {
+        environment: {},
+        error: `--language ${language} is not supported by the validator-generated English scenarios`,
+        inputFiles: [],
+        runnerArgs: [],
+      }
+    }
+  }
 
   const environment = getRunnerEnvironment(invocation, platform)
   const environmentError = getRunnerEnvironmentError(environment, platform)
@@ -143,6 +161,7 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
   return {
     environment,
     inputFiles: inputs.files,
+    omittedOptions,
     runnerArgs,
   }
 }
@@ -183,6 +202,7 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
   if (!invocation || invocation.error || !options) return []
 
   const roots = new Set()
+  const selectors = SOURCE_SELECTOR_OPTIONS[framework] || new Set()
   const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]
@@ -191,6 +211,9 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
       if (DIRECTORY_OPTIONS.has(option)) {
         const value = token.includes('=') ? token.slice(token.indexOf('=') + 1) : tokens[++index]
         addRunnerSearchRoot(roots, value, projectRoot, repositoryRoot, true)
+      } else if (selectors.has(option)) {
+        const value = token.includes('=') ? token.slice(token.indexOf('=') + 1) : tokens[++index]
+        addRunnerSearchRoot(roots, value, projectRoot, repositoryRoot, false)
       } else if (options.values.has(option) && !token.includes('=')) {
         index++
       }
@@ -252,18 +275,45 @@ function getUnknownRunnerOption (framework, invocation) {
   const retained = RUNNER_OPTIONS[framework]
   if (!retained) return
   const ignored = IGNORED_RUNNER_OPTIONS[framework] || { flags: new Set(), values: new Set() }
+  const omitted = OMITTED_RUNNER_OPTIONS[framework] || new Set()
+  const selectors = SOURCE_SELECTOR_OPTIONS[framework] || new Set()
   const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
 
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]
     if (!token.startsWith('-')) continue
     const option = token.split('=', 1)[0]
+    if (omitted.has(option)) {
+      if (token !== option) return option
+      continue
+    }
+    if (selectors.has(option)) {
+      const value = token.includes('=') ? token.slice(token.indexOf('=') + 1) : tokens[index + 1]
+      if (!value || value.startsWith('-')) return option
+      if (!token.includes('=')) index++
+      continue
+    }
     if (retained.flags.has(option) || ignored.flags.has(option)) continue
     if (retained.values.has(option) || ignored.values.has(option)) {
       if (!token.includes('=') && tokens[index + 1] && !tokens[index + 1].startsWith('-')) index++
       continue
     }
     return option
+  }
+}
+
+function getOmittedRunnerOptions (framework, invocation) {
+  const omitted = OMITTED_RUNNER_OPTIONS[framework] || new Set()
+  return [...new Set(invocation.tokens
+    .slice(invocation.runnerIndex + 1)
+    .filter(token => token.startsWith('-') && omitted.has(token.split('=', 1)[0])))]
+}
+
+function getOptionValue (invocation, expected) {
+  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index].split('=', 1)[0] !== expected) continue
+    return tokens[index].includes('=') ? tokens[index].slice(tokens[index].indexOf('=') + 1) : tokens[index + 1]
   }
 }
 

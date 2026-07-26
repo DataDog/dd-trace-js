@@ -9,6 +9,13 @@ The validator answers two separate questions:
 
 It also checks Early Flake Detection, Auto Test Retries, and Test Management when Basic Reporting succeeds.
 
+Recommended agent prompt:
+
+> From the current repository, resolve `dd-trace` only with
+> `node -p "require.resolve('dd-trace/package.json', { paths: [process.cwd()] })"`, then read and execute the adjacent
+> `ci/runbook.md`. Do not search outside this repository. Reading the single resolved package path, including its
+> symlink target, is allowed.
+
 ## Safety Boundary
 
 - Work only in the current repository. Resolve its installed `dd-trace`; do not search sibling repositories, home
@@ -70,8 +77,8 @@ Record only inert evidence in that framework's `ciWiring`:
 
 - `configFile`: absolute path to the CI file;
 - exact YAML `job` key and optional literal `step`;
-- `command`: exact command text from that job;
-- `workingDirectory`, when explicitly known;
+- `command`: only the exact literal command bytes from that job's execution field; put explanations in evidence;
+- `workingDirectory`: the effective directory, including a statically known provider default;
 - `initialization.status` and short evidence;
 - `transport.mode` and short evidence;
 - unresolved wrappers, reusable workflows, includes, inherited configuration, dynamic values, or matrix values that
@@ -83,6 +90,8 @@ Record initialization and transport independently of command indirection: use `n
 contains no visible `dd-trace/ci/init`, and `none` when it declares neither agentless transport nor an Agent. GitHub
 repository and organization secrets or variables are not ambient job environment; do not list them as unresolved
 unless the workflow explicitly references them. Do not carry evidence from unselected jobs into the selected job.
+Do not add generic wrapper-propagation uncertainty when a direct or bounded package-script path already proves that
+initialization is absent.
 
 The CI audit is deliberately conservative:
 
@@ -112,7 +121,7 @@ node ./node_modules/dd-trace/ci/validate-test-optimization.js \
   --validate-manifest
 ```
 
-Print the complete approval plan:
+Finalize discovery and CI evidence before printing the complete approval plan:
 
 ```bash
 node ./node_modules/dd-trace/ci/validate-test-optimization.js \
@@ -129,6 +138,7 @@ Present the complete delimited plan in the next user-facing message. Ask exactly
 `Approve executing exactly the plan above?`
 
 Do not run more discovery while waiting.
+After printing the plan, do not edit the manifest. Any correction or retry requires a fresh plan and fresh approval.
 
 ## 4. Run After Approval
 
@@ -191,3 +201,5 @@ Exit codes are:
 - `3`: validator implementation or orchestration error.
 
 A nonzero exit code does not by itself mean `dd-trace` is broken.
+After presenting the report, stop. Do not repair evidence, inspect validator internals, or retry without a fresh plan
+and approval.

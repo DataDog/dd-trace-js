@@ -200,6 +200,14 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
   containedPath(repositoryRoot, validation.testFile, `${prefix}.validation.testFile`, errors)
   const runnerArgsError = getRunnerArgsError(framework.framework, validation.runnerArgs)
   if (runnerArgsError) errors.push(`${prefix}.validation.runnerArgs ${runnerArgsError}.`)
+  if (validation.omittedRunnerOptions !== undefined) {
+    validateStringArray(validation.omittedRunnerOptions, `${prefix}.validation.omittedRunnerOptions`, errors)
+    for (const option of Array.isArray(validation.omittedRunnerOptions) ? validation.omittedRunnerOptions : []) {
+      if (!['--run', '--typecheck'].includes(option)) {
+        errors.push(`${prefix}.validation.omittedRunnerOptions contains unsupported option ${option}.`)
+      }
+    }
+  }
   const runnerEnvironmentError = getRunnerEnvironmentError(validation.environment)
   if (runnerEnvironmentError) errors.push(`${prefix}.validation.environment ${runnerEnvironmentError}.`)
   if (!runnerArgsError &&

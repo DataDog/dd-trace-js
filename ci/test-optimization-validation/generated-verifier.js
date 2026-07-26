@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const { getCommandBlocker } = require('./command-blocker')
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
@@ -79,7 +80,14 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       if (result.timedOut || result.exitCode !== expected.exitCode ||
         observedWrongTestCount || failOnceStateCreated === false) {
         cleanupGeneratedRuntimeFiles(framework)
-        return getVerificationFailure(framework, evidence, artifacts, scenarioEvidence, result.timedOut)
+        return getVerificationFailure(
+          framework,
+          evidence,
+          artifacts,
+          scenarioEvidence,
+          result,
+          observedTestCount
+        )
       }
     }
 
@@ -137,12 +145,36 @@ function getScenariosToVerify (scenarios, selectedFeatures) {
  * @param {object} evidence collected verification evidence
  * @param {string[]} artifacts command artifacts
  * @param {object} scenario failed scenario evidence
- * @param {boolean} timedOut whether the scenario timed out
+ * @param {object} result command result
+ * @param {number|null} observedTestCount observed generated test count
  * @returns {{ok: false, failure: object}} generated verification failure
  */
-function getVerificationFailure (framework, evidence, artifacts, scenario, timedOut) {
+function getVerificationFailure (framework, evidence, artifacts, scenario, result, observedTestCount) {
+  const commandFailure = getCommandBlocker(result, {
+    browserRequired: framework.browserRequired,
+    framework: framework.framework,
+    testsRan: Number.isInteger(observedTestCount) && observedTestCount > 0,
+  })
+  if (commandFailure) {
+    const domain = commandFailure.blockedByExecutionEnvironment
+      ? 'execution_environment'
+      : commandFailure.localRuntimeBlocked
+        ? 'local_runtime'
+        : 'project_setup'
+    return {
+      ok: false,
+      failure: {
+        frameworkId: framework.id,
+        scenario: 'generated-test-verification',
+        status: 'blocked',
+        diagnosis: `${commandFailure.summary} Advanced-feature validation could not start reliably.`,
+        evidence: { ...evidence, commandFailure, domain, validationIncomplete: true },
+        artifacts,
+      },
+    }
+  }
   let reason
-  if (timedOut) {
+  if (result.timedOut) {
     reason = 'timed out'
   } else if (scenario.id === 'atr-fail-once' && scenario.failOnceStateCreated === false) {
     reason = 'failed without creating its declared fail-once state file, so it failed for an unrelated reason'

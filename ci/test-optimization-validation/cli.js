@@ -192,6 +192,8 @@ async function main (argv) {
         validatorExitCode,
       },
     })
+    console.log(`Validation report: ${path.join(out, 'report.md')}`)
+    console.log('Present the report and stop. Any correction or retry requires a fresh plan and approval.')
     process.exitCode = validatorExitCode
   } catch (error) {
     process.exitCode = 3

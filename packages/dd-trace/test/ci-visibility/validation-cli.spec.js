@@ -114,6 +114,7 @@ describe('test optimization validation CLI', () => {
       assert.match(planned.stdout, /===== CUSTOMER APPROVAL PLAN =====/)
       assert.match(planned.stdout, /only the displayed `node <repository-contained-runner> <one-test-file>`/)
       assert.match(planned.stdout, /eligible for approved clean preflight; runtime prerequisites are unverified/)
+      assert.match(planned.stdout, /Execution count: one clean generated-test verification/)
       assert.match(planned.stdout, /Approve executing exactly the plan above\?/)
       assert.match(
         planned.stdout,
