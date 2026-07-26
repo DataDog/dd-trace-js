@@ -314,6 +314,7 @@ function compactEvidence (evidence = {}) {
     if (evidence[key] !== undefined) compact[key] = evidence[key]
   }
   if (evidence.ciCommandCandidate) compact.ciCommandCandidate = evidence.ciCommandCandidate
+  if (evidence.ciFacts) compact.ciFacts = evidence.ciFacts
   if (evidence.ciWiring?.unresolved) compact.unresolved = evidence.ciWiring.unresolved
   return sanitizeForReport(compact)
 }

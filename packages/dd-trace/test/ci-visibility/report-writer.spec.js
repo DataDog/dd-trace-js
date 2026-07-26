@@ -82,6 +82,10 @@ describe('test optimization validation report', () => {
         validationIncomplete: true,
       }),
       result('ci-wiring', 'error', 'The wrapper chain could not be resolved.', {
+        ciFacts: {
+          initialization: { status: 'missing' },
+          runnerInvocation: { status: 'unresolved' },
+        },
         conclusion: 'incomplete',
         validationIncomplete: true,
       }),
@@ -95,6 +99,8 @@ describe('test optimization validation report', () => {
     assert.match(report, /\*\*Status: INCOMPLETE\*\*/)
     assert.match(report, /Local library behavior was not validated/)
     assert.match(report, /\| INCOMPLETE \|/)
+    assert.match(report, /"ciFacts"/)
+    assert.match(report, /"initialization"[\s\S]*"status": "missing"/)
     assert.match(report, /Run the exact approved command in a normal project terminal/)
   })
 

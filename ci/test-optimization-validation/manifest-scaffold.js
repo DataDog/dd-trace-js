@@ -51,7 +51,7 @@ const CI_PATHS = [
 const CONFIG_PATTERNS = {
   cucumber: cucumber.CONFIG_PATTERN,
   cypress: cypress.CONFIG_PATTERN,
-  jest: /^(?:jest|config-jest)\.config\.[cm]?[jt]s$|^jest\.config\.[cm]?[jt]s$/,
+  jest: /^(?:jest|config-jest)\.config\.(?:[cm]?[jt]s|json)$/,
   mocha: /^\.mocharc\.(?:json|ya?ml|[cm]?js)$/,
   playwright: playwright.CONFIG_PATTERN,
   vitest: /^(?:vite|vitest)\.config\.[cm]?[jt]s$/,
@@ -235,6 +235,7 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
       requiredEnvVars: [],
       runner,
       runnerArgs: runnerContract.runnerArgs,
+      selectorScope: projectRunner ? 'instrumented_event_identity' : 'bounded_direct_runner',
       testFile: candidate.path,
       timeoutMs: browserRequired ? 300_000 : 180_000,
     },
@@ -245,6 +246,12 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
         'directly for ' +
         `${path.relative(repositoryRoot, candidate.path)}.`,
       'The validator retained only allowlisted runner configuration from the detected package script.',
+      ...(projectRunner
+        ? [
+            'Basic Reporting will remain incomplete unless captured test events identify only the approved ' +
+              'representative file.',
+          ]
+        : []),
       ...(candidate.requiresLocalSocket
         ? [
             'The selected test appears to require localhost. A restricted sandbox may leave local validation ' +

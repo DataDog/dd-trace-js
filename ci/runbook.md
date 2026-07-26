@@ -74,23 +74,33 @@ Record only inert evidence in that framework's `ciWiring`:
 - `workingDirectory`, when explicitly known;
 - `initialization.status` and short evidence;
 - `transport.mode` and short evidence;
-- unresolved wrappers, reusable workflows, includes, matrices, inherited configuration, or dynamic values.
+- unresolved wrappers, reusable workflows, includes, inherited configuration, dynamic values, or matrix values that
+  affect the selected command, `NODE_OPTIONS`, Datadog configuration, operating system, shell, or transport.
 
-Set `reviewComplete` to `true` only when the selected job and all inherited configuration are resolved. Otherwise keep
-the unknowns in `unresolved`.
+Set `reviewComplete` to `true` only when configuration relevant to initialization, runner invocation, and transport is
+resolved. An ordinary Node.js version matrix is not unresolved evidence unless it changes one of those facts.
+Record initialization and transport independently of command indirection: use `not_configured` when the selected job
+contains no visible `dd-trace/ci/init`, and `none` when it declares neither agentless transport nor an Agent. GitHub
+repository and organization secrets or variables are not ambient job environment; do not list them as unresolved
+unless the workflow explicitly references them. Do not carry evidence from unselected jobs into the selected job.
 
 The CI audit is deliberately conservative:
 
-- A literal direct-runner job with no `dd-trace/ci/init` in its checksum-bound CI file can produce a confirmed finding.
+- Literal local npm, pnpm, and Yarn script chains may be expanded statically from the approval-bound `package.json`.
+  Lifecycle scripts are disclosed but are never executed.
+- Initialization, runner invocation, wrapper propagation, matrix relevance, and transport are reported independently;
+  uncertainty in one fact does not erase confirmed evidence about another.
+- A direct runner or bounded local package-script path with no `dd-trace/ci/init` in its checksum-bound CI job can
+  produce a confirmed finding.
 - An explicit `NODE_OPTIONS` reset can produce a confirmed finding.
 - Agentless reporting visibly enabled without an API key reference remains incomplete because the key may be injected
   outside the reviewed file.
-- Package scripts, shell expressions, monorepo tools, custom launchers, reusable workflows, and dynamic values remain
-  incomplete.
+- Dynamic shell expressions, monorepo tools, custom launchers, remote reusable workflows/actions, and unavailable
+  external CI configuration remain incomplete when they can affect a relevant fact.
 - A configuration that appears correct remains propagation-unverified until runtime debug evidence confirms the final
   test process.
 
-No CI command is executed.
+No CI or package command is executed.
 
 ## 3. Validate and Print the Plan
 

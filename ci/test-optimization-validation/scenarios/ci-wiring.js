@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
+const { expandLocalPackageScripts } = require('../ci-package-scripts')
 const { buildCiRemediation } = require('../ci-remediation')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { environmentNamesEqual } = require('../environment')
@@ -12,8 +13,6 @@ const { fail, incomplete } = require('./helpers')
 
 const MAX_CI_FILE_BYTES = 512 * 1024
 const DYNAMIC_COMMAND_PATTERN = /[$`;&|\r\n]|%[^%\s]+%|![^!\s]+!/
-const WRAPPER_PATTERN =
-  /\b(?:npm|pnpm|yarn|yarnpkg)\s+(?:run\s+)?[A-Za-z0-9:_-]+\b|\bnpx(?:\.cmd)?\b|\b(?:nx|turbo|lerna|mise)\b/
 const RUNNER_PATTERNS = {
   cucumber:
     /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?cucumber(?:-js)?(?:\.js)?(?:\s|$)/,
@@ -21,7 +20,7 @@ const RUNNER_PATTERNS = {
   jest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?jest(?:\.js)?(?:\s|$)/,
   mocha: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?mocha(?:\.js)?(?:\s|$)/,
   playwright: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?playwright(?:\.js)?\s+test(?:\s|$)/,
-  vitest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?vitest(?:\.js)?\s+run(?:\s|$)/,
+  vitest: /^(?:(?:[^\s]*[/\\])?node(?:\.exe)?\s+)?(?:[^\s]*[/\\])?vitest(?:\.js)?\s+(?:run|--run)(?:\s|$)/,
 }
 
 /**
@@ -49,12 +48,11 @@ function runCiWiring ({ manifest, framework }) {
     evidenceStrength: 'unknown',
   }
   const missing = getMissingReviewFields(ci)
-  if (missing.length > 0 || ci.unresolved?.length > 0 || ci.reviewComplete !== true) {
+  if (missing.length > 0) {
     return getIncomplete(
       framework,
       `The CI audit is incomplete because ${[
-        ...(missing.length > 0 ? [`it is missing ${missing.join(', ')}`] : []),
-        ...(ci.unresolved?.length > 0 ? [`unresolved evidence remains: ${ci.unresolved.join('; ')}`] : []),
+        `it is missing ${missing.join(', ')}`,
         ...(ci.reviewComplete === true ? [] : ['the review is not marked complete']),
       ].join(' and ')}.`,
       {
@@ -89,31 +87,44 @@ function runCiWiring ({ manifest, framework }) {
   }
 
   const command = ci.command.trim()
-  const runner = getDirectRunner(command, framework.framework)
-  if (DYNAMIC_COMMAND_PATTERN.test(command) || WRAPPER_PATTERN.test(command) ||
-    !runner) {
-    return getIncomplete(
-      framework,
-      'The selected CI command is dynamic or reaches the test runner through a wrapper. This validator deliberately ' +
-        'does not interpret shell, package-manager, monorepo, or custom wrapper semantics.',
-      {
-        ...evidence,
-        recommendation: 'Confirm the effective NODE_OPTIONS value in the final test-runner process with ' +
-          'DD_TRACE_DEBUG=1, or record a literal direct-runner CI step.',
-      }
-    )
-  }
-
+  const resolution = getRunnerResolution(command, framework, ci)
   const normalizedSource = jobSource.replaceAll('\\', '/')
   const hasInitialization = /dd-trace\/ci\/init(?:\.js)?\b/.test(normalizedSource)
-  const explicitlyRemovesInitialization = commandExplicitlyClearsNodeOptions(command, framework.framework)
+  const matrixRelevant = matrixAffectsCiFacts(jobSource, command)
+  const unresolved = classifyUnresolved(ci, resolution, matrixRelevant, jobSource)
+  const initialization = getInitializationFact(ci, hasInitialization)
+  const ciFacts = {
+    initialization,
+    matrix: {
+      status: matrixRelevant ? 'affects_relevant_configuration' : 'not_relevant_to_ci_facts',
+    },
+    runnerInvocation: {
+      ...(resolution.commandPath ? { commandPath: resolution.commandPath } : {}),
+      ...(resolution.lifecycleScripts?.length > 0
+        ? { lifecycleScripts: resolution.lifecycleScripts }
+        : {}),
+      ...(resolution.reason ? { reason: resolution.reason } : {}),
+      ...(resolution.resolvedCommand ? { resolvedCommand: resolution.resolvedCommand } : {}),
+      source: resolution.source,
+      status: resolution.status,
+    },
+    transport: getTransportFact(ci, jobSource),
+    unresolved,
+  }
+  evidence.ciFacts = ciFacts
+
+  const effectiveNodeOptions = resolution.status === 'confirmed'
+    ? getEffectiveNodeOptionsOverride(resolution.commandPath)
+    : undefined
   const remediation = buildCiRemediation(framework)
-
-  if (explicitlyRemovesInitialization) {
+  if (resolution.status === 'confirmed' &&
+    effectiveNodeOptions !== undefined &&
+    !/dd-trace[\\/]ci[\\/]init(?:\.js)?\b/.test(effectiveNodeOptions) &&
+    unresolved.relevant.length === 0) {
     return getFailure(
       framework,
-      'The checksum-bound CI file explicitly clears NODE_OPTIONS in the selected direct test path, so ' +
-        'dd-trace/ci/init cannot reach that runner.',
+      'The statically resolved CI test path overrides NODE_OPTIONS without the dd-trace/ci/init preload, so Test ' +
+        'Optimization is not initialized in the final runner.',
       {
         ...evidence,
         ciRemediation: remediation,
@@ -124,11 +135,13 @@ function runCiWiring ({ manifest, framework }) {
     )
   }
 
-  if (ci.initialization?.status === 'not_configured') {
+  if (initialization.status === 'missing' &&
+    resolution.status === 'confirmed' &&
+    unresolved.relevant.length === 0) {
     return getFailure(
       framework,
-      'The reviewed selected direct-runner CI job is recorded without a dd-trace/ci/init preload. Test ' +
-        'Optimization is not initialized in that job.',
+      'The checksum-bound CI job reaches the selected test framework through a bounded static command path, but ' +
+        'does not configure the dd-trace/ci/init preload. Test Optimization is not initialized in that job.',
       {
         ...evidence,
         ciRemediation: remediation,
@@ -139,10 +152,39 @@ function runCiWiring ({ manifest, framework }) {
     )
   }
 
-  if (!hasInitialization || ci.initialization?.status !== 'configured') {
+  if (resolution.status !== 'confirmed') {
+    const partial = initialization.status === 'missing'
+      ? 'The selected job has no visible dd-trace/ci/init preload. '
+      : ''
     return getIncomplete(
       framework,
-      'Static evidence does not prove that dd-trace/ci/init is configured for the selected direct-runner job.',
+      `${partial}The CI audit remains incomplete because the selected command could not be resolved to the ` +
+        `${framework.framework} runner: ${resolution.reason}.`,
+      {
+        ...evidence,
+        recommendation: 'Resolve the remaining wrapper or dynamic command statically, or confirm the effective ' +
+          'NODE_OPTIONS value in the final test process with DD_TRACE_DEBUG=1.',
+      }
+    )
+  }
+
+  if (unresolved.relevant.length > 0) {
+    return getIncomplete(
+      framework,
+      'The framework invocation was resolved statically, but relevant CI evidence remains unresolved: ' +
+        `${unresolved.relevant.join('; ')}.`,
+      {
+        ...evidence,
+        recommendation: 'Resolve only the listed configuration that can affect initialization, runner invocation, ' +
+          'or transport. Unrelated runtime matrices do not need further analysis.',
+      }
+    )
+  }
+
+  if (initialization.status !== 'configured') {
+    return getIncomplete(
+      framework,
+      'Static evidence does not establish whether dd-trace/ci/init is configured for the selected test path.',
       {
         ...evidence,
         recommendation: 'Record the literal NODE_OPTIONS configuration for this job or rerun the CI step with ' +
@@ -181,22 +223,161 @@ function runCiWiring ({ manifest, framework }) {
 }
 
 /**
- * Returns whether the effective inline NODE_OPTIONS assignment before a direct runner is empty.
+ * Returns the final inline NODE_OPTIONS override along the resolved command path.
  *
- * @param {string} command selected direct-runner command
- * @param {string} framework framework name
- * @returns {boolean} whether the final assignment clears NODE_OPTIONS
+ * @param {string[]} commandPath selected command and expanded package scripts
+ * @returns {string|undefined} final literal override
  */
-function commandExplicitlyClearsNodeOptions (command, framework) {
-  const runner = getDirectRunner(command, framework)
-  if (!runner) return false
+function getEffectiveNodeOptionsOverride (commandPath = []) {
+  let value
+  for (const command of commandPath) {
+    for (const assignment of parseLiteralEnvironmentPrefix(command).assignments) {
+      if (environmentNamesEqual(assignment.name, 'NODE_OPTIONS')) value = assignment.value
+    }
+  }
+  return value
+}
 
-  const assignments = parseLiteralEnvironmentPrefix(command).assignments.filter(assignment => {
-    return environmentNamesEqual(assignment.name, 'NODE_OPTIONS')
+/**
+ * Resolves a direct runner or a bounded chain of local package scripts.
+ *
+ * @param {string} command selected CI command
+ * @param {object} framework framework manifest entry
+ * @param {object} ci selected CI evidence
+ * @returns {object} static runner resolution
+ */
+function getRunnerResolution (command, framework, ci) {
+  if (getDirectRunner(command, framework.framework)) {
+    return {
+      commandPath: [command],
+      resolvedCommand: command,
+      source: 'direct_ci_command',
+      status: 'confirmed',
+    }
+  }
+
+  if (ci.workingDirectory &&
+    path.resolve(ci.workingDirectory) !== path.resolve(framework.project.root)) {
+    return {
+      reason: 'the selected working directory does not match the approval-bound project package',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const scripts = readProjectScripts(framework.project.packageJson)
+  if (!scripts) {
+    return {
+      reason: 'the approval-bound project package.json is unavailable or invalid',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  const expansion = expandLocalPackageScripts(command, scripts)
+  if (expansion.error) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: expansion.error,
+      source: 'local_package_script',
+      status: 'unresolved',
+    }
+  }
+  const candidate = expansion.terminals.find(terminal => {
+    return getDirectRunner(terminal.command, framework.framework)
   })
-  if (assignments.length === 0) return false
+  if (!candidate) {
+    return {
+      lifecycleScripts: expansion.lifecycleScripts,
+      reason: 'no bounded local package-script path reaches the selected framework runner',
+      source: 'unresolved_wrapper',
+      status: 'unresolved',
+    }
+  }
+  return {
+    commandPath: candidate.path,
+    lifecycleScripts: expansion.lifecycleScripts,
+    resolvedCommand: candidate.command,
+    source: 'local_package_script',
+    status: 'confirmed',
+  }
+}
 
-  return assignments.at(-1).value === ''
+function readProjectScripts (filename) {
+  try {
+    const stat = fs.lstatSync(filename)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CI_FILE_BYTES) return
+    const packageJson = JSON.parse(fs.readFileSync(filename, 'utf8'))
+    if (!packageJson.scripts || typeof packageJson.scripts !== 'object' ||
+      Array.isArray(packageJson.scripts)) return {}
+    return packageJson.scripts
+  } catch {}
+}
+
+function getInitializationFact (ci, hasInitialization) {
+  if (ci.initialization?.status === 'configured' && hasInitialization) {
+    return { status: 'configured', evidence: ci.initialization.evidence }
+  }
+  if (ci.initialization?.status === 'not_configured' && !hasInitialization) {
+    return { status: 'missing', evidence: ci.initialization.evidence }
+  }
+  return {
+    status: 'unresolved',
+    reason: 'recorded initialization status and checksum-bound CI source do not establish the same conclusion',
+  }
+}
+
+function getTransportFact (ci, jobSource) {
+  const mode = ci.transport?.mode
+  if (mode === 'agentless' &&
+    /DD_CIVISIBILITY_AGENTLESS_ENABLED/.test(jobSource) &&
+    !/\b(?:DD_API_KEY|DATADOG_API_KEY)\b/.test(jobSource)) {
+    return { status: 'credentials_unverified', mode }
+  }
+  if (mode === 'agent' || mode === 'agentless') {
+    return { status: 'configured', mode, evidence: ci.transport.evidence }
+  }
+  if (mode === 'none') return { status: 'missing', mode }
+  return { status: 'unresolved', mode: mode || 'unknown' }
+}
+
+function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
+  const relevant = []
+  const ignored = []
+  const unresolved = Array.isArray(ci.unresolved) ? ci.unresolved : []
+  const githubHosted = /[/\\]\.github[/\\]workflows[/\\]/.test(ci.configFile) &&
+    /^\s*runs-on:\s*(?:ubuntu|windows|macos)-/mi.test(jobSource)
+
+  for (const item of unresolved) {
+    const isMatrix = /\bmatrix\b/i.test(item)
+    const isResolvedPackagePath = resolution.source === 'local_package_script' &&
+      /\b(?:lifecycle|npm|package script|pnpm|pretest|posttest|yarn)\b/i.test(item)
+    const isAmbientGithubSettings = githubHosted &&
+      /\b(?:repository|organization|environment)[-\s,\w]*\b(?:secrets?|variables?)\b/i.test(item) &&
+      /\b(?:inject|inherit|outside)\b/i.test(item)
+    const isOtherJob = /^Other jobs?\b/i.test(item) ||
+      /\bsecond\b.*\bjob\b.*\bonly\b.*\bselected\b/i.test(item) ||
+      /\brelease\b.*\bcontains no test job\b/i.test(item)
+    if ((isMatrix && !matrixRelevant) ||
+      isResolvedPackagePath ||
+      isAmbientGithubSettings ||
+      isOtherJob) {
+      ignored.push(item)
+    } else {
+      relevant.push(item)
+    }
+  }
+  if (ci.reviewComplete !== true && unresolved.length === 0) {
+    relevant.push('the CI evidence review is not marked complete')
+  }
+  return { ignored, relevant }
+}
+
+function matrixAffectsCiFacts (jobSource, command) {
+  if (!/\bmatrix\./.test(jobSource)) return false
+  if (/\bmatrix\./.test(command)) return true
+  return jobSource.split(/\r?\n/).some(line => {
+    return /\bmatrix\./.test(line) &&
+      /\b(?:container|DD_[A-Z0-9_]+|DATADOG_[A-Z0-9_]+|NODE_OPTIONS|runs-on|shell|working-directory)\b/i.test(line)
+  })
 }
 
 /**
@@ -207,8 +388,14 @@ function commandExplicitlyClearsNodeOptions (command, framework) {
  * @returns {{index: number}|undefined} direct runner location
  */
 function getDirectRunner (command, framework) {
+  if (DYNAMIC_COMMAND_PATTERN.test(command)) return
   const prefix = parseLiteralEnvironmentPrefix(command)
-  if (!RUNNER_PATTERNS[framework]?.test(command.slice(prefix.length))) return
+  let source = command.slice(prefix.length).replace(/^(?:c8|nyc)(?:\.cmd)?\s+/, '')
+  if (/^cross-env(?:\.cmd)?\s+/.test(source)) {
+    source = source.replace(/^cross-env(?:\.cmd)?\s+/, '')
+    source = source.slice(parseLiteralEnvironmentPrefix(source).length)
+  }
+  if (!RUNNER_PATTERNS[framework]?.test(source)) return
   return { index: prefix.length }
 }
 

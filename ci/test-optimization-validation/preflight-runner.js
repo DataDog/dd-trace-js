@@ -43,6 +43,9 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     exitCode: result.exitCode,
     observedTestCount,
     ran: true,
+    selectorVerification: framework.validation.selectorScope === 'instrumented_event_identity'
+      ? 'requires_instrumented_event_identity'
+      : 'bounded_direct_runner',
     source: 'validator',
     stderrSummary: summarizeTestOutput('', result.stderr).join('\n'),
     stdoutSummary: summarizeTestOutput(result.stdout).join('\n'),

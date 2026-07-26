@@ -75,6 +75,11 @@ describe('test optimization validation manifest schema', () => {
       /validation\.testFile must be inside repository\.root/,
     ],
     [
+      'an unsupported selector scope',
+      value => { value.frameworks[0].validation.selectorScope = 'unverified_wrapper' },
+      /selectorScope must be bounded_direct_runner or instrumented_event_identity/,
+    ],
+    [
       'an unsupported runner argument',
       value => { value.frameworks[0].validation.runnerArgs = ['--eval', 'process.exit()'] },
       /runnerArgs contain unsupported option --eval/,

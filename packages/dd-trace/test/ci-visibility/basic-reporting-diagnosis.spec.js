@@ -50,6 +50,43 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
     assert.match(result.diagnosis, /cannot prove that a test executed/)
   })
 
+  it('accepts repository wrapper events only from the approved representative file', async () => {
+    const { runBasicReporting } = getBasicReporting({
+      complete: true,
+      events: [{ type: 'test', testSourceFile: 'test/example.spec.js' }],
+      initialized: true,
+      settingsLoaded: true,
+    })
+    const input = getInput()
+    input.framework.validation.selectorScope = 'instrumented_event_identity'
+    const result = await runBasicReporting(input)
+
+    assert.strictEqual(result.status, 'pass')
+    assert.strictEqual(result.evidence.selector.verified, true)
+    assert.strictEqual(result.evidence.selector.matchingTestEvents, 1)
+  })
+
+  it('keeps repository wrapper reporting incomplete when other test files ran', async () => {
+    const { runBasicReporting } = getBasicReporting({
+      complete: true,
+      events: [
+        { type: 'test', testSourceFile: 'test/example.spec.js' },
+        { type: 'test', testSourceFile: 'test/other.spec.js' },
+      ],
+      initialized: true,
+      settingsLoaded: true,
+    })
+    const input = getInput()
+    input.framework.validation.selectorScope = 'instrumented_event_identity'
+    const result = await runBasicReporting(input)
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.validationIncomplete, true)
+    assert.strictEqual(result.evidence.selector.verified, false)
+    assert.deepStrictEqual(result.evidence.selector.differentSourceFiles, ['test/other.spec.js'])
+    assert.match(result.diagnosis, /did not prove that it honored/)
+  })
+
   it('stays incomplete when the initialized failure cannot be reproduced cleanly', async () => {
     const { runBasicReporting } = getBasicReporting({
       cleanExitCode: 1,
@@ -116,6 +153,7 @@ describe('test optimization validation Basic Reporting diagnosis', () => {
  * @param {string} [options.artifactDirectory] directory attached to a simulated runner error
  * @param {number} [options.cleanExitCode] clean confirmation exit code
  * @param {boolean} options.complete whether the complete event hierarchy exists
+ * @param {object[]} [options.events] normalized test events
  * @param {number} [options.exitCode] initialized command exit code
  * @param {boolean} options.initialized whether the offline exporter initialized
  * @param {boolean} options.settingsLoaded whether offline settings loaded
@@ -125,6 +163,7 @@ function getBasicReporting ({
   artifactDirectory,
   cleanExitCode = 0,
   complete,
+  events = [],
   exitCode = 0,
   initialized,
   settingsLoaded,
@@ -207,7 +246,7 @@ function getBasicReporting ({
           throw error
         }
         return {
-          events: [],
+          events,
           offline: {
             initialized,
             inputs: { settings: { status: settingsLoaded ? 'loaded' : 'missing' } },
@@ -236,6 +275,10 @@ function getInput () {
       framework: 'mocha',
       id: 'mocha:root',
       preflight: { exitCode: 0, ran: true, timedOut: false },
+      validation: {
+        selectorScope: 'bounded_direct_runner',
+        testFile: '/repo/test/example.spec.js',
+      },
     },
     options: { repositoryRoot: '/repo' },
     out: path.join('/tmp', 'results'),

@@ -49,11 +49,9 @@ describe('test optimization validation CI audit', () => {
   })
 
   for (const wrapped of [
-    'npm test',
     'npx mocha test/example.spec.js',
     'npx --no-install mocha test/example.spec.js',
     'pnpm run test:unit',
-    'yarn test',
     'nx test project',
     'node ./scripts/test.js && echo done',
     `echo ${command}`,
@@ -67,9 +65,171 @@ describe('test optimization validation CI audit', () => {
 
       assert.strictEqual(result.status, 'error')
       assert.strictEqual(result.evidence.manifestIncomplete, true)
-      assert.match(result.diagnosis, /dynamic or reaches the test runner through a wrapper/)
+      assert.match(result.diagnosis, /could not be resolved/)
     })
   }
+
+  for (const wrapped of ['npm test', 'pnpm test', 'pnpm run test', 'yarn test', 'yarn run test']) {
+    it(`resolves a local package script without executing it: ${wrapped}`, () => {
+      fs.writeFileSync(workflow, workflowSource({ command: wrapped }))
+      completeReview({ command: wrapped, initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.source, 'local_package_script')
+      assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /mocha/)
+    })
+  }
+
+  it('resolves recursive local scripts and an inert coverage launcher', () => {
+    writeScripts({
+      test: 'npm run test:unit',
+      'test:unit': `c8 ${command}`,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.deepStrictEqual(
+      result.evidence.ciFacts.runnerInvocation.commandPath,
+      ['npm test', 'npm run test:unit', `c8 ${command}`]
+    )
+  })
+
+  it('resolves coverage-wrapped package scripts and literal cross-env assignments', () => {
+    writeScripts({
+      'test-ci': 'AJV_FULL_TEST=true npm test',
+      test: 'npm run prepare-tests && npm run test-cov',
+      'prepare-tests': 'node ./scripts/prepare.js',
+      'test-cov': 'nyc npm run test-spec',
+      'test-spec': `cross-env TS_NODE_PROJECT=test/tsconfig.json ${command}`,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm run test-ci' }))
+    completeReview({ command: 'npm run test-ci', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /^cross-env .*mocha/)
+  })
+
+  it('finds a framework invoked from an npm lifecycle script', () => {
+    framework.framework = 'cucumber'
+    framework.id = 'cucumber:fixture'
+    writeScripts({
+      pretest: 'npm run conformance',
+      test: command,
+      conformance: 'cucumber-js ./features/example.feature -p default',
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /^cucumber-js/)
+    assert.deepStrictEqual(result.evidence.ciFacts.runnerInvocation.lifecycleScripts, ['pretest'])
+  })
+
+  it('does not assume implicit lifecycle semantics for Yarn', () => {
+    framework.framework = 'cucumber'
+    framework.id = 'cucumber:fixture'
+    writeScripts({
+      pretest: 'cucumber-js ./features/example.feature -p default',
+      test: command,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'yarn test' }))
+    completeReview({ command: 'yarn test', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+  })
+
+  it('does not let local lifecycle scripts or a plain Node matrix block a confirmed finding', () => {
+    writeScripts({
+      pretest: 'node ./scripts/build.js',
+      test: command,
+      posttest: 'node ./scripts/cleanup.js',
+    })
+    fs.writeFileSync(workflow, matrixWorkflowSource({ command: 'npm test' }))
+    completeReview({
+      command: 'npm test',
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: [
+        'npm lifecycle scripts',
+        'Node version matrix',
+        'Repository and organization secrets may inject Datadog configuration outside the workflow.',
+        'Other jobs also run npm test; only the test job was selected.',
+      ],
+    })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.deepStrictEqual(
+      result.evidence.ciFacts.runnerInvocation.lifecycleScripts,
+      ['pretest', 'posttest']
+    )
+    assert.strictEqual(result.evidence.ciFacts.matrix.status, 'not_relevant_to_ci_facts')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [])
+  })
+
+  it('keeps a matrix-selected package script incomplete while retaining the initialization fact', () => {
+    const selectedCommand = 'npm run test:$' + '{{ matrix.suite }}'
+    fs.writeFileSync(workflow, matrixWorkflowSource({ command: selectedCommand }))
+    completeReview({
+      command: selectedCommand,
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['The matrix selects the package script.'],
+    })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.initialization.status, 'missing')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.strictEqual(result.evidence.ciFacts.matrix.status, 'affects_relevant_configuration')
+    assert.match(result.diagnosis, /no visible dd-trace\/ci\/init/)
+  })
+
+  it('keeps opaque inherited configuration relevant after resolving the local package script', () => {
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({
+      command: 'npm test',
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['A remote action may write NODE_OPTIONS through GITHUB_ENV.'],
+    })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.initialization.status, 'missing')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [
+      'A remote action may write NODE_OPTIONS through GITHUB_ENV.',
+    ])
+  })
+
+  it('fails closed for cyclic or dynamic local package scripts', () => {
+    for (const scripts of [
+      { test: 'npm run test:unit', 'test:unit': 'npm test' },
+      { test: 'NODE_OPTIONS=$NODE_OPTIONS mocha test/example.spec.js' },
+      { test: `NODE_OPTIONS="" && ${command}` },
+    ]) {
+      writeScripts(scripts)
+      fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+      completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+      assert.match(result.evidence.ciFacts.runnerInvocation.reason, /cycle|dynamic shell syntax|stateful shell/)
+    }
+  })
 
   it('does not treat a NODE_OPTIONS reset in another job as a confirmed finding', () => {
     fs.writeFileSync(workflow, [
@@ -129,7 +289,7 @@ describe('test optimization validation CI audit', () => {
     const result = runCiWiring({ framework, manifest })
 
     assert.strictEqual(result.status, 'fail')
-    assert.match(result.diagnosis, /explicitly clears NODE_OPTIONS/)
+    assert.match(result.diagnosis, /overrides NODE_OPTIONS/)
   })
 
   it('does not treat text in the selected step label as an effective reset', () => {
@@ -226,6 +386,7 @@ describe('test optimization validation CI audit', () => {
 
     assert.strictEqual(result.status, 'error')
     assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.strictEqual(result.evidence.ciFacts.transport.status, 'credentials_unverified')
     assert.match(result.diagnosis, /may still be injected outside this file/)
   })
 
@@ -256,21 +417,36 @@ describe('test optimization validation CI audit', () => {
    * @param {object} input evidence values
    * @param {string} [input.command] selected literal command
    * @param {string} input.initialization initialization status
+   * @param {boolean} [input.reviewComplete] whether relevant review is complete
    * @param {string} input.transport transport mode
+   * @param {string[]} [input.unresolved] unresolved CI evidence
    * @returns {void}
    */
-  function completeReview ({ command: selectedCommand = command, initialization, transport }) {
+  function completeReview ({
+    command: selectedCommand = command,
+    initialization,
+    reviewComplete = true,
+    transport,
+    unresolved = [],
+  }) {
     framework.ciWiring = {
       command: selectedCommand,
       configFile: workflow,
       initialization: { evidence: ['Reviewed the selected job.'], status: initialization },
       job: 'test:',
-      reviewComplete: true,
+      reviewComplete,
       step: `run: ${selectedCommand}`,
       transport: { evidence: ['Reviewed the selected job.'], mode: transport },
-      unresolved: [],
+      unresolved,
       workingDirectory: fixture.root,
     }
+  }
+
+  function writeScripts (scripts) {
+    const filename = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(filename))
+    packageJson.scripts = scripts
+    fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
   }
 })
 
@@ -288,6 +464,23 @@ function workflowSource ({ command, env = [] }) {
     '  test:',
     ...(env.length > 0 ? ['    env:', ...env] : []),
     '    steps:',
+    `      - run: ${command}`,
+    '',
+  ].join('\n')
+}
+
+function matrixWorkflowSource ({ command }) {
+  return [
+    'jobs:',
+    '  test:',
+    '    runs-on: ubuntu-latest',
+    '    strategy:',
+    '      matrix:',
+    '        node: [18, 20, 22]',
+    '    steps:',
+    '      - uses: actions/setup-node@v4',
+    '        with:',
+    '          node-version: $' + '{{ matrix.node }}',
     `      - run: ${command}`,
     '',
   ].join('\n')

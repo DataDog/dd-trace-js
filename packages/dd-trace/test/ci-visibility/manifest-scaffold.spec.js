@@ -42,6 +42,7 @@ describe('test optimization validation manifest scaffold', () => {
         assert.strictEqual(manifest.schemaVersion, '2.0')
         assert.strictEqual(framework.status, 'runnable')
         assert.strictEqual(framework.validation.runner, fs.realpathSync(fixture.runner))
+        assert.strictEqual(framework.validation.selectorScope, 'bounded_direct_runner')
         assert.strictEqual(framework.validation.testFile, fixture.testFile)
         assert.deepStrictEqual(basic.argv.slice(0, 2), [process.execPath, fs.realpathSync(fixture.runner)])
         assert.ok(basic.argv.includes(fixture.testFile))
@@ -109,6 +110,44 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(command.env.TS_NODE_PROJECT, 'test/tsconfig.json')
       assert.ok(framework.project.configFiles.includes(path.join(fixture.root, 'test', 'tsconfig.json')))
       assert.ok(framework.project.configFiles.includes(fs.realpathSync(loader)))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('retains Jest configuration from a JavaScript runner entrypoint', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'jest',
+      script: 'node ./node_modules/jest/bin/jest.js --config ./jest.special.json test/example.test.js',
+    })
+    const config = path.join(fixture.root, 'jest.special.json')
+    fs.writeFileSync(config, '{}\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.deepStrictEqual(framework.validation.runnerArgs, ['--config', './jest.special.json'])
+      assert.ok(framework.project.configFiles.includes(config))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('approval-binds an auto-discovered Jest JSON configuration', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest' })
+    const config = path.join(fixture.root, 'jest.config.json')
+    fs.writeFileSync(config, '{}\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.ok(framework.project.configFiles.includes(config))
     } finally {
       removeFixture(fixture.root)
     }
@@ -195,8 +234,10 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
 
       assert.strictEqual(framework.validation.runner, fs.realpathSync(wrapper))
+      assert.strictEqual(framework.validation.selectorScope, 'instrumented_event_identity')
       assert.strictEqual(getBasicCommand(framework).argv[1], fs.realpathSync(wrapper))
       assert.match(framework.notes.join(' '), /repository test wrapper/)
+      assert.match(framework.notes.join(' '), /captured test events identify only/)
     } finally {
       removeFixture(fixture.root)
     }
@@ -437,6 +478,31 @@ describe('test optimization validation manifest scaffold', () => {
       removeFixture(fixture.root)
     }
   })
+
+  for (const [frameworkName, script, option] of [
+    ['jest', 'jest --setupFilesAfterEnv ./test/setup.js test/example.test.js', '--setupFilesAfterEnv'],
+    ['cypress', 'cypress run --env apiUrl=http://localhost:8080', '--env'],
+  ]) {
+    it(`requires setup instead of dropping ${frameworkName} option ${option}`, () => {
+      const fixture = createRepositoryFixture({
+        framework: frameworkName,
+        script,
+      })
+      try {
+        const framework = createManifestScaffold({
+          root: fixture.root,
+          frameworks: new Set([frameworkName]),
+        }).frameworks[0]
+
+        assert.strictEqual(framework.status, 'requires_manual_setup')
+        assert.match(framework.notes[0], new RegExp(option))
+        assert.match(framework.notes[0], /not preserved/)
+        assert.strictEqual(framework.validation, undefined)
+      } finally {
+        removeFixture(fixture.root)
+      }
+    })
+  }
 
   it('requires setup when every Cypress representative needs a localhost application', () => {
     const fixture = createRepositoryFixture({

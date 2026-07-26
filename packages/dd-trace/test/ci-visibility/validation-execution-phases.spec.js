@@ -261,7 +261,7 @@ describe('test optimization validation execution boundary', () => {
     assert.throws(() => execute(command, 'output-preexisting'), /already exists/)
   })
 
-  it('accepts a successful time-bounded preflight even when the runner output has no parseable count', async () => {
+  it('accepts a bounded direct-runner preflight when the output has no parseable count', async () => {
     fs.writeFileSync(fixture.runner, "console.log('selected test completed')\n")
     const result = await runFrameworkPreflight({
       framework,
@@ -271,6 +271,23 @@ describe('test optimization validation execution boundary', () => {
 
     assert.strictEqual(result.ok, true)
     assert.strictEqual(result.preflight.observedTestCount, null)
+    assert.strictEqual(result.preflight.selectorVerification, 'bounded_direct_runner')
+  })
+
+  it('defers repository wrapper selector verification to instrumented test identity', async () => {
+    framework.validation.selectorScope = 'instrumented_event_identity'
+    fs.writeFileSync(fixture.runner, "console.log('selected test completed')\n")
+    const result = await runFrameworkPreflight({
+      framework,
+      options: { repositoryRoot: fixture.root },
+      out,
+    })
+
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(
+      result.preflight.selectorVerification,
+      'requires_instrumented_event_identity'
+    )
   })
 
   it('classifies a representative that the runner does not collect as project setup', async () => {

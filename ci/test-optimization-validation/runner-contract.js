@@ -34,6 +34,12 @@ const RUNNER_OPTIONS = {
     values: new Set(['--config', '--environment', '--project', '--root']),
   },
 }
+const IGNORED_RUNNER_OPTIONS = {
+  mocha: {
+    flags: new Set(),
+    values: new Set(['-R', '--reporter']),
+  },
+}
 const RUNNER_ENVIRONMENT_NAMES = new Set([
   'BABEL_ENV',
   'CI',
@@ -105,6 +111,15 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
       runnerArgs: [],
     }
   }
+  const unknownOption = getUnknownRunnerOption(framework, invocation)
+  if (unknownOption) {
+    return {
+      environment: {},
+      error: `${unknownOption} is not preserved by the validator direct-runner contract`,
+      inputFiles: [],
+      runnerArgs: [],
+    }
+  }
 
   const environment = getRunnerEnvironment(invocation, platform)
   const environmentError = getRunnerEnvironmentError(environment, platform)
@@ -112,6 +127,15 @@ function getRunnerContract (framework, command, projectRoot, repositoryRoot, pla
     return { environment: {}, error: `runner environment ${environmentError}`, inputFiles: [], runnerArgs: [] }
   }
   const runnerArgs = getRunnerArgs(framework, invocation)
+  const runnerArgsError = getRunnerArgsError(framework, runnerArgs)
+  if (runnerArgsError) {
+    return {
+      environment: {},
+      error: `runner arguments ${runnerArgsError}`,
+      inputFiles: [],
+      runnerArgs: [],
+    }
+  }
   const inputs = getRunnerInputs(runnerArgs, environment, projectRoot, repositoryRoot)
   if (inputs.error) {
     return { environment: {}, error: inputs.error, inputFiles: [], runnerArgs: [] }
@@ -215,6 +239,32 @@ function getUnsupportedConfigurationOption (framework, invocation) {
   return invocation.tokens.slice(invocation.runnerIndex + 1).find(token => {
     return token.startsWith('-') && unsupported.has(token.split('=', 1)[0])
   })?.split('=', 1)[0]
+}
+
+/**
+ * Returns the first runner option whose semantics are neither retained nor explicitly safe to omit.
+ *
+ * @param {string} framework framework name
+ * @param {{runnerIndex: number, tokens: string[]}} invocation parsed invocation
+ * @returns {string|undefined} unsupported option
+ */
+function getUnknownRunnerOption (framework, invocation) {
+  const retained = RUNNER_OPTIONS[framework]
+  if (!retained) return
+  const ignored = IGNORED_RUNNER_OPTIONS[framework] || { flags: new Set(), values: new Set() }
+  const tokens = invocation.tokens.slice(invocation.runnerIndex + 1)
+
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    if (!token.startsWith('-')) continue
+    const option = token.split('=', 1)[0]
+    if (retained.flags.has(option) || ignored.flags.has(option)) continue
+    if (retained.values.has(option) || ignored.values.has(option)) {
+      if (!token.includes('=') && tokens[index + 1] && !tokens[index + 1].startsWith('-')) index++
+      continue
+    }
+    return option
+  }
 }
 
 /**
@@ -332,9 +382,9 @@ function getFrameworkInvocation (command, framework) {
   const tokens = tokenizeCommand(command)
   const executable = getRunnerExecutableName(framework)
   const runnerIndex = tokens.findIndex(token => {
-    const basename = path.basename(token).replace(/\.cmd$/i, '').toLowerCase()
+    const basename = normalizeRunnerBasename(token)
     return basename === executable ||
-      (framework === 'cucumber' && ['cucumber', 'cucumber.js', 'cucumber-js.js'].includes(basename))
+      (framework === 'cucumber' && ['cucumber', 'cucumber-js'].includes(basename))
   })
   if (runnerIndex === -1) return
 
@@ -384,7 +434,20 @@ function getRunnerArgs (framework, invocation) {
       }
     }
   }
-  return getRunnerArgsError(framework, args) ? [] : args
+  return args
+}
+
+/**
+ * Normalizes executable shims and supported JavaScript runner entrypoints.
+ *
+ * @param {string} token command token
+ * @returns {string} normalized executable basename
+ */
+function normalizeRunnerBasename (token) {
+  return path.basename(token)
+    .replace(/\.cmd$/i, '')
+    .replace(/\.(?:cjs|mjs|js)$/i, '')
+    .toLowerCase()
 }
 
 /**

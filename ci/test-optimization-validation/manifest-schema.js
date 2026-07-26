@@ -191,6 +191,11 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
   rejectExecutionFields(validation, `${prefix}.validation`, errors)
   requiredAbsolutePath(validation, 'runner', `${prefix}.validation`, errors)
   requiredAbsolutePath(validation, 'testFile', `${prefix}.validation`, errors)
+  if (!['bounded_direct_runner', 'instrumented_event_identity'].includes(validation.selectorScope)) {
+    errors.push(
+      `${prefix}.validation.selectorScope must be bounded_direct_runner or instrumented_event_identity.`
+    )
+  }
   containedPath(repositoryRoot, validation.runner, `${prefix}.validation.runner`, errors)
   containedPath(repositoryRoot, validation.testFile, `${prefix}.validation.testFile`, errors)
   const runnerArgsError = getRunnerArgsError(framework.framework, validation.runnerArgs)

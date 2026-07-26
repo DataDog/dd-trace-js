@@ -2,6 +2,7 @@
 
 const { getCommandBlocker } = require('../command-blocker')
 const { runCommand } = require('../command-runner')
+const { eventsOfType } = require('../payload-normalizer')
 const { getBasicCommand } = require('../runner-command')
 
 const {
@@ -40,6 +41,7 @@ async function runBasicReporting ({ framework, out, options }) {
     })
     outDir = run.outDir
     const complete = hasAllBasicEventTypes(run.events)
+    const selector = getSelectorEvidence(framework, run.events)
     const evidence = {
       ...basicEventEvidence(run.events),
       commandExitCode: run.result.exitCode,
@@ -53,8 +55,10 @@ async function runBasicReporting ({ framework, out, options }) {
       offlineExporterInitialized: run.offline.initialized,
       preflight: summarizePreflight(framework.preflight),
       reportingPath: complete ? 'validator-direct-runner' : 'none',
+      selector,
       settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
     }
+    evidence.foundationalReportingEstablished = evidence.foundationalReportingEstablished && selector.verified
 
     if (run.result.timedOut) {
       return inconclusive(
@@ -62,6 +66,21 @@ async function runBasicReporting ({ framework, out, options }) {
         scenarioName,
         'The initialized direct test exceeded its approved timeout. Basic Reporting remains incomplete.',
         { ...evidence, commandFailure: classifyFailure(framework, run.result) },
+        outDir
+      )
+    }
+
+    if (!selector.verified) {
+      return inconclusive(
+        framework,
+        scenarioName,
+        'The repository test wrapper ran, but captured events did not prove that it honored the approved ' +
+          'representative test file. Basic Reporting remains incomplete.',
+        {
+          ...evidence,
+          recommendation: 'Use a repository wrapper that forwards the selected test file, or use a direct ' +
+            'framework runner whose selector can be bounded by the validator.',
+        },
         outDir
       )
     }
@@ -219,8 +238,73 @@ function summarizePreflight (preflight = {}) {
     exitCode: preflight.exitCode,
     observedTestCount: preflight.observedTestCount,
     ran: preflight.ran === true,
+    selectorVerification: preflight.selectorVerification,
     timedOut: preflight.timedOut === true,
   }
+}
+
+/**
+ * Verifies repository wrapper scope from captured test source files.
+ *
+ * @param {object} framework framework manifest entry
+ * @param {object[]} events normalized captured events
+ * @returns {object} selector verification evidence
+ */
+function getSelectorEvidence (framework, events) {
+  const mode = framework.validation?.selectorScope
+  const expectedTestFile = framework.validation?.testFile
+  if (mode === 'bounded_direct_runner') {
+    return { mode, verified: true }
+  }
+  if (mode !== 'instrumented_event_identity') {
+    return { mode: mode || 'missing', verified: false }
+  }
+
+  const tests = eventsOfType(events, 'test')
+  const sourceFiles = tests.map(test => test.testSourceFile).filter(Boolean)
+  const matchingTestEvents = sourceFiles.filter(filename => {
+    return sourceFilesMatch(filename, expectedTestFile)
+  }).length
+  const differentSourceFiles = [...new Set(sourceFiles.filter(filename => {
+    return !sourceFilesMatch(filename, expectedTestFile)
+  }))].slice(0, 5)
+  const testEventsWithoutSourceFile = tests.length - sourceFiles.length
+
+  return {
+    differentSourceFiles,
+    expectedTestFile,
+    matchingTestEvents,
+    mode,
+    testEventsWithoutSourceFile,
+    verified: matchingTestEvents > 0 &&
+      differentSourceFiles.length === 0 &&
+      testEventsWithoutSourceFile === 0,
+  }
+}
+
+/**
+ * Compares absolute and repository-relative test source paths without filesystem access.
+ *
+ * @param {string} actual captured test source path
+ * @param {string} expected approved representative path
+ * @returns {boolean} whether both paths identify the same file
+ */
+function sourceFilesMatch (actual, expected) {
+  const normalizedActual = normalizeSourceFile(actual)
+  const normalizedExpected = normalizeSourceFile(expected)
+  if (!normalizedActual || !normalizedExpected) return false
+  if (normalizedActual === normalizedExpected) return true
+  if (!normalizedActual.includes('/') || !normalizedExpected.includes('/')) return false
+  return normalizedExpected.endsWith(`/${normalizedActual}`) ||
+    normalizedActual.endsWith(`/${normalizedExpected}`)
+}
+
+function normalizeSourceFile (filename) {
+  return String(filename || '')
+    .replace(/^file:\/\//, '')
+    .replaceAll('\\', '/')
+    .replace(/^\.\//, '')
+    .replaceAll(/\/+/g, '/')
 }
 
 /**
