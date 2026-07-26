@@ -1204,8 +1204,9 @@ function getSupportedVersionDetection (framework, relativePath) {
  */
 function getEligibleCommandMatch (framework) {
   const scriptMatches = [...(framework.scriptMatches || [])].sort((left, right) => {
-    return compareProjectPreference(left, right, framework.projectPreferenceScores) ||
-      getFrameworkCommandPreference(framework.id, left) - getFrameworkCommandPreference(framework.id, right)
+    return compareProjectScope(left, right, framework.projectPreferenceScores) ||
+      getFrameworkCommandPreference(framework.id, left) - getFrameworkCommandPreference(framework.id, right) ||
+      left.relativePath.localeCompare(right.relativePath)
   })
 
   for (const script of scriptMatches) {
@@ -1294,12 +1295,23 @@ function getIdentityTokens (value) {
  * @returns {number} sort order
  */
 function compareProjectPreference (left, right, scores) {
+  return compareProjectScope(left, right, scores) ||
+    left.relativePath.localeCompare(right.relativePath)
+}
+
+/**
+ * Orders command owners by repository identity and package depth.
+ *
+ * @param {object} left first command or dependency entry
+ * @param {object} right second command or dependency entry
+ * @param {Map<string, number>|undefined} scores package preference scores
+ * @returns {number} sort order before stable path tie-breaking
+ */
+function compareProjectScope (left, right, scores) {
   const scoreDifference = (scores?.get(right.relativePath) || 0) - (scores?.get(left.relativePath) || 0)
   if (scoreDifference !== 0) return scoreDifference
 
-  const depthDifference = left.relativePath.split('/').length - right.relativePath.split('/').length
-  if (depthDifference !== 0) return depthDifference
-  return left.relativePath.localeCompare(right.relativePath)
+  return left.relativePath.split('/').length - right.relativePath.split('/').length
 }
 
 /**

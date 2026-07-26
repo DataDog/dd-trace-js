@@ -85,13 +85,15 @@ function getManifestInputFiles (manifest, { includeLocal = true } = {}) {
   const files = new Set()
   for (const framework of manifest.frameworks || []) {
     addExistingFile(files, framework.ciWiring?.configFile)
-    if (framework.status !== 'runnable') continue
-    if (includeLocal) {
-      addExistingFile(files, framework.validation?.runner)
-      addExistingFile(files, framework.validation?.testFile)
+    if (!includeLocal) {
       addExistingFile(files, framework.project?.packageJson)
-      for (const filename of framework.project?.configFiles || []) addExistingFile(files, filename)
+      continue
     }
+    if (framework.status !== 'runnable') continue
+    addExistingFile(files, framework.validation?.runner)
+    addExistingFile(files, framework.validation?.testFile)
+    addExistingFile(files, framework.project?.packageJson)
+    for (const filename of framework.project?.configFiles || []) addExistingFile(files, filename)
   }
   return [...files].sort()
 }

@@ -195,6 +195,24 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.diagnosis, /no visible dd-trace\/ci\/init/)
   })
 
+  it('keeps bracket-form matrices that affect CI configuration unresolved', () => {
+    fs.writeFileSync(workflow, bracketMatrixWorkflowSource({ command: 'npm test' }))
+    completeReview({
+      command: 'npm test',
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['The matrix selects the working directory.'],
+    })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.matrix.status, 'affects_relevant_configuration')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [
+      'The matrix selects the working directory.',
+    ])
+  })
+
   it('keeps opaque inherited configuration relevant after resolving the local package script', () => {
     fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
     completeReview({
@@ -481,6 +499,23 @@ function matrixWorkflowSource ({ command }) {
     '      - uses: actions/setup-node@v4',
     '        with:',
     '          node-version: $' + '{{ matrix.node }}',
+    `      - run: ${command}`,
+    '',
+  ].join('\n')
+}
+
+function bracketMatrixWorkflowSource ({ command }) {
+  return [
+    'jobs:',
+    '  test:',
+    '    runs-on: ubuntu-latest',
+    '    strategy:',
+    '      matrix:',
+    "        working-directory: ['.', packages/app]",
+    '    defaults:',
+    '      run:',
+    '        working-directory: $' + '{{ matrix[\'working-directory\'] }}',
+    '    steps:',
     `      - run: ${command}`,
     '',
   ].join('\n')

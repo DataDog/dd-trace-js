@@ -68,6 +68,39 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('prefers a direct framework command before a stable package-path tie-breaker', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-command-preference-'))
+    const aggregateRoot = path.join(root, 'packages', 'alpha')
+    const directRoot = path.join(root, 'packages', 'zeta')
+    fs.mkdirSync(aggregateRoot, { recursive: true })
+    fs.mkdirSync(directRoot, { recursive: true })
+    fs.writeFileSync(path.join(aggregateRoot, 'package.json'), JSON.stringify({
+      name: 'alpha',
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'npm run setup && jest' },
+    }))
+    fs.writeFileSync(path.join(directRoot, 'package.json'), JSON.stringify({
+      name: 'zeta',
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'jest --runInBand' },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const jest = report.eligibleFrameworks.find(framework => framework.id === 'jest')
+
+      assert.strictEqual(jest.command, 'jest --runInBand')
+      assert.strictEqual(jest.commandLocation, 'packages/zeta/package.json')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('ignores a root package.json symbolic link that escapes the repository', function () {
     if (process.platform === 'win32') this.skip()
 

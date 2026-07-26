@@ -60,14 +60,20 @@ describe('test optimization validation approval', () => {
     assert.doesNotMatch(json, /npm (?:run |test)|shellCommand|setupCommands/)
   })
 
-  it('does not approve local execution for a CI-only audit', () => {
-    const material = getApprovalMaterial({ ...input, requestedScenario: 'ci-wiring' })
+  it('binds static package input without approving local execution for a CI-only audit', () => {
+    const approvalInput = { ...input, requestedScenario: 'ci-wiring' }
+    const material = getApprovalMaterial(approvalInput)
+    const digest = getApprovalDigest(approvalInput)
 
     assert.deepStrictEqual(material.commands, [])
     assert.deepStrictEqual(material.executables, [])
     assert.deepStrictEqual(material.fixtureRecipeDigests, [])
     assert.deepStrictEqual(material.generatedFiles, [])
-    assert.deepStrictEqual(material.projectFiles, [])
+    assert.deepStrictEqual(material.projectFiles.map(file => file.path), [
+      path.join(fixture.root, 'package.json'),
+    ])
+    fs.appendFileSync(path.join(fixture.root, 'package.json'), ' ')
+    assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
   })
 
   it('binds a CI file when local framework validation is unavailable', () => {
@@ -80,7 +86,10 @@ describe('test optimization validation approval', () => {
     const material = getApprovalMaterial(approvalInput)
     const digest = getApprovalDigest(approvalInput)
 
-    assert.deepStrictEqual(material.projectFiles.map(file => file.path), [workflow])
+    assert.deepStrictEqual(material.projectFiles.map(file => file.path), [
+      workflow,
+      path.join(fixture.root, 'package.json'),
+    ].sort())
     fs.appendFileSync(workflow, '# changed after approval\n')
     assert.notStrictEqual(getApprovalDigest(approvalInput), digest)
   })

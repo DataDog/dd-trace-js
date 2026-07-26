@@ -466,7 +466,9 @@ function selectRepresentativeTest (files, framework, projectRoot, packageName, a
     if (source === undefined ||
       !isTestFile(filename, source, framework, projectRoot, allowDirectoryConvention) ||
       hasConflictingFramework(source, framework)) continue
-    if (framework !== 'cucumber' && getStaticTestCount(source) === 0) continue
+    if (framework === 'cucumber'
+      ? cucumber.getScenarioCount(source) === 0
+      : getStaticTestCount(source) === 0) continue
     if (!hasFrameworkOwnership(filename, source, framework, packageName)) continue
     candidates.push({
       path: filename,
@@ -574,7 +576,7 @@ function hasConflictingFramework (source, framework) {
     jest: /@jest\/globals|\bjest\.(?:mock|fn|spyOn)\b/,
     'node:test': /(?:from\s+|require\s*\(\s*)['"]node:test['"]/,
     playwright: /@playwright\/test/,
-    vitest: /from\s+['"]vitest['"]|require\s*\(\s*['"]vitest['"]\s*\)/,
+    vitest: /from\s+['"]vitest['"]|require\s*\(\s*['"]vitest['"]\s*\)|\bvi\./,
   }
   return Object.entries(markers).some(([name, pattern]) => name !== framework && pattern.test(source))
 }

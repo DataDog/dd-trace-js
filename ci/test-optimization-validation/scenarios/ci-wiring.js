@@ -372,10 +372,11 @@ function classifyUnresolved (ci, resolution, matrixRelevant, jobSource) {
 }
 
 function matrixAffectsCiFacts (jobSource, command) {
-  if (!/\bmatrix\./.test(jobSource)) return false
-  if (/\bmatrix\./.test(command)) return true
+  const matrixReference = /\bmatrix\s*[.[]/
+  if (!matrixReference.test(jobSource)) return false
+  if (matrixReference.test(command)) return true
   return jobSource.split(/\r?\n/).some(line => {
-    return /\bmatrix\./.test(line) &&
+    return matrixReference.test(line) &&
       /\b(?:container|DD_[A-Z0-9_]+|DATADOG_[A-Z0-9_]+|NODE_OPTIONS|runs-on|shell|working-directory)\b/i.test(line)
   })
 }

@@ -74,6 +74,7 @@ describe('test optimization validation manifest scaffold', () => {
       const packageJson = JSON.parse(fs.readFileSync(path.join(fixture.root, 'package.json')))
       packageJson.scripts.conformance = 'cucumber-js ./features/example.feature -p default'
       fs.writeFileSync(path.join(fixture.root, 'package.json'), `${JSON.stringify(packageJson)}\n`)
+      fs.writeFileSync(path.join(fixture.root, 'features', 'a-support.feature'), 'Feature: support only\n')
 
       const framework = createManifestScaffold({
         root: fixture.root,
@@ -83,6 +84,22 @@ describe('test optimization validation manifest scaffold', () => {
       assert.strictEqual(framework.status, 'runnable')
       assert.strictEqual(framework.validation.testFile, fixture.testFile)
       assert.match(framework.validation.runner, /cucumber-js\.js$/)
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('rejects files visibly owned by another global-style runner', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest' })
+    const vitestFile = path.join(fixture.root, 'test', 'a-vitest.test.js')
+    fs.writeFileSync(vitestFile, "test('vitest', () => { vi.fn() })\n")
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.validation.testFile, fixture.testFile)
     } finally {
       removeFixture(fixture.root)
     }
