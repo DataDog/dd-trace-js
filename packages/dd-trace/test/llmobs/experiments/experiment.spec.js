@@ -13,9 +13,9 @@ const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 const cassetteDir = path.join(__dirname, 'cassettes')
 
 nock.back.fixtures = cassetteDir
-nock.back.setMode('lockdown')
 
 async function withCassette (name, fn) {
+  nock.back.setMode('lockdown')
   const { nockDone, context } = await nock.back(name)
   try {
     await fn()
@@ -23,6 +23,8 @@ async function withCassette (name, fn) {
   } finally {
     nockDone()
     nock.cleanAll()
+    nock.enableNetConnect()
+    nock.back.setMode('wild')
   }
 }
 
