@@ -52,6 +52,7 @@ jobs:
         spec:
           - client
           - aws-sdk
+          - base-inject-field
           - bedrockruntime
           - dynamodb
           - eventbridge
