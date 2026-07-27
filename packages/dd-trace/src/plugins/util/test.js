@@ -1330,10 +1330,6 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   }
 }
 
-function hasSkippedCoverage (skippedCoverage) {
-  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
-}
-
 function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
   const executableLinesByFile = new Map()
   const coveredLinesByFile = new Map()
@@ -1387,10 +1383,10 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
  * @returns {boolean}
  */
 function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
-  if (!hasSkippedCoverage(skippedCoverage)) return false
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  if (skippedCoverageByFilename.size === 0) return false
 
   const coverageMap = getCoverageMap(coverage)
-  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
   let matched = false
 
   for (const filename of coverageMap.files()) {
@@ -1734,6 +1730,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   }
 
   const metrics = {}
+  let hasMetrics = false
   for (const candidate of candidateBranches) {
     // Find common ancestor
     const baseSha = getMergeBase(candidate, sourceBranch)
@@ -1752,6 +1749,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
       ahead,
       baseSha,
     }
+    hasMetrics = true
   }
 
   function isDefaultBranch (branch) {
@@ -1760,7 +1758,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     )
   }
 
-  if (Object.keys(metrics).length === 0) {
+  if (!hasMetrics) {
     return null
   }
   // Find branch with smallest "ahead" value, preferring default branch on tie
@@ -1786,6 +1784,7 @@ function getPullRequestDiff (baseCommit, targetCommit) {
 function getModifiedFilesFromDiff (diff) {
   if (!diff) return null
   const result = {}
+  let hasModifiedFiles = false
 
   const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
   const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
@@ -1800,6 +1799,7 @@ function getModifiedFilesFromDiff (diff) {
     if (fileMatch && fileMatch.groups.file) {
       currentFile = fileMatch.groups.file
       result[currentFile] = []
+      hasModifiedFiles = true
       continue
     }
 
@@ -1818,7 +1818,7 @@ function getModifiedFilesFromDiff (diff) {
     linesRegex.lastIndex = 0
   }
 
-  if (Object.keys(result).length === 0) {
+  if (!hasModifiedFiles) {
     return null
   }
   return result

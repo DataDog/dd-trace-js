@@ -102,7 +102,7 @@ const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
-let skippableSuitesCoverage = {}
+let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
@@ -125,7 +125,7 @@ let isTestManagementTestsEnabled = false
 let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
-let modifiedFiles = {}
+let modifiedFiles
 let repositoryRoot
 let lastCoverageMap
 let lastCoverageMapRootDir
@@ -546,8 +546,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isImpactedTestsEnabled) {
         try {
-          const hasImpactedTests = Object.keys(modifiedFiles).length > 0
-          this.modifiedFiles = hasImpactedTests ? modifiedFiles : this.testEnvironmentOptions._ddModifiedFiles
+          this.modifiedFiles = modifiedFiles ?? this.testEnvironmentOptions._ddModifiedFiles
         } catch (e) {
           log.error('Error parsing impacted tests', e)
           this.isImpactedTestsEnabled = false
@@ -1757,12 +1756,6 @@ function getRepositoryRootFromTest (test, fallbackRootDir) {
   return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
 }
 
-function hasSkippableSuitesCoverage () {
-  return skippableSuitesCoverage &&
-    typeof skippableSuitesCoverage === 'object' &&
-    Object.keys(skippableSuitesCoverage).length > 0
-}
-
 function shouldCollectJestCoverageForTia () {
   return shouldReportJestSuiteCoverageForTia() ||
     (isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled)
@@ -1875,7 +1868,7 @@ function resetLibraryConfiguration () {
   testManagementTests = {}
   testManagementAttemptToFixRetries = 0
   isImpactedTestsEnabled = false
-  modifiedFiles = {}
+  modifiedFiles = undefined
   repositoryRoot = undefined
 }
 
@@ -1897,13 +1890,14 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
   isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
-  skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  const hasSkippableSuitesCoverage = skippableSuitesCoverage !== undefined
+  skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage
     ? skippableSuitesCoverage
     : {}
   coverageBackfillContexts = isSuitesSkipped && isTiaCoverageBackfillEnabled()
     ? getTestContexts(originalTests)
     : undefined
-  coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage
     ? getCoverageBackfillFiles(skippableSuitesCoverage, repositoryRoot, getTestSuitePath)
     : undefined
 
@@ -2294,10 +2288,10 @@ function getCliWrapper (isNewJestVersion) {
             skippableSuitesCoverage: receivedSkippableSuitesCoverage,
           } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (err) {
-            skippableSuitesCoverage = {}
+            skippableSuitesCoverage = undefined
           } else {
             skippableSuites = receivedSkippableSuites
-            skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
+            skippableSuitesCoverage = receivedSkippableSuitesCoverage
           }
           skippedSuitesCoverage = {}
         } catch (err) {
