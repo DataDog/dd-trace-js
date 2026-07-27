@@ -73,7 +73,10 @@ function shouldSkipEfdRetry (retryIndex, retryCount) {
   return retryCount !== undefined && retryIndex > retryCount
 }
 
+const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
+
 module.exports = {
+  EMPTY_EFD_RETRY_POLICY,
   createEfdRetryPolicy,
   getEfdRetryCountForDuration,
   hasEfdRetries,

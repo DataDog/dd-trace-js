@@ -4,12 +4,10 @@ const fs = require('node:fs')
 
 const log = require('../../dd-trace/src/log')
 const {
-  createEfdRetryPolicy,
+  EMPTY_EFD_RETRY_POLICY,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { channel } = require('./helpers/instrument')
-
-const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')

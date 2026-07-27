@@ -11,7 +11,7 @@ const {
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
-const { createEfdRetryPolicy } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
@@ -60,7 +60,6 @@ const {
 require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
-const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 const patched = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false

@@ -8,7 +8,7 @@ const log = require('../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { getSegment } = require('../../dd-trace/src/util')
 const {
-  createEfdRetryPolicy,
+  EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
@@ -79,8 +79,6 @@ const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
 function getCucumberTestName (testName, isRetry) {
   return isRetry ? testName.replace(CUCUMBER_RETRY_NAME_SUFFIX, '') : testName
 }
-
-const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')

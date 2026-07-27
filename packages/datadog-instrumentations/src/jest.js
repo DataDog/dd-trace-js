@@ -12,7 +12,7 @@ const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
-  createEfdRetryPolicy,
+  EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
   hasEfdRetries,
   shouldSkipEfdRetry,
@@ -106,7 +106,6 @@ const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
-const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 let skippableSuites = []
 let skippableSuitesCoverage = {}
@@ -146,7 +145,6 @@ const originalTestFns = new WeakMap()
 const originalHookFns = new WeakMap()
 const concurrentHookContextQueues = new WeakMap()
 const concurrentHookFns = new WeakMap()
-const discardedEfdRetryTests = new WeakSet()
 const efdRetryMetadataByTest = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const efdTestStatuses = new Map()
@@ -201,6 +199,7 @@ const handledJestEvents = new WeakSet()
  * @property {boolean} [isModified]
  * @property {number} retryCount
  * @property {string} retryType
+ * @property {string} testFullName
  */
 
 /**
@@ -1191,12 +1190,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       isModified,
       retryCount,
       retryType,
+      testFullName,
     }) {
       const { testName, fn, mode, timeout } = jestEvent
       const isAttemptToFixRetry = retryType === 'Test Management (Attempt to Fix)'
       const isEfdRetry = retryType === 'Impacted tests' || retryType === 'Early flake detection'
+      const concurrentTestState = registeredConcurrentTestState || this.concurrentTestStates.get(fn)
       for (let retryIndex = 1; retryIndex <= retryCount; retryIndex++) {
-        const concurrentTestState = registeredConcurrentTestState || this.concurrentTestStates.get(fn)
         let retryFn
         if (concurrentTestState) {
           const test = concurrentTestState.concurrentTest ||
@@ -1244,16 +1244,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             continue
           }
           efdRetryMetadataByTest.set(retryTest, { isModified: Boolean(isModified), retryIndex })
-          const retryTests = this.#efdRetryTestsByName.get(
-            this.getTestNameFromAddTestEvent(jestEvent, state)
-          )
+          const retryTests = this.#efdRetryTestsByName.get(testFullName)
           if (retryTests) {
             retryTests.push(retryTest)
           } else {
-            this.#efdRetryTestsByName.set(
-              this.getTestNameFromAddTestEvent(jestEvent, state),
-              [retryTest]
-            )
+            this.#efdRetryTestsByName.set(testFullName, [retryTest])
           }
         }
       }
@@ -1339,6 +1334,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           state,
           retryCount: testManagementAttemptToFixRetries,
           retryType: 'Test Management (Attempt to Fix)',
+          testFullName,
         })
       }
 
@@ -1387,6 +1383,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         state,
         retryCount: schedulingRetryCount,
         retryType: isModified ? 'Impacted tests' : 'Early flake detection',
+        testFullName,
       })
     }
 
@@ -1663,8 +1660,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             for (const retryTest of retryTests) {
               const retryIndex = efdRetryMetadataByTest.get(retryTest)?.retryIndex
               if (shouldSkipEfdRetry(retryIndex, retryCount)) {
-                retryTest.mode = 'skip'
-                discardedEfdRetryTests.add(retryTest)
+                // Safe mid-run: circus iterates children live, and these retries sit after the finished test.
+                const siblings = retryTest.parent.children
+                const retryTestIndex = siblings.indexOf(retryTest)
+                if (retryTestIndex !== -1) {
+                  siblings.splice(retryTestIndex, 1)
+                }
               }
             }
           }
@@ -1836,9 +1837,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        if (discardedEfdRetryTests.has(event.test)) {
-          return
-        }
         const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {

@@ -1,5 +1,8 @@
 'use strict'
 
+// No optional chaining or nullish coalescing in this file: Cypress 12 bundles it with webpack 4,
+// whose parser predates both, and its babel-loader skips node_modules.
+
 let rumFlushWaitMillis = 500
 let rumTestExecutionIdCookieName
 

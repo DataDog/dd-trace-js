@@ -2869,10 +2869,20 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
           )
 
+          let output = ''
+          childProcess.stdout?.on('data', chunk => {
+            output += chunk.toString()
+          })
+          childProcess.stderr?.on('data', chunk => {
+            output += chunk.toString()
+          })
+
           await Promise.all([
             once(childProcess, 'exit'),
             eventsPromise,
           ])
+
+          assert.doesNotMatch(output, /\d+ skipped/)
         })
       }
 
@@ -3138,6 +3148,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         assert.doesNotMatch(output, /I am running concurrent hooks/)
+        assert.doesNotMatch(output, /\d+ skipped/)
         assert.strictEqual(exitCode, 0)
       })
 

@@ -9,7 +9,7 @@ const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
 const {
-  createEfdRetryPolicy,
+  EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
   hasEfdRetries,
   shouldSkipEfdRetry: shouldSkipRetryIndex,
@@ -77,8 +77,6 @@ const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WA
 const DD_PROPERTIES_TIMEOUT = 5000
 const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
-
-const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 let applyRepeatEachIndex = null
 

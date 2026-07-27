@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const {
+  EMPTY_EFD_RETRY_POLICY,
   createEfdRetryPolicy,
   getEfdRetryCountForDuration,
   hasEfdRetries,
@@ -61,6 +62,14 @@ describe('EFD retry policy', () => {
     assert.strictEqual(hasEfdRetries(createEfdRetryPolicy({ '5s': 1 })), true)
     assert.strictEqual(hasEfdRetries(createEfdRetryPolicy({ '5s': 0 })), false)
     assert.strictEqual(hasEfdRetries(undefined), false)
+  })
+
+  it('shares an immutable zero-retry default across frameworks', () => {
+    assert.strictEqual(hasEfdRetries(EMPTY_EFD_RETRY_POLICY), false)
+    assert.strictEqual(getEfdRetryCountForDuration(0, EMPTY_EFD_RETRY_POLICY), 0)
+    assert.throws(() => {
+      EMPTY_EFD_RETRY_POLICY.schedulingRetryCount = 5
+    }, { name: 'TypeError' })
   })
 
   it('skips only retries beyond the selected count', () => {

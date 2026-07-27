@@ -9,7 +9,7 @@ const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverag
 const satisfies = require('../../../vendor/dist/semifies')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const {
-  createEfdRetryPolicy,
+  EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
   hasEfdRetries,
   shouldSkipEfdRetry,
@@ -141,7 +141,6 @@ const {
 } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
-const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 let hasWarnedDeprecatedCypressVersion = false
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
@@ -903,15 +902,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns how many EFD retries must be scheduled before the first duration is known.
-   *
-   * @returns {number}
-   */
-  getConfiguredEfdRetryCount () {
-    return this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
-  }
-
-  /**
    * Returns the selected EFD retry count for a test, or the scheduling count if it has not run yet.
    *
    * @param {string} testSuite
@@ -919,11 +909,8 @@ class CypressPlugin {
    * @returns {number}
    */
   getEfdRetryCountForTest (testSuite, testName) {
-    const testSuiteRetries = this.efdRetryCountByTest[testSuite]
-    if (!testSuiteRetries || testSuiteRetries[testName] === undefined) {
-      return this.getConfiguredEfdRetryCount()
-    }
-    return testSuiteRetries[testName]
+    return this.efdRetryCountByTest[testSuite]?.[testName] ??
+      this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
   }
 
   /**

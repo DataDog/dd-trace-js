@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 
 import efdRetryPolicy from '../packages/dd-trace/src/ci-visibility/efd-retry-policy.js'
 
-const { getEfdRetryCountForDuration } = efdRetryPolicy
+const { EMPTY_EFD_RETRY_POLICY, getEfdRetryCountForDuration } = efdRetryPolicy
 
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
@@ -12,12 +12,8 @@ const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive
 const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
-const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryPolicy || {
-  durationRetryCounts: [],
-  schedulingRetryCount: 0,
-}
+const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryPolicy || EMPTY_EFD_RETRY_POLICY
 const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
-const hasEarlyFlakeDetectionDurationRetries = earlyFlakeDetectionRetryPolicy.durationRetryCounts.length > 0
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
@@ -384,7 +380,7 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
     task.meta.__ddTestOptEfdRetries = retryCount
-    if (retryCount === 0 && hasEarlyFlakeDetectionDurationRetries) {
+    if (retryCount === 0) {
       task.meta.__ddTestOptEfdAbortReason = 'slow'
     }
   }
@@ -610,7 +606,7 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
     task.meta.__ddTestOptEfdRetries = retryCount
-    if (retryCount === 0 && hasEarlyFlakeDetectionDurationRetries) {
+    if (retryCount === 0) {
       task.meta.__ddTestOptEfdAbortReason = 'slow'
     }
   }
@@ -637,10 +633,6 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
 }
 
 function getEarlyFlakeDetectionRetryCount (task) {
-  if (!hasEarlyFlakeDetectionDurationRetries) {
-    return earlyFlakeDetectionRetries
-  }
-
   const executionStart = earlyFlakeDetectionStartByTask.get(task)
   const duration = executionStart === undefined ? task.result?.duration ?? 0 : now() - executionStart
   return getEfdRetryCountForDuration(duration, earlyFlakeDetectionRetryPolicy)
