@@ -19,6 +19,8 @@ const {
   HTTP_ENDPOINT,
   HTTP_ROUTE,
   HTTP_METHOD,
+  SPAN_KIND,
+  GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
@@ -178,6 +180,40 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,')
+  })
+
+  it('should include span kind in aggregation key', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
+  })
+
+  it('should normalize gRPC status name to numeric string in aggregation key', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, [GRPC_STATUS_CODE]: 'NOT_FOUND' } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5')
+  })
+
+  it('should keep numeric gRPC status code as numeric string in aggregation key', () => {
+    const span = { ...basicSpan, meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
+  })
+
+  it('should use rpc.grpc.status_code OTel alias when grpc.status.code is absent', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, 'rpc.grpc.status_code': '2' }, metrics: {} }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.rpcStatusCode, '2')
+  })
+
+  it('should use rpc.response.status_code OTel alias as last resort', () => {
+    const meta = { ...basicSpan.meta, 'rpc.response.status_code': 'INVALID_ARGUMENT' }
+    const span = { ...basicSpan, meta, metrics: {} }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.rpcStatusCode, '3')
   })
 })
 

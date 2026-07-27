@@ -76,7 +76,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
       await receiver.stop()
     })
 
-    it('does not initialize test optimization plugins if Test Optimization mode is not enabled', async () => {
+    it('finishes without initializing test optimization plugins if Test Optimization mode is not enabled', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (tracesRequests) => {
           const spans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
@@ -121,11 +121,12 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
         processOutput += chunk.toString()
       })
 
-      await Promise.all([
+      const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise,
       ])
 
+      assert.strictEqual(exitCode, 0, processOutput)
       const reason = 'is not initialized because Test Optimization mode is not enabled.'
       const expectedSubstring = `Plugin "${testFramework}" ${reason}`
       assert.ok(processOutput.includes(expectedSubstring), `Got: ${inspect(processOutput)}`)

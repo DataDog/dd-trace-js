@@ -27,13 +27,13 @@ const EXACT_SECRET_ASSIGNMENT_NAME_SOURCE = [
   'JWT',
   'WEBHOOK(?:_URL)?',
 ].join('|')
-const SECRET_NAME_CHARS = String.raw`[A-Za-z0-9_.-]`
+const SECRET_NAME_CHARS = '[A-Za-z0-9_.-]'
 const SECRET_ASSIGNMENT_NAME_SOURCE = [
-  String.raw`(?:${EXACT_SECRET_ASSIGNMENT_NAME_SOURCE})`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_]PASS`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
+  `(?:${EXACT_SECRET_ASSIGNMENT_NAME_SOURCE})`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_]PASS`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
   'PASS',
   'AUTH',
   'AUTHORIZATION',
@@ -68,7 +68,7 @@ const SECRET_FLAG_PATTERN = new RegExp(
   'gi'
 )
 const SECRET_FLAG_NAME_PATTERN = new RegExp(
-  String.raw`^--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*$`,
+  `^--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*$`,
   'i'
 )
 const AUTH_HEADER_PATTERN = /\b(Bearer)\s+([^\s'",}\]]+)/gi
@@ -92,10 +92,10 @@ const JWT_VALUE_PATTERN = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9
 const KNOWN_TOKEN_VALUE_PATTERN =
   /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b/g
 const SECRET_HEADER_ENV_NAME_SOURCE = [
-  String.raw`(?:${SECRET_NAME_SOURCE}|PAT|JWT|WEBHOOK(?:_URL)?)`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
-  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
+  `(?:${SECRET_NAME_SOURCE}|PAT|JWT|WEBHOOK(?:_URL)?)`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
+  `[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
 ].join('|')
 const SECRET_HEADER_NAME_SOURCE = [
   'dd-api-key',

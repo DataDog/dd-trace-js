@@ -1,0 +1,53 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4","input":"hello"}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '33'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - curl/8.7.1
+    method: POST
+    uri: https://api.openai.com/v1/v1/responses
+  response:
+    body:
+      string: ''
+    headers:
+      CF-RAY:
+      - 9e1f69338c2de615-IAD
+      Connection:
+      - keep-alive
+      Date:
+      - Wed, 25 Mar 2026 16:49:48 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      set-cookie:
+      - __cf_bm=nhkfItMxViQKMxp30DdsWzyiLSYG_V24gTrFp6sNzXE-1774457388.0853722-1.0.1.1-eBBM5j_quoBmfxp_1hGhHqj7_aecnvXnvg1evq8dIQefomFRoyuiMgKtVWdgUCOJU01jnnFLymfL0NAw2h5FhVE_5CoBDUXWRxSJag3Is7OnOlysXYcwgUD4.oIp866Q;
+        HttpOnly; Secure; Path=/; Domain=api.openai.com; Expires=Wed, 25 Mar 2026
+        17:19:48 GMT
+      - _cfuvid=71ErowylG_JQ6Ez90TmQY7G70J3cdFTedJc1IQQNb8U-1774457388.0853722-1.0.1.1-FFHwkg8O2W_RxZWUyB4Fci.gtpBvCzK0OwVG13WoVIs;
+        HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com
+    status:
+      code: 404
+      message: Not Found
+version: 1

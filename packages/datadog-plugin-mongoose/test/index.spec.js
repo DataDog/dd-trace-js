@@ -73,7 +73,8 @@ describe('Plugin', () => {
           return new PeerCat({ name: 'PeerCat' }).save()
         },
         () => dbName,
-        'peer.service')
+        'peer.service',
+        { component: 'mongodb' })
 
       it('should propagate context with write operations', () => {
         const Cat = mongoose.model('Cat1', { name: String })

@@ -694,6 +694,10 @@ function getMonorepoFindings ({ framework, command, probe }) {
   return findings
 }
 
+/**
+ * @param {object|undefined} probe
+ * @param {string} name
+ */
 function hasProbeTool (probe, name) {
   const signals = [
     ...(probe?.wrapperSignals || []),
@@ -703,6 +707,9 @@ function hasProbeTool (probe, name) {
   return signals.some(signal => signal.name === name)
 }
 
+/**
+ * @param {Array<{ name?: string }>} signals
+ */
 function formatToolNames (signals) {
   const names = []
   const seen = new Set()
@@ -715,9 +722,12 @@ function formatToolNames (signals) {
 
   if (names.length === 0) return ''
   if (names.length === 1) return names[0]
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
+/**
+ * @param {string|undefined} frameworkName
+ */
 function getDisplayFrameworkName (frameworkName) {
   return {
     cucumber: 'Cucumber',

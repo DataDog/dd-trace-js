@@ -15,7 +15,6 @@ const {
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   useSandbox([], false, [
     './packages/datadog-plugin-http/test/integration-test/*'])
@@ -24,8 +23,12 @@ describe('esm', () => {
     agent = await new FakeAgent().start()
   })
 
-  before(async function () {
-    variants = varySandbox('server.mjs', 'http', 'createServer')
+  const variants = varySandbox('server.mjs', {
+    bindingName: 'http',
+    packageName: 'http',
+    defaultExport: true,
+    namedExports: ['createServer'],
+    namedExportBinding: 'namespace',
   })
 
   afterEach(async () => {
@@ -34,7 +37,7 @@ describe('esm', () => {
   })
 
   context('http', () => {
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

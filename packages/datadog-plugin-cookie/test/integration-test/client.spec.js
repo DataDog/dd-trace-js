@@ -23,15 +23,17 @@ withVersions('cookie', 'cookie', (version, _moduleName, resolvedVersion) => {
   describe('ESM', () => {
     if (isEsmOnly && NODE_MAJOR < 22) return
 
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox([`'cookie@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-cookie/test/integration-test/*'])
 
-    before(function () {
-      variants = isEsmOnly
-        ? varySandbox('server-v2.mjs', 'parseCookie', 'parseCookie', 'cookie', true)
-        : varySandbox('server.mjs', 'cookie')
+    const variants = varySandbox(isEsmOnly ? 'server-v2.mjs' : 'server.mjs', {
+      bindingName: isEsmOnly ? 'parseCookie' : 'cookie',
+      packageName: 'cookie',
+      defaultExport: !isEsmOnly,
+      namedExports: isEsmOnly ? ['parseCookie'] : [],
+      namedExportBinding: isEsmOnly ? 'direct' : undefined,
     })
 
     beforeEach(async () => {
@@ -43,8 +45,7 @@ withVersions('cookie', 'cookie', (version, _moduleName, resolvedVersion) => {
       await agent.stop()
     })
 
-    const variantNames = isEsmOnly ? ['star', 'destructure'] : varySandbox.VARIANTS
-    for (const variant of variantNames) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)

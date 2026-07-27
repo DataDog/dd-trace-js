@@ -20,7 +20,6 @@ describe('esm', () => {
   let agent
   let proc
   let spawnEnv
-  let variants
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     useSandbox([`'@azure/event-hubs@${version}'`], false, [
@@ -37,11 +36,15 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'EventHubProducerClient', undefined, '@azure/event-hubs', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'EventHubProducerClient',
+      packageName: '@azure/event-hubs',
+      defaultExport: false,
+      namedExports: ['EventHubProducerClient'],
+      namedExportBinding: 'direct',
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

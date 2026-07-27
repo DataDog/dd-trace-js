@@ -35,6 +35,7 @@ const {
   LLMOBS_SUBMITTED_TAG_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
+  TRACE_ID,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -236,8 +237,11 @@ class LLMObsSpanProcessor {
       meta.input.prompt = prompt
     }
 
+    const apmTraceId = span.context().toTraceId(true)
+    const llmobsTraceId = mlObsTags[TRACE_ID] ?? apmTraceId
+
     const llmObsSpanEvent = {
-      trace_id: span.context().toTraceId(true),
+      trace_id: llmobsTraceId,
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       name,
@@ -249,9 +253,10 @@ class LLMObsSpanProcessor {
       metrics,
       _dd: {
         span_id: span.context().toSpanId(),
-        trace_id: span.context().toTraceId(true),
+        trace_id: apmTraceId,
         sample_rate: mlObsTags[SAMPLE_RATE],
         sampling_decision: mlObsTags[SAMPLING_DECISION],
+        apm_trace_id: apmTraceId,
       },
     }
 

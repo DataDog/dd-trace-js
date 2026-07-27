@@ -30,7 +30,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -60,7 +60,7 @@ jobs:
     env:
       PLUGINS: openai
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -88,7 +88,7 @@ jobs:
     env:
       PLUGINS: langchain
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
@@ -118,7 +118,7 @@ jobs:
     env:
       PLUGINS: aws-sdk
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -146,7 +146,7 @@ jobs:
     env:
       PLUGINS: google-cloud-vertexai
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -176,7 +176,7 @@ jobs:
     env:
       PLUGINS: ai
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -202,7 +202,7 @@ jobs:
     env:
       PLUGINS: anthropic
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -232,7 +232,7 @@ jobs:
     env:
       PLUGINS: claude-agent-sdk
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       # The SDK is ESM-only. Tests use dynamic import() to load it.
       - uses: ./.github/actions/node/active-lts
@@ -259,7 +259,7 @@ jobs:
     env:
       PLUGINS: google-genai
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -289,7 +289,7 @@ jobs:
     env:
       PLUGINS: langgraph
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
         with:
           node-floor: newest-maintenance-lts
@@ -301,5 +301,35 @@ jobs:
     env:
       PLUGINS: modelcontextprotocol-sdk
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
+
+  openai-agents:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: openai-agents
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/node/latest
+      - run: npm run test:plugins:ci
+      - run: npm run test:llmobs:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/coverage
+        with:
+          flags: llmobs-${{ github.job }}
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
