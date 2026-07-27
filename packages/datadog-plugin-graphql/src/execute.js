@@ -435,6 +435,17 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.#filterVariables(rootCtx, variableValues)
+      // eslint-disable-next-line no-console
+      console.log('[DIAG variables]', JSON.stringify({
+        variableValues,
+        variables,
+        args: fieldNode.arguments.map(arg => ({
+          argName: arg.name?.value,
+          valueKind: arg.value?.kind,
+          valueName: arg.value?.name?.value,
+          inVariables: arg.value?.name?.value ? variables[arg.value.name.value] : undefined,
+        })),
+      }))
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
           const name = arg.value.name.value
