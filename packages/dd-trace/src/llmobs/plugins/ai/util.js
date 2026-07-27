@@ -13,6 +13,8 @@ const MODEL_METADATA_KEYS = new Set([
 const VERCEL_AI_TELEMETRY_METADATA_PREFIX = 'ai.telemetry.metadata.'
 const VERCEL_AI_MODEL_METADATA_PREFIX = 'gen_ai.request.'
 const VERCEL_AI_GENERATION_METADATA_PREFIX = 'ai.settings.'
+const UNPARSABLE_TOOL_RESULT = '[Unparsable Tool Result]'
+const UNSUPPORTED_TOOL_RESULT = '[Unsupported Tool Result]'
 
 /**
  * @typedef {import('../../../opentracing/span')} Span
@@ -26,8 +28,31 @@ const VERCEL_AI_GENERATION_METADATA_PREFIX = 'ai.settings.'
 
 /**
  * @typedef {{
- *   type: string,
- *   value?: unknown
+ *   type: 'text',
+ *   text: string
+ * } | {
+ *   type: 'media' | 'file',
+ *   mediaType: string
+ * } | {
+ *   type: 'file-data' | 'file-url' | 'file-id' | 'file-reference'
+ * } | {
+ *   type: 'image-data' | 'image-url' | 'image-file-id' | 'image-file-reference'
+ * } | {
+ *   type: 'custom'
+ * }} ToolCallContentPart
+ *
+ * @typedef {{
+ *   type: 'text' | 'error-text',
+ *   value: string
+ * } | {
+ *   type: 'json' | 'error-json',
+ *   value: unknown
+ * } | {
+ *   type: 'content',
+ *   value: ToolCallContentPart[]
+ * } | {
+ *   type: 'execution-denied',
+ *   reason?: string
  * }} ToolCallOutput
  *
  * @typedef {{ output?: ToolCallOutput, result?: unknown } & Record<string, unknown>} ToolCallResultContent
@@ -304,32 +329,89 @@ function getToolNameFromTags (tags) {
 }
 
 /**
- * Get the content of a tool call result.
- * Version 5 of the ai sdk sets this tag as `content.output`, with a `
- * @param {{ output?: { type: string, value: unknown }, result?: unknown }} content
+ * @param {unknown} value
+ * @returns {string}
+ */
+function stringifyToolCallResult (value) {
+  return JSON.stringify(value) ?? UNPARSABLE_TOOL_RESULT
+}
+
+/**
+ * @param {ToolCallContentPart[]} value
+ * @returns {string}
+ */
+function formatToolCallContent (value) {
+  if (!Array.isArray(value)) return UNPARSABLE_TOOL_RESULT
+
+  let result = ''
+  for (const part of value) {
+    if (typeof part !== 'object' || part === null) return UNPARSABLE_TOOL_RESULT
+
+    const { type } = part
+    if (type === 'text') {
+      if (typeof part.text !== 'string') return UNPARSABLE_TOOL_RESULT
+      result += part.text
+    } else if (type === 'media' || type === 'file') {
+      const { mediaType } = part
+      if (typeof mediaType !== 'string') return UNPARSABLE_TOOL_RESULT
+      result += mediaType === 'image' || mediaType.startsWith('image/') ? '[Image]' : '[File]'
+    } else if (
+      type === 'file-data' ||
+      type === 'file-url' ||
+      type === 'file-id' ||
+      type === 'file-reference'
+    ) {
+      result += '[File]'
+    } else if (
+      type === 'image-data' ||
+      type === 'image-url' ||
+      type === 'image-file-id' ||
+      type === 'image-file-reference'
+    ) {
+      result += '[Image]'
+    } else if (type === 'custom') {
+      result += '[Custom Content]'
+    } else {
+      return UNPARSABLE_TOOL_RESULT
+    }
+  }
+
+  return result
+}
+
+/**
+ * @param {ToolCallResultContent | null | undefined} content
  * @returns {string}
  */
 function getToolCallResultContent (content) {
-  const { output, result } = content
-  if (output) {
-    if (output.type === 'text') {
-      return output.value
-    } else if (output.type === 'json') {
-      return JSON.stringify(output.value)
+  try {
+    if (typeof content !== 'object' || content === null) return UNPARSABLE_TOOL_RESULT
+
+    const { output, result } = content
+    if (output !== undefined) {
+      if (typeof output !== 'object' || output === null) return UNPARSABLE_TOOL_RESULT
+
+      const { type, value } = output
+      if (type === 'text' || type === 'error-text') {
+        return typeof value === 'string' ? value : UNPARSABLE_TOOL_RESULT
+      } else if (type === 'json' || type === 'error-json') {
+        return stringifyToolCallResult(value)
+      } else if (type === 'content') {
+        return formatToolCallContent(value)
+      } else if (type === 'execution-denied') {
+        const { reason } = output
+        if (reason === undefined) return '[Tool Execution Denied]'
+        return typeof reason === 'string' ? reason : UNPARSABLE_TOOL_RESULT
+      }
+      return UNPARSABLE_TOOL_RESULT
     }
-    return '[Unparsable Tool Result]'
-  } else if (result) {
-    if (typeof result === 'string') {
-      return result
+    if (result !== undefined) {
+      return typeof result === 'string' ? result : stringifyToolCallResult(result)
     }
 
-    try {
-      return JSON.stringify(result)
-    } catch {
-      return '[Unparsable Tool Result]'
-    }
-  } else {
-    return '[Unsupported Tool Result]'
+    return UNSUPPORTED_TOOL_RESULT
+  } catch {
+    return UNPARSABLE_TOOL_RESULT
   }
 }
 
