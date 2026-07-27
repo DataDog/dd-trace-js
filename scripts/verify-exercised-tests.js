@@ -1105,10 +1105,13 @@ function buildLlmobsPluginTestSet (repoRoot) {
   return out
 }
 
-function main () {
+/**
+ * @param {string} [repoRootArg] Checkout to verify. Defaults to the repository this script lives in.
+ */
+function main (repoRootArg) {
   const startNs = process.hrtime.bigint()
 
-  const repoRoot = path.resolve(__dirname, '..')
+  const repoRoot = repoRootArg ? path.resolve(repoRootArg) : path.resolve(__dirname, '..')
   const packageJsonPath = path.join(repoRoot, 'package.json')
   const pluginsVar = '$' + '{PLUGINS}'
   const bracePluginsVar = '{' + pluginsVar + '}'
@@ -1477,4 +1480,4 @@ function main () {
   process.exit(hasCategoryWarnings ? 1 : 0)
 }
 
-main()
+main(process.argv[2])
