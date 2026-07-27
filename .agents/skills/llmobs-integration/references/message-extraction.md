@@ -30,8 +30,7 @@ Common variations include:
 
 ## How to Research a New Provider
 
-1. Read the existing tracing plugin for the package (`packages/datadog-plugin-<name>/src/index.js`) to understand what
-   arguments and results look like
+1. Read the package's tracing plugin (`packages/datadog-plugin-<name>/src/index.js`) for argument and result shapes
 2. Look at the provider's SDK source or API docs to understand response shapes
 3. Check an existing LLMObs plugin for a similar provider as a reference
 
