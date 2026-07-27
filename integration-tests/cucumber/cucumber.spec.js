@@ -3,12 +3,11 @@
 const assert = require('node:assert/strict')
 
 const { once } = require('node:events')
-const { exec, execSync } = require('child_process')
+const { exec, execSync, spawn } = require('child_process')
 const fs = require('fs')
+const os = require('node:os')
 const path = require('path')
 const { inspect } = require('node:util')
-
-const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 const { assertObjectContains } = require('../helpers')
 
@@ -87,8 +86,10 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
 
-const cucumberWorkerThreadsPreloadPath =
+const cucumberWorkerThreadsPreloadPath = path.join(
+  __dirname,
   '../../packages/datadog-instrumentations/src/cucumber-worker-threads'
+)
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -109,59 +110,99 @@ const parallelModeCommand = './node_modules/.bin/cucumber-js ci-visibility/featu
 const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
 
-/**
- * @param {(request: string) => object} appRequire
- * @returns {Array<[object, boolean]>}
- */
-function loadCucumberWorkerThreadsPreload (appRequire) {
-  const patchCalls = []
-
-  proxyquire(cucumberWorkerThreadsPreloadPath, {
-    'node:module': {
-      createRequire: () => appRequire,
-    },
-    './cucumber': {
-      patchCucumberWorkerRunTestCase: (...args) => patchCalls.push(args),
-    },
-  })
-
-  return patchCalls
-}
+const shouldTestCucumberWorkerThreadsPreload = version === 'latest' && isLatestCucumberSupported
 
 describe('cucumber worker threads preload', () => {
-  it('patches the runtime executor used by the newest cucumber version', () => {
-    const runtimeExecutorPackage = { Executor: class {} }
+  const test = shouldTestCucumberWorkerThreadsPreload ? it : it.skip
 
-    const patchCalls = loadCucumberWorkerThreadsPreload((request) => {
-      assert.strictEqual(request, '@cucumber/cucumber/lib/runtime/executor')
-      return runtimeExecutorPackage
-    })
+  test('ignores unavailable cucumber runtime internals', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cucumber-worker-preload-'))
+    const cucumberPackagePath = path.join(cwd, 'node_modules/@cucumber/cucumber')
 
-    assert.deepStrictEqual(patchCalls, [[runtimeExecutorPackage, true]])
-  })
+    try {
+      fs.mkdirSync(cucumberPackagePath, { recursive: true })
+      fs.writeFileSync(
+        path.join(cucumberPackagePath, 'package.json'),
+        '{"name":"@cucumber/cucumber","version":"0.0.0"}\n'
+      )
 
-  it('falls back to the runtime worker used by older cucumber 13 versions', () => {
-    const runtimeWorkerPackage = { Worker: class {} }
+      const childProcess = spawn(process.execPath, [cucumberWorkerThreadsPreloadPath], {
+        cwd,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: '',
+        },
+      })
+      const [exitCode] = await once(childProcess, 'exit')
 
-    const patchCalls = loadCucumberWorkerThreadsPreload((request) => {
-      if (request === '@cucumber/cucumber/lib/runtime/executor') {
-        throw new Error('executor is not available')
-      }
-      assert.strictEqual(request, '@cucumber/cucumber/lib/runtime/worker')
-      return runtimeWorkerPackage
-    })
-
-    assert.deepStrictEqual(patchCalls, [[runtimeWorkerPackage, true]])
-  })
-
-  it('ignores unavailable cucumber runtime internals', () => {
-    const patchCalls = loadCucumberWorkerThreadsPreload(() => {
-      throw new Error('runtime internals are not available')
-    })
-
-    assert.deepStrictEqual(patchCalls, [])
+      assert.strictEqual(exitCode, 0)
+    } finally {
+      fs.rmSync(cwd, { force: true, recursive: true })
+    }
   })
 })
+
+for (const cucumberWorkerVersion of ['13.1.0', '13.2.0']) {
+  const testSuite = shouldTestCucumberWorkerThreadsPreload ? describe : describe.skip
+
+  testSuite(`cucumber@${cucumberWorkerVersion} worker threads preload`, () => {
+    let childProcess, cwd, receiver
+
+    useSandbox([`@cucumber/cucumber@${cucumberWorkerVersion}`], true)
+
+    before(() => {
+      cwd = sandboxCwd()
+      const cucumberPackage = JSON.parse(fs.readFileSync(
+        path.join(cwd, 'node_modules/@cucumber/cucumber/package.json'),
+        'utf8'
+      ))
+
+      assert.strictEqual(cucumberPackage.version, cucumberWorkerVersion)
+    })
+
+    beforeEach(async () => {
+      receiver = await new FakeCiVisIntake().start()
+    })
+
+    afterEach(async () => {
+      childProcess?.kill()
+      await receiver.stop()
+    })
+
+    it('reports tests from parallel workers', async () => {
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature --parallel 2',
+        {
+          cwd,
+          env: getCiVisEvpProxyConfig(receiver.port),
+        }
+      )
+
+      await receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const testEvents = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+
+          assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
+            `${featuresPath}farewell.feature.Say farewell`,
+            `${featuresPath}farewell.feature.Say whatever`,
+          ])
+          for (const { content: test } of testEvents) {
+            assert.strictEqual(test.name, 'cucumber.test')
+            assert.strictEqual(test.meta[CUCUMBER_IS_PARALLEL], 'true')
+            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'cucumber')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+        }
+      )
+
+      assert.strictEqual(childProcess.exitCode, 0)
+    })
+  })
+}
 
 // TODO: add esm tests
 describe(`cucumber@${version} commonJS`, () => {
