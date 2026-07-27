@@ -15,6 +15,7 @@ const { uploadCoverageReport: uploadCoverageReportRequest } = require('../reques
 const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
@@ -28,8 +29,7 @@ function getTestConfigurationTags (tags) {
   }
   return Object.keys(tags).reduce((acc, key) => {
     if (key.startsWith('test.configuration.')) {
-      const [, configKey] = key.split('test.configuration.')
-      acc[configKey] = tags[key]
+      acc[getSegment(key, 'test.configuration.', 1)] = tags[key]
     }
     return acc
   }, {})

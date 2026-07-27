@@ -1350,7 +1350,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalFailedTestCount = 0
       let totalPureQuarantinedFailedTestCount = 0
 
-      for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
+      for (const [fqn, testStatuses] of testsToTestStatuses) {
         // Only count as failed if the final status (after retries) is 'fail'
         const lastStatus = testStatuses.at(-1)
         if (lastStatus === 'fail') {

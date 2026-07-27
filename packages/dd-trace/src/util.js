@@ -102,6 +102,21 @@ function getSegment (string, separator, index, fallback) {
   return end === -1 ? string.slice(start) : string.slice(start, end)
 }
 
+/**
+ * Return the path portion of a request target, dropping any query string and fragment.
+ * The two scans avoid the array and substring a `split(/[?#]/)` allocates per call.
+ *
+ * @param {string} target
+ */
+function stripQueryAndFragment (target) {
+  let cut = target.indexOf('?')
+  const fragment = target.indexOf('#')
+  if (cut === -1 || (fragment !== -1 && fragment < cut)) {
+    cut = fragment
+  }
+  return cut === -1 ? target : target.slice(0, cut)
+}
+
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
@@ -136,6 +151,7 @@ module.exports = {
   isError,
   globMatch,
   getSegment,
+  stripQueryAndFragment,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
   formatKnuthRate,
