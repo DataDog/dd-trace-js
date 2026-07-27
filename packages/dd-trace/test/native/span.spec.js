@@ -148,6 +148,8 @@ describe('NativeDatadogSpan', () => {
       // production call does not blow up.
       this.syncToNativeOnly = sinon.stub()
       this.syncOneTagToNative = sinon.stub()
+      this.markExported = () => { this.exported = true }
+      this.isExported = () => this.exported === true
 
       // Tag accessor methods (matching real NativeSpanContext)
       this.setTag = (key, value) => {

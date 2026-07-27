@@ -121,18 +121,18 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
-  it('syncs deferred native error meta before export', () => {
+  it('syncs final native tags before export', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     const syncOrder = []
     const context = finishedSpan.context()
 
-    context.syncErrorMetaToNative.callsFake(() => syncOrder.push('sync'))
+    context.syncFinalTagsToNative.callsFake(() => syncOrder.push('sync'))
     exporter.export.callsFake(() => syncOrder.push('export'))
 
     processor.process(finishedSpan)
 
-    sinon.assert.calledOnce(context.syncErrorMetaToNative)
+    sinon.assert.calledOnce(context.syncFinalTagsToNative)
     assert.deepStrictEqual(syncOrder, ['sync', 'export'])
   })
 
