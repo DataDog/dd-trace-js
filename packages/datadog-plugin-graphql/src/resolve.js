@@ -39,6 +39,17 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const parentStore = legacyStorage.getStore()
     ctx.parentStore = ctx.currentStore = parentStore
 
+    // This plugin has no direct link to the enclosing execute() call — it only knows about a
+    // resolver because graphql-js independently published to the native resolve channel. execute.js's
+    // native bindStart allocates `graphqlFieldSpans` on the store for every execute() it actually
+    // traces, and skips allocating it when execute() itself is skipped (e.g. an Apollo Gateway
+    // health-check poll) — its absence is this plugin's only signal that the resolver currently
+    // running belongs to a skipped operation and must not get a span either.
+    if (!parentStore?.graphqlFieldSpans) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     if (this.config.depth === 0) {
       ctx.ddSkipped = true
       return ctx.currentStore

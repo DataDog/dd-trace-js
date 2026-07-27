@@ -807,7 +807,9 @@ function getResolverInfo (info, args) {
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {
     for (const directive of directives) {
-      if (directive.arguments.length === 0) continue
+      // graphql-js <17 always populates `arguments` with an (possibly empty) array; >=17 leaves
+      // it `undefined` when the directive takes none.
+      if (!directive.arguments?.length) continue
 
       const argList = {}
       for (const argument of directive.arguments) {

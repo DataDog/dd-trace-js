@@ -228,7 +228,24 @@ describe('Plugin', () => {
       //     dropped support for well before v17 anyway)
       // Each is a TODO for a future graphql-js release that exposes more through the channel,
       // not a bug in the v17 support itself.
-      const nativeChannelGap = semver.gte(graphqlVersion, '17.0.0') ? it.skip : it
+      //
+      // Whether any of this actually applies depends on the *Node* version running the suite,
+      // not graphql-js' version alone: graphql-js itself only wires up its native channels when
+      // `process.getBuiltinModule` exists (Node >=20.16/22.3 — see graphql-js' diagnostics.js
+      // `resolveDiagnosticsChannel`), and only Node's own `module-sync` exports-condition
+      // resolution (which sends a plain `require('graphql')` to the ESM build, bypassing
+      // orchestrion) makes that the *only* path graphql-js exercises. On an older Node (this
+      // repo's plugin CI runs each plugin's own suite on a single fixed, typically oldest-
+      // supported, Node version) a plain `require('graphql')` resolves to the CJS build same as
+      // any pre-17 release, orchestrion instruments it exactly as before, and none of the gaps
+      // above apply — so the gate has to mirror graphql-js' own runtime check, not just compare
+      // versions.
+      // Runtime-guarded by typeof, mirroring graphql-js' own capability check — not a hard
+      // dependency on this Node version supporting it.
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
+      const nativeChannelGap = semver.gte(graphqlVersion, '17.0.0') && typeof process.getBuiltinModule === 'function'
+        ? it.skip
+        : it
 
       before(() => {
         sort = spans => spans.sort((a, b) => {
@@ -3419,42 +3436,9 @@ describe('Plugin', () => {
           tracer = await agent.load('graphql')
         })
 
-        // TEMPORARY DIAGNOSTIC: the two health-check tests below flake only on CI (never
-        // reproduces locally), always as extra apm:graphql:execute:start / graphql.validate
-        // activity — consistent with a stray publish leaking in from an earlier test's
-        // not-fully-settled async work, since the graphql CompositePlugin instance (and its
-        // channel subscriptions) persists across every version block in this file. Log
-        // whichever test is running whenever either channel fires, plus a stack trace, so the
-        // next CI run pins down the actual source instead of guessing further. Remove once the
-        // leak is found.
-        let diagCleanup
         beforeEach(function () {
           if (!supported) return this.skip()
           graphql = require(`../../../versions/graphql@${version}`).get()
-
-          const title = this.currentTest?.fullTitle?.() ?? '(unknown test)'
-          const diagChannels = ['apm:graphql:execute:start', 'datadog:graphql:resolver:start']
-          const handlers = diagChannels.map(name => {
-            const channel = dc.channel(name)
-            if (channel.hasSubscribers) {
-              // eslint-disable-next-line no-console
-              console.log(`[DIAG] ${name} already has a subscriber entering "${title}"`)
-            }
-            const handler = () => {
-              // eslint-disable-next-line no-console
-              console.log(`[DIAG] ${name} fired during "${title}"\n${new Error('[DIAG] stack').stack}`)
-            }
-            channel.subscribe(handler)
-            return { channel, handler }
-          })
-          diagCleanup = () => {
-            for (const { channel, handler } of handlers) channel.unsubscribe(handler)
-          }
-        })
-
-        afterEach(() => {
-          diagCleanup?.()
-          diagCleanup = undefined
         })
 
         after(() => agent.close())

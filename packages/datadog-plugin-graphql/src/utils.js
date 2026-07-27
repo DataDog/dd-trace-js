@@ -264,8 +264,11 @@ function isApolloHealthCheck (operation) {
     selection.name?.value === '__typename' &&
     selection.alias === undefined &&
     selection.selectionSet === undefined &&
-    selection.arguments?.length === 0 &&
-    selection.directives?.length === 0
+    // graphql-js <17 always populates `arguments`/`directives` with an (possibly empty) array;
+    // >=17 leaves them `undefined` when absent instead — falsy-check rather than `.length === 0`
+    // so both shapes match.
+    !selection.arguments?.length &&
+    !selection.directives?.length
 }
 
 const TRACE_SUB_EVENTS = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
