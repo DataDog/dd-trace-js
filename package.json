@@ -222,6 +222,7 @@
     "istanbul-lib-report": "^3.0.0",
     "istanbul-reports": "^3.0.2",
     "jszip": "^3.10.1",
+    "minimatch": "^10.2.5",
     "mocha": "^11.7.6",
     "mocha-junit-reporter": "^2.2.1",
     "mocha-multi-reporters": "^1.5.1",
