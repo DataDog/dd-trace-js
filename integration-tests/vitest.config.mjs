@@ -56,6 +56,53 @@ if (process.env.VITEST_RUNNER) {
   config.test.runner = process.env.VITEST_RUNNER
 }
 
+if (process.env.VITEST_BROWSER_MODE) {
+  const provider = process.env.VITEST_BROWSER_PROVIDER_FACTORY
+    ? (await import('@vitest/browser-playwright')).playwright()
+    : 'playwright'
+
+  config.test.browser = {
+    enabled: true,
+    headless: true,
+    provider,
+    instances: [{
+      browser: 'chromium',
+      name: 'browser-chromium',
+    }],
+  }
+}
+
+if (process.env.VITEST_MIXED_BROWSER_MODE) {
+  const provider = process.env.VITEST_BROWSER_PROVIDER_FACTORY
+    ? (await import('@vitest/browser-playwright')).playwright()
+    : 'playwright'
+
+  config.test.projects = [
+    {
+      test: {
+        include: ['ci-visibility/vitest-browser-tests/mixed-node.mjs'],
+        name: 'node-project',
+        pool: 'forks',
+      },
+    },
+    {
+      test: {
+        browser: {
+          enabled: true,
+          headless: true,
+          provider,
+          instances: [{
+            browser: 'chromium',
+            name: 'browser-chromium',
+          }],
+        },
+        include: ['ci-visibility/vitest-browser-tests/browser-reporting.mjs'],
+        name: 'browser-project',
+      },
+    },
+  ]
+}
+
 if (process.env.PROJECT_POOL_CONFIG) {
   const projectConfigs = []
   const firstProjectConfig = {

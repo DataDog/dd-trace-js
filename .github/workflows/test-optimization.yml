@@ -472,3 +472,42 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
+
+  integration-vitest-browser:
+    needs: playwright-image
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, latest]
+    name: integration-vitest-browser (node-${{ matrix.version }})
+    container:
+      image: ${{ fromJson(needs.playwright-image.outputs.images).latest }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      OPTIONS_OVERRIDE: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+        continue-on-error: true
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - name: Configure Git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: npm run test:integration:vitest:coverage
+        env:
+          NODE_OPTIONS: "-r ./ci/init"
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          SPEC: vitest.browser
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-vitest-browser-${{ matrix.version }}

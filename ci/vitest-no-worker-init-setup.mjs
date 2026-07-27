@@ -1,14 +1,10 @@
-import { realpathSync } from 'node:fs'
-import { relative } from 'node:path'
-import { performance } from 'node:perf_hooks'
+import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 
-import { afterEach, beforeAll, beforeEach } from 'vitest'
-
-// Instrumentation-less worker setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
-// It applies Test Optimization execution changes without initializing dd-trace in Vitest workers.
+// Instrumentation-less setup for main-process Vitest reporting.
+// It applies Test Optimization execution changes without initializing dd-trace in the test environment.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
-const isNoWorkerInitActive = getIsNoWorkerInitActive()
-const providedContext = isNoWorkerInitActive ? getProvidedContext() : {}
+const providedContext = getProvidedContext()
+const isNoWorkerInitActive = providedContext.isActive === true || getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
@@ -22,7 +18,7 @@ const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnable
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
 const quarantinedTests = providedContext.quarantinedTests || {}
-const repositoryRoot = realpath(providedContext.repositoryRoot || process.cwd())
+const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
 let setVitestTaskFn
 if (isNoWorkerInitActive) {
   try {
@@ -35,7 +31,6 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
-const realpaths = new Map()
 
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
@@ -376,21 +371,10 @@ function isModifiedTest (testSuite) {
 }
 
 function getTestSuite (task) {
-  let filepath = realpaths.get(task.file.filepath)
-  if (filepath === undefined) {
-    filepath = realpath(task.file.filepath)
-    realpaths.set(task.file.filepath, filepath)
-  }
-
-  return normalizePath(relative(repositoryRoot, filepath))
-}
-
-function realpath (filepath) {
-  try {
-    return realpathSync(filepath)
-  } catch {
-    return filepath
-  }
+  const filepath = task.file.filepath
+  return testPropertiesByFilepath[filepath]?.testSuite ||
+    testPropertiesByFilepath[normalizePath(filepath)]?.testSuite ||
+    normalizePath(filepath)
 }
 
 function getTestName (task) {
@@ -423,8 +407,12 @@ function getIsNoWorkerInitActive () {
 
 function getProvidedContext () {
   try {
-    return globalThis.__vitest_worker__.providedContext._ddVitestWorkerSetup || {}
+    return inject('_ddVitestWorkerSetup') || {}
   } catch {
-    return {}
+    try {
+      return globalThis.__vitest_worker__.providedContext._ddVitestWorkerSetup || {}
+    } catch {
+      return {}
+    }
   }
 }

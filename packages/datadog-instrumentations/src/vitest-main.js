@@ -67,6 +67,7 @@ let coverageRootDir
 let requestErrorTags = {}
 let isSessionStarted = false
 let isVitestNoWorkerInitActive = false
+let isVitestBrowserModeActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
 const tinyPoolClassWrappers = new WeakMap()
@@ -405,11 +406,18 @@ function mergeRequestErrorTags (requestResponse) {
   }
 }
 
-async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
+async function runMainProcessSetup (
+  ctx,
+  frameworkVersion,
+  testSpecifications,
+  shouldInstallNoWorkerInit,
+  shouldInstallBrowserReporter
+) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
   }
 
+  isVitestBrowserModeActive = shouldInstallBrowserReporter
   let repositoryRoot = process.cwd()
   let testSessionConfiguration
   let testFilepaths
@@ -435,7 +443,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       requestErrorTags: receivedRequestErrorTags = {},
     } = await getChannelPromise(libraryConfigurationCh, {
       frameworkVersion,
-      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
+      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit || shouldInstallBrowserReporter,
     })
     requestErrorTags = receivedRequestErrorTags
     if (err) {
@@ -589,8 +597,11 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
     }
   }
 
-  if (shouldInstallNoWorkerInit) {
-    noWorkerInit.configure(ctx, frameworkVersion, testSpecifications, {
+  if (shouldInstallNoWorkerInit || shouldInstallBrowserReporter) {
+    const reporterTestSpecifications = shouldInstallNoWorkerInit
+      ? testSpecifications
+      : getBrowserTestSpecifications(testSpecifications)
+    noWorkerInit.configure(ctx, frameworkVersion, reporterTestSpecifications, {
       knownTests,
       knownTestsBySuite,
       modifiedFiles,
@@ -602,6 +613,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       testSessionConfiguration,
     }, {
       getConfiguredEfdRetryCount,
+      shouldReportTestModule: shouldInstallBrowserReporter ? isBrowserTestModule : undefined,
       state: getNoWorkerInitState(),
     })
   }
@@ -628,18 +640,29 @@ function getNoWorkerInitState () {
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldDeactivateOnFallback = false) {
   const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
+  const shouldInstallBrowserReporter = shouldUseBrowserReporter(frameworkVersion, testSpecifications)
+  const shouldInstallMainReporter = shouldInstallNoWorkerInit || shouldInstallBrowserReporter
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
-  if (shouldDeactivateOnFallback && setupState?.shouldInstallNoWorkerInit && !shouldInstallNoWorkerInit) {
+  if (shouldDeactivateOnFallback && setupState?.shouldInstallMainReporter && !shouldInstallMainReporter) {
     noWorkerInit.deactivate(ctx)
   }
   if (
     !setupState ||
     setupState.specificationsKey !== specificationsKey ||
-    setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit
+    setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit ||
+    setupState.shouldInstallBrowserReporter !== shouldInstallBrowserReporter
   ) {
     setupState = {
-      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit),
+      setupPromise: runMainProcessSetup(
+        ctx,
+        frameworkVersion,
+        testSpecifications,
+        shouldInstallNoWorkerInit,
+        shouldInstallBrowserReporter
+      ),
+      shouldInstallBrowserReporter,
+      shouldInstallMainReporter,
       shouldInstallNoWorkerInit,
       specificationsKey,
     }
@@ -653,6 +676,12 @@ function shouldUseNoWorkerInit (ctx, frameworkVersion, testSpecifications) {
     hasVitestWorkerPoolTestSpecification,
     isVitestWorkerPool,
   })
+}
+
+function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
+  return noWorkerInit.isSupportedVersion(frameworkVersion) &&
+    Array.isArray(testSpecifications) &&
+    testSpecifications.some(isBrowserTestSpecification)
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
@@ -828,7 +857,7 @@ function getFinishWrapper (exitOrClose) {
       isTestManagementTestsEnabled,
       requestErrorTags,
       vitestPool,
-      isVitestNoWorkerInitActive,
+      isVitestNoWorkerInitActive: isVitestNoWorkerInitActive || isVitestBrowserModeActive,
     })
 
     logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
@@ -869,6 +898,15 @@ function isVitestWorkerPool (pool) {
   return isForkPool(pool) || isThreadPool(pool)
 }
 
+function isBrowserProject (project) {
+  try {
+    if (project?.isBrowserEnabled?.()) return true
+  } catch {}
+
+  return safeConfig(project)?.browser?.enabled === true ||
+    project?.serializedConfig?.browser?.enabled === true
+}
+
 function getTestSpecificationProject (testSpecification) {
   if (Array.isArray(testSpecification)) {
     return testSpecification[0]
@@ -888,6 +926,23 @@ function getTestSpecificationPool (testSpecification) {
   const project = getTestSpecificationProject(testSpecification)
   return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
     testSpecification?.pool
+}
+
+function isBrowserTestSpecification (testSpecification) {
+  return getTestSpecificationPool(testSpecification) === 'browser' ||
+    isBrowserProject(getTestSpecificationProject(testSpecification))
+}
+
+function getBrowserTestSpecifications (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) return testSpecifications
+
+  return testSpecifications.filter(isBrowserTestSpecification)
+}
+
+function isBrowserTestModule (testModule) {
+  return testModule?.task?.pool === 'browser' ||
+    testModule?.pool === 'browser' ||
+    isBrowserProject(testModule?.project)
 }
 
 function hasVitestWorkerPoolTestSpecification (testSpecifications) {

@@ -5,6 +5,7 @@ const { storage } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
+  TEST_TYPE,
   VITEST_POOL,
   finishAllTraceSpans,
   getTestSuitePath,
@@ -36,6 +37,9 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   TEST_FINAL_STATUS,
   TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_BROWSER_DRIVER,
+  TEST_BROWSER_NAME,
+  TEST_PARAMETERS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -49,6 +53,28 @@ const { DD_MAJOR } = require('../../../version')
 // so that they do not overlap with the following test
 // This is because there's some loss of resolution.
 const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
+
+function setBrowserTags (tags, browserEnvironment, includeParameters) {
+  if (!browserEnvironment.isBrowserMode) return
+
+  tags[TEST_TYPE] = 'browser'
+  if (browserEnvironment.browserDriver) {
+    tags[TEST_BROWSER_DRIVER] = browserEnvironment.browserDriver
+  }
+  if (browserEnvironment.browserName) {
+    tags[TEST_BROWSER_NAME] = browserEnvironment.browserName
+  }
+  if (includeParameters && (browserEnvironment.browserName || browserEnvironment.browserProjectName)) {
+    const parameters = {}
+    if (browserEnvironment.browserName) {
+      parameters.browser = browserEnvironment.browserName
+    }
+    if (browserEnvironment.browserProjectName) {
+      parameters.project = browserEnvironment.browserProjectName
+    }
+    tags[TEST_PARAMETERS] = JSON.stringify({ arguments: parameters, metadata: {} })
+  }
+}
 
 class VitestPlugin extends CiPlugin {
   static id = 'vitest'
@@ -100,6 +126,10 @@ class VitestPlugin extends CiPlugin {
         isModified,
         isTestFrameworkWorker,
         requestErrorTags,
+        isBrowserMode,
+        browserDriver,
+        browserName,
+        browserProjectName,
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -143,6 +173,12 @@ class VitestPlugin extends CiPlugin {
       if (isTestFrameworkWorker) {
         extraTags[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       }
+      setBrowserTags(extraTags, {
+        browserDriver,
+        browserName,
+        browserProjectName,
+        isBrowserMode,
+      }, true)
 
       const span = this.startTestSpan(
         testName,
@@ -300,22 +336,33 @@ class VitestPlugin extends CiPlugin {
       isTestFrameworkWorker,
       requestErrorTags,
       testSuiteSpan,
+      isBrowserMode,
+      browserDriver,
+      browserName,
+      browserProjectName,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const extraTags = {
+        ...requestErrorTags,
+        [TEST_SOURCE_FILE]: testSuite,
+        [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
+        [TEST_STATUS]: 'skip',
+        [TEST_FINAL_STATUS]: 'skip',
+        ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
+        ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
+        ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
+      }
+      setBrowserTags(extraTags, {
+        browserDriver,
+        browserName,
+        browserProjectName,
+        isBrowserMode,
+      }, true)
       const testSpan = this.startTestSpan(
         testName,
         testSuite,
         testSuiteSpan || this.testSuiteSpan,
-        {
-          ...requestErrorTags,
-          [TEST_SOURCE_FILE]: testSuite,
-          [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
-          [TEST_STATUS]: 'skip',
-          [TEST_FINAL_STATUS]: 'skip',
-          ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
-          ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
-          ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
-        }
+        extraTags
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
       testSpan.finish()
@@ -330,6 +377,10 @@ class VitestPlugin extends CiPlugin {
         frameworkVersion,
         isTestFrameworkWorker,
         isVitestNoWorkerInitActive,
+        isBrowserMode,
+        browserDriver,
+        browserName,
+        browserProjectName,
       } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
@@ -377,6 +428,12 @@ class VitestPlugin extends CiPlugin {
       if (isTestFrameworkWorker) {
         testSuiteMetadata[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       }
+      setBrowserTags(testSuiteMetadata, {
+        browserDriver,
+        browserName,
+        browserProjectName,
+        isBrowserMode,
+      }, false)
 
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {

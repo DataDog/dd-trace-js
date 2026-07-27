@@ -29,9 +29,9 @@ const {
   testSuiteStartCh,
 } = require('./vitest-util')
 
-// No-worker-init instrumentation for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
-// When enabled, Vitest workers do not initialize dd-trace, so this main-process instrumentation
-// takes over some worker responsibilities, including test span creation and lifecycle reporting.
+// Main-process Vitest reporting used by no-worker-init and Browser Mode.
+// Execution changes are applied by an instrumentation-less setup file in the test environment,
+// while this module creates test spans from Vitest reporter events.
 const mainProcessReporterStates = new WeakMap()
 const loggedAttemptToFixTests = new Set()
 
@@ -144,7 +144,7 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 }
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
-  const { getConfiguredEfdRetryCount, state } = options
+  const { getConfiguredEfdRetryCount, shouldReportTestModule, state } = options
   addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
 
   const {
@@ -152,11 +152,13 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
     modifiedFiles,
     repositoryRoot,
     testManagementTestsBySuite,
+    testPropertiesByFilepath,
     testSessionConfiguration,
   } = setupData
 
   setProvidedContext(ctx, {
     _ddVitestWorkerSetup: {
+      isActive: true,
       attemptToFixRetries: state.testManagementAttemptToFixRetries,
       attemptToFixTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isAttemptToFix'),
       disabledTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isDisabled'),
@@ -171,10 +173,13 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       modifiedFiles: modifiedFiles || {},
       quarantinedTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isQuarantined'),
       repositoryRoot: repositoryRoot || process.cwd(),
+      testPropertiesByFilepath: testPropertiesByFilepath || {},
     },
-  }, 'Could not send Vitest worker setup context, so no-worker execution changes will not work.')
+  }, 'Could not send Vitest setup context, so main-process execution changes will not work.')
 
-  installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state)
+  installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state, {
+    shouldReportTestModule,
+  })
 }
 
 function deactivate (ctx) {
@@ -279,12 +284,20 @@ function getSelectedTestManagementTests (testManagementTestsBySuite, propertyNam
   return selectedTests
 }
 
-function installMainProcessReporter (ctx, frameworkVersion, testSessionConfiguration, testOptimizationData, state) {
+function installMainProcessReporter (
+  ctx,
+  frameworkVersion,
+  testSessionConfiguration,
+  testOptimizationData,
+  state,
+  options
+) {
   if (!ctx?.reporters) return
 
   const reporterState = {
     frameworkVersion,
     isActive: true,
+    shouldReportTestModule: options.shouldReportTestModule,
     state,
     testSessionConfiguration,
     testOptimizationData,
@@ -307,26 +320,26 @@ function createMainProcessReporter (reporterState) {
 
   return {
     onTestModuleStart (testModule) {
-      if (!isActive()) return
+      if (!shouldReport(testModule)) return
 
       startTestSuite(testModule)
     },
 
     onTestModuleEnd (testModule) {
-      if (!isActive()) return
+      if (!shouldReport(testModule)) return
 
       return reportTestModule(testModule)
     },
 
     onTestCaseResult (testCase) {
-      if (!isActive()) return
+      if (!shouldReport(testCase.module || testCase.task?.file)) return
 
       const task = getTestCaseTask(testCase)
       recordFinalTaskAttemptResult(task)
     },
 
     onTaskUpdate (packs, events) {
-      if (!isActive()) return
+      if (!isReporterActive()) return
       if (!events) return
 
       for (const event of events) {
@@ -337,20 +350,25 @@ function createMainProcessReporter (reporterState) {
     },
 
     onFinished (files) {
-      if (!isActive()) return
+      if (!isReporterActive()) return
       if (!files) return
 
       for (const file of files) {
         const testModule = createTestModuleFromFile(file)
-        if (!finishedTestModules.has(file.id)) {
+        if (shouldReport(testModule) && !finishedTestModules.has(file.id)) {
           reportTestModule(testModule)
         }
       }
     },
   }
 
-  function isActive () {
+  function isReporterActive () {
     return reporterState.isActive === true
+  }
+
+  function shouldReport (testModule) {
+    return isReporterActive() &&
+      (!reporterState.shouldReportTestModule || reporterState.shouldReportTestModule(testModule))
   }
 
   function recordTaskAttemptStatus (taskId, status, attemptCount) {
@@ -389,7 +407,7 @@ function createMainProcessReporter (reporterState) {
     let testSuiteError
 
     for (const task of testTasks) {
-      const testReport = getTestReport(task, testSuiteCtx.currentStore)
+      const testReport = getTestReport(task, testSuiteCtx.currentStore, testSuiteCtx.browserEnvironment)
       testReports.push(testReport)
 
       for (const attempt of testReport.nonFinalAttempts) {
@@ -428,7 +446,12 @@ function createMainProcessReporter (reporterState) {
   function startTestSuite (testModule) {
     const { frameworkVersion, testSessionConfiguration } = reporterState
     const testModuleId = getTestModuleId(testModule)
+    const browserEnvironment = getTestModuleBrowserEnvironment(testModule)
     const testSuiteCtx = {
+      browserEnvironment,
+      browserDriver: browserEnvironment?.browserDriver,
+      browserName: browserEnvironment?.browserName,
+      browserProjectName: browserEnvironment?.browserProjectName,
       testSuiteAbsolutePath: getTestModuleFilepath(testModule),
       frameworkVersion,
       testSessionId: testSessionConfiguration.testSessionId,
@@ -438,6 +461,7 @@ function createMainProcessReporter (reporterState) {
       codeOwnersEntries: testSessionConfiguration.codeOwnersEntries,
       requestErrorTags: reporterState.state.requestErrorTags,
       isTestFrameworkWorker: true,
+      isBrowserMode: browserEnvironment !== undefined,
       isVitestNoWorkerInitActive: true,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
@@ -445,7 +469,7 @@ function createMainProcessReporter (reporterState) {
     return testSuiteCtx
   }
 
-  function getTestReport (task, testSuiteStore) {
+  function getTestReport (task, testSuiteStore, browserEnvironment) {
     const result = task.result
     const testSuiteAbsolutePath = task.file?.filepath
     const testName = getTestName(task)
@@ -459,6 +483,7 @@ function createMainProcessReporter (reporterState) {
 
     if (testProperties.isAttemptToFix && task.meta?.__ddTestOptAtfStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         errorCounts: task.meta.__ddTestOptAtfErrorCounts,
         finalStatus: getAttemptToFixFinalStatus,
         state,
@@ -470,6 +495,7 @@ function createMainProcessReporter (reporterState) {
 
     if (testProperties.isEarlyFlakeDetection && task.meta?.__ddTestOptEfdStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         errorCounts: task.meta.__ddTestOptEfdErrorCounts,
         finalStatus: getEarlyFlakeDetectionFinalStatus,
         state,
@@ -481,6 +507,7 @@ function createMainProcessReporter (reporterState) {
 
     if (!testProperties.isAttemptToFix && task.meta?.__ddTestOptRepeatStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         errorCounts: task.meta.__ddTestOptRepeatErrorCounts,
         finalStatus: () => status,
         state,
@@ -493,6 +520,7 @@ function createMainProcessReporter (reporterState) {
     const attemptStatuses = taskAttemptStatuses.get(task.id)
     if (!testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection && attemptStatuses?.length > 1) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         finalStatus: () => status,
         state,
         statuses: attemptStatuses,
@@ -503,6 +531,7 @@ function createMainProcessReporter (reporterState) {
 
     if (!testProperties.isAttemptToFix && task.result?.repeatCount > 0) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        browserEnvironment,
         finalStatus: () => status,
         state,
         statuses: getRepeatedTaskStatuses(task, status),
@@ -538,6 +567,7 @@ function createMainProcessReporter (reporterState) {
     }
 
     return {
+      browserEnvironment,
       errors,
       nonFinalAttempts,
       state,
@@ -732,7 +762,7 @@ function getTestModuleProjectName (testModule) {
 function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testProperties, status, options) {
   const result = task.result
   const errors = result?.errors || []
-  const { errorCounts, finalStatus, state, statuses, testSuiteStore, type } = options
+  const { browserEnvironment, errorCounts, finalStatus, state, statuses, testSuiteStore, type } = options
   const finalAttemptStatus = finalStatus(statuses)
   const hasFailure = finalAttemptStatus === 'fail'
   const attempts = []
@@ -783,6 +813,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
   }
 
   return {
+    browserEnvironment,
     errors,
     finalAttempt: attempts.at(-1),
     nonFinalAttempts: attempts.slice(0, -1),
@@ -852,6 +883,7 @@ function getRepeatedTaskStatuses (task, status) {
 
 function reportFinalTestAttempt (testReport) {
   const {
+    browserEnvironment,
     errors,
     state,
     status,
@@ -864,6 +896,7 @@ function reportFinalTestAttempt (testReport) {
 
   if (status === 'skip') {
     testSkipCh.publish({
+      ...browserEnvironment,
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
@@ -907,6 +940,7 @@ function reportFinalTestAttempt (testReport) {
 
 function reportTestAttempt (testReport, attempt) {
   const {
+    browserEnvironment,
     state,
     task,
     testName,
@@ -917,6 +951,7 @@ function reportTestAttempt (testReport, attempt) {
   const result = task.result
   const status = attempt.status
   const testCtx = {
+    ...browserEnvironment,
     currentStore: testSuiteStore,
     testName,
     testSuiteAbsolutePath,
@@ -1273,6 +1308,27 @@ function normalizeProjectName (name) {
   return typeof label === 'string' ? label : undefined
 }
 
+function getTestModuleBrowserEnvironment (testModule) {
+  const project = testModule?.project
+  const config = safeConfig(project)
+  let isBrowserMode = testModule?.task?.pool === 'browser' || testModule?.pool === 'browser'
+  try {
+    isBrowserMode ||= project?.isBrowserEnabled?.() === true
+  } catch {}
+  isBrowserMode ||= config?.browser?.enabled === true
+  if (!isBrowserMode) return
+
+  const provider = config?.browser?.provider
+  const browserDriver = typeof provider === 'string' ? provider : provider?.name
+
+  return {
+    browserDriver,
+    browserName: config?.browser?.name,
+    browserProjectName: getTestModuleProjectName(testModule),
+    isBrowserMode: true,
+  }
+}
+
 function safeConfig (project) {
   let config
   try {
@@ -1293,5 +1349,6 @@ module.exports = {
   configure,
   deactivate,
   configureWorkerEnv,
+  isSupportedVersion,
   shouldUse,
 }
