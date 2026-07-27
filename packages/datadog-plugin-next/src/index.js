@@ -18,7 +18,7 @@ class NextPlugin extends ServerPlugin {
 
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
-    const childOf = store ? store.span : store
+    const childOf = store?.span || web.extractIncomingServerContext(this.tracer, req.headers)
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const serviceName = this.config.service || schemaServiceName
     let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
