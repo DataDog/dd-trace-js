@@ -2,23 +2,22 @@
 
 const { getCommandBlocker } = require('./command-blocker')
 const { runCommand, serializeDisplayCommand } = require('./command-runner')
-const { getDatadogCleanCommand } = require('./local-command')
-const { getBasicReportingCommand, summarizeTestOutput } = require('./scenarios/basic-reporting')
-const { frameworkOutDir } = require('./scenarios/helpers')
+const { getBasicCommand } = require('./runner-command')
+const { summarizeTestOutput } = require('./scenarios/basic-reporting')
+const { findInterestingLines, frameworkOutDir } = require('./scenarios/helpers')
 const { getObservedTestCount } = require('./test-output')
 
 /**
- * Runs the selected Basic Reporting command without inherited Datadog initialization.
+ * Runs one direct representative test without Datadog initialization.
  *
  * @param {object} input preflight inputs
- * @param {object} input.framework manifest framework entry
+ * @param {object} input.framework framework manifest entry
  * @param {string} input.out validation output directory
  * @param {object} input.options validator options
  * @returns {Promise<{ok: boolean, failure?: object, preflight: object}>} preflight outcome
  */
 async function runFrameworkPreflight ({ framework, out, options }) {
-  const maxTestCount = framework.preflight.maxTestCount
-  const command = getDatadogCleanCommand(getBasicReportingCommand(framework))
+  const command = getBasicCommand(framework)
   const outDir = frameworkOutDir(out, framework, 'preflight')
   const result = await runCommand(command, {
     artifactRoot: out,
@@ -30,49 +29,52 @@ async function runFrameworkPreflight ({ framework, out, options }) {
     verbose: options.verbose,
   })
   const observedTestCount = getObservedTestCount(framework.framework, result.stdout, result.stderr)
+  const commandFailure = getCommandBlocker(result, {
+    browserRequired: framework.browserRequired,
+    framework: framework.framework,
+    testsRan: Number.isInteger(observedTestCount) && observedTestCount > 0,
+  })
   const preflight = {
-    ran: true,
-    source: 'validator',
-    maxTestCount,
     command: serializeDisplayCommand(command),
-    exitCode: result.exitCode,
+    diagnosticSummary: findInterestingLines(`${result.stdout}\n${result.stderr}`, [
+      /\b(?:Abort trap|Cannot find|Error|ERR_[A-Z_]+|Failed to|Received signal|SIGABRT)\b/i,
+    ], 4),
     durationMs: result.durationMs,
+    exitCode: result.exitCode,
     observedTestCount,
-    stdoutSummary: summarizeTestOutput(result.stdout).join('\n'),
+    ran: true,
+    selectorVerification: framework.validation.selectorScope === 'instrumented_event_identity'
+      ? 'requires_instrumented_event_identity'
+      : 'bounded_direct_runner',
+    source: 'validator',
     stderrSummary: summarizeTestOutput('', result.stderr).join('\n'),
+    stdoutSummary: summarizeTestOutput(result.stdout).join('\n'),
+    timedOut: result.timedOut,
+    ...(commandFailure ? { commandFailure } : {}),
   }
   framework.preflight = preflight
 
-  const testCountKnown = Number.isInteger(observedTestCount)
-  const scopeMatched = testCountKnown && observedTestCount >= 1 && observedTestCount <= maxTestCount
-  preflight.scopeMatched = scopeMatched
-
-  if (!result.timedOut && scopeMatched && (result.exitCode === 0 || observedTestCount > 0)) {
+  if (!result.timedOut && result.exitCode === 0 && observedTestCount !== 0) {
     return { ok: true, preflight }
   }
 
-  const commandFailure = getCommandBlocker(result)
-  const diagnosis = commandFailure?.summary || getPreflightFailureDiagnosis({
-    maxTestCount,
-    observedTestCount,
-    result,
-    testCountKnown,
-  })
-
+  const domain = commandFailure?.blockedByExecutionEnvironment
+    ? 'execution_environment'
+    : commandFailure?.localRuntimeBlocked
+      ? 'local_runtime'
+      : 'project_setup'
   return {
     ok: false,
     preflight,
     failure: {
       frameworkId: framework.id,
       scenario: 'basic-reporting',
-      status: commandFailure ? 'blocked' : 'error',
-      diagnosis,
+      status: 'blocked',
+      diagnosis: getFailureDiagnosis(result, observedTestCount, commandFailure),
       evidence: {
-        commandExitCode: result.exitCode,
-        commandTimedOut: result.timedOut,
-        representativeScopeMismatch: !commandFailure && !scopeMatched,
-        ...(commandFailure ? { commandFailure } : {}),
-        preflight,
+        commandFailure,
+        domain,
+        validationIncomplete: true,
       },
       artifacts: Object.values(result.artifacts),
     },
@@ -80,35 +82,27 @@ async function runFrameworkPreflight ({ framework, out, options }) {
 }
 
 /**
- * Produces the narrowest diagnosis supported by a failed clean preflight.
+ * Explains why direct Basic Reporting could not start reliably.
  *
- * @param {object} input diagnosis inputs
- * @param {number} input.maxTestCount approved representative test limit
- * @param {number|undefined} input.observedTestCount parsed test count
- * @param {object} input.result command result
- * @param {boolean} input.testCountKnown whether the test count was parsed
+ * @param {object} result command result
+ * @param {number|null} observedTestCount parsed test count
+ * @param {object|undefined} commandFailure classified blocker
  * @returns {string} customer-facing diagnosis
  */
-function getPreflightFailureDiagnosis ({ maxTestCount, observedTestCount, result, testCountKnown }) {
+function getFailureDiagnosis (result, observedTestCount, commandFailure) {
+  if (commandFailure?.summary) {
+    return `${commandFailure.summary} Basic Reporting could not be tested reliably.`
+  }
   if (result.timedOut) {
-    return 'The selected test command timed out during the validator-controlled uninstrumented preflight. No Test ' +
-      'Optimization conclusion was reached.'
+    return 'The direct representative test exceeded its approved timeout. Basic Reporting could not be tested ' +
+      'reliably; rerun the test normally and confirm its prerequisites before trying again.'
   }
-  if (!testCountKnown) {
-    return 'The validator could not determine how many tests the selected command ran, so it could not confirm ' +
-      `the approved representative scope of at most ${maxTestCount} tests. Select a command whose output ` +
-      'reports the test count before validating Test Optimization.'
+  if (observedTestCount === 0) {
+    return 'The direct runner completed without reporting a test. The selected file may require project wrapper or ' +
+      'configuration semantics, so Basic Reporting remains incomplete.'
   }
-  if (observedTestCount > maxTestCount) {
-    return `The selected command ran ${observedTestCount} tests, exceeding the approved representative scope ` +
-      `of at most ${maxTestCount}. Select a narrower test command before validating Test Optimization.`
-  }
-  if (observedTestCount < 1) {
-    return 'The selected command did not report any tests. Select a runnable representative before validating ' +
-      'Test Optimization.'
-  }
-  return 'The selected test command failed before the validator could confirm that tests ran without Datadog ' +
-    'initialization. Fix the project command or its setup before validating Test Optimization.'
+  return `The direct representative test exited ${result.exitCode} without Datadog initialization. Fix or prepare ` +
+    'that test normally, then create a fresh validation plan.'
 }
 
 module.exports = { runFrameworkPreflight }

@@ -11,6 +11,7 @@ const {
   findTestsByIdentity,
 } = require('../../../../ci/test-optimization-validation/payload-normalizer')
 const {
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
 } = require('../../../../ci/test-optimization-validation/scenarios/helpers')
 
@@ -23,6 +24,37 @@ describe('test optimization validation advanced features', () => {
     assert.match(result.diagnosis, /manifest is incomplete/)
   })
 
+  it('keeps missing generated identity evidence incomplete when the clean count was unknown', async () => {
+    const scenario = { id: 'basic-pass', runCommand: { argv: ['node', 'test.js'] } }
+    const result = await reportMissingGeneratedTest({
+      command: scenario.runCommand,
+      diagnosis: 'The generated test was not reported.',
+      discovery: {
+        outDir: '/tmp/dd-validation-efd-baseline',
+        result: { exitCode: 0 },
+        tests: [],
+      },
+      framework: {
+        id: 'vitest:root',
+        framework: 'vitest',
+        generatedTestStrategy: {
+          verification: {
+            observedScenarios: [{ id: scenario.id, observedTestCount: null }],
+          },
+        },
+      },
+      options: { verbose: false },
+      out: '/tmp/dd-validation-efd',
+      scenario,
+      scenarioName: 'efd',
+    })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.validationIncomplete, true)
+    assert.strictEqual(result.evidence.reasonCode, 'generated-test-execution-unproven')
+    assert.match(result.diagnosis, /cannot prove that the generated test executed/)
+  })
+
   it('cleans generated runtime state before recreating generated files', async () => {
     const calls = []
     const helpers = proxyquire('../../../../ci/test-optimization-validation/scenarios/helpers', {
@@ -33,16 +65,21 @@ describe('test optimization validation advanced features', () => {
         findGeneratedScenario () {
           return { id: 'atr-fail-once' }
         },
-        writeGeneratedFiles () {
-          calls.push('write')
+        writeGeneratedFiles (framework, scenario) {
+          calls.push(`write:${scenario.id}`)
           return ['/repo/dd-test-optimization-validation.test.js']
+        },
+      },
+      '../runner-command': {
+        getGeneratedCommand () {
+          return { argv: [process.execPath, '/repo/runner.js', '/repo/generated.test.js'] }
         },
       },
     })
 
     await helpers.prepareGeneratedScenario({ generatedTestStrategy: {} }, 'atr-fail-once')
 
-    assert.deepStrictEqual(calls, ['cleanup', 'write'])
+    assert.deepStrictEqual(calls, ['cleanup', 'write:atr-fail-once'])
   })
 
   it('discovers a generated test by name and file when the manifest suite is wrong', async () => {
@@ -259,6 +296,37 @@ describe('test optimization validation advanced features', () => {
     assert.match(result.diagnosis, /no test\.retry_reason=auto_test_retry tag/)
     assert.strictEqual(result.evidence.autoTestRetryEvents, 0)
     assert.strictEqual(result.evidence.externalRetryEvents, 1)
+  })
+
+  it('does not run Auto Test Retries for unsupported Cucumber versions', async () => {
+    const outDir = path.join('/tmp', 'dd-validation-cucumber-atr')
+    const helpers = buildScenarioHelpers({ outDir, scenario: {}, tests: [] })
+    helpers.skip = (framework, scenario, diagnosis, evidence) => ({
+      frameworkId: framework.id,
+      scenario,
+      status: 'skip',
+      diagnosis,
+      evidence,
+      artifacts: [],
+    })
+    const { runAutoTestRetries } = proxyquire(
+      '../../../../ci/test-optimization-validation/scenarios/auto-test-retries',
+      { './helpers': helpers }
+    )
+
+    const result = await runAutoTestRetries({
+      framework: {
+        id: 'cucumber:root',
+        framework: 'cucumber',
+        frameworkVersion: '7.3.2',
+      },
+      options: { verbose: false },
+      out: outDir,
+    })
+
+    assert.strictEqual(result.status, 'skip')
+    assert.strictEqual(result.evidence.featureEligibility.reasonCode, 'cucumber-atr-version-unsupported')
+    assert.match(result.diagnosis, /requires @cucumber\/cucumber >=8\.0\.0/)
   })
 })
 

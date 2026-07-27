@@ -17,11 +17,8 @@ describe('test optimization CI remediation', () => {
         workflow: 'CI',
         job: 'unit',
         step: 'Run unit tests',
-      },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'run', 'test:unit'],
-        env: { CI: 'true' },
+        command: 'npm run test:unit',
+        stepEnv: { CI: 'true' },
       },
     })
 
@@ -73,14 +70,17 @@ describe('test optimization CI remediation', () => {
     )
   })
 
-  it('does not recommend agentless variables when CI already identifies an Agent endpoint', () => {
+  it('does not recommend agentless variables when CI records Agent transport evidence', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',
-      ciWiring: { provider: 'github-actions' },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test'],
-        env: {
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'npm test',
+        transport: {
+          mode: 'agent',
+          evidence: ['The selected test job declares a Datadog Agent sidecar.'],
+        },
+        stepEnv: {
           DD_AGENT_HOST: 'datadog-agent',
           DD_API_KEY: 'dd-validation-placeholder',
         },
@@ -99,11 +99,10 @@ describe('test optimization CI remediation', () => {
   it('does not infer agentless transport from a bare API key', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',
-      ciWiring: { provider: 'github-actions' },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test'],
-        env: { DD_API_KEY: 'dd-validation-placeholder' },
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'npm test',
+        stepEnv: { DD_API_KEY: 'dd-validation-placeholder' },
       },
     })
 
@@ -112,7 +111,7 @@ describe('test optimization CI remediation', () => {
     assert.match(remediation.summary, /If a Datadog Agent is available and reachable/)
   })
 
-  it('preserves the discovered CI command when live replay is unavailable', () => {
+  it('preserves the discovered CI command from static evidence', () => {
     const remediation = buildCiRemediation({
       id: 'vitest:date-fns',
       framework: 'vitest',
@@ -129,6 +128,97 @@ describe('test optimization CI remediation', () => {
 
     assert.match(remediation.variants[0].snippet, /run: \|\n {4}mise \/\/pkgs\/core:test\/node/)
     assert.doesNotMatch(remediation.variants[0].snippet, /keep the existing test command here/)
+  })
+
+  it('preserves the original CI command as inert configuration evidence', () => {
+    const originalCommand = 'npm test -- --project "unit tests" && echo "$CI_JOB"'
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      project: { name: 'example' },
+      ciWiring: {
+        provider: 'github-actions',
+        command: originalCommand,
+      },
+    })
+
+    assert.match(remediation.variants[0].snippet, /npm test -- --project "unit tests" && echo "\$CI_JOB"/)
+  })
+
+  it('preserves existing literal NODE_OPTIONS when adding the Datadog preload', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      project: { name: 'example' },
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'npm test',
+        stepEnv: {
+          NODE_OPTIONS: '--max-old-space-size=4096 --enable-source-maps',
+        },
+      },
+    })
+
+    assert.match(
+      remediation.variants[0].snippet,
+      /NODE_OPTIONS: "--max-old-space-size=4096 --enable-source-maps -r dd-trace\/ci\/init"/
+    )
+    assert.match(
+      remediation.summary,
+      /NODE_OPTIONS=--max-old-space-size=4096 --enable-source-maps -r dd-trace\/ci\/init/
+    )
+  })
+
+  it('preserves a case-insensitive NODE_OPTIONS entry for Windows CI shells', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      project: { name: 'example' },
+      ciWiring: {
+        provider: 'github-actions',
+        shell: 'pwsh',
+        command: 'npm test',
+        stepEnv: {
+          node_options: '--max-old-space-size=4096',
+        },
+      },
+    })
+
+    assert.match(
+      remediation.variants[0].snippet,
+      /NODE_OPTIONS: "--max-old-space-size=4096 -r dd-trace\/ci\/init"/
+    )
+  })
+
+  it('does not invent a GitHub Actions test command when discovery did not resolve one', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      ciWiring: {
+        provider: 'github-actions',
+        configFile: '/repo/.github/workflows/test.yml',
+        job: 'unit',
+      },
+    })
+
+    assert.match(remediation.variants[0].snippet, /^env:$/m)
+    assert.doesNotMatch(remediation.variants[0].snippet, /- name:|run:|keep the existing test command/)
+  })
+
+  it('removes a confirmed inline NODE_OPTIONS reset from a GitHub Actions fix', () => {
+    const remediation = buildCiRemediation({
+      framework: 'jest',
+      ciWiring: {
+        provider: 'github-actions',
+        command: 'NODE_OPTIONS="" node ./node_modules/jest/bin/jest.js test/example.test.js',
+        job: 'test',
+        step: 'Run tests',
+        transport: { mode: 'agent' },
+      },
+    })
+
+    assert.match(remediation.variants[0].snippet, /NODE_OPTIONS: "-r dd-trace\/ci\/init"/)
+    assert.match(
+      remediation.variants[0].snippet,
+      /run: \|\n {4}node \.\/node_modules\/jest\/bin\/jest\.js test\/example\.test\.js/
+    )
+    assert.doesNotMatch(remediation.variants[0].snippet, /NODE_OPTIONS=""/)
   })
 
   it('quotes shell values for non-GitHub CI providers', () => {

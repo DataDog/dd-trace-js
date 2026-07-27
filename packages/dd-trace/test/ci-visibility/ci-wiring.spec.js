@@ -2,1072 +2,564 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
 
-const { getArtifactId } = require('../../../../ci/test-optimization-validation/artifact-id')
 const { runCiWiring } = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
+const {
+  createLoadedManifest,
+  createRepositoryFixture,
+  removeFixture,
+} = require('./validation-test-helpers')
 
-function validationOptions (repositoryRoot) {
-  return {
-    approvedPlanSha256: '0'.repeat(64),
-    offlineFixtureNonce: '0'.repeat(32),
-    repositoryRoot,
-    verbose: false,
+describe('test optimization validation CI audit', () => {
+  let fixture
+  let manifest
+  let framework
+  let workflow
+  const command = 'node ./node_modules/mocha/bin/mocha.js --reporter spec test/example.spec.js'
+
+  beforeEach(() => {
+    fixture = createRepositoryFixture({
+      framework: 'mocha',
+      ciSource: workflowSource({ command }),
+    })
+    manifest = createLoadedManifest(fixture.root, 'mocha')
+    framework = manifest.frameworks[0]
+    workflow = path.join(fixture.root, '.github', 'workflows', 'test.yml')
+  })
+
+  afterEach(() => removeFixture(fixture.root))
+
+  it('stays incomplete until one exact CI path is fully reviewed', () => {
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.manifestIncomplete, true)
+    assert.match(result.diagnosis, /review is not marked complete/)
+  })
+
+  it('confirms missing initialization only for a literal direct-runner job', () => {
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
+    assert.strictEqual(result.evidence.evidenceStrength, 'confirmed_static')
+    assert.match(result.diagnosis, /Test Optimization is not initialized/)
+  })
+
+  for (const wrapped of [
+    'npx mocha test/example.spec.js',
+    'npx --no-install mocha test/example.spec.js',
+    'pnpm run test:unit',
+    'nx test project',
+    'node ./scripts/test.js && echo done',
+    `echo ${command}`,
+    `${command} & wait`,
+    `NODE_OPTIONS=$NODE_OPTIONS ${command}`,
+  ]) {
+    it(`fails closed for wrapper or dynamic command: ${wrapped}`, () => {
+      fs.writeFileSync(workflow, workflowSource({ command: wrapped }))
+      completeReview({ command: wrapped, initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.manifestIncomplete, true)
+      assert.match(result.diagnosis, /could not be resolved/)
+    })
   }
-}
 
-describe('test optimization CI wiring validation', () => {
-  it('reports a static CI wiring classification as incomplete when its command is missing', async () => {
-    const result = await runCiWiring({
-      manifest: {},
-      framework: {
-        id: 'vitest:root',
-        ciWiring: {
-          status: 'fail',
-          diagnosis: 'CI does not configure Datadog initialization.',
-        },
-      },
+  for (const wrapped of ['npm test', 'pnpm test', 'pnpm run test', 'yarn test', 'yarn run test']) {
+    it(`resolves a local package script without executing it: ${wrapped}`, () => {
+      fs.writeFileSync(workflow, workflowSource({ command: wrapped }))
+      completeReview({ command: wrapped, initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.source, 'local_package_script')
+      assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /mocha/)
     })
+  }
+
+  it('resolves recursive local scripts and an inert coverage launcher', () => {
+    writeScripts({
+      test: 'npm run test:unit',
+      'test:unit': `c8 ${command}`,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.deepStrictEqual(
+      result.evidence.ciFacts.runnerInvocation.commandPath,
+      ['npm test', 'npm run test:unit', `c8 ${command}`]
+    )
+  })
+
+  it('resolves coverage-wrapped package scripts and literal cross-env assignments', () => {
+    writeScripts({
+      'test-ci': 'AJV_FULL_TEST=true npm test',
+      test: 'npm run prepare-tests && npm run test-cov',
+      'prepare-tests': 'node ./scripts/prepare.js',
+      'test-cov': 'nyc npm run test-spec',
+      'test-spec': `cross-env TS_NODE_PROJECT=test/tsconfig.json ${command}`,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm run test-ci' }))
+    completeReview({ command: 'npm run test-ci', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /^cross-env .*mocha/)
+  })
+
+  it('finds a framework invoked from an npm lifecycle script', () => {
+    framework.framework = 'cucumber'
+    framework.id = 'cucumber:fixture'
+    writeScripts({
+      pretest: 'npm run conformance',
+      test: command,
+      conformance: 'cucumber-js ./features/example.feature -p default',
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.evidence.ciFacts.runnerInvocation.resolvedCommand, /^cucumber-js/)
+    assert.deepStrictEqual(result.evidence.ciFacts.runnerInvocation.lifecycleScripts, ['pretest'])
+  })
+
+  it('does not assume implicit lifecycle semantics for Yarn', () => {
+    framework.framework = 'cucumber'
+    framework.id = 'cucumber:fixture'
+    writeScripts({
+      pretest: 'cucumber-js ./features/example.feature -p default',
+      test: command,
+    })
+    fs.writeFileSync(workflow, workflowSource({ command: 'yarn test' }))
+    completeReview({ command: 'yarn test', initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
 
     assert.strictEqual(result.status, 'error')
-    assert.strictEqual(result.evidence.manifestIncomplete, true)
-    assert.match(result.diagnosis, /CI wiring was not replayed/)
-    assert.match(result.diagnosis, /CI does not configure Datadog initialization/)
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
   })
 
-  it('does not return a conclusive failure from static evidence when the CI command cannot be replayed', async () => {
-    const result = await runCiWiring({
-      manifest: {},
-      framework: {
-        id: 'vitest:date-fns',
-        framework: 'vitest',
-        project: { name: 'date-fns' },
-        ciWiring: {
-          status: 'skip',
-          provider: 'github-actions',
-          diagnosis: 'The CI command requires mise, which is unavailable locally.',
-          initialization: {
-            status: 'not_configured',
-            evidence: ['The selected CI job does not set NODE_OPTIONS or Datadog environment variables.'],
-          },
-        },
-      },
-      basicResult: {
-        status: 'pass',
-        diagnosis: 'Basic Reporting passed.',
-      },
+  it('does not let local lifecycle scripts or a plain Node matrix block a confirmed finding', () => {
+    writeScripts({
+      pretest: 'node ./scripts/build.js',
+      test: command,
+      posttest: 'node ./scripts/cleanup.js',
     })
+    fs.writeFileSync(workflow, matrixWorkflowSource({ command: 'npm test' }))
+    completeReview({
+      command: 'npm test',
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: [
+        'npm lifecycle scripts',
+        'Node version matrix',
+        'Repository and organization secrets may inject Datadog configuration outside the workflow.',
+        'Other jobs also run npm test; only the test job was selected.',
+      ],
+    })
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.deepStrictEqual(
+      result.evidence.ciFacts.runnerInvocation.lifecycleScripts,
+      ['pretest', 'posttest']
+    )
+    assert.strictEqual(result.evidence.ciFacts.matrix.status, 'not_relevant_to_ci_facts')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [])
+  })
+
+  it('keeps a matrix-selected package script incomplete while retaining the initialization fact', () => {
+    const selectedCommand = 'npm run test:$' + '{{ matrix.suite }}'
+    fs.writeFileSync(workflow, matrixWorkflowSource({ command: selectedCommand }))
+    completeReview({
+      command: selectedCommand,
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['The matrix selects the package script.'],
+    })
+    const result = runCiWiring({ framework, manifest })
 
     assert.strictEqual(result.status, 'error')
-    assert.strictEqual(result.evidence.manifestIncomplete, true)
-    assert.match(result.diagnosis, /CI wiring was not replayed/)
-    assert.match(result.diagnosis, /requires mise/)
-    assert.match(result.diagnosis, /No live CI-wiring conclusion was reached/)
-    assert.strictEqual(result.evidence.eventLevelFailure, undefined)
-    assert.deepStrictEqual(result.evidence.ciRemediation.variants.map(variant => variant.id), ['agentless'])
+    assert.strictEqual(result.evidence.ciFacts.initialization.status, 'missing')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+    assert.strictEqual(result.evidence.ciFacts.matrix.status, 'affects_relevant_configuration')
+    assert.match(result.diagnosis, /no visible dd-trace\/ci\/init/)
   })
 
-  it('reports unknown CI wiring without a replay command as incomplete', async () => {
-    const result = await runCiWiring({
-      manifest: {},
-      framework: {
-        id: 'vitest:root',
-        ciWiring: {
-          status: 'unknown',
-          reason: 'CI command selection was not completed.',
-        },
-      },
+  it('keeps bracket-form matrices that affect CI configuration unresolved', () => {
+    fs.writeFileSync(workflow, bracketMatrixWorkflowSource({ command: 'npm test' }))
+    completeReview({
+      command: 'npm test',
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['The matrix selects the working directory.'],
     })
+    const result = runCiWiring({ framework, manifest })
 
     assert.strictEqual(result.status, 'error')
-    assert.strictEqual(result.evidence.manifestIncomplete, true)
-    assert.match(result.diagnosis, /CI wiring was not replayed/)
+    assert.strictEqual(result.evidence.ciFacts.matrix.status, 'affects_relevant_configuration')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [
+      'The matrix selects the working directory.',
+    ])
   })
 
-  it('does not inherit ambient Datadog initialization from the validator process', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const originalNodeOptions = process.env.NODE_OPTIONS
-    const originalCiVisibilityEnabled = process.env.DD_CIVISIBILITY_ENABLED
-    const script = `
-      const leaked = []
-      if (String(process.env.NODE_OPTIONS || '').includes('dd-validation-ambient-ci-init')) {
-        leaked.push('NODE_OPTIONS')
-      }
-      if (process.env.DD_CIVISIBILITY_ENABLED === 'ambient-ci-visibility-enabled') {
-        leaked.push('DD_CIVISIBILITY_ENABLED')
-      }
-      if (leaked.length > 0) {
-        process.stderr.write('leaked ' + leaked.join(','))
-        process.exit(42)
-      }
-      console.log('1 passing')
-    `
-    process.env.NODE_OPTIONS = '--require /tmp/dd-validation-ambient-ci-init.js'
-    process.env.DD_CIVISIBILITY_ENABLED = 'ambient-ci-visibility-enabled'
+  it('keeps opaque inherited configuration relevant after resolving the local package script', () => {
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({
+      command: 'npm test',
+      initialization: 'not_configured',
+      reviewComplete: false,
+      transport: 'none',
+      unresolved: ['A remote action may write NODE_OPTIONS through GITHUB_ENV.'],
+    })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', script],
-          },
-          preflight: {
-            ran: true,
-            exitCode: 0,
-            observedTestCount: 1,
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.ciFacts.initialization.status, 'missing')
+    assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'confirmed')
+    assert.deepStrictEqual(result.evidence.ciFacts.unresolved.relevant, [
+      'A remote action may write NODE_OPTIONS through GITHUB_ENV.',
+    ])
+  })
 
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.match(result.diagnosis, /environment and setup described by the CI job/)
-      assert.match(result.diagnosis, /required Datadog initialization directly/)
-      assert.deepStrictEqual(result.evidence.directInitializationBasicReporting, {
-        ran: true,
-        status: 'pass',
-        diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-      })
-    } finally {
-      restoreEnv('NODE_OPTIONS', originalNodeOptions)
-      restoreEnv('DD_CIVISIBILITY_ENABLED', originalCiVisibilityEnabled)
-      fs.rmSync(out, { recursive: true, force: true })
+  it('fails closed for cyclic or dynamic local package scripts', () => {
+    for (const scripts of [
+      { test: 'npm run test:unit', 'test:unit': 'npm test' },
+      { test: 'NODE_OPTIONS=$NODE_OPTIONS mocha test/example.spec.js' },
+      { test: `NODE_OPTIONS="" && ${command}` },
+    ]) {
+      writeScripts(scripts)
+      fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+      completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+      const result = runCiWiring({ framework, manifest })
+
+      assert.strictEqual(result.status, 'error')
+      assert.strictEqual(result.evidence.ciFacts.runnerInvocation.status, 'unresolved')
+      assert.match(result.evidence.ciFacts.runnerInvocation.reason, /cycle|dynamic shell syntax|stateful shell/)
     }
   })
 
-  it('uses the live replay diagnosis and recommends an existing Datadog test script', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
-      scripts: {
-        test: 'jest',
-        'test:datadog': "NODE_OPTIONS='-r dd-trace/ci/init' npm test",
-      },
-    })}\n`)
+  it('does not treat a NODE_OPTIONS reset in another job as a confirmed finding', () => {
+    fs.writeFileSync(workflow, [
+      workflowSource({ command }),
+      '  unrelated:',
+      '    steps:',
+      '      - run: NODE_OPTIONS="" node other.js',
+    ].join('\n'))
+    completeReview({ initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        manifest: { repository: { root: out } },
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          project: { root: out },
-          ciWiring: {
-            diagnosis: 'The CI step runs test instead of the existing test:datadog script.',
-          },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("1 passing")'],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic Reporting passed.',
-        },
-      })
-
-      assert.strictEqual(result.status, 'fail')
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.doesNotMatch(result.diagnosis, /CI step runs test instead of the existing test:datadog script/)
-      assert.deepStrictEqual(result.evidence.existingDatadogInitScripts, [{
-        name: 'test:datadog',
-        packageJson: path.join(out, 'package.json'),
-      }])
-      assert.match(result.evidence.eventLevelFailure.recommendation, /already defines `test:datadog`/)
-      assert.match(result.evidence.eventLevelFailure.recommendation, /identified CI test step to invoke that script/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.notStrictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
   })
 
-  it('diagnoses dd-trace initialization from a Vitest setup file as too late', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const setupFile = path.join(out, 'datadog-setup.ts')
-    const configFile = path.join(out, 'vitest.config.ts')
-    fs.writeFileSync(setupFile, 'import "dd-trace/ci/init"\n')
-    fs.writeFileSync(configFile, 'export default { test: { setupFiles: ["datadog-setup.ts"] } }\n')
+  it('confirms the selected reviewed job is unconfigured when another job initializes dd-trace', () => {
+    fs.writeFileSync(workflow, [
+      workflowSource({ command }),
+      '  unrelated:',
+      '    env:',
+      '      NODE_OPTIONS: -r dd-trace/ci/init',
+      '    steps:',
+      '      - run: node other.js',
+    ].join('\n'))
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        manifest: { repository: { root: out } },
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          project: { root: out, configFiles: [configFile] },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("Tests 1 passed")'],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
-      })
-
-      assert.strictEqual(result.status, 'fail')
-      assert.deepStrictEqual(result.evidence.lateInitialization, [{ configFile, setupFile }])
-      assert.match(result.diagnosis, /setup files after the runner starts.*too late/s)
-      assert.match(result.evidence.eventLevelFailure.recommendation, /Move Test Optimization initialization out/)
-      assert.match(result.evidence.eventLevelFailure.recommendation, /NODE_OPTIONS=-r dd-trace\/ci\/init/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.evidence.conclusion, 'confirmed_misconfigured')
+    assert.match(result.diagnosis, /not initialized/)
   })
 
-  it('diagnoses a package script that explicitly removes NODE_OPTIONS', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const packageJson = path.join(out, 'package.json')
-      fs.writeFileSync(packageJson, `${JSON.stringify({
-        scripts: {
-          'test:ci': 'NODE_OPTIONS= yarn workspace app test',
-        },
-      }, null, 2)}\n`)
-      const result = await runCiWiring({
-        manifest: { repository: { root: out } },
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          ciWiring: {
-            packageScriptExpansionChain: [
-              'yarn test:ci',
-              'NODE_OPTIONS= yarn workspace app test',
-              'vitest run',
-            ],
-          },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("Tests 1 passed")'],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
-      })
-
-      assert.strictEqual(result.status, 'fail')
-      assert.deepStrictEqual(result.evidence.nodeOptionsRemoval, {
-        command: 'NODE_OPTIONS= yarn workspace app test',
-        packageJson,
-        scriptName: 'test:ci',
-      })
-      assert.match(result.diagnosis, /script `test:ci` in .*package\.json.*empty `NODE_OPTIONS=` assignment/s)
-      assert.match(result.diagnosis, /same Vitest test command.*reports test data successfully/s)
-      assert.match(result.evidence.eventLevelFailure.recommendation,
-        /Script `test:ci` in .*package\.json.*clears NODE_OPTIONS/s)
-      assert.match(result.evidence.eventLevelFailure.recommendation, /pass the CI-provided/)
-      assert.doesNotMatch(result.evidence.eventLevelFailure.recommendation, /Compare the passing/)
-      assert.deepStrictEqual(result.evidence.monorepoFindings, [])
-      assert.strictEqual(result.evidence.initializationProbe.ran, false)
-      assert.strictEqual(result.evidence.initializationProbe.skippedBecauseConfigurationProvesRemoval, true)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('replays shell CI commands with the recorded CI shell', async function () {
-    if (process.platform === 'win32') this.skip()
-
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const marker = path.join(out, 'ci-shell-used')
-    const shell = path.join(out, 'ci-shell')
-    fs.writeFileSync(shell, [
-      '#!/bin/sh',
-      `echo yes > ${JSON.stringify(marker)}`,
-      'exec /bin/sh "$@"',
+  it('does not bind a selected job to a command found only in another job', () => {
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    steps:',
+      '      - run: node ./scripts/other.js',
+      '  unrelated:',
+      '    steps:',
+      `      - run: ${command}`,
       '',
     ].join('\n'))
-    fs.chmodSync(shell, 0o755)
+    completeReview({ initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          ciWiring: {
-            shell,
-          },
-          ciWiringCommand: {
-            cwd: out,
-            usesShell: true,
-            shellCommand: 'echo "1 passing"',
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.strictEqual(fs.readFileSync(marker, 'utf8').trim(), 'yes')
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
   })
 
-  it('preserves recorded CI shell failure flags when replaying shell templates', async function () {
-    if (process.platform === 'win32') this.skip()
+  it('does not bind command text from a comment or step name', () => {
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    steps:',
+      `      # run: ${command}`,
+      `      - name: ${command}`,
+      '        run: echo not-the-test',
+      '',
+    ].join('\n'))
+    completeReview({ initialization: 'not_configured', transport: 'none' })
 
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          ciWiring: {
-            shell: 'bash --noprofile --norc -eo pipefail {0}',
-          },
-          ciWiringCommand: {
-            cwd: out,
-            usesShell: true,
-            shellCommand: 'false | true',
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'error')
-      assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.strictEqual(result.evidence.validationIncomplete, true)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.diagnosis, /could not be bound structurally/)
   })
 
-  it('preserves recorded CI shell failure flags without template placeholders', async function () {
-    if (process.platform === 'win32') this.skip()
+  it('does not expand a package script without an approval-bound working directory', () => {
+    fs.writeFileSync(workflow, workflowSource({ command: 'npm test' }))
+    completeReview({ command: 'npm test', initialization: 'not_configured', transport: 'none' })
+    delete framework.ciWiring.workingDirectory
 
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          ciWiring: {
-            shell: 'bash --noprofile --norc -eo pipefail',
-          },
-          ciWiringCommand: {
-            cwd: out,
-            usesShell: true,
-            shellCommand: 'false | true',
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'error')
-      assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.strictEqual(result.evidence.validationIncomplete, true)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.evidence.ciFacts.runnerInvocation.reason, /no approval-bound effective working directory/)
   })
 
-  it('redacts secret-like event data in CI wiring events artifacts', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+  it('confirms a reset in the selected direct command', () => {
+    const resetCommand = `NODE_OPTIONS="" ${command}`
+    fs.writeFileSync(workflow, workflowSource({ command: resetCommand }))
+    completeReview({ command: resetCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      await runCiWiring({
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', offlineEventScript([{
-              type: 'test',
-              meta: {
-                API_KEY: 'ci-wiring-event-api-key-secret',
-                command: 'TOKEN=ci-wiring-event-token-secret npm test',
-                message: 'SECRET=ci-wiring-event-secret',
-              },
-            }])],
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
-
-      const eventsArtifact = path.join(out, 'runs', getArtifactId('vitest:root'), 'ci-wiring', 'events.ndjson')
-      const events = fs.readFileSync(eventsArtifact, 'utf8')
-      for (const secret of [
-        'ci-wiring-event-api-key-secret',
-        'ci-wiring-event-token-secret',
-        'ci-wiring-event-secret',
-      ]) {
-        assert.doesNotMatch(events, new RegExp(secret))
-      }
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.diagnosis, /overrides NODE_OPTIONS/)
   })
 
-  it('records when NODE_OPTIONS reaches a wrapper but not the test runner', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const packageManagerScript = path.join(out, 'pnpm.cjs')
-    const nxScript = path.join(out, 'nx.js')
-    const jestScript = path.join(out, 'jest.js')
-    fs.writeFileSync(jestScript, 'console.log("1 passing")\n')
-    fs.writeFileSync(nxScript, `
-      const { spawnSync } = require('node:child_process')
-      const env = { ...process.env }
-      delete env.NODE_OPTIONS
-      const child = spawnSync(process.execPath, [${JSON.stringify(jestScript)}], {
-        env,
-        stdio: 'inherit'
-      })
-      process.exit(child.status)
-    `)
-    fs.writeFileSync(packageManagerScript, `
-      const { spawnSync } = require('node:child_process')
-      const child = spawnSync(process.execPath, [${JSON.stringify(nxScript)}], { stdio: 'inherit' })
-      process.exit(child.status)
-    `)
+  it('confirms a literal NODE_OPTIONS reset behind cross-env', () => {
+    const resetCommand = `cross-env NODE_OPTIONS= ${command}`
+    fs.writeFileSync(workflow, workflowSource({
+      command: resetCommand,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ command: resetCommand, initialization: 'configured', transport: 'agent' })
 
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:nx',
-          framework: 'jest',
-          ciWiring: {
-            provider: 'github-actions',
-            workflow: 'test',
-            job: 'unit',
-            step: 'Run tests',
-            diagnosis: 'Nx target selected from CI workflow.',
-            runnerToolChain: ['pnpm test', 'nx test', 'jest'],
-          },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, packageManagerScript],
-          },
-          preflight: {
-            ran: true,
-            exitCode: 0,
-            observedTestCount: 1,
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
-      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
-      assert.deepStrictEqual(result.evidence.initializationProbe.wrapperSignals.map(signal => signal.name), ['nx'])
-      assert.deepStrictEqual(
-        result.evidence.initializationProbe.packageManagerSignals.map(signal => signal.name),
-        ['pnpm']
-      )
-      assert.match(result.diagnosis, /NODE_OPTIONS probe reached nx and pnpm/)
-      assert.match(result.diagnosis, /did not appear to reach a Jest process/)
-      assert.strictEqual(result.evidence.monorepoFindings[0].id, 'nx-executor-env-forwarding')
-      assert.strictEqual(result.evidence.monorepoFindings.at(-1).id, 'node-options-not-observed-in-test-runner')
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.diagnosis, /overrides NODE_OPTIONS/)
   })
 
-  it('aggregates repeated test runner probe signals by tool and working directory', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const wrapperScript = path.join(out, 'run-tests.js')
-    const vitestScript = path.join(out, 'vitest.mjs')
-    fs.writeFileSync(vitestScript, 'console.log("Tests 1 passed")\n')
-    fs.writeFileSync(wrapperScript, `
-      const { spawnSync } = require('node:child_process')
-      for (let index = 0; index < 2; index++) {
-        spawnSync(process.execPath, [${JSON.stringify(vitestScript)}], { stdio: 'inherit' })
-      }
-    `)
+  it('does not treat text in the selected step label as an effective reset', () => {
+    const step = 'NODE_OPTIONS="" diagnostic'
+    fs.writeFileSync(workflow, [
+      'jobs:',
+      '  test:',
+      '    env:',
+      '      NODE_OPTIONS: -r dd-trace/ci/init',
+      '    steps:',
+      `      - name: ${step}`,
+      `        run: ${command}`,
+      '',
+    ].join('\n'))
+    completeReview({ initialization: 'configured', transport: 'agent' })
+    framework.ciWiring.step = step
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, wrapperScript],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
-      })
-
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, true)
-      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals.length, 1)
-      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals[0].name, 'vitest')
-      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals[0].cwd, fs.realpathSync(out))
-      assert.strictEqual(result.evidence.initializationProbe.testRunnerSignals[0].processCount, 1)
-      assert.strictEqual(result.evidence.initializationProbe.stoppedAfterRunnerReached, true)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
   })
 
-  it('lets live replay override an incorrect static not-configured claim', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+  it('uses the final inline NODE_OPTIONS assignment before the selected runner', () => {
+    const restoredCommand = `NODE_OPTIONS="" NODE_OPTIONS="-r dd-trace/ci/init" ${command}`
+    fs.writeFileSync(workflow, workflowSource({ command: restoredCommand }))
+    completeReview({ command: restoredCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        manifest: { repository: { root: out } },
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          project: { root: out },
-          ciWiring: {
-            status: 'unknown',
-            provider: 'github-actions',
-            configFile: path.join(out, '.github/workflows/test.yml'),
-            workflow: 'test',
-            job: 'unit',
-            step: 'Run tests',
-            initialization: {
-              status: 'not_configured',
-              evidence: ['The unit job defines no NODE_OPTIONS or Datadog environment variables.'],
-            },
-          },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', offlineEventScript([
-              { type: 'test_session_end' },
-              { type: 'test_module_end' },
-              { type: 'test_suite_end' },
-              { type: 'test' },
-            ])],
-            env: {
-              NODE_OPTIONS: `-r ${path.resolve('ci/init.js')}`,
-            },
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
-      })
-
-      assert.strictEqual(result.status, 'pass', JSON.stringify(result))
-      assert.deepStrictEqual(result.evidence.ciCommandExecution, {
-        mode: 'full-replay',
-        fullReplayRan: true,
-      })
-      assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.match(result.diagnosis, /CI test command emitted session, module, suite, and test events/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
   })
 
-  it('completes a large CI replay and reaches a conclusive result from bounded sampled evidence', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-large-ci-wiring-'))
+  it('does not treat NODE_OPTIONS text inside another assignment as a reset', () => {
+    const textCommand = `NOTE=NODE_OPTIONS="" ${command}`
+    fs.writeFileSync(workflow, workflowSource({
+      command: textCommand,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ command: textCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        manifest: { repository: { root: out } },
-        framework: {
-          id: 'vitest:large-ci-job',
-          framework: 'vitest',
-          project: { root: out },
-          ciWiring: { status: 'unknown', reason: 'The CI command is replayable.' },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', largeOfflineEventScript(2_100)],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
-      })
-
-      assert.strictEqual(result.status, 'pass', JSON.stringify(result))
-      assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.deepStrictEqual(result.evidence.offlineExporterCapture, {
-        mode: 'sample',
-        completionCount: 1,
-        observedEventCount: 2_103,
-        retainedEventCount: 11,
-        sampled: true,
-      })
-      assert.deepStrictEqual(result.evidence.ciCommandExecution, {
-        mode: 'full-replay',
-        fullReplayRan: true,
-      })
-      assert.strictEqual(result.evidence.testSessionEvents, 1)
-      assert.strictEqual(result.evidence.testModuleEvents, 1)
-      assert.strictEqual(result.evidence.testSuiteEvents, 1)
-      assert.strictEqual(result.evidence.testEvents, 8)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
   })
 
-  it('uses a no-events live replay as the evidence for genuinely missing CI initialization', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    const fullReplayMarker = path.join(out, 'full-replay-ran')
+  it('does not treat NODE_OPTIONS text inside another quoted assignment as a reset', () => {
+    const textCommand = `NOTE="text NODE_OPTIONS=''" ${command}`
+    fs.writeFileSync(workflow, workflowSource({
+      command: textCommand,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ command: textCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        manifest: { repository: { root: out } },
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          project: { root: out },
-          ciWiring: {
-            initialization: {
-              status: 'not_configured',
-              evidence: ['The unit job defines no NODE_OPTIONS or Datadog environment variables.'],
-            },
-          },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', [
-              `require('node:fs').writeFileSync(${JSON.stringify(fullReplayMarker)}, 'ran')`,
-              'console.log("Tests 1 passed")',
-            ].join(';')],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: { status: 'pass', diagnosis: 'Basic Reporting passed.' },
-      })
-
-      assert.strictEqual(result.status, 'fail', JSON.stringify(result))
-      assert.strictEqual(fs.readFileSync(fullReplayMarker, 'utf8'), 'ran')
-      assert.deepStrictEqual(result.evidence.ciCommandExecution, {
-        mode: 'full-replay',
-        fullReplayRan: true,
-      })
-      assert.deepStrictEqual(result.evidence.offlineExporterCapture, {
-        mode: undefined,
-        completionCount: 0,
-        observedEventCount: 0,
-        retainedEventCount: 0,
-        sampled: false,
-      })
-      assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
-      assert.match(result.diagnosis, /ran tests/)
-      assert.doesNotMatch(JSON.stringify(result.evidence), /initialization-probe-only/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.doesNotMatch(result.diagnosis, /explicitly clears NODE_OPTIONS/)
   })
 
-  it('treats monorepo runner success summaries as evidence that tests ran', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:lage',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("success: 2, skipped: 0, pending: 0, failed: 0")'],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
+  it('fails closed when NODE_OPTIONS changes through multiline shell flow', () => {
+    const multilineCommand = `NODE_OPTIONS=""\nNODE_OPTIONS="-r dd-trace/ci/init" ${command}`
+    fs.writeFileSync(workflow, workflowSource({ command: multilineCommand }))
+    completeReview({ command: multilineCommand, initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'fail')
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.match(result.diagnosis, /required Datadog initialization directly/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.match(result.diagnosis, /could not be bound structurally|dynamic/)
   })
 
-  it('treats monorepo runner failure summaries as evidence that tests ran', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:lage',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [
-              process.execPath,
-              '-e',
-              'console.log("success: 0, skipped: 0, pending: 0, failed: 2"); process.exit(1)',
-            ],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
+  it('does not trust a fabricated selected step', () => {
+    completeReview({ initialization: 'configured', transport: 'agent' })
+    framework.ciWiring.step = `run: NODE_OPTIONS="" ${command}`
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.doesNotMatch(result.diagnosis, /failed before tests/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
   })
 
-  it('probes CI wiring when test output shows failing tests', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("Tests  1 failed | 2 passed (3)"); process.exit(1)'],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
+  it('keeps a missing agentless API key reference incomplete', () => {
+    fs.writeFileSync(workflow, workflowSource({
+      command,
+      env: [
+        '      NODE_OPTIONS: -r dd-trace/ci/init',
+        '      DD_CIVISIBILITY_AGENTLESS_ENABLED: "1"',
+      ],
+    }))
+    completeReview({ initialization: 'configured', transport: 'agentless' })
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.match(result.diagnosis, /required Datadog initialization directly/)
-      assert.strictEqual(result.evidence.initializationProbe.ran, true)
-      assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
-      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'incomplete')
+    assert.strictEqual(result.evidence.ciFacts.transport.status, 'credentials_unverified')
+    assert.match(result.diagnosis, /may still be injected outside this file/)
   })
 
-  it('does not match CI wiring exit codes against unrelated existing-command preflight', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+  it('reports configured static wiring as propagation-unverified', () => {
+    fs.writeFileSync(workflow, workflowSource({
+      command,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ initialization: 'configured', transport: 'agent' })
+    const result = runCiWiring({ framework, manifest })
 
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          existingTestCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("different command"); process.exit(7)'],
-          },
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', offlineEventScript([
-              { type: 'test_session_end' },
-              { type: 'test_module_end' },
-              { type: 'test_suite_end' },
-              { type: 'test' },
-            ], 7)],
-          },
-          preflight: {
-            ran: true,
-            exitCode: 7,
-            observedTestCount: 1,
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
-
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.commandExitMatchesPreflight, false)
-      assert.deepStrictEqual(result.evidence.preflight, {
-        ran: false,
-        reason: 'No dd-trace-less preflight result was recorded for the selected CI wiring command shape.',
-      })
-      assert.match(result.diagnosis, /emitted Test Optimization events, but the command exited 7/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.conclusion, 'configured_propagation_unverified')
+    assert.match(result.diagnosis, /cannot prove.*final process/)
   })
 
-  it('does not report preload resolution failure when output proves tests ran', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [
-              process.execPath,
-              '-e',
-              'console.log("Tests  1 failed | 2 passed (3)"); ' +
-                'console.error("Cannot find module dd-trace/ci/init"); process.exit(1)',
-            ],
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
+  it('rejects stale job or command evidence', () => {
+    completeReview({ command: `${command} --changed`, initialization: 'not_configured', transport: 'none' })
+    const result = runCiWiring({ framework, manifest })
 
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.commandFailure, undefined)
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
-      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
-      assert.doesNotMatch(result.diagnosis, /failed before tests started/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
+    assert.strictEqual(result.status, 'error')
+    assert.match(result.diagnosis, /could not be bound structurally to the selected job/)
   })
 
-  it('classifies dd-trace preload resolution failures before test execution', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'mocha:fixture',
-          framework: 'mocha',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("this should not run")'],
-            env: {
-              NODE_OPTIONS: '-r dd-trace/ci/init',
-            },
-          },
-        },
-        out,
-        options: validationOptions(out),
-        basicResult: {
-          status: 'pass',
-          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
-        },
-      })
-
-      assert.strictEqual(result.status, 'fail')
-      assert.strictEqual(result.evidence.commandExitCode, 1)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-preload-resolution-failed')
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
-      assert.match(result.diagnosis, /failed before tests started/)
-      assert.match(result.diagnosis, /could not resolve.*dd-trace\/ci\/init/)
-      assert.doesNotMatch(result.diagnosis, /selected command may not have executed tests/)
-      assert.strictEqual(result.evidence.initializationProbe, undefined)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
+  /**
+   * Populates review-only CI evidence.
+   *
+   * @param {object} input evidence values
+   * @param {string} [input.command] selected literal command
+   * @param {string} input.initialization initialization status
+   * @param {boolean} [input.reviewComplete] whether relevant review is complete
+   * @param {string} input.transport transport mode
+   * @param {string[]} [input.unresolved] unresolved CI evidence
+   * @returns {void}
+   */
+  function completeReview ({
+    command: selectedCommand = command,
+    initialization,
+    reviewComplete = true,
+    transport,
+    unresolved = [],
+  }) {
+    framework.ciWiring = {
+      command: selectedCommand,
+      configFile: workflow,
+      initialization: { evidence: ['Reviewed the selected job.'], status: initialization },
+      job: 'test:',
+      reviewComplete,
+      step: `run: ${selectedCommand}`,
+      transport: { evidence: ['Reviewed the selected job.'], mode: transport },
+      unresolved,
+      workingDirectory: fixture.root,
     }
-  })
+  }
 
-  it('classifies focused CI commands that match no test files as incomplete', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:root',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.error("No test files found"); process.exit(3)'],
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(result.status, 'error')
-      assert.strictEqual(result.evidence.commandExitCode, 3)
-      assert.strictEqual(result.evidence.validationIncomplete, true)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-test-filter-mismatch')
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-test-filter-mismatch')
-      assert.match(result.diagnosis, /focused test filter matched no files/)
-      assert.match(result.diagnosis, /No CI wiring conclusion was reached/)
-      assert.match(result.evidence.commandFailure.recommendation, /exact CI-loaded project/)
-      assert.doesNotMatch(result.diagnosis, /process may not have written the event artifact/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('classifies Watchman filesystem denials as execution-environment blockers', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'jest:root',
-          framework: 'jest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [
-              process.execPath,
-              '-e',
-              'console.error("Watchman: fchmod(/home/user/.local/state/watchman/state): ' +
-                'Operation not permitted"); process.exit(1)',
-            ],
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(result.status, 'error')
-      assert.strictEqual(result.evidence.validationIncomplete, true)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'watchman-filesystem-blocked')
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'watchman-filesystem-blocked')
-      assert.match(result.diagnosis, /execution environment blocked Watchman state access before tests started/)
-      assert.match(result.evidence.commandFailure.recommendation, /Watchman can access its state directory/)
-      assert.doesNotMatch(result.diagnosis, /Test Optimization initialization/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('classifies an invented Vitest project filter as incomplete', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'vitest:date-fns',
-          framework: 'vitest',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [
-              process.execPath,
-              '-e',
-              'console.error(\'Error: No projects matched the filter "main".\'); process.exit(1)',
-            ],
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(result.status, 'error')
-      assert.strictEqual(result.evidence.validationIncomplete, true)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-project-filter-mismatch')
-      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-project-filter-mismatch')
-      assert.match(result.diagnosis, /project filter `main` is not exposed/)
-      assert.match(result.evidence.commandFailure.recommendation, /Remove the invented project selector/)
-      assert.match(result.evidence.commandFailure.recommendation, /project the original CI command actually loads/)
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
-
-  it('does not classify unrelated preload failures as dd-trace preload failures', async () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
-    try {
-      const result = await runCiWiring({
-        framework: {
-          id: 'mocha:fixture',
-          framework: 'mocha',
-          ciWiringCommand: {
-            cwd: out,
-            argv: [process.execPath, '-e', 'console.log("this should not run")'],
-            env: {
-              NODE_OPTIONS: '-r ./missing-preload.js',
-            },
-          },
-        },
-        out,
-        options: validationOptions(out),
-      })
-
-      assert.strictEqual(result.status, 'error')
-      assert.strictEqual(result.evidence.validationIncomplete, true)
-      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-command-failed-before-tests')
-      assert.notStrictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
-    } finally {
-      fs.rmSync(out, { recursive: true, force: true })
-    }
-  })
+  function writeScripts (scripts) {
+    const filename = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(filename))
+    packageJson.scripts = scripts
+    fs.writeFileSync(filename, `${JSON.stringify(packageJson)}\n`)
+  }
 })
 
-function restoreEnv (name, value) {
-  if (value === undefined) {
-    delete process.env[name]
-  } else {
-    process.env[name] = value
-  }
-}
-
-function offlineEventScript (events, exitCode = 0) {
-  const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
-  const writerPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/writer.js')
-  const idPath = path.resolve('packages/dd-trace/src/id.js')
+/**
+ * Creates a minimal literal GitHub Actions workflow.
+ *
+ * @param {object} input workflow values
+ * @param {string} input.command test command
+ * @param {string[]} [input.env] job environment lines
+ * @returns {string} workflow source
+ */
+function workflowSource ({ command, env = [] }) {
   return [
-    `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
-    `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
-    `const id = require(${JSON.stringify(idPath)})`,
-    'const outputRoot = process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR',
-    'const captureMode = process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE || "strict"',
-    'const sink = new CiValidationSink(outputRoot, { captureMode })',
-    'const writer = new CiValidationWriter({ sink, tags: {} })',
-    `const events = ${JSON.stringify(events)}`,
-    'writer.append(events.map(({ type, meta = {} }) => ({',
-    "  trace_id: id('1234abcd1234abcd'), span_id: id('1234abcd1234abcd'),",
-    "  parent_id: id('0000000000000000'), name: 'example test', resource: 'example test',",
-    "  service: 'validation', type, error: 0,",
-    "  meta: { 'test.name': 'example test', 'test.status': 'pass', ...meta }, metrics: {},",
-    '  start: 123, duration: 456,',
-    '})))',
-    'writer.flush()',
-    'sink.writeSummary()',
-    `process.exit(${exitCode})`,
+    'jobs:',
+    '  test:',
+    ...(env.length > 0 ? ['    env:', ...env] : []),
+    '    steps:',
+    `      - run: ${command}`,
+    '',
   ].join('\n')
 }
 
-function largeOfflineEventScript (eventCount) {
-  const sinkPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/sink.js')
-  const writerPath = path.resolve('packages/dd-trace/src/ci-visibility/exporters/ci-validation/writer.js')
-  const idPath = path.resolve('packages/dd-trace/src/id.js')
+function matrixWorkflowSource ({ command }) {
   return [
-    `const { CiValidationSink } = require(${JSON.stringify(sinkPath)})`,
-    `const CiValidationWriter = require(${JSON.stringify(writerPath)})`,
-    `const id = require(${JSON.stringify(idPath)})`,
-    'const outputRoot = process.env._DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR',
-    'const captureMode = process.env._DD_TEST_OPTIMIZATION_VALIDATION_CAPTURE_MODE',
-    'const sink = new CiValidationSink(outputRoot, { captureMode })',
-    'const writer = new CiValidationWriter({ sink, tags: {} })',
-    'const spans = []',
-    `for (let index = 0; index < ${eventCount}; index++) spans.push({`,
-    "  trace_id: id('1234abcd1234abcd'), span_id: id('1234abcd1234abcd'),",
-    "  parent_id: id('0000000000000000'), name: 'test', resource: 'test-' + index,",
-    "  service: 'validation', type: 'test', error: 0,",
-    "  meta: { 'test.name': 'test-' + index, 'test.status': 'pass' }, metrics: {},",
-    '  start: 123, duration: 456,',
-    '})',
-    "for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) spans.push({",
-    "  trace_id: id('1234abcd1234abcd'), span_id: id('1234abcd1234abcd'),",
-    "  parent_id: id('0000000000000000'), name: type, resource: type,",
-    "  service: 'validation', type, error: 0, meta: { 'test.status': 'pass' }, metrics: {},",
-    '  start: 123, duration: 456,',
-    '})',
-    'writer.append(spans)',
-    'writer.flush()',
-    'sink.writeSummary()',
+    'jobs:',
+    '  test:',
+    '    runs-on: ubuntu-latest',
+    '    strategy:',
+    '      matrix:',
+    '        node: [18, 20, 22]',
+    '    steps:',
+    '      - uses: actions/setup-node@v4',
+    '        with:',
+    '          node-version: $' + '{{ matrix.node }}',
+    `      - run: ${command}`,
+    '',
+  ].join('\n')
+}
+
+function bracketMatrixWorkflowSource ({ command }) {
+  return [
+    'jobs:',
+    '  test:',
+    '    runs-on: ubuntu-latest',
+    '    strategy:',
+    '      matrix:',
+    "        working-directory: ['.', packages/app]",
+    '    defaults:',
+    '      run:',
+    '        working-directory: $' + '{{ matrix[\'working-directory\'] }}',
+    '    steps:',
+    `      - run: ${command}`,
+    '',
   ].join('\n')
 }
