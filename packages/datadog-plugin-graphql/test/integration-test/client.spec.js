@@ -31,10 +31,18 @@ describe('esm', () => {
     // throws "does not provide an export named 'default'") — only the named-export forms
     // apply to it, while every earlier major exposes both. `version` can be a range
     // (e.g. '>=0.10'), so semver needs the resolved concrete version instead.
-    const variants = varySandbox('server.mjs', {
+    //
+    // varySandbox's writeSandboxVariants derives every non-base variant by string-replacing
+    // the base variant's own generated import line inside the template file, so the template
+    // must already contain *that exact line* verbatim — the base is 'default' when
+    // defaultExport is true, 'named' otherwise (see integration-tests/helpers/index.js). One
+    // template can't serve both bases, so server-named.mjs mirrors server.mjs but starts from
+    // the named-import form instead of the default one.
+    const hasDefaultExport = semver.lt(resolvedVersion, '17.0.0')
+    const variants = varySandbox(hasDefaultExport ? 'server.mjs' : 'server-named.mjs', {
       bindingName: 'graphqlLib',
       packageName: 'graphql',
-      defaultExport: semver.lt(resolvedVersion, '17.0.0'),
+      defaultExport: hasDefaultExport,
       namedExports: ['GraphQLSchema', 'GraphQLString', 'graphql', 'GraphQLObjectType'],
       namedExportBinding: 'namespace',
     })
