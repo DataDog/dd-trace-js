@@ -28,7 +28,7 @@ describe('openai-agents utils', () => {
       )
     })
 
-    it('joins input_text and text parts on array message content', () => {
+    it('preserves Chat Completions image parts alongside text content', () => {
       const input = [{
         type: 'message',
         role: 'user',
@@ -40,7 +40,26 @@ describe('openai-agents utils', () => {
       }]
       assert.deepStrictEqual(
         extractInputMessages(input),
-        [{ role: 'user', content: 'foo bar' }]
+        [{ role: 'user', content: 'foo bar[image]' }]
+      )
+    })
+
+    it('preserves Chat Completions audio parts', () => {
+      const input = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'transcribe' },
+          { type: 'input_audio', input_audio: { data: 'aGVsbG8=', format: 'wav' } },
+        ],
+      }]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [{
+          role: 'user',
+          content: 'transcribe',
+          audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }],
+        }]
       )
     })
 
@@ -394,6 +413,13 @@ describe('openai-agents utils', () => {
         usage: { output_tokens_details: { reasoning_tokens: 4 } },
       })
       assert.strictEqual(metrics.reasoningOutputTokens, 4)
+    })
+
+    it('includes reasoning tokens from Chat Completions details', () => {
+      const metrics = extractMetrics({
+        usage: { completion_tokens_details: { reasoning_tokens: 5 } },
+      })
+      assert.strictEqual(metrics.reasoningOutputTokens, 5)
     })
 
     it('omits a zero reasoning token count', () => {

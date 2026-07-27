@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 const sinon = require('sinon')
 
 const { storage } = require('../../datadog-core')
+const { PARENT_ID_KEY, ROOT_PARENT_ID } = require('../../dd-trace/src/llmobs/constants/tags')
+const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
 const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
 const { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration } = require('../src/integration')
 
@@ -45,6 +47,7 @@ function build ({
 
 afterEach(() => {
   legacyStorage.enterWith(undefined)
+  llmobsStorage.enterWith(undefined)
   sinon.restore()
 })
 
@@ -91,6 +94,62 @@ describe('OpenAIAgentsIntegration', () => {
 
       assert.strictEqual(tracer.startSpan.firstCall.args[1].childOf, parentSpan)
       assert.strictEqual(tracer.startSpan.firstCall.args[1].tags.service, 'agents-service')
+    })
+
+    it('does not use an APM-only parent as the LLMObs parent', () => {
+      const parentSpan = makeFakeSpan('apm-parent')
+      const workflowSpan = makeFakeSpan('workflow')
+      const { integration } = build({
+        tracerSpans: [workflowSpan],
+        config: {
+          llmobs: {
+            DD_LLMOBS_ENABLED: true,
+            mlApp: 'test',
+            sampleRate: 1,
+          },
+        },
+      })
+
+      legacyStorage.run({ span: parentSpan }, () => {
+        integration.startTrace({ traceId: 't1' })
+      })
+
+      assert.strictEqual(LLMObsTagger.tagMap.get(workflowSpan)[PARENT_ID_KEY], ROOT_PARENT_ID)
+    })
+
+    it('uses and restores the active LLMObs parent independently of the APM parent', () => {
+      const apmParentSpan = makeFakeSpan('apm-parent')
+      const llmobsParentSpan = makeFakeSpan('llmobs-parent')
+      const workflowSpan = makeFakeSpan('workflow')
+      const config = {
+        llmobs: {
+          DD_LLMOBS_ENABLED: true,
+          mlApp: 'test',
+          sampleRate: 1,
+        },
+      }
+      const { integration, tracer } = build({ tracerSpans: [workflowSpan], config })
+      const tagger = new LLMObsTagger(config, true)
+      tagger.registerLLMObsSpan(llmobsParentSpan, {
+        kind: 'workflow',
+        name: 'outer workflow',
+      })
+
+      llmobsStorage.run({ span: llmobsParentSpan }, () => {
+        legacyStorage.run({ span: apmParentSpan }, () => {
+          integration.startTrace({ traceId: 't1' })
+
+          assert.strictEqual(tracer.startSpan.firstCall.args[1].childOf, apmParentSpan)
+          assert.strictEqual(
+            LLMObsTagger.tagMap.get(workflowSpan)[PARENT_ID_KEY],
+            'llmobs-parent'
+          )
+          assert.strictEqual(llmobsStorage.getStore().span, workflowSpan)
+
+          integration.endTrace({ traceId: 't1' })
+          assert.strictEqual(llmobsStorage.getStore().span, llmobsParentSpan)
+        })
+      })
     })
 
     it('registers LLMObs spans when DD_LLMOBS_ENABLED is true', () => {

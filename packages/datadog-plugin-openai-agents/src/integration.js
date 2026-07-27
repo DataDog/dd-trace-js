@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
 const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
 const { getOpenAIModelProvider } = require('../../dd-trace/src/llmobs/plugins/openai/utils')
 const {
@@ -35,6 +36,7 @@ const KIND_TO_SPAN_KIND = {
  *   outputOaiSpan?: object,
  *   metadata?: Record<string, unknown>,
  *   groupId?: string,
+ *   llmobsParentStore?: object,
  * }} LLMObsTraceInfo
  */
 
@@ -128,21 +130,26 @@ class OpenAIAgentsIntegration {
       tags: this.#getSpanTags('internal'),
     })
 
+    const llmobsParentStore = this.#isLLMObsEnabled() ? llmobsStorage.getStore() : undefined
     this.#oaiToDdSpan.set(traceId, ddSpan)
     this.#traceInfo.set(traceId, {
       spanId: ddSpan.context().toSpanId(),
       traceId,
       groupId: oaiTrace.groupId || undefined,
       metadata: oaiTrace.metadata,
+      llmobsParentStore,
     })
 
     this.#tagger.registerLLMObsSpan(ddSpan, {
       kind: 'workflow',
       name,
       integration: COMPONENT,
-      parent: parentSpan,
+      parent: llmobsParentStore?.span,
       sessionId: oaiTrace.groupId || undefined,
     })
+    if (LLMObsTagger.tagMap.has(ddSpan)) {
+      llmobsStorage.enterWith({ ...llmobsParentStore, span: ddSpan })
+    }
   }
 
   endTrace (oaiTrace) {
@@ -163,6 +170,7 @@ class OpenAIAgentsIntegration {
     if (!traceId) return
     const ddSpan = this.#oaiToDdSpan.get(traceId)
     if (!ddSpan) return
+    const info = this.#traceInfo.get(traceId)
 
     if (rootAgentSpan?.error) {
       ddSpan.setTag('error', true)
@@ -174,6 +182,9 @@ class OpenAIAgentsIntegration {
 
     if (this.#isLLMObsEnabled()) this.#setTraceAttributes(ddSpan, traceId)
     ddSpan.finish()
+    if (info && LLMObsTagger.tagMap.has(ddSpan)) {
+      llmobsStorage.enterWith(info.llmobsParentStore)
+    }
     this.#oaiToDdSpan.delete(traceId)
     this.#traceInfo.delete(traceId)
   }

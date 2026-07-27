@@ -1,7 +1,34 @@
 'use strict'
 
-const { extractTextFromContentItem } = require('../openai/utils')
+const { extractContentParts, extractTextFromContentItem } = require('../openai/utils')
 const { safeJsonParse } = require('../../util')
+
+/**
+ * Flatten Responses and Chat Completions content parts without dropping
+ * provider-specific image or audio inputs.
+ *
+ * @param {Array<object>} parts
+ * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
+ */
+function extractMessageContent (parts) {
+  const contentParts = []
+  const audioParts = []
+
+  for (const part of parts) {
+    if (!part) continue
+    const text = extractTextFromContentItem(part)
+    if (text) {
+      contentParts.push(text)
+      continue
+    }
+
+    const extracted = extractContentParts([part])
+    if (extracted.content) contentParts.push(extracted.content)
+    if (extracted.audioParts.length > 0) audioParts.push(...extracted.audioParts)
+  }
+
+  return { content: contentParts.join(''), audioParts }
+}
 
 /**
  * Normalize OpenAI Chat Completions tool calls to the LLMObs message schema.
@@ -44,6 +71,7 @@ function normalizeChatCompletionMessage (message) {
     role: message.role || 'assistant',
     content: message.content ?? '',
   }
+  if (message.audioParts?.length > 0) normalized.audioParts = message.audioParts
   const toolCalls = extractChatCompletionToolCalls(message)
   if (toolCalls.length > 0) normalized.toolCalls = toolCalls
   if (message.tool_call_id) normalized.toolId = message.tool_call_id
@@ -76,19 +104,17 @@ function extractInputMessages (input, instructions) {
         if (!role) continue
 
         let content = ''
+        let audioParts
         if (Array.isArray(item.content)) {
-          const contentParts = []
-          for (const contentItem of item.content) {
-            const text = extractTextFromContentItem(contentItem)
-            if (text) contentParts.push(text)
-          }
-          content = contentParts.join('')
+          const extracted = extractMessageContent(item.content)
+          content = extracted.content
+          audioParts = extracted.audioParts
         } else if (typeof item.content === 'string') {
           content = item.content
         }
 
-        const message = normalizeChatCompletionMessage({ ...item, content, role })
-        if (content || message.toolCalls || message.toolId) {
+        const message = normalizeChatCompletionMessage({ ...item, content, role, audioParts })
+        if (content || message.audioParts || message.toolCalls || message.toolId) {
           messages.push(message)
         }
       } else if (item.type === 'function_call') {
@@ -207,7 +233,8 @@ function extractGenerationOutputMessages (result) {
  * allocating an Object.keys array.
  *
  * @param {{ usage?: { inputTokens?: number, outputTokens?: number, totalTokens?: number,
- *   outputTokensDetails?: { reasoningTokens?: number } } }} result
+ *   outputTokensDetails?: { reasoningTokens?: number },
+ *   completion_tokens_details?: { reasoning_tokens?: number } } }} result
  * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number,
  *   reasoningOutputTokens?: number } | undefined}
  */
@@ -219,7 +246,8 @@ function extractMetrics (result) {
   const outputTokens = usage.outputTokens ?? usage.output_tokens ?? usage.completion_tokens
   const totalTokens = usage.totalTokens ?? usage.total_tokens
   const reasoningTokens = usage.outputTokensDetails?.reasoningTokens ??
-    usage.output_tokens_details?.reasoning_tokens
+    usage.output_tokens_details?.reasoning_tokens ??
+    usage.completion_tokens_details?.reasoning_tokens
 
   if (inputTokens === undefined && outputTokens === undefined &&
       totalTokens === undefined && !reasoningTokens) return
