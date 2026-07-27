@@ -40,6 +40,14 @@ const playwrightVersion = latestVersions.playwright
 const browserProviderDependency = isLegacyBrowserProvider
   ? `@vitest/browser@${vitestVersion}`
   : `@vitest/browser-playwright@${vitestVersion}`
+const sandboxDependencies = [
+  `vitest@${vitestVersion}`,
+  browserProviderDependency,
+  `playwright@${playwrightVersion}`,
+]
+if (isLegacyBrowserProvider) {
+  sandboxDependencies.push('vite@6.1.0')
+}
 const NODE_OPTIONS = '--import dd-trace/register.js -r dd-trace/ci/init'
 
 function getEvents (payloads) {
@@ -64,11 +72,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
   let receiver
   let testOutput
 
-  useSandbox([
-    `vitest@${vitestVersion}`,
-    browserProviderDependency,
-    `playwright@${playwrightVersion}`,
-  ], true)
+  useSandbox(sandboxDependencies, true)
 
   before(function () {
     this.timeout(120_000)
@@ -104,6 +108,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     childProcess.stderr.on('data', data => { testOutput += data })
 
     const [exitCode] = await once(childProcess, 'exit')
+    assert.strictEqual(exitCode, 0, testOutput)
     return exitCode
   }
 
