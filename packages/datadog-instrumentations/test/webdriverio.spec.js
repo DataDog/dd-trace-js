@@ -1,9 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
 const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
 const path = require('node:path')
+const { promisify } = require('node:util')
 
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
@@ -20,6 +22,7 @@ const {
 } = require('../src/mocha/webdriverio-protocol')
 
 const fixturePath = path.join(__dirname, 'fixtures', 'webdriverio-local-runner.mjs')
+const disconnectedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-disconnected-worker.js')
 const fixtureModulePath = path.join(
   __dirname,
   'fixtures',
@@ -29,6 +32,7 @@ const fixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const execFileAsync = promisify(execFile)
 
 describe('webdriverio instrumentation', () => {
   it('rewrites the ESM local runner and waits for coordinator shutdown', () => {
@@ -39,6 +43,67 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_run/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_shutdown/)
     assert.match(rewrittenSource, /__apm\$ctx\.asyncEndPromise/)
+  })
+
+  it('propagates complete launcher NODE_OPTIONS to worker environments', () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    process.env.NODE_OPTIONS = '--require dd-trace/ci/init'
+
+    function onTestFinish () {}
+
+    testFinishCh.subscribe(onTestFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const cases = [
+        {
+          runnerEnv: undefined,
+          expectedNodeOptions: '--require dd-trace/ci/init',
+        },
+        {
+          runnerEnv: { NODE_OPTIONS: '--require dd-trace/ci/init-custom' },
+          expectedNodeOptions: '--require dd-trace/ci/init --require dd-trace/ci/init-custom',
+        },
+        {
+          runnerEnv: { NODE_OPTIONS: '--no-warnings --require dd-trace/ci/init' },
+          expectedNodeOptions: '--no-warnings --require dd-trace/ci/init',
+        },
+      ]
+
+      for (const { runnerEnv, expectedNodeOptions } of cases) {
+        const localRunner = {
+          config: {
+            framework: 'mocha',
+            runnerEnv,
+          },
+        }
+        const runContext = {
+          self: localRunner,
+          arguments: [{ specs: [] }],
+        }
+
+        tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run').start.publish(runContext)
+
+        assert.deepStrictEqual(localRunner.config.runnerEnv, {
+          NODE_OPTIONS: expectedNodeOptions,
+          MOCHA_WORKER_ID: 'webdriverio',
+          [WEBDRIVERIO_WORKER_ENV]: 'true',
+        })
+      }
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
+    }
+  })
+
+  it('does not send Mocha worker messages over disconnected IPC', async () => {
+    await execFileAsync(process.execPath, [disconnectedWorkerFixturePath])
   })
 
   it('coordinates two Mocha workers under one session', async () => {
@@ -352,6 +417,54 @@ describe('webdriverio instrumentation', () => {
       testFinishCh.unsubscribe(onTestFinish)
       libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
       testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('reports LocalRunner.run rejections before a worker exists', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+    const runError = new Error('worker spawn failed')
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const runContext = {
+        self: localRunner,
+        arguments: [{ specs: [path.join(process.cwd(), 'first.spec.js')] }],
+      }
+      const runCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
+
+      runCh.start.publish(runContext)
+      runContext.error = runError
+      runCh.asyncEnd.publish(runContext)
+
+      const shutdownContext = { self: localRunner }
+      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
+      await shutdownContext.asyncEndPromise
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].error, runError)
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
       testSessionFinishCh.unsubscribe(onSessionFinish)
     }
   })

@@ -29,6 +29,8 @@ const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 
+const NODE_OPTIONS_SEPARATOR_RE = /\s/
+
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
   loadCh.publish({ name: '@wdio/local-runner' })
@@ -74,6 +76,7 @@ const coordinatorStates = new WeakMap()
  * @property {number} activeWorkers
  * @property {number} maxActiveWorkers
  * @property {number} nextWorkerId
+ * @property {unknown} runError
  * @property {Set<WorkerRecord>} workers
  * @property {Map<object, string>} suiteStatuses
  */
@@ -144,6 +147,7 @@ function getCoordinatorState (localRunner) {
     activeWorkers: 0,
     maxActiveWorkers: 0,
     nextWorkerId: 0,
+    runError: undefined,
     workers: new Set(),
     suiteStatuses: new Map(),
   }
@@ -160,6 +164,33 @@ function getCoordinatorState (localRunner) {
  */
 function normalizeFile (file) {
   return file.startsWith('file://') ? fileURLToPath(file) : file
+}
+
+/**
+ * Checks whether worker NODE_OPTIONS contain the complete launcher options.
+ *
+ * @param {string|undefined} workerNodeOptions
+ * @param {string} launcherNodeOptions
+ * @returns {boolean}
+ */
+function includesNodeOptions (workerNodeOptions, launcherNodeOptions) {
+  if (!workerNodeOptions) {
+    return false
+  }
+
+  let index = workerNodeOptions.indexOf(launcherNodeOptions)
+  while (index !== -1) {
+    const endIndex = index + launcherNodeOptions.length
+    const startsAtBoundary = index === 0 || NODE_OPTIONS_SEPARATOR_RE.test(workerNodeOptions[index - 1])
+    const endsAtBoundary = endIndex === workerNodeOptions.length ||
+      NODE_OPTIONS_SEPARATOR_RE.test(workerNodeOptions[endIndex])
+
+    if (startsAtBoundary && endsAtBoundary) {
+      return true
+    }
+    index = workerNodeOptions.indexOf(launcherNodeOptions, index + 1)
+  }
+  return false
 }
 
 /**
@@ -556,9 +587,7 @@ localRunnerRunCh.subscribe({
     const launcherNodeOptions = getEnvironmentVariable('NODE_OPTIONS')
     const workerNodeOptions = workerEnvironment.NODE_OPTIONS
 
-    if (launcherNodeOptions &&
-      workerNodeOptions !== undefined &&
-      !workerNodeOptions.includes(launcherNodeOptions)) {
+    if (launcherNodeOptions && !includesNodeOptions(workerNodeOptions, launcherNodeOptions)) {
       workerEnvironment = {
         ...workerEnvironment,
         NODE_OPTIONS: workerNodeOptions
@@ -576,10 +605,18 @@ localRunnerRunCh.subscribe({
     context.ddWorkerSpecs = workerOptions?.specs || []
   },
   asyncEnd (context) {
-    if (!context.ddCoordinatorState || context.error || !context.result) {
+    const state = context.ddCoordinatorState
+    if (!state) {
       return
     }
-    registerWorker(context.ddCoordinatorState, context.result, context.ddWorkerSpecs)
+    if (context.error) {
+      state.runError ??= context.error
+      return
+    }
+    if (!context.result) {
+      return
+    }
+    registerWorker(state, context.result, context.ddWorkerSpecs)
   },
 })
 
@@ -593,10 +630,11 @@ localRunnerShutdownCh.subscribe({
 
     // Orchestrion waits for this promise before returning from LocalRunner.shutdown.
     context.asyncEndPromise = new Promise(resolve => {
+      const error = context.error ?? state.runError
       if (state.initializing) {
-        state.initializationCallbacks.push(() => finishCoordinator(state, context.error, resolve))
+        state.initializationCallbacks.push(() => finishCoordinator(state, error, resolve))
       } else {
-        finishCoordinator(state, context.error, resolve)
+        finishCoordinator(state, error, resolve)
       }
     })
   },

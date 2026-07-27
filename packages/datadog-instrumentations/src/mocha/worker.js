@@ -3,6 +3,7 @@
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const log = require('../../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../../version')
 
 const {
@@ -34,6 +35,28 @@ const runnerToFiles = new WeakMap()
 const runnerToFailedHookFiles = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
 let configurationRequestId = 0
+
+/**
+ * Sends a message to the WebdriverIO launcher without surfacing closed IPC channels.
+ *
+ * @param {object} message
+ * @param {() => void} [onError]
+ * @returns {void}
+ */
+function sendWebdriverioMessage (message, onError) {
+  if (!process.send || !process.connected) {
+    onError?.()
+    return
+  }
+
+  process.send(message, (error) => {
+    if (!error) {
+      return
+    }
+    log.error('WebdriverIO Test Optimization IPC error', error)
+    onError?.()
+  })
+}
 
 /**
  * Applies configuration encoded as private Mocha options by its parallel runner.
@@ -107,11 +130,6 @@ function filterSkippedFiles (runner, skippedFiles) {
  * @returns {void}
  */
 function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
-  if (!process.send) {
-    onDone({})
-    return
-  }
-
   const requestId = `${process.pid}-${++configurationRequestId}`
   let finished = false
 
@@ -156,7 +174,7 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
   const timeout = setTimeout(() => finish({}), 30_000)
   process.on('message', onMessage)
   process.once('disconnect', onDisconnect)
-  process.send({
+  sendWebdriverioMessage({
     origin: 'datadog',
     name: CONFIGURATION_REQUEST,
     content: {
@@ -164,11 +182,7 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
       frameworkVersion,
       requestId,
     },
-  }, error => {
-    if (error) {
-      finish({})
-    }
-  })
+  }, () => finish({}))
 }
 
 /**
@@ -178,11 +192,11 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
  * @returns {void}
  */
 function reportWebdriverioWorkerReady (frameworkVersion) {
-  if (!isWebdriverioWorker || !process.send) {
+  if (!isWebdriverioWorker) {
     return
   }
 
-  process.send({
+  sendWebdriverioMessage({
     origin: 'datadog',
     name: WORKER_READY,
     content: { frameworkVersion },
@@ -254,11 +268,11 @@ function getWebdriverioSuiteResults (runner) {
  * @returns {void}
  */
 function reportWebdriverioSuiteResults (runner) {
-  if (!isWebdriverioWorker || !process.send) {
+  if (!isWebdriverioWorker) {
     return
   }
 
-  process.send({
+  sendWebdriverioMessage({
     origin: 'datadog',
     name: SUITE_FINISH,
     content: {
