@@ -8,6 +8,7 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
@@ -145,7 +146,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
   try {
     const packFileContent = fs.readFileSync(packFileToUpload)
     // The original filename includes a random prefix, so we remove it here
-    const [, filename] = path.basename(packFileToUpload).split('-')
+    const filename = getSegment(path.basename(packFileToUpload), '-', 1)
     form.append('packfile', packFileContent, {
       filename,
       contentType: 'application/octet-stream',

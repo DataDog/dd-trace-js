@@ -57,18 +57,22 @@ const alreadyLoggedIncompatibleIntegrations = new Set()
 // Always disable prefixed and unprefixed node modules if one is disabled.
 if (disabledInstrumentations.size) {
   const builtinsSet = new Set(builtinModules)
+  const disabledBuiltinCounterparts = []
   for (const name of disabledInstrumentations) {
     const hasPrefix = name.startsWith('node:')
     if (hasPrefix || builtinsSet.has(name)) {
       if (hasPrefix) {
         const unprefixedName = name.slice(5)
         if (!disabledInstrumentations.has(unprefixedName)) {
-          disabledInstrumentations.add(unprefixedName)
+          disabledBuiltinCounterparts.push(unprefixedName)
         }
       } else if (!disabledInstrumentations.has(`node:${name}`)) {
-        disabledInstrumentations.add(`node:${name}`)
+        disabledBuiltinCounterparts.push(`node:${name}`)
       }
     }
+  }
+  for (const name of disabledBuiltinCounterparts) {
+    disabledInstrumentations.add(name)
   }
   builtinsSet.clear()
 }

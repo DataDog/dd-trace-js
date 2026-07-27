@@ -10,7 +10,7 @@ const errorChannel = channel('apm:moleculer:call:error')
 function wrapCall (call) {
   return function (actionName, params, opts) {
     opts = arguments[2] = opts || {}
-    opts.meta = opts.meta || {}
+    opts.meta ||= {}
 
     arguments.length = Math.max(3, arguments.length)
 
