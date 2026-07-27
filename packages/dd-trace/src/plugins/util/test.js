@@ -89,6 +89,7 @@ const {
 const TEST_SESSION_NAME = 'test_session.name'
 
 const TEST_FRAMEWORK = 'test.framework'
+const TEST_FRAMEWORK_ADAPTER = 'test.framework_adapter'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
 const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
@@ -438,6 +439,7 @@ module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
   TEST_FRAMEWORK,
+  TEST_FRAMEWORK_ADAPTER,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
@@ -814,7 +816,7 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
 }
 
 function getTestTypeFromFramework (testFramework) {
-  if (testFramework === 'playwright' || testFramework === 'cypress') {
+  if (testFramework === 'playwright' || testFramework === 'cypress' || testFramework === 'webdriverio') {
     return 'browser'
   }
   return 'test'
@@ -885,6 +887,7 @@ function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
+    [TEST_FRAMEWORK]: testFramework,
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
@@ -1112,6 +1115,7 @@ function getCodeOwnersForFilename (filename, entries) {
 
 function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
+    [TEST_FRAMEWORK]: testFramework,
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),

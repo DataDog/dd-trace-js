@@ -34,6 +34,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_FINAL_STATUS,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FRAMEWORK_ADAPTER,
   getTestSuiteExecutionKey,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -102,15 +103,19 @@ class MochaPlugin extends CiPlugin {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+      const testFramework = this.testFramework || this.constructor.id
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(
           this.command,
           this.frameworkVersion,
           testSuite,
-          'mocha'
+          testFramework
         ),
         ...this.getSessionRequestErrorTags(),
         ...this.getSessionItrSkippingEnabledTags(),
+      }
+      if (this.testFrameworkAdapter) {
+        testSuiteMetadata[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'

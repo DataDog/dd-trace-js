@@ -16,11 +16,15 @@ const {
   TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FRAMEWORK,
+  TEST_FRAMEWORK_ADAPTER,
+  TEST_FRAMEWORK_VERSION,
   TEST_IS_RETRY,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_MANAGEMENT_ENABLED,
+  TEST_MODULE,
   TEST_STATUS,
   TEST_SUITE,
+  TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
@@ -166,9 +170,10 @@ function assertOneTestPerSuiteExecution (suites, tests) {
  * Extracts events and verifies the WebdriverIO run stayed in basic-reporting mode.
  *
  * @param {object[]} payloads
+ * @param {string} requestedVersion
  * @returns {{session: object, module: object, suites: object[], tests: object[]}}
  */
-function getBasicReportingEvents (payloads) {
+function getBasicReportingEvents (payloads, requestedVersion) {
   const settingsRequests = payloads.filter(({ url }) =>
     url.endsWith('/api/v2/libraries/tests/services/setting'))
   const advancedRequests = payloads.filter(({ url }) =>
@@ -204,8 +209,17 @@ function getBasicReportingEvents (payloads) {
     assert.deepStrictEqual(capabilities, [])
   }
 
-  for (const test of tests) {
-    assert.strictEqual(test.meta[TEST_FRAMEWORK], 'mocha')
+  for (const event of [sessions[0], modules[0], ...suites, ...tests]) {
+    assert.strictEqual(event.meta[TEST_FRAMEWORK], 'webdriverio')
+    assert.strictEqual(event.meta[TEST_MODULE], 'webdriverio')
+    assert.strictEqual(event.meta[TEST_TYPE], 'browser')
+    assert.ok(event.meta[TEST_FRAMEWORK_VERSION])
+    if (requestedVersion !== 'latest') {
+      assert.strictEqual(event.meta[TEST_FRAMEWORK_VERSION], requestedVersion)
+    }
+  }
+  for (const event of [...suites, ...tests]) {
+    assert.strictEqual(event.meta[TEST_FRAMEWORK_ADAPTER], 'mocha')
   }
   assertEventHierarchy(sessions[0], modules[0], suites, tests)
 
@@ -284,7 +298,7 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        payloads => assertEvents(getBasicReportingEvents(payloads)),
+        payloads => assertEvents(getBasicReportingEvents(payloads, version)),
         { hardTimeout: 45_000 }
       )
 

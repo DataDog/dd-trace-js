@@ -9,7 +9,7 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
-const { channel, tracingChannel } = require('./helpers/instrument')
+const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
@@ -30,6 +30,7 @@ const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRun
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 
 const NODE_OPTIONS_SEPARATOR_RE = /\s/
+const TEST_FRAMEWORK = 'webdriverio'
 
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
@@ -37,6 +38,17 @@ if (loadCh.hasSubscribers) {
 }
 
 const coordinatorStates = new WeakMap()
+const localRunnerVersions = new WeakMap()
+
+addHook({
+  name: '@wdio/local-runner',
+  versions: ['>=9.0.0'],
+  file: 'build/index.js',
+  patchDefault: true,
+}, (LocalRunner, version) => {
+  localRunnerVersions.set(LocalRunner, version)
+  return LocalRunner
+})
 
 /**
  * @typedef {object} WebdriverioRunnerConfig
@@ -73,6 +85,7 @@ const coordinatorStates = new WeakMap()
  * @property {boolean} sessionStarted
  * @property {boolean} finished
  * @property {string|undefined} frameworkVersion
+ * @property {string} testFrameworkAdapter
  * @property {number} activeWorkers
  * @property {number} maxActiveWorkers
  * @property {number} nextWorkerId
@@ -143,7 +156,8 @@ function getCoordinatorState (localRunner) {
     initializationCallbacks: [],
     sessionStarted: false,
     finished: false,
-    frameworkVersion: undefined,
+    frameworkVersion: localRunnerVersions.get(localRunner.constructor),
+    testFrameworkAdapter: getRunnerConfiguration(localRunner)?.framework,
     activeWorkers: 0,
     maxActiveWorkers: 0,
     nextWorkerId: 0,
@@ -211,6 +225,8 @@ function startSession (state) {
     command,
     frameworkVersion: state.frameworkVersion,
     rootDir,
+    testFramework: TEST_FRAMEWORK,
+    testFrameworkAdapter: state.testFrameworkAdapter,
   })
   state.sessionStarted = true
 }
@@ -245,11 +261,10 @@ function completeCoordinatorInitialization (state, response) {
  * Settings for advanced features are intentionally ignored while WebdriverIO support is basic-reporting only.
  *
  * @param {CoordinatorState} state
- * @param {string|undefined} frameworkVersion
  * @param {(configuration: object) => void} [onDone]
  * @returns {void}
  */
-function initializeCoordinator (state, frameworkVersion, onDone) {
+function initializeCoordinator (state, onDone) {
   if (state.initialized) {
     onDone?.(state.configuration)
     return
@@ -262,8 +277,6 @@ function initializeCoordinator (state, frameworkVersion, onDone) {
   }
 
   state.initializing = true
-  state.frameworkVersion = frameworkVersion
-
   if (!libraryConfigurationCh.hasSubscribers) {
     completeCoordinatorInitialization(state)
     return
@@ -272,7 +285,7 @@ function initializeCoordinator (state, frameworkVersion, onDone) {
   try {
     libraryConfigurationCh.runStores({
       basicReportingOnly: true,
-      frameworkVersion,
+      frameworkVersion: state.frameworkVersion,
       isParallel: state.maxActiveWorkers > 1,
       onDone: response => state.asyncResource.runInAsyncScope(
         completeCoordinatorInitialization,
@@ -373,9 +386,9 @@ function sendWorkerMessage (workerRecord, message) {
  * @returns {void}
  */
 function handleConfigurationRequest (state, workerRecord, message) {
-  const { files = [], frameworkVersion, requestId } = message.content || {}
+  const { files = [], requestId } = message.content || {}
 
-  initializeCoordinator(state, frameworkVersion, (configuration) => {
+  initializeCoordinator(state, (configuration) => {
     startWorkerSuites(workerRecord, files)
     sendWorkerMessage(workerRecord, {
       origin: 'datadog',
@@ -424,7 +437,7 @@ function handleWorkerMessage (state, workerRecord, message) {
   }
 
   if (message.name === WORKER_READY) {
-    initializeCoordinator(state, message.content?.frameworkVersion)
+    initializeCoordinator(state)
     return
   }
   if (message.name === CONFIGURATION_REQUEST) {
@@ -438,7 +451,7 @@ function handleWorkerMessage (state, workerRecord, message) {
   if (message.name === 'testFrameworkInit') {
     workerRecord.hasTests = message.content?.hasTests
     if (!workerRecord.hasTests && state.frameworkVersion) {
-      initializeCoordinator(state, state.frameworkVersion, () => {
+      initializeCoordinator(state, () => {
         startWorkerSuites(workerRecord, workerRecord.specs)
         finishAllWorkerSuites(state, workerRecord, 'skip')
       })
@@ -547,7 +560,7 @@ function finishCoordinator (state, error, onDone) {
       onDone()
       return
     }
-    initializeCoordinator(state, state.frameworkVersion, () => finishCoordinator(state, error, onDone))
+    initializeCoordinator(state, () => finishCoordinator(state, error, onDone))
     return
   }
   state.finished = true
@@ -628,14 +641,16 @@ localRunnerShutdownCh.subscribe({
       return
     }
 
-    // Orchestrion waits for this promise before returning from LocalRunner.shutdown.
-    context.asyncEndPromise = new Promise(resolve => {
+    // Orchestrion uses the callback for the matching settlement path to delay LocalRunner.shutdown.
+    const waitForCoordinator = onDone => {
       const error = context.error ?? state.runError
       if (state.initializing) {
-        state.initializationCallbacks.push(() => finishCoordinator(state, error, resolve))
+        state.initializationCallbacks.push(() => finishCoordinator(state, error, onDone))
       } else {
-        finishCoordinator(state, error, resolve)
+        finishCoordinator(state, error, onDone)
       }
-    })
+    }
+    context.resolveCallback = waitForCoordinator
+    context.rejectCallback = waitForCoordinator
   },
 })

@@ -3,7 +3,11 @@ const LocalRunner = class {
     return workerOptions
   }
 
-  async shutdown () {}
+  async shutdown (error) {
+    if (error) {
+      throw error
+    }
+  }
 }
 
 export { LocalRunner }

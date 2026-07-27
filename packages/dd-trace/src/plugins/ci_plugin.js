@@ -48,12 +48,16 @@ const {
   CI_APP_ORIGIN,
   getTestSessionCommonTags,
   getTestModuleCommonTags,
+  TEST_FRAMEWORK,
+  TEST_FRAMEWORK_ADAPTER,
+  TEST_FRAMEWORK_VERSION,
   TEST_SUITE_ID,
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_LEVELS_METADATA,
   TEST_MODULE,
+  TEST_TYPE,
   TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
@@ -103,6 +107,7 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   cucumber: 'cucumber-js',
   playwright: 'playwright test',
   jest: 'jest',
+  webdriverio: 'wdio',
 }
 
 const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
@@ -133,7 +138,8 @@ function withTimeout (promise, timeoutMs) {
 }
 
 function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
-  const libraryCapabilitiesTags = getDefaultLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
+  const testFramework = plugin.testFramework || plugin.constructor.id
+  const libraryCapabilitiesTags = getDefaultLibraryCapabilitiesTags(testFramework, frameworkVersion)
 
   if (!libraryCapabilitiesTags[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] ||
     !plugin.libraryConfig ||
@@ -238,19 +244,28 @@ module.exports = class CiPlugin extends Plugin {
       )
     })
 
-    this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir }) => {
+    this.addSub(`ci:${this.constructor.id}:session:start`, ({
+      command,
+      frameworkVersion,
+      rootDir,
+      testFramework,
+      testFrameworkAdapter,
+    }) => {
+      const effectiveTestFramework = testFramework || this.constructor.id
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, this.constructor.id)
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, this.constructor.id)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, effectiveTestFramework)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, effectiveTestFramework)
 
       this.command = command
       this.frameworkVersion = frameworkVersion
+      this.testFramework = effectiveTestFramework
+      this.testFrameworkAdapter = testFrameworkAdapter
       // only for playwright
       this.rootDir = rootDir
 
       const testSessionName = getTestSessionName(
         this.config,
-        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[this.constructor.id],
+        DD_MAJOR < 6 ? this.command : FRAMEWORK_TO_TRIMMED_COMMAND[effectiveTestFramework],
         this.testEnvironmentMetadata
       )
 
@@ -300,7 +315,7 @@ module.exports = class CiPlugin extends Plugin {
       const testCommand = this.command
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
-          ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
+          ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.testFramework),
           ...getSessionRequestErrorTags(this.testSessionSpan),
           ...getSessionItrSkippingEnabledTags(this.testSessionSpan),
         }
@@ -607,13 +622,27 @@ module.exports = class CiPlugin extends Plugin {
       // test session, test module and test suite ids. We have to update them in the main process.
       if (span.name !== 'cucumber.test' && span.name !== 'mocha.test') continue
 
+      const testFramework = this.testFramework || this.constructor.id
+      span.meta[TEST_FRAMEWORK] = testFramework
+      span.meta[TEST_MODULE] = testFramework
+      const testType = this.testSessionSpan?.context().getTag(TEST_TYPE)
+      if (testType) {
+        span.meta[TEST_TYPE] = testType
+      }
+      if (this.frameworkVersion) {
+        span.meta[TEST_FRAMEWORK_VERSION] = this.frameworkVersion
+      }
+      if (this.testFrameworkAdapter) {
+        span.meta[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
+      }
+
       const testSuite = span.meta[TEST_SUITE]
       const testSuiteExecutionId = this._workerTraceExecutionIds.get(trace)
       const testSuiteKey = getTestSuiteExecutionKey(testSuite, testSuiteExecutionId)
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuiteKey)
       if (!testSuiteSpan) return testSuiteKey
 
-      const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
+      const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, testFramework)
       span.meta = {
         ...span.meta,
         ...testSuiteTags,
@@ -787,10 +816,13 @@ module.exports = class CiPlugin extends Plugin {
         testName,
         testSuite,
         this.frameworkVersion,
-        this.constructor.id
+        this.testFramework || this.constructor.id
       ),
       [COMPONENT]: this.constructor.id,
       ...extraTags,
+    }
+    if (this.testFrameworkAdapter) {
+      testTags[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
     }
 
     const codeOwners = this.getCodeOwners(testTags)
@@ -808,7 +840,7 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context().getTag(TEST_COMMAND),
-        [TEST_MODULE]: this.constructor.id,
+        [TEST_MODULE]: this.testFramework || this.constructor.id,
         ...getSessionRequestErrorTags(this.testSessionSpan),
       }
       if (testSuiteSpan.context()._parentId) {

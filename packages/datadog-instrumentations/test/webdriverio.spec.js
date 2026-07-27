@@ -4,7 +4,9 @@ const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
 const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 const { promisify } = require('node:util')
 
 const { channel, tracingChannel } = require('../src/helpers/instrument')
@@ -42,7 +44,48 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_run/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/local-runner:LocalRunner_shutdown/)
-    assert.match(rewrittenSource, /__apm\$ctx\.asyncEndPromise/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+  })
+
+  it('waits for coordinator shutdown before preserving a LocalRunner.shutdown rejection', async () => {
+    const source = fs.readFileSync(fixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, fixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const shutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
+    const shutdownError = new Error('shutdown failed')
+    const steps = []
+    const subscriber = {
+      asyncEnd (context) {
+        steps.push('asyncEnd')
+        context.rejectCallback = onDone => {
+          setImmediate(() => {
+            steps.push('coordinator')
+            onDone()
+          })
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    shutdownCh.subscribe(subscriber)
+
+    try {
+      const { LocalRunner } = await import(pathToFileURL(outputPath))
+      const resultPromise = new LocalRunner().shutdown(shutdownError)
+
+      await Promise.resolve()
+
+      assert.deepStrictEqual(steps, ['asyncEnd'])
+      await assert.rejects(resultPromise, error => {
+        steps.push('rejected')
+        return error === shutdownError
+      })
+      assert.deepStrictEqual(steps, ['asyncEnd', 'coordinator', 'rejected'])
+    } finally {
+      shutdownCh.unsubscribe(subscriber)
+    }
   })
 
   it('propagates complete launcher NODE_OPTIONS to worker environments', () => {
@@ -262,13 +305,13 @@ describe('webdriverio instrumentation', () => {
       firstWorker.emit('exit', { exitCode: 1, retries: 1 })
       secondWorker.emit('exit', { exitCode: 0, retries: 0 })
 
-      const shutdownContext = { self: localRunner }
-      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
-      await shutdownContext.asyncEndPromise
+      await finishLocalRunner(localRunner)
 
       assert.strictEqual(configurationRequests, 1)
       assert.strictEqual(advancedFeatureRequests, 0)
       assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].testFramework, 'webdriverio')
+      assert.strictEqual(sessionStarts[0].testFrameworkAdapter, 'mocha')
       assert.strictEqual(sessionFinishes.length, 1)
       assert.strictEqual(sessionFinishes[0].status, 'pass')
       assert.strictEqual(sessionFinishes[0].isParallel, true)
@@ -349,9 +392,7 @@ describe('webdriverio instrumentation', () => {
       reportSuiteFinish(secondWorker, secondFile)
       secondWorker.emit('exit', { exitCode: 1, retries: 0 })
 
-      const shutdownContext = { self: localRunner }
-      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
-      await shutdownContext.asyncEndPromise
+      await finishLocalRunner(localRunner)
 
       assert.strictEqual(sessionFinishes.length, 1)
       assert.strictEqual(sessionFinishes[0].status, 'fail')
@@ -403,9 +444,7 @@ describe('webdriverio instrumentation', () => {
       registerWorker(localRunner, worker, path.join(process.cwd(), 'first.spec.js'))
       worker.emit('exit', { exitCode: 1, retries: 0 })
 
-      const shutdownContext = { self: localRunner }
-      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
-      await shutdownContext.asyncEndPromise
+      await finishLocalRunner(localRunner)
 
       assert.strictEqual(configurationRequests, 1)
       assert.strictEqual(sessionStarts.length, 1)
@@ -455,9 +494,7 @@ describe('webdriverio instrumentation', () => {
       runContext.error = runError
       runCh.asyncEnd.publish(runContext)
 
-      const shutdownContext = { self: localRunner }
-      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(shutdownContext)
-      await shutdownContext.asyncEndPromise
+      await finishLocalRunner(localRunner)
 
       assert.strictEqual(sessionFinishes.length, 1)
       assert.strictEqual(sessionFinishes[0].status, 'fail')
@@ -465,6 +502,97 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(sessionFinishes[0].isParallel, false)
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('reports LocalRunner.shutdown rejections after coordinator completion', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+    const shutdownError = new Error('shutdown failed')
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const runContext = {
+        self: localRunner,
+        arguments: [{ specs: [] }],
+      }
+
+      tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run').start.publish(runContext)
+      await finishLocalRunner(localRunner, shutdownError)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].error, shutdownError)
+      assert.strictEqual(sessionFinishes[0].isParallel, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('waits for in-flight coordinator initialization during shutdown', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+    let completeConfiguration
+
+    function onTestFinish () {}
+    function onLibraryConfiguration (request) {
+      completeConfiguration = request.onDone
+    }
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, path.join(process.cwd(), 'first.spec.js'))
+      worker.emit('message', { name: WORKER_READY })
+
+      const shutdownPromise = finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 0)
+      completeConfiguration({ repositoryRoot: process.cwd() })
+      await shutdownPromise
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'skip')
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
       testSessionFinishCh.unsubscribe(onSessionFinish)
     }
   })
@@ -505,6 +633,20 @@ function registerWorker (localRunner, worker, file) {
   runCh.start.publish(context)
   context.result = worker
   runCh.asyncEnd.publish(context)
+}
+
+/**
+ * Publishes LocalRunner.shutdown completion and waits for the coordinator callback.
+ *
+ * @param {object} localRunner
+ * @param {unknown} [error]
+ * @returns {Promise<void>}
+ */
+function finishLocalRunner (localRunner, error) {
+  const context = { self: localRunner, error }
+  tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown').asyncEnd.publish(context)
+  const callback = error ? context.rejectCallback : context.resolveCallback
+  return new Promise(callback)
 }
 
 /**
