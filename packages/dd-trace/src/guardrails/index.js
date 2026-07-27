@@ -3,24 +3,16 @@
 var path = require('path')
 var Module = require('module')
 
-var nodeVersion = require('../../../../version')
-var isTrue = require('./util').isTrue
 var log = require('./log')
+var runtimeSupport = require('./runtime-support')
 var telemetry = require('./telemetry')
-
-var NODE_MAJOR = nodeVersion.NODE_MAJOR
 
 function guard (fn) {
   var initBailout = false
   var clobberBailout = false
-  var forced = isTrue(process.env.DD_INJECT_FORCE)
-  var pkg = require('../../../../package.json')
-  var engines = pkg.engines
-  var versions = engines.node.match(/^>=(\d+)$/)
-  var minMajor = versions[1]
-  var nextMajor = pkg.nodeMaxMajor
+  var forced = runtimeSupport.forced
   var version = process.versions.node
-  var supportedRange = engines.node + ' <' + nextMajor
+  var supportedRange = runtimeSupport.supportedRange
 
   if (process.env.DD_INJECTION_ENABLED) {
     // If we're running via single-step install, and we're in the app's
@@ -45,7 +37,7 @@ function guard (fn) {
 
   // If the runtime doesn't match the engines field in package.json, then we
   // should not initialize the tracer.
-  if (!clobberBailout && (NODE_MAJOR < minMajor || NODE_MAJOR >= nextMajor)) {
+  if (!clobberBailout && runtimeSupport.incompatibleRuntime) {
     initBailout = true
     var runtimeInfo = 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + supportedRange
     // When not forced, the process bails out here and may call process.exit() right away;

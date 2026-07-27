@@ -103,14 +103,16 @@ function testRuntimeVersionChecks (arg, filename) {
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
       testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource)
-    const doTestForced = async (expectedOut, expectedTelemetryPoints, expectedSource) => {
+    const withInjectForce = async (run) => {
       Object.assign(process.env, { DD_INJECT_FORCE })
       try {
-        await testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource)
+        await run()
       } finally {
         delete process.env.DD_INJECT_FORCE
       }
     }
+    const doTestForced = (expectedOut, expectedTelemetryPoints, expectedSource) =>
+      withInjectForce(() => testFile(entryFile, expectedOut, expectedTelemetryPoints, expectedSource))
 
     let pkgPath
     let pkgStr
@@ -140,6 +142,11 @@ function testRuntimeVersionChecks (arg, filename) {
       })
 
       it('should not initialize the tracer', () => doTest('false\n', []))
+
+      it('should not instrument from the loader hook', () => testFile('init/loader-inert.mjs', 'true\n', []))
+
+      it('should instrument from the loader hook, if DD_INJECT_FORCE', () =>
+        withInjectForce(() => testFile('init/loader-inert.mjs', 'false\n', [])))
 
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
@@ -182,6 +189,8 @@ true
       })
 
       it('should not initialize the tracer', () => doTest('false\n', []))
+
+      it('should not instrument from the loader hook', () => testFile('init/loader-inert.mjs', 'true\n', []))
 
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
@@ -226,6 +235,8 @@ true
         })
 
         it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n', [], 'manual'))
+
+        it('should instrument from the loader hook', () => testFile('init/loader-inert.mjs', 'false\n', []))
 
         context('with DD_INJECTION_ENABLED', () => {
           useEnv({ DD_INJECTION_ENABLED })

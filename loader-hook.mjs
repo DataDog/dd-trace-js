@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { isMainThread } from 'node:worker_threads'
 
 import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
-import { initialize as origInitialize, load as origLoad } from 'import-in-the-middle/hook.mjs'
+import { initialize as origInitialize, load as origLoad, resolve as origResolve } from 'import-in-the-middle/hook.mjs'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 // This file must support Node.js 12.0.0 syntax
@@ -14,6 +14,7 @@ const { builtinModules } = Module
 const require = Module.createRequire(import.meta.url)
 // The query marks initialize.mjs's application-thread preload; loader workers use the full graph.
 const isInitializeMainThread = isMainThread && import.meta.url.endsWith('?initialize')
+const { abortsInstrumentation } = require('./packages/dd-trace/src/guardrails/runtime-support.js')
 let syncImportInTheMiddleHook
 
 let getValueFromEnvSources
@@ -31,7 +32,7 @@ export const iitmExclusionRegExp = /middle|langsmith|openai\/_shims|openai\/reso
 const includeModuleNames = new Set()
 let moduleNameAlternation = ''
 
-if (!isInitializeMainThread) {
+if (!isInitializeMainThread && !abortsInstrumentation) {
   const regexpEscapeModule = require('./vendor/dist/escape-string-regexp/index.js')
   const hooks = require('./packages/datadog-instrumentations/src/helpers/hooks.js')
   const configHelper = require('./packages/dd-trace/src/config/helper.js')
@@ -55,7 +56,9 @@ if (!isInitializeMainThread) {
 const nodeModulesIncludeSource = `node_modules/(?:${moduleNameAlternation})/(?!node_modules).+`
 
 function initialize (data = {}) {
-  prepareImportInTheMiddleOptions(data)
+  if (!abortsInstrumentation) {
+    prepareImportInTheMiddleOptions(data)
+  }
   return origInitialize(data)
 }
 
@@ -114,6 +117,9 @@ function buildIncludeSource (securityControlsConfig) {
 }
 
 function load (url, context, nextLoad) {
+  if (abortsInstrumentation) {
+    return nextLoad(url, context)
+  }
   return rewriterLoader.load(url, context, (url, context) => origLoad(url, context, nextLoad))
 }
 
@@ -156,6 +162,10 @@ function getSyncImportInTheMiddleHook () {
 }
 
 function registerSyncLoaderHooks (data = {}) {
+  if (abortsInstrumentation) {
+    return false
+  }
+
   // The synchronous loader strips the source of a require() pulled into the iitm
   // ESM graph so Node loads it natively, but module.registerHooks rejected that
   // nullish CommonJS source until nodejs/node#59929 (released in 22.22.3, 24.11.1,
@@ -190,5 +200,5 @@ function registerSyncLoaderHooks (data = {}) {
   return true
 }
 
-export { resolve } from 'import-in-the-middle/hook.mjs'
+export const resolve = abortsInstrumentation ? undefined : origResolve
 export { initialize, load, registerSyncLoaderHooks }
