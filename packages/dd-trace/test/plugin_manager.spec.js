@@ -304,7 +304,10 @@ describe('Plugin Manager', () => {
       it('should not instantiate plugins', () => {
         pm.configure(makeTracerConfig())
         pm.configurePlugin('two')
-        assert.strictEqual(instantiated.length, 0)
+        // 'graphql' is eagerly resolved at plugin_manager module load (see the
+        // EAGERLY_ACTIVATED_PLUGINS comment there) and so is instantiated by `configure()`
+        // regardless; 'two' is not, since nothing published its loadChannel event.
+        assert.deepStrictEqual(instantiated, ['graphql'])
         sinon.assert.notCalled(Two.prototype.configure)
       })
     })
@@ -343,7 +346,10 @@ describe('Plugin Manager', () => {
       pm.configure(makeTracerConfig())
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
-      assert.deepStrictEqual(instantiated, ['two', 'four'])
+      // 'graphql' is eagerly resolved at plugin_manager module load (see the
+      // EAGERLY_ACTIVATED_PLUGINS comment there), so `configure()` instantiates it up front,
+      // before either loadChannel publish below reactively instantiates 'two'/'four'.
+      assert.deepStrictEqual(instantiated, ['graphql', 'two', 'four'])
     })
 
     describe('service naming schema manager', () => {

@@ -7,6 +7,7 @@ const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLRequestPlugin = require('./request')
+const GraphQLResolvePlugin = require('./resolve')
 const GraphQLValidatePlugin = require('./validate')
 
 class GraphQLPlugin extends CompositePlugin {
@@ -20,10 +21,14 @@ class GraphQLPlugin extends CompositePlugin {
       // and yoga produce no such channel, so the plugin simply never fires for
       // them.
       request: GraphQLRequestPlugin,
-      validate: GraphQLValidatePlugin,
-      // resolve plugin is absorbed into execute: per-field data is recorded
+      // graphql-js <17: absorbed into execute — per-field data is recorded
       // synchronously in wrapResolve, and all graphql.resolve spans are
-      // materialized at execute end.
+      // materialized at execute end. graphql-js >=17: a standalone plugin
+      // driven by graphql's own native `graphql:resolve` diagnostics_channel
+      // (see resolve.js) since execute's schema-walking approach has no
+      // resolver to intercept on that line.
+      resolve: GraphQLResolvePlugin,
+      validate: GraphQLValidatePlugin,
     }
   }
 

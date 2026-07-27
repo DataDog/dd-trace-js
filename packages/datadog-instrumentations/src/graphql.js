@@ -27,7 +27,9 @@ for (const hook of getHooks('@graphql-tools/executor')) {
 // (read lazily inside each callback so agent.load() between mocha suites can
 // rebind globalThis[dd-trace] without us stashing a stale reference).
 
-addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
+// The extra '^16.0.0' keeps 16.x (still the newest major several downstream frameworks support) in
+// the test matrix now that '>=0.10' alone resolves its "newest major" tier to 17.x.
+addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10', '^16.0.0'] }, printer => {
   const ddGlobal = globalThis[Symbol.for('dd-trace')]
   if (ddGlobal) ddGlobal.graphql_printer = printer
   return printer

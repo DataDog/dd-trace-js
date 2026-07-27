@@ -268,6 +268,36 @@ function isApolloHealthCheck (operation) {
     selection.directives?.length === 0
 }
 
+const TRACE_SUB_EVENTS = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
+
+/**
+ * Subscribe a `TracingPlugin` to an extra diagnostics_channel prefix beyond its own
+ * `static prefix`, using the same start/end/asyncStart/asyncEnd/error/finish convention
+ * `TracingPlugin#addTraceSubs` already uses. Used to listen to graphql-js's own native
+ * `tracing:graphql:<op>` channels (graphql-js >=17, one `dc.tracingChannel()` per operation —
+ * see https://www.graphql-js.org/api-v17/graphql/#category-diagnostics) alongside the
+ * orchestrion-generated `tracing:orchestrion:graphql:...` ones: on graphql-js >=17, Node's
+ * package.json `exports` resolves a plain `require('graphql')` to the package's ESM build
+ * (the `module-sync` condition), which orchestrion's CJS source rewriter never sees, so the
+ * native channels are the only hook that still fires.
+ *
+ * @param {import('../../dd-trace/src/plugins/tracing')} plugin
+ * @param {string} prefix
+ */
+function subscribeToPrefix (plugin, prefix) {
+  for (const event of TRACE_SUB_EVENTS) {
+    const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
+
+    if (plugin[event]) {
+      plugin.addSub(`${prefix}:${event}`, message => plugin[event](message))
+    }
+
+    if (plugin[bindName]) {
+      plugin.addBind(`${prefix}:${event}`, message => plugin[bindName](message))
+    }
+  }
+}
+
 let tools
 
 function getSignature (document, operationName, operationType, calculate) {
@@ -304,4 +334,5 @@ module.exports = {
   isApolloHealthCheck,
   isApolloHealthCheckSource,
   refineRequestSpan,
+  subscribeToPrefix,
 }
