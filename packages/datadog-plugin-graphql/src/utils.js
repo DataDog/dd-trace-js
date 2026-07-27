@@ -301,6 +301,22 @@ function subscribeToPrefix (plugin, prefix) {
   }
 }
 
+/**
+ * graphql-js <17's `info.variableValues` (and the internal `variableValues` `execute()`
+ * computes) is a flat `{name: value}` map. >=17's `getVariableValues` returns
+ * `{sources: {name: {signature, value}}, coerced: {name: value}}` instead, and that whole
+ * object is what ends up on `info.variableValues` — so a plugin config's `variables` filter
+ * (which only ever saw the flat map) would silently start filtering the wrapper object
+ * instead. Normalize to the flat map either shape can produce.
+ *
+ * @param {Record<string, unknown> | { sources: unknown, coerced: Record<string, unknown> } | undefined} variableValues
+ * @returns {Record<string, unknown> | undefined}
+ */
+function normalizeVariableValues (variableValues) {
+  const wrapped = /** @type {{ sources?: unknown, coerced?: Record<string, unknown> }} */ (variableValues)
+  return wrapped?.sources !== undefined && wrapped?.coerced !== undefined ? wrapped.coerced : variableValues
+}
+
 let tools
 
 function getSignature (document, operationName, operationType, calculate) {
@@ -336,6 +352,7 @@ module.exports = {
   getSignature,
   isApolloHealthCheck,
   isApolloHealthCheckSource,
+  normalizeVariableValues,
   refineRequestSpan,
   subscribeToPrefix,
 }
