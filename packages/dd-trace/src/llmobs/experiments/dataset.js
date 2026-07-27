@@ -147,7 +147,7 @@ class Dataset {
     const pending = this.#records.slice(this.#pushedCount)
     const records = pending.map((rec) => {
       const out = { input: rec.input }
-      if (rec.id !== null && rec.id !== undefined) {
+      if (rec.id != null) {
         out.id = rec.id
       }
       if (rec.expectedOutput !== null && rec.expectedOutput !== undefined) {
