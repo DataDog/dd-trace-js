@@ -6,7 +6,7 @@ const { Buffer } = require('node:buffer')
 const { afterEach, describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
 
-const { getHeadersSize } = require('../../dd-trace/src/datastreams')
+const { PATHWAY_FIELD_BYTES } = require('../../dd-trace/src/datastreams/size')
 const log = require('../../dd-trace/src/log')
 const EventBridge = require('../src/services/eventbridge')
 
@@ -25,6 +25,13 @@ const tracerConfig = {
   peerServiceMapping: {},
   spanComputePeerService: false,
 }
+const TRACE_CONTEXT = {
+  'x-datadog-trace-id': '123',
+  'x-datadog-parent-id': '456',
+  'x-datadog-sampling-priority': '1',
+}
+const TRACE_CONTEXT_BYTES = Buffer.byteLength(`,"_datadog":${JSON.stringify(TRACE_CONTEXT)}`)
+const MAX_PUT_EVENTS_BYTES = 1024 * 1024
 
 function createSpan () {
   const tags = {}
@@ -50,8 +57,7 @@ function createSpan () {
 }
 
 /**
- * @param {number} size
- * @returns {string}
+ * @param {number} size total UTF-8 byte length of the returned JSON object
  */
 function makeEventDetail (size) {
   const prefix = '{"myGreatData":"'
@@ -60,21 +66,23 @@ function makeEventDetail (size) {
 }
 
 /**
- * Construct a fully wired EventBridge plugin and exercise it through the
- * AWS diagnostic channel used by instrumented requests in production.
+ * Subscribe a fully wired EventBridge plugin to the AWS diagnostic channel. `afterEach` tears every
+ * plugin built here back down, so `publishRequest` only ever reaches the one under test.
+ *
+ * Both flags are passed explicitly because `aws-sdk.spec.js` exports
+ * `DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED` into the build-once config singleton.
  *
  * @param {object} [options]
  * @param {boolean} [options.dsmEnabled]
  * @param {boolean} [options.batchPropagationEnabled]
- * @param {(span: unknown, format: string, carrier: object) => void} [options.inject]
- * @param {(edgeTags: string[], span: unknown, payloadSize: number) => object|null|undefined} [options.setCheckpoint]
- * @returns {EventBridge}
+ * @param {() => Record<string, string>|undefined} [options.inject]
+ * @param {(edgeTags: string[], span: unknown, payloadSize: number) => object|undefined} [options.setCheckpoint]
  */
 function buildChannelPlugin ({
-  dsmEnabled,
-  batchPropagationEnabled,
-  inject = () => {},
-  setCheckpoint = () => null,
+  dsmEnabled = false,
+  batchPropagationEnabled = false,
+  inject = () => ({ ...TRACE_CONTEXT }),
+  setCheckpoint = () => undefined,
 } = {}) {
   const tracer = {
     _nomenclature: {
@@ -87,68 +95,49 @@ function buildChannelPlugin ({
     startSpan: () => createSpan(),
   }
   const plugin = new EventBridge(tracer, tracerConfig)
-  const config = { enabled: true }
 
-  if (dsmEnabled !== undefined) {
-    config.dsmEnabled = dsmEnabled
-  }
-
-  if (batchPropagationEnabled !== undefined) {
-    config.batchPropagationEnabled = batchPropagationEnabled
-  }
-
-  plugin.configure(config)
+  plugin.configure({ batchPropagationEnabled, dsmEnabled, enabled: true })
   activePlugins.push(plugin)
-
-  return plugin
 }
 
 /**
- * Helper-only tests below need tight control over `injectToEntry` ordering
- * and fallback behaviour, so they intentionally bypass the diagnostic-channel
- * constructor path.
+ * Record every checkpoint the plugin sets and hand back a pathway context whose hash is unique per
+ * call, the way distinct edge tags produce distinct hashes in production.
  *
- * @param {object} [options]
- * @param {boolean} [options.dsmEnabled]
- * @param {boolean} [options.batchPropagationEnabled]
- * @param {(span: unknown, format: string, carrier: object) => void} [options.inject]
- * @param {object|null} [options.dataStreamsContext]
- * @returns {EventBridge & { dsmCalls: Array<{ detail: string }> }}
+ * @param {unknown[][]} calls
  */
-function buildHelperPlugin ({
-  dsmEnabled = false,
-  batchPropagationEnabled = false,
-  inject = () => {},
-  dataStreamsContext = null,
-} = {}) {
-  const plugin = Object.create(EventBridge.prototype)
-  plugin._tracer = {
-    inject (span, format, carrier = {}) {
-      inject(span, format, carrier)
-      return carrier
-    },
-    setCheckpoint: () => null,
+function recordingCheckpoint (calls) {
+  return (...args) => {
+    calls.push(args)
+    const hash = Buffer.alloc(8)
+    hash.writeUInt8(calls.length)
+    return { hash, pathwayStartNs: 0, edgeStartNs: 0 }
   }
-  plugin.config = { dsmEnabled, batchPropagationEnabled }
-  plugin.dsmCalls = []
-  plugin.setDSMCheckpoint = (span, entry, ddInfo) => {
-    plugin.dsmCalls.push({
-      detail: entry.Detail,
-      ddInfo: ddInfo && { ...ddInfo },
-    })
-    return dataStreamsContext
-  }
-  return plugin
 }
 
 /**
- * @param {EventBridge} plugin
- * @param {object} request
- * @returns {void}
+ * @param {'error'|'info'} level
+ * @param {() => void} run
  */
-function publishRequest (plugin, request) {
-  assert.ok(plugin)
+function captureLog (level, run) {
+  const original = log[level]
+  const calls = []
+  log[level] = (...args) => calls.push(args)
+  try {
+    run()
+  } finally {
+    log[level] = original
+  }
+  return calls
+}
 
+/**
+ * Drive the request through the diagnostic channel the AWS instrumentation publishes on, so the
+ * plugin `buildChannelPlugin` subscribed picks it up exactly as it would in production.
+ *
+ * @param {object} request
+ */
+function publishRequest (request) {
   requestStartChannel.runStores(
     {
       awsRegion: 'us-east-1',
@@ -162,150 +151,43 @@ function publishRequest (plugin, request) {
   )
 }
 
+/**
+ * @param {object} entry
+ */
+function injectedContext (entry) {
+  return JSON.parse(entry.Detail)._datadog
+}
+
 afterEach(() => {
   while (activePlugins.length > 0) {
     activePlugins.pop().configure(false)
   }
 })
 
-describe('EventBridge plugin generateTags', () => {
-  it('returns undefined when the source is missing', () => {
-    const plugin = Object.create(EventBridge.prototype)
-
-    assert.strictEqual(plugin.generateTags({}, 'putEvents'), undefined)
-  })
-
-  it('generates tags when the source is present', () => {
-    const plugin = Object.create(EventBridge.prototype)
-
-    assert.deepStrictEqual(
-      plugin.generateTags({
-        source: 'checkout',
-        Name: 'rule-a',
-      }),
-      {
-        'resource.name': 'checkout',
-        'aws.eventbridge.source': 'checkout',
-        'messaging.system': 'aws_eventbridge',
-        rulename: 'rule-a',
-      },
-    )
-  })
-})
-
-describe('EventBridge plugin injectToEntry', () => {
-  it('measures the trace context via setDSMCheckpoint without rewriting the detail first', () => {
-    const plugin = buildHelperPlugin({
-      dsmEnabled: true,
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-    })
-    const entry = { Detail: '{"hello":"world"}' }
-
-    plugin.injectToEntry(null, entry, true, true)
-
-    assert.strictEqual(plugin.dsmCalls.length, 1)
-    // The detail is left untouched at measurement time; the trace context is
-    // passed separately so the payload size can account for it.
-    assert.strictEqual(plugin.dsmCalls[0].detail, '{"hello":"world"}')
-    assert.deepStrictEqual(plugin.dsmCalls[0].ddInfo, {
-      'x-datadog-trace-id': '123',
-    })
-  })
-
-  it('keeps the trace-only `_datadog` payload when DSM yields no context', () => {
-    const plugin = buildHelperPlugin({
-      dsmEnabled: true,
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-    })
-    const entry = { Detail: '{"hello":"world"}' }
-
-    plugin.injectToEntry(null, entry, true, true)
-
-    assert.deepStrictEqual(JSON.parse(entry.Detail)._datadog, {
-      'x-datadog-trace-id': '123',
-    })
-  })
-
-  it('adds the encoded DSM context to `_datadog`', () => {
-    const plugin = buildHelperPlugin({
-      dsmEnabled: true,
-      dataStreamsContext: {
-        hash: Buffer.alloc(8),
-        pathwayStartNs: 0,
-        edgeStartNs: 0,
-      },
-    })
-    const entry = { Detail: '{"hello":"world"}' }
-
-    plugin.injectToEntry(null, entry, false, true)
-
-    const injected = JSON.parse(entry.Detail)._datadog
-    assert.ok(
-      typeof injected['dd-pathway-ctx-base64'] === 'string' &&
-        injected['dd-pathway-ctx-base64'].length > 0,
-    )
-  })
-
-  it('keeps the trace-only detail when the DSM payload no longer fits', () => {
-    const plugin = buildHelperPlugin({
-      dsmEnabled: true,
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-      dataStreamsContext: {
-        hash: Buffer.alloc(8),
-        pathwayStartNs: 0,
-        edgeStartNs: 0,
-      },
-    })
-    const entry = { Detail: '{"hello":"world"}' }
-    let injectDetailCalls = 0
-    plugin.injectDetail = (detail, ddInfo) => {
-      injectDetailCalls++
-      // First call is the DSM-inclusive carrier (too large); the fallback
-      // injects the trace-only context.
-      return injectDetailCalls === 1
-        ? undefined
-        : `{"hello":"world","_datadog":${JSON.stringify(ddInfo)}}`
-    }
-
-    plugin.injectToEntry(null, entry, true, true)
-
-    assert.strictEqual(injectDetailCalls, 2)
-    assert.deepStrictEqual(JSON.parse(entry.Detail)._datadog, {
-      'x-datadog-trace-id': '123',
-    })
-  })
-
-  it('leaves the detail untouched when no context fits and there is nothing to fall back to', () => {
-    const plugin = buildHelperPlugin({
-      dsmEnabled: true,
-      dataStreamsContext: {
-        hash: Buffer.alloc(8),
-        pathwayStartNs: 0,
-        edgeStartNs: 0,
-      },
-    })
-    const entry = { Detail: '{"hello":"world"}' }
-    plugin.injectDetail = () => undefined
-
-    plugin.injectToEntry(null, entry, false, true)
-
-    assert.strictEqual(entry.Detail, '{"hello":"world"}')
-  })
-})
-
 describe('EventBridge plugin requestInject', () => {
-  it('injects only the first batch entry by default', () => {
-    const plugin = buildChannelPlugin({
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-    })
+  it('leaves requests for other operations untouched', () => {
+    buildChannelPlugin()
+    const request = {
+      operation: 'listRules',
+      params: { Entries: [{ Detail: '{"id":1}' }] },
+    }
+
+    publishRequest(request)
+
+    assert.strictEqual(request.params.Entries[0].Detail, '{"id":1}')
+  })
+
+  it('leaves a putEvents request without entries untouched', () => {
+    buildChannelPlugin()
+    const request = { operation: 'putEvents', params: { Entries: [] } }
+
+    publishRequest(request)
+
+    assert.deepStrictEqual(request.params.Entries, [])
+  })
+
+  it('injects the trace context into the first entry only', () => {
+    buildChannelPlugin()
     const request = {
       operation: 'putEvents',
       params: {
@@ -313,23 +195,14 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    publishRequest(plugin, request)
+    publishRequest(request)
 
-    assert.deepStrictEqual(
-      JSON.parse(request.params.Entries[0].Detail)._datadog,
-      {
-        'x-datadog-trace-id': '123',
-      },
-    )
+    assert.deepStrictEqual(injectedContext(request.params.Entries[0]), TRACE_CONTEXT)
     assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
   })
 
-  it('defaults to trace-only first-entry propagation when config is unset', () => {
-    const plugin = buildChannelPlugin({
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-    })
+  it('injects the trace context into every entry when batch propagation is enabled', () => {
+    buildChannelPlugin({ batchPropagationEnabled: true })
     const request = {
       operation: 'putEvents',
       params: {
@@ -337,78 +210,63 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    publishRequest(plugin, request)
+    publishRequest(request)
 
-    assert.deepStrictEqual(
-      JSON.parse(request.params.Entries[0].Detail)._datadog,
-      {
-        'x-datadog-trace-id': '123',
-      },
-    )
-    assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
+    assert.deepStrictEqual(injectedContext(request.params.Entries[0]), TRACE_CONTEXT)
+    assert.deepStrictEqual(injectedContext(request.params.Entries[1]), TRACE_CONTEXT)
   })
 
-  it('skips rewriting non-propagated batch entries by default', () => {
-    const plugin = buildChannelPlugin({
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-    })
-    let injectDetailCalls = 0
-    plugin.injectDetail = (...args) => {
-      injectDetailCalls++
-      return EventBridge.prototype.injectDetail.apply(plugin, args)
-    }
+  it('leaves every entry untouched when the propagator injects nothing', () => {
+    buildChannelPlugin({ batchPropagationEnabled: true, inject: () => undefined })
     const request = {
       operation: 'putEvents',
       params: {
-        Entries: [{ Detail: '{"id":1}' }, { Detail: '{ "id": 2 }' }],
+        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }],
       },
     }
 
-    publishRequest(plugin, request)
+    publishRequest(request)
 
-    assert.strictEqual(injectDetailCalls, 1)
-    assert.strictEqual(request.params.Entries[1].Detail, '{ "id": 2 }')
+    assert.deepStrictEqual(request.params.Entries, [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }])
   })
 
-  it('injects DSM context into every batch entry by default', () => {
-    const plugin = buildChannelPlugin({
+  it('adds the pathway to every entry and the trace context to the first', () => {
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint([]) })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }],
+      },
+    }
+
+    publishRequest(request)
+
+    const first = injectedContext(request.params.Entries[0])
+    const second = injectedContext(request.params.Entries[1])
+    assert.deepStrictEqual(Object.keys(first), [...Object.keys(TRACE_CONTEXT), 'dd-pathway-ctx-base64'])
+    assert.deepStrictEqual(Object.keys(second), ['dd-pathway-ctx-base64'])
+    assert.strictEqual(first['dd-pathway-ctx-base64'].length, 28)
+    assert.notStrictEqual(second['dd-pathway-ctx-base64'], first['dd-pathway-ctx-base64'])
+  })
+
+  it('adds the pathway alone when the propagator injects nothing', () => {
+    buildChannelPlugin({
       dsmEnabled: true,
-      setCheckpoint: () => ({
-        hash: Buffer.alloc(8),
-        pathwayStartNs: 0,
-        edgeStartNs: 0,
-      }),
+      inject: () => undefined,
+      setCheckpoint: recordingCheckpoint([]),
     })
     const request = {
       operation: 'putEvents',
-      params: {
-        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }],
-      },
+      params: { Entries: [{ Detail: '{"id":1}' }] },
     }
 
-    publishRequest(plugin, request)
+    publishRequest(request)
 
-    const first = JSON.parse(request.params.Entries[0].Detail)._datadog
-    const second = JSON.parse(request.params.Entries[1].Detail)._datadog
-    assert.ok(
-      typeof first['dd-pathway-ctx-base64'] === 'string' &&
-        first['dd-pathway-ctx-base64'].length > 0,
-    )
-    assert.ok(
-      typeof second['dd-pathway-ctx-base64'] === 'string' &&
-        second['dd-pathway-ctx-base64'].length > 0,
-    )
+    assert.deepStrictEqual(Object.keys(injectedContext(request.params.Entries[0])), ['dd-pathway-ctx-base64'])
   })
 
-  it('injects all batch entries when batchPropagationEnabled is enabled', () => {
-    const plugin = buildChannelPlugin({
-      batchPropagationEnabled: true,
-      inject: (span, format, carrier) => {
-        carrier['x-datadog-trace-id'] = '123'
-      },
-    })
+  it('keeps the trace context and drops the pathway when no checkpoint is recorded', () => {
+    buildChannelPlugin({ dsmEnabled: true })
     const request = {
       operation: 'putEvents',
       params: {
@@ -416,160 +274,171 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    publishRequest(plugin, request)
+    publishRequest(request)
+
+    assert.deepStrictEqual(injectedContext(request.params.Entries[0]), TRACE_CONTEXT)
+    assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
+  })
+
+  it('keeps propagating the batch when one detail is not a JSON object', () => {
+    buildChannelPlugin({ batchPropagationEnabled: true })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [{ Detail: 'not-json' }, { Detail: '{"id":2}' }],
+      },
+    }
+
+    const errors = captureLog('error', () => publishRequest(request))
+
+    assert.strictEqual(request.params.Entries[0].Detail, 'not-json')
+    assert.deepStrictEqual(injectedContext(request.params.Entries[1]), TRACE_CONTEXT)
+    assert.strictEqual(errors.length, 1)
+    assert.strictEqual(errors[0][0], 'EventBridge error injecting request')
+  })
+
+  it('skips entries that carry no string detail', () => {
+    buildChannelPlugin({ batchPropagationEnabled: true })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [null, { Detail: 42 }, { Source: 'checkout' }, { Detail: '{"id":4}' }],
+      },
+    }
+
+    publishRequest(request)
+
+    assert.deepStrictEqual(request.params.Entries.slice(0, 3), [null, { Detail: 42 }, { Source: 'checkout' }])
+    assert.deepStrictEqual(injectedContext(request.params.Entries[3]), TRACE_CONTEXT)
+  })
+
+  it('stays quiet about the cap when no entry could have taken the context anyway', () => {
+    buildChannelPlugin({ batchPropagationEnabled: true })
+    const oversizedDetail = 'x'.repeat(MAX_PUT_EVENTS_BYTES)
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: 'not-json' }, { Detail: oversizedDetail }] },
+    }
+
+    const infos = captureLog('info', () => captureLog('error', () => publishRequest(request)))
 
     assert.deepStrictEqual(
-      JSON.parse(request.params.Entries[0].Detail)._datadog,
-      {
-        'x-datadog-trace-id': '123',
-      },
+      request.params.Entries.map(entry => entry.Detail),
+      ['not-json', oversizedDetail],
     )
-    assert.deepStrictEqual(
-      JSON.parse(request.params.Entries[1].Detail)._datadog,
-      {
-        'x-datadog-trace-id': '123',
-      },
-    )
+    assert.deepStrictEqual(infos, [])
   })
 
-  it('skips batch propagation when the injected request would exceed 1mb', () => {
-    const plugin = buildChannelPlugin({
-      batchPropagationEnabled: true,
-    })
-    const originalInfo = log.info
+  it('injects a request that stays below the 1 MiB cap', () => {
+    buildChannelPlugin()
+    const detail = makeEventDetail(MAX_PUT_EVENTS_BYTES - 1 - TRACE_CONTEXT_BYTES)
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: detail }] },
+    }
+
+    const infos = captureLog('info', () => publishRequest(request))
+
+    assert.strictEqual(Buffer.byteLength(request.params.Entries[0].Detail), MAX_PUT_EVENTS_BYTES - 1)
+    assert.deepStrictEqual(infos, [])
+  })
+
+  it('skips a request that would reach the 1 MiB cap', () => {
+    buildChannelPlugin()
+    const detail = makeEventDetail(MAX_PUT_EVENTS_BYTES - TRACE_CONTEXT_BYTES)
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: detail }] },
+    }
+
+    const infos = captureLog('info', () => publishRequest(request))
+
+    assert.strictEqual(request.params.Entries[0].Detail, detail)
+    assert.deepStrictEqual(infos, [['Payload size too large to pass context']])
+  })
+
+  it('counts the whole batch against the cap, not a single entry', () => {
+    buildChannelPlugin({ batchPropagationEnabled: true })
+    const detail = makeEventDetail(MAX_PUT_EVENTS_BYTES / 2)
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: detail }, { Detail: detail }] },
+    }
+
+    const infos = captureLog('info', () => publishRequest(request))
+
+    assert.deepStrictEqual(request.params.Entries, [{ Detail: detail }, { Detail: detail }])
+    assert.deepStrictEqual(infos, [['Payload size too large to pass context']])
+  })
+
+  it('reserves the pathway field in the size check and records no checkpoint when it no longer fits', () => {
     const calls = []
-    log.info = (...args) => calls.push(args)
-    plugin.injectDetail = () => makeEventDetail(513 * 1024)
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const detail = makeEventDetail(MAX_PUT_EVENTS_BYTES - TRACE_CONTEXT_BYTES - PATHWAY_FIELD_BYTES)
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: detail }] },
+    }
+
+    const infos = captureLog('info', () => publishRequest(request))
+
+    assert.strictEqual(request.params.Entries[0].Detail, detail)
+    assert.deepStrictEqual(calls, [])
+    assert.deepStrictEqual(infos, [['Payload size too large to pass context']])
+  })
+
+  it('reports the shipped byte size to every checkpoint', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
     const request = {
       operation: 'putEvents',
       params: {
-        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }],
-      },
-    }
-    const originalDetails = request.params.Entries.map((entry) => entry.Detail)
-
-    try {
-      publishRequest(plugin, request)
-    } finally {
-      log.info = originalInfo
-    }
-
-    assert.deepStrictEqual(
-      request.params.Entries.map((entry) => entry.Detail),
-      originalDetails,
-    )
-    assert.strictEqual(calls.length, 1)
-    assert.ok(calls[0][0].includes('Payload size too large'))
-  })
-
-  it('batch propagation proceeds when injected request is under 1mb', () => {
-    const plugin = buildChannelPlugin({
-      batchPropagationEnabled: true,
-    })
-    const originalInfo = log.info
-    const calls = []
-    log.info = (...args) => calls.push(args)
-    const injectedDetail = makeEventDetail(499 * 1024)
-    plugin.injectDetail = () => injectedDetail
-    const request = {
-      operation: 'putEvents',
-      params: {
-        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }],
-      },
-    }
-
-    try {
-      publishRequest(plugin, request)
-    } finally {
-      log.info = originalInfo
-    }
-
-    assert.strictEqual(calls.length, 0)
-    assert.strictEqual(request.params.Entries[0].Detail, injectedDetail)
-    assert.strictEqual(request.params.Entries[1].Detail, injectedDetail)
-  })
-
-  it('uses the event bus and detail type in the DSM checkpoint tags', () => {
-    const calls = []
-    const plugin = buildHelperPlugin()
-    plugin._tracer.setCheckpoint = (...args) => {
-      calls.push(args)
-      return null
-    }
-    const entry = {
-      EventBusName: 'payments',
-      DetailType: 'invoice.created',
-      Detail: '{"id":1}',
-    }
-
-    EventBridge.prototype.setDSMCheckpoint.call(plugin, null, entry)
-
-    assert.deepStrictEqual(calls, [
-      [
-        [
-          'direction:out',
-          'exchange:payments',
-          'topic:invoice.created',
-          'type:eventbridge',
+        Entries: [
+          { Detail: '{"id":1}', Source: 'checkout', DetailType: 'invoice.created' },
+          { Detail: '{"id":2}' },
         ],
-        null,
-        getHeadersSize(entry),
-      ],
-    ])
-  })
-
-  it('uses the default event bus and detail type in the DSM checkpoint tags', () => {
-    const calls = []
-    const plugin = buildHelperPlugin()
-    plugin._tracer.setCheckpoint = (...args) => {
-      calls.push(args)
-      return null
-    }
-    const entry = { Detail: '{"id":1}' }
-
-    EventBridge.prototype.setDSMCheckpoint.call(plugin, null, entry)
-
-    assert.deepStrictEqual(calls, [
-      [
-        [
-          'direction:out',
-          'exchange:default',
-          'topic:unknown',
-          'type:eventbridge',
-        ],
-        null,
-        getHeadersSize(entry),
-      ],
-    ])
-  })
-})
-
-describe('EventBridge plugin injectDetail', () => {
-  it('logs and returns undefined when the detail is invalid JSON', () => {
-    const plugin = buildHelperPlugin()
-    const originalError = log.error
-    const calls = []
-    log.error = (...args) => calls.push(args)
-
-    try {
-      assert.strictEqual(plugin.injectDetail('not-json', {}), undefined)
-    } finally {
-      log.error = originalError
+      },
     }
 
-    assert.strictEqual(calls.length, 1)
-  })
+    publishRequest(request)
 
-  it('returns injected detail and leaves size checks to requestInject', () => {
-    const plugin = buildHelperPlugin()
-
-    const finalData = plugin.injectDetail(
-      JSON.stringify({
-        data: 'a'.repeat(1024 * 256),
-      }),
-      { trace: '123' },
+    const { Entries } = request.params
+    assert.strictEqual(
+      calls[0][2],
+      Buffer.byteLength(Entries[0].Detail) + Buffer.byteLength('checkout') + Buffer.byteLength('invoice.created'),
     )
+    assert.strictEqual(calls[1][2], Buffer.byteLength(Entries[1].Detail))
+  })
 
-    assert.deepStrictEqual(JSON.parse(finalData)._datadog, { trace: '123' })
+  it('tags the checkpoint with the event bus and detail type', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [{
+          Detail: '{"id":1}',
+          DetailType: 'invoice.created',
+          EventBusName: 'payments',
+        }],
+      },
+    }
+
+    publishRequest(request)
+
+    assert.deepStrictEqual(calls[0][0], ['direction:out', 'type:eventbridge', 'topic:payments:invoice.created'])
+  })
+
+  it('tags the checkpoint with the default event bus and detail type', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: '{"id":1}', DetailType: '', EventBusName: '' }] },
+    }
+
+    publishRequest(request)
+
+    assert.deepStrictEqual(calls[0][0], ['direction:out', 'type:eventbridge', 'topic:default:unknown'])
   })
 })

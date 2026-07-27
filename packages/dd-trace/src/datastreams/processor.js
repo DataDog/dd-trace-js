@@ -8,20 +8,13 @@ const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
-const { CONTEXT_PROPAGATION_KEY_BASE64, computePathwayHash } = require('./pathway')
+const { computePathwayHash } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
-const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
+const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero, PATHWAY_FIELD_BYTES } = require('./size')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
-
-// A direction:out checkpoint estimates the size cost of the header the
-// producer plugin will inject. The pathway context is always 20 binary
-// bytes, encoded as 28 base64 chars; together with the header key and
-// JSON framing (matching the prior `JSON.stringify({key: value})` byte
-// count minus 1), this is a fixed value.
-const PATHWAY_HEADER_BYTES = CONTEXT_PROPAGATION_KEY_BASE64.length + 28 + 6
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -344,7 +337,7 @@ class DataStreamsProcessor {
       closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
-      payloadSize += PATHWAY_HEADER_BYTES
+      payloadSize += PATHWAY_FIELD_BYTES
     }
     const checkpoint = {
       currentTimestamp: nowNs,

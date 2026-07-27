@@ -25,10 +25,12 @@ const KNOWN_CHANNEL_SUFFIXES = new Set([
   'bedrockruntime',
 ])
 
-const CHANNEL_SUFFIX_ALIASES = {
-  cloudwatchevents: 'eventbridge',
-  events: 'eventbridge',
-}
+// Older SDK clients report EventBridge under its CloudWatch Events name or its `events` endpoint
+// prefix; both share the EventBridge channels.
+const CHANNEL_SUFFIX_ALIASES = new Map([
+  ['cloudwatchevents', 'eventbridge'],
+  ['events', 'eventbridge'],
+])
 
 /**
  * @typedef {object} ChannelBag
@@ -319,7 +321,8 @@ function addResponse (ctx, error, result) {
 function getChannelSuffix (name) {
   // some resource identifiers have spaces between ex: bedrock runtime
   name = String(name).replaceAll(' ', '')
-  return CHANNEL_SUFFIX_ALIASES[name] || (KNOWN_CHANNEL_SUFFIXES.has(name) ? name : 'default')
+  if (KNOWN_CHANNEL_SUFFIXES.has(name)) return name
+  return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'default'
 }
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {

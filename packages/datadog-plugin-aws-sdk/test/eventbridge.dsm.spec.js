@@ -7,7 +7,7 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('EventBridge', function () {
   this.timeout(10000)
@@ -15,7 +15,7 @@ describe('EventBridge', function () {
 
   withAwsSdkVersions((version, moduleName) => {
     let eventbridge
-    let expectedProducerHash
+    let expectedHashes
 
     const eventbridgeClientName = moduleName === '@aws-sdk/smithy-client'
       ? '@aws-sdk/client-eventbridge'
@@ -33,13 +33,16 @@ describe('EventBridge', function () {
       tracer.use('aws-sdk', { eventbridge: { dsmEnabled: true } })
 
       const phash = propagationHash.getHash()
-      expectedProducerHash = computePathwayHash(
-        'test',
-        'tester',
-        ['direction:out', 'exchange:default', 'topic:invoice.created', 'type:eventbridge'],
-        ENTRY_PARENT_HASH,
-        phash
-      ).readBigUInt64LE(0).toString()
+      expectedHashes = new Map(['invoice.created', 'invoice.paid'].map(detailType => [
+        detailType,
+        computePathwayHash(
+          'test',
+          'tester',
+          ['direction:out', 'type:eventbridge', `topic:default:${detailType}`],
+          ENTRY_PARENT_HASH,
+          phash
+        ).readBigUInt64LE(0).toString(),
+      ]))
     })
 
     after(() => {
@@ -52,10 +55,40 @@ describe('EventBridge', function () {
       agent.reload('aws-sdk', { eventbridge: { dsmEnabled: true } }, { dsmEnabled: true })
     })
 
-    it('injects the expected DSM pathway hash during EventBridge putEvents', done => {
+    it('injects the expected DSM pathway hash during EventBridge putEvents', async () => {
+      await Promise.all([
+        expectPutEventsPathwayHash(expectedHashes.get('invoice.created')),
+        callViaPromise(eventbridge, 'putEvents', {
+          Entries: [{
+            Detail: '{"id":1}',
+            DetailType: 'invoice.created',
+            Source: 'checkout',
+          }],
+        }),
+      ])
+    })
+
+    it('checkpoints every entry of a batch under its own detail type', async () => {
+      await Promise.all([
+        // The span carries the hash of the checkpoint set last, so a batch that only checkpointed
+        // its first entry would report `invoice.created` here.
+        expectPutEventsPathwayHash(expectedHashes.get('invoice.paid')),
+        callViaPromise(eventbridge, 'putEvents', {
+          Entries: [
+            { Detail: '{"id":1}', DetailType: 'invoice.created', Source: 'checkout' },
+            { Detail: '{"id":2}', DetailType: 'invoice.paid', Source: 'checkout' },
+          ],
+        }),
+      ])
+    })
+
+    /**
+     * @param {string} expectedHash
+     */
+    function expectPutEventsPathwayHash (expectedHash) {
       let putEventsSpanMeta = {}
 
-      agent.assertSomeTraces(traces => {
+      return agent.assertSomeTraces(traces => {
         const span = traces[0][0]
 
         if (span.resource.startsWith('putEvents')) {
@@ -63,20 +96,10 @@ describe('EventBridge', function () {
         }
 
         assertObjectContains(putEventsSpanMeta, {
-          'pathway.hash': expectedProducerHash,
+          'pathway.hash': expectedHash,
         })
-      }).then(done, done)
-
-      eventbridge.putEvents({
-        Entries: [{
-          Detail: '{"id":1}',
-          DetailType: 'invoice.created',
-          Source: 'checkout',
-        }],
-      }, err => {
-        if (err) return done(err)
       })
-    })
+    }
 
     function getEventBridgeClient () {
       const params = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }

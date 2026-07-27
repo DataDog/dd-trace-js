@@ -15,11 +15,14 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // stub through the underscore field so the public access path stays intact.
 const fakeSpan = {}
 const fakeTracer = {
+  // Mirrors TextMapPropagator: allocate the carrier when the caller omits one, and hand it back.
   inject (span, format, carrier) {
+    carrier ??= {}
     carrier['x-datadog-trace-id'] = '1234567890'
     carrier['x-datadog-parent-id'] = '987654321'
     carrier['x-datadog-sampling-priority'] = '1'
     carrier['x-datadog-tags'] = '_dd.p.dm=-1,_dd.p.tid=1234567890abcdef'
+    return carrier
   },
 }
 
