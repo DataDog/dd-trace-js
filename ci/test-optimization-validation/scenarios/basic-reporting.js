@@ -58,7 +58,7 @@ async function runBasicReporting ({ framework, out, options }) {
       selector,
       settingsLoadedFromCache: run.offline.inputs.settings?.status === 'loaded',
     }
-    evidence.foundationalReportingEstablished = evidence.foundationalReportingEstablished && selector.verified
+    evidence.foundationalReportingEstablished &&= selector.verified
 
     if (run.result.timedOut) {
       return inconclusive(

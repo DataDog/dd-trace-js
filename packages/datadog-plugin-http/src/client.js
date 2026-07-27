@@ -10,6 +10,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const log = require('../../dd-trace/src/log')
+const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -32,7 +33,7 @@ class HttpClientPlugin extends ClientPlugin {
     // A URL object (e.g. from the fetch integration) carries the query in
     // `options.search`, not `options.path`; keep it so url.full retains the query.
     const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
-    const path = pathname ? pathname.split(/[?#]/)[0] : '/'
+    const path = pathname ? stripQueryAndFragment(pathname) : '/'
     const uri = `${base}${path}`
 
     const allowed = this.config.filter(uri)
