@@ -169,7 +169,24 @@ for (const cucumberWorkerVersion of ['13.1.0', '13.2.0']) {
       await receiver.stop()
     })
 
-    it('reports tests from parallel workers', async () => {
+    it('retries new tests from parallel workers', async () => {
+      const numRetries = 3
+
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': numRetries,
+          },
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        cucumber: {
+          [`${featuresPath}farewell.feature`]: ['Say farewell'],
+        },
+      })
+
       childProcess = exec(
         './node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature --parallel 2',
         {
@@ -186,15 +203,32 @@ for (const cucumberWorkerVersion of ['13.1.0', '13.2.0']) {
             .flatMap(({ payload }) => payload.events)
             .filter(event => event.type === 'test')
 
-          assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
-            `${featuresPath}farewell.feature.Say farewell`,
-            `${featuresPath}farewell.feature.Say whatever`,
-          ])
+          const farewellTests = testEvents.filter(({ content }) =>
+            content.resource === `${featuresPath}farewell.feature.Say farewell`
+          )
+          const newTests = testEvents.filter(({ content }) =>
+            content.resource === `${featuresPath}farewell.feature.Say whatever`
+          )
+
+          assert.strictEqual(farewellTests.length, 1)
+          assert.strictEqual(newTests.length, numRetries + 1)
+
           for (const { content: test } of testEvents) {
             assert.strictEqual(test.name, 'cucumber.test')
             assert.strictEqual(test.meta[CUCUMBER_IS_PARALLEL], 'true')
             assert.strictEqual(test.meta[TEST_FRAMEWORK], 'cucumber')
             assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+
+          for (const { content: test } of newTests) {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          }
+
+          const retriedTests = newTests.filter(({ content }) => content.meta[TEST_IS_RETRY] === 'true')
+
+          assert.strictEqual(retriedTests.length, numRetries)
+          for (const { content: test } of retriedTests) {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
           }
         }
       )
