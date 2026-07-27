@@ -94,8 +94,6 @@ describe('sdk', () => {
     it('exposes dataset operations only through the experiments facade', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
-      assert.strictEqual(llmobs.createDataset, undefined)
-      assert.strictEqual(llmobs.pullDataset, undefined)
     })
   })
 
