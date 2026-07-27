@@ -17,7 +17,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('google-genai', ['@google/genai'], version => {
     useSandbox([
@@ -30,8 +29,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'GoogleGenAI', undefined, '@google/genai', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'GoogleGenAI',
+      packageName: '@google/genai',
+      defaultExport: false,
+      namedExports: ['GoogleGenAI'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -39,7 +42,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['destructure', 'star']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

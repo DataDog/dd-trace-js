@@ -353,6 +353,7 @@
 /integration-tests/coverage-fixtures/ @DataDog/lang-platform-js
 /integration-tests/crashtracking/ @DataDog/lang-platform-js
 /integration-tests/helpers/ @DataDog/lang-platform-js
+/integration-tests/import-variants.spec.js @DataDog/lang-platform-js
 /integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/memory-leak/ @DataDog/lang-platform-js
@@ -370,6 +371,8 @@
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/client-library-headers.js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/proxy.js @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js

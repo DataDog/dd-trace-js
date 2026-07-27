@@ -416,6 +416,7 @@ describe('test optimization CI wiring validation', () => {
 
   it('records when NODE_OPTIONS reaches a wrapper but not the test runner', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const packageManagerScript = path.join(out, 'pnpm.cjs')
     const nxScript = path.join(out, 'nx.js')
     const jestScript = path.join(out, 'jest.js')
     fs.writeFileSync(jestScript, 'console.log("1 passing")\n')
@@ -427,6 +428,11 @@ describe('test optimization CI wiring validation', () => {
         env,
         stdio: 'inherit'
       })
+      process.exit(child.status)
+    `)
+    fs.writeFileSync(packageManagerScript, `
+      const { spawnSync } = require('node:child_process')
+      const child = spawnSync(process.execPath, [${JSON.stringify(nxScript)}], { stdio: 'inherit' })
       process.exit(child.status)
     `)
 
@@ -445,7 +451,7 @@ describe('test optimization CI wiring validation', () => {
           },
           ciWiringCommand: {
             cwd: out,
-            argv: [process.execPath, nxScript],
+            argv: [process.execPath, packageManagerScript],
           },
           preflight: {
             ran: true,
@@ -465,7 +471,11 @@ describe('test optimization CI wiring validation', () => {
       assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
       assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
       assert.deepStrictEqual(result.evidence.initializationProbe.wrapperSignals.map(signal => signal.name), ['nx'])
-      assert.match(result.diagnosis, /NODE_OPTIONS probe reached nx/)
+      assert.deepStrictEqual(
+        result.evidence.initializationProbe.packageManagerSignals.map(signal => signal.name),
+        ['pnpm']
+      )
+      assert.match(result.diagnosis, /NODE_OPTIONS probe reached nx and pnpm/)
       assert.match(result.diagnosis, /did not appear to reach a Jest process/)
       assert.strictEqual(result.evidence.monorepoFindings[0].id, 'nx-executor-env-forwarding')
       assert.strictEqual(result.evidence.monorepoFindings.at(-1).id, 'node-options-not-observed-in-test-runner')

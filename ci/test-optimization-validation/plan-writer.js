@@ -136,7 +136,9 @@ function formatExecutionPlan ({
       'preloads are shown as package names; the validator resolves them from the installed `dd-trace` package.',
     ''
   )
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+  for (const framework of manifest.frameworks) {
+    if (framework.status !== 'runnable') continue
+
     appendFrameworkExecutions(
       lines,
       framework,
@@ -273,7 +275,9 @@ function formatApprovalSummary ({
   }
 
   lines.push('', '## Commands', '')
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+  for (const framework of manifest.frameworks) {
+    if (framework.status !== 'runnable') continue
+
     appendApprovalSummaryFramework(lines, framework, requestedScenario, repositoryRoot)
   }
 
@@ -490,7 +494,9 @@ function getApprovalSummaryPath (out) {
  * @returns {void}
  */
 function assertPlannedExecutablesAvailable (manifest, requestedScenario) {
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+  for (const framework of manifest.frameworks) {
+    if (framework.status !== 'runnable') continue
+
     const plannedCommands = getPlannedCommands(framework, requestedScenario)
     for (const plannedCommand of plannedCommands) {
       const executable = getUnavailableExecutable(plannedCommand.command)
@@ -1016,7 +1022,9 @@ function formatFrameworkLabel (framework, repositoryRoot) {
  */
 function appendCommandIntegrity (lines, manifest, requestedScenario) {
   const executables = new Map()
-  for (const framework of manifest.frameworks.filter(entry => entry.status === 'runnable')) {
+  for (const framework of manifest.frameworks) {
+    if (framework.status !== 'runnable') continue
+
     for (const { command } of getPlannedCommands(framework, requestedScenario)) {
       const executable = getApprovedExecutable(command)
       if (executable) {

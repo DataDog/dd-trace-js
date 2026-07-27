@@ -46,6 +46,10 @@ const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
+const {
+  getChannelPromise,
+  publishWithCompletion,
+} = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -1971,6 +1975,9 @@ function shouldFinishBailTestSession (globalConfig, results) {
   return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
 }
 
+/**
+ * @param {Record<string, unknown> & { onDone?: () => void }} payload
+ */
 async function waitForTestSessionFinish (payload) {
   if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
 
@@ -1978,8 +1985,9 @@ async function waitForTestSessionFinish (payload) {
 
   let timeoutId
 
+  let onDone
   const flushPromise = new Promise((resolve) => {
-    payload.onDone = () => {
+    onDone = () => {
       clearTimeout(timeoutId)
       resolve()
     }
@@ -1992,7 +2000,7 @@ async function waitForTestSessionFinish (payload) {
     timeoutId.unref?.()
   })
 
-  testSessionFinishCh.publish(payload)
+  publishWithCompletion(testSessionFinishCh, payload, onDone)
 
   const waitingResult = await Promise.race([flushPromise, timeoutPromise])
 
@@ -2155,12 +2163,6 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
 
     return scheduleTests.apply(this, arguments)
   }
-}
-
-function getChannelPromise (channelToPublishTo, payload = {}) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ ...payload, onDone: resolve })
-  })
 }
 
 function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
@@ -2517,9 +2519,7 @@ function getCliWrapper (isNewJestVersion) {
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
-        await new Promise((resolve) => {
-          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
-        })
+        await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
@@ -2537,6 +2537,10 @@ function shouldWaitForTestSuiteFinish (environment) {
   return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
 }
 
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {boolean} waitForFinish
+ */
 function publishTestSuiteFinish (payload, waitForFinish) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
@@ -2545,12 +2549,9 @@ function publishTestSuiteFinish (payload, waitForFinish) {
     return
   }
 
-  return new Promise(resolve => {
-    testSuiteFinishCh.publish({
-      ...payload,
-      waitForFinish,
-      onDone: resolve,
-    })
+  return getChannelPromise(testSuiteFinishCh, {
+    ...payload,
+    waitForFinish,
   })
 }
 

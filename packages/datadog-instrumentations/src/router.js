@@ -86,26 +86,36 @@ function createLayerDispatchWrappers (name) {
   const finishChannel = channel(`apm:${name}:middleware:finish`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
+  const repeatChannel = channel(`apm:${name}:middleware:repeat`)
   // Bound per name so express and a bare router keep independent guards.
   const publishError = createErrorPublisher(errorChannel)
 
-  function wrapNext (req, originalNext) {
+  /**
+   * @param {import('node:http').IncomingMessage} req
+   * @param {string | undefined} layerName
+   * @param {(error?: unknown) => void} originalNext
+   */
+  function wrapNext (req, layerName, originalNext) {
     // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
     // router continuation so wrapCallback skips its name/length rewrite.
-    let published = false
+    let calls = 0
     return shimmer.wrapCallback(originalNext, original => function next (error) {
       // A handler that calls `next()` and then rejects (`next(); await bg()`)
       // makes the host call this continuation twice. Publish once so the second
       // pass cannot tag the already-finished span's parent with a late error.
-      if (!published) {
-        published = true
-
+      calls++
+      if (calls === 1) {
         if (error && error !== 'route' && error !== 'router') {
           publishError({ req, error })
         }
 
         nextChannel.publish({ req })
         finishChannel.publish({ req })
+      } else if (calls === 2) {
+        // Surface the repeat as a diagnostic on the still-live request span. The
+        // host cannot tell a legitimate `next(); await bg()` from a buggy double
+        // `next()`, so this only records that it happened, not that it is wrong.
+        repeatChannel.publish({ req, name: layerName, error })
       }
 
       original.apply(this, arguments)
@@ -125,7 +135,7 @@ function createLayerDispatchWrappers (name) {
       const meta = getLayerMeta(this)
       if (meta === undefined || this.handle.length > 3) return originalRequest.call(this, req, res, next)
 
-      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
+      const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
       enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, this), layer: this })
 
       try {
@@ -143,7 +153,7 @@ function createLayerDispatchWrappers (name) {
       const meta = getLayerMeta(this)
       if (meta === undefined || this.handle.length !== 4) return originalError.call(this, error, req, res, next)
 
-      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
+      const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
       enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, this), layer: this })
 
       try {
@@ -170,7 +180,7 @@ function createLayerDispatchWrappers (name) {
       const isErrorHandler = original.length === 4
       const req = args[isErrorHandler ? 1 : 0]
       const nextIndex = isErrorHandler ? 3 : 2
-      if (typeof args[nextIndex] === 'function') args[nextIndex] = wrapNext(req, args[nextIndex])
+      if (typeof args[nextIndex] === 'function') args[nextIndex] = wrapNext(req, meta.name, args[nextIndex])
 
       enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, layer), layer })
 

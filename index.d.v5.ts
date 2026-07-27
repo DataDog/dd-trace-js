@@ -156,12 +156,12 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
-   * OpenFeature Provider with Remote Config integration.
+   * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
-   * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed.
    *
-   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+   * @env DD_FEATURE_FLAGS_ENABLED
+   * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -293,6 +293,7 @@ interface Plugins {
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
+  "openai-agents": tracer.plugins.openai_agents;
   "opensearch": tracer.plugins.opensearch;
   "oracledb": tracer.plugins.oracledb;
   "playwright": tracer.plugins.playwright;
@@ -869,9 +870,9 @@ declare namespace tracer {
        */
       flaggingProvider?: {
         /**
-         * Whether to enable the feature flagging provider.
-         * Requires Remote Config to be properly configured.
-         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
+         * Legacy feature flagging provider switch.
+         * When the stable Feature Flags configuration is unset, true selects Agent Remote Config and false disables
+         * the provider.
          *
          * @default false
          * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
@@ -1732,7 +1733,7 @@ declare namespace tracer {
   /**
    * Flagging Provider (OpenFeature-compatible).
    *
-   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
@@ -3140,6 +3141,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
+     */
+    interface openai_agents extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
      */
     interface opensearch extends elasticsearch {}
@@ -4153,6 +4160,26 @@ declare namespace tracer {
        * Tool calls of the message
        */
       toolCalls?: ToolCall[],
+
+      /**
+       * Audio segments attached to the message (e.g. speech input/output)
+       */
+      audioParts?: AudioPart[],
+    }
+
+    /**
+     * Represents an audio segment attached to an LLM chat model message.
+     */
+    interface AudioPart {
+      /**
+       * The MIME type of the audio (e.g. "audio/wav", "audio/mpeg")
+       */
+      mimeType: string,
+
+      /**
+       * The audio content as a base64-encoded string
+       */
+      content: string,
     }
 
     /**

@@ -47,8 +47,6 @@ function enable (config) {
   setAgentStrategy(config, hasAgent => {
     exposuresWriter?.setEnabled(hasAgent)
   })
-
-  log.debug('OpenFeature module enabled')
 }
 
 /**

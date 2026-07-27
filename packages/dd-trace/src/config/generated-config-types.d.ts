@@ -16,6 +16,7 @@ export interface GeneratedConfig {
     DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
     DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
     DD_API_SECURITY_SAMPLE_DELAY: number;
+    DD_APPSEC_AGENTIC_ONBOARDING: string;
     DD_APPSEC_SCA_ENABLED: boolean | undefined;
     enabled: boolean | undefined;
     eventTracking: {
@@ -332,6 +333,7 @@ export interface GeneratedConfig {
   DD_TRACE_NODE_SERIALIZE_ENABLED: boolean;
   DD_TRACE_NYC_ENABLED: boolean;
   DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: string;
+  DD_TRACE_OPENAI_AGENTS_ENABLED: boolean;
   DD_TRACE_OPENAI_ENABLED: boolean;
   DD_TRACE_OPENSEARCH_ENABLED: boolean;
   DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED: boolean;
@@ -430,6 +432,13 @@ export interface GeneratedConfig {
         enabled: boolean;
       };
     };
+  };
+  featureFlags: {
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: "agentless" | "remote_config";
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
+    DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
+    DD_FEATURE_FLAGS_ENABLED: boolean;
   };
   flushInterval: number;
   flushMinSpans: number;
@@ -613,6 +622,7 @@ export interface GeneratedEnvVarConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APM_TRACING_ENABLED: boolean;
   DD_APP_KEY: string | undefined;
+  DD_APPSEC_AGENTIC_ONBOARDING: string;
   DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: string;
   DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING: string;
   DD_APPSEC_COLLECT_ALL_HEADERS: boolean;
@@ -690,6 +700,11 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: "agentless" | "remote_config";
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
+  DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
+  DD_FEATURE_FLAGS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;
@@ -1014,6 +1029,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_NODE_SERIALIZE_ENABLED: boolean;
   DD_TRACE_NYC_ENABLED: boolean;
   DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: string;
+  DD_TRACE_OPENAI_AGENTS_ENABLED: boolean;
   DD_TRACE_OPENAI_ENABLED: boolean;
   DD_TRACE_OPENSEARCH_ENABLED: boolean;
   DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED: boolean;

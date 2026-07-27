@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
 const zlib = require('node:zlib')
 const stream = require('node:stream')
@@ -44,6 +45,7 @@ describe('request', function () {
   let docker
   let maxAttempts
   let retryStubs
+  let runInNoopContext
 
   beforeEach(() => {
     log = {
@@ -64,7 +66,11 @@ describe('request', function () {
       getMaxAttempts: sinon.fake(() => maxAttempts),
       markEndpointReached: sinon.fake(),
     }
+    runInNoopContext = sinon.spy((_store, callback) => callback())
     request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
       './docker': docker,
       '../../log': log,
       './retry': {
@@ -103,6 +109,165 @@ describe('request', function () {
         assert.strictEqual(res, 'OK')
         done(err)
       })
+  })
+
+  it('does not retry when retries are disabled', (done) => {
+    maxAttempts = 5
+    const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+
+    nock('http://localhost:80')
+      .get('/path')
+      .replyWithError(error)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'GET',
+      retry: false,
+    }, (requestError) => {
+      assert.strictEqual(requestError, error)
+      sinon.assert.notCalled(retryStubs.getMaxAttempts)
+      sinon.assert.notCalled(retryStubs.getRetryDelay)
+      done()
+    })
+  })
+
+  it('allows callers to cancel a request with an AbortSignal', async () => {
+    nock('http://localhost:80')
+      .get('/path')
+      .delayConnection(1000)
+      .reply(200, 'OK')
+
+    const abortController = new AbortController()
+    /**
+     * @param {() => void} resolve
+     * @param {(error: Error) => void} reject
+     */
+    const execute = (resolve, reject) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
+
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'GET',
+        retry: false,
+        signal: abortController.signal,
+      }, onResponse)
+    }
+    const completed = new Promise(execute)
+
+    abortController.abort()
+
+    await assert.rejects(completed, { code: 'ABORT_ERR' })
+  })
+
+  it('settles once when a response is truncated', async () => {
+    /**
+     * @param {import('node:http').IncomingMessage} incoming
+     * @param {import('node:http').ServerResponse} response
+     */
+    const truncate = (incoming, response) => {
+      incoming.resume()
+      response.writeHead(200)
+      response.write('partial')
+      setImmediate(() => response.destroy())
+    }
+    const server = http.createServer(truncate)
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+
+    let callbacks = 0
+    /**
+     * @param {(error: Error | null) => void} resolve
+     */
+    const execute = (resolve) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        callbacks++
+        resolve(error)
+      }
+      request('', {
+        method: 'GET',
+        retry: false,
+        url: new URL(`http://127.0.0.1:${server.address().port}`),
+      }, onResponse)
+    }
+
+    try {
+      const error = await new Promise(execute)
+      assert.strictEqual(error.code, 'ECONNRESET')
+      assert.strictEqual(callbacks, 1)
+    } finally {
+      const closed = once(server, 'close')
+      server.close()
+      await closed
+    }
+  })
+
+  it('settles once when a response times out', async () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 200
+    response.setTimeout = sinon.spy()
+    /** @param {Error} error */
+    response.destroy = (error) => {
+      response.emit('error', error)
+      response.emit('end')
+    }
+
+    let respond
+    const requestMessage = new EventEmitter()
+    requestMessage.abort = sinon.spy()
+    requestMessage.setTimeout = sinon.spy()
+    requestMessage.write = sinon.spy()
+    requestMessage.end = () => {
+      respond(response)
+      response.emit('timeout')
+    }
+
+    /**
+     * @param {object} options
+     * @param {(response: EventEmitter) => void} onResponse
+     */
+    const createRequest = (options, onResponse) => {
+      assert.strictEqual(options.method, 'GET')
+      respond = onResponse
+      return requestMessage
+    }
+    const timeoutRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+
+    let callbacks = 0
+    /**
+     * @param {(error: Error | null) => void} resolve
+     */
+    const execute = (resolve) => {
+      /** @param {Error | null} error */
+      const onResponse = (error) => {
+        callbacks++
+        resolve(error)
+      }
+      timeoutRequest('', { method: 'GET', retry: false }, onResponse)
+    }
+
+    const error = await new Promise(execute)
+    assert.strictEqual(error.code, 'ETIMEDOUT')
+    assert.strictEqual(callbacks, 1)
   })
 
   it('should handle an http error', done => {
@@ -534,7 +699,7 @@ describe('request', function () {
         },
       })
         .post('/path')
-        .reply(200, compressedData, { 'content-encoding': 'gzip' })
+        .reply(200, compressedData, { 'content-encoding': 'GZip' })
 
       request(Buffer.from(''), {
         protocol: 'http:',

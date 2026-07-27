@@ -190,7 +190,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   }
 
   addURLParsingSubscriptions () {
-    const urlResultTaintedProperties = ['host', 'origin', 'hostname']
+    const urlResultTaintedProperties = new Set(['host', 'origin', 'hostname'])
     this.addSub(
       { channelName: 'datadog:url:parse:finish' },
       ({ input, base, parsed, isURL }) => {
@@ -212,7 +212,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:url:getter:finish' },
       (context) => {
-        if (!urlResultTaintedProperties.includes(context.property)) return
+        if (!urlResultTaintedProperties.has(context.property)) return
 
         const origRange = this._taintedURLs.get(context.urlObject)
         if (!origRange) return
