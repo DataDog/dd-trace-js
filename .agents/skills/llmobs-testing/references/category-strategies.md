@@ -1,16 +1,11 @@
-# Category-Specific Test Strategies
+# Test Strategy Per Package Shape
 
-## ⚠️ CRITICAL: Categories Are Mutually Exclusive ⚠️
-
-**YOU CANNOT MIX STRATEGIES BETWEEN CATEGORIES.**
-
-**Each category has FORBIDDEN and REQUIRED patterns. Violating these will cause test failure.**
-
----
+The strategies do not mix: each shape forbids what another requires, so a spec written against the
+wrong one fails on contract rather than on behaviour.
 
 ## Quick Reference: What's FORBIDDEN vs REQUIRED
 
-### ORCHESTRATION (langgraph, crewai, autogen)
+### Orchestration (langgraph)
 
 **FORBIDDEN:**
 - ❌ VCR cassettes or VCR proxy URLs
@@ -26,7 +21,7 @@
 - ✅ spanKind: 'workflow' or 'agent'
 - ✅ Test orchestration logic, not API calls
 
-### LLM_CLIENT (openai, anthropic, google-genai)
+### LLM client (openai, anthropic, genai)
 
 **FORBIDDEN:**
 - ❌ Pure function tests without VCR
@@ -38,11 +33,11 @@
 - ✅ spanKind: 'llm'
 - ✅ modelName, modelProvider fields
 
-### MULTI_PROVIDER (ai-sdk, langchain)
+### Multi-provider (ai, langchain)
 
-Same as LLM_CLIENT.
+Same as LLM client.
 
-### INFRASTRUCTURE (MCP)
+### Infrastructure (modelcontextprotocol-sdk)
 
 **REQUIRED:**
 - ✅ Mock server tests
@@ -54,18 +49,14 @@ Same as LLM_CLIENT.
 
 Test strategy depends on package category:
 
-| LlmObsCategory | VCR | Real APIs | Mock LLMs | Strategy |
+| Package shape | VCR | Real APIs | Mock LLMs | Strategy |
 |----------------|-----|-----------|-----------|----------|
-| LLM_CLIENT | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| MULTI_PROVIDER | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| ORCHESTRATION | ❌ No | ❌ No | ✅ Yes | Pure functions, mock responses |
-| INFRASTRUCTURE | ❌ No | ❌ No | ✅ Yes | Mock servers |
+| LLM client | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
+| Multi-provider | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
+| Orchestration | ❌ No | ❌ No | ✅ Yes | Pure functions, mock responses |
+| Infrastructure | ❌ No | ❌ No | ✅ Yes | Mock servers |
 
-**Enum location:** `anubis_apm/workflows/analyze/models.py`
-
-**IF YOU USE THE WRONG STRATEGY, THE TEST WILL FAIL. ALWAYS CHECK THE CATEGORY FIRST.**
-
-## LlmObsCategory.LLM_CLIENT & LlmObsCategory.MULTI_PROVIDER
+## LLM client & multi-provider
 
 **Strategy:** VCR with real API calls through proxy
 
@@ -129,7 +120,7 @@ before(() => {
 
 **Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own internal tracing output appears.
 
-## LlmObsCategory.ORCHESTRATION
+## Orchestration
 
 **Strategy:** Pure function tests, NO VCR, NO real API calls
 
@@ -193,7 +184,7 @@ it('instruments graph invoke', async () => {
 
 Orchestration tools don't make HTTP calls themselves - they coordinate other libraries that do. Testing them requires testing the orchestration logic, not API interactions.
 
-## Category 4: Infrastructure
+## Infrastructure
 
 **Strategy:** Mock server tests
 
@@ -238,7 +229,7 @@ Use this to choose strategy:
 
 ### Does package make HTTP calls to LLM APIs?
 
-**YES** → Use VCR (Category 1 or 2)
+**YES** → Use VCR (LLM client or multi-provider)
 - Configure baseURL to VCR proxy
 - Make real API calls
 - Validate real responses
@@ -247,12 +238,12 @@ Use this to choose strategy:
 
 ### Does it orchestrate workflows/graphs?
 
-**YES** → Pure functions (Category 3)
+**YES** → Pure functions (orchestration)
 - No VCR proxy
 - Mock LLM responses
 - Test state management
 
-**NO** → Mock servers (Category 4)
+**NO** → Mock servers (infrastructure)
 - Create mock server
 - Test protocol/transport
 
@@ -299,9 +290,9 @@ graph.addNode('agent', async (state) => {
 
 **Fix:** Mock LLM responses directly.
 
-## Examples by Category
+## Examples by Shape
 
-### Category 1: OpenAI (VCR)
+### LLM client: OpenAI (VCR)
 
 ```javascript
 const openai = new OpenAI({
@@ -311,7 +302,7 @@ const openai = new OpenAI({
 await openai.chat.completions.create({ ... })
 ```
 
-### Category 2: Vercel AI SDK (VCR)
+### Multi-provider: Vercel AI SDK (VCR)
 
 ```javascript
 const model = createOpenAI({
@@ -321,7 +312,7 @@ const model = createOpenAI({
 await generateText({ model, prompt: '...' })
 ```
 
-### Category 3: LangGraph (Pure Functions)
+### Orchestration: LangGraph (Pure Functions)
 
 ```javascript
 graph.addNode('agent', async (state) => ({
@@ -330,7 +321,7 @@ graph.addNode('agent', async (state) => ({
 await graph.invoke({ ... })
 ```
 
-### Category 4: MCP (Mock Server)
+### Infrastructure: MCP (Mock Server)
 
 ```javascript
 const mockServer = new MockServer()

@@ -35,8 +35,8 @@ Common variations include:
 ## Reference Implementations
 
 The best examples of message extraction for the providers we support:
-- Anthropic: [`packages/datadog-plugin-anthropic/src/llmobs.js`](../../../../../packages/datadog-plugin-anthropic/src/llmobs.js)
-- Google GenAI: [`packages/datadog-plugin-google-genai/src/llmobs.js`](../../../../../packages/datadog-plugin-google-genai/src/llmobs.js)
+- Anthropic: [`packages/dd-trace/src/llmobs/plugins/anthropic/util.js`](../../../../packages/dd-trace/src/llmobs/plugins/anthropic/util.js)
+- Google GenAI: [`packages/dd-trace/src/llmobs/plugins/genai/util.js`](../../../../packages/dd-trace/src/llmobs/plugins/genai/util.js)
 
 ## Key Implementation Notes
 

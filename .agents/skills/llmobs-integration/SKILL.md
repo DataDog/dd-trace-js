@@ -5,9 +5,9 @@ description: |
   in dd-trace-js. Triggers: "add LLMObs support", "instrument chat
   completions / streaming / embeddings / agent runs / orchestration / tool
   calls / retrieval", "LLMObsPlugin", "getLLMObsSpanRegisterOptions",
-  "setLLMObsTags", "LlmObsCategory", "LlmObsSpanKind", any provider tag
+  "setLLMObsTags", "SPAN_KINDS", "span kind", any provider tag
   ("openai" / "anthropic" / "genai" / "google" / "langchain" / "langgraph" /
-  "ai-sdk" llmobs), "VCR cassettes".
+  "ai" llmobs), "VCR cassettes".
 ---
 
 # LLM Observability Integration Skill
@@ -31,63 +31,22 @@ Lifecycle: `start(ctx)` registers the span and captures context; the wrapped ope
 
 See [references/plugin-architecture.md](references/plugin-architecture.md) for the full implementation surface.
 
-### 2. Package Category System
+### 2. Package Shape
 
-**CRITICAL:** Every integration must be classified into one category using the `LlmObsCategory` enum. This determines test strategy and implementation approach.
+**Settle the library's shape before writing anything** — it decides which methods to hook and how the plugin can be tested. These are working categories for reasoning about a package; none of them exists as a constant in the codebase, so classify by reading the source rather than looking for an enum.
 
-#### LlmObsCategory Enum Values
+- **LLM client** — calls provider endpoints itself and needs API keys (openai, anthropic, genai). Hook the chat / completion methods.
+- **Multi-provider** — exposes several providers behind one surface, wrapping the clients above (ai, langchain). Hook the provider abstraction layer.
+- **Orchestration** — runs a graph or workflow and holds state, with no provider HTTP of its own (langgraph). Hook the workflow lifecycle (invoke, stream, run).
+- **Infrastructure** — implements a protocol across a client / server split (modelcontextprotocol-sdk). Hook the protocol handlers.
 
-- **`LlmObsCategory.LLM_CLIENT`** - Direct API wrappers (openai, anthropic, genai)
-  - Signs: Makes HTTP calls to LLM provider endpoints, requires API keys
-  - Test strategy: VCR with real API calls via proxy
-  - Instrumentation: Hook chat/completion methods
+The distinctions that decide it: does the package talk to a provider endpoint itself, does it front more than one provider, and does it carry graph state. Test strategy per shape lives in [llmobs-testing](../llmobs-testing/SKILL.md) — including that an orchestration spec drives its nodes with plain return values, not a real model.
 
-- **`LlmObsCategory.MULTI_PROVIDER`** - Multi-provider frameworks (ai-sdk, langchain)
-  - Signs: Supports multiple LLM providers via configuration, wraps LLM_CLIENT libraries
-  - Test strategy: VCR with real API calls via proxy
-  - Instrumentation: Hook provider abstraction layer
-
-- **`LlmObsCategory.ORCHESTRATION`** - Workflow managers (langgraph)
-  - Signs: Graph/workflow execution, state management, NO direct HTTP to LLM providers
-  - Test strategy: Pure function tests, NO VCR, NO real API calls
-  - Instrumentation: Hook workflow lifecycle (invoke, stream, run)
-  - **Special:** Tests should use actual LLM as orchestration node (not mock responses)
-
-- **`LlmObsCategory.INFRASTRUCTURE`** - Protocols/servers (MCP)
-  - Signs: Protocol implementation, server/client architecture, transport layers
-  - Test strategy: Mock server tests
-  - Instrumentation: Hook protocol handlers
-
-#### Decision Tree
-
-Answer these questions by reading the code:
-
-1. **Does the package make direct HTTP calls to LLM provider endpoints?**
-  - YES → Go to question 2
-  - NO → Go to question 3
-
-2. **Does it support multiple LLM providers via configuration?**
-  - YES → **`LlmObsCategory.MULTI_PROVIDER`**
-  - NO → **`LlmObsCategory.LLM_CLIENT`**
-
-3. **Does it implement workflow/graph orchestration with state management?**
-  - YES → **`LlmObsCategory.ORCHESTRATION`**
-  - NO → **`LlmObsCategory.INFRASTRUCTURE`**
-
-See [references/category-detection.md](references/category-detection.md) for detailed heuristics and examples.
+See [references/category-detection.md](references/category-detection.md) for heuristics and worked examples.
 
 ### 3. LLM Span Kinds
 
-Use the `LlmObsSpanKind` enum:
-
-- **`LlmObsSpanKind.LLM`** - Chat completions, text generation
-- **`LlmObsSpanKind.WORKFLOW`** - Graph/chain execution
-- **`LlmObsSpanKind.AGENT`** - Agent runs
-- **`LlmObsSpanKind.TOOL`** - Tool/function calls
-- **`LlmObsSpanKind.EMBEDDING`** - Embedding generation
-- **`LlmObsSpanKind.RETRIEVAL`** - Vector DB/RAG retrieval
-
-**Most common:** Use `'llm'` for chat completions/text generation in LLM_CLIENT and MULTI_PROVIDER categories.
+`SPAN_KINDS` in [`packages/dd-trace/src/llmobs/constants/tags.js`](../../../packages/dd-trace/src/llmobs/constants/tags.js) is the source of truth: `llm`, `agent`, `workflow`, `task`, `tool`, `embedding`, `retrieval`. Chat completions and text generation are `llm`; graph or chain execution is `workflow`; agent runs are `agent`; vector-DB and RAG lookups are `retrieval`.
 
 ### 4. Message Extraction
 

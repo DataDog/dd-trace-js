@@ -162,7 +162,7 @@ expect(events).to.have.lengthOf(1)
 assertLlmObsSpanEvent(events[0], { spanKind: 'llm', ... })
 ```
 
-## Testing Orchestration (Category 3)
+## Testing Orchestration
 
 **No VCR, pure functions:**
 
@@ -250,7 +250,7 @@ beforeEach(() => {
 
 Study these test files as templates:
 
-- `packages/dd-trace/test/llmobs/plugins/openai/index.spec.js` - Simple format
+- `packages/dd-trace/test/llmobs/plugins/openai/openaiv4.spec.js` - Simple format
 - `packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js` - Complex format
 - `packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js` - Nested format
-- `packages/dd-trace/test/llmobs/plugins/langchain-langgraph/index.spec.js` - Orchestration
+- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js` - Orchestration

@@ -77,6 +77,6 @@ if (ctx.error) {
 
 See existing plugins for complete working examples:
 - `packages/dd-trace/src/llmobs/plugins/openai/index.js` — simple messages array, standard token usage
-- `packages/datadog-plugin-anthropic/src/llmobs.js` — nested content arrays, different token field names
-- `packages/datadog-plugin-google-genai/src/llmobs.js` — contents/parts format, role normalization
+- `packages/dd-trace/src/llmobs/plugins/anthropic/util.js` — nested content arrays, different token field names
+- `packages/dd-trace/src/llmobs/plugins/genai/util.js` — contents/parts format, role normalization
 - `packages/dd-trace/src/llmobs/plugins/langgraph/index.js` — orchestration, `workflow` span kind, no messages

@@ -17,7 +17,7 @@ Use these for non-deterministic values (output text, token counts, errors).
 | `MOCK_STRING` | Any non-empty string | Output message content (varies per run) |
 | `MOCK_NOT_NULLISH` | Any truthy value | Token counts (exist but vary) |
 | `MOCK_NUMBER` | Any number | Specific numeric metrics |
-| `MOCK_OBJECT` | Any object | Error objects |
+| `MOCK_OBJECT` | Any object | Opaque `schema` / `metadata` payloads. Never `error` |
 
 **Usage:**
 ```javascript
@@ -80,9 +80,12 @@ assertLlmObsSpanEvent(events[0], {
 assertLlmObsSpanEvent(events[0], {
   spanKind: 'llm',
   outputMessages: [{ content: '', role: '' }],  // Empty on error
-  error: MOCK_OBJECT
+  error: { type: 'Error', message: error.message, stack: error.stack }
 })
 ```
+
+All three error fields are pinned against the error the call threw. `error: MOCK_OBJECT` would accept a
+span that failed for the wrong reason.
 
 ### 5. Partial Validation
 
@@ -101,7 +104,7 @@ assertLlmObsSpanEvent(events[0], {
 1. **Use MOCK_* for non-deterministic values:**
     - Output text: `MOCK_STRING` (real responses vary)
     - Token counts: `MOCK_NOT_NULLISH` (counts vary but should exist)
-    - Error objects: `MOCK_OBJECT` (error details vary)
+    - Error message and stack: `MOCK_STRING` / `MOCK_NOT_NULLISH` per field, keeping `type` exact
 
 2. **Use exact values for inputs:**
     - Input messages: You control these in tests
@@ -119,7 +122,7 @@ assertLlmObsSpanEvent(events[0], {
 
 5. **Test error paths:**
     - Verify empty `outputMessages: [{content: '', role: ''}]` on errors
-    - Assert `error` field exists with `MOCK_OBJECT`
+    - Assert `error` as `{ type, message, stack }`, not as a whole-object matcher
 
 6. **Match span kind to operation:**
     - Chat/completions → `spanKind: 'llm'`
@@ -131,9 +134,9 @@ assertLlmObsSpanEvent(events[0], {
 ## Reference Test Implementation
 
 For a complete, real-world example of how tests using these helpers are structured, see:
-- [`packages/datadog-plugin-anthropic/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-anthropic/test/llmobs.spec.js) (LLM_CLIENT / MULTI_PROVIDER pattern)
-- [`packages/datadog-plugin-google-genai/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-google-genai/test/llmobs.spec.js) (LLM_CLIENT pattern)
-- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js` (ORCHESTRATION pattern)
+- [`packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js) (LLM client / multi-provider pattern)
+- [`packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js) (LLM client pattern)
+- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js` (orchestration pattern)
 
 ## Field Reference Quick Lookup
 

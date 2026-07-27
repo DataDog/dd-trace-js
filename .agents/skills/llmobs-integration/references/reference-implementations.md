@@ -36,7 +36,7 @@ The abstract base class all plugins extend.
 
 ### Anthropic Plugin
 
-**Location:** `packages/datadog-plugin-anthropic/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/anthropic/` (`index.js` + `util.js`)
 
 **Category:** LLM API Client
 
@@ -49,7 +49,7 @@ The abstract base class all plugins extend.
 
 ### Google GenAI Plugin
 
-**Location:** `packages/datadog-plugin-google-genai/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/genai/` (`index.js` + `util.js`)
 
 **Category:** LLM API Client
 
@@ -64,7 +64,7 @@ The abstract base class all plugins extend.
 
 ### Vercel AI SDK
 
-**Location:** `packages/datadog-plugin-ai-sdk/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/ai/` (`ddTelemetry.js` + `vercelTelemetry.js` behind a `CompositePlugin`)
 
 **Category:** Multi-Provider Framework
 
@@ -79,7 +79,7 @@ The abstract base class all plugins extend.
 
 ### LangChain LangGraph
 
-**Location:** `packages/datadog-plugin-langchain-langgraph/src/llmobs.js`
+**Location:** `packages/dd-trace/src/llmobs/plugins/langchain/` and `.../langgraph/` (separate plugins)
 
 **Category:** Pure Orchestration
 
@@ -179,10 +179,10 @@ See `packages/datadog-plugin-google-genai/src/index.js` for a reference implemen
 Test files demonstrate expected span structure and assertions:
 
 **Locations:**
-- `packages/dd-trace/test/llmobs/plugins/openai/index.spec.js`
+- `packages/dd-trace/test/llmobs/plugins/openai/openaiv4.spec.js`
 - `packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js`
 - `packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js`
-- `packages/dd-trace/test/llmobs/plugins/langchain-langgraph/index.spec.js`
+- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js`
 
 ## How to Use References
 
