@@ -75,7 +75,6 @@ if (isTestWorker) {
     exporter: EXPORTER_MAP[testWorkerType],
   }
 } else if (isValidationMode) {
-  baseOptions.telemetry = { enabled: false }
   baseOptions.experimental = {
     exporter: 'ci_validation',
   }
