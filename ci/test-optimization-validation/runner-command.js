@@ -211,7 +211,7 @@ function getRunnerArgs (framework, testFile, generated) {
  */
 function getRunnerEnv (framework) {
   return {
-    ...(framework.validation.environment || {}),
+    ...framework.validation.environment,
     ...(framework.framework === 'cucumber' ? { CUCUMBER_PUBLISH_QUIET: 'true' } : {}),
   }
 }

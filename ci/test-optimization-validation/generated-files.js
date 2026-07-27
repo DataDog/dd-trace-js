@@ -132,7 +132,7 @@ function getMissingDirectories (root, directory) {
 function cleanupCreatedDirectories (root) {
   const outcome = { removed: 0, retained: 0 }
   const resolvedRoot = path.resolve(root)
-  const directories = [...createdGeneratedDirectories.entries()]
+  const directories = [...createdGeneratedDirectories]
     .filter(([directory]) => isPathInside(resolvedRoot, directory))
     .sort(([left], [right]) => right.length - left.length)
 

@@ -941,8 +941,7 @@ function getCodeOwnersFileEntries (rootDir) {
   const lines = codeOwnersContent.split('\n')
 
   for (const line of lines) {
-    const [content] = line.split('#')
-    const trimmed = content.trim()
+    const trimmed = getSegment(line, '#', 0).trim()
     if (trimmed === '') continue
     const [pattern, ...owners] = trimmed.split(/\s+/)
     entries.push(setCodeOwnersPatternRegex({ pattern, owners }))
@@ -988,9 +987,7 @@ function codeOwnersPatternToRegexSource (pattern) {
 
     if (character === '\\') {
       const escapedCharacter = pattern[i + 1]
-      source += escapedCharacter === undefined
-        ? escapeRegexCharacter(character)
-        : escapeRegexCharacter(escapedCharacter)
+      source += escapeRegexCharacter(escapedCharacter ?? character)
       i++
     } else if (character === '*') {
       if (pattern[i + 1] === '*') {
@@ -1184,7 +1181,7 @@ function getCoveredFilenamesFromCoverage (coverage) {
 }
 
 function getCoverageMap (coverage) {
-  if (coverage?.files && coverage?.fileCoverageFor) {
+  if (coverage?.files && coverage.fileCoverageFor) {
     return coverage
   }
   return istanbul.createCoverageMap(coverage)
@@ -1917,8 +1914,8 @@ function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
   }
 
   result.executions++
-  result.isDisabled = result.isDisabled || !!isDisabled
-  result.isQuarantined = result.isQuarantined || !!isQuarantined
+  result.isDisabled ||= !!isDisabled
+  result.isQuarantined ||= !!isQuarantined
 
   if (status === 'fail') {
     result.failedCount++

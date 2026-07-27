@@ -253,7 +253,8 @@ class PeriodicMetricReader {
   #collectAndExport (callback = () => {}) {
     // Atomically drain measurements for export. New measurements can be recorded
     // during export without interfering with this batch.
-    const allMeasurements = this.#measurements.splice(0)
+    const allMeasurements = this.#measurements
+    this.#measurements = []
 
     for (const instrument of this.observableInstruments) {
       const observableMeasurements = instrument.collect()
