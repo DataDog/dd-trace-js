@@ -73,7 +73,7 @@ describe('DDOpenAIAgentsProcessor', () => {
     })
 
     it('returns without calling startSpan for span types that have no LLMObs kind', async () => {
-      for (const type of ['generation']) {
+      for (const type of ['unknown']) {
         integration.startSpan.resetHistory()
         await processor.onSpanStart({ spanData: { type } })
         sinon.assert.notCalled(integration.startSpan)
@@ -87,6 +87,7 @@ describe('DDOpenAIAgentsProcessor', () => {
         ['handoff', 'tool'],
         ['guardrail', 'task'],
         ['custom', 'task'],
+        ['generation', 'llm'],
         ['response', 'llm'],
       ]
       for (const [type, expectedKind] of cases) {
