@@ -141,7 +141,8 @@ describe('tests', () => {
 
 ## Test Organization
 
-Group by method (`describe('chat completions')`, `describe('embeddings')`) or by scenario (`describe('basic usage')`, `describe('error handling')`).
+Group by method (`describe('chat completions')`, `describe('embeddings')`) or by scenario (`describe('basic usage')`,
+`describe('error handling')`).
 
 ## beforeEach / afterEach
 

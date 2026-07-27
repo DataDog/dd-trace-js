@@ -4,7 +4,8 @@ Complete guide to `assertLlmObsSpanEvent()` and mock matchers for validating LLM
 
 ## assertLlmObsSpanEvent
 
-Main assertion function for validating LLMObs span structure. Only the fields you specify are checked — unspecified fields are ignored.
+Main assertion function for validating LLMObs span structure. Only the fields you specify are checked — unspecified
+fields are ignored.
 
 See the docstring in `packages/dd-trace/test/llmobs/util.js` for the full type signature and parameter details.
 
@@ -14,10 +15,10 @@ Use these for non-deterministic values (output text, token counts, errors).
 
 | Matcher | Matches | Example Use Case |
 |---------|---------|------------------|
-| `MOCK_STRING` | Any non-empty string | Output message content (varies per run) |
-| `MOCK_NOT_NULLISH` | Any truthy value | Token counts (exist but vary) |
+| `MOCK_STRING` | Any string, `''` included | Output message content (varies per run) |
+| `MOCK_NOT_NULLISH` | Anything but `null` / `undefined` | Token counts (exist but vary) |
 | `MOCK_NUMBER` | Any number | Specific numeric metrics |
-| `MOCK_OBJECT` | Any object | Opaque `schema` / `metadata` payloads. Never `error` |
+| `MOCK_OBJECT` | Anything with `typeof 'object'`, `null` included | Opaque `schema` / `metadata`, whole messages |
 
 **Usage:**
 ```javascript
@@ -82,10 +83,13 @@ assertLlmObsSpanEvent(events[0], {
   outputMessages: [{ content: '', role: '' }],  // Empty on error
   error: { type: 'Error', message: error.message, stack: error.stack }
 })
+
+assert.strictEqual(apmSpans[0].meta['error.message'], error.message)
 ```
 
-All three error fields are pinned against the error the call threw. `error: MOCK_OBJECT` would accept a
-span that failed for the wrong reason.
+The helper fills `error.message`, `error.type` and `error.stack` from the span it is checking, so the
+`error` option decides `status: 'error'` and nothing else. The fields written into it document the throw;
+the assertion on the APM span is what pins which error was thrown.
 
 ### 5. Partial Validation
 
@@ -122,7 +126,7 @@ assertLlmObsSpanEvent(events[0], {
 
 5. **Test error paths:**
     - Verify empty `outputMessages: [{content: '', role: ''}]` on errors
-    - Assert `error` as `{ type, message, stack }`, not as a whole-object matcher
+    - Pass `error` as `{ type, message, stack }`, and assert the thrown error on the APM span
 
 6. **Match span kind to operation:**
     - Chat/completions → `spanKind: 'llm'`
@@ -134,9 +138,12 @@ assertLlmObsSpanEvent(events[0], {
 ## Reference Test Implementation
 
 For a complete, real-world example of how tests using these helpers are structured, see:
-- [`packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js) (LLM client / multi-provider pattern)
-- [`packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js) (LLM client pattern)
-- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js` (orchestration pattern)
+- [`packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/anthropic/index.spec.js)
+  (LLM client / multi-provider pattern)
+- [`packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js)
+  (LLM client pattern)
+- [`packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js)
+  (orchestration pattern)
 
 ## Field Reference Quick Lookup
 

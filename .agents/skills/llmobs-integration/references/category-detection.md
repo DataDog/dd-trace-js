@@ -10,7 +10,7 @@ for reasoning about a package, not constants in the codebase.
 **Definition:** Direct wrappers around LLM provider APIs.
 
 **Examples:**
-- `@google/generative-ai` - Google GenAI client (recommended reference implementation)
+- `@google/genai` - Google GenAI client (recommended reference implementation)
 - `@anthropic-ai/sdk` - Anthropic Claude client (recommended reference implementation)
 - `openai` - OpenAI API client
 
@@ -141,13 +141,15 @@ Check for:
 
 **Package:** `@anthropic-ai/sdk` — see `packages/datadog-plugin-anthropic/`
 
-**Category:** LLM client — name contains "anthropic", direct HTTP calls to Claude API, requires API key, methods are `messages.create`
+**Category:** LLM client — name contains "anthropic", direct HTTP calls to Claude API, requires API key, methods are
+`messages.create`
 
 ### Example 2: Google GenAI (LLM client)
 
-**Package:** `@google/generative-ai` — see `packages/datadog-plugin-google-genai/`
+**Package:** `@google/genai` — see `packages/datadog-plugin-google-genai/`
 
-**Category:** LLM client — name contains "genai", direct HTTP calls to Gemini API, complex nested message format (contents/parts)
+**Category:** LLM client — name contains "genai", direct HTTP calls to Gemini API, complex nested message format
+(contents/parts)
 
 ### Example 3: Vercel AI SDK (multi-provider)
 
@@ -163,11 +165,14 @@ Check for:
 
 **Package:** `@langchain/langgraph` — see `packages/dd-trace/src/llmobs/plugins/langgraph/`
 
-**Category:** orchestration — name indicates graph orchestration, depends on `@langchain/core`, methods manage workflow state (`StateGraph.invoke`, `Pregel.stream`), no direct LLM HTTP calls
+**Category:** orchestration — name indicates graph orchestration, depends on `@langchain/core`, methods manage
+workflow state (`StateGraph.invoke`, `Pregel.stream`), no direct LLM HTTP calls
 
 ## Edge Cases
 
-When signals conflict or are weak, choose the category with the most evidence and prefer the category that matches test strategy needs: if the package makes HTTP calls it needs VCR (LLM client/multi-provider); if it doesn't, use pure functions (orchestration) or mock servers (infrastructure).
+When signals conflict or are weak, choose the category with the most evidence and prefer the category that matches
+test strategy needs: if the package makes HTTP calls it needs VCR (LLM client/multi-provider); if it doesn't, use pure
+functions (orchestration) or mock servers (infrastructure).
 
 Some packages don't fit cleanly:
 - Utilities/helpers → Check what they instrument

@@ -44,10 +44,9 @@ format a recording produces; each request is stored once, in one format, so a ca
 twin in the other. Binary and multipart bodies live inside JSON cassettes, base64-encoded behind a
 `base64:` prefix.
 
-Six providers record without any configuration (openai, anthropic, genai, azure-openai, deepseek,
-bedrock-runtime), which is every cassette directory except one. A provider the agent cannot resolve
-from its name needs an entry in `VCR_PROVIDER_MAP` in `docker-compose.yml`, and the seventh directory
-is that worked example: `claude-agent-sdk=https://api.anthropic.com`.
+Only one of the seven cassette directories has an entry in `VCR_PROVIDER_MAP` in `docker-compose.yml`:
+`claude-agent-sdk=https://api.anthropic.com`. The other six (openai, anthropic, genai, azure-openai,
+deepseek, bedrock-runtime) are names the testagent resolves on its own. Add a map entry when it cannot.
 
 ## Recording
 
@@ -79,6 +78,8 @@ npm run test:llmobs:sdk                      # everything except the plugin spec
 `PLUGINS` is matched as a glob alternation against
 `packages/dd-trace/test/llmobs/plugins/@(${PLUGINS})/*.spec.js`.
 
-`Cannot find module '…/versions/<pkg>@<version>'` is a missing version fixture, not a broken spec:
-`PLUGINS=<pkg> yarn services` installs it. The fixtures live in a gitignored `versions/` directory at
-the repo root, so a fresh worktree has none of them.
+`Cannot find module '…/versions/<package>@<version>'` is a missing version fixture, not a broken spec:
+`PLUGINS=<integration> yarn services` installs it. The error names the npm package while `PLUGINS` takes
+the integration key, which is the file name under `packages/datadog-instrumentations/src/` — so
+`@anthropic-ai/sdk` is `anthropic` and `@google/genai` is `google-genai`. The fixtures live in a gitignored
+`versions/` directory at the repo root, so a fresh worktree has none of them.

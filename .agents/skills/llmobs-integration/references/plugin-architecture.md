@@ -6,7 +6,8 @@ Guide to implementing LLMObs plugins in dd-trace-js.
 
 All LLMObs plugins extend `LLMObsPlugin` at `packages/dd-trace/src/llmobs/plugins/base.js`.
 
-The base class handles span registration, context management, and lifecycle hooks. Plugins only need to implement two methods.
+The base class handles span registration, context management, and lifecycle hooks. Plugins only need to implement two
+methods.
 
 ## Required Methods
 
@@ -15,7 +16,8 @@ The base class handles span registration, context management, and lifecycle hook
 Defines span metadata for registration with LLMObs. Called at span start.
 
 **Returns** an object with:
-- `kind` (string) — span type, from `SPAN_KINDS`: `'llm'`, `'agent'`, `'workflow'`, `'task'`, `'tool'`, `'embedding'`, `'retrieval'`
+- `kind` (string) — span type, from `SPAN_KINDS`: `'llm'`, `'agent'`, `'workflow'`, `'task'`, `'tool'`, `'embedding'`,
+  `'retrieval'`
 - `name` (string) — operation name (e.g. `'openai.chat.completions'`)
 - `modelProvider` (string, optional) — provider name (e.g. `'openai'`, `'anthropic'`, `'google'`)
 - `modelName` (string, optional) — model identifier (e.g. `'gpt-4'`, `'claude-3-sonnet'`)
@@ -57,16 +59,16 @@ Tag data using `this._tagger`, which provides:
 - `tagSpanTags(span, tags)` — arbitrary key/value span tags
 - `tagPrompt(span, prompt)` — prompt tracking metadata
 - `tagToolDefinitions(span, toolDefinitions)` — the tools a request declared, for tool-calling integrations
-- `tagCostTags(span, costTags, source)` — provider-reported cost
 - `tagModelName(span, modelName)` — a model name discovered after registration
 
 ## Static Properties
 
 Each plugin class needs:
-- `static integration` — integration name (e.g. `'openai'`)
-- `static id` — unique plugin ID, matching the integration for a single-plugin package (`'openai'`) and
-  qualified per hooked operation when a package needs several (`'llmobs_langgraph_pregel_stream'`)
-- `static prefix` — diagnostic channel prefix (e.g. `'tracing:apm:openai:chat'`)
+- `static integration` — integration name for LLMObs telemetry (`'openai'`, `'google_genai'`)
+- `static id` — unique plugin ID. Often the same string as the integration (`'openai'`), but not
+  necessarily: genai pairs `id = 'google-genai'` with `integration = 'google_genai'`. A package that hooks
+  several operations qualifies it per operation (`'llmobs_langgraph_pregel_stream'`)
+- `static prefix` — diagnostic channel prefix (e.g. `'tracing:apm:openai:request'`)
 
 ## Error Handling
 

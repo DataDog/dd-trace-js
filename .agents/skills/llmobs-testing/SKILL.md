@@ -13,14 +13,23 @@ description: |
 
 ## Decide how the package gets its responses first
 
-**That choice picks the test strategy, the span kind, and the test structure, and the wrong one tests the wrong contract** — cassettes for a workflow library record nothing, while pure-function tests for an HTTP wrapper miss the network surface entirely. These are working categories for reasoning about a package; none of them exists as a constant in the codebase.
+**That choice picks the test strategy, the span kind, and the test structure, and the wrong one tests the wrong
+contract** — cassettes for a workflow library record nothing, while pure-function tests for an HTTP wrapper miss the
+network surface entirely. These are working categories for reasoning about a package; none of them exists as a
+constant in the codebase.
 
-- **LLM client / multi-provider** — talks provider HTTP itself (openai, anthropic, genai, ai, langchain): VCR cassettes.
-- **Orchestration** — carries workflow or graph state and makes no provider calls of its own (langgraph): no VCR; drive nodes with plain return values.
-- **Infrastructure** — implements a protocol or server (modelcontextprotocol-sdk): mock the server.
-- **SDKs that call through global `fetch`** (google-cloud-vertexai) cannot be intercepted by `nock`, so their specs replace `global.fetch` for the duration of the test instead of recording a cassette.
+- **LLM client / multi-provider** — talks provider HTTP itself (openai, anthropic, genai, ai, langchain): VCR
+  cassettes.
+- **Orchestration** — carries workflow or graph state and makes no provider calls of its own (langgraph): no VCR;
+  drive nodes with plain return values.
+- **Infrastructure** — implements a protocol or server (modelcontextprotocol-sdk): run the SDK's own server
+  and client over its in-memory transport.
+- **Canned `fetch` instead of a cassette** — where the spec supplies the responses itself: google-cloud-vertexai
+  swaps `global.fetch` per test and stubs Google auth, openai-agents and some `ai` providers pass a `fetch` option
+  to the client they construct.
 
-See [references/category-strategies.md](references/category-strategies.md) for the forbidden-vs-required matrix per strategy.
+See [references/category-strategies.md](references/category-strategies.md) for the forbidden-vs-required matrix per
+strategy.
 
 ## Core Testing Concepts
 
@@ -60,9 +69,13 @@ normalizers, and the commands to run a single integration.
 
 The block at the top maps shape to strategy. The non-obvious bits:
 
-- **LLM client / multi-provider**: proxy baseURL `http://127.0.0.1:9126/vcr/{provider}`, span kind `'llm'`. Cassettes are recorded once with real keys and replayed everywhere after.
-- **Orchestration**: span kind `'workflow'` or `'agent'`, never `'llm'` — the orchestrator coordinates libraries that call providers rather than calling them itself. Nodes return plain values, so the test exercises graph execution instead of a provider API.
-- **Infrastructure**: mock server, protocol-specific validation, no VCR.
+- **LLM client / multi-provider**: proxy baseURL `http://127.0.0.1:9126/vcr/{provider}`, span kind `'llm'`. Cassettes
+  are recorded once with real keys and replayed everywhere after.
+- **Orchestration**: span kind `'workflow'` or `'agent'`, never `'llm'` — the orchestrator coordinates libraries that
+  call providers rather than calling them itself. Nodes return plain values, so the test exercises graph execution
+  instead of a provider API.
+- **Infrastructure**: the SDK's own server and client over its in-memory transport, protocol-specific
+  validation, no VCR.
 
 See [references/category-strategies.md](references/category-strategies.md) for the patterns per shape.
 
@@ -72,11 +85,12 @@ See [references/category-strategies.md](references/category-strategies.md) for t
 
 Validates span structure with flexible matchers for non-deterministic values.
 
-**Available matchers:**
-- `MOCK_STRING` - Matches any non-empty string (use for output text)
-- `MOCK_NOT_NULLISH` - Matches any truthy value (use for token counts)
-- `MOCK_NUMBER` - Matches any number
-- `MOCK_OBJECT` - Matches any object (use for opaque `schema` / `metadata` payloads, never for `error`)
+**Available matchers:** each one is a `typeof` or nullish check, not a value check.
+- `MOCK_STRING` - any string, `''` included (use for output text)
+- `MOCK_NOT_NULLISH` - anything but `null` / `undefined`, so `0` and `''` pass (use for token counts)
+- `MOCK_NUMBER` - any number
+- `MOCK_OBJECT` - anything with `typeof 'object'`, `null` included (opaque `schema` / `metadata` payloads, or
+  a whole output message whose shape varies, as the `ai` specs do)
 
 **Assertable fields:**
 - `spanKind` (required) - one of `SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js`
@@ -136,22 +150,29 @@ Span kinds come from `SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tag
 
 ### Error Handling
 
-On errors the span is still submitted, with `outputMessages: [{ content: '', role: '' }]`. Every LLMObs
-spec pins all three error fields against the error the call threw, so `error: MOCK_OBJECT` would accept a
-span that failed for the wrong reason:
+On errors the span is still submitted, with `outputMessages: [{ content: '', role: '' }]`. The specs that assert
+an error pass all three fields, reaching for a matcher where the value varies (`type: MOCK_STRING` in the MCP
+spec, `message: MOCK_STRING` in langchain):
 
 ```javascript
 error: { type: 'Error', message: error.message, stack: error.stack },
 ```
 
-Reach for a per-field matcher only where the value genuinely varies, as langchain does with
-`message: MOCK_STRING` and `stack: MOCK_NOT_NULLISH`.
+The option decides only whether the expected event carries `status: 'error'` — `assertLlmObsSpanEvent`
+copies the three error fields out of the span it is checking, so the values written here document the
+throw without asserting it. Pin the identity of the error on the APM span the LLMObs span was built from:
+
+```javascript
+assert.strictEqual(apmSpans[0].meta['error.message'], error.message)
+```
 
 ## References
 
 For detailed information, see:
 
 - [references/test-structure.md](references/test-structure.md) - Complete test file templates and organization
-- [references/vcr-cassettes.md](references/vcr-cassettes.md) - VCR recording process, cassette management, troubleshooting
-- [references/assertion-helpers.md](references/assertion-helpers.md) - Complete assertLlmObsSpanEvent API, matchers, patterns
+- [references/vcr-cassettes.md](references/vcr-cassettes.md) - VCR recording process, cassette management,
+  troubleshooting
+- [references/assertion-helpers.md](references/assertion-helpers.md) - Complete assertLlmObsSpanEvent API, matchers,
+  patterns
 - [references/category-strategies.md](references/category-strategies.md) - Detailed test strategy per package shape

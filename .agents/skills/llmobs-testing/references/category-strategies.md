@@ -24,23 +24,22 @@ wrong one fails on contract rather than on behaviour.
 ### LLM client (openai, anthropic, genai)
 
 **FORBIDDEN:**
-- ❌ Pure function tests without VCR
+- ❌ Tests that skip the SDK and tag spans by hand
 - ❌ spanKind: 'workflow' (use 'llm' instead)
 
 **REQUIRED:**
-- ✅ VCR cassettes with proxy baseURL
-- ✅ Real API calls (recorded once)
+- ✅ Calls through the real client, answered by a cassette on the proxy baseURL or by a canned `fetch`
 - ✅ spanKind: 'llm'
 - ✅ modelName, modelProvider fields
 
 ### Multi-provider (ai, langchain)
 
-Same as LLM client.
+Same as LLM client. `ai` records cassettes for some providers and hands a canned `fetch` to others.
 
 ### Infrastructure (modelcontextprotocol-sdk)
 
 **REQUIRED:**
-- ✅ Mock server tests
+- ✅ The SDK's real server and client over its in-memory transport
 - ❌ NO VCR
 
 ---
@@ -54,7 +53,11 @@ Test strategy depends on package category:
 | LLM client | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
 | Multi-provider | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
 | Orchestration | ❌ No | ❌ No | ✅ Yes | Pure functions, mock responses |
-| Infrastructure | ❌ No | ❌ No | ✅ Yes | Mock servers |
+| Infrastructure | ❌ No | ❌ No | ✅ Yes | SDK server over in-memory transport |
+
+A cassette is the default source of responses for the first two rows. Where the client takes a `fetch` option
+(openai-agents, some `ai` providers) or only reaches for `global.fetch` (google-cloud-vertexai), the spec answers the
+call itself instead.
 
 ## LLM client & multi-provider
 
@@ -100,25 +103,28 @@ it('instruments chat completion', async () => {
 - ✅ Test provider-specific features
 - ✅ Commit cassettes to repo
 
-### ⚠️ Transitive Dependency Require Order
+### ⚠️ Require The SDK Inside `before()`
 
-If the instrumented methods live in a **sub-package** that is a dependency of the package you load (e.g. `@openai/agents-openai` is a dep of `@openai/agents-core`), you must **require the sub-package first**.
-
-RITM patches modules on their first `require()`. If the parent package loads the sub-package transitively before your `before()` hook requires it, the module is already cached and RITM never fires — instrumentation silently does nothing.
+RITM patches a module the first time it is loaded, and it cannot patch one already in the require cache.
+`useLlmObs()` loads the tracer from its own `before()` hook, so a `require` at file scope runs first and stays
+uninstrumented. Load the version fixtures from `before()`:
 
 ```javascript
-before(() => {
-  // ✅ CORRECT: require the instrumented sub-package first
-  const { OpenAIResponsesModel } = require('@openai/agents-openai')
-  const agentsCore = require('@openai/agents-core')
-
-  // ❌ WRONG: parent loads sub-package transitively, caching it before RITM patches it
-  // const agentsCore = require('@openai/agents-core')        // caches @openai/agents-openai
-  // const { OpenAIResponsesModel } = require('@openai/agents-openai')  // already cached, not patched
+withVersions('openai-agents', '@openai/agents', (version) => {
+  before(() => {
+    agentsCore = require(`../../../../../../versions/@openai/agents@${version}`).get()
+    const { OpenAIResponsesModel } =
+      require(`../../../../../../versions/@openai/agents-openai@${version}`).get()
+  })
 })
 ```
 
-**Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own internal tracing output appears.
+Order between the two does not matter here: `packages/datadog-instrumentations/src/openai-agents.js` hooks both
+`@openai/agents` and `@openai/agents-openai`. Where a spec's comment does ask for an order — the MCP spec requires
+its client entry before the server — keep it.
+
+**Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own
+internal tracing output appears.
 
 ## Orchestration
 
@@ -182,46 +188,52 @@ it('instruments graph invoke', async () => {
 
 ### Why No VCR?
 
-Orchestration tools don't make HTTP calls themselves - they coordinate other libraries that do. Testing them requires testing the orchestration logic, not API interactions.
+Orchestration tools don't make HTTP calls themselves - they coordinate other libraries that do. Testing them requires
+testing the orchestration logic, not API interactions.
 
 ## Infrastructure
 
-**Strategy:** Mock server tests
+**Strategy:** the SDK's own server and client, wired over its in-memory transport
 
 ### Setup
 
 ```javascript
-const mockServer = new MockMCPServer()
-await mockServer.start()
+const server = new McpServer({ name: 'test-server', version: '1.0.0' })
+server.registerTool('test-tool', { description: 'A test tool', inputSchema: {} }, async () => ({
+  content: [{ type: 'text', text: 'Result from test-tool' }],
+}))
+
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+await server.connect(serverTransport)
+
+client = new Client({ name: 'test-client', version: '1.0.0' })
+await client.connect(clientTransport)
 ```
 
 ### Test Pattern
 
 ```javascript
-it('instruments MCP protocol', async () => {
-  const client = new MCPClient({
-    serverUrl: mockServer.url
-  })
+it('creates a tool span for a basic tool call', async () => {
+  const result = await client.callTool({ name: 'test-tool', arguments: {} })
 
-  await client.connect()
-  const response = await client.call('method', params)
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  const events = getEvents()
-
-  assertLlmObsSpanEvent(events[0], {
-    spanKind: 'task',  // Or appropriate kind
-    name: 'mcp.call'
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
+    spanKind: 'tool',
+    name: 'MCP Client Tool Call: test-tool',
+    inputValue: JSON.stringify({ name: 'test-tool', arguments: {} }),
+    tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk', mcp_tool_kind: 'client' },
   })
 })
 ```
 
 ### Key Points
 
-- ❌ NO VCR
-- ✅ Mock server instances
-- ✅ Test protocol compliance
-- ✅ Test message passing
-- ✅ Validate transport behavior
+- ❌ NO VCR, and no hand-rolled fake server — the tool handlers you register are the canned responses
+- ✅ Span kinds `'tool'` for tool calls and `'task'` for the rest of the protocol
+- ✅ Protocol-specific tags (`mcp_tool_kind`, `mcp_server_name`, `mcp_server_version`)
+- ✅ `inputValue` / `outputValue` carry the JSON-stringified protocol payloads
 
 ## Decision Matrix
 
@@ -243,8 +255,8 @@ Use this to choose strategy:
 - Mock LLM responses
 - Test state management
 
-**NO** → Mock servers (infrastructure)
-- Create mock server
+**NO** → Infrastructure
+- Run the SDK's own server and client over its in-memory transport
 - Test protocol/transport
 
 ## Common Mistakes
@@ -321,12 +333,13 @@ graph.addNode('agent', async (state) => ({
 await graph.invoke({ ... })
 ```
 
-### Infrastructure: MCP (Mock Server)
+### Infrastructure: MCP
 
 ```javascript
-const mockServer = new MockServer()
-const client = new MCPClient({ url: mockServer.url })
-await client.call('method', {})
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+await server.connect(serverTransport)
+await client.connect(clientTransport)
+await client.callTool({ name: 'test-tool', arguments: {} })
 ```
 
 ## Summary
@@ -334,6 +347,6 @@ await client.call('method', {})
 - **API clients**: Use VCR, test real APIs
 - **Multi-provider**: Use VCR, test provider switching
 - **Orchestration**: Pure functions, mock responses
-- **Infrastructure**: Mock servers, test protocols
+- **Infrastructure**: SDK server over in-memory transport, test protocols
 
 Choose strategy based on what the package does, not what it's called.

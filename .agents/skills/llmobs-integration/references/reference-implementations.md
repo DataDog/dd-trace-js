@@ -64,7 +64,8 @@ The abstract base class all plugins extend.
 
 ### Vercel AI SDK
 
-**Location:** `packages/dd-trace/src/llmobs/plugins/ai/` (`ddTelemetry.js` + `vercelTelemetry.js` behind a `CompositePlugin`)
+**Location:** `packages/dd-trace/src/llmobs/plugins/ai/` (`ddTelemetry.js` + `vercelTelemetry.js` behind a
+`CompositePlugin`)
 
 **Category:** Multi-Provider Framework
 
@@ -77,9 +78,9 @@ The abstract base class all plugins extend.
 
 ## Orchestration Examples
 
-### LangChain LangGraph
+### LangGraph
 
-**Location:** `packages/dd-trace/src/llmobs/plugins/langchain/` and `.../langgraph/` (separate plugins)
+**Location:** `packages/dd-trace/src/llmobs/plugins/langgraph/`
 
 **Category:** Pure Orchestration
 
@@ -88,6 +89,10 @@ The abstract base class all plugins extend.
 - State management tracking
 - Uses 'workflow' span kind instead of 'llm'
 - No direct LLM API calls
+
+LangChain is a separate plugin (`packages/dd-trace/src/llmobs/plugins/langchain/`) and is not
+orchestration: it returns `llm`, `embedding`, `tool` and `retrieval` kinds and its spec runs over the VCR
+proxy.
 
 **Good for:** Workflow instrumentation, non-LLM span kinds
 
@@ -170,7 +175,8 @@ kind: 'workflow' for graph execution
 
 ## CompositePlugin Integration
 
-Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class declares a `static plugins` field mapping keys to plugin classes.
+Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class declares a
+`static plugins` field mapping keys to plugin classes.
 
 See `packages/datadog-plugin-google-genai/src/index.js` for a reference implementation.
 
