@@ -1,6 +1,54 @@
 'use strict'
 
 const { extractTextFromContentItem } = require('../openai/utils')
+const { safeJsonParse } = require('../../util')
+
+/**
+ * Normalize OpenAI Chat Completions tool calls to the LLMObs message schema.
+ *
+ * @param {object} message
+ * @returns {Array<{ toolId?: string, name?: string, arguments: object, type?: string }>}
+ */
+function extractChatCompletionToolCalls (message) {
+  if (message.function_call) {
+    return [{
+      name: message.function_call.name,
+      arguments: safeJsonParse(message.function_call.arguments, {}),
+      type: 'function',
+    }]
+  }
+
+  const toolCalls = []
+  if (!Array.isArray(message.tool_calls)) return toolCalls
+
+  for (const toolCall of message.tool_calls) {
+    if (!toolCall) continue
+    toolCalls.push({
+      toolId: toolCall.id,
+      name: toolCall.function?.name,
+      arguments: safeJsonParse(toolCall.function?.arguments, {}),
+      type: toolCall.type,
+    })
+  }
+  return toolCalls
+}
+
+/**
+ * Normalize a Chat Completions message to the LLMObs message schema.
+ *
+ * @param {object} message
+ * @returns {object}
+ */
+function normalizeChatCompletionMessage (message) {
+  const normalized = {
+    role: message.role || 'assistant',
+    content: message.content ?? '',
+  }
+  const toolCalls = extractChatCompletionToolCalls(message)
+  if (toolCalls.length > 0) normalized.toolCalls = toolCalls
+  if (message.tool_call_id) normalized.toolId = message.tool_call_id
+  return normalized
+}
 
 /**
  * Extracts input messages for an LLM span. agents-openai stores only
@@ -39,8 +87,9 @@ function extractInputMessages (input, instructions) {
           content = item.content
         }
 
-        if (content) {
-          messages.push({ role, content })
+        const message = normalizeChatCompletionMessage({ ...item, content, role })
+        if (content || message.toolCalls || message.toolId) {
+          messages.push(message)
         }
       } else if (item.type === 'function_call') {
         let args = item.arguments
@@ -144,11 +193,7 @@ function extractGenerationOutputMessages (result) {
       for (const choice of response.choices) {
         const message = choice?.message
         if (!message) continue
-        messages.push({
-          ...message,
-          role: message.role || 'assistant',
-          content: message.content ?? '',
-        })
+        messages.push(normalizeChatCompletionMessage(message))
       }
     }
   }

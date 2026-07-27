@@ -92,6 +92,42 @@ describe('openai-agents utils', () => {
       )
     })
 
+    it('normalizes Chat Completions tool calls and results', () => {
+      const input = [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"city":"Paris"}' },
+          }],
+        },
+        {
+          role: 'tool',
+          content: '72F',
+          tool_call_id: 'call-1',
+        },
+      ]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              toolId: 'call-1',
+              name: 'lookup',
+              arguments: { city: 'Paris' },
+              type: 'function',
+            }],
+          },
+          { role: 'tool', content: '72F', toolId: 'call-1' },
+        ]
+      )
+    })
+
     it('parses function_call arguments as JSON when possible', () => {
       const input = [{
         type: 'function_call',
@@ -200,6 +236,36 @@ describe('openai-agents utils', () => {
       assert.deepStrictEqual(
         extractGenerationOutputMessages(output),
         [{ role: 'assistant', content: 'hello' }]
+      )
+    })
+
+    it('normalizes Chat Completions tool calls', () => {
+      const output = [{
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'lookup', arguments: '{"city":"Paris"}' },
+            }],
+          },
+        }],
+      }]
+
+      assert.deepStrictEqual(
+        extractGenerationOutputMessages(output),
+        [{
+          role: 'assistant',
+          content: '',
+          toolCalls: [{
+            toolId: 'call-1',
+            name: 'lookup',
+            arguments: { city: 'Paris' },
+            type: 'function',
+          }],
+        }]
       )
     })
 
