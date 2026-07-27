@@ -276,7 +276,8 @@ function sanitizeValue (value, seen, key, depth) {
 
   const sanitized = {}
   for (const [entryKey, entryValue] of Object.entries(value)) {
-    if (isSensitiveName(entryKey) && !SECRET_NAME_ONLY_KEYS.has(entryKey)) {
+    if (isSensitiveName(entryKey) && !SECRET_NAME_ONLY_KEYS.has(entryKey) &&
+      typeof entryValue !== 'boolean') {
       sanitized[entryKey] = REDACTED
       continue
     }

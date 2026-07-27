@@ -1,256 +1,217 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
+const { loadManifest } = require('../../../../ci/test-optimization-validation/manifest-loader')
 const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
+const {
+  createLoadedManifest,
+  createRepositoryFixture,
+  removeFixture,
+} = require('./validation-test-helpers')
 
 describe('test optimization validation manifest schema', () => {
-  it('rejects unresolved placeholders in executable command env', () => {
-    const errors = validateManifest(getManifest({
-      ciWiring: {
-        status: 'fail',
-        replayability: 'replayable',
-        provider: 'github-actions',
-        configFile: '/repo/.github/workflows/test.yml',
-        job: 'test',
-        step: 'Run tests',
-        whySelected: 'This step runs the selected test command.',
-        workingDirectory: '/repo',
-      },
-      ciWiringCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test'],
-        env: {
-          NODE_OPTIONS: '$' + '{NODE_OPTIONS}',
-        },
-      },
-    }))
+  let fixture
+  let manifest
 
-    assert.deepStrictEqual(errors, [
-      'frameworks[0].ciWiringCommand.env.NODE_OPTIONS contains an unresolved placeholder. ' +
-        'Resolve it before live validation.',
-    ])
+  beforeEach(() => {
+    fixture = createRepositoryFixture({ framework: 'mocha' })
+    manifest = JSON.parse(JSON.stringify(createLoadedManifest(fixture.root, 'mocha')))
+    delete manifest.__path
   })
 
-  it('rejects the removed forced local command role', () => {
-    const errors = validateManifest(getManifest({
-      forcedLocalCommand: {
-        cwd: '/repo',
-        argv: ['npm', 'test'],
-      },
-    }))
+  afterEach(() => removeFixture(fixture.root))
 
-    assert.deepStrictEqual(errors, [
-      'frameworks[0].forcedLocalCommand is not supported. Use the focused existingTestCommand for Basic ' +
-        'Reporting and ciWiringCommand for the CI-shaped replay.',
-    ])
+  it('accepts the data-only scaffold', () => {
+    assert.deepStrictEqual(validateManifest(manifest), [])
+    assert.strictEqual(JSON.stringify(manifest).includes('"argv"'), false)
   })
 
-  it('rejects duplicate runnable framework and CI command coverage', () => {
-    const manifest = getManifest({
-      ciWiring: getCiWiring(),
-      ciWiringCommand: getCiWiringCommand(),
-    })
-    manifest.frameworks.push({
-      ...manifest.frameworks[0],
-      id: 'jest:release',
-      ciWiring: {
-        ...getCiWiring(),
-        workflow: 'release',
-        job: 'release-test',
-      },
-      ciWiringCommand: {
-        ...getCiWiringCommand(),
-        env: { CI: 'true' },
-      },
-    })
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[1] duplicates runnable framework and CI command coverage from frameworks[0]. ' +
-        'Keep one representative framework entry and record the other CI job as an omitted or duplicate candidate.',
-    ])
-  })
-
-  it('allows the same CI command shape when Datadog initialization differs', () => {
-    const manifest = getManifest({
-      ciWiring: getCiWiring(),
-      ciWiringCommand: getCiWiringCommand(),
-    })
-    manifest.frameworks.push({
-      ...manifest.frameworks[0],
-      id: 'jest:initialized',
-      ciWiring: {
-        ...getCiWiring(),
-        workflow: 'initialized',
-      },
-      ciWiringCommand: {
-        ...getCiWiringCommand(),
-        env: { NODE_OPTIONS: '-r dd-trace/ci/init' },
-      },
-    })
+  it('accepts a detected framework that the validator does not support', () => {
+    const unsupported = structuredClone(manifest.frameworks[0])
+    unsupported.id = 'karma:root'
+    unsupported.framework = 'karma'
+    unsupported.status = 'unsupported_by_validator'
+    delete unsupported.validation
+    delete unsupported.preflight
+    delete unsupported.generatedTestStrategy
+    manifest.frameworks = [unsupported]
 
     assert.deepStrictEqual(validateManifest(manifest), [])
   })
 
-  it('accepts structured CI initialization evidence', () => {
-    const manifest = getManifest({
-      ciWiring: {
-        ...getCiWiring(),
-        initialization: {
-          status: 'not_configured',
-          evidence: ['The selected job has no NODE_OPTIONS or DD_* configuration.'],
-        },
-      },
-      ciWiringCommand: getCiWiringCommand(),
+  for (const [label, mutate, expected] of [
+    [
+      'an embedded argv',
+      value => { value.frameworks[0].argv = ['npm', 'test'] },
+      /argv is not supported/,
+    ],
+    [
+      'an embedded generated command',
+      value => { value.frameworks[0].generatedTestStrategy.scenarios[0].runCommand = { shell: 'npm test' } },
+      /runCommand is not supported/,
+    ],
+    [
+      'a shell field',
+      value => { value.frameworks[0].shellCommand = 'npm test' },
+      /shellCommand is not supported/,
+    ],
+    [
+      'a setup recipe',
+      value => { value.frameworks[0].setup = { commands: ['npm install'] } },
+      /setup is not supported/,
+    ],
+    [
+      'an outside runner',
+      value => { value.frameworks[0].validation.runner = path.join(os.tmpdir(), 'outside-runner.js') },
+      /validation\.runner must be inside repository\.root/,
+    ],
+    [
+      'an outside test',
+      value => { value.frameworks[0].validation.testFile = path.join(os.tmpdir(), 'outside-test.js') },
+      /validation\.testFile must be inside repository\.root/,
+    ],
+    [
+      'an unsupported selector scope',
+      value => { value.frameworks[0].validation.selectorScope = 'unverified_wrapper' },
+      /selectorScope must be bounded_direct_runner or instrumented_event_identity/,
+    ],
+    [
+      'an unsupported runner argument',
+      value => { value.frameworks[0].validation.runnerArgs = ['--eval', 'process.exit()'] },
+      /runnerArgs contain unsupported option --eval/,
+    ],
+    [
+      'runner shell control syntax',
+      value => { value.frameworks[0].validation.runnerArgs = ['--require', 'safe; unsafe'] },
+      /runnerArgs contain a missing or unsafe value for --require/,
+    ],
+    [
+      'a runner-controlled NODE_OPTIONS value',
+      value => { value.frameworks[0].validation.environment = { NODE_OPTIONS: '--require ./unsafe.js' } },
+      /environment contains unsupported variable NODE_OPTIONS/,
+    ],
+    [
+      'a dynamic runner environment value',
+      value => { value.frameworks[0].validation.environment = { NODE_ENV: '$NODE_ENV' } },
+      /environment contains an unsafe value for NODE_ENV/,
+    ],
+    [
+      'a Datadog environment dependency',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['DD_API_KEY'] },
+      /must not inherit Datadog/,
+    ],
+    [
+      'NODE_OPTIONS inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['NODE_OPTIONS'] },
+      /must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or TS_NODE_PROJECT/,
+    ],
+    [
+      'TS_NODE_PROJECT inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['TS_NODE_PROJECT'] },
+      /must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or TS_NODE_PROJECT/,
+    ],
+    [
+      'secret environment inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['NPM_TOKEN'] },
+      /must not inherit secret-like environment variables/,
+    ],
+    [
+      'executable-loading environment inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['NODE_PATH'] },
+      /must not inherit executable-loading environment variables/,
+    ],
+    [
+      'an excessive timeout',
+      value => { value.frameworks[0].validation.timeoutMs = 1_800_001 },
+      /timeoutMs must be an integer between/,
+    ],
+    [
+      'rewritten generated source',
+      value => { value.frameworks[0].generatedTestStrategy.files[0].contentLines = ['process.exit(0)'] },
+      /source differs from the validator-owned mocha recipe/,
+    ],
+    [
+      'a generated file omitted from cleanup',
+      value => { value.frameworks[0].generatedTestStrategy.cleanupPaths.shift() },
+      /must be included in generatedTestStrategy\.cleanupPaths/,
+    ],
+    [
+      'an executable-shaped CI command',
+      value => { value.frameworks[0].ciWiring.command = { argv: ['npm', 'test'] } },
+      /ciWiring\.command must be a string or null/,
+    ],
+    [
+      'an outside CI file',
+      value => { value.frameworks[0].ciWiring.configFile = path.join(os.tmpdir(), 'workflow.yml') },
+      /ciWiring\.configFile must be inside repository\.root/,
+    ],
+    [
+      'a non-boolean review result',
+      value => { value.frameworks[0].ciWiring.reviewComplete = 'yes' },
+      /reviewComplete must be a boolean/,
+    ],
+  ]) {
+    it(`rejects ${label}`, () => {
+      mutate(manifest)
+      assert.match(validateManifest(manifest).join('\n'), expected)
     })
+  }
 
-    assert.deepStrictEqual(validateManifest(manifest), [])
+  it('rejects generated-path ownership collisions across frameworks', () => {
+    const duplicate = structuredClone(manifest.frameworks[0])
+    duplicate.id = 'mocha:second'
+    manifest.frameworks.push(duplicate)
+
+    assert.match(validateManifest(manifest).join('\n'), /conflicts with another framework/)
   })
 
-  it('rejects CI replay initialization that contradicts discovery evidence', () => {
-    const manifest = getManifest({
-      ciWiring: {
-        ...getCiWiring(),
-        initialization: {
-          status: 'not_configured',
-          evidence: ['The selected job has no NODE_OPTIONS or DD_* configuration.'],
-        },
-      },
-      ciWiringCommand: {
-        ...getCiWiringCommand(),
-        env: { NODE_OPTIONS: '--require dd-trace/ci/init' },
-      },
-    })
+  it('rejects a retained preload that is not approval-bound', () => {
+    const preload = path.join(fixture.root, 'test', 'preload.js')
+    fs.writeFileSync(preload, 'void 0\n')
+    manifest.frameworks[0].validation.runnerArgs = ['--require', preload]
 
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.initialization.status is not_configured, but ' +
-        'frameworks[0].ciWiringCommand adds dd-trace initialization. The replay command must preserve the ' +
-        'discovered CI configuration; remove the added initialization or correct the initialization status and ' +
-        'evidence.',
-    ])
+    assert.match(validateManifest(manifest).join('\n'), /input that is not approval-bound/)
   })
 
-  it('rejects conclusive CI initialization status without evidence', () => {
-    const manifest = getManifest({
-      ciWiring: {
-        ...getCiWiring(),
-        initialization: {
-          status: 'configured',
-          evidence: [],
-        },
-      },
-      ciWiringCommand: getCiWiringCommand(),
-    })
+  it('rejects a retained preload outside the repository', () => {
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-outside-loader-')))
+    const preload = path.join(outside, 'preload.js')
+    fs.writeFileSync(preload, 'void 0\n')
+    manifest.frameworks[0].validation.runnerArgs = ['--require', preload]
 
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.initialization.evidence must explain the configured conclusion.',
-    ])
+    try {
+      assert.match(validateManifest(manifest).join('\n'), /resolves outside the repository/)
+    } finally {
+      fs.rmSync(outside, { force: true, recursive: true })
+    }
   })
 
-  it('requires an explicit CI replayability decision', () => {
-    const manifest = getManifest()
-    delete manifest.frameworks[0].ciWiring.replayability
+  it('rejects a manifest symlink', () => {
+    const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+    const linkedPath = path.join(fixture.root, 'linked-manifest.json')
+    fs.symlinkSync(manifestPath, linkedPath)
 
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.replayability must be replayable or not_replayable.',
-    ])
+    assert.throws(() => loadManifest(linkedPath), /must be a regular file, not a symbolic link/)
   })
 
-  it('requires the CI command when replay is possible', () => {
-    const manifest = getManifest({
-      ciWiring: {
-        ...getCiWiring(),
-        status: 'unknown',
-      },
-    })
+  it('rejects paths that lexically look contained but physically escape', () => {
+    const external = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-outside-')))
+    const linkedDirectory = path.join(fixture.root, 'linked')
+    fs.symlinkSync(external, linkedDirectory, 'dir')
+    const escaped = path.join(linkedDirectory, 'runner.js')
+    fs.writeFileSync(path.join(external, 'runner.js'), 'process.exit(0)\n')
+    manifest.frameworks[0].validation.runner = escaped
+    const manifestPath = path.join(fixture.root, 'dd-test-optimization-validation-manifest.json')
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`)
 
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiringCommand is required when frameworks[0].ciWiring.replayability is replayable.',
-    ])
-  })
-
-  it('requires a concrete blocker when CI replay is unavailable', () => {
-    const manifest = getManifest()
-    delete manifest.frameworks[0].ciWiring.replayBlocker
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.replayBlocker must explain why CI replay is not_replayable.',
-    ])
-  })
-
-  it('rejects a conclusive CI status when replay is unavailable', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.status = 'fail'
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.status must be skip or unknown when replayability is not_replayable.',
-    ])
-  })
-
-  it('rejects a CI command nested inside CI discovery evidence', () => {
-    const manifest = getManifest()
-    manifest.frameworks[0].ciWiring.ciWiringCommand = getCiWiringCommand()
-
-    assert.deepStrictEqual(validateManifest(manifest), [
-      'frameworks[0].ciWiring.ciWiringCommand is misplaced; use frameworks[0].ciWiringCommand.',
-    ])
+    try {
+      assert.throws(() => loadManifest(manifestPath), /validation\.runner resolves outside/)
+    } finally {
+      fs.rmSync(external, { force: true, recursive: true })
+    }
   })
 })
-
-function getCiWiring () {
-  return {
-    status: 'unknown',
-    replayability: 'replayable',
-    provider: 'github-actions',
-    configFile: '/repo/.github/workflows/test.yml',
-    job: 'test',
-    step: 'Run tests',
-    whySelected: 'This step runs tests.',
-    workingDirectory: '/repo',
-    diagnosis: 'The command is replayable.',
-  }
-}
-
-function getCiWiringCommand () {
-  return {
-    cwd: '/repo',
-    argv: ['npm', 'test'],
-    env: { CI: 'true' },
-  }
-}
-
-function getManifest (frameworkFields) {
-  return {
-    schemaVersion: '1.0',
-    repository: {
-      root: '/repo',
-    },
-    environment: {},
-    frameworks: [
-      {
-        id: 'jest:root',
-        framework: 'jest',
-        status: 'runnable',
-        project: {
-          root: '/repo',
-        },
-        existingTestCommand: {
-          cwd: '/repo',
-          argv: ['npm', 'test'],
-        },
-        preflight: {
-          ran: true,
-          exitCode: 0,
-          maxTestCount: 50,
-        },
-        ciWiring: {
-          status: 'skip',
-          replayability: 'not_replayable',
-          replayBlocker: 'No replayable CI test command was selected for this fixture.',
-          reason: 'No replayable CI test command was selected for this fixture.',
-        },
-        ...frameworkFields,
-      },
-    ],
-  }
-}
