@@ -14,18 +14,15 @@ const envVarRegex = new RegExp(ENV_PATTERN)
 const REDACTED = '?'
 
 function extractVarNames (expression) {
-  const varNames = new Set()
+  const varNames = {}
   let match
 
   while ((match = VARNAMES_REGEX.exec(expression))) {
-    varNames.add(match[1])
+    const name = match[1]
+    varNames[name] = `$${name}`
   }
 
-  const varNamesObject = {}
-  for (const varName of varNames.keys()) {
-    varNamesObject[varName] = `$${varName}`
-  }
-  return varNamesObject
+  return varNames
 }
 
 function getTokensByExpression (expressionTokens) {

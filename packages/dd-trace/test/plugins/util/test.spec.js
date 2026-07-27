@@ -761,6 +761,11 @@ describe('getCodeOwnersForFilename', () => {
         matches: ['file1.js', 'packages/dd-trace/fileA.js'],
         misses: ['file10.js', 'packages/dd-trace/file/name.js'],
       },
+      {
+        pattern: String.raw`file\*.js`,
+        matches: ['file*.js', 'packages/dd-trace/file*.js'],
+        misses: ['file1.js', 'packages/dd-trace/fileA.js'],
+      },
     ]
 
     for (const { pattern, matches = [], misses = [] } of patternTests) {
@@ -775,6 +780,14 @@ describe('getCodeOwnersForFilename', () => {
         assert.strictEqual(getCodeOwnersForFilename(filename, entries), null)
       }
     }
+  })
+
+  it('treats a trailing backslash as a literal instead of throwing', () => {
+    const codeOwnersFileEntries = [
+      { pattern: 'docs\\', owners: ['@datadog-docs'] },
+    ]
+
+    assert.strictEqual(getCodeOwnersForFilename('docs/README.md', codeOwnersFileEntries), null)
   })
 
   it('keeps CODEOWNERS matching case-sensitive', () => {

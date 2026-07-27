@@ -80,10 +80,11 @@ describe('ElectronExporter', () => {
       sinon.assert.notCalled(traceChannel.publish)
     })
 
-    it('should not publish when there are no subscribers', () => {
+    it('should not buffer when there are no subscribers', () => {
       traceChannel.hasSubscribers = false
 
       exporter.export([span])
+      traceChannel.hasSubscribers = true
       exporter.flush()
 
       sinon.assert.notCalled(traceChannel.publish)

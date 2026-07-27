@@ -215,9 +215,7 @@ function getTaintTrackingImpl (telemetryVerbosity, dummy = false) {
   if (dummy) return TaintTrackingNoop
 
   // with Verbosity.DEBUG every invocation of a TaintedUtils method increases the EXECUTED_PROPAGATION metric
-  return isDebugAllowed(telemetryVerbosity)
-    ? createImplWith(getContextDebug)
-    : createImplWith(getContextDefault)
+  return createImplWith(isDebugAllowed(telemetryVerbosity) ? getContextDebug : getContextDefault)
 }
 
 function getTaintTrackingNoop () {
