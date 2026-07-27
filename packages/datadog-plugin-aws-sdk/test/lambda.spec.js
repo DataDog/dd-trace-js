@@ -18,18 +18,17 @@ const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('
 
 /**
  * `@aws-sdk/core` 3.977.0 rewrote the clock-skew helper and dropped the guard that ignored an
- * unparsable server `Date`. Older clients, and every v2 client, resolve no `@aws-sdk/core` at all.
+ * unparsable server `Date`. Resolution reaches that copy through the hoisted tree even from clients
+ * that predate `@aws-sdk/core`, so only the declared dependency separates the two.
  *
  * @param {string} version Suffix of the `versions/@aws-sdk/client-lambda@<version>` entry.
- * @returns {boolean}
  */
 function hasUnguardedClockSkewCorrection (version) {
-  try {
-    const versionEntry = require(`../../../versions/@aws-sdk/client-lambda@${version}`)
-    return semifies(require(versionEntry.pkgJsonPath('@aws-sdk/core')).version, '>=3.977.0')
-  } catch {
-    return false
-  }
+  const versionEntry = require(`../../../versions/@aws-sdk/client-lambda@${version}`)
+  const { dependencies } = require(versionEntry.pkgJsonPath())
+
+  return dependencies?.['@aws-sdk/core'] !== undefined &&
+    semifies(require(versionEntry.pkgJsonPath('@aws-sdk/core')).version, '>=3.977.0')
 }
 
 describe('Plugin', () => {
