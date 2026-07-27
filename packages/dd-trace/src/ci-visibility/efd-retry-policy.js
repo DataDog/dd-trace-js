@@ -7,6 +7,10 @@ const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
   { limitMs: 300_000, key: '5m' },
 ]
 
+// A bucket the settings validator accepts but this module ignores silently loses its retries.
+const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
+  Object.freeze(EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS.map(({ key }) => key))
+
 /**
  * @typedef {object} EfdDurationRetryCount
  * @property {number} durationLimitMs
@@ -76,6 +80,7 @@ function shouldSkipEfdRetry (retryIndex, retryCount) {
 const EMPTY_EFD_RETRY_POLICY = createEfdRetryPolicy()
 
 module.exports = {
+  EARLY_FLAKE_DETECTION_RETRY_BUCKETS,
   EMPTY_EFD_RETRY_POLICY,
   createEfdRetryPolicy,
   getEfdRetryCountForDuration,

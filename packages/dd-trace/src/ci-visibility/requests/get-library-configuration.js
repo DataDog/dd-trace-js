@@ -3,7 +3,7 @@
 const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
-const { createEfdRetryPolicy } = require('../efd-retry-policy')
+const { EARLY_FLAKE_DETECTION_RETRY_BUCKETS, createEfdRetryPolicy } = require('../efd-retry-policy')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -25,7 +25,6 @@ const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = Object.freeze({
 const DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY =
   createEfdRetryPolicy(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
-const EARLY_FLAKE_DETECTION_RETRY_BUCKETS = Object.keys(DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES)
 
 /**
  * @typedef {object} EarlyFlakeDetectionSettings

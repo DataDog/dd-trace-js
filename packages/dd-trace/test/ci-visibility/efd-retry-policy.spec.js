@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const {
+  EARLY_FLAKE_DETECTION_RETRY_BUCKETS,
   EMPTY_EFD_RETRY_POLICY,
   createEfdRetryPolicy,
   getEfdRetryCountForDuration,
@@ -70,6 +71,14 @@ describe('EFD retry policy', () => {
     assert.throws(() => {
       EMPTY_EFD_RETRY_POLICY.schedulingRetryCount = 5
     }, { name: 'TypeError' })
+  })
+
+  it('honors every bucket it publishes to the settings validator', () => {
+    assert.deepStrictEqual(EARLY_FLAKE_DETECTION_RETRY_BUCKETS, ['5s', '10s', '30s', '5m'])
+
+    for (const bucket of EARLY_FLAKE_DETECTION_RETRY_BUCKETS) {
+      assert.strictEqual(createEfdRetryPolicy({ [bucket]: 1 }).schedulingRetryCount, 1, bucket)
+    }
   })
 
   it('skips only retries beyond the selected count', () => {
