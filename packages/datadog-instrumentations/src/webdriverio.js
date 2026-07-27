@@ -67,11 +67,19 @@ addHook({
  * @typedef {object} WorkerRecord
  * @property {object} worker
  * @property {string[]} specs
- * @property {Map<string, object>} suiteContexts
+ * @property {Map<string, WebdriverioSuiteContext>} suiteContexts
  * @property {string} testSuiteExecutionId
  * @property {boolean|undefined} hasTests
  * @property {number|undefined} exitCode
  * @property {number|undefined} retries
+ */
+
+/**
+ * @typedef {object} WebdriverioSuiteContext
+ * @property {object|undefined} currentStore
+ * @property {string|undefined} status
+ * @property {string} testSuiteAbsolutePath
+ * @property {string} testSuiteExecutionId
  */
 
 /**
@@ -352,8 +360,20 @@ function finishWorkerSuite (state, workerRecord, rawFile, status) {
  * @returns {void}
  */
 function finishAllWorkerSuites (state, workerRecord, status) {
-  for (const file of workerRecord.suiteContexts.keys()) {
-    finishWorkerSuite(state, workerRecord, file, status)
+  let hasFailedSuite = false
+  for (const suiteContext of workerRecord.suiteContexts.values()) {
+    if (suiteContext.status === 'fail') {
+      hasFailedSuite = true
+      break
+    }
+  }
+
+  for (const [file, suiteContext] of workerRecord.suiteContexts) {
+    let suiteStatus = suiteContext.status ?? status
+    if (status === 'fail' && !hasFailedSuite && suiteStatus === 'skip') {
+      suiteStatus = 'fail'
+    }
+    finishWorkerSuite(state, workerRecord, file, suiteStatus)
   }
 }
 
@@ -404,15 +424,17 @@ function handleConfigurationRequest (state, workerRecord, message) {
 /**
  * Handles suite results reported by a Mocha worker.
  *
- * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object} message
  * @returns {void}
  */
-function handleSuiteResults (state, workerRecord, message) {
+function handleSuiteResults (workerRecord, message) {
   const { results = [] } = message.content || {}
   for (const { file, status } of results) {
-    finishWorkerSuite(state, workerRecord, file, status)
+    const suiteContext = workerRecord.suiteContexts.get(normalizeFile(file))
+    if (suiteContext) {
+      suiteContext.status = status
+    }
   }
 }
 
@@ -445,7 +467,7 @@ function handleWorkerMessage (state, workerRecord, message) {
     return
   }
   if (message.name === SUITE_FINISH) {
-    handleSuiteResults(state, workerRecord, message)
+    handleSuiteResults(workerRecord, message)
     return
   }
   if (message.name === 'testFrameworkInit') {
@@ -476,6 +498,9 @@ function handleWorkerExit (state, workerRecord, exit) {
   }
 
   const status = workerRecord.hasTests === false ? 'skip' : exit.exitCode === 0 ? 'pass' : 'fail'
+  if (status === 'fail' && workerRecord.suiteContexts.size === 0) {
+    startWorkerSuites(workerRecord, workerRecord.specs)
+  }
   finishAllWorkerSuites(state, workerRecord, status)
 }
 

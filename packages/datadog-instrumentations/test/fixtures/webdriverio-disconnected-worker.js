@@ -69,6 +69,7 @@ function exerciseWorkerMessages () {
      * @returns {void}
      */
     run () {
+      this.emit('fail', { file: 'hook-fail.e2e.js', type: 'hook' })
       this.emit('end')
     }
   }

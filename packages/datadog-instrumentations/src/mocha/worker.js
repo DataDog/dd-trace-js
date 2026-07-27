@@ -389,13 +389,15 @@ addHook({
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler(config))
 
-    const failedHookFiles = new Set()
-    runnerToFailedHookFiles.set(this, failedHookFiles)
-    this.on('fail', runnable => {
-      if (runnable.type === 'hook' && runnable.file) {
-        failedHookFiles.add(runnable.file)
-      }
-    })
+    if (isWebdriverioWorker) {
+      const failedHookFiles = new Set()
+      runnerToFailedHookFiles.set(this, failedHookFiles)
+      this.on('fail', runnable => {
+        if (runnable.type === 'hook' && runnable.file) {
+          failedHookFiles.add(runnable.file)
+        }
+      })
+    }
     this.on('fail', getOnFailHandler(false, config))
 
     this.on('pending', getOnPendingHandler())

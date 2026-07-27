@@ -346,6 +346,16 @@ for (const version of versions) {
       }, 1)
     })
 
+    it('reports specs that fail while loading', async () => {
+      await runScenario('loadFailure', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites.length, 1)
+        assert.strictEqual(suites[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suites[0].meta[TEST_SUITE], 'load-fail.e2e.js')
+        assert.strictEqual(tests.length, 0)
+      }, 1)
+    })
+
     it('reports sequential workers as one session', async () => {
       await runScenario('serial', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)

@@ -25,6 +25,7 @@ const {
 
 const fixturePath = path.join(__dirname, 'fixtures', 'webdriverio-local-runner.mjs')
 const disconnectedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-disconnected-worker.js')
+const regularMochaWorkerFixturePath = path.join(__dirname, 'fixtures', 'mocha-regular-worker.js')
 const fixtureModulePath = path.join(
   __dirname,
   'fixtures',
@@ -147,6 +148,10 @@ describe('webdriverio instrumentation', () => {
 
   it('does not send Mocha worker messages over disconnected IPC', async () => {
     await execFileAsync(process.execPath, [disconnectedWorkerFixturePath])
+  })
+
+  it('does not track WebdriverIO hook failures in regular Mocha workers', async () => {
+    await execFileAsync(process.execPath, [regularMochaWorkerFixturePath])
   })
 
   it('coordinates two Mocha workers under one session', async () => {
@@ -457,6 +462,65 @@ describe('webdriverio instrumentation', () => {
       libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
       testSessionStartCh.unsubscribe(onSessionStart)
       testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('reports a suite that fails after Mocha loads but before requesting configuration', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const sessionFinishes = []
+    const suiteStarts = []
+    const suiteFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+    function onSuiteStart (event) {
+      suiteStarts.push(event)
+    }
+    function onSuiteFinish (event) {
+      suiteFinishes.push(event)
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const file = path.join(process.cwd(), 'load-fail.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, file)
+      worker.emit('message', {
+        name: WORKER_READY,
+        content: { frameworkVersion: '10.8.2' },
+      })
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.deepStrictEqual(suiteStarts.map(event => event.testSuiteAbsolutePath), [file])
+      assert.deepStrictEqual(suiteFinishes.map(event => event.status), ['fail'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
     }
   })
 

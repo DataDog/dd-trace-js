@@ -194,6 +194,19 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('tags telemetry with the effective test framework', () => {
+    const exportTelemetry = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter.exportTelemetry = exportTelemetry
+
+    plugin.telemetry.ciVisEvent('event_created', 'session')
+    plugin.testFramework = 'webdriverio'
+    plugin.telemetry.ciVisEvent('event_finished', 'session')
+
+    assert.strictEqual(exportTelemetry.firstCall.args[0].testFramework, 'vitest')
+    assert.strictEqual(exportTelemetry.secondCall.args[0].testFramework, 'webdriverio')
+  })
+
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
     const plugin = createPlugin('jest_worker')
     const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()

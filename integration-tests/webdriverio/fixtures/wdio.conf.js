@@ -73,6 +73,10 @@ const scenarioConfig = {
       './first.e2e.js',
     ]],
   },
+  loadFailure: {
+    maxInstances: 1,
+    specs: ['./load-fail.e2e.js'],
+  },
   multipleCapabilities: {
     capabilities: [
       { browserName: 'chrome' },
