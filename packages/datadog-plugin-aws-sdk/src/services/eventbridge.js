@@ -157,10 +157,7 @@ class EventBridge extends BaseAwsSdkPlugin {
   getInjectedEntryDetail (span, entry, injectTraceContext, dsmEnabled) {
     if (!entry?.Detail) return
 
-    const ddInfo = {}
-    if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
-    }
+    const ddInfo = this.tracer.inject(span, 'text_map');
 
     if (dsmEnabled) {
       // Measure with the trace context so the reported payload size matches the
