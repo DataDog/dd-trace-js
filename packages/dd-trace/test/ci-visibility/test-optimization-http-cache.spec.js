@@ -337,6 +337,33 @@ describe('test-optimization-http-cache', () => {
     }
   })
 
+  it('disables only the malformed feature in cached settings', () => {
+    writeCacheLayout(tmpRoot, {
+      settings: {
+        data: {
+          attributes: {
+            ...SETTINGS_RESPONSE.data.attributes,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': -1,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    const cache = new TestOptimizationHttpCache()
+    const settings = cache.readSettings()
+
+    assert.strictEqual(cache.isAvailable(), true)
+    assert.strictEqual(settings.isCodeCoverageEnabled, true)
+    assert.strictEqual(settings.isEarlyFlakeDetectionEnabled, false)
+    assert.strictEqual(settings.isTestManagementEnabled, true)
+    assert.strictEqual(Object.isFrozen(settings), true)
+  })
+
   it('ignores optional endpoint files after invalid settings disable the cache', () => {
     writeCacheLayout(tmpRoot, { settings: { data: { attributes: { code_coverage: true } } } })
     writeHttpCacheFile(tmpRoot, 'known_tests.json', KNOWN_TESTS_RESPONSE)
@@ -442,7 +469,7 @@ describe('test-optimization-http-cache', () => {
     assert.match(cache.getLastError().message, /exceeds 32 bytes/)
   })
 
-  it('rejects out-of-range and non-integer validation retry counts', () => {
+  it('rejects out-of-range and non-integer validation policy values', () => {
     const settings = structuredClone(SETTINGS_RESPONSE)
     settings.data.attributes.early_flake_detection.slow_test_retries['5s'] = 101
     const { manifestPath } = writeCacheLayout(tmpRoot, { settings })
@@ -451,6 +478,12 @@ describe('test-optimization-http-cache', () => {
     assert.match(cache.getLastError().message, /value must be between 0 and 100/)
 
     settings.data.attributes.early_flake_detection.slow_test_retries['5s'] = 1.5
+    writeHttpCacheFile(tmpRoot, 'settings.json', settings)
+    cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+
+    settings.data.attributes.early_flake_detection.slow_test_retries['5s'] = 1
+    settings.data.attributes.early_flake_detection.faulty_session_threshold = 1.5
     writeHttpCacheFile(tmpRoot, 'settings.json', settings)
     cache = new TestOptimizationHttpCache({ validationManifestPath: manifestPath })
     assert.strictEqual(cache.readSettings(), CACHE_MISS)
