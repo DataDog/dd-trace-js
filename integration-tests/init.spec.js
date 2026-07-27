@@ -339,6 +339,16 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
       testInjectionScenarios('loader', 'initialize.mjs',
         process.versions.node !== '18.0.0')
       testRuntimeVersionChecks('loader', 'initialize.mjs')
+
+      // Only off-thread loaders install the matcher; see initialize.mjs.
+      if (semver.satisfies(process.versions.node, '>=18.19.0')) {
+        context('when importing an unrelated module', () => {
+          useEnv({ NODE_OPTIONS: '--no-warnings --loader dd-trace/initialize.mjs' })
+
+          it('does not wrap the module with import-in-the-middle', () =>
+            testFile('init/unrelated-loader.mjs', 'true\n', [], ''))
+        })
+      }
     })
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
