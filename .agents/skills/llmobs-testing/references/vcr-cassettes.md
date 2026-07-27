@@ -40,8 +40,9 @@ new OpenAI({
 Names are generated as `{provider}_{path}_{method}_{hash}`, so you never choose or rename one. The
 hash covers the request, which means editing a prompt in a spec orphans its cassette and requires a
 new recording. Both `.json` and `.yaml` files are in the tree and both replay, so take whichever
-format a recording produces. Binary and multipart bodies live inside JSON cassettes, base64-encoded
-behind a `base64:` prefix.
+format a recording produces; each request is stored once, in one format, so a cassette never has a
+twin in the other. Binary and multipart bodies live inside JSON cassettes, base64-encoded behind a
+`base64:` prefix.
 
 Six providers record without any configuration (openai, anthropic, genai, azure-openai, deepseek,
 bedrock-runtime), which is every cassette directory except one. A provider the agent cannot resolve

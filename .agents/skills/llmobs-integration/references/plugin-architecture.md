@@ -15,12 +15,14 @@ The base class handles span registration, context management, and lifecycle hook
 Defines span metadata for registration with LLMObs. Called at span start.
 
 **Returns** an object with:
-- `kind` (string) — span type: `'llm'`, `'embedding'`, `'workflow'`, `'agent'`, `'tool'`, `'retrieval'`
+- `kind` (string) — span type, from `SPAN_KINDS`: `'llm'`, `'agent'`, `'workflow'`, `'task'`, `'tool'`, `'embedding'`, `'retrieval'`
 - `name` (string) — operation name (e.g. `'openai.chat.completions'`)
 - `modelProvider` (string, optional) — provider name (e.g. `'openai'`, `'anthropic'`, `'google'`)
 - `modelName` (string, optional) — model identifier (e.g. `'gpt-4'`, `'claude-3-sonnet'`)
 
-**Return `null`** to skip recording an LLMObs span for a given `ctx` entirely.
+**Return nothing** to skip recording an LLMObs span for a given `ctx` entirely — `base.js` only tests the
+result for truthiness, and the plugins use a bare `return` (`openai/index.js` does this for the methods it
+does not trace).
 
 ### setLLMObsTags(ctx)
 
@@ -54,12 +56,16 @@ Tag data using `this._tagger`, which provides:
 - `tagMetrics(span, metrics)` — token usage (`input_tokens`, `output_tokens`, `total_tokens`)
 - `tagSpanTags(span, tags)` — arbitrary key/value span tags
 - `tagPrompt(span, prompt)` — prompt tracking metadata
+- `tagToolDefinitions(span, toolDefinitions)` — the tools a request declared, for tool-calling integrations
+- `tagCostTags(span, costTags, source)` — provider-reported cost
+- `tagModelName(span, modelName)` — a model name discovered after registration
 
 ## Static Properties
 
 Each plugin class needs:
 - `static integration` — integration name (e.g. `'openai'`)
-- `static id` — unique plugin ID (e.g. `'llmobs_openai'`)
+- `static id` — unique plugin ID, matching the integration for a single-plugin package (`'openai'`) and
+  qualified per hooked operation when a package needs several (`'llmobs_langgraph_pregel_stream'`)
 - `static prefix` — diagnostic channel prefix (e.g. `'tracing:apm:openai:chat'`)
 
 ## Error Handling

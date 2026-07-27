@@ -42,6 +42,6 @@ The best examples of message extraction for the providers we support:
 
 - Always handle null/undefined with fallback defaults (`|| ''` and `|| []`)
 - Normalize `'model'` role to `'assistant'` for consistency (preserve `'system'`, `'tool'`, `'function'`)
-- For array content parts (Anthropic, Google), join text parts with `''`
+- For array content parts, the separator is the provider's, not a default: `genai/util.js` joins text parts with `'\n'`, `anthropic/util.js` with `','`
 - For streaming, accumulate delta content across chunks before tagging
 - Always return `[{ content: '', role: '' }]` on error (never omit output messages)
