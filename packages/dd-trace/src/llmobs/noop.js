@@ -19,10 +19,6 @@ class NoopLLMObs {
     return this.experiments.experiment(options)
   }
 
-  asyncExperiment (options) {
-    return this.experiment(options)
-  }
-
   enable (options) {}
 
   disable () {}

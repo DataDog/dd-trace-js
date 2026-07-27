@@ -3793,11 +3793,6 @@ declare namespace tracer {
       experiment (options: ExperimentOptions): Experiment
 
       /**
-       * Alias for experiment(); run() is always asynchronous in Node.js.
-       */
-      asyncExperiment (options: ExperimentOptions): Experiment
-
-      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.

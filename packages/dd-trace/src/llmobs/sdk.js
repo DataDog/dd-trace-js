@@ -81,10 +81,6 @@ class LLMObs extends NoopLLMObs {
     return this.experiments.experiment(options)
   }
 
-  asyncExperiment (options) {
-    return this.experiment(options)
-  }
-
   enable (options = {}) {
     logger.warn(
       'Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
