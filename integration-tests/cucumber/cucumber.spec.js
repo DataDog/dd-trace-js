@@ -142,7 +142,7 @@ describe('cucumber worker threads preload', () => {
   })
 })
 
-for (const cucumberWorkerVersion of ['13.1.0', '13.2.0']) {
+for (const cucumberWorkerVersion of ['13.1.1', 'latest']) {
   const testSuite = shouldTestCucumberWorkerThreadsPreload ? describe : describe.skip
 
   testSuite(`cucumber@${cucumberWorkerVersion} worker threads preload`, () => {
@@ -157,7 +157,9 @@ for (const cucumberWorkerVersion of ['13.1.0', '13.2.0']) {
         'utf8'
       ))
 
-      assert.strictEqual(cucumberPackage.version, cucumberWorkerVersion)
+      if (cucumberWorkerVersion !== 'latest') {
+        assert.strictEqual(cucumberPackage.version, cucumberWorkerVersion)
+      }
     })
 
     beforeEach(async () => {
