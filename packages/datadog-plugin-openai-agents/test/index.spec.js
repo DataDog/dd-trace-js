@@ -36,6 +36,10 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
     await testSetup.teardown()
   })
 
+  it('preserves the exported Chat Completions model class', () => {
+    assert.strictEqual(testSetup.chatCompletionsModelClass, testSetup.directChatCompletionsModelClass)
+  })
+
   describe('run() — single-agent workflow', () => {
     it('emits a workflow span with correct component/kind tags', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {

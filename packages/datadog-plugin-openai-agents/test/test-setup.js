@@ -187,10 +187,22 @@ class OpenaiAgentsTestSetup {
 
     const agentsOpenaiDir = path.join(__dirname, '..', '..', '..', 'versions', '@openai', `agents-openai@${version}`)
     const { OpenAIChatCompletionsModel, OpenAIResponsesModel } = require(agentsOpenaiDir).get()
+    const directModelPath = path.join(
+      agentsOpenaiDir,
+      'node_modules',
+      '@openai',
+      'agents-openai',
+      'dist',
+      'openaiChatCompletionsModel.js'
+    )
+    const { OpenAIChatCompletionsModel: DirectOpenAIChatCompletionsModel } = require(directModelPath)
     const openaiPath = require.resolve('openai', {
       paths: [path.join(__dirname, '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai')],
     })
     const { OpenAI } = require(openaiPath)
+
+    this.chatCompletionsModelClass = OpenAIChatCompletionsModel
+    this.directChatCompletionsModelClass = DirectOpenAIChatCompletionsModel
 
     const mockClient = new OpenAI({
       apiKey: 'test',
@@ -295,6 +307,8 @@ class OpenaiAgentsTestSetup {
     this.agent = undefined
     this.streamAgent = undefined
     this.chatCompletionsAgent = undefined
+    this.chatCompletionsModelClass = undefined
+    this.directChatCompletionsModelClass = undefined
     this.errorAgent = undefined
     this.handoffAgentA = undefined
     this.handoffAgentB = undefined

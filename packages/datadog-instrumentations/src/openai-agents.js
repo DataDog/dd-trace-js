@@ -1,14 +1,32 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook } = require('./helpers/instrument')
+const { addHook, getHooks } = require('./helpers/instrument')
 
 // `WeakSet` keyed by module exports — replaces the underscored
 // `mod._datadogPatched` flag while keeping dedupe semantics. Mods are kept
 // alive by `require.cache` anyway, so this doesn't add lifetime to anything.
 const patchedMods = new WeakSet()
 const modelBaseURLs = new WeakMap()
+const chatCompletionsModelConstructorCh =
+  tracingChannel('orchestrion:@openai/agents-openai:OpenAIChatCompletionsModel_constructor')
+
+/**
+ * Capture the client base URL before the SDK stores the client in a #private field.
+ *
+ * @param {{ arguments?: [{ baseURL?: string }], self?: object }} ctx
+ */
+function captureChatCompletionsModelBaseURL (ctx) {
+  const baseURL = ctx.arguments?.[0]?.baseURL
+  if (ctx.self && typeof baseURL === 'string') modelBaseURLs.set(ctx.self, baseURL)
+}
+
+chatCompletionsModelConstructorCh.end.subscribe(captureChatCompletionsModelBaseURL)
+
+for (const hook of getHooks('@openai/agents-openai')) {
+  addHook(hook, moduleExports => moduleExports)
+}
 
 // Plugin subscribes to this and registers its TracingProcessor when
 // `@openai/agents` loads. Publishing from here keeps this file free of
@@ -101,25 +119,6 @@ function getClientBaseURL (model) {
   return model?.client?.baseURL ?? model?._client?.baseURL ?? modelBaseURLs.get(model)
 }
 
-/**
- * Capture the client base URL passed to OpenAIChatCompletionsModel. The SDK
- * stores this client in a JavaScript #private field, so response-method wrappers
- * cannot read it from the model instance later.
- *
- * @param {Function} Original
- * @returns {Function}
- */
-function wrapChatCompletionsModel (Original) {
-  function OpenAIChatCompletionsModel (...args) {
-    const model = Reflect.construct(Original, args, new.target)
-    const baseURL = args[0]?.baseURL
-    if (typeof baseURL === 'string') modelBaseURLs.set(model, baseURL)
-    return model
-  }
-  OpenAIChatCompletionsModel.prototype = Original.prototype
-  return OpenAIChatCompletionsModel
-}
-
 function wrapAsyncIterator (iterator, context) {
   if (!iterator || typeof iterator !== 'object') return iterator
 
@@ -155,11 +154,6 @@ addHook({ name: '@openai/agents-openai', versions: ['>=0.7.0'] }, (mod) => {
     if (typeof proto?.getStreamedResponse === 'function') {
       shimmer.wrap(proto, 'getStreamedResponse', wrapStreamedResponseMethod)
     }
-  }
-  if (chatCompletionsProto) {
-    // Orchestrion cannot observe constructor arguments for this dynamically
-    // exported class, and the SDK keeps its client in a #private field.
-    shimmer.wrap(mod, 'OpenAIChatCompletionsModel', wrapChatCompletionsModel, { replaceGetter: true })
   }
   return mod
 })
