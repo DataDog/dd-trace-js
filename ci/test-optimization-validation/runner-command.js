@@ -193,7 +193,9 @@ function getRunnerArgs (framework, testFile, generated) {
       ...generatedOverrides,
     ]
   }
-  if (name === 'mocha') return [...configuration, '--reporter', 'spec', testFile]
+  if (name === 'mocha') {
+    return [...configuration, '--no-config', '--no-package', '--no-opts', '--reporter', 'spec', testFile]
+  }
   if (name === 'vitest') {
     const needsGlobals = generated && framework.generatedTestStrategy.moduleSystem === 'commonjs'
     return ['run', ...configuration, testFile, ...(needsGlobals ? ['--globals'] : [])]

@@ -72,6 +72,7 @@ const DIRECTORY_OPTIONS = new Set(['--root'])
 const UNSUPPORTED_CONFIGURATION_OPTIONS = {
   cypress: new Set(['--config']),
   jest: new Set(['--projects']),
+  mocha: new Set(['--config']),
 }
 const BUILTIN_MODULE_VALUES = new Map([
   ['-u', new Set(['bdd', 'exports', 'qunit', 'tdd'])],

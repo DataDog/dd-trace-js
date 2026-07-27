@@ -124,9 +124,64 @@ describe('test optimization validation manifest scaffold', () => {
       assert.deepStrictEqual(framework.validation.runnerArgs, ['-r', 'ts-node/register'])
       assert.deepStrictEqual(framework.validation.environment, { TS_NODE_PROJECT: 'test/tsconfig.json' })
       assert.deepStrictEqual(command.argv.slice(2, 4), ['-r', 'ts-node/register'])
+      assert.deepStrictEqual(
+        command.argv.slice(4, 9),
+        ['--no-config', '--no-package', '--no-opts', '--reporter', 'spec']
+      )
       assert.strictEqual(command.env.TS_NODE_PROJECT, 'test/tsconfig.json')
       assert.ok(framework.project.configFiles.includes(path.join(fixture.root, 'test', 'tsconfig.json')))
       assert.ok(framework.project.configFiles.includes(fs.realpathSync(loader)))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('disables implicit Mocha config for representative and generated commands', () => {
+    const fixture = createRepositoryFixture({ framework: 'mocha' })
+    fs.writeFileSync(path.join(fixture.root, '.mocharc.json'), JSON.stringify({
+      spec: ['test/**/*.js'],
+    }))
+    const packageJsonPath = path.join(fixture.root, 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath))
+    packageJson.mocha = { spec: ['other-tests/**/*.js'] }
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson)}\n`)
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      }).frameworks[0]
+      const generated = framework.generatedTestStrategy.scenarios[0]
+      const commands = [
+        [getBasicCommand(framework), framework.validation.testFile],
+        [getGeneratedCommand(framework, generated), generated.testIdentities[0].file],
+      ]
+
+      assert.strictEqual(framework.status, 'runnable')
+      for (const [command, expectedTestFile] of commands) {
+        assert.ok(command.argv.includes('--no-config'))
+        assert.ok(command.argv.includes('--no-package'))
+        assert.ok(command.argv.includes('--no-opts'))
+        assert.strictEqual(command.argv.at(-1), expectedTestFile)
+      }
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
+  it('requires setup instead of retaining an explicit Mocha config', () => {
+    const fixture = createRepositoryFixture({
+      framework: 'mocha',
+      script: 'mocha --config .mocharc.json test/example.spec.js',
+    })
+    fs.writeFileSync(path.join(fixture.root, '.mocharc.json'), '{}\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['mocha']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'requires_manual_setup')
+      assert.match(framework.notes.join('\n'), /--config has configuration semantics/)
     } finally {
       removeFixture(fixture.root)
     }
