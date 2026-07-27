@@ -425,10 +425,18 @@ describe('parseSkippableSuitesResponse', () => {
     assert.deepStrictEqual(result, {
       skippableSuites: [{ suite: 'suite1.spec.js', name: 'test 1' }],
       correlationId: 'corr-123',
-      coverage: {},
+      coverage: undefined,
       numReceivedSkippableItems: 1,
       numExcludedByMissingLineCoverage: 0,
     })
+  })
+
+  it('leaves coverage undefined when the response carries none', () => {
+    const withoutCoverage = parseSkippableSuitesResponse(JSON.stringify({ data: [], meta: {} }))
+    const withEmptyCoverage = parseSkippableSuitesResponse(JSON.stringify({ data: [], meta: { coverage: {} } }))
+
+    assert.strictEqual(withoutCoverage.coverage, undefined)
+    assert.strictEqual(withEmptyCoverage.coverage, undefined)
   })
 
   it('filters missing line coverage when coverage report upload is enabled', () => {
