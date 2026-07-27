@@ -9,16 +9,25 @@ import { describe, it } from 'mocha'
 
 const SCRIPT = fileURLToPath(new URL('verify-exercised-tests.js', import.meta.url))
 
-// Written split so the linter does not read it as an unintended template literal.
+// Written split so the linter does not read these as unintended template literals.
 const PLUGINS_VAR = '$' + '{PLUGINS}'
+const SPEC_VAR = '$' + '{SPEC:-*}'
+const MATRIX_SPEC = '$' + '{{ matrix.spec }}'
 
 /**
- * @typedef {{ run: string, env?: Record<string, string> }} WorkflowStep
+ * @typedef {{ run: string, env?: Record<string, string> } | { uses: string }} WorkflowStep
+ * @typedef {Array<string|WorkflowStep>} JobSteps
+ * @typedef {JobSteps | {
+ *   steps: JobSteps,
+ *   env?: Record<string, string>,
+ *   matrix?: Record<string, string[]>,
+ * }} WorkflowJob
  * @typedef {{
  *   scripts: Record<string, string>,
- *   workflows: Record<string, Record<string, Array<string|WorkflowStep>>>,
+ *   workflows: Record<string, Record<string, WorkflowJob>|string>,
  *   files: string[],
- * }} Fixture
+ *   actions: Record<string, JobSteps|string>,
+ * }} Fixture Workflows and actions accept raw YAML so malformed shapes stay expressible.
  */
 
 /**
@@ -35,30 +44,95 @@ const PASSING = {
     'test.yml': { unit: ['npm run test:unit:ci'] },
   },
   files: ['packages/alpha/test/one.spec.js'],
+  actions: {},
 }
 
 /**
- * @param {Record<string, Array<string|WorkflowStep>>} jobs
+ * @param {JobSteps} steps
+ * @param {string} indent
+ * @returns {string[]}
+ */
+function stepLines (steps, indent) {
+  const lines = []
+
+  for (const step of steps) {
+    const normalized = typeof step === 'string' ? { run: step } : step
+
+    if ('uses' in normalized) {
+      lines.push(`${indent}- uses: ${normalized.uses}`)
+      continue
+    }
+
+    lines.push(`${indent}- run: ${normalized.run}`)
+    if (normalized.env) {
+      lines.push(`${indent}  env:`)
+      for (const [name, value] of Object.entries(normalized.env)) {
+        lines.push(`${indent}    ${name}: ${value}`)
+      }
+    }
+  }
+
+  return lines
+}
+
+/**
+ * @param {Record<string, WorkflowJob>} jobs
  * @returns {string}
  */
 function workflowYaml (jobs) {
   const lines = ['name: test', 'on: push', 'jobs:']
 
-  for (const [jobId, steps] of Object.entries(jobs)) {
-    lines.push(`  ${jobId}:`, '    runs-on: ubuntu-latest', '    steps:')
+  for (const [jobId, jobValue] of Object.entries(jobs)) {
+    const job = Array.isArray(jobValue) ? { steps: jobValue } : jobValue
+    lines.push(`  ${jobId}:`, '    runs-on: ubuntu-latest')
 
-    for (const step of steps) {
-      const { run, env } = typeof step === 'string' ? { run: step } : step
-      lines.push(`      - run: ${run}`)
-
-      if (env) {
-        lines.push('        env:')
-        for (const [name, value] of Object.entries(env)) lines.push(`          ${name}: ${value}`)
+    if ('matrix' in job && job.matrix) {
+      lines.push('    strategy:', '      matrix:')
+      for (const [name, values] of Object.entries(job.matrix)) {
+        lines.push(`        ${name}:`)
+        for (const value of values) lines.push(`          - ${value}`)
       }
     }
+
+    if ('env' in job && job.env) {
+      lines.push('    env:')
+      for (const [name, value] of Object.entries(job.env)) lines.push(`      ${name}: ${value}`)
+    }
+
+    lines.push('    steps:', ...stepLines(job.steps, ' '.repeat(6)))
   }
 
   return `${lines.join('\n')}\n`
+}
+
+/**
+ * @param {JobSteps|string} action Composite steps, or raw YAML for a non-composite action.
+ * @returns {string}
+ */
+function actionYaml (action) {
+  if (typeof action === 'string') return action
+
+  const lines = ['name: fixture', 'runs:', '  using: composite', '  steps:', ...stepLines(action, ' '.repeat(4))]
+
+  return `${lines.join('\n')}\n`
+}
+
+/**
+ * A single job whose glob narrows per matrix leg through the environment.
+ *
+ * @param {string[]} spec
+ * @returns {Record<string, Record<string, WorkflowJob>>}
+ */
+function matrixWorkflow (spec) {
+  return {
+    'test.yml': {
+      plugins: {
+        matrix: { spec },
+        env: { SPEC: MATRIX_SPEC },
+        steps: ['npm run test:plugins:ci'],
+      },
+    },
+  }
 }
 
 /**
@@ -66,7 +140,7 @@ function workflowYaml (jobs) {
  * @returns {{ status: number|null, stdout: string, stderr: string }}
  */
 function runVerifier (overrides = {}) {
-  const { scripts, workflows, files } = { ...PASSING, ...overrides }
+  const { scripts, workflows, files, actions } = { ...PASSING, ...overrides }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-verify-exercised-'))
 
   try {
@@ -75,7 +149,13 @@ function runVerifier (overrides = {}) {
     for (const [name, jobs] of Object.entries(workflows)) {
       const file = path.join(root, '.github', 'workflows', name)
       fs.mkdirSync(path.dirname(file), { recursive: true })
-      fs.writeFileSync(file, workflowYaml(jobs))
+      fs.writeFileSync(file, typeof jobs === 'string' ? jobs : workflowYaml(jobs))
+    }
+
+    for (const [directory, action] of Object.entries(actions)) {
+      const file = path.join(root, directory, 'action.yml')
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, actionYaml(action))
     }
 
     for (const file of files) {
@@ -231,6 +311,150 @@ describe('verify-exercised-tests', () => {
 
     assert.strictEqual(status, 1)
     assert.match(stderr, /generates coverage but does not upload it/)
+  })
+
+  describe('coverage upload ordering', () => {
+    const scripts = { ...PASSING.scripts, 'test:cov:ci': 'node scripts/c8-ci.js test:unit:ci' }
+    const upload = { uses: './.github/actions/coverage' }
+
+    it('accepts a job that uploads after generating coverage', () => {
+      const { status } = runVerifier({
+        scripts,
+        workflows: { 'test.yml': { unit: ['npm run test:cov:ci', upload] } },
+      })
+
+      assert.strictEqual(status, 0)
+    })
+
+    it('reports a job that generates coverage after its last upload', () => {
+      const { status, stderr } = runVerifier({
+        scripts,
+        workflows: { 'test.yml': { unit: [upload, 'npm run test:cov:ci'] } },
+      })
+
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /test\.yml#unit: generates coverage after its last coverage upload/)
+    })
+
+    it('accepts a later upload that still covers an earlier suite', () => {
+      const { status } = runVerifier({
+        scripts,
+        workflows: { 'test.yml': { unit: [upload, 'npm run test:cov:ci', upload] } },
+      })
+
+      assert.strictEqual(status, 0)
+    })
+
+    it('reports a suite repeated after the upload that already covered it', () => {
+      const { status, stderr } = runVerifier({
+        scripts,
+        workflows: { 'test.yml': { unit: ['npm run test:cov:ci', upload, 'npm run test:cov:ci'] } },
+      })
+
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /generates coverage after its last coverage upload/)
+    })
+
+    it('reports the ordering inside a composite action', () => {
+      const { status, stderr } = runVerifier({
+        scripts,
+        actions: { '.github/actions/suite': [upload, { run: 'npm run test:cov:ci' }] },
+        workflows: { 'test.yml': { unit: [{ uses: './.github/actions/suite' }] } },
+      })
+
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /generates coverage after its last coverage upload/)
+    })
+
+    it('accepts a composite action that uploads after its suite', () => {
+      const { status } = runVerifier({
+        scripts,
+        actions: { '.github/actions/suite': [{ run: 'npm run test:cov:ci' }, upload] },
+        workflows: { 'test.yml': { unit: [{ uses: './.github/actions/suite' }] } },
+      })
+
+      assert.strictEqual(status, 0)
+    })
+
+    it('walks past steps that carry neither a command nor an action', () => {
+      const { status } = runVerifier({
+        workflows: {
+          'test.yml': [
+            'name: test',
+            'on: push',
+            'env:',
+            '  DD_ENV: ci',
+            '  DD_TELEMETRY: false',
+            'jobs:',
+            '  unit:',
+            '    runs-on: ubuntu-latest',
+            '    env:',
+            '      DD_TRACE_DEBUG: true',
+            '    steps:',
+            '      -',
+            '      - name: no command here',
+            '      - uses: nick-fields/retry@v3',
+            '      - run: npm run test:unit:ci',
+          ].join('\n') + '\n',
+        },
+      })
+
+      assert.strictEqual(status, 0)
+    })
+
+    it('reports a local action whose steps it cannot read', () => {
+      const { status, stderr } = runVerifier({
+        actions: { '.github/actions/bundled': 'name: fixture\nruns:\n  using: node20\n  main: index.js\n' },
+        workflows: { 'test.yml': { unit: ['npm run test:unit:ci', { uses: './.github/actions/bundled' }] } },
+      })
+
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /cannot inspect local action "\.\/\.github\/actions\/bundled", which is not a composite action/)
+    })
+
+    it('reports an action file it cannot read as a composite action', () => {
+      const { status, stderr } = runVerifier({
+        actions: { '.github/actions/empty': '' },
+        workflows: { 'test.yml': { unit: ['npm run test:unit:ci', { uses: './.github/actions/empty' }] } },
+      })
+
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /cannot inspect local action "\.\/\.github\/actions\/empty"/)
+    })
+
+    it('accepts a composite action that declares no steps', () => {
+      const { status } = runVerifier({
+        actions: { '.github/actions/noop': 'name: fixture\nruns:\n  using: composite\n' },
+        workflows: { 'test.yml': { unit: ['npm run test:unit:ci', { uses: './.github/actions/noop' }] } },
+      })
+
+      assert.strictEqual(status, 0)
+    })
+  })
+
+  describe('matrix legs', () => {
+    // `SPEC` reaches the glob only through the environment, so an unresolved matrix expression
+    // widens the pattern to `*` and hides every spec no leg actually selects.
+    const scripts = {
+      'test:plugins:ci': `mocha "packages/datadog-plugin-alpha/test/**/${SPEC_VAR}*.spec.js"`,
+    }
+    const files = [
+      'packages/datadog-plugin-alpha/test/one.spec.js',
+      'packages/datadog-plugin-alpha/test/two.spec.js',
+    ]
+
+    it('reports a spec that no matrix leg selects', () => {
+      const { status, stderr } = runVerifier({ scripts, files, workflows: matrixWorkflow(['one']) })
+
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /exercise packages\/datadog-plugin-alpha\/test\/two\.spec\.js/)
+    })
+
+    it('accepts specs that the matrix legs cover between them', () => {
+      const { status } = runVerifier({ scripts, files, workflows: matrixWorkflow(['one', 'two']) })
+
+      assert.strictEqual(status, 0)
+    })
   })
 
   it('warns about a dd-trace test category test:trace:core excludes', () => {

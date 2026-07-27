@@ -561,70 +561,75 @@ function isUsesStep (step) {
 }
 
 /**
- * @param {string} repoRoot
- * @param {string} uses
- * @param {Record<string, string|undefined>} env
- * @param {Set<string>} visiting
- * @returns {{ run: string, env: Record<string, string|undefined> }[]}
+ * @typedef {{ kind: 'run', run: string, env: Record<string, string> }
+ *   | { kind: 'upload' }
+ *   | { kind: 'opaque', action: string }} StepEvent
  */
-function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
-  const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile) return []
-  if (visiting.has(actionFile)) return []
-  visiting.add(actionFile)
 
-  const doc = parseYamlFile(repoRoot, actionFile)
-  if (!isPlainObject(doc)) return []
+/**
+ * Ordered events a step contributes, descending into local composite actions.
+ *
+ * Commands and uploads share one timeline because five of this repository's composite actions run a
+ * suite and upload its report, so their relative order exists only inside the action. A second
+ * traversal answering just "does this upload?" drifted from this one and lost the composite guard.
+ *
+ * @param {unknown} stepValue
+ * @param {string} repoRoot
+ * @param {Record<string, string>} env
+ * @param {Set<string>} visiting
+ * @returns {StepEvent[]}
+ */
+function collectStepEvents (stepValue, repoRoot, env, visiting) {
+  if (!isPlainObject(stepValue)) return []
+  const step = stepValue
 
-  const runs = doc.runs
-  if (!isPlainObject(runs) || runs.using !== 'composite') return []
-  const steps = Array.isArray(runs.steps) ? runs.steps : []
-
-  /** @type {{ run: string, env: Record<string, string|undefined> }[]} */
-  const out = []
-
-  for (const s of steps) {
-    if (isRunStep(s)) {
-      /** @type {Record<string, string|undefined>} */
-      const stepEnv = { ...env }
-      if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) stepEnv[k] = typeof v === 'string' ? v : String(v)
-      }
-
-      // Inline env in composite run: export and prefix assignments.
-      const exports = parseExportAssignments(s.run)
-      for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-
-      const idxYarn = s.run.indexOf('yarn ')
-      const idxNpm = s.run.indexOf('npm ')
-      let idx = idxNpm
-      if (idxYarn !== -1) {
-        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
-      }
-      if (idx > 0) {
-        const prefix = s.run.slice(0, idx)
-        const assigns = parseInlineAssignments(prefix)
-        for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-      }
-
-      out.push({ run: s.run, env: stepEnv })
-      continue
-    }
-
-    if (isUsesStep(s)) {
-      // Recurse into local composite actions.
-      /** @type {Record<string, string|undefined>} */
-      const nextEnv = { ...env }
-      if (isPlainObject(s.env)) {
-        for (const [k, v] of Object.entries(s.env)) nextEnv[k] = typeof v === 'string' ? v : String(v)
-      }
-      const nested = expandLocalCompositeActionRuns(repoRoot, s.uses, nextEnv, visiting)
-      for (const n of nested) out.push(n)
+  /** @type {Record<string, string>} */
+  const stepEnv = { ...env }
+  if (isPlainObject(step.env)) {
+    for (const [name, value] of Object.entries(step.env)) {
+      stepEnv[name] = typeof value === 'string' ? value : String(value)
     }
   }
 
+  if (isRunStep(step)) {
+    return [{ kind: 'run', run: step.run, env: applyInlineAssignments(step.run, stepEnv) }]
+  }
+
+  if (!isUsesStep(step)) return []
+  if (COVERAGE_ACTIONS.has(step.uses)) return [{ kind: 'upload' }]
+
+  // Third-party retry wrappers run their `with.command` like an inline `run:`. Without unwrapping
+  // it, the joint check below cannot see that `instrumentation-http` exercises
+  // `test:instrumentations:ci` with `PLUGINS=http`.
+  if (/^nick-fields\/retry@/.test(step.uses)) {
+    const command = isPlainObject(step.with) && typeof step.with.command === 'string'
+      ? step.with.command
+      : undefined
+    if (command === undefined) return []
+    return [{ kind: 'run', run: command, env: applyInlineAssignments(command, stepEnv) }]
+  }
+
+  const actionFile = resolveLocalActionFile(repoRoot, step.uses)
+  if (actionFile === null || visiting.has(actionFile)) return []
+
+  const doc = parseYamlFile(repoRoot, actionFile)
+  const runs = isPlainObject(doc) ? doc.runs : undefined
+
+  // A JavaScript or Docker action exposes no steps to read. Reporting it beats letting an upload
+  // hidden inside one read as "this job never uploads".
+  if (!isPlainObject(runs) || runs.using !== 'composite') return [{ kind: 'opaque', action: step.uses }]
+
+  visiting.add(actionFile)
+
+  /** @type {StepEvent[]} */
+  const events = []
+  const steps = Array.isArray(runs.steps) ? runs.steps : []
+  for (const nested of steps) {
+    for (const event of collectStepEvents(nested, repoRoot, stepEnv, visiting)) events.push(event)
+  }
+
   visiting.delete(actionFile)
-  return out
+  return events
 }
 
 /**
@@ -681,34 +686,6 @@ function commandProducesCoverage (command, knownScripts, coverageScripts) {
 }
 
 /**
- * @param {string} repoRoot
- * @param {string} uses
- * @param {Set<string>} visiting
- * @returns {boolean}
- */
-function localActionUploadsCoverage (repoRoot, uses, visiting) {
-  if (COVERAGE_ACTIONS.has(uses)) return true
-
-  const actionFile = resolveLocalActionFile(repoRoot, uses)
-  if (!actionFile || visiting.has(actionFile)) return false
-  visiting.add(actionFile)
-
-  const doc = parseYamlFile(repoRoot, actionFile)
-  const steps = doc.runs.steps
-  let uploadsCoverage = false
-
-  for (const step of steps) {
-    if (isUsesStep(step) && localActionUploadsCoverage(repoRoot, step.uses, visiting)) {
-      uploadsCoverage = true
-      break
-    }
-  }
-
-  visiting.delete(actionFile)
-  return uploadsCoverage
-}
-
-/**
  * Returns all combinations of matrix scalar/array values (ignores include/exclude).
  * @param {Record<string, unknown>} matrix
  * @returns {Record<string, string>[]}
@@ -746,16 +723,64 @@ function expandMatrixExpressions (s, matrixValues) {
 }
 
 /**
+ * Applies the environment a command sets for itself: `export X=1` lines, and `X=1 npm run …`
+ * prefixes.
+ *
+ * @param {string} command
+ * @param {Record<string, string>} env
+ * @returns {Record<string, string>}
+ */
+function applyInlineAssignments (command, env) {
+  const merged = { ...env, ...parseExportAssignments(command) }
+
+  const idxYarn = command.indexOf('yarn ')
+  const idxNpm = command.indexOf('npm ')
+  const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+  if (idx > 0) Object.assign(merged, parseInlineAssignments(command.slice(0, idx)))
+
+  return merged
+}
+
+/**
+ * @param {Record<string, string>} env
+ * @param {Record<string, string>} matrixValues
+ * @returns {Record<string, string>}
+ */
+function expandMatrixExpressionsInEnv (env, matrixValues) {
+  /** @type {Record<string, string>} */
+  const expanded = {}
+  for (const [name, value] of Object.entries(env)) {
+    expanded[name] = expandMatrixExpressions(value, matrixValues)
+  }
+  return expanded
+}
+
+/**
+ * @typedef {{
+ *   workflowFile: string,
+ *   jobId: string,
+ *   run: string,
+ *   env: Record<string, string>,
+ *   sequence: number
+ * }} WorkflowRun
+ */
+
+/**
  * @param {string} repoRoot
  * @returns {{
- *   runs: { workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[],
- *   coverageUploadJobs: Set<string>
- * }}
+ *   runs: WorkflowRun[],
+ *   coverageUploadSequences: Map<string, number>,
+ *   opaqueActions: Map<string, Set<string>>
+ * }} `coverageUploadSequences` holds each job's last upload position on the same scale as
+ *   `WorkflowRun.sequence`.
  */
 function collectWorkflowRuns (repoRoot) {
-  /** @type {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]} */
+  /** @type {WorkflowRun[]} */
   const out = []
-  const coverageUploadJobs = new Set()
+  /** @type {Map<string, number>} */
+  const coverageUploadSequences = new Map()
+  /** @type {Map<string, Set<string>>} */
+  const opaqueActions = new Map()
 
   const files = findWorkflowFiles(repoRoot)
   for (const wf of files) {
@@ -775,85 +800,60 @@ function collectWorkflowRuns (repoRoot) {
         : {}
       const matrixCombinations = getMatrixCombinations(matrixData)
 
-      for (const stepVal of steps) {
-        const step = isPlainObject(stepVal) ? stepVal : {}
-        if (
-          typeof step.uses === 'string' &&
-          localActionUploadsCoverage(repoRoot, step.uses, new Set())
-        ) {
-          coverageUploadJobs.add(`${wf}#${jobId}`)
+      // Values can be strings or non-strings; we only keep string-ish.
+      /** @type {Record<string, string>} */
+      const jobEnvironment = {}
+      for (const [k, v] of Object.entries(topEnv)) jobEnvironment[k] = typeof v === 'string' ? v : String(v)
+      for (const [k, v] of Object.entries(jobEnv)) jobEnvironment[k] = typeof v === 'string' ? v : String(v)
+
+      /** @type {StepEvent[]} */
+      const events = []
+      for (const stepValue of steps) {
+        for (const event of collectStepEvents(stepValue, repoRoot, jobEnvironment, new Set())) {
+          events.push(event)
         }
+      }
 
-        // Merge env. Values can be strings or non-strings; we only keep string-ish.
-        /** @type {Record<string, string|undefined>} */
-        const env = {}
-        for (const [k, v] of Object.entries(topEnv)) env[k] = typeof v === 'string' ? v : String(v)
-        for (const [k, v] of Object.entries(jobEnv)) env[k] = typeof v === 'string' ? v : String(v)
-        if (isPlainObject(step.env)) {
-          for (const [k, v] of Object.entries(step.env)) env[k] = typeof v === 'string' ? v : String(v)
-        }
+      const jobKey = `${wf}#${jobId}`
 
-        if (typeof step.run === 'string') {
-          // Expand matrix expressions and emit one entry per combination.
-          const seenRuns = new Set()
-          for (const combo of matrixCombinations) {
-            const run = expandMatrixExpressions(step.run, combo)
-            if (seenRuns.has(run)) continue
-            seenRuns.add(run)
-
-            const stepEnv = { ...env }
-
-            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
-            const exports = parseExportAssignments(run)
-            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-
-            const idxYarn = run.indexOf('yarn ')
-            const idxNpm = run.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const prefix = run.slice(0, idx)
-              const assigns = parseInlineAssignments(prefix)
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
-
-            out.push({ workflowFile: wf, jobId, run, env: stepEnv })
-          }
+      for (const [sequence, event] of events.entries()) {
+        if (event.kind === 'upload') {
+          coverageUploadSequences.set(jobKey, sequence)
           continue
         }
 
-        if (typeof step.uses === 'string' && step.uses.startsWith('./')) {
-          const expanded = expandLocalCompositeActionRuns(repoRoot, step.uses, env, new Set())
-          for (const e of expanded) {
-            out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
+        if (event.kind === 'opaque') {
+          let actions = opaqueActions.get(jobKey)
+          if (actions === undefined) {
+            actions = new Set()
+            opaqueActions.set(jobKey, actions)
           }
+          actions.add(event.action)
+          continue
         }
 
-        // Third-party retry wrappers run their `with.command` like an inline `run:`.
-        // Without unwrapping it, the joint check below cannot see that `instrumentation-http`
-        // exercises `test:instrumentations:ci` with `PLUGINS=http`.
-        if (typeof step.uses === 'string' && /^nick-fields\/retry@/.test(step.uses)) {
-          const command = isPlainObject(step.with) && typeof step.with.command === 'string'
-            ? step.with.command
-            : null
-          if (command) {
-            const stepEnv = { ...env }
-            const exports = parseExportAssignments(command)
-            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
-            const idxYarn = command.indexOf('yarn ')
-            const idxNpm = command.indexOf('npm ')
-            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-            if (idx > 0) {
-              const assigns = parseInlineAssignments(command.slice(0, idx))
-              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
-            }
-            out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
-          }
+        // Deduplicated per event, not per job: the same command at a later position carries a
+        // later sequence, which is what tells an upload apart from the suites it leaves behind.
+        const seen = new Set()
+
+        for (const combo of matrixCombinations) {
+          // A matrix leg reaches the glob through the environment as often as through the command
+          // (`SPEC: ${{ matrix.spec }}`). Leaving the expression unresolved degrades the pattern to
+          // `*`, and every spec in the directory then looks exercised by every leg.
+          const run = expandMatrixExpressions(event.run, combo)
+          const env = expandMatrixExpressionsInEnv(event.env, combo)
+
+          const key = `${run}\0${JSON.stringify(env)}`
+          if (seen.has(key)) continue
+          seen.add(key)
+
+          out.push({ workflowFile: wf, jobId, run, env, sequence })
         }
       }
     }
   }
 
-  return { runs: out, coverageUploadJobs }
+  return { runs: out, coverageUploadSequences, opaqueActions }
 }
 
 /**
@@ -1108,7 +1108,7 @@ function main (repoRootArg) {
     process.exit(1)
   }
 
-  const { runs: workflowRuns, coverageUploadJobs } = collectWorkflowRuns(repoRoot)
+  const { runs: workflowRuns, coverageUploadSequences, opaqueActions } = collectWorkflowRuns(repoRoot)
 
   /** @type {{ workflowFile: string, jobId: string, script: string, env: Record<string, string|undefined> }[]} */
   const invoked = []
@@ -1124,16 +1124,25 @@ function main (repoRootArg) {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
-  const coverageProducerJobs = new Set()
   const coverageScripts = findCoverageScripts(scripts, knownScripts)
   for (const run of workflowRuns) {
-    if (commandProducesCoverage(run.run, knownScripts, coverageScripts)) {
-      coverageProducerJobs.add(`${run.workflowFile}#${run.jobId}`)
+    if (!commandProducesCoverage(run.run, knownScripts, coverageScripts)) continue
+
+    const job = `${run.workflowFile}#${run.jobId}`
+    const uploadSequence = coverageUploadSequences.get(job)
+
+    if (uploadSequence === undefined) {
+      pushError(`${job}: generates coverage but does not upload it`)
+    } else if (run.sequence > uploadSequence) {
+      // The uploader has already collected the reports it will ever see, so this suite's report
+      // never leaves the runner even though the job looks like it uploads coverage.
+      pushError(`${job}: generates coverage after its last coverage upload`)
     }
   }
-  for (const job of coverageProducerJobs) {
-    if (!coverageUploadJobs.has(job)) {
-      pushError(`${job}: generates coverage but does not upload it`)
+
+  for (const [job, actions] of opaqueActions) {
+    for (const action of actions) {
+      pushError(`${job}: cannot inspect local action "${action}", which is not a composite action`)
     }
   }
 
