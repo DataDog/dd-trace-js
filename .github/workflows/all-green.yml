@@ -52,7 +52,9 @@ jobs:
       - if: "!cancelled()"
         uses: ./.github/actions/datadog-ci
       - if: "!cancelled()"
-        run: datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results
+        run: >-
+          datadog-ci junit upload --service dd-trace-js-tests --auto-discovery
+          --skip-git-metadata-upload junit-results
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       # One Datadog upload per integration, flagged with the integration name so coverage is
@@ -64,7 +66,8 @@ jobs:
           shopt -s nullglob
           # shellcheck disable=SC2016 # the inner shell must expand "$1", not the template.
           printf '%s\0' coverage-upload/*/lcov/ | xargs -0 -r -P 20 -I {} \
-            bash -c 'datadog-ci coverage upload "$1" --flags "$(basename "$(dirname "$1")")"' _ {}
+            bash -c 'datadog-ci coverage upload "$1" --flags "$(basename "$(dirname "$1")")" \
+              --skip-git-metadata-upload' _ {}
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       # One Codecov upload per integration via the CLI directly — the codecov-action would re-validate

@@ -2,7 +2,7 @@
 # yarn lockfile v1
 
 
-"@datadog/datadog-ci@5.17.0":
-  version "5.17.0"
-  resolved "https://registry.npmjs.org/@datadog/datadog-ci/-/datadog-ci-5.17.0.tgz#88f68eff837d9988564592e0c52a859cd9de7836"
-  integrity sha512-Orwju9h/kLQnuNr7VoHW/JABbKsK8/Lhh8zDacjR1CqwJBmgwejgmcL3ut9/Vbi6hC5KYlgXybeeMpsdJEWvQQ==
+"@datadog/datadog-ci@5.21.2":
+  version "5.21.2"
+  resolved "https://registry.npmjs.org/@datadog/datadog-ci/-/datadog-ci-5.21.2.tgz#0fd6391405e3612a3fea2e3265e3b417f7952619"
+  integrity sha512-DNSveS6vV6UWAL5BQbbFtQQnLvJlrTQnc0k7EonpJR9AA8RgTB3f9LYyXo1Qch8Z2IJK/+WrLPcK29Z94j/Waw==
