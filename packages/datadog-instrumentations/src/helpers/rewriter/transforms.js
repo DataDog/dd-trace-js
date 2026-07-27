@@ -14,7 +14,7 @@ const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles
 
 const { parse, query } = require('./compiler')
 
-module.exports = { waitForAsyncEnd }
+module.exports = { waitForAsyncEnd, waitForAsyncEndCallback }
 
 /**
  * Injects a wait for `ctx.asyncEndPromise` into a generated `tracePromise`
@@ -58,4 +58,75 @@ function waitForAsyncEnd (_state, node) {
   onSettled[1].body = clone(returnArgument)
 
   statements.splice(returnIndex, 0, ...waitStatements)
+}
+
+/**
+ * Injects a callback-driven wait into both settlement handlers of a generated
+ * `tracePromise` wrapper.
+ *
+ * @param {object} _state
+ * @param {import('estree').CallExpression} node
+ * @returns {void}
+ */
+function waitForAsyncEndCallback (_state, node) {
+  const onFulfilled = node.arguments[0]
+  const onRejected = node.arguments[1]
+
+  if (!onFulfilled?.body || !onRejected?.body) {
+    return
+  }
+
+  injectAsyncEndCallbackWait(onFulfilled.body, 'ReturnStatement')
+  injectAsyncEndCallbackWait(onRejected.body, 'ThrowStatement')
+}
+
+/**
+ * Injects the callback-driven wait before a fulfillment return or rejection throw.
+ *
+ * @param {import('estree').BlockStatement} body
+ * @param {'ReturnStatement'|'ThrowStatement'} exitType
+ * @returns {void}
+ */
+function injectAsyncEndCallbackWait (body, exitType) {
+  if (query(body, '[id.name=__apm$waitForAsyncEnd]').length > 0) {
+    return
+  }
+
+  const exitIndex = body.body.findIndex(statement =>
+    statement.type === exitType && statement.argument
+  )
+
+  // The generated settlement handlers always end in a return or throw; a miss means the
+  // upstream template changed and the caller's try/catch falls back to the
+  // unwrapped source.
+  assert(exitIndex !== -1, `waitForAsyncEndCallback: no ${exitType} to wait on`)
+
+  const waitStatements = parse(`
+    function wrapper () {
+      const __apm$waitForAsyncEnd = __apm$ctx.waitForAsyncEnd;
+      if (typeof __apm$waitForAsyncEnd === 'function') {
+        return new Promise(__apm$waitForAsyncEnd).then(() => __apm$result, () => __apm$result);
+      }
+    }
+  `).body[0].body.body
+
+  const exitArgument = body.body[exitIndex].argument
+  const { arguments: onSettled } = waitStatements[1].consequent.body[0].argument
+
+  if (exitType === 'ThrowStatement') {
+    for (const handler of onSettled) {
+      handler.body = {
+        type: 'BlockStatement',
+        body: [{
+          type: 'ThrowStatement',
+          argument: clone(exitArgument),
+        }],
+      }
+    }
+  } else {
+    onSettled[0].body = clone(exitArgument)
+    onSettled[1].body = clone(exitArgument)
+  }
+
+  body.body.splice(exitIndex, 0, ...waitStatements)
 }
