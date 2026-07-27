@@ -54,6 +54,7 @@ const {
 
 const {
   CI_JOB_NAME,
+  CI_PIPELINE_DISPLAY_NAME,
   CI_PIPELINE_URL,
   CI_PROVIDER_NAME,
   GIT_COMMIT_SHA,
@@ -297,6 +298,7 @@ describe('getTestLevelsMetadataTags', () => {
   it('keeps only allowlisted CI and Git tags', () => {
     const testLevelsMetadataTags = getTestLevelsMetadataTags({
       [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
       [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
       [CI_PROVIDER_NAME]: 'github',
       [GIT_COMMIT_SHA]: '1234567890abcdef',
@@ -308,6 +310,7 @@ describe('getTestLevelsMetadataTags', () => {
 
     assert.deepStrictEqual(testLevelsMetadataTags, {
       [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_DISPLAY_NAME]: 'Pipeline Display Name',
       [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
       [CI_PROVIDER_NAME]: 'github',
       [GIT_COMMIT_SHA]: '1234567890abcdef',
