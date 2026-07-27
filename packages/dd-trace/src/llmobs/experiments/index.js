@@ -100,11 +100,10 @@ class Experiments {
           const query = new URLSearchParams()
           if (cursor) query.set('page[cursor]', cursor)
           if (datasetVersion !== null) query.set('filter[version]', String(datasetVersion))
-          const queryString = query.toString() ? `?${query.toString()}` : ''
           // eslint-disable-next-line no-await-in-loop
           const resp = await this.#client.request(
             'GET',
-            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records${queryString}`
+            `${API_BASE_PATH}/${projectId}/datasets/${datasetId}/records?${query.toString()}`
           )
           for (const item of resp?.data ?? []) {
             const attrs = item?.attributes ?? item
