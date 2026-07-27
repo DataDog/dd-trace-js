@@ -31,10 +31,18 @@ function getValidatorExitCode (results, executionStatus) {
   if (executionStatus === 'validator_error') return 3
   if (results.some(result => result.status === 'fail' && result.evidenceStrength.startsWith('confirmed_'))) return 1
   const incomplete = results.some(result => {
-    return ['configured_propagation_unverified', 'incomplete'].includes(result.conclusion)
+    return ['configured_propagation_unverified', 'incomplete', 'not_checked'].includes(result.conclusion)
   })
   if (executionStatus !== 'completed' || incomplete || !results.some(result => result.scenario !== 'all')) return 2
   return 0
+}
+
+function getValidationCoverage (results) {
+  return results.some(result => result.conclusion === 'not_checked' ||
+    result.evidence?.validationIncomplete ||
+    result.evidence?.manifestIncomplete)
+    ? 'partial'
+    : 'complete'
 }
 
 function getConclusion (result) {
@@ -75,4 +83,4 @@ function isValidatorError (result) {
     result.frameworkId === 'validation-cleanup'
 }
 
-module.exports = { annotateResults, getExecutionStatus, getValidatorExitCode }
+module.exports = { annotateResults, getExecutionStatus, getValidationCoverage, getValidatorExitCode }

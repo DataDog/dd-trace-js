@@ -229,8 +229,11 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
     if (!ENV_NAME_PATTERN.test(name)) {
       errors.push(`${prefix}.validation.requiredEnvVars contains an invalid environment name.`)
     }
-    if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$)/i.test(name)) {
-      errors.push(`${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, or NODE_OPTIONS.`)
+    if (/^(?:DD_|DATADOG_|OTEL_|NODE_OPTIONS$|TS_NODE_PROJECT$)/i.test(name)) {
+      errors.push(
+        `${prefix}.validation.requiredEnvVars must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or ` +
+          'TS_NODE_PROJECT.'
+      )
     }
     if (SECRET_ENV_PATTERN.test(name)) {
       errors.push(`${prefix}.validation.requiredEnvVars must not inherit secret-like environment variables.`)

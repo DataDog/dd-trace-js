@@ -18,7 +18,12 @@ const {
 } = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
-const { annotateResults, getExecutionStatus, getValidatorExitCode } = require('./result-semantics')
+const {
+  annotateResults,
+  getExecutionStatus,
+  getValidationCoverage,
+  getValidatorExitCode,
+} = require('./result-semantics')
 const { writePendingReport, writeReport } = require('./report-writer')
 const { getBasicCommand } = require('./runner-command')
 const { getUnavailableExecutable } = require('./executable')
@@ -607,18 +612,6 @@ function printHelp () {
  */
 function logPhase (framework, phase, status) {
   console.log(sanitizeConsoleText(`[test-optimization-validator] ${framework.id}: ${phase}: ${status}`))
-}
-
-/**
- * Returns validation coverage.
- *
- * @param {object[]} results annotated results
- * @returns {'complete'|'partial'} coverage
- */
-function getValidationCoverage (results) {
-  return results.some(result => result.evidence?.validationIncomplete || result.evidence?.manifestIncomplete)
-    ? 'partial'
-    : 'complete'
 }
 
 /**

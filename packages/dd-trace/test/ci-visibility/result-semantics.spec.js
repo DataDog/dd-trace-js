@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const {
   annotateResults,
   getExecutionStatus,
+  getValidationCoverage,
   getValidatorExitCode,
 } = require('../../../../ci/test-optimization-validation/result-semantics')
 
@@ -153,6 +154,21 @@ describe('test optimization validation result semantics', () => {
       resultSemantics: [{ conclusion: 'not_eligible', domain: 'validator_adapter' }],
     },
     {
+      name: 'returns two when a requested feature was not checked',
+      results: [
+        getResult('basic-reporting', 'pass'),
+        getResult('atr', 'skip', {
+          featureEligibility: { eligible: false, blockedBy: 'unsupported_framework_version' },
+        }),
+      ],
+      executionStatus: 'completed',
+      exitCode: 2,
+      resultSemantics: [
+        { conclusion: 'confirmed_working', domain: 'test_optimization' },
+        { conclusion: 'not_checked', domain: 'test_optimization' },
+      ],
+    },
+    {
       name: 'returns one for a confirmed advanced-feature failure despite incomplete CI evidence',
       results: [
         getResult('basic-reporting', 'pass'),
@@ -187,6 +203,14 @@ describe('test optimization validation result semantics', () => {
 
       assert.strictEqual(executionStatus, decisionCase.executionStatus)
       assert.strictEqual(getValidatorExitCode(results, executionStatus), decisionCase.exitCode)
+      assert.strictEqual(
+        getValidationCoverage(results),
+        results.some(result => result.conclusion === 'not_checked' ||
+          result.evidence?.validationIncomplete ||
+          result.evidence?.manifestIncomplete)
+          ? 'partial'
+          : 'complete'
+      )
       assert.deepStrictEqual(results.slice(0, decisionCase.resultSemantics.length).map(result => ({
         conclusion: result.conclusion,
         domain: result.domain,

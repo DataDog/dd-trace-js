@@ -218,6 +218,24 @@ describe('test optimization validation report', () => {
     assert.match(consoleLog.lastCall.args[0], /Cleanup: incomplete \(2 temporary paths retained\)/)
   })
 
+  it('gives validator failures a validator-specific next action', () => {
+    const validatorFailure = result('all', 'error', 'The validator failed before completing orchestration.', {
+      validationIncomplete: true,
+      validationOrchestrationFailed: true,
+    })
+    validatorFailure.frameworkId = 'validator'
+
+    write([validatorFailure], {
+      executionStatus: 'validator_error',
+      validationCoverage: 'partial',
+      validatorExitCode: 3,
+    })
+    const report = readReport()
+
+    assert.match(report, /Keep the validation artifacts and report this validator failure to engineering/)
+    assert.doesNotMatch(report, /Prepare the project so the selected direct test passes/)
+  })
+
   /**
    * Writes a final report with standard run metadata.
    *

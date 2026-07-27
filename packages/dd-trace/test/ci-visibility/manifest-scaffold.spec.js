@@ -207,6 +207,26 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
+  it('approval-binds a default Jest config beyond the bounded discovery window', () => {
+    const fixture = createRepositoryFixture({ framework: 'jest' })
+    const config = path.join(fixture.root, 'jest.config.js')
+    for (let index = 0; index < 1_025; index++) {
+      fs.writeFileSync(path.join(fixture.root, `a-${String(index).padStart(4, '0')}.txt`), '')
+    }
+    fs.writeFileSync(config, 'module.exports = {}\n')
+    try {
+      const framework = createManifestScaffold({
+        root: fixture.root,
+        frameworks: new Set(['jest']),
+      }).frameworks[0]
+
+      assert.strictEqual(framework.status, 'runnable')
+      assert.ok(framework.project.configFiles.includes(fs.realpathSync(config)))
+    } finally {
+      removeFixture(fixture.root)
+    }
+  })
+
   it('retains a built-in Mocha interface without treating it as a code-loading input', () => {
     const fixture = createRepositoryFixture({
       framework: 'mocha',

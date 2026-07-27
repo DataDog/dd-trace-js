@@ -231,7 +231,7 @@ function runCiWiring ({ manifest, framework }) {
 function getEffectiveNodeOptionsOverride (commandPath = []) {
   let value
   for (const command of commandPath) {
-    for (const assignment of parseLiteralEnvironmentPrefix(command).assignments) {
+    for (const assignment of normalizeDirectCommand(command).assignments) {
       if (environmentNamesEqual(assignment.name, 'NODE_OPTIONS')) value = assignment.value
     }
   }
@@ -392,14 +392,22 @@ function matrixAffectsCiFacts (jobSource, command) {
  */
 function getDirectRunner (command, framework) {
   if (DYNAMIC_COMMAND_PATTERN.test(command)) return
+  const { index, source } = normalizeDirectCommand(command)
+  if (!RUNNER_PATTERNS[framework]?.test(source)) return
+  return { index }
+}
+
+function normalizeDirectCommand (command) {
   const prefix = parseLiteralEnvironmentPrefix(command)
-  let source = command.slice(prefix.length).replace(/^(?:c8|nyc)(?:\.cmd)?\s+/, '')
+  const assignments = [...prefix.assignments]
+  let source = String(command).slice(prefix.length).replace(/^(?:c8|nyc)(?:\.cmd)?\s+/, '')
   if (/^cross-env(?:\.cmd)?\s+/.test(source)) {
     source = source.replace(/^cross-env(?:\.cmd)?\s+/, '')
-    source = source.slice(parseLiteralEnvironmentPrefix(source).length)
+    const crossEnv = parseLiteralEnvironmentPrefix(source)
+    assignments.push(...crossEnv.assignments)
+    source = source.slice(crossEnv.length)
   }
-  if (!RUNNER_PATTERNS[framework]?.test(source)) return
-  return { index: prefix.length }
+  return { assignments, index: prefix.length, source }
 }
 
 /**

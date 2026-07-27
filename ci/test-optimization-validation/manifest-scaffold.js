@@ -56,6 +56,24 @@ const CONFIG_PATTERNS = {
   playwright: playwright.CONFIG_PATTERN,
   vitest: /^(?:vite|vitest)\.config\.[cm]?[jt]s$/,
 }
+const JS_CONFIG_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts']
+const IMPLICIT_CONFIG_FILENAMES = {
+  cucumber: ['json', 'yaml', 'yml', ...JS_CONFIG_EXTENSIONS].map(extension => `cucumber.${extension}`),
+  cypress: ['json', ...JS_CONFIG_EXTENSIONS].flatMap(extension => [
+    `cypress.${extension}`,
+    `cypress.config.${extension}`,
+  ]),
+  jest: ['json', ...JS_CONFIG_EXTENSIONS].flatMap(extension => [
+    `jest.config.${extension}`,
+    `config-jest.config.${extension}`,
+  ]),
+  mocha: ['json', 'yaml', 'yml', ...JS_CONFIG_EXTENSIONS].map(extension => `.mocharc.${extension}`),
+  playwright: JS_CONFIG_EXTENSIONS.map(extension => `playwright.config.${extension}`),
+  vitest: JS_CONFIG_EXTENSIONS.flatMap(extension => [
+    `vite.config.${extension}`,
+    `vitest.config.${extension}`,
+  ]),
+}
 const TEST_FILE_PATTERN = /^.+[._-](?:test|spec)\.[cm]?[jt]sx?$/
 const BARE_TEST_FILE_PATTERN = /^test\.[cm]?[jt]sx?$/
 const TYPE_ONLY_TEST_PATTERN = /\.(?:test|spec)-d\.[cm]?tsx?$|\.d\.[cm]?ts$/i
@@ -212,8 +230,22 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
   })
   const configFiles = [...new Set([
     ...runnerContract.inputFiles,
+    ...getImplicitConfigFiles(framework, projectRoot, repositoryRoot),
+    ...(representativeRoot === projectRoot
+      ? []
+      : getImplicitConfigFiles(framework, representativeRoot, repositoryRoot)),
     ...projectFiles.filter(filename => CONFIG_PATTERNS[framework]?.test(path.basename(filename))).slice(0, 5),
-  ])].slice(0, 20)
+  ])]
+  if (configFiles.length > 20) {
+    return {
+      ...base,
+      status: 'requires_manual_setup',
+      notes: [
+        `${detection.name} loads more configuration files than the validator can approval-bind safely. ` +
+          'Use a narrower project setup before creating a fresh plan.',
+      ],
+    }
+  }
   const runnerDescription = projectRunner ? 'repository test wrapper' : `installed ${framework} runner`
   const browserRequired = framework === 'cypress' ||
     framework === 'playwright' ||
@@ -263,6 +295,21 @@ function buildFramework (repositoryRoot, detection, ciDiscovery) {
         : []),
     ],
   }
+}
+
+function getImplicitConfigFiles (framework, projectRoot, repositoryRoot) {
+  const files = []
+  for (const basename of IMPLICIT_CONFIG_FILENAMES[framework] || []) {
+    const filename = path.join(projectRoot, basename)
+    try {
+      const stat = fs.lstatSync(filename)
+      const physical = fs.realpathSync(filename)
+      if (stat.isFile() && !stat.isSymbolicLink() &&
+        fs.statSync(physical).isFile() &&
+        isPathInside(fs.realpathSync(repositoryRoot), physical)) files.push(physical)
+    } catch {}
+  }
+  return files
 }
 
 /**

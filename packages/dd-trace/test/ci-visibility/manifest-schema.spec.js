@@ -107,7 +107,12 @@ describe('test optimization validation manifest schema', () => {
     [
       'NODE_OPTIONS inheritance',
       value => { value.frameworks[0].validation.requiredEnvVars = ['NODE_OPTIONS'] },
-      /must not inherit Datadog, OpenTelemetry, or NODE_OPTIONS/,
+      /must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or TS_NODE_PROJECT/,
+    ],
+    [
+      'TS_NODE_PROJECT inheritance',
+      value => { value.frameworks[0].validation.requiredEnvVars = ['TS_NODE_PROJECT'] },
+      /must not inherit Datadog, OpenTelemetry, NODE_OPTIONS, or TS_NODE_PROJECT/,
     ],
     [
       'secret environment inheritance',

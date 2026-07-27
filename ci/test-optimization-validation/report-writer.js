@@ -269,6 +269,10 @@ function findRecommendation (value) {
  * @returns {string|undefined} fallback
  */
 function getFallbackAction (result) {
+  if (result.frameworkId === 'validator' || result.frameworkId === 'validation-cleanup') {
+    return 'Keep the validation artifacts and report this validator failure to engineering. Project setup changes ' +
+      'will not resolve it.'
+  }
   if (result.scenario === 'ci-wiring') {
     return 'Resolve the exact CI test job and effective environment, or rerun it with DD_TRACE_DEBUG=1.'
   }

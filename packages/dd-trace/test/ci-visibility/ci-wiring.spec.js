@@ -339,6 +339,20 @@ describe('test optimization validation CI audit', () => {
     assert.match(result.diagnosis, /overrides NODE_OPTIONS/)
   })
 
+  it('confirms a literal NODE_OPTIONS reset behind cross-env', () => {
+    const resetCommand = `cross-env NODE_OPTIONS= ${command}`
+    fs.writeFileSync(workflow, workflowSource({
+      command: resetCommand,
+      env: ['      NODE_OPTIONS: -r dd-trace/ci/init'],
+    }))
+    completeReview({ command: resetCommand, initialization: 'configured', transport: 'agent' })
+
+    const result = runCiWiring({ framework, manifest })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.diagnosis, /overrides NODE_OPTIONS/)
+  })
+
   it('does not treat text in the selected step label as an effective reset', () => {
     const step = 'NODE_OPTIONS="" diagnostic'
     fs.writeFileSync(workflow, [
