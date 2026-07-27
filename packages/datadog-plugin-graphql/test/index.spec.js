@@ -3419,9 +3419,42 @@ describe('Plugin', () => {
           tracer = await agent.load('graphql')
         })
 
+        // TEMPORARY DIAGNOSTIC: the two health-check tests below flake only on CI (never
+        // reproduces locally), always as extra apm:graphql:execute:start / graphql.validate
+        // activity — consistent with a stray publish leaking in from an earlier test's
+        // not-fully-settled async work, since the graphql CompositePlugin instance (and its
+        // channel subscriptions) persists across every version block in this file. Log
+        // whichever test is running whenever either channel fires, plus a stack trace, so the
+        // next CI run pins down the actual source instead of guessing further. Remove once the
+        // leak is found.
+        let diagCleanup
         beforeEach(function () {
           if (!supported) return this.skip()
           graphql = require(`../../../versions/graphql@${version}`).get()
+
+          const title = this.currentTest?.fullTitle?.() ?? '(unknown test)'
+          const diagChannels = ['apm:graphql:execute:start', 'datadog:graphql:resolver:start']
+          const handlers = diagChannels.map(name => {
+            const channel = dc.channel(name)
+            if (channel.hasSubscribers) {
+              // eslint-disable-next-line no-console
+              console.log(`[DIAG] ${name} already has a subscriber entering "${title}"`)
+            }
+            const handler = () => {
+              // eslint-disable-next-line no-console
+              console.log(`[DIAG] ${name} fired during "${title}"\n${new Error('[DIAG] stack').stack}`)
+            }
+            channel.subscribe(handler)
+            return { channel, handler }
+          })
+          diagCleanup = () => {
+            for (const { channel, handler } of handlers) channel.unsubscribe(handler)
+          }
+        })
+
+        afterEach(() => {
+          diagCleanup?.()
+          diagCleanup = undefined
         })
 
         after(() => agent.close())
