@@ -14,26 +14,31 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-function getOpenaiVersion (realVersion) {
+/**
+ * @param {string} realVersion
+ */
+function getOpenaiRange (realVersion) {
+  if (semifies(realVersion, '>=7.0.0')) {
+    return '^4.0.0'
+  }
   if (semifies(realVersion, '>=6.0.0')) {
-    return '3.0.0'
+    return '^3.0.0'
   }
   if (semifies(realVersion, '>=5.0.0')) {
-    return '2.0.0'
+    return '^2.0.0'
   }
-  return '1.3.23'
+  return '^1.3.23'
 }
 
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('ai', 'ai', (version, _, realVersion) => {
     useSandbox([
       `ai@${version}`,
-      `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
-      'zod@3.25.75',
+      `@ai-sdk/openai@${getOpenaiRange(realVersion)}`,
+      'zod@^3.25.76',
     ], false, [
       './packages/datadog-plugin-ai/test/integration-test/*',
     ])
@@ -42,8 +47,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'generateText', undefined, 'ai', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'generateText',
+      packageName: 'ai',
+      defaultExport: false,
+      namedExports: ['generateText'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -51,7 +60,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

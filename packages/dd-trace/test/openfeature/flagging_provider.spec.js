@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -15,6 +16,7 @@ describe('FlaggingProvider', () => {
   let mockChannel
   let log
   let channelStub
+  let configurationSource
   let mockEvalMetricsHook
   let mockEvalMetricsHookClass
   let mockSpanEnrichmentHook
@@ -45,6 +47,9 @@ describe('FlaggingProvider', () => {
     }
 
     channelStub = sinon.stub().returns(mockChannel)
+    configurationSource = {
+      create: sinon.stub(),
+    }
 
     log = {
       debug: sinon.spy(),
@@ -68,19 +73,13 @@ describe('FlaggingProvider', () => {
         channel: channelStub,
       },
       '../log': log,
+      './configuration_source': configurationSource,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
     })
   })
 
   describe('constructor', () => {
-    it('should initialize with tracer and config', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-
-      assert.strictEqual(provider._tracer, mockTracer)
-      assert.strictEqual(provider._config, mockConfig)
-    })
-
     it('should create exposure channel', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
@@ -93,36 +92,6 @@ describe('FlaggingProvider', () => {
 
       assert.ok(provider)
       sinon.assert.calledWith(log.debug, '%s created with timeout: %dms', 'FlaggingProvider', 30000)
-    })
-  })
-
-  describe('_setConfiguration', () => {
-    it('should call setConfiguration when method exists', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-      const setConfigSpy = sinon.spy(provider, 'setConfiguration')
-      const ufc = { flags: { 'test-flag': {} } }
-
-      provider._setConfiguration(ufc)
-
-      sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
-      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
-    })
-
-    it('should handle null/undefined configuration gracefully', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-
-      provider._setConfiguration(null)
-      provider._setConfiguration(undefined)
-    })
-
-    it('should not throw when setConfiguration is not a function', () => {
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
-      provider.setConfiguration = null // Remove the method
-
-      provider._setConfiguration({ flags: {} })
-
-      // Should still log the debug message
-      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
     })
   })
 
@@ -200,6 +169,41 @@ describe('FlaggingProvider', () => {
 
       sinon.assert.notCalled(mockSpanEnrichmentHook.destroy)
     })
+
+    it('stops the attached configuration source', () => {
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      configurationSource.create.returns(source)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(source.start)
+      sinon.assert.calledOnce(source.stop)
+    })
+
+    it('applies source configurations through the provider boundary', () => {
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      configurationSource.create.returns(source)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const ufc = { flags: {} }
+      const applyConfiguration = configurationSource.create.firstCall.args[1]
+
+      applyConfiguration(ufc)
+
+      assert.strictEqual(provider.getConfiguration(), ufc)
+    })
+
+    it('closes owned resources only once', () => {
+      const source = { start: sinon.spy(), stop: sinon.spy() }
+      configurationSource.create.returns(source)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+      provider.onClose()
+
+      sinon.assert.calledOnce(source.stop)
+      sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
+    })
   })
 
   describe('inheritance', () => {
@@ -211,20 +215,24 @@ describe('FlaggingProvider', () => {
     })
   })
 
-  // Pins the optional-peer gate against accidental regression to a direct
-  // `require('@datadog/openfeature-node-server')`, which would leak the optional peer chain
-  // into customer bundles (see #8635). The opaque-load mechanism is covered by
-  // `datadog-instrumentations/test/helpers/require-optional-peer.spec.js`.
+  // Pins the optional-peer gate against leaking the provider chain into customer bundles (#8635).
+  // `file-tracing.spec.js` covers the same wrapper's nft contract.
   describe('optional-peer gate', () => {
     const modulePath = require.resolve('../../src/openfeature/flagging_provider')
+    const providerModulePath = require.resolve('../../src/openfeature/require-provider')
+    const peer = '@datadog/openfeature-node-server'
 
     afterEach(() => {
       delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
+      delete globalThis.__webpack_require__
+      delete globalThis.__non_webpack_require__
     })
 
     it('uses `require` outside a bundler', () => {
       assert.strictEqual(typeof globalThis.__webpack_require__, 'undefined')
       delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
 
       const ReloadedFlaggingProvider = require(modulePath)
 
@@ -232,14 +240,49 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })
 
-    it('does not statically require `@datadog/openfeature-node-server`', () => {
-      const fs = require('node:fs')
-      const source = fs.readFileSync(modulePath, 'utf8')
+    it('uses `__non_webpack_require__`, never `__webpack_require__`, under webpack', () => {
+      const loadCalls = []
+      globalThis.__webpack_require__ = () => {
+        throw new Error('webpack require must not run for an optional peer')
+      }
+      /** @param {string} request */
+      globalThis.__non_webpack_require__ = (request) => {
+        loadCalls.push(request)
+        return require(request)
+      }
+
+      delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.deepStrictEqual(loadCalls, [peer])
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+    })
+
+    it('falls back to `require` when `__non_webpack_require__` is absent', () => {
+      globalThis.__webpack_require__ = () => {
+        throw new Error('webpack require must not run for an optional peer')
+      }
+
+      delete require.cache[modulePath]
+      delete require.cache[providerModulePath]
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+    })
+
+    it('keeps the provider load opaque to bundlers', () => {
+      const source = fs.readFileSync(providerModulePath, 'utf8')
 
       assert.doesNotMatch(
         source,
         /require\(\s*['"]@datadog\/openfeature-node-server['"]\s*\)/,
         'a literal require would let bundlers resolve the optional peer chain at build time'
+      )
+      assert.doesNotMatch(
+        source,
+        /\brequire\(\s*[^'"\s]/,
+        'a dynamic require would create a webpack expression dependency'
       )
     })
   })

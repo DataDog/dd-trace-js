@@ -126,6 +126,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 - For two awaits that should both settle, use `Promise.all([a, b])`. `await a; await b` leaves `b` unawaited until `a` settles; if `b` rejects in that window Node raises an unhandled rejection.
 - For limits / caps / thresholds / windows: pin the last accepted value AND the first rejected value (32-entry cap → cases for 32 and 33). Comfortable distances (10 / 50) miss off-by-one bugs.
 - A bug fix ships with cases for the failure AND its siblings sharing the fixed code path. Read the existing spec first so you don't duplicate a permutation already there.
+- **Test the real path, not a fake.** Prefer the real entry point — the plugin loaded via `agent.load` against the mock agent (or a real service/LocalStack) and asserted through observable output (span `meta`, emitted trace, `pathway.hash`, DSM stats). A `Object.create(Plugin.prototype)` instance with a stubbed `_tracer` verifies the stub, not the code, and can assert a state production never reaches (a no-op `inject` leaving a carrier empty when every real caller passes a span that writes headers). When that faked assertion blocks a correct production change, rewrite the test against the real path — don't bend production back to satisfy the fake.
 
 ### Time-Based Testing
 

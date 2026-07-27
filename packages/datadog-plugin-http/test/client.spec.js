@@ -817,7 +817,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 0)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -845,7 +845,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -877,7 +877,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 1)
-              })
+              }, { timeoutMs: 9000 }) // the app delays its response 6s, so the span finishes well after 1s
               .then(done)
               .catch(done)
 
@@ -1031,13 +1031,11 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('Noop request was traced.'))
-              })
+              .assertNoTraces(() => {
+                throw new Error('Noop request was traced.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             appListener = server(app, port => {
               const store = storage('legacy').getStore()
@@ -1489,14 +1487,11 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Blocklisted requests should not be recorded.'))
-            })
-            .catch(done)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted requests should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           appListener = server(app, port => {
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
@@ -1532,12 +1527,11 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            const timer = setTimeout(done, 100)
-
-            agent.assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Filtered requests should not be recorded.'))
-            })
+            agent
+              .assertNoTraces(() => {
+                throw new Error('Filtered requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             appListener = server(app, port => {
               const req = http.request(`${protocol}://localhost:${port}/health`, res => {

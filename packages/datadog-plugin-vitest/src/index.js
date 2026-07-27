@@ -264,8 +264,10 @@ class VitestPlugin extends CiPlugin {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
       const finish = () => {
-        if (duration) {
-          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        if (Number.isFinite(duration) && duration >= 0) {
+          span.finish(
+            span._startTime + Math.max(duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION, 0)
+          ) // milliseconds
         } else {
           span.finish() // `duration` is empty for retries, so we'll use clock time
         }
@@ -398,7 +400,7 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onFinish }) => {
+    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onDone }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
         testSuiteSpan.finish()
@@ -406,10 +408,10 @@ class VitestPlugin extends CiPlugin {
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       if (deferFlush) {
-        onFinish()
+        onDone()
         return
       }
-      this.tracer._exporter.flush(onFinish)
+      this.tracer._exporter.flush(onDone)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
       }
@@ -440,7 +442,7 @@ class VitestPlugin extends CiPlugin {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
-      onFinish,
+      onDone,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags || {})) {
         this.testSessionSpan.setTag(tag, value)
@@ -479,7 +481,7 @@ class VitestPlugin extends CiPlugin {
         provider: this.ciProviderName,
         autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
-      this.tracer._exporter.flush(onFinish)
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {

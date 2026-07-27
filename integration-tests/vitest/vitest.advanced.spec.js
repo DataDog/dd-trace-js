@@ -634,30 +634,6 @@ versions.forEach((version) => {
           },
         })
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
-              .filter(event => event.type === 'test')
-              .map(test => test.content)
-              .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
-                'ci-visibility/vitest-tests-programmatic-api/test-programmatic-api-'
-              ))
-
-            const testDetails = events
-              .filter(event => event.type === 'test')
-              .map(test => ({
-                name: test.content.meta[TEST_NAME],
-                sourceFile: test.content.meta[TEST_SOURCE_FILE],
-              }))
-            assert.strictEqual(tests.length, 2, inspect(testDetails))
-
-            const disabledTest = tests.find(test => test.meta[TEST_NAME] === disabledTestName)
-            assert.ok(disabledTest, inspect(tests.map(test => test.meta[TEST_NAME])))
-            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-          })
-
         childProcess = exec(
           'node run-programmatic-api-rerun.mjs',
           {
@@ -672,12 +648,36 @@ versions.forEach((version) => {
         childProcess.stdout.on('data', data => { testOutput += data })
         childProcess.stderr.on('data', data => { testOutput += data })
 
-        const [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
+        await receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url === '/api/v2/citestcycle',
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(test => test.content)
+                .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
+                  'ci-visibility/vitest-tests-programmatic-api/test-programmatic-api-'
+                ))
 
-        assert.strictEqual(exitCode, 0, testOutput)
+              const testDetails = events
+                .filter(event => event.type === 'test')
+                .map(test => ({
+                  name: test.content.meta[TEST_NAME],
+                  sourceFile: test.content.meta[TEST_SOURCE_FILE],
+                }))
+              assert.strictEqual(tests.length, 2, inspect(testDetails))
+
+              const disabledTest = tests.find(test => test.meta[TEST_NAME] === disabledTestName)
+              assert.ok(disabledTest, inspect(tests.map(test => test.meta[TEST_NAME])))
+              assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            },
+            { hardTimeout: 30_000 }
+          )
+
+        assert.strictEqual(childProcess.exitCode, 0, testOutput)
       })
     })
 

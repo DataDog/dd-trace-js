@@ -101,6 +101,12 @@ class DatadogTracer {
     return span
   }
 
+  /**
+   * @param {Span|SpanContext} context
+   * @param {string} format
+   * @param {object} [carrier]
+   * @returns {object | undefined}
+   */
   inject (context, format, carrier) {
     if (context instanceof Span) {
       context = context.context()
@@ -110,7 +116,7 @@ class DatadogTracer {
       if (format !== 'text_map_dsm' && format !== formats.LOG) {
         this._prioritySampler.sample(context)
       }
-      this._propagators[format].inject(context, carrier)
+      return this._propagators[format].inject(context, carrier)
     } catch (e) {
       log.error('Error injecting trace', e)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)

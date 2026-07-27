@@ -28,6 +28,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { writeCoverageBackfillToCache } = require('../../dd-trace/src/ci-visibility/test-optimization-cache')
 const satisfies = require('../../../vendor/dist/semifies')
+const { getChannelPromise } = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 
 const cucumberWorkerThreadsPatchModule = require.resolve('./cucumber-worker-threads')
@@ -180,7 +181,7 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
 
 function getConfiguredEfdRetryCount () {
   const maxSlowTestRetryCount = getMaxEfdRetryCount(earlyFlakeDetectionSlowTestRetries)
-  return maxSlowTestRetryCount || earlyFlakeDetectionNumRetries
+  return maxSlowTestRetryCount ?? earlyFlakeDetectionNumRetries
 }
 
 function publishWorkerEfdRetryCount (pickle, retryCount) {
@@ -561,12 +562,6 @@ function getErrorFromCucumberResult (cucumberResult) {
   }
   error.stack = cucumberResult.message
   return error
-}
-
-function getChannelPromise (channelToPublishTo, frameworkVersion = null) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
-  })
 }
 
 function getShouldBeSkippedSuite (pickle, suitesToSkip) {
@@ -1036,7 +1031,9 @@ function testCaseHook (TestCaseRunner, version) {
 // Valid for old and new cucumber versions
 function getCucumberOptions (adapterOrCoordinator) {
   if (adapterOrCoordinator.adapter) {
-    return adapterOrCoordinator.adapter.worker?.options || adapterOrCoordinator.adapter.options
+    return adapterOrCoordinator.adapter.worker?.options ||
+      adapterOrCoordinator.adapter.executor?.options ||
+      adapterOrCoordinator.adapter.options
   }
   return adapterOrCoordinator.options
 }
@@ -1054,7 +1051,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, { frameworkVersion }) || {}
 
     repositoryRoot = configurationResponse.repositoryRoot
     isItrEnabled = configurationResponse.libraryConfig?.isItrEnabled
@@ -1087,7 +1084,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isKnownTestsEnabled) {
       const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
-      if (currentKnownTestsResponse.err) {
+      if (!currentKnownTestsResponse || currentKnownTestsResponse.err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
       } else {
@@ -1096,7 +1093,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableResponse = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
+      const skippableResponse = skippableSuitesResponse ||
+        await getChannelPromise(skippableSuitesCh) ||
+        { err: true }
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
@@ -1145,7 +1144,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     if (isTestManagementTestsEnabled) {
       const currentTestManagementTestsResponse =
         testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
-      if (currentTestManagementTestsResponse.err) {
+      if (!currentTestManagementTestsResponse || currentTestManagementTestsResponse.err) {
         isTestManagementTestsEnabled = false
       } else {
         testManagementTests = currentTestManagementTestsResponse.testManagementTests
@@ -1154,7 +1153,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isImpactedTestsEnabled) {
       const impactedTestsResponse = await getChannelPromise(modifiedFilesCh)
-      if (!impactedTestsResponse.err) {
+      if (impactedTestsResponse && !impactedTestsResponse.err) {
         modifiedFiles = impactedTestsResponse.modifiedFiles
       }
     }
@@ -1178,7 +1177,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const success = await start.apply(this, arguments)
+    const result = await start.apply(this, arguments)
+    const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
     let untestedCoverage
     if (getCodeCoverageCh.hasSubscribers) {
@@ -1212,7 +1212,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    sessionFinishCh.publish({
+    const flushPromise = getChannelPromise(sessionFinishCh, {
       status: success ? 'pass' : 'fail',
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
@@ -1225,10 +1225,12 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isTestManagementTestsEnabled,
       isParallel,
     })
+
     logTestOptimizationSummary({ attemptToFixExecutions })
     loggedAttemptToFixTests.clear()
     eventDataCollector = null
-    return success
+    await flushPromise
+    return result
   }
 }
 
@@ -1433,13 +1435,14 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
   }
 }
 
-function patchCucumberWorkerRunTestCase (workerPackage, isWorker) {
-  const workerPrototype = workerPackage?.Worker?.prototype
-  if (!workerPrototype || patchedCucumberWorkers.has(workerPrototype)) return
+function patchCucumberWorkerRunTestCase (runtimeExecutorPackage, isWorker) {
+  const runtimeExecutorPrototype =
+    runtimeExecutorPackage?.Worker?.prototype || runtimeExecutorPackage?.Executor?.prototype
+  if (!runtimeExecutorPrototype || patchedCucumberWorkers.has(runtimeExecutorPrototype)) return
 
-  patchedCucumberWorkers.add(workerPrototype)
+  patchedCucumberWorkers.add(runtimeExecutorPrototype)
   shimmer.wrap(
-    workerPrototype,
+    runtimeExecutorPrototype,
     'runTestCase',
     runTestCase => getWrappedRunTestCase(runTestCase, true, isWorker)
   )
@@ -1571,13 +1574,23 @@ addHook({
 // `getWrappedRunTestCase` does two things:
 // - generates suite start and finish events in the main process,
 // - handles EFD in both the main process and the worker process.
+// Shimmer is required because this wrapper may invoke the original test case multiple times and mutate runtime options.
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
+  versions: ['>=11.0.0 <13.2.0'],
   file: 'lib/runtime/worker.js',
 }, (workerPackage) => {
   patchCucumberWorkerRunTestCase(workerPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
   return workerPackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=13.2.0'],
+  file: 'lib/runtime/executor.js',
+}, (executorPackage) => {
+  patchCucumberWorkerRunTestCase(executorPackage, !!getEnvironmentVariable('CUCUMBER_WORKER_ID'))
+  return executorPackage
 })
 
 // `getWrappedStart` generates session start and finish events

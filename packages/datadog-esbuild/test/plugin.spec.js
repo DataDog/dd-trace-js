@@ -11,7 +11,7 @@ function captureOptionalPeerOnLoad () {
     initialOptions: {},
     onResolve () {},
     onLoad (options, callback) {
-      if (options.filter.source.includes('flagging_provider')) onLoad = callback
+      if (options.filter.source.includes('require-provider')) onLoad = callback
     },
   })
   return onLoad
@@ -19,9 +19,9 @@ function captureOptionalPeerOnLoad () {
 
 describe('datadog-esbuild plugin', () => {
   describe('optional peer bundling', () => {
-    it('rewrites the installed peer load in flagging_provider into a literal require', () => {
+    it('rewrites the installed peer load in require-provider into a literal require', () => {
       const onLoad = captureOptionalPeerOnLoad()
-      const providerPath = require.resolve('../../dd-trace/src/openfeature/flagging_provider')
+      const providerPath = require.resolve('../../dd-trace/src/openfeature/require-provider')
 
       const result = onLoad({ path: providerPath })
 
@@ -35,7 +35,7 @@ describe('datadog-esbuild plugin', () => {
     it('ignores files that match the filter but are not an optional-peer file', () => {
       const onLoad = captureOptionalPeerOnLoad()
 
-      assert.strictEqual(onLoad({ path: '/somewhere/else/flagging_provider.js' }), undefined)
+      assert.strictEqual(onLoad({ path: '/somewhere/else/require-provider.js' }), undefined)
     })
   })
 })

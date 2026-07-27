@@ -22,18 +22,27 @@ function parseJsonResponse (rawJson) {
 
 function parseSkippableSuitesResponse (
   rawJson,
-  { testLevel = 'suite', isCoverageReportUploadEnabled = false, validateRequiredFields = false } = {}
+  {
+    testLevel = 'suite',
+    isCoverageReportUploadEnabled = false,
+    validateRequiredFields = false,
+    validationMode = false,
+  } = {}
 ) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (validateRequiredFields) {
-    validateSkippableTestsResponse(parsedResponse)
+    validateSkippableTestsResponse(parsedResponse, { validationMode })
   }
-  const coverage = parsedResponse.meta?.coverage || {}
+  const coverage = {}
+  for (const [filename, bitmap] of Object.entries(parsedResponse.meta?.coverage || {})) {
+    coverage[filename.replaceAll('\\', '/')] = bitmap
+  }
 
   const skippableItems = parsedResponse
     .data
     .filter(({ type }) => type === testLevel)
   const skippableSuites = []
+  let numExcludedByMissingLineCoverage = 0
   for (const {
     attributes: {
       suite,
@@ -42,13 +51,58 @@ function parseSkippableSuitesResponse (
     },
   } of skippableItems) {
     // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
-    if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
+    if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) {
+      numExcludedByMissingLineCoverage++
+      continue
+    }
 
     skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
   }
   const correlationId = parsedResponse.meta?.correlation_id
 
-  return { skippableSuites, correlationId, coverage }
+  return {
+    skippableSuites,
+    correlationId,
+    coverage,
+    numReceivedSkippableItems: skippableItems.length,
+    numExcludedByMissingLineCoverage,
+  }
+}
+
+/**
+ * Logs how missing line coverage affected the skippable candidates without logging their contents.
+ *
+ * @param {{
+ *   skippableSuites: Array<string|{suite: string, name: string}>,
+ *   numReceivedSkippableItems?: number,
+ *   numExcludedByMissingLineCoverage?: number
+ * }} result - Parsed skippable response.
+ * @param {'suite'|'test'} testLevel - Test optimization skipping level.
+ * @returns {void}
+ */
+function logSkippableSuitesResponse (result, testLevel) {
+  if (result.numReceivedSkippableItems === undefined) {
+    log.debug('Number of received skippable %ss: %d', testLevel, result.skippableSuites.length)
+    return
+  }
+
+  log.debug(
+    'Received %d skippable %s candidates; excluded %d because line coverage is missing; %d remain.',
+    result.numReceivedSkippableItems,
+    testLevel,
+    result.numExcludedByMissingLineCoverage,
+    result.skippableSuites.length
+  )
+  if (
+    result.numReceivedSkippableItems > 0 &&
+    result.numExcludedByMissingLineCoverage === result.numReceivedSkippableItems
+  ) {
+    log.warn(
+      'All %d skippable %s candidates were excluded: coverage upload is enabled but line coverage is missing.',
+      result.numReceivedSkippableItems,
+      testLevel
+    )
+  }
 }
 
 function getSkippableSuites ({
@@ -96,6 +150,7 @@ function getSkippableSuites ({
     }, cb)
   }, (err, data) => {
     if (err) return done(err)
+    logSkippableSuitesResponse(data, testLevel)
     done(null, data.skippableSuites, data.correlationId, data.coverage)
   })
 }
@@ -203,6 +258,7 @@ function fetchFromApi ({
         const result = parseSkippableSuitesResponse(parsedResponse, {
           testLevel,
           isCoverageReportUploadEnabled,
+          validateRequiredFields: true,
         })
         const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
         incrementCountMetric(
@@ -213,7 +269,6 @@ function fetchFromApi ({
           skippableItems.length
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
-        log.debug('Number of received skippable %ss:', testLevel, result.skippableSuites.length)
 
         writeToCache(cacheKey, result)
 
@@ -225,4 +280,4 @@ function fetchFromApi ({
   })
 }
 
-module.exports = { getSkippableSuites, parseSkippableSuitesResponse }
+module.exports = { getSkippableSuites, logSkippableSuitesResponse, parseSkippableSuitesResponse }

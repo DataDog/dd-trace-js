@@ -1,6 +1,9 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const nomenclature = require('../../dd-trace/src/service-naming')
+const spanEndingHook = require('../../dd-trace/src/opentelemetry/span-ending-hook')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:next:request:start')
@@ -20,6 +23,27 @@ const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
+
+// `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
+const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
+
+// In OTel-bridge mode (`plugins: false` + `new tracer.TracerProvider().register()`) Next emits its
+// own OTel spans and renames the root request span to `${method} ${route}` at finish, which the
+// bridge routes into the DD operation name and leaves the resource as the bare method — the reverse
+// of Datadog's contract. Correct it via the bridge's pre-finish hook. See span-ending-hook.js.
+spanEndingHook.hook = (ddSpan) => {
+  const tags = ddSpan.context().getTags()
+  if (tags['next.span_type'] !== NEXT_BASE_SERVER_HANDLE_REQUEST) return
+
+  const method = tags['http.method']
+  const route = tags['next.route'] ?? tags['http.route']
+  // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we
+  // mirror Next's own naming, and only construct the resource when it is absent.
+  const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
+
+  ddSpan.setOperationName(nomenclature.opName('web', 'server', 'next'))
+  ddSpan.setTag(RESOURCE_NAME, resource)
+}
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {

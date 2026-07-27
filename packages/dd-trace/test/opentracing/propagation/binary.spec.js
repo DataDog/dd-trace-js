@@ -25,9 +25,10 @@ describe('BinaryPropagator', () => {
         spanId: id('456', 10),
       })
 
-      propagator.inject(spanContext, carrier)
+      const injectedCarrier = propagator.inject(spanContext, carrier)
 
-      assert.deepStrictEqual(carrier, carrier)
+      assert.strictEqual(injectedCarrier, undefined)
+      assert.deepStrictEqual(carrier, {})
     })
   })
 

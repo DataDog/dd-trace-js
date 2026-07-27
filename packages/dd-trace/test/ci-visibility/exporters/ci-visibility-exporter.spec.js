@@ -11,12 +11,24 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const nock = require('nock')
+const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
-const CiVisibilityExporterBase = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
+const ciVisibilityLog = require('../../../src/log')
+const { uploadCoverageReport: actualUploadCoverageReportRequest } =
+  require('../../../src/ci-visibility/requests/upload-coverage-report')
+
+let uploadCoverageReportRequest = actualUploadCoverageReportRequest
+const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
+  '../requests/upload-coverage-report': {
+    uploadCoverageReport (...args) {
+      return uploadCoverageReportRequest(...args)
+    },
+  },
+})
 
 // The real tracer Config always carries a `testOptimization` namespace object.
 // Default it here so the partial config stand-ins below mirror that guarantee.
@@ -35,13 +47,114 @@ describe('CI Visibility Exporter', () => {
     sinon.stub(fs, 'readFileSync').returns('')
     process.env.DD_API_KEY = '1'
     nock.cleanAll()
+    uploadCoverageReportRequest = actualUploadCoverageReportRequest
   })
 
   afterEach(() => {
     sinon.restore()
   })
 
+  describe('filterConfiguration', () => {
+    const testOptimization = {
+      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: true,
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 5,
+      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+      DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: true,
+      DD_TEST_FAILED_TEST_REPLAY_ENABLED: true,
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: 20,
+      DD_TEST_MANAGEMENT_ENABLED: true,
+    }
+
+    it('creates a complete frozen policy from remote and local settings', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
+      const policy = ciVisibilityExporter.filterConfiguration({
+        isCodeCoverageEnabled: true,
+        isSuitesSkippingEnabled: true,
+        isItrEnabled: true,
+        requireGit: true,
+        isEarlyFlakeDetectionEnabled: true,
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionFaultyThreshold: 0,
+        isFlakyTestRetriesEnabled: true,
+        isDiEnabled: true,
+        isKnownTestsEnabled: true,
+        isTestManagementEnabled: true,
+        testManagementAttemptToFixRetries: 0,
+        isImpactedTestsEnabled: true,
+        isCoverageReportUploadEnabled: true,
+      })
+
+      assert.deepStrictEqual(policy, {
+        isCodeCoverageEnabled: true,
+        isSuitesSkippingEnabled: true,
+        isItrEnabled: true,
+        requireGit: true,
+        isEarlyFlakeDetectionEnabled: true,
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: { '5s': 0 },
+        earlyFlakeDetectionFaultyThreshold: 0,
+        isFlakyTestRetriesEnabled: true,
+        flakyTestRetriesCount: 5,
+        isDiEnabled: true,
+        isKnownTestsEnabled: true,
+        isTestManagementEnabled: true,
+        testManagementAttemptToFixRetries: 0,
+        isImpactedTestsEnabled: true,
+        isCoverageReportUploadEnabled: true,
+      })
+      assert.strictEqual(Object.isFrozen(policy), true)
+      assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionSlowTestRetries), true)
+    })
+
+    it('creates a complete disabled policy when remote settings are unavailable', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
+
+      assert.deepStrictEqual(ciVisibilityExporter.filterConfiguration(), {
+        isCodeCoverageEnabled: false,
+        isSuitesSkippingEnabled: false,
+        isItrEnabled: false,
+        requireGit: false,
+        isEarlyFlakeDetectionEnabled: false,
+        earlyFlakeDetectionNumRetries: 0,
+        earlyFlakeDetectionSlowTestRetries: {},
+        earlyFlakeDetectionFaultyThreshold: 30,
+        isFlakyTestRetriesEnabled: false,
+        flakyTestRetriesCount: 5,
+        isDiEnabled: false,
+        isKnownTestsEnabled: false,
+        isTestManagementEnabled: false,
+        testManagementAttemptToFixRetries: 20,
+        isImpactedTestsEnabled: false,
+        isCoverageReportUploadEnabled: false,
+      })
+    })
+  })
+
   describe('sendGitMetadata', () => {
+    it('should resolve git upload readiness immediately when git upload is disabled', async () => {
+      const clock = sinon.useFakeTimers()
+      const scope = nock(url)
+        .post('/api/v2/git/repository/search_commits')
+        .reply(200)
+        .post('/api/v2/git/repository/packfile')
+        .reply(202)
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: false },
+      })
+      const onGitUploadReady = sinon.spy()
+
+      ciVisibilityExporter._gitUploadPromise.then(onGitUploadReady)
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
+      await Promise.resolve()
+
+      sinon.assert.calledOnceWithExactly(onGitUploadReady, undefined)
+      assert.strictEqual(clock.now, 0)
+      assert.strictEqual(scope.isDone(), false)
+    })
+
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
       const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
@@ -286,8 +399,13 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          url, testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
         })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assert.strictEqual(scope.isDone(), true)
@@ -338,6 +456,60 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveGit()
+      })
+    })
+  })
+
+  describe('filterConfiguration', () => {
+    const remoteConfiguration = {
+      isEarlyFlakeDetectionEnabled: true,
+      earlyFlakeDetectionNumRetries: 10,
+      earlyFlakeDetectionSlowTestRetries: { '5s': 10, '10s': 5, '30s': 3, '5m': 2 },
+    }
+
+    it('preserves the backend EFD retry configuration when the local retry count is unset', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+
+      const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
+
+      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 10)
+      assert.deepStrictEqual(
+        configuration.earlyFlakeDetectionSlowTestRetries,
+        remoteConfiguration.earlyFlakeDetectionSlowTestRetries
+      )
+    })
+
+    it('replaces the backend EFD duration policy when the local retry count is set', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 2 },
+      })
+
+      const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
+
+      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 2)
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
+        '5s': 2,
+        '10s': 2,
+        '30s': 2,
+        '5m': 2,
+      })
+    })
+
+    it('replaces the backend EFD duration policy with zero retries', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 0 },
+      })
+
+      const configuration = ciVisibilityExporter.filterConfiguration(remoteConfiguration)
+
+      assert.strictEqual(configuration.earlyFlakeDetectionNumRetries, 0)
+      assert.deepStrictEqual(configuration.earlyFlakeDetectionSlowTestRetries, {
+        '5s': 0,
+        '10s': 0,
+        '30s': 0,
+        '5m': 0,
       })
     })
   })
@@ -1180,6 +1352,94 @@ describe('CI Visibility Exporter', () => {
           },
         }))
       })
+    })
+  })
+
+  describe('uploadCoverageReport', () => {
+    let warn
+
+    beforeEach(() => {
+      uploadCoverageReportRequest = sinon.stub().callsFake((_options, callback) => callback(null))
+      warn = sinon.stub(ciVisibilityLog, 'warn')
+    })
+
+    function createExporter (flags) {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CODE_COVERAGE_FLAGS: flags },
+      })
+      exporter._codeCoverageReportUrl = url
+      return exporter
+    }
+
+    function upload (exporter, callback = () => {}) {
+      exporter.uploadCoverageReport({
+        filePath: '/tmp/coverage.xml',
+        format: 'cobertura',
+        testEnvironmentMetadata: { 'git.commit.sha': 'abc123' },
+      }, callback)
+    }
+
+    it('reuses exactly 32 coverage report flags for every upload', () => {
+      const flags = Array.from({ length: 32 }, (_, index) => `flag-${index}`)
+      const exporter = createExporter(flags.join(','))
+      const callback = sinon.spy()
+
+      upload(exporter, callback)
+      upload(exporter, callback)
+
+      sinon.assert.calledTwice(uploadCoverageReportRequest)
+      assert.deepStrictEqual(uploadCoverageReportRequest.firstCall.args[0].flags, flags)
+      assert.strictEqual(
+        uploadCoverageReportRequest.firstCall.args[0].flags,
+        uploadCoverageReportRequest.secondCall.args[0].flags
+      )
+      sinon.assert.calledTwice(callback)
+      sinon.assert.alwaysCalledWithExactly(callback, null)
+      sinon.assert.notCalled(warn)
+    })
+
+    it('normalizes coverage report flags when the exporter is created', () => {
+      const exporter = createExporter(' type:unit-tests, ,jvm-21,type:unit-tests, ')
+
+      upload(exporter)
+
+      assert.deepStrictEqual(
+        uploadCoverageReportRequest.firstCall.args[0].flags,
+        ['type:unit-tests', 'jvm-21', 'type:unit-tests']
+      )
+      sinon.assert.notCalled(warn)
+    })
+
+    it('warns once, omits 33 coverage report flags, and continues every upload', () => {
+      const flags = Array.from({ length: 33 }, (_, index) => `flag-${index}`)
+      const exporter = createExporter(flags.join(','))
+      const callback = sinon.spy()
+
+      upload(exporter, callback)
+      upload(exporter, callback)
+
+      sinon.assert.calledOnceWithExactly(
+        warn,
+        'Maximum of %d coverage report flags allowed, but %d flags were provided. Omitting coverage report flags.',
+        32,
+        33
+      )
+      sinon.assert.calledTwice(uploadCoverageReportRequest)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].flags, undefined)
+      assert.strictEqual(uploadCoverageReportRequest.secondCall.args[0].flags, undefined)
+      sinon.assert.calledTwice(callback)
+      sinon.assert.alwaysCalledWithExactly(callback, null)
+    })
+
+    it('omits an empty coverage report flags string without warning', () => {
+      const exporter = createExporter('')
+
+      upload(exporter)
+
+      sinon.assert.calledOnce(uploadCoverageReportRequest)
+      assert.strictEqual(uploadCoverageReportRequest.firstCall.args[0].flags, undefined)
+      sinon.assert.notCalled(warn)
     })
   })
 

@@ -625,81 +625,69 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
       })
 
       describe('CPU Usage Calculations', () => {
-        it('should report CPU percentages within valid ranges', () => {
-          const startCpuUsage = process.cpuUsage()
-          const startTime = Date.now()
-          const startPerformanceNow = performance.now()
+        it('should report CPU percentages matching real process usage', () => {
+          const outerStartCpuUsage = process.cpuUsage()
+          const outerStartTime = performance.now()
+          clock.tick(10000)
+          client.gauge.resetHistory()
+          const innerStartTime = performance.now()
+          const innerStartCpuUsage = process.cpuUsage()
+
           let iterations = 0
-          let ticks = 0
-          while (Date.now() - startTime < 100) {
-            iterations++
-            if (iterations % 1000000 === 0) {
-              clock.tick(1)
-              ticks++
+          let userCpuUsage = 0
+          while (userCpuUsage < 100_000) {
+            if (++iterations % 1_000_000 === 0) {
+              userCpuUsage = process.cpuUsage(innerStartCpuUsage).user
             }
           }
-          const cpuUsage = process.cpuUsage()
-          const cpuUsageStub = sinon.stub(process, 'cpuUsage').returns(cpuUsage)
-          const performanceNowStub = sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
-          clock.tick(10000 - ticks)
-          performanceNowStub.restore()
-          cpuUsageStub.restore()
 
-          const timeDivisor = 100_000 // Microseconds * 100 for percent
+          const innerEndCpuUsage = process.cpuUsage()
+          const innerEndTime = performance.now()
+          clock.tick(10000)
+          const outerEndTime = performance.now()
+          const outerEndCpuUsage = process.cpuUsage()
 
-          const cpuMetrics = new Map([[
-            'runtime.node.cpu.user',
-            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2)),
-          ], [
+          const cpuCalls = client.gauge.getCalls().filter(call => call.args[0].startsWith('runtime.node.cpu.'))
+          const cpuMetrics = new Map(cpuCalls.map(call => [call.args[0], call.args[1]]))
+          assert.deepStrictEqual([...cpuMetrics.keys()].sort(), [
             'runtime.node.cpu.system',
-            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2)),
-          ], [
             'runtime.node.cpu.total',
-            Number((
-              ((cpuUsage.user - startCpuUsage.user) + (cpuUsage.system - startCpuUsage.system)) / timeDivisor
-            ).toFixed(2)),
-          ]])
-
-          let userPercent = 0
-          let systemPercent = 0
-          let totalPercent = 0
-
-          for (const call of client.gauge.getCalls()) {
-            const metric = call.args[0]
-            const expected = cpuMetrics.get(metric)
-            cpuMetrics.delete(metric)
-            if (expected !== undefined) {
-              const stringValue = call.args[1]
-              assert.match(stringValue, /^\d+(\.\d{1,2})?$/)
-              const number = Number(stringValue)
-              if (metric === 'runtime.node.cpu.user') {
-                assert(
-                  number >= 1,
-                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number}`
-                )
-                userPercent = number
-              }
-              if (metric === 'runtime.node.cpu.system') {
-                assert(number >= 0 && number <= 5, `${metric} sanity check failed: ${number}`)
-                systemPercent = number
-              }
-              if (metric === 'runtime.node.cpu.total') {
-                assert(
-                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
-                  number >= expected - 0.1 && number <= expected + 1,
-                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
-                )
-                totalPercent = number
-              }
-              const epsilon = os.platform() === 'win32' ? 1.5 : 0.5
-              assert(number - expected < epsilon, `${metric} sanity check failed: ${number} ${expected}`)
-            }
+            'runtime.node.cpu.user',
+          ])
+          assert.strictEqual(cpuCalls.length, cpuMetrics.size, 'CPU metrics should be reported exactly once')
+          for (const value of cpuMetrics.values()) {
+            assert.match(value, /^\d+\.\d{2}$/)
           }
 
-          assert.strictEqual(cpuMetrics.size, 0, `All CPU metrics should be matched, missing ${[...cpuMetrics.keys()]}`)
-
+          const userPercent = Number(cpuMetrics.get('runtime.node.cpu.user'))
+          const systemPercent = Number(cpuMetrics.get('runtime.node.cpu.system'))
+          const totalPercent = Number(cpuMetrics.get('runtime.node.cpu.total'))
           const totalDiff = Math.abs(totalPercent - userPercent - systemPercent)
-          assert(totalDiff <= 0.03, `Total CPU percentage sanity check failed: ${totalDiff} > 0.03`)
+          assert(totalDiff <= 0.02, `Total CPU percentage sanity check failed: ${totalDiff} > 0.02`)
+
+          // The collector reads its counters between the outer and inner samples on each side.
+          const minimumElapsedTime = innerEndTime - innerStartTime
+          const maximumElapsedTime = outerEndTime - outerStartTime
+          const minimumUserPercent = (innerEndCpuUsage.user - innerStartCpuUsage.user) / (maximumElapsedTime * 10)
+          const maximumUserPercent = (outerEndCpuUsage.user - outerStartCpuUsage.user) / (minimumElapsedTime * 10)
+          const minimumSystemPercent = (innerEndCpuUsage.system - innerStartCpuUsage.system) / (maximumElapsedTime * 10)
+          const maximumSystemPercent = (outerEndCpuUsage.system - outerStartCpuUsage.system) / (minimumElapsedTime * 10)
+          const minimumTotalPercent = minimumUserPercent + minimumSystemPercent
+          const maximumTotalPercent = maximumUserPercent + maximumSystemPercent
+
+          assert(
+            userPercent >= minimumUserPercent - 0.01 && userPercent <= maximumUserPercent + 0.01,
+            `Expected real user CPU percentage ${minimumUserPercent} <= ${userPercent} <= ${maximumUserPercent}`
+          )
+          assert(
+            systemPercent >= minimumSystemPercent - 0.01 && systemPercent <= maximumSystemPercent + 0.01,
+            `Expected real system CPU percentage ${minimumSystemPercent} <= ${systemPercent} <= ${maximumSystemPercent}`
+          )
+
+          assert(
+            totalPercent >= minimumTotalPercent - 0.01 && totalPercent <= maximumTotalPercent + 0.01,
+            `Expected real total CPU percentage ${minimumTotalPercent} <= ${totalPercent} <= ${maximumTotalPercent}`
+          )
         })
       })
 

@@ -15,6 +15,9 @@ class Writer {
     this._interprocessCode = interprocessCode
   }
 
+  /**
+   * @param {() => void} [onDone]
+   */
   flush (onDone) {
     const count = this._encoder.count()
 
@@ -22,6 +25,8 @@ class Writer {
       const payload = this._encoder.makePayload()
 
       this._sendPayload(payload, onDone)
+    } else {
+      onDone?.()
     }
   }
 

@@ -2,14 +2,17 @@
 
 const { defineConfig } = require('cypress')
 
+const retries = Number(process.env.CYPRESS_RETRIES || 0)
+
 module.exports = defineConfig({
   defaultCommandTimeout: 1000,
-  retries: {
-    runMode: Number(process.env.CYPRESS_RETRIES || 0),
-    openMode: 0,
-  },
+  retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
+    ? { runMode: retries, openMode: 0 }
+    : Number(process.env.CYPRESS_RETRIES_AS_NUMBER),
   e2e: {
-    testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false',
+    ...(process.env.CYPRESS_TEST_ISOLATION === undefined
+      ? {}
+      : { testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false' }),
     setupNodeEvents (on, config) {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
         require('cypress-fail-fast/plugin')(on, config)

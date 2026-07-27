@@ -344,10 +344,12 @@ describe('Tracer', () => {
   describe('inject', () => {
     it('should support text map format', () => {
       TextMapPropagator.returns(propagator)
+      propagator.inject.returns(carrier)
 
       tracer = new Tracer(config)
-      tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
+      const injectedCarrier = tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
+      assert.strictEqual(injectedCarrier, carrier)
       sinon.assert.calledWith(TextMapPropagator, config)
       sinon.assert.calledWith(propagator.inject, spanContext, carrier)
     })
@@ -374,7 +376,9 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      tracer.inject({})
+      const injectedCarrier = tracer.inject({})
+
+      assert.strictEqual(injectedCarrier, undefined)
       sinon.assert.calledOnce(log.error)
     })
 

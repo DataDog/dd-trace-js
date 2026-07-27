@@ -3,6 +3,7 @@
 const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (require('dc-polyfill'))
 
 const shimmer = require('../../datadog-shimmer')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   addHook,
   channel,
@@ -106,7 +107,7 @@ function createWrapEmit (emit) {
     }
 
     const ctx = { req }
-    ctx.req.resStatus = headers[0].split(' ')[1]
+    ctx.req.resStatus = getSegment(headers[0], ' ', 1)
 
     emitCh.runStores(ctx, () => {
       try {

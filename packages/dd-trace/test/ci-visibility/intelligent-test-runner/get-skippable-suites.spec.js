@@ -5,6 +5,7 @@ const fs = require('node:fs')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
+const sinon = require('sinon')
 
 require('../../setup/core')
 
@@ -18,6 +19,7 @@ const {
   getCachePath,
   getLockPath,
 } = require('../../../src/ci-visibility/requests/fs-cache')
+const log = require('../../../src/log')
 
 const BASE_URL = 'http://localhost:8126'
 
@@ -96,6 +98,17 @@ const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
   },
 }
 
+const SKIPPABLE_RESPONSE_WITH_ALL_MISSING_LINE_COVERAGE = {
+  ...SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE,
+  data: SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE.data.map(item => ({
+    ...item,
+    attributes: {
+      ...item.attributes,
+      _is_missing_line_code_coverage: true,
+    },
+  })),
+}
+
 function cacheKeyForParams (params) {
   return buildCacheKey('skippable', [
     params.sha, params.service, params.env, params.repositoryUrl,
@@ -113,6 +126,8 @@ function cleanup (params) {
 
 describe('get-skippable-suites', () => {
   beforeEach(() => {
+    sinon.spy(log, 'debug')
+    sinon.spy(log, 'warn')
     process.env.DD_API_KEY = 'test-api-key'
     getConfig().DD_API_KEY = 'test-api-key'
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
@@ -122,6 +137,7 @@ describe('get-skippable-suites', () => {
   })
 
   afterEach(() => {
+    sinon.restore()
     delete process.env.DD_API_KEY
     getConfig().DD_API_KEY = undefined
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
@@ -140,6 +156,20 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should return a request error for malformed skippable suites', (done) => {
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify({
+        data: [{ type: 'suite', attributes: {} }],
+      }))
+
+    getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites) => {
+      assert.match(err.message, /Invalid skippable tests response: data entry suite must be a string/)
+      assert.strictEqual(skippableSuites, undefined)
       done()
     })
   })
@@ -189,6 +219,43 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
+      sinon.assert.calledWithExactly(
+        log.debug,
+        'Received %d skippable %s candidates; excluded %d because line coverage is missing; %d remain.',
+        2,
+        'suite',
+        1,
+        1
+      )
+      sinon.assert.notCalled(log.warn)
+      done()
+    })
+  })
+
+  it('warns if missing line coverage excludes every skippable suite', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_ALL_MISSING_LINE_COVERAGE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, [])
+      assert.strictEqual(correlationId, 'corr-123')
+      sinon.assert.calledWithExactly(
+        log.debug,
+        'Received %d skippable %s candidates; excluded %d because line coverage is missing; %d remain.',
+        2,
+        'suite',
+        2,
+        0
+      )
+      sinon.assert.calledOnceWithExactly(
+        log.warn,
+        'All %d skippable %s candidates were excluded: coverage upload is enabled but line coverage is missing.',
+        2,
+        'suite'
+      )
       done()
     })
   })
@@ -272,6 +339,25 @@ describe('parseSkippableSuitesResponse', () => {
         'src/file1.js': 'gA==',
         'src/file2.js': 'IA==',
       },
+      numReceivedSkippableItems: 2,
+      numExcludedByMissingLineCoverage: 0,
+    })
+  })
+
+  it('normalizes legacy Windows separators in coverage paths', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify({
+      data: [],
+      meta: {
+        coverage: {
+          'src\\file1.js': 'gA==',
+          'src/file2.js': 'IA==',
+        },
+      },
+    }))
+
+    assert.deepStrictEqual(result.coverage, {
+      'src/file1.js': 'gA==',
+      'src/file2.js': 'IA==',
     })
   })
 
@@ -288,6 +374,8 @@ describe('parseSkippableSuitesResponse', () => {
       skippableSuites: [{ suite: 'suite1.spec.js', name: 'test 1' }],
       correlationId: 'corr-123',
       coverage: {},
+      numReceivedSkippableItems: 1,
+      numExcludedByMissingLineCoverage: 0,
     })
   })
 
@@ -298,6 +386,8 @@ describe('parseSkippableSuitesResponse', () => {
     })
 
     assert.deepStrictEqual(result.skippableSuites, ['suite2.spec.js'])
+    assert.strictEqual(result.numReceivedSkippableItems, 2)
+    assert.strictEqual(result.numExcludedByMissingLineCoverage, 1)
   })
 
   it('validates skippable tests response shape when requested', () => {

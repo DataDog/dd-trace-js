@@ -46,6 +46,10 @@ const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
+const {
+  getChannelPromise,
+  publishWithCompletion,
+} = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -1858,13 +1862,39 @@ function resetSuiteSkippingRunState () {
   coverageBackfillFiles = undefined
 }
 
+function resetLibraryConfiguration () {
+  knownTests = {}
+  isCodeCoverageEnabled = false
+  isCoverageReportUploadEnabled = false
+  isItrEnabled = false
+  isSuitesSkippingEnabled = false
+  isEarlyFlakeDetectionEnabled = false
+  earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionSlowTestRetries = {}
+  earlyFlakeDetectionFaultyThreshold = 30
+  isEarlyFlakeDetectionFaulty = false
+  isKnownTestsEnabled = false
+  isTestManagementTestsEnabled = false
+  testManagementTests = {}
+  testManagementAttemptToFixRetries = 0
+  isImpactedTestsEnabled = false
+  modifiedFiles = {}
+  repositoryRoot = undefined
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   if (!isItrEnabled || !isSuitesSkippingEnabled) return originalTests
 
-  const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
-  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
+  const repositoryRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
+  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, repositoryRoot, rootDir)
   hasFilteredSkippableSuites = true
-  log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
+  log.debug(
+    'Jest discovered %d suites; skipped %d using %d skippable candidates; %d suites will run.',
+    originalTests.length,
+    jestSuitesToRun.skippedSuites.length,
+    skippableSuites.length,
+    jestSuitesToRun.suitesToRun.length
+  )
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
   hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
@@ -1877,7 +1907,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
     ? getTestContexts(originalTests)
     : undefined
   coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
-    ? getCoverageBackfillFiles(skippableSuitesCoverage, suitePathRoot, getTestSuitePath)
+    ? getCoverageBackfillFiles(skippableSuitesCoverage, repositoryRoot, getTestSuitePath)
     : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
@@ -1945,6 +1975,9 @@ function shouldFinishBailTestSession (globalConfig, results) {
   return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
 }
 
+/**
+ * @param {Record<string, unknown> & { onDone?: () => void }} payload
+ */
 async function waitForTestSessionFinish (payload) {
   if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
 
@@ -1952,8 +1985,9 @@ async function waitForTestSessionFinish (payload) {
 
   let timeoutId
 
+  let onDone
   const flushPromise = new Promise((resolve) => {
-    payload.onDone = () => {
+    onDone = () => {
       clearTimeout(timeoutId)
       resolve()
     }
@@ -1966,7 +2000,7 @@ async function waitForTestSessionFinish (payload) {
     timeoutId.unref?.()
   })
 
-  testSessionFinishCh.publish(payload)
+  publishWithCompletion(testSessionFinishCh, payload, onDone)
 
   const waitingResult = await Promise.race([flushPromise, timeoutPromise])
 
@@ -2131,12 +2165,6 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, payload = {}) {
-  return new Promise(resolve => {
-    channelToPublishTo.publish({ ...payload, onDone: resolve })
-  })
-}
-
 function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
   const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
@@ -2205,11 +2233,13 @@ function getCliWrapper (isNewJestVersion) {
       resetSuiteSkippingRunState()
       hasFinishedTestSession = false
 
+      let shouldResetLibraryConfiguration = true
       try {
         const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
           frameworkVersion: jestVersion,
         })
         if (!err) {
+          shouldResetLibraryConfiguration = false
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
           isItrEnabled = libraryConfig.isItrEnabled
@@ -2225,6 +2255,10 @@ function getCliWrapper (isNewJestVersion) {
         }
       } catch (err) {
         log.error('Jest library configuration error', err)
+      } finally {
+        if (shouldResetLibraryConfiguration) {
+          resetLibraryConfiguration()
+        }
       }
 
       const {
@@ -2485,9 +2519,7 @@ function getCliWrapper (isNewJestVersion) {
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
-        await new Promise((resolve) => {
-          codeCoverageReportCh.publish({ rootDir, onDone: resolve })
-        })
+        await getChannelPromise(codeCoverageReportCh, { rootDir })
       }
 
       logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
@@ -2505,6 +2537,10 @@ function shouldWaitForTestSuiteFinish (environment) {
   return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
 }
 
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {boolean} waitForFinish
+ */
 function publishTestSuiteFinish (payload, waitForFinish) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
@@ -2513,12 +2549,9 @@ function publishTestSuiteFinish (payload, waitForFinish) {
     return
   }
 
-  return new Promise(resolve => {
-    testSuiteFinishCh.publish({
-      ...payload,
-      waitForFinish,
-      onDone: resolve,
-    })
+  return getChannelPromise(testSuiteFinishCh, {
+    ...payload,
+    waitForFinish,
   })
 }
 

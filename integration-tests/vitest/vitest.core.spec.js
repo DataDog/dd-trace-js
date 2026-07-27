@@ -297,6 +297,42 @@ versions.forEach((version) => {
       })
     })
 
+    it('does not report negative durations for short failed tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.strictEqual(tests.length, 1)
+          assert.strictEqual(tests[0].meta[TEST_NAME], 'reports a non-negative duration for a short failed test')
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+          assert.strictEqual(Number(tests[0].duration), 0)
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/short-failed-test.mjs',
+            VITEST_RUNNER: 'ci-visibility/vitest-tests/short-failed-test-runner.mjs',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 1, testOutput)
+    })
+
     for (const workerPoolConfig of poolConfig) {
       it(`sets DD_VITEST_WORKER in workers with pool=${workerPoolConfig}`, async () => {
         const eventsPromise = receiver

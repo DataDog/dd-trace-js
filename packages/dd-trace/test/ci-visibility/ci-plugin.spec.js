@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -93,6 +94,69 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
   })
 
+  it('clears ITR state when library configuration fails', () => {
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, new Error('settings failed'))
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.libraryConfig = { isSuitesSkippingEnabled: true }
+    plugin.itrCorrelationId = 'correlation-id'
+    plugin.skippableSuitesCoverage = { 'suite.js': 'coverage' }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.strictEqual(plugin.libraryConfig, undefined)
+    assert.strictEqual(plugin.itrCorrelationId, undefined)
+    assert.strictEqual(plugin.skippableSuitesCoverage, undefined)
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('replaces frozen policy snapshots when dependent requests fail', () => {
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.libraryConfig = Object.freeze({
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      isTestManagementEnabled: true,
+    })
+    plugin.tracer._exporter.getKnownTests = (configuration, done) => {
+      done(new Error('known tests failed'))
+    }
+    plugin.tracer._exporter.getTestManagementTests = (configuration, done) => {
+      done(new Error('test management failed'))
+    }
+
+    try {
+      dc.channel('ci:vitest:known-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isKnownTestsEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+
+      dc.channel('ci:vitest:test-management-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, false)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
     const plugin = createPlugin('jest_worker')
     const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
@@ -129,6 +193,56 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
     assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('adds a new DI probe after removing one from the same location', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onFirstCall().returns(['probe-1', setProbePromise])
+      .onSecondCall().returns(['probe-2', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const file = `${plugin.repositoryRoot}/test.js`
+    const line = 23
+    const error = { stack: `Error: test failed\n    at test (${file}:${line}:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+
+    const firstProbe = plugin.addDiProbe(error)
+    await plugin.removeDiProbe({ file, line })
+    const secondProbe = plugin.addDiProbe(error)
+
+    assert.strictEqual(firstProbe.probeId, 'probe-1')
+    assert.strictEqual(secondProbe.probeId, 'probe-2')
+    sinon.assert.calledTwice(addLineProbe)
+    sinon.assert.calledOnceWithExactly(removeProbe, 'probe-1')
+  })
+
+  it('removes all DI probes with Windows-style file paths', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onCall(0).returns(['probe-1', setProbePromise])
+      .onCall(1).returns(['probe-2', setProbePromise])
+      .onCall(2).returns(['probe-3', setProbePromise])
+      .onCall(3).returns(['probe-4', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const firstFile = 'C:\\repo\\first.spec.js'
+    const secondFile = 'C:\\repo\\second.spec.js'
+    const firstError = { stack: `Error: first failure\n    at first (${firstFile}:23:5)` }
+    const secondError = { stack: `Error: second failure\n    at second (${secondFile}:42:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+    plugin._setRepositoryRoot('C:\\repo', [])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+    await plugin.removeAllDiProbes()
+
+    assert.deepStrictEqual(removeProbe.args, [['probe-1'], ['probe-2']])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+
+    sinon.assert.callCount(addLineProbe, 4)
   })
 
   it('exports DI breakpoint hits with the debugger log envelope', () => {
@@ -174,14 +288,14 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
-  function createPlugin (exporter) {
+  function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
     }
 
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
-      enabled: false,
+      enabled,
       experimental: {
         exporter,
       },

@@ -79,10 +79,12 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: self.github.release.push-tags
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
@@ -128,6 +130,23 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
+  publish-electron:
+    needs: [setup, publish]
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://npmjs.com/package/dd-trace-electron
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
+      - run: node scripts/release/publish-electron.js --tag ${{ needs.setup.outputs.npm_tag }}
+
   docs:
     needs: [setup, publish]
     if: needs.setup.outputs.is_latest == 'true'
@@ -136,7 +155,7 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
       - id: pkg
         run: |
@@ -149,7 +168,7 @@ jobs:
           yarn
           yarn build
           mv out /tmp/out
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: gh-pages
       - name: Deploy
@@ -161,7 +180,7 @@ jobs:
           git add -A
           git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
           git push
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
   publish-dev:
     if: github.event_name == 'workflow_dispatch'
@@ -177,10 +196,12 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: self.github.release.push-tags
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
       - uses: ./.github/actions/install
       - id: pkg
         run: |
@@ -192,3 +213,27 @@ jobs:
           git tag --force dev
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git :refs/tags/dev
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git --tags
+
+  publish-electron-dev:
+    needs: publish-dev
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://npmjs.com/package/dd-trace-electron
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/node
+        with:
+          registry-url: https://registry.npmjs.org
+      - uses: ./.github/actions/install
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+      - run: node scripts/release/publish-electron.js --tag dev

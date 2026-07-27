@@ -22,6 +22,7 @@ const {
 const FIXTURE_ROOT = 'ci-visibility/tia-code-coverage'
 const RUN_SUITE = `${FIXTURE_ROOT}/test-run.js`
 const SKIPPED_SUITE = `${FIXTURE_ROOT}/test-skipped.js`
+const JEST_ROOT_SKIPPED_SUITE = 'tia-code-coverage/test-skipped.js'
 const RUN_SOURCE = `${FIXTURE_ROOT}/src/run-dependency.js`
 const SKIPPED_SOURCE = `${FIXTURE_ROOT}/src/skipped-dependency.js`
 const EXTRA_SOURCE = `${FIXTURE_ROOT}/src/uncovered-dependency.js`
@@ -845,8 +846,8 @@ function describeJestVersion (jestVersion, dependencies) {
       })
     })
 
-    // Jest can be launched below the repository root while backend suites and coverage use repository-relative paths.
-    // This catches regressions where coverage filenames become cwd-relative and stop matching backend meta.coverage.
+    // Jest can be launched below the repository root. Suite identifiers remain relative to Jest's rootDir, while
+    // coverage filenames remain repository-relative.
     it('uses the repository root for jest coverage when launched from a subdirectory', async () => {
       const framework = {
         ...FRAMEWORKS[0],
@@ -869,7 +870,7 @@ function describeJestVersion (jestVersion, dependencies) {
         suitesToSkip: [{
           type: 'suite',
           attributes: {
-            suite: SKIPPED_SUITE,
+            suite: JEST_ROOT_SKIPPED_SUITE,
           },
         }],
         skippableCoverage: {

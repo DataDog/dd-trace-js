@@ -8,7 +8,11 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
-const IPC_TIMEOUT_MS = 10_000
+// Each test spawns a fresh Electron app, so its first traced operation pays cold-start cost (process
+// warm-up plus an IPC or network round-trip); on a loaded CI runner that can exceed a second. Give trace
+// assertions generous headroom to avoid flakes — they still resolve the moment the matching trace arrives,
+// so passing runs are unaffected.
+const TRACE_TIMEOUT_MS = 10_000
 
 describe('Plugin', () => {
   let child
@@ -55,7 +59,7 @@ describe('Plugin', () => {
 
     describe('electron', () => {
       describe('without configuration', function () {
-        this.timeout(IPC_TIMEOUT_MS + 5_000)
+        this.timeout(TRACE_TIMEOUT_MS + 5_000)
         beforeEach(() => agent.load('electron'))
         beforeEach(function (done) {
           this.timeout(30_000)
@@ -64,8 +68,14 @@ describe('Plugin', () => {
 
         afterEach(() => agent.close({ ritmReset: false }))
         afterEach(done => {
-          child.send({ name: 'quit' })
-          child.on('close', () => done())
+          const proc = child
+          child = undefined
+          // The child may have already exited (e.g. an app crash mid-test). Sending on a closed IPC channel emits
+          // an unhandled ERR_IPC_CHANNEL_CLOSED 'error' that masks the real failure and aborts the rest of the
+          // suite, so only quit a still-connected child and let the send callback absorb a channel that races closed.
+          if (!proc?.connected) return done()
+          proc.once('close', () => done())
+          proc.send({ name: 'quit' }, () => {})
         })
 
         it('should do automatic instrumentation for fetch', done => {
@@ -85,7 +95,7 @@ describe('Plugin', () => {
               assert.strictEqual(meta['http.url'], `http://127.0.0.1:${port}/`)
               assert.strictEqual(meta['http.method'], 'GET')
               assert.strictEqual(meta['http.status_code'], '200')
-            })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -109,7 +119,7 @@ describe('Plugin', () => {
               assert.strictEqual(meta['http.url'], `http://127.0.0.1:${port}/`)
               assert.strictEqual(meta['http.method'], 'GET')
               assert.strictEqual(meta['http.status_code'], '200')
-            })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -132,7 +142,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            }, { timeoutMs: IPC_TIMEOUT_MS })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -154,7 +164,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            }, { timeoutMs: IPC_TIMEOUT_MS })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -175,7 +185,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'producer')
-            }, { timeoutMs: IPC_TIMEOUT_MS })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -198,7 +208,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'consumer')
-            }, { timeoutMs: IPC_TIMEOUT_MS })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -222,7 +232,7 @@ describe('Plugin', () => {
               assert.strictEqual(meta['http.url'], `http://127.0.0.1:${port}/utility`)
               assert.strictEqual(meta['http.method'], 'GET')
               assert.strictEqual(meta['http.status_code'], '200')
-            })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 
@@ -243,7 +253,7 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'producer')
-            }, { timeoutMs: IPC_TIMEOUT_MS })
+            }, { timeoutMs: TRACE_TIMEOUT_MS })
             .then(done)
             .catch(done)
 

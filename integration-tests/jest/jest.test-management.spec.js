@@ -23,6 +23,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_NAME,
   TEST_RETRY_REASON,
   TEST_SESSION_NAME,
@@ -46,6 +47,7 @@ const {
   TEST_FINAL_STATUS,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  ITR_CORRELATION_ID,
   TEST_PARAMETERS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
@@ -173,6 +175,80 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
+            DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
+            LAGE_PACKAGE_NAME: 'my-initial-lage-package',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('clears test optimization policies when a later settings request fails', async () => {
+      const itrCorrelationId = '4321'
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setItrCorrelationId(itrCorrelationId)
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+          'ci-visibility/test/ci-visibility-test-2.js': ['ci visibility 2 can report tests 2'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+        },
+        flaky_test_retries_enabled: true,
+        itr_enabled: true,
+        known_tests_enabled: true,
+        test_management: {
+          enabled: true,
+          attempt_to_fix_retries: 2,
+        },
+        tests_skipping: true,
+      })
+      receiver.setSettingsResponseStatusCodes([200, 404])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessions = []
+          const testSuites = []
+          for (const event of events) {
+            if (event.type === 'test_session_end') {
+              testSessions.push(event.content)
+            } else if (event.type === 'test_suite_end') {
+              testSuites.push(event.content)
+            }
+          }
+          const [firstSession, secondSession] = testSessions
+          const [firstSuite, secondSuite] = testSuites
+
+          assert.ok(firstSession, inspect(testSessions))
+          assert.ok(secondSession, inspect(testSessions))
+          assert.ok(firstSuite, inspect(testSuites))
+          assert.ok(secondSuite, inspect(testSuites))
+          assert.strictEqual(firstSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+          assert.strictEqual(firstSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.strictEqual(firstSuite[ITR_CORRELATION_ID], itrCorrelationId)
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in secondSession.meta), inspect(secondSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ABORT_REASON in secondSession.meta), inspect(secondSession.meta))
+          assert.ok(!(TEST_MANAGEMENT_ENABLED in secondSession.meta), inspect(secondSession.meta))
+          assert.ok(!(ITR_CORRELATION_ID in secondSuite), inspect(secondSuite))
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-jest-lage-multi.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
             DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
             LAGE_PACKAGE_NAME: 'my-initial-lage-package',
           },
@@ -3081,6 +3157,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(coverageReport.eventFile.name, 'event')
           assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
           assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+          assert.deepStrictEqual(
+            coverageReport.eventFile.content['report.flags'],
+            ['type:unit-tests', 'jvm-21', 'type:unit-tests']
+          )
           assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
           assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
         })
@@ -3096,6 +3176,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             COLLECT_COVERAGE_FROM: 'ci-visibility/test/*.js',
             DD_GIT_COMMIT_SHA: gitCommitSha,
             DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+            DD_CODE_COVERAGE_FLAGS: ' type:unit-tests, ,jvm-21,type:unit-tests, ',
           },
         }
       )

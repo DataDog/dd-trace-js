@@ -84,7 +84,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
     const finish = () => finishPoolQueryCh.publish(ctx)
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const cb = args[args.length - 1]
+      const cb = args.at(-1)
       if (typeof cb === 'function') {
         args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
           return finishPoolQueryCh.runStores(ctx, cb, this, ...args)

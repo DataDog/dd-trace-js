@@ -136,16 +136,18 @@ const DsmPathwayCodec = {
    * @param {Buffer} dataStreamsContext.hash
    * @param {number} dataStreamsContext.pathwayStartNs
    * @param {number} dataStreamsContext.edgeStartNs
-   * @param {object} carrier
+   * @param {object} [carrier]
+   * @returns {object | undefined}
    */
   encode (dataStreamsContext, carrier) {
-    if (!dataStreamsContext || !dataStreamsContext.hash) {
-      return
-    }
+    if (!dataStreamsContext || !dataStreamsContext.hash) return
+    carrier ??= {}
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
+
+    return carrier
   },
 
   /**

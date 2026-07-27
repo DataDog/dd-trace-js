@@ -23,7 +23,6 @@ const describe = version.NODE_MAJOR >= 20
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('tedious', 'tedious', '>=16.0.0', version => {
@@ -34,8 +33,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'tds', 'Connection, Request', 'tedious')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'tds',
+      packageName: 'tedious',
+      defaultExport: true,
+      namedExports: ['Connection', 'Request'],
+      namedExportBinding: 'namespace',
     })
 
     afterEach(async () => {
@@ -43,7 +46,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

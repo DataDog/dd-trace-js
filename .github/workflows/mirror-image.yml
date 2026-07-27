@@ -14,17 +14,25 @@ on:
 
 permissions:
   packages: write
+  id-token: write
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
+      - name: Get GitHub Token via dd-octo-sts
+        id: generate-token
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        with:
+          scope: DataDog/dd-trace-js
+          policy: self.mirror-image
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ steps.generate-token.outputs.token }}
 
       - name: Resolve GHCR target
         env:

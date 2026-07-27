@@ -14,13 +14,16 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox([`'cookie-parser@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'cookieParser', undefined, 'cookie-parser')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'cookieParser',
+      packageName: 'cookie-parser',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -32,7 +35,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)
