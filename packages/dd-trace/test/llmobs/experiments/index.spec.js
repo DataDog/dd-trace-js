@@ -111,6 +111,52 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
       sinon.assert.calledThrice(warn)
     })
+
+    it('models inert datasets and experiments with stable accessors', async () => {
+      const warn = sinon.spy(log, 'warn')
+      const exp = new NoopExperiments()
+
+      const ignoredDescriptionDataset = exp.createDataset('legacy description', 'ignored')
+      assert.deepEqual(ignoredDescriptionDataset.records(), [])
+
+      const dataset = exp.createDataset('d', {
+        records: [{
+          id: 'r1',
+          inputData: { question: 'q' },
+          expectedOutput: { answer: 'a' },
+          metadata: { source: 'test' },
+        }],
+      })
+      dataset.addRecord('input only')
+
+      assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.id(), null)
+      assert.equal(dataset.projectId(), null)
+      assert.equal(dataset.version(), null)
+      assert.equal(dataset.latestVersion(), null)
+      assert.deepEqual(dataset.recordIds(), [])
+      assert.equal(dataset.url(), null)
+      assert.deepEqual(dataset.records(), [
+        {
+          id: 'r1',
+          input: { question: 'q' },
+          expectedOutput: { answer: 'a' },
+          metadata: { source: 'test' },
+        },
+        { id: null, input: 'input only', expectedOutput: null, metadata: {} },
+      ])
+      assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
+
+      const pulled = await exp.pullDataset('pulled')
+      assert.equal(pulled.name(), 'pulled')
+
+      const experiment = exp.experiment()
+      assert.equal(experiment.name(), '')
+      assert.equal(experiment.experimentId(), null)
+      assert.equal(experiment.url(), null)
+      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      sinon.assert.callCount(warn, 4)
+    })
   })
 
   describe('pullDataset', () => {
