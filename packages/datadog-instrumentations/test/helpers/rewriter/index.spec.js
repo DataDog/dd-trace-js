@@ -295,6 +295,28 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end-callback.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'Async',
+          },
+          channelName: 'trace_promise_async_end_callback',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-promise-async-end-callback.js',
+          },
+          astQuery: 'ReturnStatement > CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+          channelName: 'trace_promise_async_end_callback',
+          transform: 'waitForAsyncEndCallback',
+        },
+        {
+          module: {
             name: 'test-esm',
             versionRange: '>=0.1',
             filePath: 'pregel-class.js',
@@ -594,6 +616,72 @@ describe('check-require-cache', () => {
 
     assert.equal(result, 'result')
     assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndPromise', 'resolved'])
+  })
+
+  it('should wait for an asyncEnd callback before resolving', async () => {
+    const { test } = compileFile('trace-promise-async-end-callback')
+    const steps = []
+
+    subs = {
+      asyncEnd (ctx) {
+        steps.push('asyncEnd')
+        ctx.waitForAsyncEnd = onDone => {
+          setImmediate(() => {
+            steps.push('asyncEndCallback')
+            onDone()
+          })
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end_callback')
+    ch.subscribe(subs)
+
+    const resultPromise = test().then(result => {
+      steps.push('resolved')
+      return result
+    })
+
+    await Promise.resolve()
+
+    assert.deepStrictEqual(steps, ['asyncEnd'])
+
+    const result = await resultPromise
+
+    assert.equal(result, 'result')
+    assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndCallback', 'resolved'])
+  })
+
+  it('should wait for an asyncEnd callback before preserving a rejection', async () => {
+    const { test } = compileFile('trace-promise-async-end-callback')
+    const error = new Error('test rejection')
+    const steps = []
+
+    subs = {
+      asyncEnd (ctx) {
+        steps.push('asyncEnd')
+        ctx.waitForAsyncEnd = onDone => {
+          setImmediate(() => {
+            steps.push('asyncEndCallback')
+            onDone()
+          })
+        }
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_promise_async_end_callback')
+    ch.subscribe(subs)
+
+    const resultPromise = test(error)
+
+    await Promise.resolve()
+
+    assert.deepStrictEqual(steps, ['asyncEnd'])
+    await assert.rejects(resultPromise, actualError => {
+      steps.push('rejected')
+      return actualError === error
+    })
+    assert.deepStrictEqual(steps, ['asyncEnd', 'asyncEndCallback', 'rejected'])
   })
 
   it('should use import when rewriting esm modules', () => {
