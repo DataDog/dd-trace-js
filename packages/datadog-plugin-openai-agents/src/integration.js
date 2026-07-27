@@ -1,10 +1,13 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
+const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
 const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
 const { getOpenAIModelProvider } = require('../../dd-trace/src/llmobs/plugins/openai/utils')
 const {
   extractInputMessages,
   extractOutputMessages,
+  extractGenerationOutputMessages,
   extractMetrics,
   extractMetadata,
 } = require('../../dd-trace/src/llmobs/plugins/openai-agents/utils')
@@ -12,6 +15,8 @@ const { AGENTS_ERROR_TYPE, applyError, deriveSpanName } = require('./util')
 
 const COMPONENT = 'openai-agents'
 const DEFAULT_MODEL_PROVIDER = 'openai'
+const MODEL_BASE_URL_STORE_KEY = Symbol('openai-agents.model-base-url')
+const legacyStorage = storage('legacy')
 
 const KIND_TO_SPAN_KIND = {
   agent: 'internal',
@@ -31,6 +36,7 @@ const KIND_TO_SPAN_KIND = {
  *   outputOaiSpan?: object,
  *   metadata?: Record<string, unknown>,
  *   groupId?: string,
+ *   llmobsParentStore?: object,
  * }} LLMObsTraceInfo
  */
 
@@ -41,14 +47,14 @@ const KIND_TO_SPAN_KIND = {
  */
 class OpenAIAgentsIntegration {
   #tracer
+  #config
   #enabled = false
-  #modelProvider = DEFAULT_MODEL_PROVIDER
+  #service
   /**
    * LLMObs is gated independently of APM tracing: when DD_LLMOBS_ENABLED is
    * false we keep emitting APM spans for the agent workflow but skip all
-   * LLMObs tagging and the work that feeds it. The tagger is the single
-   * source of truth for "is LLMObs on for this integration?".
-   * @type {LLMObsTagger | undefined}
+   * LLMObs tagging and the work that feeds it.
+   * @type {LLMObsTagger}
    */
   #tagger
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
@@ -58,28 +64,22 @@ class OpenAIAgentsIntegration {
 
   constructor ({ tracer, config } = {}) {
     this.#tracer = tracer
-    this.#tagger = config?.llmobs?.DD_LLMOBS_ENABLED ? new LLMObsTagger(config, true) : undefined
+    this.#config = config ?? { llmobs: {} }
+    this.#tagger = new LLMObsTagger(this.#config, true)
   }
 
   get enabled () {
     return this.#enabled
   }
 
-  setEnabled (enabled) {
-    this.#enabled = enabled
-  }
-
   /**
-   * Update the model_provider tag based on the OpenAI-compatible client's
-   * baseURL captured by the agents-openai instrumentation hook. Single-
-   * provider-per-process is the assumed deployment shape; concurrent runs
-   * against different providers will see last-write-wins on this field.
+   * Apply plugin lifecycle configuration.
    *
-   * @param {string} baseURL
+   * @param {{ enabled?: boolean, service?: string }} [config]
    */
-  setClientBaseURL (baseURL) {
-    if (typeof baseURL !== 'string' || baseURL.length === 0) return
-    this.#modelProvider = getOpenAIModelProvider(baseURL)
+  configure (config) {
+    this.#enabled = !!config?.enabled
+    this.#service = config?.service
   }
 
   /**
@@ -88,6 +88,22 @@ class OpenAIAgentsIntegration {
    */
   getDDSpan (spanId) {
     return this.#oaiToDdSpan.get(spanId)
+  }
+
+  /**
+   * Ensure a function span is available synchronously at Tool.invoke. Newer
+   * agents-core versions dispatch processor callbacks after an async exporter
+   * callback, which can otherwise happen after user tool code has started.
+   *
+   * @param {object} oaiSpan
+   * @returns {import('../../dd-trace/src/opentracing/span') | undefined}
+   */
+  getOrStartToolSpan (oaiSpan) {
+    if (!oaiSpan?.spanId) return
+    const existingSpan = this.#oaiToDdSpan.get(oaiSpan.spanId)
+    if (existingSpan) return existingSpan
+    this.startSpan(oaiSpan, 'tool')
+    return this.#oaiToDdSpan.get(oaiSpan.spanId)
   }
 
   clearState () {
@@ -108,27 +124,32 @@ class OpenAIAgentsIntegration {
     if (!traceId) return
 
     const name = oaiTrace.name || 'Agent workflow'
+    const parentSpan = legacyStorage.getStore()?.span
     const ddSpan = this.#tracer.startSpan(name, {
-      tags: {
-        component: COMPONENT,
-        'span.kind': 'internal',
-      },
+      childOf: parentSpan,
+      tags: this.#getSpanTags('internal'),
     })
 
+    const llmobsParentStore = this.#isLLMObsEnabled() ? llmobsStorage.getStore() : undefined
     this.#oaiToDdSpan.set(traceId, ddSpan)
     this.#traceInfo.set(traceId, {
       spanId: ddSpan.context().toSpanId(),
       traceId,
       groupId: oaiTrace.groupId || undefined,
       metadata: oaiTrace.metadata,
+      llmobsParentStore,
     })
 
-    this.#tagger?.registerLLMObsSpan(ddSpan, {
+    this.#tagger.registerLLMObsSpan(ddSpan, {
       kind: 'workflow',
       name,
       integration: COMPONENT,
+      parent: llmobsParentStore?.span,
       sessionId: oaiTrace.groupId || undefined,
     })
+    if (LLMObsTagger.tagMap.has(ddSpan)) {
+      llmobsStorage.enterWith({ ...llmobsParentStore, span: ddSpan })
+    }
   }
 
   endTrace (oaiTrace) {
@@ -149,6 +170,7 @@ class OpenAIAgentsIntegration {
     if (!traceId) return
     const ddSpan = this.#oaiToDdSpan.get(traceId)
     if (!ddSpan) return
+    const info = this.#traceInfo.get(traceId)
 
     if (rootAgentSpan?.error) {
       ddSpan.setTag('error', true)
@@ -158,8 +180,11 @@ class OpenAIAgentsIntegration {
       }
     }
 
-    if (this.#tagger) this.#setTraceAttributes(ddSpan, traceId)
+    if (this.#isLLMObsEnabled()) this.#setTraceAttributes(ddSpan, traceId)
     ddSpan.finish()
+    if (info && LLMObsTagger.tagMap.has(ddSpan)) {
+      llmobsStorage.enterWith(info.llmobsParentStore)
+    }
     this.#oaiToDdSpan.delete(traceId)
     this.#traceInfo.delete(traceId)
   }
@@ -168,22 +193,19 @@ class OpenAIAgentsIntegration {
 
   startSpan (oaiSpan, llmobsKind) {
     const spanId = oaiSpan.spanId
-    if (!spanId) return
+    if (!spanId || this.#oaiToDdSpan.has(spanId)) return
 
     const parentSpan = this.#resolveParent(oaiSpan)
     const spanName = deriveSpanName(oaiSpan)
 
     const ddSpan = this.#tracer.startSpan(spanName, {
       childOf: parentSpan,
-      tags: {
-        component: COMPONENT,
-        'span.kind': KIND_TO_SPAN_KIND[llmobsKind] ?? 'internal',
-      },
+      tags: this.#getSpanTags(KIND_TO_SPAN_KIND[llmobsKind] ?? 'internal'),
     })
 
     this.#oaiToDdSpan.set(spanId, ddSpan)
 
-    if (this.#tagger) {
+    if (this.#isLLMObsEnabled()) {
       const llmobsOptions = {
         kind: llmobsKind,
         name: spanName,
@@ -191,11 +213,11 @@ class OpenAIAgentsIntegration {
         parent: parentSpan,
       }
 
-      if (oaiSpan.spanData?.type === 'response') {
+      if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
         // Model name only arrives with the response; tagged in
         // `#setResponseAttributes` once known. Model provider is resolved from
         // the agents-openai client's baseURL captured at getResponse time.
-        llmobsOptions.modelProvider = this.#modelProvider
+        llmobsOptions.modelProvider = this.#getCurrentModelProvider()
       }
 
       this.#tagger.registerLLMObsSpan(ddSpan, llmobsOptions)
@@ -213,14 +235,18 @@ class OpenAIAgentsIntegration {
     if (oaiSpan.spanData?.type === 'handoff') {
       const spanName = deriveSpanName(oaiSpan)
       ddSpan.setOperationName(spanName)
-      this.#tagger?.setName(ddSpan, spanName)
+      if (this.#isLLMObsEnabled()) this.#tagger.setName(ddSpan, spanName)
     }
 
-    if (this.#tagger) {
+    if (this.#isLLMObsEnabled()) {
       const spanData = oaiSpan.spanData
       switch (spanData?.type) {
         case 'response':
           this.#setResponseAttributes(ddSpan, oaiSpan)
+          this.#updateTraceInfoOutput(oaiSpan)
+          break
+        case 'generation':
+          this.#setGenerationAttributes(ddSpan, oaiSpan)
           this.#updateTraceInfoOutput(oaiSpan)
           break
         case 'function':
@@ -241,7 +267,6 @@ class OpenAIAgentsIntegration {
     }
 
     ddSpan.finish()
-
     // agents-core's withTrace skips Trace.end() when its callback throws, so an
     // errored parentless span is our last chance to finalize the workflow.
     if (oaiSpan.parentId == null && oaiSpan.error) {
@@ -293,6 +318,38 @@ class OpenAIAgentsIntegration {
   }
 
   /**
+   * Tag a Chat Completions generation span from agents-core's public span data.
+   *
+   * @param {import('../../dd-trace/src/opentracing/span')} ddSpan
+   * @param {object} oaiSpan
+   */
+  #setGenerationAttributes (ddSpan, oaiSpan) {
+    const spanData = oaiSpan.spanData
+    if (spanData?.model) {
+      this.#tagger.tagModelName(ddSpan, spanData.model)
+    }
+
+    const parentAgentName = this.#llmSpanParentAgentName(oaiSpan)
+    if (parentAgentName) {
+      this.#tagger.setName(ddSpan, `${parentAgentName} (LLM)`)
+    }
+
+    const inputMessages = extractInputMessages(spanData?.input)
+    this.#tagger.tagLLMIO(ddSpan, inputMessages, extractGenerationOutputMessages(spanData?.output))
+
+    const info = this.#traceInfo.get(oaiSpan.traceId)
+    if (info && info.inputOaiSpan === oaiSpan) {
+      info.inputMessages = inputMessages
+    }
+
+    const metrics = extractMetrics({
+      usage: spanData?.usage ?? spanData?.output?.at(-1)?.usage,
+    })
+    if (metrics) this.#tagger.tagMetrics(ddSpan, metrics)
+    if (spanData?.model_config) this.#tagger.tagMetadata(ddSpan, spanData.model_config)
+  }
+
+  /**
    * If this response span's parent is the top-level agent span of the trace,
    * return that agent's dd-trace span name. Used to set the LLMObs span name
    * to `${agentName} (LLM)` (Python parity).
@@ -335,7 +392,12 @@ class OpenAIAgentsIntegration {
     // input messages were cached during #setResponseAttributes.
     const lastInputMessage = info.inputMessages?.at(-1)
     const inputValue = typeof lastInputMessage?.content === 'string' ? lastInputMessage.content : ''
-    const outputValue = info.outputOaiSpan?.spanData?._response?.output_text ?? ''
+    const outputSpanData = info.outputOaiSpan?.spanData
+    let outputValue = outputSpanData?._response?.output_text ?? ''
+    if (outputSpanData?.type === 'generation') {
+      const outputMessages = extractGenerationOutputMessages(outputSpanData.output)
+      outputValue = outputMessages.at(-1)?.content ?? ''
+    }
 
     this.#tagger.tagTextIO(ddSpan, inputValue, outputValue)
 
@@ -364,7 +426,7 @@ class OpenAIAgentsIntegration {
     // Capture the first response span whose parent is the top-level agent
     // as the workflow-level input source.
     if (
-      type === 'response' &&
+      (type === 'response' || type === 'generation') &&
       parentId &&
       !info.inputOaiSpan &&
       parentId === info.currentTopLevelAgentSpanId
@@ -400,6 +462,42 @@ class OpenAIAgentsIntegration {
       if (root) return root
     }
   }
+
+  /**
+   * Read the mutable tracer configuration so remote/runtime enablement is
+   * reflected without reconstructing the plugin.
+   *
+   * @returns {boolean}
+   */
+  #isLLMObsEnabled () {
+    return !!this.#config.llmobs?.DD_LLMOBS_ENABLED
+  }
+
+  /**
+   * Resolve model provider from the model invocation's async-local context.
+   *
+   * @returns {string}
+   */
+  #getCurrentModelProvider () {
+    const baseURL = legacyStorage.getStore()?.[MODEL_BASE_URL_STORE_KEY]
+    return baseURL ? getOpenAIModelProvider(baseURL) : DEFAULT_MODEL_PROVIDER
+  }
+
+  /**
+   * Build common APM tags without overriding the tracer's global service when
+   * the integration has no explicit service configuration.
+   *
+   * @param {string} spanKind
+   * @returns {Record<string, string>}
+   */
+  #getSpanTags (spanKind) {
+    const tags = {
+      component: COMPONENT,
+      'span.kind': spanKind,
+    }
+    if (this.#service) tags.service = this.#service
+    return tags
+  }
 }
 
-module.exports = { OpenAIAgentsIntegration }
+module.exports = { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration }
