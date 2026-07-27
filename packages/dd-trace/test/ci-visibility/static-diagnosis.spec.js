@@ -12,6 +12,95 @@ const {
 } = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
+  it('recognizes Better Node Test scripts as node:test diagnostics', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { '@better-node-test/bnt': '0.4.0' },
+      scripts: { test: 'bnt --test-reporter spec' },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.ok(report.unsupportedFrameworks.some(framework => framework.id === 'node-test'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not treat a Cucumber config filename as a Cucumber runner invocation', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-cucumber-command-'))
+    const conformanceCommand = 'cucumber-js ./conformance/features/*-protocol-binding.feature -p default'
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { '@cucumber/cucumber': '8.11.1' },
+      scripts: {
+        'lint:js': "eslint 'src/**/*.{js,ts}' 'test/**/*.{js,ts}' cucumber.js",
+        conformance: conformanceCommand,
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const cucumber = report.supportedFrameworks.find(framework => framework.id === 'cucumber')
+
+      assert.strictEqual(cucumber.eligibleCommand.command, conformanceCommand)
+      assert.deepStrictEqual(report.eligibleFrameworks.filter(framework => framework.id === 'cucumber'), [{
+        id: 'cucumber',
+        name: 'Cucumber',
+        command: conformanceCommand,
+        commandLocation: 'package.json',
+        supportedRange: '>=7.0.0',
+        version: '8.11.1',
+        versionLocation: 'package.json',
+      }])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers a direct framework command before a stable package-path tie-breaker', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-command-preference-'))
+    const aggregateRoot = path.join(root, 'packages', 'alpha')
+    const directRoot = path.join(root, 'packages', 'zeta')
+    fs.mkdirSync(aggregateRoot, { recursive: true })
+    fs.mkdirSync(directRoot, { recursive: true })
+    fs.writeFileSync(path.join(aggregateRoot, 'package.json'), JSON.stringify({
+      name: 'alpha',
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'npm run setup && jest' },
+    }))
+    fs.writeFileSync(path.join(directRoot, 'package.json'), JSON.stringify({
+      name: 'zeta',
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'jest --runInBand' },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const jest = report.eligibleFrameworks.find(framework => framework.id === 'jest')
+
+      assert.strictEqual(jest.command, 'jest --runInBand')
+      assert.strictEqual(jest.commandLocation, 'packages/zeta/package.json')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('ignores a root package.json symbolic link that escapes the repository', function () {
     if (process.platform === 'win32') this.skip()
 
@@ -531,7 +620,7 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
-  it('does not select Jest watchAll scripts as eligible validation commands', () => {
+  it('does not select Jest watchAll scripts but retains the installed-runner fallback', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
 
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
@@ -552,7 +641,10 @@ describe('test optimization validation static diagnosis', () => {
         },
       })
 
-      assert.deepStrictEqual(report.eligibleFrameworks, [])
+      assert.strictEqual(report.eligibleFrameworks.length, 1)
+      assert.strictEqual(report.eligibleFrameworks[0].id, 'jest')
+      assert.strictEqual(report.eligibleFrameworks[0].command, 'direct jest binary')
+      assert.doesNotMatch(report.eligibleFrameworks[0].command, /watchAll/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
