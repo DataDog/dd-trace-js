@@ -6,20 +6,19 @@ const path = require('node:path')
 const { globSync } = require('glob')
 const YAML = require('yaml')
 
+const { TEST_FILE_GLOB, createTestFileIndex } = require('./helpers/test-file-index')
+
+/** @typedef {import('./helpers/test-file-index').TestFileIndex} TestFileIndex */
+
+const NODE_MODULES_IGNORE_GLOBS = ['**/node_modules/**']
 const DEFAULT_IGNORE_GLOBS = [
-  '**/node_modules/**',
+  ...NODE_MODULES_IGNORE_GLOBS,
   '**/coverage/**',
   '**/.git/**',
   '**/.nyc_output/**',
   '**/.junit-tmp/**',
   'vendor/dist/**',
 ]
-
-const GLOB_CACHE_MAX = 2000
-/** @type {Map<string, string[]>} */
-const globCache = new Map()
-let globCacheHits = 0
-let globCacheMisses = 0
 
 const COVERAGE_ACTIONS = new Set([
   './.github/actions/coverage',
@@ -29,36 +28,6 @@ const COVERAGE_COLLECTORS = new Set([
   'integration-tests/coverage/run-suite.js',
   'scripts/c8-ci.js',
 ])
-
-/**
- * @param {string} pattern
- * @param {{cwd: string, nodir: boolean, windowsPathsNoEscape: boolean, ignore?: string[]}} opts
- * @returns {string[]}
- */
-function globSyncCached (pattern, opts) {
-  const ignoreKey = Array.isArray(opts.ignore) ? opts.ignore.join('\n') : ''
-  const key = `${opts.cwd}\0${pattern}\0${opts.nodir ? 1 : 0}\0${opts.windowsPathsNoEscape ? 1 : 0}\0${ignoreKey}`
-
-  const cached = globCache.get(key)
-  if (cached) {
-    globCacheHits++
-    // Basic LRU: refresh insertion order.
-    globCache.delete(key)
-    globCache.set(key, cached)
-    return cached
-  }
-
-  globCacheMisses++
-  const res = globSync(pattern, opts)
-
-  globCache.set(key, res)
-  if (globCache.size > GLOB_CACHE_MAX) {
-    const first = globCache.keys().next().value
-    if (first !== undefined) globCache.delete(first)
-  }
-
-  return res
-}
 
 /**
  * @param {string} s
@@ -350,30 +319,23 @@ function parseExportAssignments (run) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {string[]}
  */
-function findTestFiles (repoRoot) {
-  const commonGlobOpts = { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore: DEFAULT_IGNORE_GLOBS }
-
+function findTestFiles (index) {
   // Collect every test-file naming convention used in the repo so an unrun spec
   // can never slip through untracked. Kept deliberately wide (js/mjs/cjs) even
   // where no file currently uses an extension, so a future one is caught.
-  const files = globSyncCached('**/*.@(spec|test).@(js|mjs|cjs)', commonGlobOpts)
-
-  files.sort((a, b) => a.localeCompare(b, 'en'))
-  return files
+  return index.match(TEST_FILE_GLOB, DEFAULT_IGNORE_GLOBS)
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @param {Record<string, string>} scripts
  * @param {Record<string, string|undefined>} [env]
  * @returns {{ globs: string[], matchedFiles: Set<string> }}
  */
-function expandScriptGlobs (repoRoot, scripts, env = {}) {
-  const ignore = DEFAULT_IGNORE_GLOBS
-
+function expandScriptGlobs (index, scripts, env = {}) {
   /** @type {string[]} */
   const allGlobs = []
   const matchedFiles = new Set()
@@ -392,7 +354,7 @@ function expandScriptGlobs (repoRoot, scripts, env = {}) {
 
       let expanded
       try {
-        expanded = globSyncCached(normalized, { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore })
+        expanded = index.match(normalized, DEFAULT_IGNORE_GLOBS)
       } catch {
         // If a pattern can't be parsed by glob, skip expanding it. It still counts as an extracted glob.
         continue
@@ -466,14 +428,14 @@ function extractScriptInvocations (run, knownScripts) {
 
 /**
  * Expand a script and any nested `npm run`/`yarn <script>` calls into matched files.
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @param {Record<string, string>} scripts
  * @param {Set<string>} knownScripts
  * @param {string} scriptName
  * @param {Record<string, string|undefined>} env
  * @returns {{ files: Set<string>, globs: string[], visited: string[] }}
  */
-function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) {
+function expandInvokedScript (index, scripts, knownScripts, scriptName, env) {
   /** @type {string[]} */
   const visited = []
   /** @type {string[]} */
@@ -483,8 +445,6 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
   /** @type {string[]} */
   const queue = [scriptName]
   const seen = new Set()
-
-  const ignore = DEFAULT_IGNORE_GLOBS
 
   while (queue.length) {
     const name = queue.shift()
@@ -503,7 +463,7 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
       allGlobs.push(normalized)
       let expanded
       try {
-        expanded = globSyncCached(normalized, { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore })
+        expanded = index.match(normalized, DEFAULT_IGNORE_GLOBS)
       } catch {
         continue
       }
@@ -523,7 +483,7 @@ function expandInvokedScript (repoRoot, scripts, knownScripts, scriptName, env) 
  * @returns {string[]}
  */
 function findWorkflowFiles (repoRoot) {
-  const files = globSyncCached('.github/workflows/*.{yml,yaml}', {
+  const files = globSync('.github/workflows/*.{yml,yaml}', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -901,7 +861,7 @@ function collectWorkflowRuns (repoRoot) {
  * @returns {Set<string>}
  */
 function listPluginPackages (repoRoot) {
-  const entries = globSyncCached('packages/datadog-plugin-*', {
+  const entries = globSync('packages/datadog-plugin-*', {
     cwd: repoRoot,
     nodir: false,
     windowsPathsNoEscape: true,
@@ -989,18 +949,11 @@ function getTraceCoreCategoriesFromScripts (scripts) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {Set<string>}
  */
-function findDdTraceTestCategories (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/*/**/*.@(spec|test).@(js|mjs|cjs)', {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: [
-      '**/node_modules/**',
-    ],
-  })
+function findDdTraceTestCategories (index) {
+  const files = index.match('packages/dd-trace/test/*/**/*.@(spec|test).@(js|mjs|cjs)', NODE_MODULES_IGNORE_GLOBS)
 
   /** @type {Set<string>} */
   const out = new Set()
@@ -1017,21 +970,12 @@ function findDdTraceTestCategories (repoRoot) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @param {string} category
  * @returns {string[]}
  */
-function listDdTraceCategorySpecFiles (repoRoot, category) {
-  const files = globSyncCached(`packages/dd-trace/test/${category}/**/*.@(spec|test).@(js|mjs|cjs)`, {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: [
-      '**/node_modules/**',
-    ],
-  })
-  files.sort((a, b) => a.localeCompare(b, 'en'))
-  return files
+function listDdTraceCategorySpecFiles (index, category) {
+  return index.match(`packages/dd-trace/test/${category}/**/*.@(spec|test).@(js|mjs|cjs)`, NODE_MODULES_IGNORE_GLOBS)
 }
 
 /**
@@ -1059,16 +1003,14 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {Set<string>}
  */
-function buildAppsecPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/appsec/**/*.plugin.@(spec|test).@(js|mjs|cjs)', {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: DEFAULT_IGNORE_GLOBS,
-  })
+function buildAppsecPluginTestSet (index) {
+  const files = index.match(
+    'packages/dd-trace/test/appsec/**/*.plugin.@(spec|test).@(js|mjs|cjs)',
+    DEFAULT_IGNORE_GLOBS
+  )
 
   /** @type {Set<string>} */
   const out = new Set()
@@ -1082,16 +1024,14 @@ function buildAppsecPluginTestSet (repoRoot) {
 }
 
 /**
- * @param {string} repoRoot
+ * @param {TestFileIndex} index
  * @returns {Set<string>}
  */
-function buildLlmobsPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/llmobs/plugins/*/*.@(spec|test).@(js|mjs|cjs)', {
-    cwd: repoRoot,
-    nodir: true,
-    windowsPathsNoEscape: true,
-    ignore: DEFAULT_IGNORE_GLOBS,
-  })
+function buildLlmobsPluginTestSet (index) {
+  const files = index.match(
+    'packages/dd-trace/test/llmobs/plugins/*/*.@(spec|test).@(js|mjs|cjs)',
+    DEFAULT_IGNORE_GLOBS
+  )
 
   /** @type {Set<string>} */
   const out = new Set()
@@ -1148,8 +1088,9 @@ function main (repoRootArg) {
     process.exit(1)
   }
 
-  const testFiles = findTestFiles(repoRoot)
-  const { globs, matchedFiles } = expandScriptGlobs(repoRoot, scripts)
+  const index = createTestFileIndex(repoRoot)
+  const testFiles = findTestFiles(index)
+  const { globs, matchedFiles } = expandScriptGlobs(index, scripts)
 
   /** @type {string[]} */
   const missing = []
@@ -1267,8 +1208,8 @@ function main (repoRootArg) {
   const pluginPkgs = listPluginPackages(repoRoot)
   const versionsDeps = loadUpstreamPluginNames(repoRoot)
   const pluginExternals = loadUpstreamExternals(repoRoot)
-  const appsecPluginTests = buildAppsecPluginTestSet(repoRoot)
-  const llmobsPluginTests = buildLlmobsPluginTestSet(repoRoot)
+  const appsecPluginTests = buildAppsecPluginTestSet(index)
+  const llmobsPluginTests = buildLlmobsPluginTestSet(index)
 
   // Detect CI steps that will match no tests due to env/script mismatches.
   const testFileSet = new Set(testFiles)
@@ -1288,7 +1229,7 @@ function main (repoRootArg) {
     // Only use literal PLUGINS for matching; expressions are unknown.
     if (env.PLUGINS && env.PLUGINS.includes(ghaExprStart)) env.PLUGINS = undefined
 
-    const { files, globs: invokedGlobs } = expandInvokedScript(repoRoot, scripts, knownScripts, i.script, env)
+    const { files, globs: invokedGlobs } = expandInvokedScript(index, scripts, knownScripts, i.script, env)
 
     // Only enforce "matches test files" when the (expanded) script actually contains globs.
     // Some scripts (e.g. `test:plugins:upstream`) run a suite runner and do not directly
@@ -1419,7 +1360,7 @@ function main (repoRootArg) {
   let hasCategoryWarnings = false
   const traceCoreCats = getTraceCoreCategoriesFromScripts(scripts)
   if (traceCoreCats.size) {
-    const ddTraceCats = findDdTraceTestCategories(repoRoot)
+    const ddTraceCats = findDdTraceTestCategories(index)
     /** @type {string[]} */
     const missingFromTraceCore = []
 
@@ -1436,7 +1377,7 @@ function main (repoRootArg) {
       // Only warn when the category is excluded from core AND we can't find any dedicated script
       // that appears to cover it. If it is covered elsewhere, it should not produce warnings.
       if (!covered) {
-        const files = listDdTraceCategorySpecFiles(repoRoot, cat)
+        const files = listDdTraceCategorySpecFiles(index, cat)
         const maxList = 25
         warnLines.push(`test:trace:core excludes "${cat}" (no dedicated test script found; files: ${files.length})`)
         for (let i = 0; i < files.length && i < maxList; i++) {
@@ -1475,7 +1416,6 @@ function main (repoRootArg) {
 
   const durMs = Number(process.hrtime.bigint() - startNs) / 1e6
   process.stdout.write(`Runtime(ms): ${durMs.toFixed(1)}\n`)
-  process.stdout.write(`Glob cache: size=${globCache.size} hits=${globCacheHits} misses=${globCacheMisses}\n`)
 
   process.exit(hasCategoryWarnings ? 1 : 0)
 }
