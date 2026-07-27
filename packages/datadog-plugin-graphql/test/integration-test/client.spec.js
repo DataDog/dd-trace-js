@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const semver = require('semver')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -17,7 +19,7 @@ describe('esm', () => {
   let agent
   let proc
 
-  withVersions('graphql', 'graphql', version => {
+  withVersions('graphql', 'graphql', (version, moduleName, resolvedVersion) => {
     useSandbox([`'graphql@${version}'`], false, [
       './packages/datadog-plugin-graphql/test/integration-test/*'])
 
@@ -25,10 +27,14 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
+    // graphql-js >=17 dropped its ESM default export (`import graphql from 'graphql'` now
+    // throws "does not provide an export named 'default'") — only the named-export forms
+    // apply to it, while every earlier major exposes both. `version` can be a range
+    // (e.g. '>=0.10'), so semver needs the resolved concrete version instead.
     const variants = varySandbox('server.mjs', {
       bindingName: 'graphqlLib',
       packageName: 'graphql',
-      defaultExport: true,
+      defaultExport: semver.lt(resolvedVersion, '17.0.0'),
       namedExports: ['GraphQLSchema', 'GraphQLString', 'graphql', 'GraphQLObjectType'],
       namedExportBinding: 'namespace',
     })

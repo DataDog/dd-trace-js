@@ -1,15 +1,16 @@
 import 'dd-trace/init.js'
 import { createServer } from 'node:http'
-import graphql from 'graphql'
+// Named imports, not a default import: graphql-js >=17 dropped its ESM default export.
+import { GraphQLObjectType, GraphQLSchema, GraphQLString, graphql } from 'graphql'
 
-const schema = new graphql.GraphQLSchema({
-  query: new graphql.GraphQLObjectType({
+const schema = new GraphQLSchema({
+  query: new GraphQLObjectType({
     name: 'Query',
     fields: {
       hello: {
-        type: graphql.GraphQLString,
+        type: GraphQLString,
         args: {
-          name: { type: graphql.GraphQLString },
+          name: { type: GraphQLString },
         },
         resolve (obj, args) {
           return `Hello, ${args.name || 'world'}!`
@@ -28,7 +29,7 @@ const server = createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const { query, variables } = JSON.parse(body)
-        const result = await graphql.graphql({
+        const result = await graphql({
           schema,
           source: query,
           variableValues: variables,
