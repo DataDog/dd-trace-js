@@ -400,7 +400,7 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onFinish }) => {
+    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onDone }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
         testSuiteSpan.finish()
@@ -408,10 +408,10 @@ class VitestPlugin extends CiPlugin {
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       if (deferFlush) {
-        onFinish()
+        onDone()
         return
       }
-      this.tracer._exporter.flush(onFinish)
+      this.tracer._exporter.flush(onDone)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
       }
@@ -442,7 +442,7 @@ class VitestPlugin extends CiPlugin {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
-      onFinish,
+      onDone,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags || {})) {
         this.testSessionSpan.setTag(tag, value)
@@ -481,7 +481,7 @@ class VitestPlugin extends CiPlugin {
         provider: this.ciProviderName,
         autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
-      this.tracer._exporter.flush(onFinish)
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {

@@ -6,6 +6,7 @@ const {
   SPAN_POINTER_DIRECTION,
   SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
@@ -29,7 +30,7 @@ class WSClosePlugin extends TracingPlugin {
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanTags
-    const path = spanTags['resource.name'].split(' ')[1]
+    const path = getSegment(spanTags['resource.name'], ' ', 1)
     const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,

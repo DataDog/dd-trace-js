@@ -24,14 +24,15 @@ const UPLOAD_TIMEOUT_MS = 30_000
  * @param {object} options - Upload options
  * @param {string} options.filePath - Path to the coverage report file
  * @param {string} options.format - Format of the coverage report (e.g., 'lcov', 'cobertura')
+ * @param {string[]} [options.flags] - Optional coverage report grouping flags
  * @param {object} options.testEnvironmentMetadata - Test environment metadata containing git/CI tags
  * @param {URL} options.url - The base URL for the coverage report upload
  * @param {boolean} [options.isEvpProxy] - Whether to use EVP proxy for the upload
  * @param {string} [options.evpProxyPrefix] - The EVP proxy prefix (e.g., '/evp_proxy/v4')
- * @param {Function} callback - Callback function (err)
+ * @param {(error: Error|null) => void} callback - Callback function
  */
 function uploadCoverageReport (
-  { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
+  { filePath, format, flags, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
   const { DD_API_KEY } = getConfig()
@@ -53,6 +54,9 @@ function uploadCoverageReport (
     type: 'coverage_report',
     format,
     ...testEnvironmentMetadata,
+  }
+  if (flags?.length) {
+    eventPayload['report.flags'] = flags
   }
 
   // Create multipart form

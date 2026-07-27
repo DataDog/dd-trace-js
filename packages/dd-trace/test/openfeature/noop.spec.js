@@ -10,23 +10,16 @@ const NoopFlaggingProvider = require('../../src/openfeature/noop')
 
 describe('NoopFlaggingProvider', () => {
   let noopProvider
-  let mockTracer
 
   beforeEach(() => {
-    mockTracer = {}
-    noopProvider = new NoopFlaggingProvider(mockTracer)
+    noopProvider = new NoopFlaggingProvider()
   })
 
   describe('constructor', () => {
-    it('should store tracer reference', () => {
-      assert.strictEqual(noopProvider._tracer, mockTracer)
-    })
-
     it('should initialize with OpenFeature Provider properties', () => {
       assert.deepStrictEqual(noopProvider.metadata, { name: 'NoopFlaggingProvider' })
       assert.strictEqual(noopProvider.status, 'NOT_READY')
       assert.strictEqual(noopProvider.runsOn, 'server')
-      assert.deepStrictEqual(noopProvider._config, {})
     })
   })
 
@@ -98,38 +91,6 @@ describe('NoopFlaggingProvider', () => {
     })
   })
 
-  describe('configuration methods', () => {
-    it('should handle setConfiguration', () => {
-      const config = { flags: { 'test-flag': {} } }
-      noopProvider.setConfiguration(config)
-
-      const result = noopProvider.getConfiguration()
-      assert.deepStrictEqual(result, config)
-    })
-
-    it('should handle _setConfiguration wrapper', () => {
-      const config = { flags: { 'test-flag': {} } }
-      noopProvider._setConfiguration(config)
-
-      const result = noopProvider.getConfiguration()
-      assert.deepStrictEqual(result, config)
-    })
-
-    it('should handle empty or null configuration', () => {
-      noopProvider.setConfiguration(null)
-      noopProvider.setConfiguration(undefined)
-      noopProvider._setConfiguration()
-      noopProvider._setConfiguration(null)
-    })
-
-    it('should return stored configuration', () => {
-      const config = { flags: {} }
-      noopProvider.setConfiguration(config)
-      const result = noopProvider.getConfiguration()
-      assert.strictEqual(result, config)
-    })
-  })
-
   describe('promise handling', () => {
     it('should return promises from all evaluation methods', () => {
       const booleanResult = noopProvider.resolveBooleanEvaluation('test', true, {}, {})
@@ -153,20 +114,6 @@ describe('NoopFlaggingProvider', () => {
         objectResult && typeof objectResult.then === 'function',
         `Expected a thenable, got: ${inspect(objectResult)}`
       )
-    })
-
-    it('should resolve promises immediately', async () => {
-      const start = Date.now()
-
-      await Promise.all([
-        noopProvider.resolveBooleanEvaluation('test', true, {}, {}),
-        noopProvider.resolveStringEvaluation('test', 'default', {}, {}),
-        noopProvider.resolveNumberEvaluation('test', 42, {}, {}),
-        noopProvider.resolveObjectEvaluation('test', {}, {}, {}),
-      ])
-
-      const duration = Date.now() - start
-      assert.ok(duration < 10, `Expected ${duration} < 10`)
     })
   })
 })

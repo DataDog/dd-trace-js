@@ -7,7 +7,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.967.0",
     "amqplib": "1.0.6",
-    "body-parser": "2.2.2",
+    "body-parser": "2.3.0",
     "bunyan": "1.8.15",
     "cassandra-driver": "4.8.0",
     "express": "5.2.1",

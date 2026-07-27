@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 require('./setup/core')
-const { isEmpty, isTrue, isFalse, globMatch } = require('../src/util')
+const { isEmpty, isTrue, isFalse, globMatch, getSegment } = require('../src/util')
 
 const TRUES = [
   1,
@@ -78,5 +78,46 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
     // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
     assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+  })
+
+  describe('getSegment', () => {
+    const cases = [
+      ['GET /path HTTP/1.1', ' ', 0],
+      ['GET /path HTTP/1.1', ' ', 1],
+      ['GET /path HTTP/1.1', ' ', 2],
+      ['integration:openai', ':', 1],
+      ['foo:bar:baz', ':', 1],
+      ['1.2.3', '.', 0],
+      ['1.2.3', '.', 2],
+      ['CohereEmbeddings', 'Embeddings', 0],
+      ['a::b::c', '::', 1],
+      ['origin\nupstream', '\n', 0],
+      ['only', '.', 0],
+      ['leading, trailing', ',', 1],
+      [',leading', ',', 0],
+      ['trailing,', ',', 1],
+    ]
+
+    it('matches String.prototype.split for the indexed segment', () => {
+      for (const [string, separator, index] of cases) {
+        assert.strictEqual(
+          getSegment(string, separator, index),
+          string.split(separator, index + 1)[index],
+          `getSegment(${JSON.stringify(string)}, ${JSON.stringify(separator)}, ${index})`
+        )
+      }
+    })
+
+    it('returns the fallback when fewer than index + 1 segments exist', () => {
+      assert.strictEqual(getSegment('a.b', '.', 5), undefined)
+      assert.strictEqual(getSegment('a.b', '.', 5, 'fallback'), 'fallback')
+      assert.strictEqual(getSegment('no-separator', '.', 1), undefined)
+      assert.strictEqual(getSegment('no-separator', '.', 1, 'fallback'), 'fallback')
+    })
+
+    it('handles the empty string and an absent separator at index 0', () => {
+      assert.strictEqual(getSegment('', '.', 0), '')
+      assert.strictEqual(getSegment('whole', '.', 0), 'whole')
+    })
   })
 })

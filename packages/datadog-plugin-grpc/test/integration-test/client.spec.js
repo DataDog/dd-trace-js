@@ -18,7 +18,6 @@ const { NODE_MAJOR } = require('../../../../version')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 ? '>=1.3.0' : '*', version => {
     useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
@@ -29,9 +28,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'grpc', 'loadPackageDefinition, Server, ServerCredentials, credentials',
-        '@grpc/grpc-js')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'grpc',
+      packageName: '@grpc/grpc-js',
+      defaultExport: true,
+      namedExports: ['loadPackageDefinition', 'Server', 'ServerCredentials', 'credentials'],
+      namedExportBinding: 'namespace',
     })
 
     afterEach(async () => {
@@ -39,7 +41,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

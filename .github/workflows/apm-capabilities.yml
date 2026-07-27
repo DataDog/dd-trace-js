@@ -26,10 +26,10 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-macos
@@ -47,12 +47,12 @@ jobs:
       matrix:
         node-version: [oldest, maintenance, active, latest]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-ubuntu-${{ matrix.node-version }}
@@ -66,12 +66,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
       - uses: ./.github/actions/install
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/node-crash-report
         if: failure()
       - uses: ./.github/actions/coverage

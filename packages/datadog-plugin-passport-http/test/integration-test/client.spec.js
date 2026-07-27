@@ -14,13 +14,17 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('passport-http', 'passport-http', version => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox(['passport', `passport-http@${version}`, 'express'], false,
       ['./packages/datadog-plugin-passport-http/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'passportHttp', 'BasicStrategy', 'passport-http')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'passportHttp',
+      packageName: 'passport-http',
+      defaultExport: true,
+      namedExports: ['BasicStrategy'],
+      namedExportBinding: 'namespace',
     })
 
     beforeEach(async () => {
@@ -32,7 +36,7 @@ withVersions('passport-http', 'passport-http', version => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)

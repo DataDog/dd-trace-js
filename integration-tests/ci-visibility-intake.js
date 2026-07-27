@@ -48,6 +48,7 @@ class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
+  #mediaResponseDelayMs = 0
   #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
@@ -117,6 +118,14 @@ class FakeCiVisIntake extends FakeAgent {
   // cypress run still completes and reports normally when an upload fails.
   setMediaResponseStatusCode (statusCode) {
     this.#mediaResponseStatusCode = statusCode
+  }
+
+  /**
+   * @param {number} delayMs - Delay before responding to screenshot uploads
+   * @returns {void}
+   */
+  setMediaResponseDelay (delayMs) {
+    this.#mediaResponseDelayMs = delayMs
   }
 
   setWaitingTime (newWaitingTime) {
@@ -241,20 +250,30 @@ class FakeCiVisIntake extends FakeAgent {
     })
 
     app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
-      res.status(this.#mediaResponseStatusCode).send()
-      this.emit('message', {
-        headers: req.headers,
-        media: {
-          traceId: req.params.traceId,
-          contentType: req.headers['content-type'],
-          // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
-          // evp_proxy, which forwards only an allow-listed header set.
-          idempotencyKey: req.query.idempotency_key,
-          capturedAt: req.query.captured_at_ms,
-          content: req.body,
-        },
-        url: req.url,
-      })
+      const receivedAtMs = Date.now()
+      const respond = () => {
+        res.status(this.#mediaResponseStatusCode).send()
+        this.emit('message', {
+          headers: req.headers,
+          media: {
+            traceId: req.params.traceId,
+            contentType: req.headers['content-type'],
+            // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
+            // evp_proxy, which forwards only an allow-listed header set.
+            idempotencyKey: req.query.idempotency_key,
+            capturedAt: req.query.captured_at_ms,
+            content: req.body,
+            receivedAtMs,
+          },
+          url: req.url,
+        })
+      }
+
+      if (this.#mediaResponseDelayMs > 0) {
+        setTimeout(respond, this.#mediaResponseDelayMs)
+      } else {
+        respond()
+      }
     })
 
     app.post([
@@ -406,6 +425,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
     this.#knownTestsPageIndex = 0
     this.#infoResponse = DEFAULT_INFO_RESPONSE
+    this.#mediaResponseDelayMs = 0
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
     this.#skippableSuitesResponseStatusCode = 200
