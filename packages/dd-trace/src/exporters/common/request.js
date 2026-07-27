@@ -156,7 +156,7 @@ function request (data, options, callback) {
         if (responseData) {
           errorMessage += ` Response from the endpoint: "${responseData}"`
         }
-        const error = new log.NoTransmitError(errorMessage)
+        const error = new Error(errorMessage)
         error.status = res.statusCode
 
         complete(error, null, res.statusCode, res.headers)

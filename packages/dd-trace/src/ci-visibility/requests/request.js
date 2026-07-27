@@ -192,7 +192,7 @@ function buildError (res, buffer, options) {
     errorMessage += ` Response from the endpoint: "${responseData}"`
   }
 
-  const error = new log.NoTransmitError(errorMessage)
+  const error = new Error(errorMessage)
   error.status = res.statusCode
   return error
 }
