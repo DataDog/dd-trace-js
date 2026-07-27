@@ -47,7 +47,7 @@ function parseJsonResponse (rawJson) {
 function parseTestManagementTestsResponse (rawJson, options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (options.validateRequiredFields) {
-    validateTestManagementTestsResponse(parsedResponse)
+    validateTestManagementTestsResponse(parsedResponse, options)
   }
   const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
   return testManagementTests

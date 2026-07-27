@@ -958,17 +958,28 @@ module.exports = class CiPlugin extends Plugin {
     }
     log.debug('Removing all Dynamic Instrumentation probes')
     const promises = []
-    for (const fileLine of this.fileLineToProbeId.keys()) {
-      const [file, line] = fileLine.split(':')
-      promises.push(this.removeDiProbe({ file, line }))
+    for (const [activeProbeKey, probeId] of this.fileLineToProbeId) {
+      promises.push(this.#removeDiProbe(activeProbeKey, probeId))
     }
     return Promise.all(promises)
   }
 
+  /**
+   * @param {{ file: string, line: number }} location
+   */
   removeDiProbe ({ file, line }) {
-    const probeId = this.fileLineToProbeId.get(`${file}:${line}`)
-    log.warn('Removing probe from %s:%s, with id: %s', file, line, probeId)
-    this.fileLineToProbeId.delete(probeId)
+    const activeProbeKey = `${file}:${line}`
+    const probeId = this.fileLineToProbeId.get(activeProbeKey)
+    return this.#removeDiProbe(activeProbeKey, probeId)
+  }
+
+  /**
+   * @param {string} activeProbeKey
+   * @param {string|undefined} probeId
+   */
+  #removeDiProbe (activeProbeKey, probeId) {
+    log.warn('Removing probe from %s, with id: %s', activeProbeKey, probeId)
+    this.fileLineToProbeId.delete(activeProbeKey)
     return this.di.removeProbe(probeId)
   }
 

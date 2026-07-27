@@ -6,9 +6,14 @@ const { before, describe, it } = require('mocha')
 
 const getConfig = require('../../src/config')
 const {
+  audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  generateLlmObsTraceId,
+  llmObsTraceIdToWire,
+  formatAudioPart,
   getFunctionArguments,
+  normalizeLlmObsTraceId,
   validateCostTags,
   safeJsonParse,
   validateKind,
@@ -17,6 +22,48 @@ const {
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
+  describe('LLMObs trace id propagation', () => {
+    const traceId = '6a5f76e7000000001973227978d8110b'
+    const wireTraceId = '141393847380800662846519802803680448779'
+
+    it('converts a canonical hexadecimal trace id to decimal for propagation', () => {
+      assert.strictEqual(llmObsTraceIdToWire(traceId), wireTraceId)
+    })
+
+    it('normalizes a propagated decimal trace id to canonical hexadecimal', () => {
+      assert.strictEqual(normalizeLlmObsTraceId(wireTraceId), traceId)
+    })
+
+    it('preserves 64-bit decimal trace ids and converts the first 128-bit value', () => {
+      assert.strictEqual(normalizeLlmObsTraceId('18446744073709551615'), '18446744073709551615')
+      assert.strictEqual(
+        normalizeLlmObsTraceId('18446744073709551616'),
+        '00000000000000010000000000000000'
+      )
+    })
+
+    it('preserves hexadecimal and custom trace ids while normalizing', () => {
+      assert.strictEqual(normalizeLlmObsTraceId(traceId), traceId)
+      assert.strictEqual(normalizeLlmObsTraceId('custom-trace-id'), 'custom-trace-id')
+    })
+
+    it('preserves custom trace ids for propagation', () => {
+      assert.strictEqual(llmObsTraceIdToWire('custom-trace-id'), 'custom-trace-id')
+    })
+
+    it('returns undefined for empty trace ids', () => {
+      assert.strictEqual(llmObsTraceIdToWire(''), undefined)
+      assert.strictEqual(normalizeLlmObsTraceId(''), undefined)
+    })
+
+    it('generates a 128-bit trace id containing the start time', () => {
+      const generatedTraceId = generateLlmObsTraceId(1_700_000_000_000)
+
+      assert.match(generatedTraceId, /^[0-9a-f]{32}$/)
+      assert.strictEqual(generatedTraceId.slice(0, 16), '6553f10000000000')
+    })
+  })
+
   describe('encodeUnicode', () => {
     it('should encode unicode characters', () => {
       assert.strictEqual(encodeUnicode('😀'), '\\ud83d\\ude00')
@@ -346,6 +393,57 @@ describe('util', () => {
     it('is a no-op-safe when span has no context', () => {
       assert.strictEqual(findGenAIAncestorSpanId(undefined), null)
       assert.strictEqual(findGenAIAncestorSpanId({}), null)
+    })
+  })
+
+  describe('audioMimeTypeFromFormat', () => {
+    it('maps a format to audio/<format> by default', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('wav'), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat('opus'), 'audio/opus')
+      assert.strictEqual(audioMimeTypeFromFormat('mp3'), 'audio/mp3')
+    })
+
+    it('prefers a provider override from mimeTypeLookup', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('mp3', { mp3: 'audio/mpeg' }), 'audio/mpeg')
+      assert.strictEqual(audioMimeTypeFromFormat('wav', { mp3: 'audio/mpeg' }), 'audio/wav')
+    })
+
+    it('normalizes whitespace and case', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('  MP3 ', { mp3: 'audio/mpeg' }), 'audio/mpeg')
+      assert.strictEqual(audioMimeTypeFromFormat('WAV'), 'audio/wav')
+    })
+
+    it('defaults to audio/wav for missing or non-string formats', () => {
+      assert.strictEqual(audioMimeTypeFromFormat(''), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat('   '), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat(undefined), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat(5), 'audio/wav')
+    })
+  })
+
+  describe('formatAudioPart', () => {
+    it('passes through an existing base64 string', () => {
+      assert.deepStrictEqual(
+        formatAudioPart('aGVsbG8=', 'audio/wav'),
+        { mimeType: 'audio/wav', content: 'aGVsbG8=' }
+      )
+    })
+
+    it('base64-encodes Buffer and Uint8Array input', () => {
+      const expected = Buffer.from('hello').toString('base64')
+      assert.deepStrictEqual(
+        formatAudioPart(Buffer.from('hello'), 'audio/mpeg'),
+        { mimeType: 'audio/mpeg', content: expected }
+      )
+      assert.deepStrictEqual(
+        formatAudioPart(new Uint8Array([104, 101, 108, 108, 111]), 'audio/mpeg'),
+        { mimeType: 'audio/mpeg', content: expected }
+      )
+    })
+
+    it('passes through non-binary, non-string input unchanged (tagger soft-skips it)', () => {
+      const result = formatAudioPart(5, 'audio/wav')
+      assert.deepStrictEqual(result, { mimeType: 'audio/wav', content: 5 })
     })
   })
 })

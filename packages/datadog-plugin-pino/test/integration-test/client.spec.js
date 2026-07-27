@@ -2,6 +2,9 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+
+const semver = require('semver')
+
 const {
   FakeAgent,
   spawnPluginIntegrationTestProcAndExpectExit,
@@ -15,14 +18,19 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
-  withVersions('pino', 'pino', version => {
+  withVersions('pino', 'pino', (version, _, realVersion) => {
     useSandbox([`'pino@${version}'`],
       false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'pino')
+    const hasNamedExport = semver.satisfies(realVersion, '>=6.8.0')
+
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'pino',
+      packageName: 'pino',
+      defaultExport: true,
+      namedExports: hasNamedExport ? ['pino'] : [],
+      namedExportBinding: hasNamedExport ? 'direct' : undefined,
     })
 
     beforeEach(async () => {
@@ -34,7 +42,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),

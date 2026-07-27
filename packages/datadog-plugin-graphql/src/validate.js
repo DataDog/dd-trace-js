@@ -68,14 +68,14 @@ class GraphQLValidatePlugin extends TracingPlugin {
     const errors = ctx.result
     const span = ctx?.currentStore?.span || this.activeSpan
 
-    this.config.hooks.validate(span, document, errors)
-
     if (errors?.length) {
       span.setTag('error', errors[0])
       for (const err of errors) {
         extractErrorIntoSpanEvent(this.config, span, err)
       }
     }
+
+    this.config.hooks.validate(span, document, errors)
 
     span.finish()
 

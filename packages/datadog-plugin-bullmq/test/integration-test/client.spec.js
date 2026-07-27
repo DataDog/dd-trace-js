@@ -17,7 +17,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   withVersions('bullmq', 'bullmq', '>=5.66.0', version => {
     useSandbox([`'bullmq@${version}'`], false, [
@@ -32,12 +31,18 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    describe('Queue.add()', () => {
-      beforeEach(async () => {
-        variants = varySandbox('server-queue-add.mjs', 'bullmq', 'Queue')
-      })
+    const queueImportOptions = {
+      bindingName: 'bullmq',
+      packageName: 'bullmq',
+      defaultExport: true,
+      namedExports: ['Queue'],
+      namedExportBinding: 'namespace',
+    }
 
-      for (const variant of varySandbox.VARIANTS) {
+    describe('Queue.add()', () => {
+      const variants = varySandbox('server-queue-add.mjs', queueImportOptions)
+
+      for (const variant of Object.keys(variants)) {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -53,11 +58,9 @@ describe('esm', () => {
     })
 
     describe('Queue.addBulk()', () => {
-      beforeEach(async () => {
-        variants = varySandbox('server-queue-add-bulk.mjs', 'bullmq', 'Queue')
-      })
+      const variants = varySandbox('server-queue-add-bulk.mjs', queueImportOptions)
 
-      for (const variant of varySandbox.VARIANTS) {
+      for (const variant of Object.keys(variants)) {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -73,11 +76,15 @@ describe('esm', () => {
     })
 
     describe('FlowProducer.add()', () => {
-      beforeEach(async () => {
-        variants = varySandbox('server-flow-producer-add.mjs', 'bullmq', 'FlowProducer')
+      const variants = varySandbox('server-flow-producer-add.mjs', {
+        bindingName: 'bullmq',
+        packageName: 'bullmq',
+        defaultExport: true,
+        namedExports: ['FlowProducer'],
+        namedExportBinding: 'namespace',
       })
 
-      for (const variant of varySandbox.VARIANTS) {
+      for (const variant of Object.keys(variants)) {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
@@ -97,11 +104,15 @@ describe('esm', () => {
     })
 
     describe('Worker.callProcessJob()', () => {
-      beforeEach(async () => {
-        variants = varySandbox('server-worker-process-job.mjs', 'bullmq', 'Queue, Worker, QueueEvents')
+      const variants = varySandbox('server-worker-process-job.mjs', {
+        bindingName: 'bullmq',
+        packageName: 'bullmq',
+        defaultExport: true,
+        namedExports: ['Queue', 'Worker', 'QueueEvents'],
+        namedExportBinding: 'namespace',
       })
 
-      for (const variant of varySandbox.VARIANTS) {
+      for (const variant of Object.keys(variants)) {
         it(`is instrumented ${variant}`, async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
             assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

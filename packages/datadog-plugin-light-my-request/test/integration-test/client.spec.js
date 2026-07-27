@@ -2,6 +2,9 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+
+const semver = require('semver')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -16,9 +19,8 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
-  withVersions('light-my-request', 'light-my-request', version => {
+  withVersions('light-my-request', 'light-my-request', (version, _, realVersion) => {
     useSandbox([`'light-my-request@${version}'`], false, [
       './packages/datadog-plugin-light-my-request/test/integration-test/*'])
 
@@ -26,8 +28,14 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'inject', undefined, 'light-my-request')
+    const hasNamedExport = semver.satisfies(realVersion, '>=4.0.0')
+
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'inject',
+      packageName: 'light-my-request',
+      defaultExport: true,
+      namedExports: hasNamedExport ? ['inject'] : [],
+      namedExportBinding: hasNamedExport ? 'direct' : undefined,
     })
 
     afterEach(async () => {
@@ -35,12 +43,12 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-          assert.strictEqual(checkSpansForServiceName(payload, 'mariadb.query'), true)
+          assert.strictEqual(checkSpansForServiceName(payload, 'web.request'), true)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)

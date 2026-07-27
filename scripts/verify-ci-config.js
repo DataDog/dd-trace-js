@@ -29,7 +29,7 @@ if (!Module.isBuiltin) {
   Module.isBuiltin = mod => Module.builtinModules.includes(mod)
 }
 
-const nodeMajor = Number(process.versions.node.split('.')[0])
+const nodeMajor = Number(process.versions.node.split('.', 1)[0])
 
 const instrumentations = getAllInstrumentations()
 

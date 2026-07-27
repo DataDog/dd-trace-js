@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const semifies = require('semifies')
 
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
@@ -10,15 +11,16 @@ const {
   MOCK_STRING,
   useLlmObs,
   MOCK_NUMBER,
+  MOCK_OBJECT,
 } = require('../../util')
 
 /**
  * @param {(version: string, openaiVersion: string) => void} callback
  */
 function withAiSdkOpenAiVersions (callback) {
-  withVersions('ai', 'ai', '>=7.0.0', version => {
+  withVersions('ai', 'ai', '>=7.0.0', (version, _, resolvedVersion) => {
     withVersions('ai', '@ai-sdk/openai', '^4.0.0', openaiVersion => {
-      callback(version, openaiVersion)
+      callback(version, resolvedVersion, openaiVersion)
     })
   })
 }
@@ -36,7 +38,7 @@ describe('Plugin', () => {
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
 
-  withAiSdkOpenAiVersions((version, openaiVersion) => {
+  withAiSdkOpenAiVersions((version, resolvedVersion, openaiVersion) => {
     let ai
     let openai
 
@@ -148,8 +150,9 @@ describe('Plugin', () => {
       })
     })
 
-    // eslint-disable-next-line mocha/no-pending-tests
-    it.skip('creates a span for embedMany', async () => {
+    it('creates a span for embedMany', async function () {
+      if (!semifies(resolvedVersion, '>=7.0.23')) this.skip()
+
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],
@@ -165,7 +168,17 @@ describe('Plugin', () => {
       assertLlmObsSpanEvent(embedManySpan, {
         span: embedManyApmSpan,
         name: 'embedMany',
-        spanKind: 'workflow',
+        spanKind: 'embedding',
+        modelName: 'text-embedding-ada-002',
+        modelProvider: 'openai',
+        inputDocuments: [
+          { text: 'hello world' },
+          { text: 'goodbye world' },
+        ],
+        outputValue: '[2 embedding(s) returned with size 1536]',
+        metrics: {
+          input_tokens: 5,
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -930,6 +943,137 @@ describe('Plugin', () => {
           reasoning_output_tokens: 0,
         },
         tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+  })
+
+  describe('tool result formatting', () => {
+    withAiSdkOpenAiVersions((version, _, openaiVersion) => {
+      let ai
+      let openai
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+
+        const OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+        openai = OpenAI.createOpenAI({
+          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+          compatibility: 'strict',
+        })
+      })
+
+      it('formats file result parts produced by the AI SDK', async () => {
+        const result = await ai.generateText({
+          // Chat Completions serializes every tool result as text. The Responses API validates file contents before
+          // the instrumented request can capture their formatted value.
+          model: openai.chat('gpt-4o-mini'),
+          prompt: 'Run the test tool',
+          tools: {
+            testTool: ai.tool({
+              description: 'Run the test tool and return its result',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {},
+              }),
+              execute: () => 'result',
+              toModelOutput: () => ({
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'before' },
+                  {
+                    type: 'file',
+                    mediaType: 'image/png',
+                    data: { type: 'data', data: 'cHJpdmF0ZS1pbWFnZS1kYXRh' },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'application/pdf',
+                    data: { type: 'data', data: 'cHJpdmF0ZS1maWxlLWRhdGE=' },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'application/pdf',
+                    data: { type: 'reference', reference: { test: 'private-file-id' } },
+                  },
+                  {
+                    type: 'file',
+                    mediaType: 'image/png',
+                    data: { type: 'reference', reference: { test: 'private-image-id' } },
+                  },
+                  { type: 'custom', providerOptions: { secret: 'provider-data' } },
+                  { type: 'text', text: 'after' },
+                ],
+              }),
+            }),
+          },
+          stopWhen: ai.stepCountIs(2),
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+        })
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(6)
+        let finalModelSpan
+        let finalModelApmSpan
+        let finalStepSpan
+        for (const span of llmobsSpans) {
+          if (span.name === 'languageModelCall') {
+            finalModelSpan = span
+          } else if (span.name === 'step') {
+            finalStepSpan = span
+          }
+        }
+        for (const span of apmSpans) {
+          if (span.name === 'languageModelCall') finalModelApmSpan = span
+        }
+
+        assertLlmObsSpanEvent(finalModelSpan, {
+          span: finalModelApmSpan,
+          parentId: finalStepSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'languageModelCall',
+          inputMessages: [
+            { content: 'Run the test tool', role: 'user' },
+            {
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'testTool',
+                arguments: {},
+                type: 'function',
+              }],
+            },
+            {
+              content: 'before[Image][File][File][Image][Custom Content]after',
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [MOCK_OBJECT],
+          toolDefinitions: [{
+            name: 'testTool',
+            description: 'Run the test tool and return its result',
+            schema: {
+              type: 'object',
+              properties: {},
+              required: [],
+            },
+          }],
+          metadata: {},
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
       })
     })
   })

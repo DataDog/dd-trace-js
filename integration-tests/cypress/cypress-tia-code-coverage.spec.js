@@ -28,7 +28,6 @@ const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
-const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_RUN_HARD_TIMEOUT = 70_000
 const SPEC_PATTERN = 'cypress/e2e/{other,spec}.cy.js'
 const SKIPPED_TEST = {
@@ -100,7 +99,7 @@ const moduleTypes = [
   },
   {
     type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`,
+    testCommand: 'node ./cypress-esm-config.mjs',
   },
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 

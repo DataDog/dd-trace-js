@@ -164,6 +164,56 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
   })
 
+  it('adds a new DI probe after removing one from the same location', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onFirstCall().returns(['probe-1', setProbePromise])
+      .onSecondCall().returns(['probe-2', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const file = `${plugin.repositoryRoot}/test.js`
+    const line = 23
+    const error = { stack: `Error: test failed\n    at test (${file}:${line}:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+
+    const firstProbe = plugin.addDiProbe(error)
+    await plugin.removeDiProbe({ file, line })
+    const secondProbe = plugin.addDiProbe(error)
+
+    assert.strictEqual(firstProbe.probeId, 'probe-1')
+    assert.strictEqual(secondProbe.probeId, 'probe-2')
+    sinon.assert.calledTwice(addLineProbe)
+    sinon.assert.calledOnceWithExactly(removeProbe, 'probe-1')
+  })
+
+  it('removes all DI probes with Windows-style file paths', async () => {
+    const plugin = createPlugin('jest_worker')
+    const setProbePromise = Promise.resolve()
+    const addLineProbe = sinon.stub()
+      .onCall(0).returns(['probe-1', setProbePromise])
+      .onCall(1).returns(['probe-2', setProbePromise])
+      .onCall(2).returns(['probe-3', setProbePromise])
+      .onCall(3).returns(['probe-4', setProbePromise])
+    const removeProbe = sinon.stub().resolves()
+    const firstFile = 'C:\\repo\\first.spec.js'
+    const secondFile = 'C:\\repo\\second.spec.js'
+    const firstError = { stack: `Error: first failure\n    at first (${firstFile}:23:5)` }
+    const secondError = { stack: `Error: second failure\n    at second (${secondFile}:42:5)` }
+    plugin.di = { addLineProbe, removeProbe }
+    plugin._setRepositoryRoot('C:\\repo', [])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+    await plugin.removeAllDiProbes()
+
+    assert.deepStrictEqual(removeProbe.args, [['probe-1'], ['probe-2']])
+
+    plugin.addDiProbe(firstError)
+    plugin.addDiProbe(secondError)
+
+    sinon.assert.callCount(addLineProbe, 4)
+  })
+
   it('exports DI breakpoint hits with the debugger log envelope', () => {
     const plugin = createPlugin('vitest_worker')
     const exportDiLogs = sinon.spy()

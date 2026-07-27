@@ -16,7 +16,6 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let variants
 
   // TODO(sabrenner, MLOB-4410): follow-up on re-enabling this test in a different PR once a fix lands
   withVersions('langchain', ['@langchain/core'], '>=0.1 <1.0.0', version => {
@@ -31,8 +30,12 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
-    before(async function () {
-      variants = varySandbox('server.mjs', 'StringOutputParser', undefined, '@langchain/core/output_parsers', true)
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'StringOutputParser',
+      packageName: '@langchain/core/output_parsers',
+      defaultExport: false,
+      namedExports: ['StringOutputParser'],
+      namedExportBinding: 'direct',
     })
 
     afterEach(async () => {
@@ -40,7 +43,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['star', 'destructure']) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
