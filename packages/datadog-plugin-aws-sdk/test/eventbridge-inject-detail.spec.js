@@ -122,7 +122,13 @@ function buildHelperPlugin ({
   dataStreamsContext = null,
 } = {}) {
   const plugin = Object.create(EventBridge.prototype)
-  plugin._tracer = { inject, setCheckpoint: () => null }
+  plugin._tracer = {
+    inject (span, format, carrier = {}) {
+      inject(span, format, carrier)
+      return carrier
+    },
+    setCheckpoint: () => null,
+  }
   plugin.config = { dsmEnabled, batchPropagationEnabled }
   plugin.dsmCalls = []
   plugin.setDSMCheckpoint = (span, entry, ddInfo) => {
