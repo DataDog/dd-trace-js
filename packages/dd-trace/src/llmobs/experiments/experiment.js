@@ -213,9 +213,11 @@ class Experiment {
 
         const timestampMs = Date.now()
         for (const [label, evaluator] of this.#evaluators) {
+          if (!evaluatorResults[label]) evaluatorResults[label] = []
           if (row.isError) {
             const msg = 'task error; evaluation skipped'
             row.evaluationErrors[label] = msg
+            evaluatorResults[label].push(null)
             metrics.push(toMetric(label, null, msg, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
             continue
           }
@@ -227,13 +229,13 @@ class Experiment {
               retryDelay
             )
             row.evaluations[label] = value
-            if (!evaluatorResults[label]) evaluatorResults[label] = []
             evaluatorResults[label].push(value)
             metrics.push(toMetric(label, value, null, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
           } catch (err) {
             if (raiseErrors) throw err
             const msg = err.message ?? String(err)
             row.evaluationErrors[label] = msg
+            evaluatorResults[label].push(null)
             metrics.push(toMetric(label, null, msg, row.spanId, row.traceId, timestampMs, experimentId, this.#tags))
           }
         }

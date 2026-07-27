@@ -6,7 +6,7 @@ const path = require('node:path')
 const { describe, it } = require('mocha')
 const nock = require('nock')
 
-const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
+const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 
@@ -25,6 +25,39 @@ async function withCassette (name, fn) {
     nock.cleanAll()
     nock.enableNetConnect()
     nock.back.setMode('wild')
+  }
+}
+
+function defaultAppendRecordAttributes (_record, index) {
+  return { id: `rec-${index}`, valid_from_version: 2 }
+}
+
+function stubClient ({ appendRecordAttributes = defaultAppendRecordAttributes } = {}) {
+  const requests = []
+  return {
+    appBase: 'https://app.datadoghq.com',
+    requests,
+    ensureProjectId: async () => 'proj',
+    request: async (method, requestPath, body) => {
+      requests.push({ method, path: requestPath, body })
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets`) {
+        return { data: { id: 'ds', attributes: { current_version: 1 } } }
+      }
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/proj/datasets/ds/records`) {
+        return {
+          data: body.data.attributes.records.map((record, index) => ({
+            id: record.id ?? `rec-${index}`,
+            attributes: appendRecordAttributes(record, index),
+          })),
+        }
+      }
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/experiments`) {
+        return { data: { id: 'exp' } }
+      }
+      if (method === 'POST' && requestPath === `${API_BASE_PATH}/experiments/exp/events`) return {}
+      if (method === 'PATCH' && requestPath === `${API_BASE_PATH}/experiments/exp`) return {}
+      throw new Error(`Unexpected request ${method} ${requestPath}`)
+    },
   }
 }
 
@@ -133,6 +166,55 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
         /Failed to create dataset 'demo'.*HTTP 500 boom/
       )
     })
+  })
+
+  it('clears the pinned dataset version when append responses omit a new version', async () => {
+    const c = stubClient({ appendRecordAttributes: () => ({}) })
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+
+    await dataset.push()
+
+    assert.equal(dataset.version(), null)
+    assert.equal(dataset.latestVersion(), 1)
+  })
+
+  it('keeps evaluator results aligned for summary evaluators when rows fail', async () => {
+    const c = stubClient()
+    const dataset = new Dataset(c, 'demo')
+      .addRecord('good', 'good')
+      .addRecord('eval-bad', 'eval-bad')
+      .addRecord('task-bad', 'task-bad')
+    let summaryInputs
+    let summaryOutputs
+    let summaryEvaluatorResults
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: (input) => {
+        if (input === 'task-bad') throw new Error('boom')
+        return input
+      },
+      evaluators: {
+        exactMatch: (input, output, expectedOutput) => {
+          if (input === 'eval-bad') throw new Error('eval boom')
+          return output === expectedOutput
+        },
+      },
+      summaryEvaluators: {
+        passRate: (inputs, outputs, _expectedOutputs, evaluatorResults) => {
+          summaryInputs = inputs
+          summaryOutputs = outputs
+          summaryEvaluatorResults = evaluatorResults
+          return evaluatorResults.exactMatch.filter(Boolean).length / evaluatorResults.exactMatch.length
+        },
+      },
+    }).run()
+
+    assert.deepEqual(summaryInputs, ['good', 'eval-bad', 'task-bad'])
+    assert.deepEqual(summaryOutputs, ['good', 'eval-bad', null])
+    assert.deepEqual(summaryEvaluatorResults.exactMatch, [true, null, null])
+    assert.equal(result.summaryEvaluations.passRate.value, 1 / 3)
   })
 
   it('validates required options', () => {

@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../../log')
+
 // Matches the backend and dd-trace-py evaluator metric label contract.
 const EVALUATOR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 
@@ -55,12 +57,19 @@ function normalizeEvaluators (evaluators, kind) {
 
   const normalized = []
   if (Array.isArray(evaluators)) {
+    const indexesByName = new Map()
     for (let i = 0; i < evaluators.length; i++) {
       const evaluator = evaluators[i]
       if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator must be a function`)
       const name = functionName(evaluator, `${kind}_evaluator_${i}`)
       validateEvaluatorName(name)
-      normalized.push([name, evaluator])
+      if (indexesByName.has(name)) {
+        log.warn('Duplicate %s evaluator name %s; previous evaluator will be overwritten', kind, name)
+        normalized[indexesByName.get(name)] = [name, evaluator]
+      } else {
+        indexesByName.set(name, normalized.length)
+        normalized.push([name, evaluator])
+      }
     }
     return normalized
   }

@@ -175,7 +175,11 @@ class Dataset {
     // ids are preserved for experiment row tagging.
     const created = createdRecordsFromResponse(response)
     const pushedVersion = versionFromCreatedRecords(created)
-    if (pushedVersion !== null) {
+    if (pushedVersion === null) {
+      // The dataset contents changed, but the backend did not report the new
+      // version. Avoid pinning later experiments to the pre-append create version.
+      this.#version = null
+    } else {
       this.#version = pushedVersion
       this.#latestVersion = Math.max(Number(this.#latestVersion ?? pushedVersion), pushedVersion)
     }

@@ -1,7 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
+const sinon = require('sinon')
+
+const log = require('../../../src/log')
 
 const {
   inferMetricType,
@@ -11,6 +14,10 @@ const {
 } = require('../../../src/llmobs/experiments/util')
 
 describe('LLMObs Experiments util', () => {
+  afterEach(() => {
+    sinon.restore()
+  })
+
   it('validates evaluator names against the backend contract', () => {
     validateEvaluatorName('ok_Name-1')
 
@@ -27,6 +34,20 @@ describe('LLMObs Experiments util', () => {
     assert.deepEqual(normalizeEvaluators([namedEvaluator], 'summary'), [['namedEvaluator', namedEvaluator]])
     assert.throws(() => normalizeEvaluators({ 'bad.name': namedEvaluator }, 'row'), /invalid/)
     assert.throws(() => normalizeEvaluators([true], 'summary'), /summary evaluator must be a function/)
+  })
+
+  it('warns and keeps the last array evaluator when inferred names collide', () => {
+    const warn = sinon.spy(log, 'warn')
+    function duplicate () {}
+    const last = function duplicate () {}
+
+    assert.deepEqual(normalizeEvaluators([duplicate, last], 'row'), [['duplicate', last]])
+    sinon.assert.calledWith(
+      warn,
+      'Duplicate %s evaluator name %s; previous evaluator will be overwritten',
+      'row',
+      'duplicate'
+    )
   })
 
   it('identifies plain objects for JSON metric inference', () => {
