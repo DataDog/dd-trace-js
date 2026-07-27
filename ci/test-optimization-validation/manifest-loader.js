@@ -76,17 +76,13 @@ function getManifestPaths (manifest) {
     paths.push(
       [`${prefix}.project.root`, framework.project?.root],
       [`${prefix}.project.packageJson`, framework.project?.packageJson],
+      [`${prefix}.validation.runner`, framework.validation?.runner],
+      [`${prefix}.validation.testFile`, framework.validation?.testFile],
       [`${prefix}.ciWiring.configFile`, framework.ciWiring?.configFile],
       [`${prefix}.ciWiring.workingDirectory`, framework.ciWiring?.workingDirectory]
     )
     for (const [index, configFile] of (framework.project?.configFiles || []).entries()) {
       paths.push([`${prefix}.project.configFiles[${index}]`, configFile])
-    }
-    for (const [name, command] of getCommands(framework)) {
-      paths.push([`${prefix}.${name}.cwd`, command.cwd])
-      for (const [outputIndex, outputPath] of (command.outputPaths || []).entries()) {
-        paths.push([`${prefix}.${name}.outputPaths[${outputIndex}]`, outputPath])
-      }
     }
 
     const strategy = framework.generatedTestStrategy
@@ -107,22 +103,6 @@ function getManifestPaths (manifest) {
     }
   }
   return paths
-}
-
-function getCommands (framework) {
-  const commands = []
-  for (const name of ['existingTestCommand', 'ciWiringCommand']) {
-    if (framework[name]) commands.push([name, framework[name]])
-  }
-  for (const [index, command] of (framework.setup?.commands || []).entries()) {
-    commands.push([`setup.commands[${index}]`, command])
-  }
-  for (const [index, scenario] of (framework.generatedTestStrategy?.scenarios || []).entries()) {
-    if (scenario?.runCommand) {
-      commands.push([`generatedTestStrategy.scenarios[${index}].runCommand`, scenario.runCommand])
-    }
-  }
-  return commands
 }
 
 function isPathInside (root, filename) {

@@ -71,7 +71,10 @@ function createOfflineFixture ({
   }
   ensurePrivateDirectory(base)
   if (fs.existsSync(root)) {
-    throw new Error(`Offline validation fixture already exists and will not be replaced: ${root}`)
+    throw new Error(
+      `Offline validation fixture already exists and will not be replaced or deleted: ${root}. ` +
+      'Inspect and remove it manually, then render a fresh approval plan.'
+    )
   }
   try {
     fs.mkdirSync(root, { recursive: true, mode: 0o700 })
