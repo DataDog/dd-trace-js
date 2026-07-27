@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
-const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
@@ -24,6 +24,7 @@ function findSpan (traces, predicate) {
 createIntegrationTestSuite('openai-agents', '@openai/agents', {
   category: 'generative-ai',
   additionalPlugins: ['openai'],
+  pluginConfig: { service: 'agents-service' },
 }, (meta) => {
   const { agent } = meta
 
@@ -35,13 +36,17 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
     await testSetup.teardown()
   })
 
+  it('preserves the exported Chat Completions model class', () => {
+    assert.strictEqual(testSetup.chatCompletionsModelClass, testSetup.directChatCompletionsModelClass)
+  })
+
   describe('run() — single-agent workflow', () => {
     it('emits a workflow span with correct component/kind tags', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         const workflowSpan = findSpan(traces, s => s.name === 'Agent workflow')
         assertObjectContains(workflowSpan, {
           name: 'Agent workflow',
-          service: ANY_STRING,
+          service: 'agents-service',
           meta: {
             component: 'openai-agents',
             'span.kind': 'internal',
@@ -53,6 +58,21 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
       assert.ok(result, 'run() should return a result object')
       assert.notStrictEqual(result.finalOutput, undefined, 'run() should have finalOutput')
 
+      return traceAssertion
+    })
+
+    it('parents the workflow span under the active Datadog span', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        const flat = traces.flat()
+        const parentSpan = flat.find(s => s.name === 'parent.request')
+        const workflowSpan = flat.find(s => s.name === 'Agent workflow')
+
+        assert.ok(parentSpan, 'expected an active parent span')
+        assert.ok(workflowSpan, 'expected a workflow span')
+        assert.equal(workflowSpan.parent_id.toString(), parentSpan.span_id.toString())
+      })
+
+      await meta.tracer.trace('parent.request', () => testSetup.run())
       return traceAssertion
     })
 
@@ -122,6 +142,41 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
         // errorAgent triggers an intentional error from the mocked model
       }
 
+      return traceAssertion
+    })
+
+    it('emits a generation span for Chat Completions models', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        const generationSpan = findSpan(traces, s => s.name === 'openai_agents.generation')
+        assertObjectContains(generationSpan, {
+          name: 'openai_agents.generation',
+          service: 'agents-service',
+          meta: {
+            component: 'openai-agents',
+            'span.kind': 'client',
+          },
+        })
+      })
+
+      await testSetup.runChatCompletions()
+      return traceAssertion
+    })
+  })
+
+  describe('function tools', () => {
+    it('activates the function span while user tool code executes', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        const flat = traces.flat()
+        const functionSpan = flat.find(s => s.name === 'lookup')
+        const toolWorkSpan = flat.find(s => s.name === 'tool.work')
+        const spanNames = flat.map(s => s.name).join(', ')
+
+        assert.ok(functionSpan, `expected a function span; received: ${spanNames}`)
+        assert.ok(toolWorkSpan, `expected a span created by user tool code; received: ${spanNames}`)
+        assert.equal(toolWorkSpan.parent_id.toString(), functionSpan.span_id.toString())
+      })
+
+      await testSetup.runWithTool(() => meta.tracer.trace('tool.work', () => '72F'))
       return traceAssertion
     })
   })

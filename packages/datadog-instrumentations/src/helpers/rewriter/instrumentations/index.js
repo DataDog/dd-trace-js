@@ -10,6 +10,7 @@ module.exports = [
   ...require('./langgraph'),
   ...require('./mercurius'),
   ...require('./modelcontextprotocol-sdk'),
+  ...require('./openai-agents'),
   ...require('./playwright'),
   ...require('./aws-durable-execution-sdk-js'),
 ]

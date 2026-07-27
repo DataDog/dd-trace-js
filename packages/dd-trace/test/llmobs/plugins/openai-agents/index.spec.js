@@ -72,6 +72,7 @@ describe('integrations', () => {
 
     let agentsCore
     let agent
+    let chatCompletionsAgent
     let handoffAgent
     let toolErrorAgent
 
@@ -79,7 +80,7 @@ describe('integrations', () => {
       before(() => {
         agentsCore = require(`../../../../../../versions/@openai/agents@${version}`).get()
 
-        const { OpenAIResponsesModel } =
+        const { OpenAIChatCompletionsModel, OpenAIResponsesModel } =
           require(`../../../../../../versions/@openai/agents-openai@${version}`).get()
 
         const agentsOpenaiDir = path.join(
@@ -92,6 +93,26 @@ describe('integrations', () => {
           apiKey: 'test',
           baseURL: 'https://api.openai.com/v1',
           fetch: createFetch([createResponse([createMessageOutput('hello')])]),
+        })
+        const chatCompletionsClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://resource.openai.azure.com/openai/deployments/test',
+          fetch: createFetch([{
+            id: 'chatcmpl_test',
+            object: 'chat.completion',
+            created: 0,
+            model: 'gpt-4o',
+            choices: [{
+              index: 0,
+              message: { role: 'assistant', content: 'hello' },
+              finish_reason: 'stop',
+            }],
+            usage: {
+              prompt_tokens: 2,
+              completion_tokens: 1,
+              total_tokens: 3,
+            },
+          }]),
         })
         const toolErrorClient = new OpenAI({
           apiKey: 'test',
@@ -132,6 +153,11 @@ describe('integrations', () => {
           name: 'test_agent',
           instructions: AGENT_INSTRUCTIONS,
           model: new OpenAIResponsesModel(mockClient, 'gpt-4'),
+        })
+        chatCompletionsAgent = new agentsCore.Agent({
+          name: 'chat_completions_agent',
+          instructions: AGENT_INSTRUCTIONS,
+          model: new OpenAIChatCompletionsModel(chatCompletionsClient, 'gpt-4o'),
         })
 
         const handoffModel = new OpenAIResponsesModel(handoffClient, 'gpt-4o-mini')
@@ -242,6 +268,19 @@ describe('integrations', () => {
             metadata: COMMON_RESPONSE_METADATA,
             tags: { ml_app: 'test', integration: 'openai-agents' },
           })
+        })
+
+        it('uses the Chat Completions client URL to identify the model provider', async () => {
+          await agentsCore.run(chatCompletionsAgent, 'hello', { maxTurns: 1 })
+
+          const { llmobsSpans } = await getEvents(3)
+          const llmEvent = llmobsSpans.find(s => s.meta?.['span.kind'] === 'llm')
+
+          assert.strictEqual(llmEvent.meta.model_provider, 'azure_openai')
+          assert.deepStrictEqual(llmEvent.meta.output.messages, [{
+            role: 'assistant',
+            content: 'hello',
+          }])
         })
 
         it('keeps the workflow open through a real multi-agent handoff', async () => {
