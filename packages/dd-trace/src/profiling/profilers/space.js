@@ -66,9 +66,7 @@ class NativeSpaceProfiler {
     return profile
   }
 
-  getInfo () {
-    return {}
-  }
+  getInfo () {}
 
   encode (profile) {
     return encodeProfileAsync(profile)
