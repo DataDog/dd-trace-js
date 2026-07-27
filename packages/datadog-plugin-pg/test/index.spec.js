@@ -93,6 +93,8 @@ describe('Plugin', () => {
                   `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
                 )
               }
+
+              assert.ok(!Object.hasOwn(traces[0][0].metrics, 'db.pool.wait_time_ms'))
             }, { spanResourceMatch: /^SELECT \$1::text as message$/ })
               .then(done)
               .catch(done)
@@ -459,6 +461,240 @@ describe('Plugin', () => {
           })
 
           await tracePromise
+        })
+
+        it('records the wait of an acquire that opens a new connection', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+
+              assert.ok(waitTime > 0, `expected a positive wait, got ${waitTime}`)
+            }, { spanResourceMatch: /^SELECT 4 AS pool_wait_probe$/ }),
+            pool.query('SELECT 4 AS pool_wait_probe'),
+          ])
+        })
+
+        it('reports a zero wait time when an idle pooled client is reused', async () => {
+          await pool.query('SELECT 1')
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].metrics['db.pool.wait_time_ms'], 0)
+            }, { spanResourceMatch: /^SELECT 7 AS idle_probe$/ }),
+            pool.query('SELECT 7 AS idle_probe'),
+          ])
+        })
+
+        it('reports a positive wait time when a same-tick query takes the only idle client', async () => {
+          await pool.query('SELECT 1')
+
+          // The first query takes the idle client and the second queues behind it, while
+          // `idleCount` still reads 1 for both.
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+
+              assert.ok(waitTime > 0, `expected a positive wait, got ${waitTime}`)
+            }, { spanResourceMatch: /^SELECT 9 AS queued_probe$/ }),
+            pool.query('SELECT 8 AS idle_taker'),
+            pool.query('SELECT 9 AS queued_probe'),
+          ])
+        })
+
+        it('keeps a concurrent acquire on another pool independent', async () => {
+          const otherPool = new pg.Pool({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+            application_name: 'test',
+            max: 1,
+          })
+
+          let starvedWaitTime
+          let idleWaitTime
+
+          try {
+            await Promise.all([pool.query('SELECT 1'), otherPool.query('SELECT 1')])
+
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                starvedWaitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+              }, { spanResourceMatch: /^SELECT 5 AS starved_probe$/ }),
+              agent.assertSomeTraces(traces => {
+                idleWaitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+              }, { spanResourceMatch: /^SELECT 6 AS other_pool_probe$/ }),
+              pool.query('SELECT pg_sleep(0.2)'),
+              pool.query('SELECT 5 AS starved_probe'),
+              otherPool.query('SELECT 6 AS other_pool_probe'),
+            ])
+          } finally {
+            await otherPool.end()
+          }
+
+          assert.ok(starvedWaitTime > 150, `expected the starved pool to wait for its sleep, got ${starvedWaitTime}`)
+          assert.strictEqual(idleWaitTime, 0)
+        })
+
+        it('does not tag a query on an unrelated client with the pool wait', async () => {
+          const standalone = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+            application_name: 'test',
+          })
+
+          await standalone.connect()
+
+          try {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                assert.ok(!Object.hasOwn(traces[0][0].metrics, 'db.pool.wait_time_ms'))
+              }, { spanResourceMatch: /^SELECT 10 AS unrelated_probe$/ }),
+              agent.assertSomeTraces(traces => {
+                const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+
+                assert.ok(waitTime > 0, `expected the acquired client to carry the wait, got ${waitTime}`)
+              }, { spanResourceMatch: /^SELECT 11 AS acquired_probe$/ }),
+              new Promise((resolve, reject) => {
+                pool.connect((error, client, release) => {
+                  if (error) {
+                    reject(error)
+                    return
+                  }
+
+                  standalone.query('SELECT 10 AS unrelated_probe', unrelatedError => {
+                    if (unrelatedError) {
+                      reject(unrelatedError)
+                    }
+                  })
+
+                  client.query('SELECT 11 AS acquired_probe', queryError => {
+                    release()
+
+                    if (queryError) {
+                      reject(queryError)
+                    } else {
+                      resolve()
+                    }
+                  })
+                })
+              }),
+            ])
+          } finally {
+            await standalone.end()
+          }
+        })
+
+        it('gives an acquire nested in a release its own wait', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+
+              assert.ok(waitTime > 0, `expected the nested acquire to carry its own wait, got ${waitTime}`)
+            }, { spanResourceMatch: /^SELECT 12 AS nested_probe$/ }),
+            new Promise((resolve, reject) => {
+              pool.connect((error, client, release) => {
+                if (error) {
+                  reject(error)
+                  return
+                }
+
+                pool.connect((nestedError, nestedClient, nestedRelease) => {
+                  if (nestedError) {
+                    reject(nestedError)
+                    return
+                  }
+
+                  nestedClient.query('SELECT 12 AS nested_probe', queryError => {
+                    nestedRelease()
+
+                    if (queryError) {
+                      reject(queryError)
+                    } else {
+                      resolve()
+                    }
+                  })
+                })
+
+                // `release` pulses the pending queue synchronously, so the acquire queued above runs
+                // inside this callback while this callback's own entry is still on the stack.
+                release()
+              })
+            }),
+          ])
+        })
+
+        it('records the deepest wait when acquires nest six releases deep', async () => {
+          const deepest = 6
+          const blockMs = 50
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+
+              assert.ok(waitTime > 40, `expected the deepest acquire's own ~${blockMs}ms wait, got ${waitTime}`)
+            }, { spanResourceMatch: /^SELECT 13 AS deep_probe$/ }),
+            new Promise((resolve, reject) => {
+              const acquireLevel = level => {
+                pool.connect((error, client, release) => {
+                  if (error) {
+                    reject(error)
+                    return
+                  }
+
+                  if (level === deepest) {
+                    client.query('SELECT 13 AS deep_probe', queryError => {
+                      release()
+
+                      if (queryError) {
+                        reject(queryError)
+                      } else {
+                        resolve()
+                      }
+                    })
+                    return
+                  }
+
+                  acquireLevel(level + 1)
+
+                  // Every level acquires the same `max: 1` client, so only the size of the wait tells
+                  // the entries apart. A timer instead of a block would end the nesting chain.
+                  if (level === deepest - 1) {
+                    const until = performance.now() + blockMs
+                    while (performance.now() < until) { /* block the acquire queued above */ }
+                  }
+
+                  release()
+                })
+              }
+
+              acquireLevel(1)
+            }),
+          ])
+        })
+
+        it('does not throw when the pool fails to acquire a connection', done => {
+          const probe = net.createServer().listen(0, '127.0.0.1', () => {
+            const { port } = probe.address()
+
+            probe.close(() => {
+              const failingPool = new pg.Pool({
+                host: '127.0.0.1',
+                port,
+                user: 'postgres',
+                database: 'postgres',
+                connectionTimeoutMillis: 500,
+              })
+              failingPool.on('error', () => {})
+
+              failingPool.query('SELECT 1', error => {
+                assert.ok(error, 'expected the pool connection to fail')
+                failingPool.end(() => done())
+              })
+            })
+          })
         })
       })
 

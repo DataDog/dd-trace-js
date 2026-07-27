@@ -1,6 +1,7 @@
 'use strict'
 
 const { errorMonitor } = require('node:events')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -22,6 +23,13 @@ const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
 
+// pg dispatches the pooled query synchronously from the connect callback, so the acquire wait
+// reaches `wrapQuery` through this stack: `_release` pulses the pending queue synchronously, which
+// nests acquires, and the client pins each wait to the connection that actually waited for it.
+// Each entry is popped by the frame that pushed it, so no client outlives its callback.
+const poolWaitClients = []
+const poolWaitTimes = []
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -41,8 +49,23 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
     }
 
     const ctx = {}
+    // pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
+    // outnumbers the requests already queued ahead of us. That handoff is not a wait on the pool.
+    const start = this.idleCount > this.waitingCount ? 0 : performance.now()
     arguments[0] = function (...args) {
-      return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
+      const client = args[1]
+      if (client !== undefined) {
+        poolWaitClients.push(client)
+        poolWaitTimes.push(start === 0 ? 0 : performance.now() - start)
+      }
+      try {
+        return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
+      } finally {
+        if (client !== undefined) {
+          poolWaitClients.pop()
+          poolWaitTimes.pop()
+        }
+      }
     }
 
     poolConnectStartCh.publish(ctx)
@@ -83,6 +106,17 @@ function wrapQuery (query) {
       abortController,
       stream,
     }
+
+    if (poolWaitClients.length !== 0) {
+      for (let i = poolWaitClients.length - 1; i >= 0; i--) {
+        if (poolWaitClients[i] === this) {
+          ctx.poolWaitTime = poolWaitTimes[i]
+          poolWaitClients[i] = undefined
+          break
+        }
+      }
+    }
+
     const finish = (error, res) => {
       if (error) {
         ctx.error = error
