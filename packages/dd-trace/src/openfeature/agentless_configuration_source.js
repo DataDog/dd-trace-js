@@ -20,7 +20,7 @@ const RETRY_JITTER = 0.2
  * @property {URL} endpoint
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
- * @property {string} apiKey
+ * @property {string | undefined} apiKey
  */
 
 /**
@@ -138,7 +138,7 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
-    headers['DD-API-KEY'] = this.#config.apiKey
+    if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     if (this.#etag) headers['If-None-Match'] = this.#etag
 
     /**
@@ -228,10 +228,7 @@ class AgentlessConfigurationSource {
     this.#failureWarnings.add(category)
 
     if (statusCode === 401 || statusCode === 403) {
-      log.warn(
-        'Feature Flagging agentless endpoint returned HTTP %d; verify DD_API_KEY is configured and valid',
-        statusCode
-      )
+      log.warn('Feature Flagging agentless endpoint returned HTTP %d; verify endpoint authentication', statusCode)
     } else if (statusCode) {
       log.warn('Feature Flagging agentless endpoint returned HTTP %d after %d attempts', statusCode, attempts)
     } else if (attempts > 1) {

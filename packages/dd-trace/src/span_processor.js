@@ -298,7 +298,7 @@ class SpanProcessor {
         } else {
           if (!allStartedFinished) finishedSpansToExport.push(span)
           const context = span.context()
-          if (isFirstSpanInChunk && stampApmDisabled) {
+          if (stampApmDisabled) {
             context.setTag(APM_TRACING_ENABLED_KEY, 0)
           }
 

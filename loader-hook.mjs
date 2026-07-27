@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { isMainThread } from 'node:worker_threads'
 
 import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
-import { initialize as origInitialize, load as origLoad, resolve } from 'import-in-the-middle/hook.mjs'
+import { initialize as origInitialize, load as origLoad } from 'import-in-the-middle/hook.mjs'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 // This file must support Node.js 12.0.0 syntax
@@ -190,4 +190,5 @@ function registerSyncLoaderHooks (data = {}) {
   return true
 }
 
-export { initialize, load, registerSyncLoaderHooks, resolve }
+export { resolve } from 'import-in-the-middle/hook.mjs'
+export { initialize, load, registerSyncLoaderHooks }

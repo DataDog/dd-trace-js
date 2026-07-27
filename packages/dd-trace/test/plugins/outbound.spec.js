@@ -50,6 +50,44 @@ describe('OuboundPlugin', () => {
       sinon.assert.notCalled(getRemapStub)
     })
 
+    it('should not recompute peer service after its source was set', () => {
+      computePeerServiceStub.value({ spanComputePeerService: true })
+      const tags = {
+        'peer.service': 'mypeerservice',
+        '_dd.peer.service.source': 'out.host',
+      }
+      instance.tagPeerService({ context: () => ({ getTags: () => tags }) })
+
+      sinon.assert.notCalled(getPeerServiceStub)
+      sinon.assert.notCalled(getRemapStub)
+    })
+
+    it('should not recompute peer service when only its source was set', () => {
+      computePeerServiceStub.value({ spanComputePeerService: true })
+      const tags = {
+        '_dd.peer.service.source': 'out.host',
+      }
+      instance.tagPeerService({ context: () => ({ getTags: () => tags }) })
+
+      sinon.assert.notCalled(getPeerServiceStub)
+      sinon.assert.notCalled(getRemapStub)
+    })
+
+    it('should compute peer service when only its value was set', () => {
+      computePeerServiceStub.value({ spanComputePeerService: true })
+      getPeerServiceStub.returns({
+        'peer.service': 'mypeerservice',
+        '_dd.peer.service.source': 'peer.service',
+      })
+      const tags = {
+        'peer.service': 'mypeerservice',
+      }
+      instance.tagPeerService({ context: () => ({ getTags: () => tags }), addTags: () => {} })
+
+      sinon.assert.called(getPeerServiceStub)
+      sinon.assert.called(getRemapStub)
+    })
+
     it('should do nothing when disabled', () => {
       computePeerServiceStub.value({ spanComputePeerService: false })
       instance.tagPeerService({ context: () => ({ _tags: {}, getTags () { return this._tags } }), addTags: () => {} })

@@ -15,10 +15,10 @@ function getTokensFromLlmOutput (result) {
   for (const tokenNames of [['input', 'prompt'], ['output', 'completion'], ['total']]) {
     let token = 0
     for (const tokenName of tokenNames) {
-      const underScore = `${tokenName}_tokens`
+      const underscore = `${tokenName}_tokens`
       const camelCase = `${tokenName}Tokens`
 
-      token = tokenUsage[underScore] || tokenUsage[camelCase] || token
+      token = tokenUsage[underscore] || tokenUsage[camelCase] || token
     }
 
     tokens[tokenNames[0]] = token

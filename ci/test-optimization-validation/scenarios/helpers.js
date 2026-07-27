@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('path')
 
 const { getArtifactId } = require('../artifact-id')
-const { buildCiWiringEnv, buildDatadogEnv, runCommand } = require('../command-runner')
+const { buildDatadogEnv, buildOfflineCaptureEnv, runCommand } = require('../command-runner')
 const {
   cleanupGeneratedRuntimeFiles,
   findGeneratedScenario,
@@ -14,10 +14,10 @@ const {
   eventsOfType,
   findTestsByIdentity,
 } = require('../payload-normalizer')
-const { getLocalValidationCommand } = require('../local-command')
 const { cleanupOfflineFixture, createOfflineFixture } = require('../offline-fixtures')
 const { readOfflineOutput } = require('../offline-output')
 const { sanitizeForReport, sanitizeString } = require('../redaction')
+const { getGeneratedCommand } = require('../runner-command')
 const { ensureSafeDirectory, writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
@@ -34,7 +34,7 @@ async function runInstrumentedCommand ({
   options,
   extraEnv,
   fixtureConfig,
-  ciWiring = false,
+  injectInitialization = true,
   allowMissingInitialization = false,
 }) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
@@ -52,9 +52,9 @@ async function runInstrumentedCommand ({
       scenarioName,
       ...fixtureConfig,
     })
-    const validationEnv = ciWiring
-      ? buildCiWiringEnv({ fixture, outputRoot: rawOutputRoot })
-      : buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
+    const validationEnv = injectInitialization
+      ? buildDatadogEnv({ fixture, outputRoot: rawOutputRoot, scenario: scenarioName, framework })
+      : buildOfflineCaptureEnv({ fixture, outputRoot: rawOutputRoot })
     result = await runCommand(command, {
       env: {
         ...validationEnv,
@@ -82,7 +82,7 @@ async function runInstrumentedCommand ({
       `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
       'scenario result artifact'
     )
-    if (!offline.initialized && !ciWiring && !allowMissingInitialization) {
+    if (!offline.initialized && injectInitialization && !allowMissingInitialization) {
       const stderr = sanitizeString(result.stderr).trim().slice(-2000)
       throw new Error(
         'Offline Test Optimization exporter did not initialize or write completion evidence. ' +
@@ -180,11 +180,11 @@ async function prepareGeneratedScenario (framework, scenarioId) {
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) return { scenario: null, written: [] }
   cleanupGeneratedRuntimeFiles(framework)
-  const written = await writeGeneratedFiles(framework)
+  const written = await writeGeneratedFiles(framework, scenario)
   return {
     scenario: {
       ...scenario,
-      runCommand: getLocalValidationCommand(framework, scenario.runCommand),
+      runCommand: getGeneratedCommand(framework, scenario),
     },
     written,
   }
@@ -312,6 +312,63 @@ async function discoverScenarioTests ({ framework, out, scenarioName, scenario, 
     tests,
     testIdentities: tests.map(testToIdentity),
   }
+}
+
+/**
+ * Reports a missing generated test without blaming dd-trace when clean execution was unproven.
+ *
+ * @param {object} input missing-test evidence
+ * @param {object} input.command generated scenario command
+ * @param {string} input.diagnosis diagnosis used when clean execution was proven
+ * @param {object} input.discovery instrumented baseline result
+ * @param {object} input.framework framework manifest entry
+ * @param {object} input.options execution options
+ * @param {string} input.out validation output root
+ * @param {object} input.scenario generated scenario
+ * @param {string} input.scenarioName advanced scenario name
+ * @returns {object|Promise<object>} incomplete or confirmed failure result
+ */
+function reportMissingGeneratedTest ({
+  command,
+  diagnosis,
+  discovery,
+  framework,
+  options,
+  out,
+  scenario,
+  scenarioName,
+}) {
+  const verification = framework.generatedTestStrategy?.verification?.observedScenarios
+    ?.find(observed => observed.id === scenario.id)
+  const evidence = {
+    ...discoveryEvidence(discovery),
+    generatedVerificationObservedTestCount: verification?.observedTestCount,
+  }
+  if (verification?.observedTestCount === null) {
+    return inconclusive(
+      framework,
+      scenarioName,
+      'The clean temporary validation command exited as expected without a parseable test count, and the ' +
+        'instrumented baseline emitted no matching test event. The validator cannot prove that the generated test ' +
+        'executed, so no advanced-feature conclusion was reached.',
+      {
+        ...evidence,
+        reasonCode: 'generated-test-execution-unproven',
+      },
+      discovery.outDir
+    )
+  }
+
+  return failWithDebugRerun({
+    command,
+    diagnosis,
+    evidence,
+    framework,
+    options,
+    out,
+    outDir: discovery.outDir,
+    scenarioName,
+  })
 }
 
 function testsForDiscoveredScenario (events, scenario, discovery) {
@@ -528,6 +585,7 @@ module.exports = {
   inconclusive,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runDebugInstrumentedCommand,
   runInstrumentedCommand,

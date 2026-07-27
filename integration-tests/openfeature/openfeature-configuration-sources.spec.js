@@ -341,7 +341,7 @@ function assertDeliveryTraffic (testCase) {
     for (const request of cdnRequests) {
       assert.strictEqual(request.url, `${AGENTLESS_PATH}?case=${testCase.identifier}`, testCase.label)
       assert.strictEqual(request.headers['accept-encoding'], 'gzip', testCase.label)
-      assert.strictEqual(request.headers['dd-api-key'], 'integration-api-key', testCase.label)
+      assert.strictEqual(request.headers['dd-api-key'], undefined, testCase.label)
       assert.strictEqual(request.headers['dd-client-library-language'], 'nodejs', testCase.label)
       assert.strictEqual(request.headers['dd-client-library-version'], VERSION, testCase.label)
     }

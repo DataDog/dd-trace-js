@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -19,6 +20,7 @@ describe('SpanProcessor', () => {
   let trace
   let exporter
   let tracer
+  let spanFormat
   let config
   let SpanSampler
   let sample
@@ -51,6 +53,7 @@ describe('SpanProcessor', () => {
         hasTag: (key) => key in tags,
         clearTags: () => { tags = Object.create(null) },
         syncErrorMetaToNative: sinon.stub(),
+        syncFinalTagsToNative: sinon.stub(),
       }),
     }
 
@@ -79,6 +82,8 @@ describe('SpanProcessor', () => {
       sample,
     })
 
+    spanFormat = sinon.stub().returns({ name: 'formatted', metrics: {}, meta: {} })
+
     fakeOpCode = {
       SetTraceMetricsAttr: 11,
       SetTraceMetaAttr: 10,
@@ -97,6 +102,7 @@ describe('SpanProcessor', () => {
     registerExtraService = extraServicesStub.registerExtraService
 
     SpanProcessor = proxyquire('../src/span_processor', {
+      './span_format': spanFormat,
       './span_sampler': SpanSampler,
       './native': { OpCode: fakeOpCode },
       './service-naming/extra-services': extraServicesStub,
@@ -489,7 +495,53 @@ describe('SpanProcessor', () => {
     sinon.assert.notCalled(exporter.export)
   })
 
-  it('should add APM disabled marker to first native span in a chunk when APM tracing is disabled', () => {
+  it('should call spanFormat every time a partial flush is triggered', () => {
+    config.flushMinSpans = 1
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(activeSpan)
+
+    assert.ok('started' in trace)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.ok('finished' in trace)
+    assert.deepStrictEqual(trace.finished, [])
+    assert.strictEqual(spanFormat.callCount, 1)
+    sinon.assert.calledWith(spanFormat, finishedSpan, true)
+  })
+
+  it('should add span tags to first span in a chunk', () => {
+    config.flushMinSpans = 2
+    config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = true
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan, finishedSpan]
+    processor.process(activeSpan)
+    const tags = processor._processTags
+
+    {
+      let foundATag = false
+      tags.split(',').forEach(tag => {
+        const [key, value] = tag.split(':')
+        if (key !== 'entrypoint.basedir') return
+        // The exact basedir varies depending on the test runner location
+        // (e.g. "test" in source tree vs "bin" when run via node_modules/.bin/mocha).
+        assert.ok(
+          typeof value === 'string' && value.length > 0,
+          `entrypoint.basedir value: ${inspect(value)}`
+        )
+        foundATag = true
+      })
+      assert.ok(foundATag)
+    }
+
+    sinon.assert.calledWith(spanFormat.getCall(0), finishedSpan, true, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
+  })
+
+  it('should add APM disabled marker to every native span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
     config.flushMinSpans = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config, nativeSpans)
@@ -504,7 +556,7 @@ describe('SpanProcessor', () => {
     processor.process(firstFinished)
 
     assert.strictEqual(firstFinished.context().getTag(APM_TRACING_ENABLED_KEY), 0)
-    assert.strictEqual(secondFinished.context().getTag(APM_TRACING_ENABLED_KEY), undefined)
+    assert.strictEqual(secondFinished.context().getTag(APM_TRACING_ENABLED_KEY), 0)
     sinon.assert.calledOnceWithExactly(exporter.export, [firstFinished, secondFinished])
   })
 

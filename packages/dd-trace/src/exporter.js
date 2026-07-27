@@ -1,6 +1,8 @@
 'use strict'
 
 const exporters = require('../../../ext/exporters')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { isTrue } = require('./util')
 
 // On the native-spans branch, `getExporter` is only used for the CI Visibility
 // pipeline — regular APM tracing uses the native exporter (see
@@ -15,16 +17,21 @@ module.exports = function getExporter (name) {
     case exporters.AGENT_PROXY:
       return require('./ci-visibility/exporters/agent-proxy')
     case exporters.CI_VALIDATION:
-      return require('./ci-visibility/exporters/ci-validation')
+      if (hasCiValidationEnvironment()) return require('./ci-visibility/exporters/ci-validation')
+      break
     case exporters.JEST_WORKER:
     case exporters.CUCUMBER_WORKER:
     case exporters.MOCHA_WORKER:
     case exporters.PLAYWRIGHT_WORKER:
     case exporters.VITEST_WORKER:
       return require('./ci-visibility/exporters/test-worker')
-    default:
-      // ci/init.js always sets one of the names above; fall back to the
-      // agent-proxy exporter (the non-agentless CI-vis default) for safety.
-      return require('./ci-visibility/exporters/agent-proxy')
   }
+
+  return require('./exporters/agent')
+}
+
+function hasCiValidationEnvironment () {
+  return isTrue(getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MODE')) &&
+    getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
+    getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }

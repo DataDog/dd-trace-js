@@ -1904,6 +1904,55 @@ if (requestedVersion === 'latest' &&
       })
     })
 
+    describe('manual plugin', () => {
+      it('runs the latest after:screenshot handler after user handlers', async () => {
+        const projectRoot = createProjectRoot()
+        const userHandler = sinon.stub().returns({ path: 'updated.png' })
+        const datadogHandler = sinon.stub()
+        const taskHandler = {
+          'dd:testSuiteStart': sinon.stub(),
+          'dd:beforeEach': sinon.stub(),
+          'dd:afterEach': sinon.stub(),
+          'dd:addTags': sinon.stub(),
+        }
+        const config = {
+          e2e: {
+            /**
+             * @param {Function} on Cypress event registration function
+             * @returns {void}
+             */
+            setupNodeEvents (on) {
+              on('after:screenshot', userHandler)
+              on('after:screenshot', datadogHandler)
+              on('task', taskHandler)
+            },
+          },
+        }
+        const handlers = {}
+        const { cypressConfig } = loadCypressConfig()
+
+        cypressConfig.wrapConfig(config)
+        config.e2e.setupNodeEvents(
+          /**
+           * @param {string} event Cypress event name
+           * @param {Function} handler Cypress event handler
+           * @returns {void}
+           */
+          (event, handler) => {
+            handlers[event] = handler
+          },
+          { projectRoot, supportFile: false }
+        )
+
+        const details = { path: 'original.png' }
+        await handlers['after:screenshot'](details)
+        await handlers['after:run']({})
+
+        assert.strictEqual(userHandler.calledOnceWithExactly(details), true)
+        assert.strictEqual(datadogHandler.calledOnceWithExactly({ path: 'updated.png' }), true)
+      })
+    })
+
     describe('configuration wrapper', () => {
       it('falls back to the project root when the config directory is not writable', () => {
         const projectRoot = createProjectRoot()
