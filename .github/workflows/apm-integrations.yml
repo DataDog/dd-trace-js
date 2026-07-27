@@ -1009,7 +1009,18 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - name: Verify Node.js matrix version
+        shell: bash
+        run: |
+          MAJOR=$(node -p 'process.versions.node.split(".")[0]')
+          if [ "${{ matrix.version }}" = "18" ]; then
+            test "$MAJOR" = "18"
+          else
+            test "$MAJOR" != "18"
+          fi
       - uses: ./.github/actions/install
       - run: npm run test:plugins:ci
       - uses: ./.github/actions/coverage
