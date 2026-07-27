@@ -332,8 +332,11 @@ module.exports = class CiPlugin extends Plugin {
           log.error('Known tests could not be fetched. %s', err.message)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, err)
           if (this.libraryConfig) {
-            this.libraryConfig.isEarlyFlakeDetectionEnabled = false
-            this.libraryConfig.isKnownTestsEnabled = false
+            this.libraryConfig = Object.freeze({
+              ...this.libraryConfig,
+              isEarlyFlakeDetectionEnabled: false,
+              isKnownTestsEnabled: false,
+            })
           }
         }
         onDone({ err, knownTests, requestErrorTags: this._getCurrentRequestErrorTags() })
@@ -353,7 +356,10 @@ module.exports = class CiPlugin extends Plugin {
           log.error('Test management tests could not be fetched. %s', err.message)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS, err)
           if (this.libraryConfig) {
-            this.libraryConfig.isTestManagementEnabled = false
+            this.libraryConfig = Object.freeze({
+              ...this.libraryConfig,
+              isTestManagementEnabled: false,
+            })
           }
         }
         onDone({ err, testManagementTests, requestErrorTags: this._getCurrentRequestErrorTags() })

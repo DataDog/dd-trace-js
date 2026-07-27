@@ -20,6 +20,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags'
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 
 const hostname = getHostname()
+const EMPTY_SETTINGS = Object.freeze({})
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -308,60 +309,58 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   // Takes into account potential kill switches
-  filterConfiguration (remoteConfiguration) {
-    if (!remoteConfiguration) {
-      return {}
-    }
+  filterConfiguration (remoteConfiguration = EMPTY_SETTINGS) {
+    const { testOptimization } = this._config
     const {
-      isCodeCoverageEnabled,
-      isSuitesSkippingEnabled,
-      isItrEnabled,
-      requireGit,
-      isEarlyFlakeDetectionEnabled,
+      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: isEarlyFlakeDetectionAllowed,
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: flakyTestRetriesCount = 0,
+      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: isFlakyTestRetriesAllowed,
+      DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: isImpactedTestsAllowed,
+      DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: earlyFlakeDetectionRetryCount,
+      DD_TEST_FAILED_TEST_REPLAY_ENABLED: isFailedTestReplayAllowed,
+      DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: configuredAttemptToFixRetries = 0,
+      DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
+    } = testOptimization
+    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
+    const configuredSlowTestRetries = remoteConfiguration.earlyFlakeDetectionSlowTestRetries ?? EMPTY_SETTINGS
+    const earlyFlakeDetectionSlowTestRetries = hasEarlyFlakeDetectionRetryCount
+      ? Object.freeze({
+        '5s': earlyFlakeDetectionRetryCount,
+        '10s': earlyFlakeDetectionRetryCount,
+        '30s': earlyFlakeDetectionRetryCount,
+        '5m': earlyFlakeDetectionRetryCount,
+      })
+      : Object.isFrozen(configuredSlowTestRetries)
+        ? configuredSlowTestRetries
+        : Object.freeze({ ...configuredSlowTestRetries })
+    const earlyFlakeDetectionNumRetries = hasEarlyFlakeDetectionRetryCount
+      ? earlyFlakeDetectionRetryCount
+      : remoteConfiguration.earlyFlakeDetectionNumRetries ?? 0
+    const testManagementAttemptToFixRetries =
+      remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
+
+    return Object.freeze({
+      isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
+      isSuitesSkippingEnabled: remoteConfiguration.isSuitesSkippingEnabled === true,
+      isItrEnabled: remoteConfiguration.isItrEnabled === true,
+      requireGit: remoteConfiguration.requireGit === true,
+      isEarlyFlakeDetectionEnabled:
+        remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionSlowTestRetries,
-      earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled,
-      isDiEnabled,
-      isKnownTestsEnabled,
-      isTestManagementEnabled,
+      earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
+      isFlakyTestRetriesEnabled:
+        remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,
+      flakyTestRetriesCount,
+      isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
+      isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
+      isTestManagementEnabled:
+        remoteConfiguration.isTestManagementEnabled === true && isTestManagementAllowed === true,
       testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled,
-      isCoverageReportUploadEnabled,
-    } = remoteConfiguration
-    const { testOptimization } = this._config
-    const earlyFlakeDetectionRetryCount =
-      testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
-    const hasEarlyFlakeDetectionRetryCount = earlyFlakeDetectionRetryCount !== undefined
-    return {
-      isCodeCoverageEnabled,
-      isSuitesSkippingEnabled,
-      isItrEnabled,
-      requireGit,
-      isEarlyFlakeDetectionEnabled:
-        isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
-      earlyFlakeDetectionNumRetries:
-        hasEarlyFlakeDetectionRetryCount ? earlyFlakeDetectionRetryCount : earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionSlowTestRetries: hasEarlyFlakeDetectionRetryCount
-        ? {
-            '5s': earlyFlakeDetectionRetryCount,
-            '10s': earlyFlakeDetectionRetryCount,
-            '30s': earlyFlakeDetectionRetryCount,
-            '5m': earlyFlakeDetectionRetryCount,
-          }
-        : earlyFlakeDetectionSlowTestRetries,
-      earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
-      flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
-      isDiEnabled: isDiEnabled && testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
-      isKnownTestsEnabled,
-      isTestManagementEnabled: isTestManagementEnabled && testOptimization.DD_TEST_MANAGEMENT_ENABLED,
-      testManagementAttemptToFixRetries:
-        testManagementAttemptToFixRetries ?? testOptimization.DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
       isImpactedTestsEnabled:
-        isImpactedTestsEnabled && testOptimization.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED,
-      isCoverageReportUploadEnabled,
-    }
+        remoteConfiguration.isImpactedTestsEnabled === true && isImpactedTestsAllowed === true,
+      isCoverageReportUploadEnabled: remoteConfiguration.isCoverageReportUploadEnabled === true,
+    })
   }
 
   sendGitMetadata (repositoryUrl) {
