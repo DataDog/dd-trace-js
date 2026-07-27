@@ -30,7 +30,7 @@ const RETRY_THRESHOLD_PATTERN = /^\d+(?:ms|s|m|h)$/
 const MAX_VALIDATION_MODULES = 1000
 const MAX_VALIDATION_SUITES = 10_000
 const MAX_VALIDATION_TESTS = 100_000
-const MAX_VALIDATION_RETRIES = 100
+const MAX_RETRIES = 100
 const MAX_VALIDATION_STRING_BYTES = 4096
 
 function isObject (value) {
@@ -75,7 +75,8 @@ function validateSettingsResponse (response, options = {}) {
   assertBooleanFields(attributes.test_management, ['enabled'], 'settings test_management')
   assertOptionalBoundedNumber(
     attributes.early_flake_detection.faulty_session_threshold,
-    'settings early_flake_detection faulty_session_threshold'
+    'settings early_flake_detection faulty_session_threshold',
+    { integer: true }
   )
   assertRetryMap(attributes.early_flake_detection.slow_test_retries)
   assertOptionalBoundedNumber(
@@ -216,8 +217,8 @@ function assertBooleanFields (object, keys, endpoint) {
 function assertOptionalBoundedNumber (value, endpoint, { integer = false } = {}) {
   if (value === undefined) return
   if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) ||
-    value < 0 || value > MAX_VALIDATION_RETRIES) {
-    throw new TypeError(`Invalid ${endpoint}: value must be between 0 and ${MAX_VALIDATION_RETRIES}`)
+    value < 0 || value > MAX_RETRIES) {
+    throw new TypeError(`Invalid ${endpoint}: value must be between 0 and ${MAX_RETRIES}`)
   }
 }
 
@@ -249,6 +250,7 @@ function assertValidationString (value, field) {
 }
 
 module.exports = {
+  MAX_RETRIES,
   validateKnownTestsResponse,
   validateSettingsResponse,
   validateSkippableTestsResponse,

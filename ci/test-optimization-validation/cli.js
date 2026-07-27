@@ -2,236 +2,140 @@
 
 /* eslint-disable no-console */
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
-const { getFrameworkDefinitions } = require('../diagnose')
-const { DD_MAJOR } = require('../../version')
-
-const { assertApprovalDigest, getApprovalDigest } = require('./approval')
+const { assertApprovalDigest } = require('./approval')
 const { loadApprovedPlan } = require('./approval-artifacts')
-
-const { runBasicReporting } = require('./scenarios/basic-reporting')
-const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
-const { runAutoTestRetries } = require('./scenarios/auto-test-retries')
-const { runTestManagement } = require('./scenarios/test-management')
-const { runCiWiring } = require('./scenarios/ci-wiring')
+const { annotateCiDiscovery } = require('./ci-discovery')
 const { cleanupGeneratedFiles } = require('./generated-files')
 const { verifyGeneratedTestStrategy } = require('./generated-verifier')
-const { annotateCiDiscovery } = require('./ci-discovery')
 const { loadManifest } = require('./manifest-loader')
 const { createManifestScaffold } = require('./manifest-scaffold')
-const { formatExecutionPlan, getApprovalSummaryPath, getExecutionPlanPath } = require('./plan-writer')
+const {
+  formatExecutionPlanArtifacts,
+  getExecutionPlanPath,
+} = require('./plan-writer')
 const { runFrameworkPreflight } = require('./preflight-runner')
 const { sanitizeConsoleText } = require('./redaction')
-const { writePendingReport, writeReport } = require('./report-writer')
-const { ensureSafeDirectory } = require('./safe-files')
-const { runSetupCommands } = require('./setup-runner')
 const {
-  getStaticBlocker,
-  runStaticDiagnosis,
-} = require('./static-diagnosis')
+  annotateResults,
+  getExecutionStatus,
+  getValidationCoverage,
+  getValidatorExitCode,
+} = require('./result-semantics')
+const { writePendingReport, writeReport } = require('./report-writer')
+const { getBasicCommand } = require('./runner-command')
+const { getUnavailableExecutable } = require('./executable')
+const { runAutoTestRetries } = require('./scenarios/auto-test-retries')
+const { runBasicReporting } = require('./scenarios/basic-reporting')
+const { runCiWiring } = require('./scenarios/ci-wiring')
+const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
+const { runTestManagement } = require('./scenarios/test-management')
+const { ensureSafeDirectory } = require('./safe-files')
+const { getStaticBlocker, runStaticDiagnosis } = require('./static-diagnosis')
 
 const DEFAULT_MANIFEST = './dd-test-optimization-validation-manifest.json'
 const DEFAULT_OUT = './dd-test-optimization-validation-results'
-
 const SCENARIOS = {
   'basic-reporting': runBasicReporting,
   efd: runEarlyFlakeDetection,
   atr: runAutoTestRetries,
   'test-management': runTestManagement,
 }
-const BASIC_REPORTING_SCENARIO = 'basic-reporting'
-const CI_WIRING_SCENARIO = 'ci-wiring'
+const BASIC_REPORTING = 'basic-reporting'
+const CI_WIRING = 'ci-wiring'
 
+/**
+ * Parses validator CLI arguments.
+ *
+ * @param {string[]} argv command arguments
+ * @returns {object} parsed options
+ */
 function parseArgs (argv) {
   const options = {
+    approvalOverrides: [],
+    frameworks: new Set(),
+    keepTempFiles: false,
     manifest: DEFAULT_MANIFEST,
     out: DEFAULT_OUT,
-    frameworks: new Set(),
-    scenarios: new Set(getSelectableScenarios()),
     requestedScenario: null,
-    keepTempFiles: false,
+    scenarios: new Set(getSelectableScenarios()),
     verbose: false,
-    approvalOverrides: [],
   }
 
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]
-    switch (arg) {
-      case '--manifest':
-        options.manifest = requireValue(argv, ++i, arg)
-        options.approvalOverrides.push(arg)
-        break
-      case '--out':
-        options.out = requireValue(argv, ++i, arg)
-        options.approvalOverrides.push(arg)
-        break
-      case '--framework':
-        options.frameworks.add(normalizeFrameworkTarget(requireValue(argv, ++i, arg)))
-        options.approvalOverrides.push(arg)
-        break
-      case '--scenario':
-        options.requestedScenario = requireValue(argv, ++i, arg)
-        options.scenarios = normalizeScenarioSelection(options.requestedScenario)
-        options.approvalOverrides.push(arg)
-        break
-      case '--keep-temp-files':
-        options.keepTempFiles = true
-        options.approvalOverrides.push(arg)
-        break
-      case '--verbose':
-        options.verbose = true
-        options.approvalOverrides.push(arg)
-        break
-      case '--validate-manifest':
-        options.validateManifest = true
-        break
-      case '--init-manifest':
-        options.initManifest = true
-        break
-      case '--print-plan':
-        options.printPlan = true
-        break
-      case '--print-approval-sha256':
-        options.printApprovalSha256 = true
-        break
-      case '--approved-plan-sha256':
-        options.approvedPlanSha256 = requireValue(argv, ++i, arg)
-        break
-      case '--offline-fixture-nonce':
-        options.offlineFixtureNonce = requireValue(argv, ++i, arg)
-        break
-      case '--run-approved-plan':
-        options.runApprovedPlan = requireValue(argv, ++i, arg)
-        break
-      case '--sha256':
-        options.approvedArtifactSha256 = requireValue(argv, ++i, arg)
-        break
-      case '--help':
-      case '-h':
-        options.help = true
-        break
-      default:
-        throw new Error(`Unknown argument: ${arg}`)
+  for (let index = 0; index < argv.length; index++) {
+    const argument = argv[index]
+    if (argument === '--manifest') {
+      options.manifest = requireValue(argv, ++index, argument)
+      options.approvalOverrides.push(argument)
+    } else if (argument === '--out') {
+      options.out = requireValue(argv, ++index, argument)
+      options.approvalOverrides.push(argument)
+    } else if (argument === '--framework') {
+      options.frameworks.add(normalizeFrameworkTarget(requireValue(argv, ++index, argument)))
+      options.approvalOverrides.push(argument)
+    } else if (argument === '--scenario') {
+      options.requestedScenario = requireValue(argv, ++index, argument)
+      options.scenarios = normalizeScenarioSelection(options.requestedScenario)
+      options.approvalOverrides.push(argument)
+    } else if (argument === '--keep-temp-files') {
+      options.keepTempFiles = true
+      options.approvalOverrides.push(argument)
+    } else if (argument === '--verbose') {
+      options.verbose = true
+      options.approvalOverrides.push(argument)
+    } else if (argument === '--validate-manifest') {
+      options.validateManifest = true
+    } else if (argument === '--init-manifest') {
+      options.initManifest = true
+    } else if (argument === '--print-plan') {
+      options.printPlan = true
+    } else if (argument === '--run-approved-plan') {
+      options.runApprovedPlan = requireValue(argv, ++index, argument)
+    } else if (argument === '--sha256') {
+      options.approvedArtifactSha256 = requireValue(argv, ++index, argument)
+    } else if (argument === '--help' || argument === '-h') {
+      options.help = true
+    } else {
+      throw new Error(`Unknown argument: ${argument}`)
     }
   }
-
-  for (const scenario of options.scenarios) {
-    if (!getSelectableScenarios().includes(scenario)) {
-      throw new Error(`Unknown scenario "${scenario}". Expected one of: ${getSelectableScenarios().join(', ')}`)
-    }
-  }
-
   return options
 }
 
-function requireValue (argv, index, flag) {
-  if (!argv[index]) {
-    throw new Error(`${flag} requires a value`)
-  }
-  return argv[index]
-}
-
-function printHelp () {
-  console.log(`Usage:
-  node ci/validate-test-optimization.js [options]
-
-Options:
-  --manifest <path>       Manifest path. Defaults to ${DEFAULT_MANIFEST}
-  --out <path>            Output directory. Defaults to ${DEFAULT_OUT}
-  --framework <id>        Run one framework entry. Can be repeated. A trailing ":" is ignored.
-                          A framework kind such as "vitest" runs all matching Vitest entries.
-  --scenario <name>       Run one scenario: ${getSelectableScenarios().join(', ')}
-  --keep-temp-files       Leave generated validation files in place.
-  --verbose               Print command progress.
-  --validate-manifest     Validate the manifest and exit without running project code.
-  --init-manifest         Create a schema-valid manifest scaffold without running project code.
-  --print-plan            Write the plan and approval artifacts without running project code.
-  --run-approved-plan     Run the exact approval.json produced by --print-plan.
-  --sha256 <digest>       Require approval.json and reconstructed current inputs to match this SHA-256.
-  --help                  Show this help.
-`)
-}
-
+/**
+ * Runs the validator CLI.
+ *
+ * @param {string[]} argv command arguments
+ * @returns {Promise<void>} completion
+ */
 async function main (argv) {
+  let activeManifest
+  let activeOut
+  let cleanupOutcome = { status: 'not_started' }
+
   try {
     const options = parseArgs(argv)
-    if (options.help) {
-      printHelp()
-      return
-    }
-
-    if (options.initManifest) {
-      const manifestPath = path.resolve(options.manifest)
-      if (path.dirname(manifestPath) !== process.cwd()) {
-        throw new Error('The generated manifest must be stored directly in the current repository root.')
-      }
-      const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
-      fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
-      console.log(sanitizeConsoleText(
-        `Created validation manifest scaffold without running project code: ${manifestPath}\n` +
-        'This scaffold is already schema-valid; preserve its command boilerplate. Review the selected test commands ' +
-        'and CI files listed in ciDiscovery, record one replayable CI test step when available, then run ' +
-        '--validate-manifest and follow its field-specific errors.'
-      ))
-      return
-    }
+    assertCompatibleModes(options)
+    if (options.help) return printHelp()
+    if (options.initManifest) return initializeManifest(options)
 
     if (options.runApprovedPlan) applyApprovedPlanOptions(options)
-
     const manifest = loadManifest(options.manifest)
-    if (options.printPlan) {
-      const out = validateOutputPath(manifest, options.out)
-      const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      formatExecutionPlan({
-        manifest: approvalManifest,
-        out,
-        selectedFrameworkIds: options.frameworks.size > 0
-          ? approvalManifest.frameworks.map(framework => framework.id)
-          : [],
-        requestedScenario: options.requestedScenario,
-        keepTempFiles: options.keepTempFiles,
-        verbose: options.verbose,
-      })
-      console.log(sanitizeConsoleText(
-        '[test-optimization-validator-agent] Customer approval summary written to ' +
-        `${getApprovalSummaryPath(out)}. Read that file and send its complete contents in a user-facing message ` +
-        `before requesting approval. Detailed audit information is in ${getExecutionPlanPath(out)}. ` +
-        'The approval command is available only in the summary.'
-      ))
-      return
-    }
-    if (options.printApprovalSha256) {
-      if (!options.offlineFixtureNonce) {
-        throw new Error('--print-approval-sha256 requires the --offline-fixture-nonce value shown in the plan.')
-      }
-      const out = validateOutputPath(manifest, options.out)
-      const approvalManifest = getApprovalManifest(manifest, options.frameworks)
-      console.log(getApprovalDigest({
-        manifest: approvalManifest,
-        out,
-        selectedFrameworkIds: options.frameworks.size > 0
-          ? approvalManifest.frameworks.map(framework => framework.id)
-          : [],
-        requestedScenario: options.requestedScenario,
-        offlineFixtureNonce: options.offlineFixtureNonce,
-        keepTempFiles: options.keepTempFiles,
-        verbose: options.verbose,
-      }))
-      return
-    }
+
     if (options.validateManifest) {
       console.log(sanitizeConsoleText(`Validation manifest is valid: ${manifest.__path}`))
       return
     }
+    if (options.printPlan) return printPlan(manifest, options)
     if (!options.approvedPlanSha256 || !options.offlineFixtureNonce) {
-      throw new Error(
-        'Live validation requires --run-approved-plan and --sha256 from a reviewed --print-plan result. Render and ' +
-        'approve a fresh execution plan first.'
-      )
+      throw new Error('Live validation requires the checksum-bound command produced by --print-plan.')
     }
+
     const out = validateOutputPath(manifest, options.out)
+    activeManifest = manifest
+    activeOut = out
     options.repositoryRoot = manifest.repository.root
     const selectedFrameworks = filterFrameworks(manifest.frameworks, options.frameworks)
     const approvalManifest = getApprovalManifest(manifest, options.frameworks)
@@ -248,172 +152,233 @@ async function main (argv) {
     })
     options.requireExecutableApproval = true
     ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
-    if (writePendingReport) writePendingReport({ manifest, out })
+    writePendingReport({ manifest, out })
+
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
     annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
-
     const results = []
-    const runnableFrameworks = []
 
     try {
-      const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
-      const liveReadyFrameworks = []
-
-      for (const framework of frameworks) {
-        if (framework.status !== 'runnable') {
-          results.push(getFrameworkStatusResult(framework))
-          continue
-        }
-
-        const staticBlocker = getStaticBlocker(framework, staticDiagnosis.report)
-        if (staticBlocker) {
-          results.push(getStaticFailure(framework, staticBlocker, staticDiagnosis.reportPath))
-          continue
-        }
-
-        liveReadyFrameworks.push(framework)
-      }
-
-      for (const framework of liveReadyFrameworks) {
-        // Setup commands are project preparation, not Test Optimization signal collection.
-        if (framework.setup?.commands?.length > 0) logPhaseStart(framework, 'Project setup')
+      for (const framework of selectedFrameworks) {
+        // Each framework is independent. A setup blocker must not discard useful results from another adapter.
         // eslint-disable-next-line no-await-in-loop
-        const setup = await runSetupCommands({ framework, out, options })
-        if (framework.setup?.commands?.length > 0) {
-          logPhaseComplete(framework, 'Project setup', setup.ok ? 'pass' : setup.failure?.status)
-        }
-        if (!setup.ok) {
-          results.push(setup.failure)
-          continue
-        }
-
-        runnableFrameworks.push(framework)
-      }
-      for (const framework of runnableFrameworks) {
-        let basicResult
-        if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
-          // The validator owns the dd-trace-less control so ambient agent initialization cannot contaminate it.
-          logPhaseStart(framework, 'Test execution without Datadog')
-          // eslint-disable-next-line no-await-in-loop
-          const preflight = await runFrameworkPreflight({ framework, out, options })
-          logPhaseComplete(
-            framework,
-            'Test execution without Datadog',
-            preflight.ok ? 'pass' : preflight.failure?.status
-          )
-          // Scenarios intentionally run in order so each one can use an isolated offline fixture.
-          if (preflight.ok) {
-            logPhaseStart(framework, 'Basic Reporting')
-            // eslint-disable-next-line no-await-in-loop
-            basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, out, options })
-            logPhaseComplete(framework, 'Basic Reporting', basicResult.status)
-          } else {
-            basicResult = preflight.failure
-          }
-          results.push(basicResult)
-        }
-
-        if (options.scenarios.has(CI_WIRING_SCENARIO)) {
-          if (basicResult && basicResult.status !== 'pass') {
-            results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
-          } else {
-            // CI wiring runs after Basic Reporting proves this framework can report when initialized directly.
-            logPhaseStart(framework, 'CI wiring')
-            // eslint-disable-next-line no-await-in-loop
-            const ciWiringResult = await runCiWiring({ manifest, framework, out, options, basicResult })
-            results.push(ciWiringResult)
-            logPhaseComplete(framework, 'CI wiring', ciWiringResult.status)
-          }
-        }
-
-        const advancedScenarios = getAdvancedScenarios(options.scenarios)
-        if (basicResult && basicResult.status !== 'pass') {
-          for (const scenario of advancedScenarios) {
-            results.push(getSkippedAfterBasicFailure(framework, scenario, basicResult))
-          }
-          continue
-        }
-
-        if (advancedScenarios.length > 0) {
-          logPhaseStart(framework, 'Temporary test verification')
-          // eslint-disable-next-line no-await-in-loop
-          const generatedVerification = await verifyGeneratedTestStrategy({ framework, out, options })
-          logPhaseComplete(
-            framework,
-            'Temporary test verification',
-            generatedVerification.ok ? 'pass' : generatedVerification.failure?.status
-          )
-          if (!generatedVerification.ok) {
-            results.push(generatedVerification.failure)
-            for (const scenario of advancedScenarios) {
-              results.push(getSkippedAfterGeneratedVerificationFailure(
-                framework,
-                scenario,
-                generatedVerification.failure
-              ))
-            }
-            continue
-          }
-        }
-
-        for (const scenario of advancedScenarios) {
-          const runScenario = SCENARIOS[scenario]
-          // Scenarios intentionally run in order so each one can use an isolated offline fixture.
-          logPhaseStart(framework, getScenarioDisplayName(scenario))
-          // eslint-disable-next-line no-await-in-loop
-          const result = await runScenario({ manifest, framework, out, options })
-          results.push(result)
-          logPhaseComplete(framework, getScenarioDisplayName(scenario), result.status)
-        }
+        await validateFramework({ framework, manifest, options, out, results, staticDiagnosis })
       }
     } finally {
-      await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+      try {
+        cleanupOutcome = await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
+        if (cleanupOutcome.status === 'incomplete') {
+          results.push(getCleanupFailure(undefined, cleanupOutcome))
+        }
+      } catch (error) {
+        cleanupOutcome = { errorCount: 1, status: 'incomplete' }
+        results.push(getCleanupFailure(error, cleanupOutcome))
+      }
     }
 
-    addMissingRequiredResults(results, runnableFrameworks, options.scenarios)
-    const validatorExitCode = results.some(isUnsuccessfulResult) || !didRunLiveValidation(results) ? 1 : 0
+    addMissingResults(results, selectedFrameworks, options.scenarios)
+    const annotatedResults = annotateResults(results)
+    const executionStatus = getExecutionStatus(annotatedResults)
+    const validatorExitCode = getValidatorExitCode(annotatedResults, executionStatus)
     await writeReport({
       manifest,
-      results,
       out,
+      results: annotatedResults,
       staticDiagnosis,
       runSummary: {
-        runCompleted: true,
-        validatorExitCode,
-        validationCoverage: getValidationCoverage({
-          results,
-          requestedScenario: options.requestedScenario,
-          frameworks: selectedFrameworks,
-          scenarios: options.scenarios,
-        }),
         checkedScenarios: [...options.scenarios],
+        cleanup: cleanupOutcome,
+        executionStatus,
         omittedScenarios: getSelectableScenarios().filter(scenario => !options.scenarios.has(scenario)),
         requestedScenario: options.requestedScenario,
+        runCompleted: true,
+        selectedFrameworkIds: selectedFrameworks.map(framework => framework.id),
+        validationCoverage: getValidationCoverage(annotatedResults),
+        validatorExitCode,
       },
     })
+    console.log(`Validation report: ${path.join(out, 'report.md')}`)
+    console.log('Present the report and stop. Any correction or retry requires a fresh plan and approval.')
     process.exitCode = validatorExitCode
-  } catch (err) {
-    process.exitCode = 1
-    console.error(sanitizeConsoleText(err && err.stack ? err.stack : err))
+  } catch (error) {
+    process.exitCode = 3
+    if (activeManifest && activeOut) {
+      try {
+        await writeReport({
+          manifest: activeManifest,
+          out: activeOut,
+          results: [getOrchestrationFailure(error)],
+          runSummary: {
+            checkedScenarios: [],
+            cleanup: cleanupOutcome,
+            executionStatus: 'validator_error',
+            omittedScenarios: getSelectableScenarios(),
+            runCompleted: true,
+            selectedFrameworkIds: [],
+            validationCoverage: 'partial',
+            validatorExitCode: 3,
+          },
+        })
+      } catch {}
+    }
+    console.error(sanitizeConsoleText(error?.stack || error))
   }
 }
 
 /**
- * Reconstructs live options from a hash-verified approval artifact.
+ * Runs selected checks for one framework.
  *
- * @param {object} options parsed CLI options
+ * @param {object} input framework execution inputs
+ * @param {object} input.framework framework manifest entry
+ * @param {object} input.manifest validation manifest
+ * @param {object} input.options validator options
+ * @param {string} input.out output directory
+ * @param {object[]} input.results accumulated results
+ * @param {object} input.staticDiagnosis static diagnosis
+ * @returns {Promise<void>} completion
+ */
+async function validateFramework ({ framework, manifest, options, out, results, staticDiagnosis }) {
+  let ciResult
+  if (options.scenarios.has(CI_WIRING)) {
+    logPhase(framework, 'CI configuration audit', 'start')
+    ciResult = runCiWiring({ manifest, framework })
+    logPhase(framework, 'CI configuration audit', ciResult.status)
+  }
+  if (![...options.scenarios].some(scenario => scenario !== CI_WIRING)) {
+    if (ciResult) results.push(ciResult)
+    return
+  }
+
+  if (framework.status !== 'runnable') {
+    results.push(getFrameworkStatusResult(framework))
+    if (ciResult) results.push(ciResult)
+    addNotReachedLocalResults(results, framework, options.scenarios, 'framework-not-runnable')
+    return
+  }
+
+  const unavailable = getUnavailableExecutable(getBasicCommand(framework))
+  if (unavailable) {
+    results.push(getUnavailableRunnerResult(framework, unavailable))
+    if (ciResult) results.push(ciResult)
+    addNotReachedLocalResults(results, framework, options.scenarios, 'runner-unavailable')
+    return
+  }
+
+  const blocker = getStaticBlocker(framework, staticDiagnosis.report)
+  if (blocker) {
+    const staticFailure = getStaticFailure(framework, blocker, staticDiagnosis.reportPath)
+    const basicNotReached = getBasicNotReached(framework, blocker.reason, 'static-project-blocker')
+    results.push(staticFailure, basicNotReached)
+    if (ciResult) results.push(ciResult)
+    addAdvancedNotReached(results, framework, options.scenarios, basicNotReached)
+    return
+  }
+
+  let basicResult
+  if (options.scenarios.has(BASIC_REPORTING)) {
+    logPhase(framework, 'clean direct test', 'start')
+    const preflight = await runFrameworkPreflight({ framework, out, options })
+    logPhase(framework, 'clean direct test', preflight.ok ? 'pass' : 'incomplete')
+    if (preflight.ok) {
+      logPhase(framework, 'Basic Reporting', 'start')
+      basicResult = await runBasicReporting({ manifest, framework, out, options })
+      logPhase(framework, 'Basic Reporting', basicResult.status)
+    } else {
+      basicResult = preflight.failure
+    }
+    results.push(basicResult)
+  }
+  if (ciResult) results.push(ciResult)
+
+  const advanced = getAdvancedScenarios(options.scenarios)
+  if (advanced.length === 0) return
+  if (basicResult?.evidence?.foundationalReportingEstablished !== true) {
+    addAdvancedNotReached(results, framework, options.scenarios, basicResult)
+    return
+  }
+
+  const generated = await verifyGeneratedTestStrategy({ framework, out, options })
+  if (!generated.ok) {
+    results.push(generated.failure)
+    addAdvancedNotReached(results, framework, options.scenarios, generated.failure)
+    return
+  }
+  for (const scenario of advanced) {
+    // Advanced scenarios are serial because their offline fixtures and generated retry state are isolated.
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await SCENARIOS[scenario]({ manifest, framework, out, options }))
+  }
+}
+
+/**
+ * Creates a manifest scaffold and prints the bounded next step.
+ *
+ * @param {object} options CLI options
+ * @returns {void}
+ */
+function initializeManifest (options) {
+  const manifestPath = path.resolve(options.manifest)
+  if (path.dirname(manifestPath) !== process.cwd()) {
+    throw new Error('The generated manifest must be stored directly in the current repository root.')
+  }
+  const manifest = createManifestScaffold({ root: process.cwd(), frameworks: options.frameworks })
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+  const targets = manifest.ciDiscovery.reviewTargets
+  console.log(sanitizeConsoleText([
+    `Created a data-only validation manifest: ${manifestPath}`,
+    'No project code ran. The validator selected repository-contained runners and one test file per framework.',
+    targets.length > 0
+      ? `Review only these CI files, in order: ${targets.join(', ')}. Record one exact test job, command, and ` +
+        'effective initialization/transport evidence. Set reviewComplete=true only after resolving wrappers and ' +
+        'inherited configuration; otherwise leave the uncertainty in unresolved.'
+      : 'No supported CI configuration file was found. Leave CI review incomplete.',
+    'Do not add commands, setup steps, package scripts, wrapper chains, or fallback tests to the manifest.',
+    'Then run --validate-manifest and --print-plan.',
+  ].join('\n')))
+}
+
+/**
+ * Writes and prints the approval plan.
+ *
+ * @param {object} manifest loaded manifest
+ * @param {object} options CLI options
+ * @returns {void}
+ */
+function printPlan (manifest, options) {
+  const out = validateOutputPath(manifest, options.out)
+  const approvalManifest = getApprovalManifest(manifest, options.frameworks)
+  const { plan } = formatExecutionPlanArtifacts({
+    manifest: approvalManifest,
+    out,
+    selectedFrameworkIds: options.frameworks.size > 0
+      ? approvalManifest.frameworks.map(framework => framework.id)
+      : [],
+    requestedScenario: options.requestedScenario,
+    keepTempFiles: options.keepTempFiles,
+    verbose: options.verbose,
+  })
+  console.log(sanitizeConsoleText([
+    '===== CUSTOMER APPROVAL PLAN =====',
+    plan,
+    '===== END CUSTOMER APPROVAL PLAN =====',
+    '',
+    `Saved execution plan: ${getExecutionPlanPath(out)}`,
+    'LIVE VALIDATION HAS NOT RUN.',
+    'Present the complete delimited plan and ask exactly: Approve executing exactly the plan above?',
+  ].join('\n')))
+}
+
+/**
+ * Restores approved execution options from approval.json.
+ *
+ * @param {object} options parsed options
  * @returns {void}
  */
 function applyApprovedPlanOptions (options) {
-  if (!options.approvedArtifactSha256) {
-    throw new Error('--run-approved-plan requires --sha256 from the reviewed execution plan.')
+  if (!options.approvedArtifactSha256) throw new Error('--run-approved-plan requires --sha256.')
+  if (options.approvalOverrides.length > 0) {
+    throw new Error('--run-approved-plan cannot be combined with manifest, output, or selection flags.')
   }
-  if (options.approvalOverrides.length > 0 || options.offlineFixtureNonce || options.approvedPlanSha256) {
-    throw new Error(
-      '--run-approved-plan cannot be combined with manifest, output, selection, or legacy approval flags.'
-    )
-  }
-
   const { material } = loadApprovedPlan(options.runApprovedPlan, options.approvedArtifactSha256)
   options.manifest = material.manifest.path
   options.out = material.validation.outputDirectory
@@ -428,85 +393,94 @@ function applyApprovedPlanOptions (options) {
   options.approvedPlanSha256 = options.approvedArtifactSha256
 }
 
-function validateOutputPath (manifest, outputPath) {
-  const root = path.resolve(manifest.repository.root)
-  const out = path.resolve(outputPath)
-  const relative = path.relative(root, out)
-  if (relative === '' || !relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('Validation output directory must be a dedicated child directory inside repository.root.')
-  }
-  return out
-}
-
+/**
+ * Filters manifest frameworks.
+ *
+ * @param {object[]} frameworks framework entries
+ * @param {Set<string>} targets selected ids or kinds
+ * @returns {object[]} selected entries
+ */
 function filterFrameworks (frameworks, targets) {
   if (targets.size === 0) return frameworks
-
-  const selected = frameworks.filter(framework => {
-    return targets.has(framework.id) || targets.has(framework.framework)
-  })
-
-  if (selected.length === 0) {
-    throw new Error(`No framework entries matched ${formatFrameworkTargets(targets)}. Available entries: ${
-      frameworks.map(framework => framework.id).join(', ') || 'none'
-    }`)
-  }
-
+  const selected = frameworks.filter(framework => targets.has(framework.id) || targets.has(framework.framework))
+  if (selected.length === 0) throw new Error('No framework matched the requested selection.')
   return selected
 }
 
 /**
- * Creates the manifest view covered by a framework-scoped approval.
+ * Returns a framework-scoped approval manifest.
  *
  * @param {object} manifest loaded manifest
- * @param {Set<string>} targets selected framework targets
+ * @param {Set<string>} targets selected frameworks
  * @returns {object} approval manifest
  */
 function getApprovalManifest (manifest, targets) {
-  const frameworks = filterFrameworks(manifest.frameworks, targets)
-  if (frameworks === manifest.frameworks) return manifest
-
-  const approvalManifest = { ...manifest, frameworks }
+  if (targets.size === 0) return manifest
+  const approvalManifest = { ...manifest, frameworks: filterFrameworks(manifest.frameworks, targets) }
   Object.defineProperty(approvalManifest, '__sourceSha256', {
-    configurable: false,
     enumerable: false,
     value: manifest.__sourceSha256,
-    writable: false,
   })
   return approvalManifest
 }
 
-function normalizeFrameworkTarget (target) {
-  const normalized = String(target).trim().replaceAll(/:+$/g, '')
-  if (!normalized) {
-    throw new Error('Framework target cannot be empty')
+/**
+ * Adds explicit not-reached results for advanced scenarios.
+ *
+ * @param {object[]} results result list
+ * @param {object} framework framework entry
+ * @param {Set<string>} scenarios selected scenarios
+ * @param {object} blocker blocking result
+ * @returns {void}
+ */
+function addAdvancedNotReached (results, framework, scenarios, blocker) {
+  for (const scenario of getAdvancedScenarios(scenarios)) {
+    results.push({
+      frameworkId: framework.id,
+      scenario,
+      status: 'skip',
+      diagnosis: 'Not reached because Basic Reporting did not establish the direct reporting path.',
+      evidence: {
+        blockedBy: blocker?.scenario || 'basic-reporting',
+        validationIncomplete: true,
+      },
+      artifacts: [],
+    })
   }
-  return normalized
-}
-
-function formatFrameworkTargets (targets) {
-  return [...targets].map(target => `"${target}"`).join(', ')
-}
-
-function normalizeScenarioSelection (scenario) {
-  if (scenario === BASIC_REPORTING_SCENARIO) return new Set([scenario])
-  return new Set([BASIC_REPORTING_SCENARIO, scenario])
-}
-
-function getAdvancedScenarios (scenarios) {
-  return Object.keys(SCENARIOS).filter(scenario => {
-    return scenario !== BASIC_REPORTING_SCENARIO && scenarios.has(scenario)
-  })
 }
 
 /**
- * Fails closed when orchestration omits a selected check for a runnable framework.
+ * Adds local not-reached results for a non-runnable framework.
  *
- * @param {object[]} results collected validation results
- * @param {object[]} frameworks runnable frameworks whose live phases started
+ * @param {object[]} results result list
+ * @param {object} framework framework entry
+ * @param {Set<string>} scenarios selected scenarios
+ * @param {string} reasonCode blocker id
+ * @returns {void}
+ */
+function addNotReachedLocalResults (results, framework, scenarios, reasonCode) {
+  for (const scenario of scenarios) {
+    if (scenario === CI_WIRING) continue
+    results.push({
+      frameworkId: framework.id,
+      scenario,
+      status: 'skip',
+      diagnosis: 'Not reached because this framework has no available direct-runner validation target.',
+      evidence: { reasonCode, validationIncomplete: true },
+      artifacts: [],
+    })
+  }
+}
+
+/**
+ * Adds fail-closed results for missing orchestration output.
+ *
+ * @param {object[]} results result list
+ * @param {object[]} frameworks selected frameworks
  * @param {Set<string>} scenarios selected scenarios
  * @returns {void}
  */
-function addMissingRequiredResults (results, frameworks, scenarios) {
+function addMissingResults (results, frameworks, scenarios) {
   for (const framework of frameworks) {
     for (const scenario of scenarios) {
       if (results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) continue
@@ -514,12 +488,8 @@ function addMissingRequiredResults (results, frameworks, scenarios) {
         frameworkId: framework.id,
         scenario,
         status: 'error',
-        diagnosis: `${getScenarioDisplayName(scenario)} was selected but produced no validation result.`,
-        evidence: {
-          validationIncomplete: true,
-          recommendation: 'Rerun the validator. If the check remains absent, report this validator orchestration ' +
-            'error instead of treating the validation as successful.',
-        },
+        diagnosis: 'The selected check produced no result. This is a validator orchestration error.',
+        evidence: { validationIncomplete: true, validationOrchestrationFailed: true },
         artifacts: [],
       })
     }
@@ -527,377 +497,242 @@ function addMissingRequiredResults (results, frameworks, scenarios) {
 }
 
 /**
- * Reports whether all default checks produced results in an unscoped run.
+ * Returns selected advanced scenario ids.
  *
- * @param {object} input coverage inputs
- * @param {object[]} input.results validation results
- * @param {string|null} input.requestedScenario explicitly selected scenario
- * @param {object[]} input.frameworks selected manifest frameworks
- * @param {Set<string>} input.scenarios selected scenarios
- * @returns {'complete'|'partial'} validation coverage
+ * @param {Set<string>} scenarios selected scenarios
+ * @returns {string[]} advanced scenarios
  */
-function getValidationCoverage ({ results, requestedScenario, frameworks, scenarios }) {
-  if (requestedScenario) return 'partial'
-  if (results.some(result => result.evidence?.manifestIncomplete || result.evidence?.validationIncomplete)) {
-    return 'partial'
-  }
-
-  const runnableFrameworks = frameworks.filter(framework => framework.status === 'runnable')
-  if (runnableFrameworks.length === 0) return 'partial'
-  for (const framework of runnableFrameworks) {
-    for (const scenario of scenarios) {
-      if (!results.some(result => result.frameworkId === framework.id && result.scenario === scenario)) {
-        return 'partial'
-      }
-    }
-  }
-  return 'complete'
+function getAdvancedScenarios (scenarios) {
+  return Object.keys(SCENARIOS).filter(scenario => scenario !== BASIC_REPORTING && scenarios.has(scenario))
 }
 
+/**
+ * Returns all selectable scenarios.
+ *
+ * @returns {string[]} scenario ids
+ */
 function getSelectableScenarios () {
-  return [
-    BASIC_REPORTING_SCENARIO,
-    CI_WIRING_SCENARIO,
-    ...Object.keys(SCENARIOS).filter(scenario => scenario !== BASIC_REPORTING_SCENARIO),
-  ]
-}
-
-function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {
-  return {
-    frameworkId: framework.id,
-    scenario: 'ci-wiring',
-    status: 'skip',
-    diagnosis: 'Skipped CI wiring validation because Basic Reporting did not pass with direct Datadog ' +
-      'initialization. Fix the selected test command or local Test Optimization capability before diagnosing CI ' +
-      'wiring.',
-    evidence: {
-      blockedBy: BASIC_REPORTING_SCENARIO,
-      basicReportingStatus: basicResult.status,
-      basicReportingDiagnosis: basicResult.diagnosis,
-      featureEligibility: {
-        eligible: false,
-        blockedBy: BASIC_REPORTING_SCENARIO,
-        reasonCode: 'basic-reporting-failed',
-        scenario: 'ci-wiring',
-      },
-      ciWiring: framework.ciWiring,
-    },
-    artifacts: [],
-  }
-}
-
-function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
-  return {
-    frameworkId: framework.id,
-    scenario,
-    status: 'skip',
-    diagnosis: `Skipped because basic reporting did not pass: ${basicResult.diagnosis}`,
-    evidence: {
-      blockedBy: BASIC_REPORTING_SCENARIO,
-      basicReportingStatus: basicResult.status,
-      basicReportingDiagnosis: basicResult.diagnosis,
-      featureEligibility: {
-        eligible: false,
-        blockedBy: BASIC_REPORTING_SCENARIO,
-        reasonCode: 'basic-reporting-failed',
-        scenario,
-      },
-    },
-    artifacts: [],
-  }
-}
-
-function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failure) {
-  return {
-    frameworkId: framework.id,
-    scenario,
-    status: 'skip',
-    diagnosis: `Skipped because the temporary validation test could not run as expected: ${failure.diagnosis}`,
-    evidence: {
-      blockedBy: 'generated-test-verification',
-      verificationStatus: failure.status,
-      verificationDiagnosis: failure.diagnosis,
-      featureEligibility: {
-        eligible: false,
-        blockedBy: 'generated-test-verification',
-        reasonCode: 'generated-test-verification-failed',
-        scenario,
-      },
-    },
-    artifacts: [],
-  }
-}
-
-function isUnsuccessfulResult (result) {
-  return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
+  return [...Object.keys(SCENARIOS), CI_WIRING]
 }
 
 /**
- * Reports whether at least one live validation check produced a result.
+ * Normalizes scenario selection.
  *
- * Framework discovery-only entries use the synthetic `all` scenario and do not prove Test Optimization behavior.
- *
- * @param {object[]} results validation results
- * @returns {boolean} whether live validation ran
+ * @param {string} scenario requested scenario
+ * @returns {Set<string>} effective scenarios
  */
-function didRunLiveValidation (results) {
-  return results.some(result => result.scenario !== 'all')
+function normalizeScenarioSelection (scenario) {
+  if (!getSelectableScenarios().includes(scenario)) throw new Error(`Unknown scenario: ${scenario}`)
+  if (scenario === BASIC_REPORTING || scenario === CI_WIRING) return new Set([scenario])
+  return new Set([BASIC_REPORTING, scenario])
 }
 
 /**
- * Prints the start of one framework validation phase.
+ * Normalizes a framework target.
  *
- * @param {object} framework manifest framework entry
- * @param {string} phase customer-facing phase name
+ * @param {string} target target value
+ * @returns {string} normalized target
+ */
+function normalizeFrameworkTarget (target) {
+  const normalized = String(target).trim().replaceAll(/:+$/g, '')
+  if (!normalized) throw new Error('Framework target cannot be empty.')
+  return normalized
+}
+
+/**
+ * Validates the output directory.
+ *
+ * @param {object} manifest loaded manifest
+ * @param {string} outputPath output path
+ * @returns {string} absolute output path
+ */
+function validateOutputPath (manifest, outputPath) {
+  const root = path.resolve(manifest.repository.root)
+  const out = path.resolve(outputPath)
+  const relative = path.relative(root, out)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Validation output directory must be a dedicated child of repository.root.')
+  }
+  return out
+}
+
+/**
+ * Prevents incompatible CLI modes.
+ *
+ * @param {object} options parsed options
  * @returns {void}
  */
-function logPhaseStart (framework, phase) {
-  logValidationProgress(`${framework.id}: ${phase} started.`)
-}
-
-/**
- * Prints the outcome of one framework validation phase.
- *
- * @param {object} framework manifest framework entry
- * @param {string} phase customer-facing phase name
- * @param {string|undefined} status phase outcome
- * @returns {void}
- */
-function logPhaseComplete (framework, phase, status) {
-  logValidationProgress(`${framework.id}: ${phase} ${status || 'complete'}.`)
-}
-
-/**
- * Prints a sanitized validator progress line.
- *
- * @param {string} message progress message
- * @returns {void}
- */
-function logValidationProgress (message) {
-  console.log(sanitizeConsoleText(`[test-optimization-validator] ${message}`))
-}
-
-/**
- * Converts an advanced scenario id to customer-facing text.
- *
- * @param {string} scenario scenario id
- * @returns {string} display name
- */
-function getScenarioDisplayName (scenario) {
-  return {
-    'basic-reporting': 'Basic Reporting',
-    'ci-wiring': 'CI Wiring',
-    efd: 'Early Flake Detection',
-    atr: 'Auto Test Retries',
-    'test-management': 'Test Management',
-  }[scenario] || scenario
-}
-
-function getStaticFailure (framework, blocker, staticDiagnosisPath) {
-  return {
-    frameworkId: framework.id,
-    scenario: 'all',
-    status: 'fail',
-    diagnosis: blocker.reason,
-    evidence: {
-      staticDiagnosis: true,
-      recommendation: blocker.recommendation,
-    },
-    artifacts: [staticDiagnosisPath],
+function assertCompatibleModes (options) {
+  if (!options.runApprovedPlan) return
+  if (options.help || options.initManifest || options.printPlan || options.validateManifest) {
+    throw new Error('--run-approved-plan cannot be combined with another mode.')
   }
 }
 
+/**
+ * Reads a required flag value.
+ *
+ * @param {string[]} argv arguments
+ * @param {number} index value index
+ * @param {string} flag flag name
+ * @returns {string} flag value
+ */
+function requireValue (argv, index, flag) {
+  if (!argv[index]) throw new Error(`${flag} requires a value.`)
+  return argv[index]
+}
+
+/**
+ * Prints CLI help.
+ *
+ * @returns {void}
+ */
+function printHelp () {
+  console.log(`Usage: node ci/validate-test-optimization.js [options]
+
+  --init-manifest
+  --validate-manifest
+  --print-plan
+  --run-approved-plan <approval.json> --sha256 <digest>
+  --manifest <path>
+  --out <path>
+  --framework <id>
+  --scenario <${getSelectableScenarios().join('|')}>
+  --keep-temp-files
+  --verbose`)
+}
+
+/**
+ * Logs one phase transition.
+ *
+ * @param {object} framework framework entry
+ * @param {string} phase phase name
+ * @param {string} status status
+ * @returns {void}
+ */
+function logPhase (framework, phase, status) {
+  console.log(sanitizeConsoleText(`[test-optimization-validator] ${framework.id}: ${phase}: ${status}`))
+}
+
+/**
+ * Builds a non-runnable framework result.
+ *
+ * @param {object} framework framework entry
+ * @returns {object} result
+ */
 function getFrameworkStatusResult (framework) {
-  const evidence = getFrameworkStatusEvidence(framework)
-
-  if (framework.status === 'unsupported_by_validator') {
-    const frameworkName = getDisplayFrameworkName(framework.framework)
-
-    return {
-      frameworkId: framework.id,
-      scenario: 'all',
-      status: 'skip',
-      diagnosis: `${frameworkName} is not supported as a Test Optimization test framework.`,
-      evidence: {
-        ...evidence,
-        recommendation: 'Choose a supported framework before running live validation.',
-      },
-      artifacts: [],
-    }
-  }
-
+  const requiresProjectSetup = framework.status === 'requires_manual_setup'
   return {
     frameworkId: framework.id,
     scenario: 'all',
     status: 'skip',
-    diagnosis: getFrameworkStatusDiagnosis(framework, evidence),
+    diagnosis: framework.notes?.[0] || `Framework status is ${framework.status}.`,
     evidence: {
-      ...evidence,
-      recommendation: 'Provide a small runnable command for this framework, or mark the setup blocker explicitly.',
+      frameworkStatus: framework.status,
+      validationIncomplete: true,
+      ...(requiresProjectSetup
+        ? {
+            blockedByProjectSetup: true,
+            ...(framework.notes?.[0] ? { recommendation: framework.notes[0] } : {}),
+          }
+        : { validatorAdapterUnavailable: true }),
     },
     artifacts: [],
   }
 }
 
-function getFrameworkStatusDiagnosis (framework, evidence) {
-  const frameworkName = framework.framework
-  const notes = evidence.manifestNotes || []
-
-  if (isDependencyOnlyDetection(evidence)) {
-    return getDependencyOnlyDiagnosis(framework, evidence)
-  }
-
-  if (notes.length > 0) {
-    return `${frameworkName} was detected, but no runnable validation command was available. ` +
-      `Basic reporting was not run. Manifest reason: ${notes[0]}`
-  }
-
-  return `${frameworkName} was detected, but the manifest did not prove a runnable validation command. ` +
-    'Basic reporting was not run. See discovery evidence for scripts/config files to turn into a small command.'
-}
-
-function isDependencyOnlyDetection (evidence) {
-  return evidence.directDependency && evidence.configFiles.length === 0 && evidence.frameworkScripts.length === 0
-}
-
-function getDependencyOnlyDiagnosis (framework, evidence) {
-  const frameworkName = getDisplayFrameworkName(framework.framework)
-  const dependency = formatDependency(evidence.directDependency)
-  const note = evidence.manifestNotes?.[0] ? ` Manifest note: ${evidence.manifestNotes[0]}` : ''
-  const common = `${frameworkName} is installed${dependency}, but this repository does not appear to use ` +
-    `${frameworkName} to run tests: no ${framework.framework} config, package script, or runnable ` +
-    `${framework.framework} test command was found. Basic reporting was not run for ${frameworkName}.`
-
-  if (framework.framework === 'playwright') {
-    return `${frameworkName} is installed${dependency}, but no Playwright Test setup was found. ` +
-      'The playwright package can be used only for browser automation; Test Optimization validation needs a ' +
-      '`playwright test` setup with a config, script, or runnable test command. Basic reporting was not run ' +
-      `for ${frameworkName}.${note}`
-  }
-
-  return `${common} If this repo does use ${frameworkName}, provide a small ${frameworkName} test command; ` +
-    `otherwise this dependency-only detection can be ignored.${note}`
-}
-
-function getDisplayFrameworkName (frameworkName) {
+/**
+ * Builds an unavailable runner result.
+ *
+ * @param {object} framework framework entry
+ * @param {string} unavailable missing file
+ * @returns {object} result
+ */
+function getUnavailableRunnerResult (framework, unavailable) {
   return {
-    cucumber: 'Cucumber',
-    cypress: 'Cypress',
-    jest: 'Jest',
-    mocha: 'Mocha',
-    playwright: 'Playwright',
-    vitest: 'Vitest',
-  }[frameworkName] || frameworkName
+    frameworkId: framework.id,
+    scenario: 'all',
+    status: 'skip',
+    diagnosis: `The direct runner is unavailable: ${unavailable}. Complete normal project setup and retry.`,
+    evidence: { blockedByProjectSetup: true, unavailableRunner: unavailable, validationIncomplete: true },
+    artifacts: [],
+  }
 }
 
-function formatDependency (dependency) {
-  if (!dependency) return ''
-  return ` in ${dependency.field}${dependency.version ? ` (${dependency.version})` : ''}`
-}
-
-function getFrameworkStatusEvidence (framework) {
-  const root = framework.project?.root
+/**
+ * Builds a static project blocker result.
+ *
+ * @param {object} framework framework entry
+ * @param {object} blocker static blocker
+ * @param {string} reportPath static report path
+ * @returns {object} result
+ */
+function getStaticFailure (framework, blocker, reportPath) {
   return {
-    frameworkStatus: framework.status,
-    frameworkVersion: framework.frameworkVersion,
-    manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
-    directDependency: root ? getDirectDependency(root, framework.framework) : undefined,
-    frameworkScripts: root ? findFrameworkScripts(root, framework.framework) : [],
-    testLikeScripts: root ? findTestLikeScripts(root) : [],
-    configFiles: root ? findFrameworkConfigFiles(root, framework.framework) : [],
+    frameworkId: framework.id,
+    scenario: 'all',
+    status: 'error',
+    diagnosis: blocker.reason,
+    evidence: { blockedByProjectSetup: true, staticDiagnosis: reportPath, validationIncomplete: true },
+    artifacts: [reportPath],
   }
 }
 
-function getDirectDependency (root, frameworkName) {
-  const packageJson = readPackageJson(root)
-  if (!packageJson) return
-
-  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
-    const value = packageJson[field]?.[frameworkName]
-    if (value) return { field, version: value }
+/**
+ * Builds a Basic Reporting not-reached result.
+ *
+ * @param {object} framework framework entry
+ * @param {string} diagnosis blocker diagnosis
+ * @param {string} reasonCode blocker id
+ * @returns {object} result
+ */
+function getBasicNotReached (framework, diagnosis, reasonCode) {
+  return {
+    frameworkId: framework.id,
+    scenario: BASIC_REPORTING,
+    status: 'skip',
+    diagnosis: `Basic Reporting was not reached: ${diagnosis}`,
+    evidence: { reasonCode, validationIncomplete: true },
+    artifacts: [],
   }
 }
 
-function findFrameworkScripts (root, frameworkName) {
-  return findScripts(root, (name, command) => {
-    return includesWord(name, frameworkName) || includesWord(command, frameworkName)
-  })
-}
-
-function findTestLikeScripts (root) {
-  return findScripts(root, name => /(^|:)(test|unit|e2e|integration|ci)(:|$)/.test(name)).slice(0, 8)
-}
-
-function findScripts (root, predicate) {
-  const packageJson = readPackageJson(root)
-  const scripts = packageJson?.scripts || {}
-  const matches = []
-  for (const [name, command] of Object.entries(scripts)) {
-    if (predicate(name, command)) matches.push({ name, command })
-  }
-  return matches.slice(0, 8)
-}
-
-function findFrameworkConfigFiles (root, frameworkName) {
-  const patterns = getFrameworkConfigPatterns(frameworkName)
-  if (patterns.length === 0) return []
-
-  const files = []
-  findFiles(root, 4, file => {
-    if (patterns.some(pattern => pattern.test(path.basename(file)))) {
-      files.push(path.relative(root, file))
-    }
-    return files.length < 8
-  })
-  return files
-}
-
-function getFrameworkConfigPatterns (frameworkName) {
-  const definition = getFrameworkDefinitions(DD_MAJOR).find(definition => definition.id === frameworkName)
-  return definition?.configPatterns || []
-}
-
-function readPackageJson (root) {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-  } catch {
-    return null
+/**
+ * Builds a cleanup failure.
+ *
+ * @param {Error|undefined} error cleanup error
+ * @param {object} cleanup cleanup outcome
+ * @returns {object} result
+ */
+function getCleanupFailure (error, cleanup) {
+  const retained = (cleanup.filesRetained || 0) + (cleanup.directoriesRetained || 0)
+  const reason = error?.message || error ||
+    `${retained} temporary validation path${retained === 1 ? '' : 's'} remained after safe cleanup`
+  return {
+    frameworkId: 'validation-cleanup',
+    scenario: 'all',
+    status: 'error',
+    diagnosis: `Temporary validation files could not be removed safely: ${reason}`,
+    evidence: { cleanup, cleanupFailed: true, validationIncomplete: true },
+    artifacts: [],
   }
 }
 
-function findFiles (dir, depth, visit) {
-  if (depth < 0) return true
-
-  let entries
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return true
+/**
+ * Builds a top-level orchestration failure.
+ *
+ * @param {Error} error failure
+ * @returns {object} result
+ */
+function getOrchestrationFailure (error) {
+  return {
+    frameworkId: 'validator',
+    scenario: 'all',
+    status: 'error',
+    diagnosis: error?.message || String(error),
+    evidence: { validationIncomplete: true, validationOrchestrationFailed: true },
+    artifacts: [],
   }
-
-  for (const entry of entries) {
-    if (shouldSkipDirectory(entry.name)) continue
-    const filename = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (!findFiles(filename, depth - 1, visit)) return false
-    } else if (!visit(filename)) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function shouldSkipDirectory (name) {
-  return name === '.git' || name === 'node_modules' || name === 'dist' || name === 'coverage'
-}
-
-function includesWord (value, word) {
-  return new RegExp(`(^|[^a-zA-Z0-9_-])${escapeRegExp(word)}([^a-zA-Z0-9_-]|$)`).test(value)
-}
-
-function escapeRegExp (value) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 module.exports = { filterFrameworks, main, normalizeFrameworkTarget, parseArgs }

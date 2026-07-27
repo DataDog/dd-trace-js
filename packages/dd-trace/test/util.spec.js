@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 require('./setup/core')
-const { isEmpty, isTrue, isFalse, globMatch, getSegment } = require('../src/util')
+const { isEmpty, isTrue, isFalse, globMatch, getSegment, stripQueryAndFragment } = require('../src/util')
 
 const TRUES = [
   1,
@@ -118,6 +118,33 @@ describe('util', () => {
     it('handles the empty string and an absent separator at index 0', () => {
       assert.strictEqual(getSegment('', '.', 0), '')
       assert.strictEqual(getSegment('whole', '.', 0), 'whole')
+    })
+  })
+
+  describe('stripQueryAndFragment', () => {
+    const cases = [
+      '/api/v1/users',
+      '/api/v1/users?page=2&limit=50',
+      '/search?q=hello+world#results',
+      '/docs#section-3',
+      '/docs#section?not-a-query',
+      '/redirect?to=/other%3Fnested#frag',
+      '/?only-query',
+      '/#only-fragment',
+      '?leading-query',
+      '#leading-fragment',
+      '/',
+      '',
+    ]
+
+    it('matches splitting on the query and fragment delimiters', () => {
+      for (const target of cases) {
+        assert.strictEqual(
+          stripQueryAndFragment(target),
+          target.split(/[?#]/)[0],
+          `stripQueryAndFragment(${JSON.stringify(target)})`
+        )
+      }
     })
   })
 })

@@ -78,7 +78,6 @@ class ExternalLogger {
 
   // Flushes logs with optional callback for when the call is complete
   flush (cb = () => {}) {
-    let logs
     let numLogs
     let encodedLogs
 
@@ -88,7 +87,7 @@ class ExternalLogger {
     }
 
     try {
-      logs = this.queue
+      const logs = this.queue
       this.queue = []
 
       numLogs = logs.length
