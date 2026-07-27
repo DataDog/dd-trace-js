@@ -72,27 +72,13 @@ for reasoning about a package, not constants in the codebase.
 - Implements protocols or server/client architecture
 - Transport layer code
 
-**Test strategy:** Mock server tests
-
-## Decision Tree
-
-Follow this tree to determine category:
-
-```
-1. Does the package make direct HTTP calls to LLM provider endpoints?
-    ├─ YES → Go to question 2
-    └─ NO  → Go to question 3
-
-2. Does it support multiple LLM providers via configuration?
-    ├─ YES → multi-provider
-    └─ NO  → LLM client
-
-3. Does it implement workflow/graph orchestration with state management?
-    ├─ YES → orchestration
-    └─ NO  → infrastructure
-```
+**Test strategy:** the SDK's own server and client over its in-memory transport
 
 ## Detection Process
+
+Direct HTTP calls to provider endpoints mean LLM client, or multi-provider when the provider is
+configurable. Without them, graph or workflow execution means orchestration and a protocol
+implementation means infrastructure.
 
 ### Step 1: Read Package Name
 
@@ -135,44 +121,20 @@ Check for:
 - State management, graph execution → orchestration
 - Protocol implementation → infrastructure
 
-## Real-World Examples
+## Worked Examples
 
-### Example 1: Anthropic (LLM client)
-
-**Package:** `@anthropic-ai/sdk` — see `packages/datadog-plugin-anthropic/`
-
-**Category:** LLM client — name contains "anthropic", direct HTTP calls to Claude API, requires API key, methods are
-`messages.create`
-
-### Example 2: Google GenAI (LLM client)
-
-**Package:** `@google/genai` — see `packages/datadog-plugin-google-genai/`
-
-**Category:** LLM client — name contains "genai", direct HTTP calls to Gemini API, complex nested message format
-(contents/parts)
-
-### Example 3: Vercel AI SDK (multi-provider)
-
-**Package:** `ai` (Vercel AI SDK)
-
-- Named `ai`, not a provider name
-- Depends on openai + anthropic SDKs (multiple LLM providers)
-- Methods include provider-agnostic chat interface
-
-**Category:** multi-provider
-
-### Example 4: LangGraph (orchestration)
-
-**Package:** `@langchain/langgraph` — see `packages/dd-trace/src/llmobs/plugins/langgraph/`
-
-**Category:** orchestration — name indicates graph orchestration, depends on `@langchain/core`, methods manage
-workflow state (`StateGraph.invoke`, `Pregel.stream`), no direct LLM HTTP calls
+| Package | Category | Deciding signal |
+|---------|----------|-----------------|
+| `@anthropic-ai/sdk` | LLM client | `messages.create` calls the Claude API directly, needs a key |
+| `@google/genai` | LLM client | calls the Gemini API directly, nested `contents` / `parts` format |
+| `ai` | multi-provider | not a provider name, and depends on the openai and anthropic SDKs |
+| `@langchain/langgraph` | orchestration | `StateGraph.invoke` / `Pregel.stream` manage state, no provider calls |
 
 ## Edge Cases
 
 When signals conflict or are weak, choose the category with the most evidence and prefer the category that matches
 test strategy needs: if the package makes HTTP calls it needs VCR (LLM client/multi-provider); if it doesn't, use pure
-functions (orchestration) or mock servers (infrastructure).
+functions (orchestration) or the SDK's in-memory transport (infrastructure).
 
 Some packages don't fit cleanly:
 - Utilities/helpers → Check what they instrument

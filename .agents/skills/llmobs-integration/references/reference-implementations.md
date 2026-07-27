@@ -106,55 +106,8 @@ proxy.
 | Vercel AI SDK | Multi-Provider | Medium | Provider abstraction |
 | LangGraph | Orchestration | Simple | Workflow spans, state management |
 
-## Key Patterns by Provider
-
-### OpenAI Pattern
-```javascript
-// Messages: Simple array
-inputs.messages → [{role, content}]
-
-// Response: choices array
-results.choices[0].message → {role, content}
-
-// Tokens: Standard names
-usage.prompt_tokens, usage.completion_tokens
-```
-
-### Anthropic Pattern
-```javascript
-// Messages: Content blocks
-msg.content[0].text → Extract text from blocks
-
-// Response: Content array
-results.content.filter(c => c.type === 'text')
-
-// Tokens: Different names
-usage.input_tokens, usage.output_tokens
-```
-
-### Google Pattern
-```javascript
-// Messages: Parts format
-contents → [{role, parts: [{text}]}]
-
-// Response: Candidates
-candidates[0].content.parts → Join text
-
-// Tokens: Mixed names
-usageMetadata.promptTokenCount, candidatesTokenCount
-```
-
-### LangGraph Pattern
-```javascript
-// Input: State objects
-StateGraph state → Extract relevant fields
-
-// Output: State changes
-Track state transitions, not LLM responses
-
-// Span kind: 'workflow' not 'llm'
-kind: 'workflow' for graph execution
-```
+Per-provider request, response and token-field shapes live in
+[message-extraction.md](message-extraction.md).
 
 ## Streaming Implementations
 
@@ -190,38 +143,5 @@ Test files demonstrate expected span structure and assertions:
 - `packages/dd-trace/test/llmobs/plugins/google-genai/index.spec.js`
 - `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js`
 
-## How to Use References
-
-### Starting Point
-
-1. Read `base.js` to understand abstract methods
-2. Study OpenAI plugin for simplest example
-3. Look at Anthropic/Google for complex formats
-
-### Finding Similar Patterns
-
-1. Check message format in provider docs
-2. Find reference plugin with similar format
-3. Adapt extraction logic
-
-### Debugging
-
-1. Compare your plugin with reference
-2. Check test files for expected structure
-3. Verify message format matches standard
-
-## Quick Reference Guide
-
-**Simple formats (messages array):** Use OpenAI pattern
-
-**Nested content:** Use Anthropic pattern
-
-**Multi-level nesting:** Use Google pattern
-
-**Multiple providers:** Use Vercel AI SDK pattern
-
-**Orchestration/workflows:** Use LangGraph pattern
-
-**Streaming:** Check OpenAI streaming implementation
-
-**CompositePlugin:** Check Anthropic integration
+Start from `base.js` for the abstract methods, then the plugin above whose message format is closest to the
+one you are adding.

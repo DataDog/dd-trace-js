@@ -92,20 +92,10 @@ Validates span structure with flexible matchers for non-deterministic values.
 - `MOCK_OBJECT` - anything with `typeof 'object'`, `null` included (opaque `schema` / `metadata` payloads, or
   a whole output message whose shape varies, as the `ai` specs do)
 
-**Assertable fields:**
-- `spanKind` (required) - one of `SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js`
-- `name` - Operation name
-- `modelName` - Model identifier (for LLM spans)
-- `modelProvider` - Provider name (for LLM spans)
-- `inputMessages` - Input messages in `[{content, role}]` format
-- `outputMessages` - Output messages in `[{content, role}]` format
-- `metrics` - Token usage (`input_tokens`, `output_tokens`, `total_tokens`)
-- `metadata` - Model parameters (`temperature`, `max_tokens`, etc.)
-- `error` - Error object (if operation failed)
-
-**Partial validation:** Only specified fields are checked, others ignored.
-
-See [references/assertion-helpers.md](references/assertion-helpers.md) for complete API and patterns.
+**Assertable fields:** `span`, `parentId`, `spanKind` (required), `name`, `modelName`, `modelProvider`,
+`inputMessages`, `outputMessages`, `inputDocuments`, `outputDocuments`, `inputValue`, `outputValue`, `metrics`,
+`metadata`, `error`, `tags`. Only the fields you pass are checked, and which ones a span carries depends on its
+kind. See [references/assertion-helpers.md](references/assertion-helpers.md) for the patterns.
 
 ## Test File Organization
 
@@ -128,27 +118,24 @@ useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH, MOCK_NUMBER, MO
 
 See [references/test-structure.md](references/test-structure.md) for complete template.
 
-## Key Testing Points
+## Span Kinds And The Fields They Carry
 
-### What Every Span Assertion Pins
+`SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js` is the list the public SDK validates against:
+`llm` (chat / completions), `workflow`, `agent`, `task` (a unit of work inside a workflow), `tool`, `embedding`,
+`retrieval`. Plugins set the kind directly and skip that validation, so kinds outside the list exist — `ai` v7
+and claude-agent-sdk both emit `step`.
 
-Beyond covering each instrumented method, once with a single message and once with a multi-turn
-conversation where the surface takes one: `spanKind`, `name`, `modelName` and `modelProvider` on every
-span; messages as `{ content, role }`; token counts truthy in `metrics`; and the parameters the caller
-passed reflected in `metadata`.
+Pinning a field the kind never emits asserts metadata production does not produce:
 
-### Span Kind Validation
+- `llm` — `modelName`, `modelProvider`, `inputMessages` / `outputMessages`, token `metrics`, `metadata`
+- `embedding` — `modelName`, `modelProvider`, `inputDocuments`, `outputValue`, sometimes `metrics`
+- `retrieval` — `inputValue`, `outputDocuments`
+- `workflow` / `agent` / `task` / `step` / `tool` — `name` plus `inputValue` / `outputValue`, no model fields
+  and no token metrics
 
-Span kinds come from `SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js`:
-- Chat/completions → `'llm'`
-- Workflow execution → `'workflow'`
-- Agent runs → `'agent'`
-- Discrete unit of work inside a workflow → `'task'`
-- Tool calls → `'tool'`
-- Embeddings → `'embedding'`
-- Retrieval → `'retrieval'`
+Cover every instrumented method, and a multi-turn conversation where the surface takes one.
 
-### Error Handling
+## Error Handling
 
 On errors the span is still submitted, with `outputMessages: [{ content: '', role: '' }]`. The specs that assert
 an error pass all three fields, reaching for a matcher where the value varies (`type: MOCK_STRING` in the MCP
@@ -165,14 +152,3 @@ throw without asserting it. Pin the identity of the error on the APM span the LL
 ```javascript
 assert.strictEqual(apmSpans[0].meta['error.message'], error.message)
 ```
-
-## References
-
-For detailed information, see:
-
-- [references/test-structure.md](references/test-structure.md) - Complete test file templates and organization
-- [references/vcr-cassettes.md](references/vcr-cassettes.md) - VCR recording process, cassette management,
-  troubleshooting
-- [references/assertion-helpers.md](references/assertion-helpers.md) - Complete assertLlmObsSpanEvent API, matchers,
-  patterns
-- [references/category-strategies.md](references/category-strategies.md) - Detailed test strategy per package shape

@@ -20,7 +20,7 @@ graphs), tool calls, retrieval (RAG / vector DB).
 
 LLM libraries iterate fast — six-month-old assumptions about an SDK's response shape, streaming contract, or tool-call
 format are usually wrong. Before category detection or any plugin work, read the upstream library's source for the
-installed version (`versions/<lib>@<range>/node_modules/<lib>`). The category decision tree below depends on facts the
+installed version (`versions/<lib>@<range>/node_modules/<lib>`). The shape checklist below depends on facts the
 source carries (does this package make HTTP calls? does it orchestrate? does it support multiple providers?). See
 [apm-integrations § Read Upstream Source First](../apm-integrations/SKILL.md#read-upstream-source-first) for the
 shallow-clone / `npm pack` shapes.
@@ -64,9 +64,10 @@ See [references/category-detection.md](references/category-detection.md) for heu
 ### 3. LLM Span Kinds
 
 `SPAN_KINDS` in [`packages/dd-trace/src/llmobs/constants/tags.js`](../../../packages/dd-trace/src/llmobs/constants/tags.js)
-is the source of truth: `llm`, `agent`, `workflow`, `task`, `tool`, `embedding`, `retrieval`. Chat completions and
-text generation are `llm`; graph or chain execution is `workflow`; agent runs are `agent`; vector-DB and RAG lookups
-are `retrieval`.
+lists `llm`, `agent`, `workflow`, `task`, `tool`, `embedding`, `retrieval`. Chat completions and text generation are
+`llm`; graph or chain execution is `workflow`; agent runs are `agent`; vector-DB and RAG lookups are `retrieval`.
+Only the public SDK validates against that list, so a plugin may register a kind outside it — `ai` v7 and
+claude-agent-sdk both use `step`.
 
 ### 4. Message Extraction
 
@@ -86,52 +87,14 @@ See [references/message-extraction.md](references/message-extraction.md) for pro
 
 ## Implementation Steps
 
-1. **Detect package category** (REQUIRED FIRST STEP)
-  - Follow decision tree above
-  - Output: category, confidence, reasoning
+1. **Settle the shape first**, from the upstream source rather than the package name.
+2. **Create `packages/dd-trace/src/llmobs/plugins/{integration}/index.js`** extending `LLMObsPlugin`.
+3. **Implement `getLLMObsSpanRegisterOptions(ctx)`** — model provider, model name, span kind, span name.
+4. **Implement `setLLMObsTags(ctx)`** — input from `ctx.arguments`, output from `ctx.result`, token metrics and
+  model metadata, tagged through `this._tagger`.
+5. **Cover the edges**: streaming, errors (output messages come out empty), non-standard formats, absent metadata.
 
-2. **Create plugin file**
-  - Location: `packages/dd-trace/src/llmobs/plugins/{integration}/index.js`
-  - Extend: `LLMObsPlugin` base class
-  - Implement: Required methods per plugin architecture
-
-3. **Implement `getLLMObsSpanRegisterOptions(ctx)`**
-  - Extract model provider and name from context
-  - Determine span kind (usually `'llm'`)
-  - Return registration options object
-
-4. **Implement `setLLMObsTags(ctx)`**
-  - Extract input messages from `ctx.arguments`
-  - Extract output messages from `ctx.result`
-  - Extract token metrics (input_tokens, output_tokens, total_tokens)
-  - Extract metadata (temperature, max_tokens, etc.)
-  - Tag span using `this._tagger` methods
-
-5. **Handle edge cases**
-  - Streaming responses (if applicable)
-  - Error cases (empty output messages)
-  - Non-standard message formats
-  - Missing metadata
-
-See [references/plugin-architecture.md](references/plugin-architecture.md) for step-by-step implementation guide.
-
-## Plugin Registration
-
-All plugins must export an array:
-
-**Static properties required:**
-- `integration` - Integration name (e.g., 'openai')
-- `id` - Unique plugin ID (e.g., 'llmobs_openai')
-- `prefix` - Channel prefix (e.g., 'tracing:apm:openai:request')
-
-## References
-
-For detailed information, see:
-
-- [references/plugin-architecture.md](references/plugin-architecture.md) - Complete plugin structure, implementation
-  steps, helper methods
-- [references/category-detection.md](references/category-detection.md) - Package classification heuristics and
-  detection process
-- [references/message-extraction.md](references/message-extraction.md) - Provider-specific message format patterns
-- [references/reference-implementations.md](references/reference-implementations.md) - Working plugin examples
-  (Anthropic, Google GenAI)
+Export the class itself when the package needs one plugin (openai, anthropic, genai), or an array when several
+operations each need their own (langchain, langgraph, modelcontextprotocol-sdk, claude-agent-sdk). The required
+static fields and the rest of the surface are in
+[references/plugin-architecture.md](references/plugin-architecture.md).

@@ -35,7 +35,10 @@ assertLlmObsSpanEvent(span, {
 ### 1. Basic Chat Completion
 
 ```javascript
-assertLlmObsSpanEvent(events[0], {
+const { apmSpans, llmobsSpans } = await getEvents()
+
+assertLlmObsSpanEvent(llmobsSpans[0], {
+  span: apmSpans[0],
   spanKind: 'llm',
   name: 'openai.chat.completions',
   modelName: 'gpt-4',
@@ -51,34 +54,20 @@ assertLlmObsSpanEvent(events[0], {
 })
 ```
 
-### 2. Multi-Turn Conversation
+### 2. Workflow/Orchestration Span
 
 ```javascript
-assertLlmObsSpanEvent(events[0], {
-  spanKind: 'llm',
-  inputMessages: [
-    { content: 'Hello', role: 'user' },
-    { content: 'Hi!', role: 'assistant' },
-    { content: 'How are you?', role: 'user' }
-  ],
-  outputMessages: [{ content: MOCK_STRING, role: 'assistant' }]
-})
-```
-
-### 3. Workflow/Orchestration Span
-
-```javascript
-assertLlmObsSpanEvent(events[0], {
+assertLlmObsSpanEvent(llmobsSpans[0], {
   spanKind: 'workflow',  // Not 'llm'!
   name: 'langgraph.graph.invoke'
   // Workflows may not have inputMessages/outputMessages
 })
 ```
 
-### 4. Error Case
+### 3. Error Case
 
 ```javascript
-assertLlmObsSpanEvent(events[0], {
+assertLlmObsSpanEvent(llmobsSpans[0], {
   spanKind: 'llm',
   outputMessages: [{ content: '', role: '' }],  // Empty on error
   error: { type: 'Error', message: error.message, stack: error.stack }
@@ -91,49 +80,8 @@ The helper fills `error.message`, `error.type` and `error.stack` from the span i
 `error` option decides `status: 'error'` and nothing else. The fields written into it document the throw;
 the assertion on the APM span is what pins which error was thrown.
 
-### 5. Partial Validation
-
-Only specified fields are checked (others ignored):
-
-```javascript
-assertLlmObsSpanEvent(events[0], {
-  spanKind: 'llm',
-  modelName: 'gpt-4'
-  // inputMessages, outputMessages, metrics, metadata not validated
-})
-```
-
-## Best Practices
-
-1. **Use MOCK_* for non-deterministic values:**
-    - Output text: `MOCK_STRING` (real responses vary)
-    - Token counts: `MOCK_NOT_NULLISH` (counts vary but should exist)
-    - Error message and stack: `MOCK_STRING` / `MOCK_NOT_NULLISH` per field, keeping `type` exact
-
-2. **Use exact values for inputs:**
-    - Input messages: You control these in tests
-    - Model parameters: You set these (temperature, max_tokens)
-    - Model name: You specify this
-
-3. **Always validate core fields:**
-    - `spanKind` (required for every span)
-    - `name` (operation identifier)
-    - `modelName` and `modelProvider` (for LLM spans)
-
-4. **Validate message format:**
-    - Ensure `{content: string, role: string}` structure
-    - Check role values: `'user'`, `'assistant'`, `'system'`, `'tool'`
-
-5. **Test error paths:**
-    - Verify empty `outputMessages: [{content: '', role: ''}]` on errors
-    - Pass `error` as `{ type, message, stack }`, and assert the thrown error on the APM span
-
-6. **Match span kind to operation:**
-    - Chat/completions → `spanKind: 'llm'`
-    - Workflow execution → `spanKind: 'workflow'`
-    - Agent runs → `spanKind: 'agent'`
-    - Tool calls → `spanKind: 'tool'`
-    - Embeddings → `spanKind: 'embedding'`
+Values you control in the spec — input messages, model name, model parameters — are pinned exactly; only
+what the provider decides gets a matcher.
 
 ## Reference Test Implementation
 
@@ -145,25 +93,13 @@ For a complete, real-world example of how tests using these helpers are structur
 - [`packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js`](../../../../packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js)
   (orchestration pattern)
 
-## Field Reference Quick Lookup
+## Fields Per Span Kind
 
-**Required:**
-- `spanKind` - Always required
+`spanKind` and `name` are on every span. The rest follow the kind, and a field the kind never emits fails:
 
-**LLM Spans:**
-- `name`, `modelName`, `modelProvider`, `inputMessages`, `outputMessages`, `metrics`, `metadata`
-
-**Workflow Spans:**
-- `name` (may not have messages/metrics)
-
-**Agent Spans:**
-- `name` (may have messages for agent I/O)
-
-**Tool Spans:**
-- `name` (may have input/output for tool calls)
-
-**Embedding Spans:**
-- `name`, `modelName`, `modelProvider`, `metrics` (input/output token counts)
-
-**Retrieval Spans:**
-- `name`, `metadata` (query, results count, etc.)
+| Kind | Fields |
+|------|--------|
+| `llm` | `modelName`, `modelProvider`, `inputMessages`, `outputMessages`, `metrics`, `metadata` |
+| `embedding` | `modelName`, `modelProvider`, `inputDocuments`, `outputValue`, sometimes `metrics` |
+| `retrieval` | `inputValue`, `outputDocuments` |
+| `workflow`, `agent`, `task`, `step`, `tool` | `inputValue`, `outputValue`, `metadata` |

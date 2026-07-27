@@ -82,9 +82,10 @@ it('instruments chat completion', async () => {
     model: 'gpt-4'
   })
 
-  const events = getEvents()
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  assertLlmObsSpanEvent(events[0], {
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
     spanKind: 'llm',
     modelName: 'gpt-4',
     inputMessages: [{ content: 'Hello', role: 'user' }],
@@ -94,20 +95,12 @@ it('instruments chat completion', async () => {
 })
 ```
 
-### Key Points
-
-- ✅ Use VCR proxy URL
-- ✅ Make real API calls
-- ✅ Test actual LLM responses
-- ✅ Validate token counts from real usage
-- ✅ Test provider-specific features
-- ✅ Commit cassettes to repo
-
 ### ⚠️ Require The SDK Inside `before()`
 
-RITM patches a module the first time it is loaded, and it cannot patch one already in the require cache.
-`useLlmObs()` loads the tracer from its own `before()` hook, so a `require` at file scope runs first and stays
-uninstrumented. Load the version fixtures from `before()`:
+A module is instrumented by the `require` that runs after the hooks are installed: RITM's patched require pulls
+the exports (from Node's cache if they are already there) and hands them to every registered hook.
+`useLlmObs()` loads the tracer from its own `before()` hook, so a file-scope `require` returns the exports as
+they were before any hook existed. Load the version fixtures from `before()`:
 
 ```javascript
 withVersions('openai-agents', '@openai/agents', (version) => {
@@ -165,9 +158,10 @@ it('instruments graph invoke', async () => {
     messages: [{ role: 'user', content: 'Test' }]
   })
 
-  const events = getEvents()
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  assertLlmObsSpanEvent(events[0], {
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
     spanKind: 'workflow',  // Not 'llm'!
     name: 'langgraph.graph.invoke'
   })
@@ -235,72 +229,12 @@ it('creates a tool span for a basic tool call', async () => {
 - ✅ Protocol-specific tags (`mcp_tool_kind`, `mcp_server_name`, `mcp_server_version`)
 - ✅ `inputValue` / `outputValue` carry the JSON-stringified protocol payloads
 
-## Decision Matrix
+## Which Row Applies
 
-Use this to choose strategy:
-
-### Does package make HTTP calls to LLM APIs?
-
-**YES** → Use VCR (LLM client or multi-provider)
-- Configure baseURL to VCR proxy
-- Make real API calls
-- Validate real responses
-
-**NO** → Check next question
-
-### Does it orchestrate workflows/graphs?
-
-**YES** → Pure functions (orchestration)
-- No VCR proxy
-- Mock LLM responses
-- Test state management
-
-**NO** → Infrastructure
-- Run the SDK's own server and client over its in-memory transport
-- Test protocol/transport
-
-## Common Mistakes
-
-### Mistake 1: Using VCR for Orchestration
-
-```javascript
-// ❌ WRONG - LangGraph with VCR
-const client = new StateGraph({
-  baseURL: 'http://127.0.0.1:9126/vcr/langgraph'
-})
-```
-
-**Why wrong:** LangGraph doesn't make HTTP calls itself.
-
-**Fix:** Use pure functions with mock responses.
-
-### Mistake 2: Not Using VCR for API Clients
-
-```javascript
-// ❌ WRONG - OpenAI without VCR
-const client = new OpenAI({
-  apiKey: 'real-key',
-  baseURL: 'https://api.openai.com'  // Direct to API
-})
-```
-
-**Why wrong:** Tests will fail without API key, hit rate limits, be non-deterministic.
-
-**Fix:** Use VCR proxy URL.
-
-### Mistake 3: Making Real API Calls in Orchestration Tests
-
-```javascript
-// ❌ WRONG - Real OpenAI in LangGraph test
-graph.addNode('agent', async (state) => {
-  const openai = new OpenAI({ apiKey: 'real-key' })
-  return await openai.chat.completions.create({ ... })
-})
-```
-
-**Why wrong:** Orchestration tests should be pure functions.
-
-**Fix:** Mock LLM responses directly.
+The question that picks the row is whether the package itself speaks HTTP to a provider. Pointing an
+orchestrator at a proxy baseURL, or letting a node inside a graph construct a real client, tests the provider
+instead of the graph; letting a client reach `https://api.openai.com` needs a key and stops being
+deterministic.
 
 ## Examples by Shape
 
@@ -341,12 +275,3 @@ await server.connect(serverTransport)
 await client.connect(clientTransport)
 await client.callTool({ name: 'test-tool', arguments: {} })
 ```
-
-## Summary
-
-- **API clients**: Use VCR, test real APIs
-- **Multi-provider**: Use VCR, test provider switching
-- **Orchestration**: Pure functions, mock responses
-- **Infrastructure**: SDK server over in-memory transport, test protocols
-
-Choose strategy based on what the package does, not what it's called.

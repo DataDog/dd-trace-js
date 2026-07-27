@@ -38,10 +38,10 @@ describe('my-integration LLMObs', () => {
         temperature: 0.7
       })
 
-      const events = getEvents()
-      expect(events).to.have.lengthOf(1)
+      const { apmSpans, llmobsSpans } = await getEvents()
 
-      assertLlmObsSpanEvent(events[0], {
+      assertLlmObsSpanEvent(llmobsSpans[0], {
+        span: apmSpans[0],
         spanKind: 'llm',
         name: 'my-integration.chat',
         modelName: 'test-model',
@@ -60,52 +60,35 @@ describe('my-integration LLMObs', () => {
     })
 
     it('handles errors', async () => {
-      try {
-        await client.chat({ messages: [], model: 'invalid' })
-      } catch (err) {
-        // Expected error
-      }
+      const error = await client.chat({ messages: [], model: 'invalid' }).catch(error => error)
 
-      const events = getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents()
 
-      assertLlmObsSpanEvent(events[0], {
+      assertLlmObsSpanEvent(llmobsSpans[0], {
+        span: apmSpans[0],
         spanKind: 'llm',
         outputMessages: [{ content: '', role: '' }],
-        error: MOCK_NOT_NULLISH
+        error: { type: 'Error', message: error.message, stack: error.stack }
       })
     })
   })
 })
 ```
 
-## useLlmObs Configuration
+## useLlmObs And getEvents
 
 ```javascript
-const { getEvents } = useLlmObs({ plugin: 'integration-name' })
+const { getEvents, assertNoLlmObsSpans, getEvaluationMetrics } =
+  useLlmObs({ plugin: 'integration-name', tracerConfigOptions: {} })
 ```
 
-**Parameters:**
-- `plugin` (string): Plugin name to test
-
-**Returns:**
-- `getEvents()` function that returns captured span events
-
-**Usage:**
-Call `useLlmObs()` once at describe block level, then call `getEvents()` in each test.
-
-## getEvents() Usage
+Call `useLlmObs()` once per `describe`; it installs its own `before` / `after` hooks. `getEvents(count = 1)` is
+async and resolves `{ apmSpans, llmobsSpans }` once that many LLMObs span events have arrived, in creation
+order, so a spec that asks for the wrong count times out rather than failing an assertion:
 
 ```javascript
-const events = getEvents()
+const { apmSpans, llmobsSpans } = await getEvents(2)
 ```
-
-**Returns:** Array of captured LLMObs span events
-
-**Usage:**
-- Call after instrumented operation completes
-- Returns spans in creation order
-- Use `events[0]` for first/only span
-- Use `events.length` to assert count
 
 ## Module Loading Pattern
 
@@ -122,130 +105,27 @@ beforeEach(() => {
 })
 ```
 
-**Why this matters:**
-- Ensures clean state between tests
-- Prevents test pollution
-- Especially important for orchestration packages with state management
-- Allows each test to start fresh
-
-**Bad pattern (don't do this):**
-```javascript
-// At top of file
-const MyLib = require('my-lib')  // ❌ Shared across all tests
-
-describe('tests', () => {
-  it('test 1', () => { ... })  // May affect test 2
-  it('test 2', () => { ... })  // May be affected by test 1
-})
-```
+A require at file scope is shared by every test and runs before the tracer exists, so the exports it captures
+are never instrumented. See
+[category-strategies.md](category-strategies.md) for the fixture form and why the hook matters.
 
 ## Test Organization
 
 Group by method (`describe('chat completions')`, `describe('embeddings')`) or by scenario (`describe('basic usage')`,
 `describe('error handling')`).
 
-## beforeEach / afterEach
-
-Standard: Load module in `beforeEach`, cleanup in `afterEach` if needed.
-Async: Use `async beforeEach/afterEach` if initialization/cleanup is async.
-
-## Imports
-
-```javascript
-const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
-```
-
 ## Assertions
 
 ```javascript
-const events = getEvents()
-expect(events).to.have.lengthOf(1)
-assertLlmObsSpanEvent(events[0], { spanKind: 'llm', ... })
+const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
+
+const { apmSpans, llmobsSpans } = await getEvents()
+assert.strictEqual(llmobsSpans.length, 1)
+assertLlmObsSpanEvent(llmobsSpans[0], { span: apmSpans[0], spanKind: 'llm' })
 ```
 
-## Testing Orchestration
-
-**No VCR, pure functions:**
-
-```javascript
-describe('langgraph', () => {
-  const { getEvents } = useLlmObs({ plugin: 'langgraph' })
-
-  let StateGraph, Annotation
-
-  beforeEach(() => {
-    // Fresh import
-    const langgraph = require('@langchain/langgraph')
-    StateGraph = langgraph.StateGraph
-    Annotation = langgraph.Annotation
-  })
-
-  it('instruments graph invoke', async () => {
-    const graph = new StateGraph({
-      channels: {
-        messages: Annotation.Root({ ... })
-      }
-    })
-
-    graph.addNode('agent', async (state) => ({
-      messages: [{ role: 'assistant', content: 'Mock response' }]
-    }))
-
-    const result = await graph.invoke({ messages: [...] })
-
-    assertLlmObsSpanEvent(events[0], {
-      spanKind: 'workflow',  // Not 'llm'
-      name: 'langgraph.graph.invoke'
-    })
-  })
-})
-```
-
-## Common Pitfalls
-
-### Pitfall 1: Forgetting to call getEvents()
-
-```javascript
-// ❌ Bad
-it('test', async () => {
-  await client.chat({ ... })
-  // Missing: const events = getEvents()
-  assertLlmObsSpanEvent(undefined, { ... })  // Error!
-})
-
-// ✅ Good
-it('test', async () => {
-  await client.chat({ ... })
-  const events = getEvents()
-  assertLlmObsSpanEvent(events[0], { ... })
-})
-```
-
-### Pitfall 2: Using VCR for orchestration
-
-```javascript
-// ❌ Bad (orchestration with VCR)
-const client = new LangGraph({
-  baseURL: 'http://127.0.0.1:9126/vcr/langgraph'  // Wrong!
-})
-
-// ✅ Good (orchestration without VCR)
-const graph = new StateGraph({ ... })  // Pure functions
-```
-
-### Pitfall 3: Not isolating module state
-
-```javascript
-// ❌ Bad (shared state)
-const MyLib = require('my-lib')  // Once at top
-it('test 1', () => { ... })  // Modifies MyLib state
-it('test 2', () => { ... })  // Affected by test 1
-
-// ✅ Good (isolated)
-beforeEach(() => {
-  MyLib = require('my-lib')  // Fresh each test
-})
-```
+Per-shape patterns, including the orchestration spec that answers its own nodes rather than recording
+cassettes, live in [category-strategies.md](category-strategies.md).
 
 ## Working Examples
 
