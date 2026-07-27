@@ -75,7 +75,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       return ctx.currentStore
     }
 
-    const baseTypeName = fieldType.replace(/[[\]!]/g, '')
+    const baseTypeName = fieldType.replaceAll(/[[\]!]/g, '')
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
@@ -162,11 +162,11 @@ function getParentKey (fieldPath, collapse) {
   const segments = fieldPath.split('.')
   segments.pop()
 
-  while (segments.length && /^\d+$/.test(segments[segments.length - 1])) {
+  while (segments.length && /^\d+$/.test(segments.at(-1))) {
     segments.pop()
   }
 
-  if (segments.length === 0) return undefined
+  if (segments.length === 0) return
 
   const parentPath = segments.join('.')
   return collapse ? collapseListIndices(parentPath) : parentPath

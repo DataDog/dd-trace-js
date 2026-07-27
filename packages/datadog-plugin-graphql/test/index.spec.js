@@ -568,28 +568,28 @@ describe('Plugin', () => {
 
         nativeChannelGap(
           'publishes caller-owned execute args before installing the wrapped fieldResolver', async () => {
-          const startChannel = dc.channel('apm:graphql:execute:start')
-          const document = graphql.parse('query MyQuery { hello(name: "world") }')
-          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
-          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+            const startChannel = dc.channel('apm:graphql:execute:start')
+            const document = graphql.parse('query MyQuery { hello(name: "world") }')
+            const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+            const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
 
-          let publishedArgs
-          const handler = ({ args: channelArgs }) => {
-            publishedArgs = channelArgs
-            assert.strictEqual(channelArgs, args)
-            assert.strictEqual(channelArgs.fieldResolver, callerFieldResolver)
-          }
-          startChannel.subscribe(handler)
+            let publishedArgs
+            const handler = ({ args: channelArgs }) => {
+              publishedArgs = channelArgs
+              assert.strictEqual(channelArgs, args)
+              assert.strictEqual(channelArgs.fieldResolver, callerFieldResolver)
+            }
+            startChannel.subscribe(handler)
 
-          try {
-            assert.ok(await graphql.execute(args), 'execute returned a result')
-          } finally {
-            startChannel.unsubscribe(handler)
-          }
+            try {
+              assert.ok(await graphql.execute(args), 'execute returned a result')
+            } finally {
+              startChannel.unsubscribe(handler)
+            }
 
-          assert.strictEqual(publishedArgs, args)
-          assert.strictEqual(args.fieldResolver, callerFieldResolver)
-        })
+            assert.strictEqual(publishedArgs, args)
+            assert.strictEqual(args.fieldResolver, callerFieldResolver)
+          })
 
         describe('preserves the caller-supplied contextValue', () => {
           let recordingSchema
@@ -1819,35 +1819,35 @@ describe('Plugin', () => {
           // on apm:graphql:execute:start. callInAsyncScope sees the signal and
           // throws AbortError before exe runs; the field-resolver path never
           // fires for this query.
-          const startCh = dc.channel('apm:graphql:execute:start')
-          const handler = (ctx) => {
-            ctx.abortController.abort()
-          }
-          startCh.subscribe(handler)
+            const startCh = dc.channel('apm:graphql:execute:start')
+            const handler = (ctx) => {
+              ctx.abortController.abort()
+            }
+            startCh.subscribe(handler)
 
-          const source = '{ hello(name: "world") }'
-          const document = graphql.parse(source)
+            const source = '{ hello(name: "world") }'
+            const document = graphql.parse(source)
 
-          try {
-            const [, error] = await Promise.all([
-              agent.assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
-                assert.strictEqual(resolveSpans.length, 0, 'no resolver should run after abort')
-                const opSpan = spans.find(span => span.name === expectedSchema.server.opName)
-                assert.ok(opSpan, 'execute span still finishes')
-                assert.strictEqual(opSpan.error, 0)
-              }),
-              assert.throws(
-                () => graphql.execute({ schema, document }),
-                { name: 'AbortError', message: 'Aborted' },
-              ),
-            ])
-            assert.strictEqual(error, undefined)
-          } finally {
-            startCh.unsubscribe(handler)
-          }
-        })
+            try {
+              const [, error] = await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const spans = sort(traces[0])
+                  const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+                  assert.strictEqual(resolveSpans.length, 0, 'no resolver should run after abort')
+                  const opSpan = spans.find(span => span.name === expectedSchema.server.opName)
+                  assert.ok(opSpan, 'execute span still finishes')
+                  assert.strictEqual(opSpan.error, 0)
+                }),
+                assert.throws(
+                  () => graphql.execute({ schema, document }),
+                  { name: 'AbortError', message: 'Aborted' },
+                ),
+              ])
+              assert.strictEqual(error, undefined)
+            } finally {
+              startCh.unsubscribe(handler)
+            }
+          })
 
         nativeChannelGap(
           'throws AbortError from the next resolver when the controller aborts mid-execution', async () => {
@@ -1857,32 +1857,32 @@ describe('Plugin', () => {
           // own signal check is the only guard that stops the second
           // resolver from running, and assertField has already published its
           // startResolveCh / built its TrackedField for it.
-          const updateCh = dc.channel('apm:graphql:resolve:updateField')
-          const finished = []
-          const handler = (ctx) => {
-            finished.push(ctx.pathString)
-            if (finished.length === 1) {
-              ctx.rootCtx.abortController.abort()
+            const updateCh = dc.channel('apm:graphql:resolve:updateField')
+            const finished = []
+            const handler = (ctx) => {
+              finished.push(ctx.pathString)
+              if (finished.length === 1) {
+                ctx.rootCtx.abortController.abort()
+              }
             }
-          }
-          updateCh.subscribe(handler)
+            updateCh.subscribe(handler)
 
-          try {
-            const source = '{ first: hello(name: "first") second: hello(name: "second") }'
-            const result = await graphql.graphql({ schema, source })
+            try {
+              const source = '{ first: hello(name: "first") second: hello(name: "second") }'
+              const result = await graphql.graphql({ schema, source })
 
-            // graphql captures the resolver throw into result.errors; the
-            // first resolver runs to completion, the second hits the abort
-            // branch.
-            assert.ok(result.errors, 'expected an AbortError surfaced through result.errors')
-            assert.strictEqual(result.errors.length, 1)
-            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
-            assert.strictEqual(result.errors[0].originalError?.message, 'Aborted')
-            assert.deepStrictEqual(finished.sort(), ['first', 'second'])
-          } finally {
-            updateCh.unsubscribe(handler)
-          }
-        })
+              // graphql captures the resolver throw into result.errors; the
+              // first resolver runs to completion, the second hits the abort
+              // branch.
+              assert.ok(result.errors, 'expected an AbortError surfaced through result.errors')
+              assert.strictEqual(result.errors.length, 1)
+              assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+              assert.strictEqual(result.errors[0].originalError?.message, 'Aborted')
+              assert.deepStrictEqual(finished.sort(), ['first', 'second'])
+            } finally {
+              updateCh.unsubscribe(handler)
+            }
+          })
 
         it('should support multiple executions with the same contextValue', async () => {
           const schema = graphql.buildSchema(`
@@ -1929,25 +1929,25 @@ describe('Plugin', () => {
 
         nativeChannelGap(
           'should publish empty resolver args with subscription to datadog:graphql:resolver:start', async () => {
-          const source = 'query MyQuery { human { name } }'
-          const document = graphql.parse(source)
-          const resolverInfo = []
+            const source = 'query MyQuery { human { name } }'
+            const document = graphql.parse(source)
+            const resolverInfo = []
 
-          const handler = ({ resolverInfo: info }) => {
-            resolverInfo.push(info)
-          }
-          dc.channel('datadog:graphql:resolver:start').subscribe(handler)
+            const handler = ({ resolverInfo: info }) => {
+              resolverInfo.push(info)
+            }
+            dc.channel('datadog:graphql:resolver:start').subscribe(handler)
 
-          try {
-            await graphql.execute({ schema, document })
-          } finally {
-            dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
-          }
+            try {
+              await graphql.execute({ schema, document })
+            } finally {
+              dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
+            }
 
-          const humanResolverInfo = resolverInfo.find(info => info?.human)
-          assert.deepStrictEqual(humanResolverInfo, { human: {} },
+            const humanResolverInfo = resolverInfo.find(info => info?.human)
+            assert.deepStrictEqual(humanResolverInfo, { human: {} },
             `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
-        })
+          })
 
         it('should support multiple validations on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
@@ -2657,15 +2657,15 @@ describe('Plugin', () => {
           // The depth knob caps span creation, not channel publishes.
           // IAST taint-tracking and AppSec WAF subscribers run on every resolver
           // call so user-controlled args at any depth still flow through.
-          const startCh = dc.channel('apm:graphql:resolve:start')
-          const paths = []
-          const handler = (ctx) => {
-            paths.push(ctx.pathString)
-          }
-          startCh.subscribe(handler)
+            const startCh = dc.channel('apm:graphql:resolve:start')
+            const paths = []
+            const handler = (ctx) => {
+              paths.push(ctx.pathString)
+            }
+            startCh.subscribe(handler)
 
-          try {
-            const source = `
+            try {
+              const source = `
               {
                 human {
                   name
@@ -2676,27 +2676,27 @@ describe('Plugin', () => {
                 }
               }
             `
-            const [, result] = await Promise.all([
-              agent.assertSomeTraces(traces => {
-                const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
-                const tracedPaths = spans.map(span => span.meta['graphql.field.path']).sort()
-                assert.deepStrictEqual(tracedPaths, ['human', 'human.address', 'human.name'])
-              }),
-              graphql.graphql({ schema, source }),
-            ])
+              const [, result] = await Promise.all([
+                agent.assertSomeTraces(traces => {
+                  const spans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+                  const tracedPaths = spans.map(span => span.meta['graphql.field.path']).sort()
+                  assert.deepStrictEqual(tracedPaths, ['human', 'human.address', 'human.name'])
+                }),
+                graphql.graphql({ schema, source }),
+              ])
 
-            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
-            assert.deepStrictEqual(paths.sort(), [
-              'human',
-              'human.address',
-              'human.address.civicNumber',
-              'human.address.street',
-              'human.name',
-            ])
-          } finally {
-            startCh.unsubscribe(handler)
-          }
-        })
+              assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+              assert.deepStrictEqual(paths.sort(), [
+                'human',
+                'human.address',
+                'human.address.civicNumber',
+                'human.address.street',
+                'human.name',
+              ])
+            } finally {
+              startCh.unsubscribe(handler)
+            }
+          })
 
         it('should run depth-gated resolvers in the parent scope and still resolve the data', async () => {
           const localSchema = graphql.buildSchema(`
@@ -3669,25 +3669,25 @@ describe('Plugin', () => {
         for (const [divergence, source] of Object.entries(spoofedHealthChecks)) {
           nativeChannelGap(
             `should trace an operation that spoofs the health-check name with ${divergence}`, async () => {
-            const helloField = { type: graphql.GraphQLString, resolve: () => 'world' }
-            const schema = new graphql.GraphQLSchema({
-              query: new graphql.GraphQLObjectType({ name: 'Query', fields: { hello: helloField } }),
-              mutation: new graphql.GraphQLObjectType({ name: 'Mutation', fields: { hello: helloField } }),
+              const helloField = { type: graphql.GraphQLString, resolve: () => 'world' }
+              const schema = new graphql.GraphQLSchema({
+                query: new graphql.GraphQLObjectType({ name: 'Query', fields: { hello: helloField } }),
+                mutation: new graphql.GraphQLObjectType({ name: 'Mutation', fields: { hello: helloField } }),
+              })
+
+              const executeCh = dc.channel('apm:graphql:execute:start')
+              let starts = 0
+              const handler = () => { starts++ }
+              executeCh.subscribe(handler)
+
+              try {
+                const spoofed = await graphql.graphql({ schema, source })
+                assert.ok(!spoofed.errors, inspect(spoofed.errors))
+                assert.strictEqual(starts, 1, 'an operation spoofing the health-check name must still be traced')
+              } finally {
+                executeCh.unsubscribe(handler)
+              }
             })
-
-            const executeCh = dc.channel('apm:graphql:execute:start')
-            let starts = 0
-            const handler = () => { starts++ }
-            executeCh.subscribe(handler)
-
-            try {
-              const spoofed = await graphql.graphql({ schema, source })
-              assert.ok(!spoofed.errors, inspect(spoofed.errors))
-              assert.strictEqual(starts, 1, 'an operation spoofing the health-check name must still be traced')
-            } finally {
-              executeCh.unsubscribe(handler)
-            }
-          })
         }
 
         it('should not let a shared interface hide a second schema\'s implementation fields', async () => {

@@ -27,9 +27,14 @@ for (const hook of getHooks('@graphql-tools/executor')) {
 // (read lazily inside each callback so agent.load() between mocha suites can
 // rebind globalThis[dd-trace] without us stashing a stale reference).
 
-// The extra '^16.0.0' keeps 16.x (still the newest major several downstream frameworks support) in
-// the test matrix now that '>=0.10' alone resolves its "newest major" tier to 17.x.
-addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10', '^16.0.0'] }, printer => {
+// The extra exact '17.0.2' opts the graphql plugin's own test suite into testing graphql-js 17.x
+// (see packages/datadog-plugin-graphql/src/utils.js' `subscribeToPrefix` doc comment) without
+// raising the shared "latest" pin in packages/dd-trace/test/plugins/versions/package.json — that
+// pin also drives every sandbox/integration test that installs a bare `graphql` dependency (e.g.
+// integration-tests/appsec/graphql.spec.js's Apollo Server sandbox), and those exercise IAST/AppSec
+// resolver-argument scanning, which has no v17 equivalent (no AST access on the native channel) —
+// bumping the shared pin would silently move them onto a graphql-js line without that coverage.
+addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10', '17.0.2'] }, printer => {
   const ddGlobal = globalThis[Symbol.for('dd-trace')]
   if (ddGlobal) ddGlobal.graphql_printer = printer
   return printer
