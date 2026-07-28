@@ -199,6 +199,7 @@ export default [
       '@stylistic/yield-star-spacing': ['error', 'both'],
       'accessor-pairs': ['error', { setWithoutGet: true, enforceForClassMembers: true }],
       'array-callback-return': ['error', { allowImplicit: false, checkForEach: false }],
+      'block-scoped-var': 'error',
       'brace-style': [ // TODO: Deprecated, use @stylistic/brace-style instead
         'error',
         '1tbs',
@@ -218,6 +219,7 @@ export default [
       'dot-notation': ['error', { allowKeywords: true }],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'func-call-spacing': ['error', 'never'], // TODO: Deprecated, use @stylistic/func-call-spacing instead
+      'grouped-accessor-pairs': ['error', 'getBeforeSet'],
       indent: [ // TODO: Deprecated, use @stylistic/indent instead
         'error',
         2,
@@ -259,9 +261,11 @@ export default [
       'import/export': 'error',
       'import/first': 'error',
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
+      'import/no-amd': 'error',
       'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
       'import/no-empty-named-blocks': 'error',
+      'import/no-import-module-exports': 'error',
       'import/no-mutable-exports': 'error',
       'import/no-named-default': 'error',
       'import/no-self-import': 'error',
@@ -283,6 +287,7 @@ export default [
       // The option keeps `@overload` blocks that document fewer params than the implementation.
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
+      'jsdoc/check-template-names': 'error',
       'jsdoc/check-types': 'error',
       'jsdoc/no-bad-blocks': 'error',
       'jsdoc/no-blank-blocks': 'error',
@@ -297,6 +302,9 @@ export default [
       'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
       'jsdoc/require-returns': 'off',
+      'jsdoc/require-template': 'error',
+      'jsdoc/require-throws-description': 'error',
+      'jsdoc/require-yields-description': 'error',
       'jsdoc/tag-lines': 'off', // Alignment is not important for us.
       'n/handle-callback-err': ['error', '^(err|error)$'],
       'n/no-callback-literal': 'error',
@@ -358,6 +366,7 @@ export default [
       'object-shorthand': ['warn', 'properties'],
       'one-var': ['error', { initialized: 'never' }],
       'prefer-const': ['error', { destructuring: 'all' }],
+      'prefer-numeric-literals': 'error',
       'prefer-promise-reject-errors': 'error',
       'prefer-regex-literals': ['error', { disallowRedundantWrapping: true }],
       // 6 errors. Attaching `cause` changes error output, so it needs its own change.
@@ -366,6 +375,7 @@ export default [
       'promise/no-return-in-finally': 'error',
       'promise/no-return-wrap': 'error',
       'promise/param-names': 'error',
+      'promise/spec-only': 'error',
       'promise/valid-params': 'error',
       'symbol-description': 'error',
       'unicode-bom': ['error', 'never'],
@@ -529,18 +539,30 @@ export default [
       sonarjs: eslintPluginSonar,
     },
     rules: {
+      'sonarjs/anchor-precedence': 'error',
+      'sonarjs/arguments-order': 'error',
+      'sonarjs/comma-or-logical-or-case': 'error',
       'sonarjs/duplicates-in-character-class': 'error',
+      'sonarjs/empty-string-repetition': 'error',
+      'sonarjs/inverted-assertion-arguments': 'error',
       'sonarjs/no-all-duplicated-branches': 'error',
+      'sonarjs/no-case-label-in-switch': 'error',
       'sonarjs/no-code-after-done': 'error',
+      'sonarjs/no-collection-size-mischeck': 'error',
       'sonarjs/no-commented-code': 'error',
       'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-empty-after-reluctant': 'error',
       'sonarjs/no-empty-collection': 'error',
+      'sonarjs/no-empty-group': 'error',
+      'sonarjs/no-equals-in-for-termination': 'error',
       'sonarjs/no-extra-arguments': 'error',
       'sonarjs/no-globals-shadowing': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
+      'sonarjs/no-identical-conditions': 'error',
       'sonarjs/no-identical-functions': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/no-invariant-returns': 'error',
+      'sonarjs/no-mixed-completion-style': 'error',
       'sonarjs/no-nested-assignment': 'error',
       'sonarjs/no-parameter-reassignment': 'error',
       'sonarjs/no-redundant-assignments': 'error',
@@ -549,17 +571,25 @@ export default [
       'sonarjs/no-unthrown-error': 'error',
       'sonarjs/no-unused-collection': 'error',
       'sonarjs/no-use-of-empty-return-value': 'error',
+      'sonarjs/no-variable-usage-before-declaration': 'error',
       'sonarjs/non-existent-operator': 'error',
       'sonarjs/prefer-immediate-return': 'error',
+      'sonarjs/prefer-promise-shorthand': 'error',
       'sonarjs/prefer-single-boolean-return': 'error',
+      'sonarjs/prefer-while': 'error',
+      'sonarjs/reduce-initial-value': 'error',
       'sonarjs/single-char-in-character-classes': 'error',
       'sonarjs/single-character-alternation': 'error',
       'sonarjs/slow-regex': 'error',
       'sonarjs/stable-tests': 'error',
+      'sonarjs/synchronous-suite-callback': 'error',
       'sonarjs/test-check-exception': 'error',
+      'sonarjs/unicode-aware-regex': 'error',
       'sonarjs/updated-loop-counter': 'error',
 
       // --- Rules to check later ------------------
+      // SonarJS rules marked `requiresTypeChecking` report nothing without a TypeScript program, so they
+      // read as clean while catching nothing. Enabling them needs typescript-eslint wired up first.
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
       // 37 errors, all false positives: those suites are built by shared helper factories
       // (`assertPromise`, `prepareTestServerForIast`) instead of literal `it()` calls.
