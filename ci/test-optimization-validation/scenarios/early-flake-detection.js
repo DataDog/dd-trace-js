@@ -7,6 +7,7 @@ const {
   failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
+  reportMissingGeneratedTest,
   requireGeneratedScenario,
   runInstrumentedCommand,
   skip,
@@ -28,14 +29,14 @@ async function runEarlyFlakeDetection ({ framework, out, options }) {
 
     const discovery = await discoverScenarioTests({ framework, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return failWithDebugRerun({
+      return reportMissingGeneratedTest({
         command: scenario.runCommand,
         diagnosis: 'The generated new-test candidate was not reported during baseline identity discovery.',
-        evidence: discoveryEvidence(discovery),
+        discovery,
         framework,
         options,
         out,
-        outDir: discovery.outDir,
+        scenario,
         scenarioName,
       })
     }
