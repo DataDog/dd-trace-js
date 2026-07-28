@@ -221,7 +221,7 @@ function isWebdriverioFailureSuppressed (test) {
     return false
   }
   const hasPassingEfdAttempt = config.isEarlyFlakeDetectionEnabled &&
-    efdTests[getTestFullName(test)]?.some(attempt => attempt.state === 'passed')
+    efdTests[getTestFullName(test)]?.some(attempt => attempt.state === 'passed' && !attempt._ddHookFailed)
   return (test._ddIsQuarantined && !test._ddIsAttemptToFix) || hasPassingEfdAttempt
 }
 

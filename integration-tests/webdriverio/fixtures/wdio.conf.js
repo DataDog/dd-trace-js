@@ -57,6 +57,10 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./efd.e2e.js'],
   },
+  efdAfterEachFailure: {
+    maxInstances: 1,
+    specs: ['./efd-after-each-fail.e2e.js'],
+  },
   efdFaultySchedule: {
     maxInstances: 1,
     specs: [

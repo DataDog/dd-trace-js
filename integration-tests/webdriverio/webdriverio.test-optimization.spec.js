@@ -485,6 +485,30 @@ for (const version of versions) {
       })
     })
 
+    it('fails the run when every EFD attempt has a failing afterEach hook', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          faulty_session_threshold: 100,
+          slow_test_retries: { '5s': 2 },
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ webdriverio: {} })
+
+      await runScenario('efdAfterEachFailure', 1, payloads => {
+        const events = getEvents(payloads)
+        const session = events.find(event => event.type === 'test_session_end').content
+        const suite = events.find(event => event.type === 'test_suite_end').content
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(tests.length, 1)
+        assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+      }, {}, 1)
+    })
+
     it('marks tests from modified files as impacted', async () => {
       receiver.setSettings({ impacted_tests_enabled: true })
 
