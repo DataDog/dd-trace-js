@@ -42,13 +42,6 @@ class RemoteConfig {
     })
 
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    const tags = repositoryUrl
-      ? {
-          ...config.tags,
-          [GIT_REPOSITORY_URL]: repositoryUrl,
-          [GIT_COMMIT_SHA]: commitSHA,
-        }
-      : config.tags
 
     const appliedConfigs = this.appliedConfigs = new Map()
 
@@ -88,7 +81,16 @@ class RemoteConfig {
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          get tags () {
+            const tags = repositoryUrl
+              ? {
+                  ...config.tags,
+                  [GIT_REPOSITORY_URL]: repositoryUrl,
+                  [GIT_COMMIT_SHA]: commitSHA,
+                }
+              : config.tags
+            return Object.entries(tags).map((pair) => pair.join(':'))
+          },
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`

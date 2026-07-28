@@ -58,7 +58,7 @@ class DatadogTracer extends Tracer {
   }
 
   refreshMetadata (config) {
-    if (!this._inmem_cfg) return
+    if (this._inmem_cfg === undefined) return
     const storeConfig = require('./tracer_metadata')
     const metadata = storeConfig(config)
     if (metadata !== undefined) {

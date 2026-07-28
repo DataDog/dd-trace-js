@@ -67,6 +67,12 @@ interface Tracer extends opentracing.Tracer {
   setUrl (url: string): this;
 
   /**
+   * Regenerates clone-specific identities (runtime ID, RC client ID) after an
+   * AWS Lambda MicroVM snapshot resume. No-op outside a MicroVM environment.
+   */
+  resetRuntimeId (): this;
+
+  /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
