@@ -398,7 +398,17 @@ describe('mocha hooks setup', () => {
 })
 
 /**
+ * Subset of Mocha's JSON reporter output that these assertions read.
+ *
+ * @typedef {{
+ *   failures: Array<{ title: string, err: { message: string } }>,
+ *   passes: Array<{ title: string }>,
+ * }} MochaJsonResult
+ */
+
+/**
  * @param {string} body
+ * @param {string[]} [args]
  * @returns {Promise<MochaJsonResult>}
  */
 async function runFixture (body, args = []) {

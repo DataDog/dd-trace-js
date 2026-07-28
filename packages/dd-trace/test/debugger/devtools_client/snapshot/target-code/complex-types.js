@@ -60,7 +60,7 @@ function get () {
     yield 1
     yield 2
   }
-  /** @type {Generator<1 | 2, void, unknown> & { foo?: number }} */
+  /** @type {ReturnType<typeof makeIterator> & { foo?: number }} */
   const gen = makeIterator()
   gen.foo = 42
 
