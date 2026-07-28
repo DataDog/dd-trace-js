@@ -345,6 +345,19 @@ describe('mocha hooks setup', () => {
     )
   })
 
+  it('does not swallow errors thrown after a hook completes with allow uncaught enabled', () => {
+    const failure = new Error('test failed')
+    const hook = new Hook('before each', () => {})
+
+    hook.allowUncaught = true
+
+    assert.throws(() => {
+      hook.run(() => {
+        throw failure
+      })
+    }, error => error === failure)
+  })
+
   it('does not let a suppressed after each error change bail behavior', async () => {
     const result = await runFixture(`
       describe('suite', () => {
