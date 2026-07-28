@@ -12,6 +12,7 @@ const {
   useSandbox,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_BROWSER_DRIVER,
@@ -185,6 +186,31 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 1, testOutput)
   })
 
+  it('reports errors from the correct automatic retry attempt', async () => {
+    receiver.setSettings({
+      flaky_test_retries_enabled: true,
+      early_flake_detection: {
+        enabled: false,
+      },
+    })
+
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      assert.match(tests[0].meta[ERROR_MESSAGE], /test attempt 1 failed/)
+      assert.match(tests[1].meta[ERROR_MESSAGE], /test attempt 2 failed/)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-multiple-errors.mjs', {
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+      }, 1),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 1, testOutput)
+  })
+
   it('correlates sequential browser tests with RUM', async () => {
     receiver.setSettings({
       flaky_test_retries_enabled: true,
@@ -252,11 +278,31 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
-  it('does not correlate concurrent browser tests with RUM', async () => {
+  it('flushes RUM when a user setup file enables fake timers', async () => {
     const payloadsPromise = gatherEvents(events => {
       const [test] = getEventContents(events, 'test')
       assert.ok(test)
-      assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-fake-timers.mjs', {
+        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
+        VITEST_SETUP_FILE: 'ci-visibility/vitest-browser-tests/browser-fake-timers-setup.mjs',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate concurrent browser tests with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      for (const test of tests) {
+        assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      }
     })
 
     const [exitCode] = await Promise.all([

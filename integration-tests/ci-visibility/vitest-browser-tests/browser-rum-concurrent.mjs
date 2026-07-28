@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { describe, expect, test } from 'vitest'
 
 const RUM_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
@@ -7,8 +7,14 @@ window.DD_RUM = {
   stopSession: () => {},
 }
 
-test.concurrent('does not correlate concurrent browser tests with RUM', () => {
-  expect(getCookie(RUM_COOKIE_NAME)).toBeUndefined()
+describe.concurrent('concurrent browser tests', () => {
+  test('does not correlate the first inherited concurrent test with RUM', () => {
+    expect(getCookie(RUM_COOKIE_NAME)).toBeUndefined()
+  })
+
+  test('does not correlate the second inherited concurrent test with RUM', () => {
+    expect(getCookie(RUM_COOKIE_NAME)).toBeUndefined()
+  })
 })
 
 function getCookie (name) {

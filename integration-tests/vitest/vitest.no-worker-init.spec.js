@@ -362,6 +362,7 @@ describe('vitest no-worker init instrumentation selection', () => {
           moduleId: '/repo/first.test.mjs',
         })
         noWorkerInit.deactivate(ctx)
+        assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isActive, false)
         ctx.reporters[0].onTestModuleStart({
           id: 'second',
           moduleId: '/repo/second.test.mjs',

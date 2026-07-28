@@ -190,6 +190,11 @@ function deactivate (ctx) {
   if (installedReporterState) {
     installedReporterState.isActive = false
   }
+  setProvidedContext(ctx, {
+    _ddVitestWorkerSetup: {
+      isActive: false,
+    },
+  }, 'Could not deactivate Vitest main-process execution changes.')
 }
 
 function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
@@ -535,6 +540,7 @@ function createMainProcessReporter (reporterState) {
     ) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
         browserEnvironment,
+        errorCounts: task.meta?.__ddTestOptRetryErrorCounts,
         finalStatus: () => status,
         state,
         statuses: getRetriedTaskStatuses(attemptStatuses, retryCount, status),

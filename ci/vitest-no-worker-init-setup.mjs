@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 // It applies Test Optimization execution changes without initializing dd-trace in the test environment.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const providedContext = getProvidedContext()
-const isNoWorkerInitActive = providedContext.isActive === true || getIsNoWorkerInitActive()
+const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
@@ -23,7 +23,7 @@ const rumFlushWaitMillis = Number.isFinite(providedContext.rumFlushWaitMillis)
   : 500
 const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
-const realSetTimeout = globalThis.setTimeout
+const realSetTimeout = getRealSetTimeout()
 let setVitestTaskFn
 if (isNoWorkerInitActive) {
   try {
@@ -69,16 +69,18 @@ if (isNoWorkerInitActive) {
 
     prepareRumCorrelation(task, attemptIndex)
 
-    if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) {
-      onTestFinished(() => {
-        if (attemptIndex === getFinalAttemptIndex(task)) {
-          if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt) {
-            recordTestOptimizationStatus(task, attemptIndex, true)
-          }
-          switchQuarantinedFinalFailure(task, attemptIndex)
+    onTestFinished(() => {
+      recordRetryErrorCount(task)
+      if (
+        (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) &&
+        attemptIndex === getFinalAttemptIndex(task)
+      ) {
+        if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt) {
+          recordTestOptimizationStatus(task, attemptIndex, true)
         }
-      })
-    }
+        switchQuarantinedFinalFailure(task, attemptIndex)
+      }
+    })
   })
 
   afterEach(async function ({ task }) {
@@ -133,7 +135,7 @@ function getNextAttemptIndex (task) {
  */
 function prepareRumCorrelation (task, attemptIndex) {
   // A per-origin cookie cannot identify overlapping attempts without racing.
-  if (task.concurrent === true) return
+  if (isConcurrentTask(task)) return
 
   if (
     typeof window === 'undefined' ||
@@ -220,6 +222,35 @@ function getIsRumActive (rum) {
   } catch {
     return false
   }
+}
+
+/**
+ * Returns a timer outside Vitest's test iframe, where user fake timers are not installed.
+ *
+ * @returns {typeof setTimeout}
+ */
+function getRealSetTimeout () {
+  try {
+    if (typeof window !== 'undefined' && window.parent !== window) {
+      return window.parent.setTimeout.bind(window.parent)
+    }
+  } catch {}
+  return globalThis.setTimeout
+}
+
+/**
+ * Returns whether a task or any containing suite is concurrent.
+ *
+ * @param {object} task
+ * @returns {boolean}
+ */
+function isConcurrentTask (task) {
+  let currentTask = task
+  while (currentTask) {
+    if (currentTask.concurrent === true) return true
+    currentTask = currentTask.suite
+  }
+  return false
 }
 
 /**
@@ -372,6 +403,21 @@ function recordManualRepeatStatus (task, attemptIndex) {
     attemptIndex
   )
   task.meta.__ddTestOptRepeatErrorCounts[attemptIndex] = task.result?.errors?.length || 0
+}
+
+/**
+ * Records cumulative errors at the end of each configured retry attempt.
+ *
+ * @param {object} task
+ * @returns {void}
+ */
+function recordRetryErrorCount (task) {
+  const retryLimit = typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
+  if (retryLimit <= 0) return
+
+  const retryCount = task.result?.retryCount || 0
+  task.meta.__ddTestOptRetryErrorCounts ||= []
+  task.meta.__ddTestOptRetryErrorCounts[retryCount] = task.result?.errors?.length || 0
 }
 
 function restoreEarlyFlakeDetectionSkippedResult (task) {
