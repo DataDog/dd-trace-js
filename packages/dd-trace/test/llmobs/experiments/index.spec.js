@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const log = require('../../../src/log')
 const { createExperiments } = require('../../../src/llmobs/experiments')
 const NoopExperiments = require('../../../src/llmobs/experiments/noop')
 
@@ -16,11 +17,17 @@ const enabledConfig = (overrides = {}) => ({
 })
 
 describe('LLMObs Experiments facade', () => {
+  let fetchHandler
+  let fetchStub
   let originalFetch
 
   beforeEach(() => {
     originalFetch = global.fetch
-    global.fetch = sinon.stub()
+    fetchHandler = async (url) => {
+      throw new Error(`Unexpected fetch ${url}`)
+    }
+    fetchStub = sinon.stub().callsFake((...args) => fetchHandler(...args))
+    global.fetch = fetchStub
   })
 
   afterEach(() => {
@@ -28,11 +35,21 @@ describe('LLMObs Experiments facade', () => {
     sinon.restore()
   })
 
+  const resolveFetchWith = (handler) => {
+    fetchHandler = handler
+  }
+
   describe('createExperiments gating', () => {
     it('returns a no-op when LLM Obs is disabled', () => {
+      const warn = sinon.spy(log, 'warn')
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
       assert.ok(exp instanceof NoopExperiments)
-      assert.throws(() => exp.createDataset('d'), /unavailable/)
+
+      const dataset = exp.createDataset('d', { records: [{ inputData: 'in' }] })
+
+      assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.records()[0].input, 'in')
+      sinon.assert.calledWith(warn, sinon.match(/LLMObs experiments unavailable/))
     })
 
     it('returns a no-op when app key is missing', () => {
@@ -42,14 +59,27 @@ describe('LLMObs Experiments facade', () => {
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())
-      const dataset = exp.createDataset('d', 'desc')
+      const dataset = exp.createDataset('d', {
+        description: 'desc',
+        records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
+      })
       assert.equal(typeof dataset.addRecord, 'function')
+      assert.equal(dataset.records()[0].input, 'in')
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
     })
 
+    it('rejects duplicate custom record ids', () => {
+      assert.throws(
+        () => createExperiments(enabledConfig()).createDataset('d', {
+          records: [{ id: 'r1', inputData: 'a' }, { id: 'r1', inputData: 'b' }],
+        }),
+        /Duplicate record id 'r1'/
+      )
+    })
+
     it('falls back to config.service for the project name when llmobs.mlApp is not set', async () => {
-      global.fetch.callsFake(async () => ({
+      resolveFetchWith(async () => ({
         ok: true,
         status: 200,
         text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })),
@@ -58,31 +88,91 @@ describe('LLMObs Experiments facade', () => {
       const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
       await exp.createDataset('d').push()
 
-      const [url, opts] = global.fetch.getCall(0).args
+      const [url, opts] = fetchStub.getCall(0).args
       assert.equal(new URL(url).pathname, '/api/v2/llm-obs/v1/projects')
       assert.equal(JSON.parse(opts.body).data.attributes.name, 'my-service')
     })
 
     it('returns a no-op with actionable steps when neither mlApp nor service is set', () => {
+      const warn = sinon.spy(log, 'warn')
       const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
       assert.ok(exp instanceof NoopExperiments)
-      assert.throws(() => exp.createDataset('d'), /DD_LLMOBS_ML_APP.*DD_SERVICE/)
+
+      exp.createDataset('d')
+
+      sinon.assert.calledWith(warn, sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/))
     })
   })
 
   describe('no-op (disabled / missing keys)', () => {
-    it('throws on every operation with a clear message', async () => {
+    it('warns and returns inert objects for every operation', async () => {
+      const warn = sinon.spy(log, 'warn')
       const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
-      assert.throws(() => exp.createDataset('d'), /unavailable/)
-      assert.throws(() => exp.experiment({}), /unavailable/)
-      await assert.rejects(() => exp.pullDataset('d'), /unavailable/)
+
+      const dataset = exp.createDataset('d')
+      assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
+      assert.equal(dataset.url(), null)
+
+      const pulled = await exp.pullDataset('d')
+      assert.equal(pulled.name(), 'd')
+
+      const experiment = exp.experiment({ name: 'exp' })
+      assert.equal(experiment.name(), 'exp')
+      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      sinon.assert.calledThrice(warn)
+    })
+
+    it('models inert datasets and experiments with stable accessors', async () => {
+      const warn = sinon.spy(log, 'warn')
+      const exp = new NoopExperiments()
+
+      const ignoredDescriptionDataset = exp.createDataset('legacy description', 'ignored')
+      assert.deepEqual(ignoredDescriptionDataset.records(), [])
+
+      const dataset = exp.createDataset('d', {
+        records: [{
+          id: 'r1',
+          inputData: { question: 'q' },
+          expectedOutput: { answer: 'a' },
+          metadata: { source: 'test' },
+        }],
+      })
+      dataset.addRecord('input only')
+
+      assert.equal(dataset.name(), 'd')
+      assert.equal(dataset.id(), null)
+      assert.equal(dataset.projectId(), null)
+      assert.equal(dataset.version(), null)
+      assert.equal(dataset.latestVersion(), null)
+      assert.deepEqual(dataset.recordIds(), [])
+      assert.equal(dataset.url(), null)
+      assert.deepEqual(dataset.records(), [
+        {
+          id: 'r1',
+          input: { question: 'q' },
+          expectedOutput: { answer: 'a' },
+          metadata: { source: 'test' },
+        },
+        { id: null, input: 'input only', expectedOutput: null, metadata: {} },
+      ])
+      assert.deepEqual(await dataset.push(), { pushedCount: 0, totalCount: 0 })
+
+      const pulled = await exp.pullDataset('pulled')
+      assert.equal(pulled.name(), 'pulled')
+
+      const experiment = exp.experiment()
+      assert.equal(experiment.name(), '')
+      assert.equal(experiment.experimentId(), null)
+      assert.equal(experiment.url(), null)
+      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      sinon.assert.callCount(warn, 4)
     })
   })
 
   describe('pullDataset', () => {
     const resolveRoutes = (recordsResponses) => {
       let recordsCall = 0
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         let payload
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
@@ -113,6 +203,52 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(ds.records()[0].input, { q: '2+2' })
       assert.equal(ds.records()[0].expectedOutput, '4')
       assert.deepEqual(ds.records()[0].metadata, { a: 1 })
+      assert.equal(ds.records()[0].id, 'r1')
+      assert.equal(ds.records()[1].id, 'r2')
+    })
+
+    it('passes explicit dataset version when reading records', async () => {
+      resolveFetchWith(async (url) => {
+        const u = new URL(url)
+        let payload
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
+          assert.equal(u.searchParams.get('filter[version]'), '3')
+          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
+        } else {
+          payload = {}
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const ds = await createExperiments(enabledConfig()).pullDataset('wanted', { version: 3 })
+      assert.equal(ds.version(), 3)
+      assert.equal(ds.latestVersion(), 7)
+    })
+
+    it('pins the current version when pulling latest records', async () => {
+      resolveFetchWith(async (url) => {
+        const u = new URL(url)
+        let payload
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          payload = { data: { id: 'proj' } }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets') {
+          payload = { data: [{ id: 'ds9', attributes: { name: 'wanted', description: 'd', current_version: 7 } }] }
+        } else if (u.pathname === '/api/v2/llm-obs/v1/proj/datasets/ds9/records') {
+          assert.equal(u.searchParams.get('filter[version]'), '7')
+          payload = { data: [{ id: 'r1', attributes: { input: 'i1' } }] }
+        } else {
+          payload = {}
+        }
+        return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
+      })
+
+      const ds = await createExperiments(enabledConfig()).pullDataset('wanted')
+      assert.equal(ds.version(), 7)
+      assert.equal(ds.records().length, 1)
     })
 
     it('waits (backoff) until the expected record count is readable', async () => {
@@ -128,7 +264,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('throws when the dataset is absent (no wait)', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         const payload = u.pathname === '/api/v2/llm-obs/v1/projects' ? { data: { id: 'proj' } } : { data: [] }
         return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify(payload)) }
@@ -140,7 +276,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('throws with the underlying error when listing datasets fails', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
           return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
@@ -162,7 +298,7 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('throws the underlying error when fetching records fails, even without expectedRecordCount', async () => {
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
           return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
@@ -184,7 +320,7 @@ describe('LLMObs Experiments facade', () => {
         '': { data: [{ id: 'r1', attributes: { input: 'i1' } }], meta: { after: 'cursor1' } },
         cursor1: { data: [{ id: 'r2', attributes: { input: 'i2' } }], meta: { after: '' } },
       }
-      global.fetch.callsFake(async (url) => {
+      resolveFetchWith(async (url) => {
         const u = new URL(url)
         let payload
         if (u.pathname === '/api/v2/llm-obs/v1/projects') {
