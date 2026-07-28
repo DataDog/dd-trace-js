@@ -536,6 +536,7 @@ export default [
       'sonarjs/no-duplicated-branches': 'error',
       'sonarjs/no-empty-collection': 'error',
       'sonarjs/no-extra-arguments': 'error',
+      'sonarjs/no-globals-shadowing': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
       'sonarjs/no-identical-functions': 'error',
       'sonarjs/no-ignored-exceptions': 'error',
