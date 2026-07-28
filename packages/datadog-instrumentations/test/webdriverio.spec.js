@@ -24,6 +24,7 @@ const {
 } = require('../src/mocha/webdriverio-protocol')
 
 const fixturePath = path.join(__dirname, 'fixtures', 'webdriverio-local-runner.mjs')
+const delayedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-delayed-worker.js')
 const disconnectedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-disconnected-worker.js')
 const regularMochaWorkerFixturePath = path.join(__dirname, 'fixtures', 'mocha-regular-worker.js')
 const fixtureModulePath = path.join(
@@ -148,6 +149,10 @@ describe('webdriverio instrumentation', () => {
 
   it('does not send Mocha worker messages over disconnected IPC', async () => {
     await execFileAsync(process.execPath, [disconnectedWorkerFixturePath])
+  })
+
+  it('waits for worker payloads before completing Mocha', async () => {
+    await execFileAsync(process.execPath, [delayedWorkerFixturePath])
   })
 
   it('does not track WebdriverIO hook failures in regular Mocha workers', async () => {
