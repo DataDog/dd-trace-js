@@ -38,7 +38,7 @@ describe('EventBridge', function () {
         computePathwayHash(
           'test',
           'tester',
-          ['direction:out', 'type:eventbridge', `topic:default:${detailType}`],
+          ['direction:out', 'exchange:default', `topic:${detailType}`, 'type:eventbridge'],
           ENTRY_PARENT_HASH,
           phash
         ).readBigUInt64LE(0).toString(),

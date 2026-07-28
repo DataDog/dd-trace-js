@@ -387,7 +387,7 @@ describe('EventBridge plugin requestInject', () => {
     assert.deepStrictEqual(infos, [['Payload size too large to pass context']])
   })
 
-  it('reports the shipped byte size to every checkpoint', () => {
+  it('reports the caller-built byte size to every checkpoint, not the injected one', () => {
     const calls = []
     buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
     const request = {
@@ -402,12 +402,13 @@ describe('EventBridge plugin requestInject', () => {
 
     publishRequest(request)
 
-    const { Entries } = request.params
     assert.strictEqual(
       calls[0][2],
-      Buffer.byteLength(Entries[0].Detail) + Buffer.byteLength('checkout') + Buffer.byteLength('invoice.created'),
+      Buffer.byteLength('{"id":1}') + Buffer.byteLength('checkout') + Buffer.byteLength('invoice.created'),
     )
-    assert.strictEqual(calls[1][2], Buffer.byteLength(Entries[1].Detail))
+    assert.strictEqual(calls[1][2], Buffer.byteLength('{"id":2}'))
+    // The `_datadog` context ships but is not the caller's payload, so it must not be reported.
+    assert.ok(Buffer.byteLength(request.params.Entries[1].Detail) > calls[1][2])
   })
 
   it('tags the checkpoint with the event bus and detail type', () => {
@@ -426,7 +427,8 @@ describe('EventBridge plugin requestInject', () => {
 
     publishRequest(request)
 
-    assert.deepStrictEqual(calls[0][0], ['direction:out', 'type:eventbridge', 'topic:payments:invoice.created'])
+    assert.deepStrictEqual(calls[0][0],
+      ['direction:out', 'exchange:payments', 'topic:invoice.created', 'type:eventbridge'])
   })
 
   it('tags the checkpoint with the default event bus and detail type', () => {
@@ -439,6 +441,7 @@ describe('EventBridge plugin requestInject', () => {
 
     publishRequest(request)
 
-    assert.deepStrictEqual(calls[0][0], ['direction:out', 'type:eventbridge', 'topic:default:unknown'])
+    assert.deepStrictEqual(calls[0][0],
+      ['direction:out', 'exchange:default', 'topic:unknown', 'type:eventbridge'])
   })
 })

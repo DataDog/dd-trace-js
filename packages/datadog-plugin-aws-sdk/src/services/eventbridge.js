@@ -136,14 +136,13 @@ class EventBridge extends BaseAwsSdkPlugin {
           // The pathway field is a fixed width, so reserving it is exact and saves building the
           // detail a second time just to measure it.
           const reserved = dsmEnabled && tracePropagated ? PATHWAY_FIELD_BYTES : 0
-          const size = putEventEntrySize(entry, traceOnlyDetail) + reserved
+          requestSize += putEventEntrySize(entry, traceOnlyDetail) + reserved
           injectable.push({
             entry,
             carrier,
-            size,
+            payloadSize: dsmEnabled ? putEventEntrySize(entry) : 0,
             traceOnlyDetail: tracePropagated ? traceOnlyDetail : undefined,
           })
-          requestSize += size
           continue
         }
       }
@@ -156,10 +155,10 @@ class EventBridge extends BaseAwsSdkPlugin {
       return
     }
 
-    for (const { entry, carrier, size, traceOnlyDetail } of injectable) {
+    for (const { entry, carrier, payloadSize, traceOnlyDetail } of injectable) {
       let detail = traceOnlyDetail
       if (dsmEnabled) {
-        const dataStreamsContext = this.setDSMCheckpoint(span, entry, size)
+        const dataStreamsContext = this.setDSMCheckpoint(span, entry, payloadSize)
         // Anything short of a real pathway leaves the carrier on the sizing stand-in, which must
         // never ship; a pathway-only entry then has no fallback and keeps the caller's detail.
         if (DsmPathwayCodec.encode(dataStreamsContext, carrier) !== undefined) {
@@ -173,14 +172,17 @@ class EventBridge extends BaseAwsSdkPlugin {
   /**
    * @param {import('../../../..').Span} span
    * @param {PutEventsRequestEntry} entry
-   * @param {number} payloadSize bytes the entry adds to the request once the context is injected
-   * @see https://github.com/DataDog/dd-trace-go/blob/main/contrib/aws/aws-sdk-go-v2/internal/eventbridge/eventbridge.go
+   * @param {number} payloadSize the entry's byte size as the caller built it, before the `_datadog`
+   *   context is injected; DSM measures the payload, not our propagation overhead
+   *
+   * Edge tags feed the pathway hash, so they are a cross-tracer contract: renaming or merging one
+   * splits the DSM pathway instead of extending it.
    */
   setDSMCheckpoint (span, entry, payloadSize) {
     const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS
     const detailType = entry.DetailType || DEFAULT_DETAIL_TYPE
     return this.tracer.setCheckpoint(
-      ['direction:out', 'type:eventbridge', `topic:${eventBus}:${detailType}`],
+      ['direction:out', `exchange:${eventBus}`, `topic:${detailType}`, 'type:eventbridge'],
       span,
       payloadSize,
     )
