@@ -765,6 +765,19 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, undefined)
   })
 
+  it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is otlp but the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, undefined)
+  })
+
+  it('should still respect an explicit OTEL_TRACES_SAMPLER when the exporter is electron', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_TRACES_SAMPLER = 'always_off'
+    const config = getConfig({ experimental: { exporter: 'electron' } })
+    assert.strictEqual(config.sampleRate, 0)
+  })
+
   it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
