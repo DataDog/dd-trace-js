@@ -2,7 +2,10 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
-const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
+const VERCEL_REQUEST_CONTEXTS = [
+  Symbol.for('@next/request-context'),
+  Symbol.for('@vercel/request-context'),
+]
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -58,10 +61,13 @@ function scheduleVercelFlush (tracer) {
   if (typeof tracer._exporter?.flush !== 'function') return false
 
   let waitUntil
-  try {
-    waitUntil = globalThis[VERCEL_REQUEST_CONTEXT]?.get?.()?.waitUntil
-  } catch {
-    return false
+  for (const requestContext of VERCEL_REQUEST_CONTEXTS) {
+    try {
+      waitUntil = globalThis[requestContext]?.get?.()?.waitUntil
+    } catch {
+      continue
+    }
+    if (typeof waitUntil === 'function') break
   }
   if (typeof waitUntil !== 'function') return false
 

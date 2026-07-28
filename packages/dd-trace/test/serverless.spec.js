@@ -14,6 +14,7 @@ const {
 } = require('../src/serverless')
 
 const vercelRequestContext = Symbol.for('@vercel/request-context')
+const nextRequestContext = Symbol.for('@next/request-context')
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE
@@ -51,6 +52,7 @@ describe('scheduleVercelFlush', () => {
     if (originalVercel === undefined) delete process.env.VERCEL
     else process.env.VERCEL = originalVercel
     delete globalThis[vercelRequestContext]
+    delete globalThis[nextRequestContext]
   })
 
   it('keeps the request alive until asynchronous export completes', async () => {
@@ -80,6 +82,25 @@ describe('scheduleVercelFlush', () => {
     await waitUntilTask
 
     assert.strictEqual(settled, true)
+  })
+
+  it('uses the current Next.js request context', async () => {
+    process.env.VERCEL = '1'
+    let flushDone
+    let waitUntilTask
+    const tracer = createAgentlessTracer(done => {
+      flushDone = done
+    })
+    globalThis[nextRequestContext] = createRequestContext(promise => {
+      waitUntilTask = promise
+    })
+
+    assert.strictEqual(scheduleVercelFlush(tracer), true)
+    await nextImmediate()
+
+    assert.strictEqual(typeof flushDone, 'function')
+    flushDone()
+    await waitUntilTask
   })
 
   it('keeps a serverless invocation alive through a loopback intake request', async () => {
