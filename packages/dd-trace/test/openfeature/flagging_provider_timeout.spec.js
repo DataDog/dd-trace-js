@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { ProviderEvents } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -52,7 +53,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       warn: sinon.spy(),
     }
 
-    FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
+    const createFlaggingProviderClass = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
@@ -61,6 +62,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
         create: sinon.stub(),
       },
     })
+    FlaggingProvider = createFlaggingProviderClass(DatadogNodeServerProvider)
   })
 
   afterEach(() => {

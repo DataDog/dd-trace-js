@@ -163,6 +163,7 @@ interface Tracer extends opentracing.Tracer {
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @beta This feature is in preview and not ready for production use
+   * @deprecated Use `require('dd-trace/openfeature')` instead, which also works in bundled applications.
    */
   openfeature: tracer.OpenFeatureProvider;
 

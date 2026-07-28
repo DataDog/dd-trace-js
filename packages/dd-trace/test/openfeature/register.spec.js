@@ -12,12 +12,14 @@ require('../setup/core')
 
 describe('OpenFeature register', () => {
   let config
+  let createFlaggingProviderClass
   let feature
   let FlaggingProvider
   let openfeatureModule
   let openfeatureRemoteConfig
   let proxy
   let registerFeature
+  let requireProviderStub
 
   function NoopFlaggingProvider () {}
 
@@ -35,11 +37,14 @@ describe('OpenFeature register', () => {
       enable: sinon.spy(),
     }
     FlaggingProvider = function () {}
+    createFlaggingProviderClass = sinon.stub().returns(FlaggingProvider)
+    requireProviderStub = { DatadogNodeServerProvider: function () {} }
 
     delete require.cache[require.resolve('../../src/openfeature/register')]
     proxyquire('../../src/openfeature/register', {
       '../feature-registry': { registerFeature },
-      './flagging_provider': FlaggingProvider,
+      './flagging_provider': createFlaggingProviderClass,
+      './require-provider': requireProviderStub,
       './remote_config': openfeatureRemoteConfig,
       './index': openfeatureModule,
       './noop': NoopFlaggingProvider,
@@ -61,6 +66,7 @@ describe('OpenFeature register', () => {
     assert.ok(feature.noop instanceof NoopFlaggingProvider)
     assert.strictEqual(feature.factory(), openfeatureModule)
     assert.strictEqual(feature.provider(), FlaggingProvider)
+    sinon.assert.calledOnceWithExactly(createFlaggingProviderClass, requireProviderStub.DatadogNodeServerProvider)
   })
 
   it('does not load active OpenFeature modules before application access', () => {
