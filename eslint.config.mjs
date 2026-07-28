@@ -517,6 +517,7 @@ export default [
       'sonarjs/no-extra-arguments': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
       'sonarjs/no-identical-functions': 'error',
+      'sonarjs/no-ignored-exceptions': 'error',
       'sonarjs/no-invariant-returns': 'error',
       'sonarjs/no-nested-assignment': 'error',
       'sonarjs/no-parameter-reassignment': 'error',
@@ -691,6 +692,17 @@ export default [
     },
   },
   {
+    name: 'dd-trace/unicorn/all',
+    // Unicorn is otherwise limited to production code, and `sonarjs/no-ignored-exceptions`
+    // reports only a subset of the unused catch bindings in tests and fixtures.
+    plugins: {
+      unicorn: eslintPluginUnicorn,
+    },
+    rules: {
+      'unicorn/prefer-optional-catch-binding': 'error',
+    },
+  },
+  {
     name: 'dd-trace/config-sync',
     files: [
       'eslint.config.mjs',
@@ -781,6 +793,8 @@ export default [
       }],
       'no-var': 'off', // Only supported in Node.js 6+
       'object-shorthand': 'off', // Only supported in Node.js 4+
+      // The binding cannot be dropped without optional catch binding (Node.js 10+).
+      'sonarjs/no-ignored-exceptions': 'off',
       'unicorn/prefer-includes': 'off', // Only supported in Node.js 6+
       'unicorn/prefer-number-properties': 'off', // Only supported in Node.js 0.12+
       'unicorn/prefer-optional-catch-binding': 'off', // Only supported in Node.js 10+

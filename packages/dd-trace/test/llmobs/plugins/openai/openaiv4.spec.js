@@ -721,7 +721,7 @@ describe('integrations', () => {
             n: 1,
             user: 'dd-trace-test',
           })
-        } catch (e) {
+        } catch {
           // expected error
         }
 

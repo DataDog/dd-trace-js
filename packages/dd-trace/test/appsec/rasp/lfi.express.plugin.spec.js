@@ -171,7 +171,7 @@ describe('RASP - lfi', () => {
           args.forEach(arg => {
             try {
               fs.unlinkSync(arg)
-            } catch (e) {
+            } catch {
 
             }
           })
@@ -250,7 +250,7 @@ describe('RASP - lfi', () => {
           afterEach(() => {
             try {
               fs.rmdirSync(dirname)
-            } catch (e) {
+            } catch {
               // some ops are blocked
             }
           })
@@ -264,7 +264,7 @@ describe('RASP - lfi', () => {
             onfinish: (todelete) => {
               try {
                 fs.rmdirSync(todelete)
-              } catch (e) {
+              } catch {
                 // some ops are blocked
               }
             },
@@ -377,7 +377,7 @@ describe('RASP - lfi', () => {
           afterEach(() => {
             try {
               fs.rmdirSync(dirname)
-            } catch (e) {
+            } catch {
             }
           })
 

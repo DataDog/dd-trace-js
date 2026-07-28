@@ -426,7 +426,7 @@ describe('Plugin', () => {
               try {
                 // Passing invalid arguments should cause an error
                 nativeProducer.produce()
-              } catch (err) {
+              } catch {
                 // Error is expected
               }
 

@@ -96,7 +96,7 @@ withVersions('passport-local', 'passport-local', version => {
             password: '1234',
           }
         )
-      } catch (e) {}
+      } catch {}
 
       await agent.assertSomeTraces(assertFingerprintInTraces)
     })
