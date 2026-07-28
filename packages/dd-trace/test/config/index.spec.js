@@ -5121,8 +5121,8 @@ rules:
       process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
 
       const config = getConfig()
-      const warning = 'Unsupported Feature Flagging configuration source; provider disabled: ' +
-        "'offline' for DD_FEATURE_FLAGS_CONFIGURATION_SOURCE (source: env_var)"
+      const warning = 'Unsupported Feature Flagging configuration source: ' +
+        "'offline' for DD_FEATURE_FLAGS_CONFIGURATION_SOURCE (source: env_var), provider disabled"
 
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
@@ -5145,6 +5145,18 @@ rules:
       config.setRemoteConfig({})
 
       sinon.assert.calledOnce(log.warn)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('does not warn for an unsupported source when the stable kill switch disables the provider', () => {
+      process.env.DD_FEATURE_FLAGS_ENABLED = 'false'
+      process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'offline'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
+      sinon.assert.notCalled(log.warn)
       sinon.assert.notCalled(log.error)
     })
 

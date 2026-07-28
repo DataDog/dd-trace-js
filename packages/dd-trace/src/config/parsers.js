@@ -59,30 +59,15 @@ const transformers = {
     return toCase(value, 'toLowerCase')
   },
   /**
-   * Normalizes a Feature Flagging configuration source while preserving unsupported values for
-   * diagnostics. A blank value is treated as unset so legacy configuration can still apply.
+   * Normalizes a Feature Flagging configuration source.
+   * A blank value is treated as unset so legacy configuration can still apply.
    *
    * @param {string} value
-   * @param {string} optionName
-   * @param {string} source
    * @returns {string | undefined}
    */
-  configurationSource (value, optionName, source) {
+  configurationSource (value) {
     const normalized = value.trim().toLowerCase()
-    if (normalized === '') return
-
-    if (normalized !== 'agentless' && normalized !== 'remote_config') {
-      warnInvalidValue(
-        value,
-        optionName,
-        source,
-        'Unsupported Feature Flagging configuration source; provider disabled',
-        undefined,
-        false
-      )
-    }
-
-    return normalized
+    return normalized || undefined
   },
   toUpperCase (value) {
     return toCase(value, 'toUpperCase')

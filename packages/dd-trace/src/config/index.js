@@ -347,6 +347,14 @@ class Config extends ConfigBase {
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         configurationSource !== 'agentless' &&
         configurationSource !== 'remote_config') {
+      warnInvalidValue(
+        configurationSource,
+        'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
+        this.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'),
+        'Unsupported Feature Flagging configuration source',
+        undefined,
+        'provider disabled'
+      )
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
     }
 
