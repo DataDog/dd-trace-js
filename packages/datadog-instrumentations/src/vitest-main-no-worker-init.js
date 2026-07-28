@@ -796,6 +796,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
     const attempt = {
       index,
       attemptToFixFailed: type === 'attempt_to_fix' && isFinalAttempt && hasFailure,
+      duration: task.meta?.__ddTestOptAttemptDurations?.[index],
       earlyFlakeAbortReason: type === 'early_flake_detection' && isFinalAttempt
         ? task.meta?.__ddTestOptEfdAbortReason
         : undefined,
@@ -939,7 +940,7 @@ function reportFinalTestAttempt (testReport) {
   const finalAttempt = testReport.finalAttempt
 
   if (status === 'fail') {
-    const error = errors.at(-1) || errors[0]
+    const error = finalAttempt?.error || errors[0]
     reportTestAttempt(testReport, finalAttempt || {
       error,
       finalStatus,
@@ -1023,11 +1024,16 @@ function reportTestAttempt (testReport, attempt) {
   testCtx.task = task
   if (
     status === 'pass' &&
-    !attempt.isRetry &&
-    isFinalTestAttempt(testReport, attempt) &&
-    result?.duration !== undefined
+    (
+      attempt.duration !== undefined ||
+      (
+        !attempt.isRetry &&
+        isFinalTestAttempt(testReport, attempt) &&
+        result?.duration !== undefined
+      )
+    )
   ) {
-    testCtx.duration = result.duration
+    testCtx.duration = attempt.duration ?? result.duration
   }
   testFinishTimeCh.runStores(testCtx, () => {})
 
@@ -1042,7 +1048,8 @@ function reportTestAttempt (testReport, attempt) {
   }
 
   testErrorCh.publish({
-    duration: shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined,
+    duration: attempt.duration ??
+      (shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined),
     error: attempt.error,
     earlyFlakeAbortReason: attempt.earlyFlakeAbortReason,
     finalStatus: attempt.finalStatus,

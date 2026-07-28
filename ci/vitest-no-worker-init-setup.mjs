@@ -33,6 +33,7 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
+const now = globalThis.performance ? globalThis.performance.now.bind(globalThis.performance) : Date.now
 
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
@@ -48,6 +49,7 @@ if (isNoWorkerInitActive) {
     const isEarlyFlakeDetectionTestAttempt = isEarlyFlakeDetectionTest(testSuite, testName)
     const isQuarantinedTest = quarantinedTests[testSuite]?.[testName] && !isAttemptToFixTest
     const attemptIndex = getNextAttemptIndex(task)
+    const attemptStart = now()
     if (attemptIndex > 0) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
     }
@@ -66,6 +68,7 @@ if (isNoWorkerInitActive) {
     prepareRumCorrelation(task, attemptIndex)
 
     onTestFinished(() => {
+      recordTestAttemptDuration(task, attemptIndex, attemptStart)
       recordRetryErrorCount(task)
       if (
         (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) &&
@@ -371,12 +374,35 @@ function recordManualRepeatStatus (task, attemptIndex) {
  * @returns {void}
  */
 function recordRetryErrorCount (task) {
-  const retryLimit = typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
+  const retryLimit = getRetryLimit(task)
   if (retryLimit <= 0) return
 
   const retryCount = task.result?.retryCount || 0
   task.meta.__ddTestOptRetryErrorCounts ||= []
   task.meta.__ddTestOptRetryErrorCounts[retryCount] = task.result?.errors?.length || 0
+}
+
+/**
+ * Records the elapsed time for one retry or repeat execution.
+ *
+ * @param {object} task
+ * @param {number} attemptIndex
+ * @param {number} attemptStart
+ * @returns {void}
+ */
+function recordTestAttemptDuration (task, attemptIndex, attemptStart) {
+  task.meta.__ddTestOptAttemptDurations ||= []
+  task.meta.__ddTestOptAttemptDurations[attemptIndex] = now() - attemptStart
+}
+
+/**
+ * Returns the configured retry count for numeric and object-form retry options.
+ *
+ * @param {object} task
+ * @returns {number}
+ */
+function getRetryLimit (task) {
+  return typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
 }
 
 function restoreEarlyFlakeDetectionSkippedResult (task) {
@@ -424,7 +450,7 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
   }
 
   const retryCount = task.result?.retryCount || 0
-  const retryLimit = task.retry || 0
+  const retryLimit = getRetryLimit(task)
   if (retryCount < retryLimit || attemptIndex < getFinalAttemptIndex(task)) {
     return
   }
