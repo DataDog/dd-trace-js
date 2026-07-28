@@ -12,6 +12,7 @@ const { promisify } = require('node:util')
 const MochaTest = require('mocha/lib/test')
 const sinon = require('sinon')
 
+const MochaPlugin = require('../../datadog-plugin-mocha/src')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const {
@@ -188,6 +189,23 @@ describe('webdriverio instrumentation', () => {
 
   it('does not track WebdriverIO hook failures in regular Mocha workers', async () => {
     await execFileAsync(process.execPath, [regularMochaWorkerFixturePath])
+  })
+
+  it('configures the Mocha worker plugin with the WebdriverIO framework', () => {
+    const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+    plugin.configure({ enabled: true })
+
+    try {
+      channel('ci:mocha:worker:configuration').publish({
+        libraryConfig: {},
+        repositoryRoot: process.cwd(),
+        testFramework: 'webdriverio',
+      })
+
+      assert.strictEqual(plugin.testFramework, 'webdriverio')
+    } finally {
+      plugin.configure(false)
+    }
   })
 
   it('keeps failures when all executed EFD attempts fail and unused attempts are pending', () => {

@@ -142,6 +142,10 @@ const scenarioConfig = {
     specFileRetriesDelay: 0,
     specs: ['./spec-file-retry.e2e.js'],
   },
+  suiteHookFailure: {
+    maxInstances: 1,
+    specs: ['./suite-hook-fail.e2e.js'],
+  },
   tdd: {
     maxInstances: 1,
     mochaOpts: {

@@ -509,6 +509,61 @@ for (const version of versions) {
       }, {}, 1)
     })
 
+    for (const hookType of ['beforeAll', 'afterAll']) {
+      it(`does not suppress a quarantined test's ${hookType} failure`, async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+        })
+        receiver.setTestManagementTests({
+          webdriverio: {
+            suites: {
+              'suite-hook-fail.e2e.js': {
+                tests: {
+                  'WebdriverIO suite hook failure is quarantined': {
+                    properties: { quarantined: true },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        await runScenario('suiteHookFailure', 1, payloads => {
+          const events = getEvents(payloads)
+          const session = events.find(event => event.type === 'test_session_end').content
+          const suite = events.find(event => event.type === 'test_suite_end').content
+
+          assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+        }, {
+          WEBDRIVERIO_SUITE_HOOK: hookType,
+        }, 1)
+      })
+    }
+
+    it('does not suppress an afterAll failure after passing EFD attempts', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          faulty_session_threshold: 100,
+          slow_test_retries: { '5s': 2 },
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ webdriverio: {} })
+
+      await runScenario('suiteHookFailure', 1, payloads => {
+        const events = getEvents(payloads)
+        const session = events.find(event => event.type === 'test_session_end').content
+        const suite = events.find(event => event.type === 'test_suite_end').content
+
+        assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+      }, {
+        WEBDRIVERIO_SUITE_HOOK: 'afterAll',
+      }, 1)
+    })
+
     it('marks tests from modified files as impacted', async () => {
       receiver.setSettings({ impacted_tests_enabled: true })
 

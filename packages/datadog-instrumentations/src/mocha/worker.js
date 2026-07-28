@@ -226,6 +226,18 @@ function isWebdriverioFailureSuppressed (test) {
 }
 
 /**
+ * Gets the test owned by a per-test hook without associating suite hooks with boundary tests.
+ *
+ * @param {object} hook
+ * @returns {object|undefined}
+ */
+function getWebdriverioHookTest (hook) {
+  const { parent } = hook
+  const isTestHook = parent?._beforeEach?.includes(hook) || parent?._afterEach?.includes(hook)
+  return isTestHook ? hook.ctx?.currentTest : undefined
+}
+
+/**
  * Removes managed hook failures from WebdriverIO's Mocha runner totals.
  *
  * @param {object} runner
@@ -491,7 +503,7 @@ addHook({
         if (runnable.type === 'hook' && runnable.file) {
           failedHooks.push({
             file: runnable.file,
-            test: runnable.ctx?.currentTest,
+            test: getWebdriverioHookTest(runnable),
           })
         }
       })
