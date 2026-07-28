@@ -121,7 +121,7 @@ versions.forEach((version) => {
       `@vitest/coverage-v8@${version}`,
       '@types/node',
       'tinypool',
-      'typescript',
+      'typescript@6.0.3',
     ], true)
 
     before(function () {
