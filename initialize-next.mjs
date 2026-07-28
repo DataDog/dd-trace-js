@@ -6,6 +6,9 @@ const require = Module.createRequire(import.meta.url)
 const { API, onApiReady } = require('./packages/dd-trace/src/opentelemetry/api')
 const tracer = require('.')
 
+// Load Next's OTel span normalization hook without enabling the legacy plugin.
+require('./packages/datadog-instrumentations/src/next')
+
 // Next's native OTel spans own the server lifecycle. Keep dd-trace's HTTP client
 // instrumentation for propagation and integrations that Next does not provide.
 // eslint-disable-next-line eslint-rules/eslint-process-env
