@@ -10,7 +10,7 @@ registerFeature({
   name: 'openfeature',
   noop,
   factory: () => require('./index'),
-  provider: () => require('./flagging_provider'),
+  provider: () => require('./flagging_provider')(require('./require-provider').DatadogNodeServerProvider),
 
   /** @param {import('../config/config-base')} config */
   isEnabled (config) {

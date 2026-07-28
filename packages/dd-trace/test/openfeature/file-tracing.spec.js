@@ -38,7 +38,7 @@ async function assertTracesProvider (entrypoint) {
 
 describe('OpenFeature file tracing', () => {
   it('traces the provider dependency tree through the runtime wrapper', async () => {
-    await assertTracesProvider(path.join(repoRoot, 'packages/dd-trace/src/openfeature/flagging_provider.js'))
+    await assertTracesProvider(path.join(repoRoot, 'packages/dd-trace/src/openfeature/require-provider.js'))
   })
 
   it('traces the provider dependency tree through the explicit entrypoint', async () => {
@@ -46,7 +46,26 @@ describe('OpenFeature file tracing', () => {
   })
 
   it('loads the provider through the explicit entrypoint', () => {
-    require(path.join(repoRoot, 'openfeature.js'))
+    const tracerPath = JSON.stringify(path.join(repoRoot, 'packages/dd-trace'))
+    const entrypointPath = JSON.stringify(path.join(repoRoot, 'openfeature.js'))
+    const result = spawnSync(
+      process.execPath,
+      ['--eval', `require(${tracerPath}).init({ plugins: false }); require(${entrypointPath})`],
+      { encoding: 'utf8' }
+    )
+
+    assert.strictEqual(result.status, 0, result.stderr)
+  })
+
+  it('throws a clear error when required before tracer.init()', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--eval', `require(${JSON.stringify(path.join(repoRoot, 'openfeature.js'))})`],
+      { encoding: 'utf8' }
+    )
+
+    assert.notStrictEqual(result.status, 0)
+    assert.match(result.stderr, /must be required after tracer\.init\(\)/)
   })
 
   it('loads the explicit entrypoint as a CommonJS and ESM package subpath', () => {
@@ -58,14 +77,18 @@ describe('OpenFeature file tracing', () => {
       symlinkSync(repoRoot, path.join(nodeModulesPath, 'dd-trace'), 'junction')
       const commonJsResult = spawnSync(
         process.execPath,
-        ['--eval', "require('dd-trace/openfeature')"],
+        ['--eval', "require('dd-trace').init({ plugins: false }); require('dd-trace/openfeature')"],
         { cwd: fixtureRoot, encoding: 'utf8' }
       )
       assert.strictEqual(commonJsResult.status, 0, commonJsResult.stderr)
 
       const esmResult = spawnSync(
         process.execPath,
-        ['--input-type=module', '--eval', "import 'dd-trace/openfeature.js'"],
+        [
+          '--import', 'dd-trace/initialize.mjs',
+          '--input-type=module',
+          '--eval', "import 'dd-trace/openfeature.js'",
+        ],
         { cwd: fixtureRoot, encoding: 'utf8' }
       )
       assert.strictEqual(esmResult.status, 0, esmResult.stderr)
