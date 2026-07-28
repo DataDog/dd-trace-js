@@ -261,6 +261,8 @@ export default [
       'import/no-absolute-path': ['error', { esmodule: true, commonjs: true, amd: false }],
       'import/no-cycle': 'error',
       'import/no-duplicates': 'error',
+      'import/no-empty-named-blocks': 'error',
+      'import/no-mutable-exports': 'error',
       'import/no-named-default': 'error',
       'import/no-self-import': 'error',
       'import/order': ['error', {
@@ -280,6 +282,8 @@ export default [
       'import/no-webpack-loader-syntax': 'error',
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
+      'jsdoc/no-bad-blocks': 'error',
+      'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
       'jsdoc/no-undefined-types': 'off',
@@ -289,7 +293,6 @@ export default [
       'jsdoc/require-param': 'off',
       'jsdoc/require-property-description': 'off',
       'jsdoc/require-returns-description': 'off',
-      'jsdoc/require-returns-type': 'off',
       'jsdoc/require-returns': 'off',
       'jsdoc/tag-lines': 'off', // Alignment is not important for us.
       'n/handle-callback-err': ['error', '^(err|error)$'],
@@ -303,6 +306,7 @@ export default [
       'no-array-constructor': 'error',
       'no-caller': 'error',
       'no-constant-condition': ['error', { checkLoops: false }], // override config from @eslint/js/recommended
+      'no-constructor-return': 'error',
       'no-empty': ['error', { allowEmptyCatch: true }], // override config from @eslint/js/recommended
       'no-eval': 'error',
       'no-extend-native': 'error',
@@ -324,9 +328,6 @@ export default [
       'no-sequences': 'error',
       'no-template-curly-in-string': 'error',
       'no-throw-literal': 'error',
-      // Surfaces pre-existing latent bugs (always-undefined vars in tests/intake helpers)
-      // unrelated to this tooling bump; worth a focused follow-up.
-      'no-unassigned-vars': 'off',
       'no-undef-init': 'error',
       'no-unmodified-loop-condition': 'error',
       'no-unneeded-ternary': ['error', { defaultAssignment: false }],
@@ -356,8 +357,10 @@ export default [
       'prefer-const': ['error', { destructuring: 'all' }],
       'prefer-promise-reject-errors': 'error',
       'prefer-regex-literals': ['error', { disallowRedundantWrapping: true }],
-      // Newly enabled by the ESLint 10 bump; deferred with no-unassigned-vars above.
+      // 6 errors. Attaching `cause` changes error output, so it needs its own change.
       'preserve-caught-error': 'off',
+      'promise/no-new-statics': 'error',
+      'promise/no-return-in-finally': 'error',
       'promise/param-names': 'error',
       'symbol-description': 'error',
       'unicode-bom': ['error', 'never'],
@@ -446,7 +449,6 @@ export default [
           'packages/dd-trace/src/llmobs/span_processor.js',
           // Test specs that intentionally mock the `_tags` field shape on a
           // fake span context (their `getTag`/`getTags` mocks read `this._tags`).
-          'packages/dd-trace/test/opentracing/span_context.spec.js',
           'packages/dd-trace/test/priority_sampler.spec.js',
           'packages/dd-trace/test/sampling_rule.spec.js',
           'packages/dd-trace/test/span_sampler.spec.js',
@@ -461,7 +463,6 @@ export default [
           'packages/dd-trace/test/profiling/profilers/wall.spec.js',
           // Benchmark stubs that mock the `_tags` field shape on a fake span
           // context (their `getTag`/`getTags` mocks read from `_tags`).
-          'benchmark/stubs/span.js',
           'benchmark/sirun/exporting-pipeline/index.js',
         ],
       }],
@@ -522,19 +523,21 @@ export default [
       'sonarjs/no-redundant-assignments': 'error',
       'sonarjs/no-redundant-jump': 'error',
       'sonarjs/no-small-switch': 'error',
+      'sonarjs/no-unthrown-error': 'error',
       'sonarjs/no-unused-collection': 'error',
       'sonarjs/no-use-of-empty-return-value': 'error',
+      'sonarjs/non-existent-operator': 'error',
       'sonarjs/prefer-immediate-return': 'error',
       'sonarjs/prefer-single-boolean-return': 'error',
       'sonarjs/single-char-in-character-classes': 'error',
       'sonarjs/single-character-alternation': 'error',
+      'sonarjs/slow-regex': 'error',
       'sonarjs/stable-tests': 'error',
       'sonarjs/test-check-exception': 'error',
       'sonarjs/updated-loop-counter': 'error',
 
       // --- Rules to check later ------------------
       'sonarjs/no-element-overwrite': 'off', // 3 errors (false positives)
-      'sonarjs/slow-regex': 'off', // 30 errors. Valuable ReDoS signal; needs audit.
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
     },
   },
@@ -585,12 +588,13 @@ export default [
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
+      'unicorn/no-unsafe-dom-html': 'error', // Not in `recommended`; guards the innerHTML sink class.
+
       // Overriding recommended unicorn rules.
       // Rules not listed here are left at the `recommended` default. The entries below
       // document deliberate exceptions. Volume markers stay coarse so they do not drift:
       // `few` is under ten sites, `many` is tens, `lots` is hundreds or more.
       'unicorn/catch-error-name': ['off', { name: 'err' }], // lots
-      'unicorn/expiring-todo-comments': 'off',
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // lots
       'unicorn/name-replacements': 'off', // lots | naming churn (split out of prevent-abbreviations)
       'unicorn/prevent-abbreviations': 'off', // Its replacements moved to name-replacements
@@ -613,7 +617,7 @@ export default [
       // These rules could potentially be evaluated again at a much later point
       'unicorn/class-reference-in-static-methods': 'off', // few
       'unicorn/consistent-class-member-order': 'off', // many | ordering churn
-      'unicorn/consistent-conditional-object-spread': 'off', // few
+      'unicorn/consistent-conditional-object-spread': 'off', // many
       'unicorn/explicit-length-check': 'off', // Not a big advantage
       'unicorn/explicit-timer-delay': 'off', // Covered by our own timer lint rules
       'unicorn/no-array-callback-reference': 'off',
@@ -680,7 +684,7 @@ export default [
       'unicorn/no-confusing-array-splice': 'off', // few
       'unicorn/no-for-each': 'off', // many | we already prefer for-of in production
       'unicorn/no-unnecessary-global-this': 'off', // few | explicit globals are clearer
-      'unicorn/no-useless-continue': 'off', // few
+      'unicorn/no-useless-continue': 'off', // few | the one site guards third-party parser output
       'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // many
       'unicorn/prefer-ternary': 'off', // many
@@ -913,7 +917,6 @@ export default [
       },
     },
     rules: {
-      'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
     },
   },
