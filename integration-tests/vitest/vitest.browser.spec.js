@@ -92,7 +92,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     await receiver.stop()
   })
 
-  async function runVitest (testFile, extraEnv = {}) {
+  async function runVitest (testFile, extraEnv = {}, expectedExitCode = 0) {
     childProcess = exec('./node_modules/.bin/vitest run', {
       cwd,
       env: {
@@ -109,7 +109,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     childProcess.stderr.on('data', data => { testOutput += data })
 
     const [exitCode] = await once(childProcess, 'exit')
-    assert.strictEqual(exitCode, 0, testOutput)
+    assert.strictEqual(exitCode, expectedExitCode, testOutput)
     return exitCode
   }
 
@@ -169,6 +169,22 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  it('reports multiple errors from one browser test execution as one attempt', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+      assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-multiple-errors.mjs', {}, 1),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 1, testOutput)
+  })
+
   it('correlates sequential browser tests with RUM', async () => {
     receiver.setSettings({
       flaky_test_retries_enabled: true,
@@ -211,6 +227,23 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
 
     const [exitCode] = await Promise.all([
       runVitest('browser-rum.mjs', {
+        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
+      }),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not treat an uninitialized RUM stub as active', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const [test] = getEventContents(events, 'test')
+      assert.ok(test)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-uninitialized.mjs', {
         DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
       }),
       payloadsPromise,

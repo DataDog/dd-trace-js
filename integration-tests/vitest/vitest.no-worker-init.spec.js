@@ -18,7 +18,10 @@ const noWorkerInit = require('../../packages/datadog-instrumentations/src/vitest
 const {
   RUM_TEST_EXECUTION_ID_COOKIE_NAME,
 } = require('../../packages/dd-trace/src/ci-visibility/rum')
-const { testSuiteStartCh } = require('../../packages/datadog-instrumentations/src/vitest-util')
+const {
+  testStartCh,
+  testSuiteStartCh,
+} = require('../../packages/datadog-instrumentations/src/vitest-util')
 const {
   ERROR_MESSAGE,
 } = require('../../packages/dd-trace/src/constants')
@@ -307,6 +310,32 @@ describe('vitest no-worker init instrumentation selection', () => {
       })
     }
 
+    function createReporterTestFile (retryCount = 0, errors = []) {
+      const file = {
+        filepath: '/repo/watch-rerun.test.mjs',
+        id: 'watch-rerun-file',
+        meta: {},
+        projectName: 'browser',
+        result: { state: 'pass' },
+        tasks: [],
+        type: 'suite',
+      }
+      const task = {
+        file,
+        id: 'watch-rerun-test',
+        meta: {},
+        name: 'does not reuse retry state',
+        result: {
+          errors,
+          retryCount,
+          state: 'pass',
+        },
+        type: 'test',
+      }
+      file.tasks.push(task)
+      return { file, task }
+    }
+
     it('sends execution and RUM configuration to the no-worker setup context', () => {
       const ctx = getNoWorkerReporterContext()
 
@@ -342,6 +371,35 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
 
       assert.deepStrictEqual(testSuiteStarts, ['/repo/first.test.mjs'])
+    })
+
+    it('clears completed modules and retry state before a watch rerun', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testAttemptRetries = []
+      const onTestStart = context => testAttemptRetries.push(context.isRetry)
+      testStartCh.subscribe(onTestStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const reporter = ctx.reporters[0]
+        const firstRun = createReporterTestFile(1, [new Error('first attempt failed')])
+        reporter.onTaskUpdate(
+          [[firstRun.task.id, firstRun.task.result, firstRun.task.meta]],
+          [[firstRun.task.id, 'test-retried']]
+        )
+        reporter.onTestCaseResult({ task: firstRun.task })
+        reporter.onFinished([firstRun.file])
+
+        reporter.onWatcherRerun()
+
+        const secondRun = createReporterTestFile()
+        reporter.onTestCaseResult({ task: secondRun.task })
+        reporter.onFinished([secondRun.file])
+      } finally {
+        testStartCh.unsubscribe(onTestStart)
+      }
+
+      assert.deepStrictEqual(testAttemptRetries, [false, true, false])
     })
   })
 

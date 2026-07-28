@@ -352,6 +352,12 @@ function createMainProcessReporter (reporterState) {
       }
     },
 
+    onWatcherRerun () {
+      finishedTestModules.clear()
+      taskAttemptStatuses.clear()
+      tasksWithRecordedFinalAttempt.clear()
+    },
+
     onFinished (files) {
       if (!isReporterActive()) return
       if (!files) return
@@ -521,12 +527,17 @@ function createMainProcessReporter (reporterState) {
     }
 
     const attemptStatuses = taskAttemptStatuses.get(task.id)
-    if (!testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection && attemptStatuses?.length > 1) {
+    const retryCount = task.result?.retryCount || 0
+    if (
+      !testProperties.isAttemptToFix &&
+      !testProperties.isEarlyFlakeDetection &&
+      (attemptStatuses?.length > 1 || retryCount > 0)
+    ) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
         browserEnvironment,
         finalStatus: () => status,
         state,
-        statuses: attemptStatuses,
+        statuses: getRetriedTaskStatuses(attemptStatuses, retryCount, status),
         testSuiteStore,
         type: 'external',
       })
@@ -555,25 +566,11 @@ function createMainProcessReporter (reporterState) {
     }
 
     const errors = result?.errors || []
-    const finalErrorIndex = status === 'fail' ? errors.length - 1 : -1
-    const nonFinalAttempts = []
-
-    if (status !== 'skip') {
-      for (let index = 0; index < errors.length; index++) {
-        if (index === finalErrorIndex) continue
-        nonFinalAttempts.push({
-          error: errors[index],
-          index,
-          isRetry: index > 0,
-          status: 'fail',
-        })
-      }
-    }
 
     return {
       browserEnvironment,
       errors,
-      nonFinalAttempts,
+      nonFinalAttempts: [],
       state,
       status,
       task,
@@ -886,6 +883,24 @@ function getRepeatedTaskStatuses (task, status) {
   return repeatedStatuses
 }
 
+/**
+ * Completes reporter retry events with Vitest's final retry count and status.
+ *
+ * @param {string[]} recordedStatuses
+ * @param {number} retryCount
+ * @param {string} finalStatus
+ * @returns {string[]}
+ */
+function getRetriedTaskStatuses (recordedStatuses = [], retryCount, finalStatus) {
+  const statuses = [...recordedStatuses]
+  const attemptCount = Math.max(statuses.length, retryCount + 1)
+  while (statuses.length < attemptCount - 1) {
+    statuses.push('fail')
+  }
+  statuses[attemptCount - 1] = finalStatus
+  return statuses
+}
+
 function reportFinalTestAttempt (testReport) {
   const {
     browserEnvironment,
@@ -930,7 +945,7 @@ function reportFinalTestAttempt (testReport) {
         true,
         true
       ),
-      isRetry: errors.length > 1 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
+      isRetry: (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
       status: 'fail',
     })
     return finalStatus === 'skip' ? undefined : error
@@ -938,7 +953,7 @@ function reportFinalTestAttempt (testReport) {
 
   reportTestAttempt(testReport, finalAttempt || {
     finalStatus,
-    isRetry: errors.length > 0 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
+    isRetry: (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
     status: 'pass',
   })
 }

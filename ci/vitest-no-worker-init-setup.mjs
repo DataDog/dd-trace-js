@@ -213,7 +213,7 @@ function getRum () {
  */
 function getIsRumActive (rum) {
   if (!rum) return false
-  if (typeof rum.getInternalContext !== 'function') return true
+  if (typeof rum.getInternalContext !== 'function') return false
 
   try {
     return !!rum.getInternalContext()
