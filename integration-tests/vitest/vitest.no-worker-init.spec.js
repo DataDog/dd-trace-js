@@ -353,8 +353,8 @@ describe('vitest no-worker init instrumentation selection', () => {
         config: {
           browser: {
             enabled: true,
-            fileParallelism: true,
           },
+          fileParallelism: true,
         },
       }
 
@@ -372,8 +372,28 @@ describe('vitest no-worker init instrumentation selection', () => {
         config: {
           browser: {
             enabled: true,
+          },
+          fileParallelism: false,
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
+        [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, true)
+    })
+
+    it('uses resolved browser file parallelism when available', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
             fileParallelism: false,
           },
+          fileParallelism: true,
         },
       }
 

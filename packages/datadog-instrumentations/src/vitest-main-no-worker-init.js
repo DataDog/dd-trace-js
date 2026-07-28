@@ -1395,7 +1395,8 @@ function canRunBrowserTestFilesInParallel (ctx, testSpecifications) {
   if (browserFileCount < 2) return false
 
   const config = getProjectReportingConfig(project) || safeConfig(ctx)
-  return config?.browser?.fileParallelism !== false && config?.maxWorkers !== 1
+  const fileParallelism = config?.browser?.fileParallelism ?? config?.fileParallelism
+  return fileParallelism !== false && config?.maxWorkers !== 1
 }
 
 function getTestModuleBrowserEnvironment (testModule) {
