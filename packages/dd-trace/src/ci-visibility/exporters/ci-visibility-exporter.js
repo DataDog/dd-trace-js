@@ -24,6 +24,18 @@ const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata'
 const hostname = getHostname()
 const EMPTY_SETTINGS = Object.freeze({})
 
+/**
+ * Test session identity sent with every request. Fields are optional because the CI provider,
+ * the git repository or the runtime may not expose them.
+ *
+ * @typedef {{
+ *   repositoryUrl?: string, sha?: string, branch?: string, tag?: string, testLevel?: string,
+ *   osVersion?: string, osPlatform?: string, osArchitecture?: string,
+ *   runtimeName?: string, runtimeVersion?: string, commitMessage?: string,
+ *   pullRequestBaseSha?: string, commitHeadSha?: string, commitHeadMessage?: string,
+ * }} TestConfiguration
+ */
+
 function getTestConfigurationTags (tags) {
   if (!tags) {
     return {}
@@ -239,6 +251,10 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * We can't request library configuration until we know whether we can use the
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
+   *
+   * @param {TestConfiguration} testConfiguration
+   * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} callback
+   * @returns {void}
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration

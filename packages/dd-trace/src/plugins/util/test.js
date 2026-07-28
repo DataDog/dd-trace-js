@@ -736,6 +736,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
  *
  * @param {string=} testFramework
  * @param {TestEnvironmentConfig=} config
+ * @param {boolean=} shouldSkipGitMetadataExtraction
  * @returns {TestEnvironmentMetadata}
  */
 function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
@@ -916,6 +917,10 @@ function getTestCommonTags (name, suite, version, testFramework) {
 /**
  * We want to make sure that test suites are reported the same way for
  * every OS, so we replace `path.sep` by `/`
+ *
+ * @param {string | undefined} testSuiteAbsolutePath
+ * @param {string} sourceRoot
+ * @returns {string}
  */
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
