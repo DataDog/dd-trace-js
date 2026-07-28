@@ -2,12 +2,16 @@
 
 const { randomFillSync } = require('crypto')
 
+const { channel } = require('dc-polyfill')
+
 const UINT_MAX = 4_294_967_296
 
 const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
 let batch = 0
+
+channel('datadog:identity:update').subscribe(reseed)
 
 // Internal representation of a trace or span ID.
 class Identifier {

@@ -301,7 +301,6 @@ class Tracer extends NoopProxy {
    */
   #registerMicroVmRunHook (config) {
     const { channel } = require('dc-polyfill')
-    require('./microvm-identity-refresh')
     const ch = channel('http.server.request.start')
     let done = false
 

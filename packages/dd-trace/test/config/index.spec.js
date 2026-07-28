@@ -12,6 +12,7 @@ const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const context = describe
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const exporters = require('../../../../ext/exporters')
@@ -5402,6 +5403,17 @@ rules:
       assert.strictEqual(typeof configModule.refreshRuntimeId, 'function')
     })
 
+    it('should not generate a runtime id until a Config is constructed', () => {
+      const uuid = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
+      const configModule = loadConfigModule({ uuid })
+
+      sinon.assert.notCalled(uuid)
+
+      configModule()
+
+      sinon.assert.calledOnce(uuid)
+    })
+
     it('should update config.tags[runtime-id] to a new UUID', () => {
       const configModule = loadConfigModule()
       const config = configModule()
@@ -5453,6 +5465,16 @@ rules:
       const secondRefresh = config.tags['runtime-id']
 
       assert.notStrictEqual(firstRefresh, secondRefresh)
+    })
+
+    it('should refresh the runtime id when datadog:identity:update is published', () => {
+      const configModule = loadConfigModule()
+      const config = configModule()
+      const originalId = config.tags['runtime-id']
+
+      channel('datadog:identity:update').publish(config)
+
+      assert.notStrictEqual(config.tags['runtime-id'], originalId)
     })
   })
 })

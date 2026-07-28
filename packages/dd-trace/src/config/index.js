@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
+const { channel } = require('dc-polyfill')
+
 const exporters = require('../../../../ext/exporters')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -42,7 +44,6 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
-let runtimeId = uuid()
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.CUCUMBER_WORKER,
   exporters.JEST_WORKER,
@@ -50,6 +51,23 @@ const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.PLAYWRIGHT_WORKER,
   exporters.VITEST_WORKER,
 ])
+
+let runtimeId
+
+channel('datadog:identity:update').subscribe(refreshRuntimeId)
+
+/**
+ * Lazily generates the process-wide runtime ID on first access instead of at module load,
+ * so modules that merely require this file without constructing a Config never pay for it.
+ *
+ * @returns {string}
+ */
+function getRuntimeId () {
+  if (runtimeId === undefined) {
+    runtimeId = uuid()
+  }
+  return runtimeId
+}
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -598,7 +616,7 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = runtimeId
+    this.tags['runtime-id'] = getRuntimeId()
     const platformTags = getServerlessPlatformTags()
     if (platformTags) {
       for (let i = 0; i < platformTags.length; i += 2) {
