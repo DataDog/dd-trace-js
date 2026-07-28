@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
+const { channel } = require('dc-polyfill')
+
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
@@ -40,7 +42,22 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
-let runtimeId = uuid()
+let runtimeId
+
+channel('datadog:identity:update').subscribe(refreshRuntimeId)
+
+/**
+ * Lazily generates the process-wide runtime ID on first access instead of at module load,
+ * so modules that merely require this file without constructing a Config never pay for it.
+ *
+ * @returns {string}
+ */
+function getRuntimeId () {
+  if (runtimeId === undefined) {
+    runtimeId = uuid()
+  }
+  return runtimeId
+}
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -586,7 +603,7 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = runtimeId
+    this.tags['runtime-id'] = getRuntimeId()
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)

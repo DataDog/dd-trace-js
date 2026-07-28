@@ -249,7 +249,6 @@
 /packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/log/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/microvm-identity-refresh.js @DataDog/serverless-aws
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities-js
@@ -396,7 +395,6 @@
 /packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/loader-hook.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/log.spec.js @DataDog/lang-platform-js
-/packages/dd-trace/test/microvm-identity-refresh.spec.js @DataDog/serverless-aws
 /packages/dd-trace/test/msgpack/ @DataDog/lang-platform-js
 /packages/dd-trace/test/mocha-hooks.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/noop.spec.js @DataDog/lang-platform-js
