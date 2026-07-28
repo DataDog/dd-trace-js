@@ -244,12 +244,18 @@ function getTestEfdRetryPolicy (test) {
   return efdRetryPolicyByTest.get(test) || earlyFlakeDetectionRetryPolicy
 }
 
+/**
+ * @returns {boolean}
+ */
+function shouldRunEarlyFlakeDetection () {
+  return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
+}
+
 function isTestEfdManaged (test) {
   return !!test._ddIsEfdManagedTest || (
     (test._ddIsNew || test._ddIsModified) &&
     !test._ddIsAttemptToFix &&
-    isEarlyFlakeDetectionEnabled &&
-    hasEfdRetries(earlyFlakeDetectionRetryPolicy)
+    shouldRunEarlyFlakeDetection()
   )
 }
 
@@ -1052,7 +1058,7 @@ function prepareDispatcherRun (dispatcher, args) {
     testGroups = testGroups.filter(group => group.tests.length > 0)
   }
 
-  if (isEarlyFlakeDetectionEnabled) {
+  if (shouldRunEarlyFlakeDetection()) {
     testGroups = deferEfdRetryGroups(testGroups)
   }
 
@@ -1761,7 +1767,7 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
+      if (shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped') {
         markEfdManagedTest(impactedTest)
         const fileSuite = getSuiteType(impactedTest, 'file')
         if (!fileSuitesWithImpactedTestsToProjects.has(fileSuite)) {
@@ -1804,8 +1810,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
-          // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
+        if (shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+          // Prevent ATR or `--retries` from retrying tests that EFD manages.
           newTest.retries = 0
           markEfdManagedTest(newTest)
           const fileSuite = getSuiteType(newTest, 'file')

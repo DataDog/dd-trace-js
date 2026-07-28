@@ -2596,6 +2596,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           'ci-visibility/test-impacted-test/test-impacted-1.js': [
             'impacted tests can pass normally',
             'impacted tests use their duration retry budget',
+            'root-level impacted test declared last',
           ],
           'ci-visibility/test-impacted-test/test-impacted-2.js': [
             'impacted tests 2 can pass normally',
@@ -2628,7 +2629,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           slowIt('use their duration retry budget', (done) => {
             setTimeout(done, 5_100)
           })
-        })`
+        })
+
+        if (process.env.RUN_ROOT_LEVEL_IMPACTED_TEST) {
+          it('root-level impacted test declared last', () => {
+            assert.strictEqual(1 + 2, 3)
+          })
+        }`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
 
@@ -2819,6 +2826,116 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           runImpactedTest(done, { isModified: true, isEfdEnabled: true, isParallel }, extraEnvVars)
         })
       }
+
+      it('retries a root-level impacted test declared last', async () => {
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const testName = 'root-level impacted test declared last'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+
+            assert.strictEqual(tests.length, NUM_RETRIES + 1)
+            assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+            for (const retryTest of tests.slice(1)) {
+              assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            }
+          }, 30_000)
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+              GITHUB_BASE_REF: '',
+              RUN_ROOT_LEVEL_IMPACTED_TEST: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
+      it('retries a root-level attempt-to-fix test declared last', async () => {
+        const testName = 'root-level impacted test declared last'
+        receiver.setSettings({
+          test_management: {
+            enabled: true,
+            attempt_to_fix_retries: NUM_RETRIES,
+          },
+        })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-impacted-test/test-impacted-1.js': {
+                tests: {
+                  [testName]: {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const tests = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+
+            assert.strictEqual(tests.length, NUM_RETRIES + 1)
+            for (const retryTest of tests.slice(1)) {
+              assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+            }
+          }, 30_000)
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-1',
+              GITHUB_BASE_REF: '',
+              RUN_ROOT_LEVEL_IMPACTED_TEST: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
 
       for (const isParallel of [false, true]) {
         it(`selects the impacted test retry budget after its first execution${

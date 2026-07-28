@@ -71,6 +71,9 @@ describe('EFD retry policy', () => {
     assert.throws(() => {
       EMPTY_EFD_RETRY_POLICY.schedulingRetryCount = 5
     }, { name: 'TypeError' })
+    assert.throws(() => {
+      EMPTY_EFD_RETRY_POLICY.durationRetryCounts[0].retryCount = 5
+    }, { name: 'TypeError' })
   })
 
   it('honors every bucket it publishes to the settings validator', () => {

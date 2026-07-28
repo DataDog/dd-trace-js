@@ -19,7 +19,7 @@ const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
 
 /**
  * @typedef {object} EfdRetryPolicy
- * @property {EfdDurationRetryCount[]} durationRetryCounts
+ * @property {ReadonlyArray<EfdDurationRetryCount>} durationRetryCounts
  * @property {number} schedulingRetryCount
  */
 
@@ -38,7 +38,7 @@ function getEfdRetryCountForDuration (durationMs, retryPolicy) {
 }
 
 /**
- * @param {Record<string, number> | undefined} retriesByDuration
+ * @param {Record<string, unknown> | undefined} retriesByDuration
  * @returns {EfdRetryPolicy}
  */
 function createEfdRetryPolicy (retriesByDuration = {}) {
@@ -46,10 +46,12 @@ function createEfdRetryPolicy (retriesByDuration = {}) {
   let schedulingRetryCount = 0
   for (const { limitMs: durationLimitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
     const configuredRetryCount = retriesByDuration[key]
-    const retryCount = Number.isSafeInteger(configuredRetryCount) && configuredRetryCount >= 0
+    const retryCount = typeof configuredRetryCount === 'number' &&
+      Number.isSafeInteger(configuredRetryCount) &&
+      configuredRetryCount >= 0
       ? configuredRetryCount
       : 0
-    durationRetryCounts.push({ durationLimitMs, retryCount })
+    durationRetryCounts.push(Object.freeze({ durationLimitMs, retryCount }))
     if (retryCount > schedulingRetryCount) {
       schedulingRetryCount = retryCount
     }

@@ -175,6 +175,12 @@ const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
 
 /**
+ * @param {boolean} _shouldRun
+ * @returns {void}
+ */
+function ignoreEfdRetryGateResolution (_shouldRun) {}
+
+/**
  * @typedef {object} ConcurrentTestOptions
  * @property {(...args: unknown[]) => unknown} [concurrentTest]
  * @property {unknown} [concurrentTestThisArg]
@@ -1167,7 +1173,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     createEfdRetryDecision (retryCount) {
       const gates = []
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
-        let resolveGate
+        /** @type {(shouldRun: boolean) => void} */
+        let resolveGate = ignoreEfdRetryGateResolution
         const promise = new Promise(resolve => {
           resolveGate = resolve
         })
@@ -1394,6 +1401,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.flushDeferredRetryTests()
       if (event.name === 'add_test') {
         this.handleAddTestEvent(event, state)
+        this.flushDeferredRetryTests()
       }
 
       if (super.handleTestEvent) {
@@ -1484,7 +1492,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.frameworkVersion = jestVersion
         ctx.isNew = isNewTest
         ctx.isEfdRetry ||= efdRetryMetadata !== undefined || numEfdRetry > 0
-        ctx.efdRetryIndex = ctx.efdRetryIndex ?? efdRetryMetadata?.retryIndex
+        ctx.efdRetryIndex ??= efdRetryMetadata?.retryIndex
         ctx.isAttemptToFix = isAttemptToFix
         ctx.isAttemptToFixRetry ||= numOfAttemptsToFixRetries > 0
         ctx.isJestRetry = isJestRetry
