@@ -53,11 +53,12 @@ function collectRoutesFromRouter (router, prefix) {
     if (layer.route) {
       // This layer has a direct route
       const route = layer.route
+      if (!route.methods) continue
 
       const fullPaths = getRouteFullPaths(route, prefix)
 
       for (const fullPath of fullPaths) {
-        for (const [method, enabled] of Object.entries(route.methods || {})) {
+        for (const [method, enabled] of Object.entries(route.methods)) {
           if (!enabled) continue
           routeAddedChannel.publish({
             method: normalizeMethodName(method),

@@ -444,9 +444,11 @@ class VitestPlugin extends CiPlugin {
       isVitestNoWorkerInitActive,
       onDone,
     }) => {
-      for (const [tag, value] of Object.entries(requestErrorTags || {})) {
-        this.testSessionSpan.setTag(tag, value)
-        this.testModuleSpan.setTag(tag, value)
+      if (requestErrorTags) {
+        for (const [tag, value] of Object.entries(requestErrorTags)) {
+          this.testSessionSpan.setTag(tag, value)
+          this.testModuleSpan.setTag(tag, value)
+        }
       }
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
