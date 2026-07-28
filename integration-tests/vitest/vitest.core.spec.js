@@ -114,6 +114,7 @@ versions.forEach((version) => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
     const typecheckIt = version === '1.6.0' ? it.skip : it
+    const typescriptDependency = version === 'latest' ? 'typescript' : 'typescript@6.0.3'
 
     useSandbox([
       `vitest@${version}`,
@@ -121,7 +122,7 @@ versions.forEach((version) => {
       `@vitest/coverage-v8@${version}`,
       '@types/node',
       'tinypool',
-      'typescript',
+      typescriptDependency,
     ], true)
 
     before(function () {

@@ -23,8 +23,8 @@ const {
 
 const { PLAYWRIGHT_VERSION } = process.env
 
-const latest = 'latest'
-const { oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 versions.forEach((version) => {

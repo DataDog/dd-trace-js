@@ -14,11 +14,11 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
+const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const webAppServer = require('./web-app-server')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
-// Playwright 1.62 drops Node 18 support.
-const playwrightDependency = NODE_MAJOR < 20 ? '@playwright/test@1.61.0' : '@playwright/test'
+const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}`
 
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort

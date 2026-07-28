@@ -45,6 +45,7 @@ const {
   resolveOriginalSourceFile,
   resolveSourceLineForTest,
 } = require('../../packages/datadog-plugin-cypress/src/source-map-utils')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
@@ -165,9 +166,7 @@ moduleTypes.forEach(({
     this.timeout(80_000)
     let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
-    // cypress-fail-fast is required as an incompatible plugin.
-    // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    const sandboxDependencies = [`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript']
+    const sandboxDependencies = getCypressDependencies(version)
     if (type === 'commonJS' && version === 'latest') {
       // These dependencies are only needed by the component/Vite regression test below.
       sandboxDependencies.push(
