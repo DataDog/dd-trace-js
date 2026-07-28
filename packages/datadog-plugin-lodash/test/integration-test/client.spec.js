@@ -14,13 +14,16 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('lodash', 'lodash', version => {
   describe('ESM', () => {
-    let variants, proc, agent
+    let proc, agent
 
     useSandbox([`'lodash@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-lodash/test/integration-test/*'])
 
-    before(function () {
-      variants = varySandbox('server.mjs', 'lodash')
+    const variants = varySandbox('server.mjs', {
+      bindingName: 'lodash',
+      packageName: 'lodash',
+      defaultExport: true,
+      namedExports: [],
     })
 
     beforeEach(async () => {
@@ -32,7 +35,7 @@ withVersions('lodash', 'lodash', version => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)

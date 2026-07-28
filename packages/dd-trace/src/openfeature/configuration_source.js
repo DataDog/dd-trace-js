@@ -26,6 +26,8 @@ function create (config, applyConfiguration) {
 
   const hasCustomEndpoint = Boolean(baseUrl?.trim())
 
+  const hasCustomEndpoint = Boolean(baseUrl?.trim())
+
   try {
     if (!hasCustomEndpoint && !config.DD_API_KEY) {
       throw new Error('DD_API_KEY is required for the default Datadog Feature Flagging endpoint')

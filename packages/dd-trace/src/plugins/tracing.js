@@ -265,6 +265,7 @@ class TracingPlugin extends Plugin {
     analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
+    // eslint-disable-next-line unicorn/no-unnecessary-boolean-comparison -- Context objects use the other branch.
     if (enterOrCtx === true) {
       legacyStorage.enterWith({ ...store, span })
     } else if (enterOrCtx) {

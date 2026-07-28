@@ -126,6 +126,87 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('replaces frozen policy snapshots when dependent requests fail', () => {
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.libraryConfig = Object.freeze({
+      isEarlyFlakeDetectionEnabled: true,
+      isKnownTestsEnabled: true,
+      isTestManagementEnabled: true,
+    })
+    plugin.tracer._exporter.getKnownTests = (configuration, done) => {
+      done(new Error('known tests failed'))
+    }
+    plugin.tracer._exporter.getTestManagementTests = (configuration, done) => {
+      done(new Error('test management failed'))
+    }
+
+    try {
+      dc.channel('ci:vitest:known-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isEarlyFlakeDetectionEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isKnownTestsEnabled, false)
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+
+      dc.channel('ci:vitest:test-management-tests').publish({ onDone: () => {} })
+
+      assert.strictEqual(plugin.libraryConfig.isTestManagementEnabled, false)
+      assert.strictEqual(Object.isFrozen(plugin.libraryConfig), true)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('disables advanced features for basic-reporting library configuration requests', () => {
+    const libraryConfig = {
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isSuitesSkippingEnabled: true,
+      isTestManagementEnabled: true,
+    }
+    const getLibraryConfiguration = sinon.stub().callsArgWith(1, null, libraryConfig)
+    const addMetadataTags = sinon.stub()
+    const onDone = sinon.stub()
+    const plugin = createPlugin('jest_worker')
+    plugin.tracer._exporter = {
+      addMetadataTags,
+      getLibraryConfiguration,
+    }
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    dc.channel('ci:vitest:library-configuration').publish({
+      basicReportingOnly: true,
+      frameworkVersion: '1.0.0',
+      onDone,
+    })
+    plugin.configure(false)
+
+    assert.deepStrictEqual(plugin.libraryConfig, {})
+    assert.deepStrictEqual(plugin.getLibraryCapabilitiesTags('1.0.0', { basicReportingOnly: true }), {})
+    assert.deepStrictEqual(onDone.firstCall.args[0].libraryConfig, {})
+    assert.deepStrictEqual(addMetadataTags.firstCall.args[0], { test: {} })
+    sinon.assert.calledOnce(getLibraryConfiguration)
+    sinon.assert.calledOnce(onDone)
+  })
+
+  it('tags telemetry with the effective test framework', () => {
+    const exportTelemetry = sinon.stub()
+    const plugin = createPlugin('mocha')
+    plugin.tracer._exporter.exportTelemetry = exportTelemetry
+
+    plugin.telemetry.ciVisEvent('event_created', 'session')
+    plugin.testFramework = 'webdriverio'
+    plugin.telemetry.ciVisEvent('event_finished', 'session')
+
+    assert.strictEqual(exportTelemetry.firstCall.args[0].testFramework, 'vitest')
+    assert.strictEqual(exportTelemetry.secondCall.args[0].testFramework, 'webdriverio')
+  })
+
   it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
     const plugin = createPlugin('jest_worker')
     const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
@@ -257,14 +338,14 @@ describe('CiPlugin', () => {
     assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
   })
 
-  function createPlugin (exporter) {
+  function createPlugin (exporter, enabled = false) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
     }
 
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
-      enabled: false,
+      enabled,
       experimental: {
         exporter,
       },

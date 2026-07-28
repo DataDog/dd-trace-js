@@ -670,80 +670,119 @@ async function createSandbox (
 }
 
 /**
- * @typedef {{ default?: string, star: string, destructure: string }} Variants
+ * @typedef {'destructure' | 'direct' | 'namespace'} NamedExportBinding
+ * @typedef {object} ImportVariantOptions
+ * @property {string} bindingName
+ * @property {string} packageName
+ * @property {boolean} defaultExport
+ * @property {string[]} namedExports
+ * @property {NamedExportBinding} [namedExportBinding]
+ * @typedef {Record<string, string>} ImportVariants
+ * @typedef {Record<string, string>} ImportVariantFiles
  */
+
 /**
- * @overload
- * @param {string} filename - The file that will be copied and modified for each variant.
- * @param {string} bindingName - The binding name that will be use to bind to the packageName.
- * @param {string} [namedExport] - The name of the named variant to use.
- * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
- * @param {boolean} [byPassDefault] - Skip default export variant generation.
- * @returns {Variants} A map from variant names to resulting filenames
+ * @param {ImportVariantOptions} options
+ * @returns {ImportVariants}
  */
-/**
- * Creates a bunch of files based on an original file in sandbox. Useful for varying test files
- * without having to create a bunch of them yourself.
- *
- * The variants object should have keys that are named variants, and values that are the text
- * in the file that's different in each variant. There must always be a "default" variant,
- * whose value is the original text within the file that will be replaced.
- *
- * @param {string} filename - The file that will be copied and modified for each variant.
- * @param {Variants|string} variants - The variants or binding name.
- * @param {string} [namedExport] - Named export to use for star/destructure variants.
- * @param {string} [packageName] - Module specifier for the import.
- * @param {boolean} [byPassDefault] - Skip default export variant generation.
- * @returns {Variants} A map from variant names to resulting filenames
- */
-function varySandbox (filename, variants, namedExport, packageName, byPassDefault) {
-  if (typeof variants === 'string') {
-    const bindingName = variants
-    const resolvedName = packageName || bindingName
-    // Default namedVariant to bindingName when bypassing default export
-    if (byPassDefault && !namedExport) namedExport = bindingName
-    variants = byPassDefault
-      ? {
-          // eslint-disable-next-line @stylistic/max-len
-          star: `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
-          destructure: `import { ${namedExport} } from '${resolvedName}'`,
-        }
-      : {
-          default: `import ${bindingName} from '${resolvedName}'`,
-          star: namedExport
-            ? `import * as ${bindingName} from '${resolvedName}'`
-            : `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.default`,
-          destructure: namedExport
-            ? `import { ${namedExport} } from '${resolvedName}'; const ${bindingName} = { ${namedExport} }`
-            : `import { default as ${bindingName}} from '${resolvedName}'`,
-        }
+function createImportVariants (options) {
+  const {
+    bindingName,
+    packageName,
+    defaultExport,
+    namedExports,
+    namedExportBinding,
+  } = options
+  assert(defaultExport || namedExports.length, 'At least one default or named export is required')
+  assert(!namedExports.length || namedExportBinding, 'Named exports require a binding style')
+  assert(
+    !namedExportBinding ||
+    namedExportBinding === 'destructure' ||
+    namedExportBinding === 'direct' ||
+    namedExportBinding === 'namespace',
+    `Unknown named export binding style: ${namedExportBinding}`
+  )
+  assert(
+    namedExportBinding !== 'direct' || namedExports.length === 1,
+    'Direct named export bindings require exactly one export'
+  )
+
+  const variants = {}
+  const namespaceName = `mod${bindingName[0].toUpperCase()}${bindingName.slice(1)}`
+
+  if (defaultExport) {
+    variants.default = `import ${bindingName} from '${packageName}'`
+    variants['default-as-named'] = `import { default as ${bindingName} } from '${packageName}'`
+    variants['default-from-namespace'] =
+      `import * as ${namespaceName} from '${packageName}'; const ${bindingName} = ${namespaceName}.default`
   }
 
+  if (namedExports.length) {
+    if (namedExportBinding === 'direct') {
+      const [namedExport] = namedExports
+      const importBinding = namedExport === bindingName ? namedExport : `${namedExport} as ${bindingName}`
+      variants.named = `import { ${importBinding} } from '${packageName}'`
+      variants['named-from-namespace'] =
+        `import * as ${namespaceName} from '${packageName}'; const ${bindingName} = ${namespaceName}.${namedExport}`
+    } else if (namedExportBinding === 'namespace') {
+      const exportsList = namedExports.join(', ')
+      variants.named = `import { ${exportsList} } from '${packageName}'; const ${bindingName} = { ${exportsList} }`
+      variants['named-from-namespace'] = `import * as ${bindingName} from '${packageName}'`
+    } else {
+      const exportsList = namedExports.join(', ')
+      variants.named = `import { ${exportsList} } from '${packageName}'`
+      variants['named-from-namespace'] =
+        `import * as ${bindingName} from '${packageName}'; const { ${exportsList} } = ${bindingName}`
+    }
+  }
+
+  return variants
+}
+
+/**
+ * @param {string} filename - The file that will be copied and modified for each variant.
+ * @param {ImportVariants} variants - Import statements keyed by variant name.
+ * @param {ImportVariantFiles} variantFilenames - Resulting filenames keyed by variant name.
+ */
+function writeSandboxVariants (filename, variants, variantFilenames) {
   const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
-  const { name: prefix, ext: suffix } = path.parse(filename)
-  const variantFilenames = /** @type {Variants} */ ({})
-  const baseVariant = byPassDefault ? 'destructure' : 'default'
+  const baseVariant = variants.default ? 'default' : 'named'
 
   for (const [variant, value] of Object.entries(variants)) {
-    const variantFilename = `${prefix}-${variant}${suffix}`
-    variantFilenames[variant] = variantFilename
+    const variantFilename = variantFilenames[variant]
     let newFileData = origFileData
     if (variant !== baseVariant) {
       const baseValue = variants[baseVariant]
       assert(baseValue, `Missing ${baseVariant} variant`)
       newFileData = origFileData.replace(baseValue, `${value}`)
-      // Error out when the default import does not match that of server.mjs
       if (newFileData === origFileData) throw Error(`Unable to match ${baseVariant}`)
     }
     writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }
-  return variantFilenames
 }
 
 /**
- * @type {['default', 'star', 'destructure']}
+ * Call after useSandbox so variant materialization runs after the sandbox setup.
+ *
+ * @param {string} filename - The file that will be copied and modified for each import variant.
+ * @param {ImportVariantOptions} options
+ * @returns {ImportVariantFiles} Resulting filenames keyed by variant name.
  */
-varySandbox.VARIANTS = ['default', 'star', 'destructure']
+function varySandbox (filename, options) {
+  const variants = createImportVariants(options)
+  const { name: prefix, ext: suffix } = path.parse(filename)
+  const variantFilenames = {}
+
+  for (const variant of Object.keys(variants)) {
+    variantFilenames[variant] = `${prefix}-${variant}${suffix}`
+  }
+
+  before(function () {
+    writeSandboxVariants(filename, variants, variantFilenames)
+  })
+
+  return variantFilenames
+}
 
 /**
  * @param {boolean} shouldExpectTelemetryPoints

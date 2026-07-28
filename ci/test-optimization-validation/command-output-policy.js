@@ -10,11 +10,7 @@ const path = require('node:path')
  * @returns {string[]} absolute output paths
  */
 function getCommandOutputPaths (command) {
-  const paths = new Set((command.outputPaths || []).map(outputPath => path.resolve(command.cwd, outputPath)))
-  const tokens = command.usesShell ? tokenizeShell(command.shellCommand) : command.argv || []
-  const coverageDirectory = getCoverageDirectory(tokens)
-  if (coverageDirectory) paths.add(path.resolve(command.cwd, coverageDirectory))
-  return [...paths]
+  return [...new Set((command.outputPaths || []).map(outputPath => path.resolve(command.cwd, outputPath)))]
 }
 
 /**
@@ -38,7 +34,8 @@ function prepareCommandOutputs ({ command, artifactRoot, repositoryRoot }) {
     if (pathExists(outputPath)) {
       throw new Error(
         `Command output path already exists and will not be moved or overwritten: ${outputPath}. ` +
-        'Remove it or choose a command that writes to a fresh output path, then render a new approval plan.'
+        'The validator will not delete pre-existing output. Inspect and remove it manually, or choose a fresh ' +
+        'output path, then render a new approval plan.'
       )
     }
     states.push({
@@ -108,7 +105,7 @@ function assertOutputParentsUnchanged (state) {
     }
   }
 
-  const lastExisting = state.parentIdentities[state.parentIdentities.length - 1].path
+  const lastExisting = state.parentIdentities.at(-1).path
   const relative = path.relative(lastExisting, path.dirname(state.outputPath))
   let current = lastExisting
   for (const segment of relative ? relative.split(path.sep) : []) {
@@ -138,26 +135,6 @@ function pathExists (filename) {
     if (error.code === 'ENOENT') return false
     throw error
   }
-}
-
-function getCoverageDirectory (tokens) {
-  let coverageEnabled = false
-  for (let index = 0; index < tokens.length; index++) {
-    const token = String(tokens[index])
-    if (token === '--coverage' || token === '--coverage=true') coverageEnabled = true
-    const inline = /^(?:--coverageDirectory|--coverage-directory|--coverage\.reportsDirectory)=(.+)$/.exec(token)
-    if (inline) return inline[1]
-    if (['--coverageDirectory', '--coverage-directory', '--coverage.reportsDirectory'].includes(token)) {
-      return tokens[index + 1]
-    }
-  }
-  return coverageEnabled ? 'coverage' : undefined
-}
-
-function tokenizeShell (source) {
-  return String(source || '').match(/"[^"]*"|'[^']*'|[^\s]+/g)?.map(token => {
-    return token.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2')
-  }) || []
 }
 
 function assertSafeOutputPath ({ outputPath, repositoryRoot, artifactRoot, command }) {

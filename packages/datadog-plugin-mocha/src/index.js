@@ -34,6 +34,8 @@ const {
   TEST_IS_MODIFIED,
   TEST_FINAL_STATUS,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FRAMEWORK_ADAPTER,
+  getTestSuiteExecutionKey,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -88,22 +90,32 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addBind('ci:mocha:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, isUnskippable, isForcedToRun, itrCorrelationId } = ctx
+      const {
+        testSuiteAbsolutePath,
+        testSuiteExecutionId,
+        isUnskippable,
+        isForcedToRun,
+        itrCorrelationId,
+      } = ctx
 
       // If the test module span is undefined, the plugin has not been initialized correctly and we bail out
       if (!this.testModuleSpan) {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+      const testFramework = this.testFramework || this.constructor.id
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(
           this.command,
           this.frameworkVersion,
           testSuite,
-          'mocha'
+          testFramework
         ),
         ...this.getSessionRequestErrorTags(),
         ...this.getSessionItrSkippingEnabledTags(),
+      }
+      if (this.testFrameworkAdapter) {
+        testSuiteMetadata[TEST_FRAMEWORK_ADAPTER] = this.testFrameworkAdapter
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
@@ -144,8 +156,9 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
-      this._testSuiteSpansByTestSuite.set(testSuite, testSuiteSpan)
-      this._exportPendingWorkerTracesForTestSuite(testSuite)
+      const testSuiteKey = getTestSuiteExecutionKey(testSuite, testSuiteExecutionId)
+      this._testSuiteSpansByTestSuite.set(testSuiteKey, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuiteKey)
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
@@ -390,6 +403,7 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
       isParallel,
+      onDone,
     }) => {
       this._exportPendingWorkerTraces()
       if (this.testSessionSpan) {
@@ -456,7 +470,7 @@ class MochaPlugin extends CiPlugin {
         })
       }
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addBind('ci:mocha:global:run', (ctx) => {

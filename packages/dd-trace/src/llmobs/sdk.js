@@ -11,6 +11,7 @@ const {
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
+  TRACE_ID,
 } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -317,14 +318,14 @@ class LLMObs extends NoopLLMObs {
       }
       throw e
     } finally {
-      if (autoinstrumented === false) {
+      if (!autoinstrumented) {
         telemetry.recordLLMObsAnnotate(span, err)
       }
     }
   }
 
   exportSpan (span) {
-    span = span || this._active()
+    span ||= this._active()
     let err = ''
     try {
       if (!span) {
@@ -345,7 +346,7 @@ class LLMObs extends NoopLLMObs {
     }
     try {
       return {
-        traceId: span.context().toTraceId(true),
+        traceId: LLMObsTagger.tagMap.get(span)[TRACE_ID],
         spanId: span.context().toSpanId(),
       }
     } catch {
@@ -425,7 +426,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
       }
-      if (metricType === 'json' && !(typeof value === 'object' && value != null && !Array.isArray(value))) {
+      if (metricType === 'json' && (typeof value !== 'object' || value == null || Array.isArray(value))) {
         err = 'invalid_metric_value'
         throw new Error('value must be a JSON object for a json metric')
       }

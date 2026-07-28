@@ -72,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      onDone,
     }) => {
       this._exportPendingWorkerTraces()
       const {
@@ -127,7 +128,7 @@ class CucumberPlugin extends CiPlugin {
       })
 
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     this.addSub('ci:cucumber:test-suite:start', ({
@@ -438,7 +439,7 @@ class CucumberPlugin extends CiPlugin {
         const isModified = isModifiedTest(
           testScenarioPath,
           scenario.location.line,
-          scenario.steps[scenario.steps.length - 1].location.line,
+          scenario.steps.at(-1).location.line,
           modifiedFiles,
           'cucumber'
         )

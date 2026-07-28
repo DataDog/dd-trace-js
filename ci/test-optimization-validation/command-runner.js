@@ -2,15 +2,22 @@
 
 /* eslint-disable no-console, eslint-rules/eslint-process-env */
 
+const fs = require('node:fs')
 const path = require('path')
-const { spawn } = require('child_process')
+const { spawn, spawnSync } = require('child_process')
 
-const { cleanupCommandOutputs, prepareCommandOutputs } = require('./command-output-policy')
 const {
-  getExecutableForSpawn,
-  isEnvExecutable,
-  parseArgv,
-} = require('./executable')
+  cleanupCommandOutputs,
+  prepareCommandOutputs,
+} = require('./command-output-policy')
+const { getExecutableForSpawn } = require('./executable')
+const {
+  environmentNamesEqual,
+  getEnvironmentValue,
+  isDatadogEnvironmentName,
+  mergeEnvironment,
+  setEnvironmentValue,
+} = require('./environment')
 const { sanitizeConsoleText, sanitizeString } = require('./redaction')
 const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
@@ -78,6 +85,7 @@ const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 const EARLY_STOP_KILL_GRACE_MS = 500
 const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
+const WINDOWS_TASKKILL_TIMEOUT_MS = 10_000
 
 function runCommand (command, options = {}) {
   const {
@@ -110,8 +118,10 @@ function runCommand (command, options = {}) {
     durationMs: 0,
     timedOut: false,
     stdout: '',
+    stdoutOmittedBytes: 0,
     stdoutTruncated: false,
     stderr: '',
+    stderrOmittedBytes: 0,
     stderrTruncated: false,
     artifacts: {},
   }
@@ -122,51 +132,64 @@ function runCommand (command, options = {}) {
   } catch (error) {
     return Promise.reject(error)
   }
+  const missingRequiredEnvVars = getMissingRequiredEnvironmentNames(command.requiredEnvVars)
+  if (missingRequiredEnvVars.length > 0) {
+    result.missingRequiredEnvVars = missingRequiredEnvVars
+    result.stderr = 'The approved command requires environment variables that are not available: ' +
+      `${missingRequiredEnvVars.join(', ')}.\n`
+    result.durationMs = Date.now() - startedAt
+    return Promise.resolve(result)
+  }
   const outputStates = prepareCommandOutputs({ command, artifactRoot, outDir, repositoryRoot })
 
   return new Promise((resolve) => {
     let finalized = false
-    let processGroupCleanupPending = false
+    let processTreeCleanupPending = false
     let pendingCloseResult
-    const childEnv = {
-      ...getBaseEnv(envMode),
-      ...command.env,
-      ...env,
-    }
-    if (command.env?.NODE_OPTIONS && env.NODE_OPTIONS) {
-      childEnv.NODE_OPTIONS = mergeNodeOptions(env.NODE_OPTIONS, command.env.NODE_OPTIONS)
+    const childEnv = { ...getBaseEnv(envMode, command.requiredEnvVars) }
+    mergeEnvironment(childEnv, command.env)
+    mergeEnvironment(childEnv, env)
+    const commandNodeOptions = getEnvironmentValue(command.env || {}, 'NODE_OPTIONS')
+    const injectedNodeOptions = getEnvironmentValue(env, 'NODE_OPTIONS')
+    if (commandNodeOptions && injectedNodeOptions) {
+      setEnvironmentValue(childEnv, 'NODE_OPTIONS', mergeNodeOptions(injectedNodeOptions, commandNodeOptions))
     }
     for (const [name, value] of Object.entries(childEnv)) {
       if (value === undefined) delete childEnv[name]
     }
 
     const useProcessGroup = shouldUseProcessGroup()
+    const windowsTaskkillPath = getWindowsTaskkillPath()
+    if (process.platform === 'win32' && !windowsTaskkillPath) {
+      result.stderr = 'Validation cannot safely bound test processes because the Windows process-tree cleanup ' +
+        'executable is unavailable.\n'
+      result.durationMs = Date.now() - startedAt
+      try {
+        finishCommandOutputCleanup(result, outputStates)
+      } catch (cleanupError) {
+        result.outputCleanupError = cleanupError?.message || String(cleanupError)
+      }
+      resolve(result)
+      return
+    }
+    const managesProcessTree = useProcessGroup || Boolean(windowsTaskkillPath)
     let child
     try {
       const executable = getExecutableForSpawn(command, { requireApproval: requireExecutableApproval })
       const argv0 = process.platform === 'win32' ? {} : { argv0: executable.argv0 }
-      child = command.usesShell
-        ? spawn(command.shellCommand, {
-          ...argv0,
-          cwd: command.cwd,
-          detached: useProcessGroup,
-          env: childEnv,
-          shell: executable.path,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-        : spawn(executable.path, command.argv.slice(1), {
-          ...argv0,
-          cwd: command.cwd,
-          detached: useProcessGroup,
-          env: childEnv,
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+      child = spawn(executable.path, command.argv.slice(1), {
+        ...argv0,
+        cwd: command.cwd,
+        detached: useProcessGroup,
+        env: childEnv,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
     } catch (error) {
       result.stderr = `${error.stack || error}\n`
       result.durationMs = Date.now() - startedAt
       try {
-        result.commandOutputPaths = cleanupCommandOutputs(outputStates)
+        finishCommandOutputCleanup(result, outputStates)
       } catch (cleanupError) {
         result.outputCleanupError = cleanupError?.message || String(cleanupError)
       }
@@ -183,13 +206,15 @@ function runCommand (command, options = {}) {
     let killTimer
     let finalizeTimer
     let stopTimer
+    let stdoutCapture
+    let stderrCapture
     const timeout = setTimeout(() => {
       result.timedOut = true
-      processGroupCleanupPending = useProcessGroup
-      signalChild(child, 'SIGTERM', useProcessGroup)
+      processTreeCleanupPending = managesProcessTree
+      signalChild(child, 'SIGTERM', useProcessGroup, windowsTaskkillPath)
       killTimer = setTimeout(() => {
-        signalChild(child, 'SIGKILL', useProcessGroup)
-        finishProcessGroupCleanup('SIGKILL')
+        signalChild(child, 'SIGKILL', useProcessGroup, windowsTaskkillPath)
+        finishProcessTreeCleanup('SIGKILL')
       }, timeoutKillGraceMs)
     }, timeoutMs)
 
@@ -203,39 +228,45 @@ function runCommand (command, options = {}) {
 
         clearInterval(stopTimer)
         result.stoppedEarly = true
-        processGroupCleanupPending = useProcessGroup
-        signalChild(child, 'SIGTERM', useProcessGroup)
+        processTreeCleanupPending = managesProcessTree
+        signalChild(child, 'SIGTERM', useProcessGroup, windowsTaskkillPath)
         killTimer = setTimeout(() => {
-          signalChild(child, 'SIGKILL', useProcessGroup)
-          finishProcessGroupCleanup('SIGKILL')
+          signalChild(child, 'SIGKILL', useProcessGroup, windowsTaskkillPath)
+          finishProcessTreeCleanup('SIGKILL')
         }, EARLY_STOP_KILL_GRACE_MS)
       }, 25)
     }
 
     child.stdout.on('data', chunk => {
-      const capture = appendCapturedOutput(result.stdout, chunk, maxOutputBytes)
+      const capture = appendCapturedOutput(stdoutCapture, chunk, maxOutputBytes)
+      stdoutCapture = capture
       result.stdout = capture.output
-      result.stdoutTruncated = result.stdoutTruncated || capture.truncated
+      result.stdoutOmittedBytes = capture.omittedBytes
+      result.stdoutTruncated = capture.truncated
     })
     child.stderr.on('data', chunk => {
-      const capture = appendCapturedOutput(result.stderr, chunk, maxOutputBytes)
+      const capture = appendCapturedOutput(stderrCapture, chunk, maxOutputBytes)
+      stderrCapture = capture
       result.stderr = capture.output
-      result.stderrTruncated = result.stderrTruncated || capture.truncated
+      result.stderrOmittedBytes = capture.omittedBytes
+      result.stderrTruncated = capture.truncated
     })
     child.on('error', err => {
       result.stderr += `${err.stack || err}\n`
       finalize(null, null)
     })
     child.on('close', (code, signal) => {
-      if (processGroupCleanupPending) {
+      if (processTreeCleanupPending) {
         pendingCloseResult = { code, signal }
+        signalChild(child, 'SIGKILL', useProcessGroup, windowsTaskkillPath)
+        finishProcessTreeCleanup(signal)
         return
       }
       finalize(code, signal)
     })
 
-    function finishProcessGroupCleanup (fallbackSignal) {
-      processGroupCleanupPending = false
+    function finishProcessTreeCleanup (fallbackSignal) {
+      processTreeCleanupPending = false
       if (pendingCloseResult) {
         finalize(pendingCloseResult.code, pendingCloseResult.signal || fallbackSignal)
         return
@@ -255,7 +286,7 @@ function runCommand (command, options = {}) {
       result.durationMs = Date.now() - startedAt
 
       try {
-        result.commandOutputPaths = cleanupCommandOutputs(outputStates)
+        finishCommandOutputCleanup(result, outputStates)
       } catch (err) {
         result.outputCleanupError = err && err.message ? err.message : String(err)
         result.stderr += '\n[test-optimization-validator] could not clean up command outputs: ' +
@@ -271,13 +302,13 @@ function runCommand (command, options = {}) {
         writeFileSafely(
           artifactRoot,
           result.artifacts.stdout,
-          sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes)),
+          sanitizeString(result.stdout),
           'command stdout artifact'
         )
         writeFileSafely(
           artifactRoot,
           result.artifacts.stderr,
-          sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes)),
+          sanitizeString(result.stderr),
           'command stderr artifact'
         )
         writeFileSafely(artifactRoot, result.artifacts.command, `${JSON.stringify({
@@ -291,7 +322,9 @@ function runCommand (command, options = {}) {
           timedOut: result.timedOut,
           stoppedEarly: result.stoppedEarly,
           stdoutTruncated: result.stdoutTruncated,
+          stdoutOmittedBytes: result.stdoutOmittedBytes,
           stderrTruncated: result.stderrTruncated,
+          stderrOmittedBytes: result.stderrOmittedBytes,
           maxOutputBytes,
           commandOutputPaths: result.commandOutputPaths,
           outputCleanupError: result.outputCleanupError,
@@ -306,6 +339,17 @@ function runCommand (command, options = {}) {
       resolve(result)
     }
   })
+}
+
+/**
+ * Cleans command outputs after the command exits.
+ *
+ * @param {object} result command result
+ * @param {object[]} outputStates prepared command output state
+ * @returns {void}
+ */
+function finishCommandOutputCleanup (result, outputStates) {
+  result.commandOutputPaths = cleanupCommandOutputs(outputStates)
 }
 
 /**
@@ -327,48 +371,92 @@ function getCommandExecutionSettings (command) {
 /**
  * Appends output while retaining only the latest bytes for diagnostic artifacts.
  *
- * @param {string} current currently captured output
+ * @param {object|undefined} current currently captured output state
  * @param {Buffer|string} chunk new output chunk
  * @param {number} maxBytes maximum retained bytes
  * @returns {{output: string, truncated: boolean}} retained output and truncation flag
  */
 function appendCapturedOutput (current, chunk, maxBytes) {
-  const next = Buffer.concat([
-    Buffer.from(current),
-    Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)),
-  ])
+  const nextChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+  const totalBytes = (current?.totalBytes || 0) + nextChunk.length
+  const headLimit = Math.floor(maxBytes / 2)
+  const tailLimit = maxBytes - headLimit
+  let head = current?.head || Buffer.alloc(0)
+  let tail
 
-  if (next.length <= maxBytes) {
-    return {
-      output: next.toString('utf8'),
-      truncated: false,
+  if (current?.truncated) {
+    const combinedTail = Buffer.concat([current.tail, nextChunk])
+    tail = combinedTail.subarray(Math.max(0, combinedTail.length - tailLimit))
+  } else {
+    const combined = Buffer.concat([current?.tail || Buffer.alloc(0), nextChunk])
+    if (combined.length <= maxBytes) {
+      return {
+        head,
+        tail: combined,
+        totalBytes,
+        omittedBytes: 0,
+        output: combined.toString('utf8'),
+        truncated: false,
+      }
     }
+    head = combined.subarray(0, headLimit)
+    tail = combined.subarray(combined.length - tailLimit)
   }
 
+  const omittedBytes = totalBytes - head.length - tail.length
   return {
-    output: next.subarray(next.length - maxBytes).toString('utf8'),
+    head,
+    tail,
+    totalBytes,
+    omittedBytes,
+    output: `${head.toString('utf8')}\n[test-optimization-validator] ${omittedBytes} bytes omitted\n` +
+      tail.toString('utf8'),
     truncated: true,
   }
-}
-
-/**
- * Adds truncation context to a captured command output artifact.
- *
- * @param {string} output captured output
- * @param {boolean} truncated whether earlier output was omitted
- * @param {number} maxBytes maximum retained bytes
- * @returns {string} output artifact content
- */
-function formatCapturedOutput (output, truncated, maxBytes) {
-  if (!truncated) return output
-  return `[test-optimization-validator] output truncated to last ${maxBytes} bytes\n${output}`
 }
 
 function shouldUseProcessGroup () {
   return process.platform !== 'win32'
 }
 
-function signalChild (child, signal, useProcessGroup) {
+/**
+ * Resolves the fixed Windows process-tree cleanup executable without PATH lookup.
+ *
+ * @returns {string|undefined} physical taskkill executable
+ */
+function getWindowsTaskkillPath () {
+  if (process.platform !== 'win32') return
+
+  const systemRoot = getEnvironmentValue(process.env, 'SystemRoot') ||
+    getEnvironmentValue(process.env, 'WINDIR')
+  if (!systemRoot || !path.win32.isAbsolute(systemRoot)) return
+
+  try {
+    const root = fs.realpathSync(systemRoot)
+    const candidate = path.win32.join(root, 'System32', 'taskkill.exe')
+    const stat = fs.lstatSync(candidate)
+    const physical = fs.realpathSync(candidate)
+    const relative = path.win32.relative(root, physical)
+    if (!stat.isFile() || stat.isSymbolicLink() ||
+      relative.startsWith('..') || path.win32.isAbsolute(relative)) return
+    return physical
+  } catch {}
+}
+
+function signalChild (child, signal, useProcessGroup, windowsTaskkillPath) {
+  if (windowsTaskkillPath) {
+    try {
+      const args = ['/PID', String(child.pid), '/T', '/F']
+      const outcome = spawnSync(windowsTaskkillPath, args, {
+        shell: false,
+        stdio: 'ignore',
+        timeout: WINDOWS_TASKKILL_TIMEOUT_MS,
+        windowsHide: true,
+      })
+      if (!outcome.error && outcome.status === 0) return
+    } catch {}
+  }
+
   try {
     if (useProcessGroup) {
       process.kill(-child.pid, signal)
@@ -379,14 +467,27 @@ function signalChild (child, signal, useProcessGroup) {
   child.kill(signal)
 }
 
-function getBaseEnv (envMode) {
+function getBaseEnv (envMode, requiredEnvVars = []) {
   if (envMode !== 'clean') return process.env
 
   const cleanEnv = {}
-  for (const name of CLEAN_ENV_ALLOWLIST) {
-    if (process.env[name] !== undefined) cleanEnv[name] = process.env[name]
+  for (const name of [...CLEAN_ENV_ALLOWLIST, ...requiredEnvVars]) {
+    const entry = Object.entries(process.env).find(([candidate]) => {
+      return environmentNamesEqual(candidate, name)
+    })
+    if (entry) setEnvironmentValue(cleanEnv, name, entry[1])
   }
   return cleanEnv
+}
+
+/**
+ * Finds explicitly approved ambient variables that are unavailable at execution time.
+ *
+ * @param {string[]|undefined} requiredEnvVars approved variable names
+ * @returns {string[]} missing names
+ */
+function getMissingRequiredEnvironmentNames (requiredEnvVars = []) {
+  return requiredEnvVars.filter(name => getEnvironmentValue(process.env, name) === undefined)
 }
 
 function buildDatadogEnv ({ fixture, outputRoot, scenario, framework }) {
@@ -405,7 +506,7 @@ function buildDatadogEnv ({ fixture, outputRoot, scenario, framework }) {
   }
 }
 
-function buildCiWiringEnv ({ fixture, outputRoot }) {
+function buildOfflineCaptureEnv ({ fixture, outputRoot }) {
   return {
     ...buildOfflineValidationEnv({ fixture, outputRoot }),
     [VALIDATION_CAPTURE_MODE_ENV]: 'sample',
@@ -454,136 +555,13 @@ function buildOfflineValidationEnv ({ fixture, outputRoot }) {
  */
 function assertNoInlineValidationEnvOverrides (command, env) {
   if (!env[VALIDATION_MODE_ENV]) return
-  const reservedEnvNames = new Set([
-    ...VALIDATION_RESERVED_ENV_NAMES,
-    ...Object.keys(env).filter(name => {
-      return name.startsWith('DD_') || name.startsWith('_DD_') || name.startsWith('OTEL_')
-    }),
-  ])
-
-  if (command.usesShell) {
-    rejectReservedShellAssignments(command.shellCommand, reservedEnvNames)
-    return
-  }
-
-  const parsed = parseArgv(command.argv)
-  rejectReservedEnvSplitStrings(command.argv, reservedEnvNames)
-  if (parsed.ignoreEnvironment) throwEnvironmentReset()
-  if (parsed.unsupportedEnvOption) throwUnsupportedEnvOption(parsed.unsupportedEnvOption)
-  for (const name of Object.keys(parsed.prefixEnv)) {
-    if (reservedEnvNames.has(name)) throwReservedEnvOverride(name)
-  }
-  for (const name of parsed.unsetEnvNames) {
-    if (reservedEnvNames.has(name)) throwReservedEnvOverride(name)
-  }
-
-  if (isPosixShellExecutable(command.argv[parsed.commandIndex])) {
-    for (let index = parsed.commandIndex + 1; index < command.argv.length - 1; index++) {
-      const value = command.argv[index]
-      if (isShellCommandFlag(value) && typeof command.argv[index + 1] === 'string') {
-        rejectReservedShellAssignments(command.argv[index + 1], reservedEnvNames)
-      }
+  for (const name of Object.keys(command.env || {})) {
+    const normalized = process.platform === 'win32' ? name.toUpperCase() : name
+    if (VALIDATION_RESERVED_ENV_NAMES.some(reserved => environmentNamesEqual(reserved, name)) ||
+      isDatadogEnvironmentName(name) || normalized.startsWith('OTEL_')) {
+      throw new Error(`Direct-runner adapter must not override validator-controlled environment variable ${name}.`)
     }
   }
-}
-
-/**
- * Rejects reserved variable assignments and removals in shell source.
- *
- * @param {string} shellCommand shell source
- * @param {Set<string>} reservedEnvNames validator-controlled environment names
- */
-function rejectReservedShellAssignments (shellCommand, reservedEnvNames) {
-  const source = String(shellCommand || '')
-  const environmentReset =
-    /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-(?=\s|$)|-i\b|--ignore-environment\b)/i
-
-  if (environmentReset.test(source)) throwEnvironmentReset()
-
-  for (const name of reservedEnvNames) {
-    const escapedName = escapeRegExp(name)
-    const assignment = new RegExp(
-      String.raw`(?:^|[\s;&|()'"])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*\+?=`,
-      'i'
-    )
-    const removal = new RegExp(
-      String.raw`(?:\bunset(?:\s+(?:-[A-Za-z]+|[A-Za-z_][A-Za-z0-9_]*))*\s+|` +
-      String.raw`\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-u\s*|--unset(?:=|\s+))|` +
-      String.raw`\bRemove-Item\s+(?:[^;&|]*\s)?env:)${escapedName}\b`,
-      'i'
-    )
-
-    if (assignment.test(source) || removal.test(source)) throwReservedEnvOverride(name)
-  }
-}
-
-/**
- * Rejects reserved environment changes hidden inside env --split-string arguments.
- *
- * @param {string[]} argv structured command arguments
- * @param {Set<string>} reservedEnvNames validator-controlled environment names
- * @returns {void}
- */
-function rejectReservedEnvSplitStrings (argv, reservedEnvNames) {
-  if (!Array.isArray(argv) || !isEnvExecutable(argv[0])) return
-
-  for (let index = 1; index < argv.length; index++) {
-    const argument = argv[index]
-    if (argument === '-S' || argument === '--split-string') {
-      if (typeof argv[index + 1] === 'string') {
-        rejectReservedShellAssignments(`env ${argv[index + 1]}`, reservedEnvNames)
-      }
-      index++
-      continue
-    }
-
-    const splitString = /^(?:-S|--split-string=)(.+)$/.exec(argument)?.[1]
-    if (splitString !== undefined) rejectReservedShellAssignments(`env ${splitString}`, reservedEnvNames)
-  }
-}
-
-function isShellCommandFlag (value) {
-  return /^-[A-Za-z]*c[A-Za-z]*$/.test(value)
-}
-
-function isPosixShellExecutable (value) {
-  return /^(?:a|ba|da|k|z)?sh$/.test(path.basename(String(value || '')).toLowerCase())
-}
-
-/**
- * Throws a customer-facing error for unsafe inline validation environment changes.
- *
- * @param {string} name reserved environment variable
- */
-function throwReservedEnvOverride (name) {
-  throw new Error(
-    `Refusing inline ${name} changes during live validation because they can bypass the offline validation mode. ` +
-    'Record CI-provided values in command.env so the validator can apply its private diagnostic settings.'
-  )
-}
-
-function throwEnvironmentReset () {
-  throw new Error(
-    'Refusing to clear the command environment during live validation because this would remove the offline ' +
-    'validation and Datadog initialization settings.'
-  )
-}
-
-function throwUnsupportedEnvOption (option) {
-  throw new Error(
-    `Refusing unsupported env option ${option} during live validation because its environment effects cannot be ` +
-    'verified safely.'
-  )
-}
-
-/**
- * Escapes a literal for use in a regular expression.
- *
- * @param {string} value literal value
- * @returns {string} escaped value
- */
-function escapeRegExp (value) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 function withCiPreloads (nodeOptions = '', framework) {
@@ -621,7 +599,7 @@ function formatNodeRequire (filename) {
 }
 
 function serializeCommand (command) {
-  return command.usesShell ? command.shellCommand : command.argv.join(' ')
+  return command.argv.join(' ')
 }
 
 /**
@@ -631,7 +609,6 @@ function serializeCommand (command) {
  * @returns {string} unambiguous customer-facing command
  */
 function serializeApprovalCommand (command) {
-  if (command.usesShell) return command.shellCommand
   return command.argv.map(formatApprovalArgument).join(' ')
 }
 
@@ -645,56 +622,23 @@ function formatApprovalArgument (value) {
   const argument = String(value)
   if (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument)) return argument
   if (process.platform === 'win32') return JSON.stringify(argument)
-  return `'${argument.replaceAll('\'', String.raw`'"'"'`)}'`
+  return `'${argument.replaceAll('\'', '\'"\'"\'')}'`
 }
 
 function serializeDisplayCommand (command) {
-  if (typeof command.displayCommand === 'string' && command.displayCommand.trim()) {
-    return command.displayCommand.trim()
-  }
-
-  if (command.usesShell) return command.shellCommand
-
-  return getDisplayArgv(command.argv).join(' ')
+  return command.argv.join(' ')
 }
 
 function getCommandDetails (command) {
-  if (command.usesShell) return
-
-  const details = getDisplayDetails(command.argv)
-  if (!details.exactCommandCollapsed) return
-
-  return details
-}
-
-function getDisplayArgv (argv) {
-  const { prefixAssignments, commandIndex, corepackIndex } = parseArgv(argv)
-  if (corepackIndex !== -1) return [...prefixAssignments, ...argv.slice(corepackIndex + 1)]
-  return [...prefixAssignments, ...argv.slice(commandIndex)]
-}
-
-function getDisplayDetails (argv) {
-  const { commandIndex, corepackIndex, pathAdjusted } = parseArgv(argv)
-  const displayArgv = getDisplayArgv(argv)
-  const details = {
-    exactCommandCollapsed: displayArgv.join(' ') !== argv.join(' '),
+  return {
+    executionBoundary: 'validator-owned-direct-runner',
+    runner: command.argv[1],
   }
-
-  if (pathAdjusted) details.pathAdjusted = true
-
-  if (corepackIndex !== -1) {
-    details.runtimeWrapper = 'node/corepack'
-    details.packageManager = argv[corepackIndex + 1]
-  } else if (commandIndex > 0) {
-    details.runtimeWrapper = 'env'
-  }
-
-  return details
 }
 
 module.exports = {
   runCommand,
-  buildCiWiringEnv,
+  buildOfflineCaptureEnv,
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,

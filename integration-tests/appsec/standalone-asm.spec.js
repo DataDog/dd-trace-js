@@ -45,6 +45,14 @@ describe('Standalone ASM', () => {
     }
   }
 
+  function isLateOutboundSpan (span) {
+    return span.name === 'http.request' && span.meta['http.url']?.endsWith('/intake/v2/events')
+  }
+
+  function isLateOutboundRoot (span) {
+    return span.resource === 'GET /late-outbound'
+  }
+
   describe('enabled', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -79,6 +87,50 @@ describe('Standalone ASM', () => {
 
         assertKeep(payload[0][0])
       })
+    })
+
+    it('should add _dd.apm.enabled tag to delayed local child chunks', async () => {
+      const seenGroups = []
+      const groups = await agent.collectGroups({
+        trigger: () => curl(`${proc.url}/late-outbound`),
+        predicate: group => {
+          seenGroups.push(group.map(span => ({
+            name: span.name,
+            resource: span.resource,
+            url: span.meta['http.url'],
+            apmEnabled: span.metrics['_dd.apm.enabled'],
+          })))
+
+          return group.some(isLateOutboundRoot) || group.some(isLateOutboundSpan)
+        },
+        expectedCount: 2,
+      }).catch(error => {
+        error.message += `\nSeen groups: ${inspect(seenGroups, { depth: null })}`
+        throw error
+      })
+
+      const rootGroup = groups.find(group => group.some(isLateOutboundRoot))
+      const outboundGroup = groups.find(group => group.some(isLateOutboundSpan))
+      const rootSpan = rootGroup?.find(isLateOutboundRoot)
+      const outboundSpan = outboundGroup?.find(isLateOutboundSpan)
+
+      // Two distinct chunks: parent flushes first, delayed child flushes later.
+      assert.notStrictEqual(rootGroup, undefined)
+      assert.notStrictEqual(outboundGroup, undefined)
+      assert.notStrictEqual(outboundGroup, rootGroup)
+      assert.ok(groups.indexOf(rootGroup) < groups.indexOf(outboundGroup))
+      assert.strictEqual(String(outboundSpan.parent_id), String(rootSpan.span_id))
+
+      // Load-bearing: every span in every chunk must carry the billing marker,
+      // including the delayed child whose parent is a local (non-remote) span.
+      for (const group of groups) {
+        for (const span of group) {
+          assert.strictEqual(
+            span.metrics['_dd.apm.enabled'], 0,
+            `span ${span.name}/${span.resource} missing _dd.apm.enabled:0`
+          )
+        }
+      }
     })
 
     it('should keep fifth req because RateLimiter allows 1 req/min', async () => {
