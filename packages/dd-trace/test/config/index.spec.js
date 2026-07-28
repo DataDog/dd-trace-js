@@ -5339,11 +5339,6 @@ rules:
       sinon.spy(log, 'error')
     })
 
-    it('should export refreshRuntimeId as a function', () => {
-      const configModule = loadConfigModule()
-      assert.strictEqual(typeof configModule.refreshRuntimeId, 'function')
-    })
-
     it('should not generate a runtime id until a Config is constructed', () => {
       const uuid = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
       const configModule = loadConfigModule({ uuid })
@@ -5360,7 +5355,7 @@ rules:
       const config = configModule()
       const originalId = config.tags['runtime-id']
 
-      configModule.refreshRuntimeId(config)
+      channel('datadog:identity:update').publish(config)
 
       assert.ok(config.tags['runtime-id'])
       assert.strictEqual(typeof config.tags['runtime-id'], 'string')
@@ -5368,25 +5363,12 @@ rules:
       assert.notStrictEqual(config.tags['runtime-id'], originalId)
     })
 
-    it('should set config.tags[runtime-id] to the value returned by uuid', () => {
-      const fixedUUID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
-      const uuid = sinon.stub()
-      uuid.onFirstCall().returns('initial-uuid')
-      uuid.onSecondCall().returns(fixedUUID)
-      const configModule = loadConfigModule({ uuid })
-      const config = configModule()
-
-      configModule.refreshRuntimeId(config)
-
-      assert.strictEqual(config.tags['runtime-id'], fixedUUID)
-    })
-
     it('should call uuid again to regenerate the runtime id', () => {
       const uuid = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
       const configModule = loadConfigModule({ uuid })
       const config = configModule()
 
-      configModule.refreshRuntimeId(config)
+      channel('datadog:identity:update').publish(config)
 
       // once at module load for the initial runtimeId, once on refresh
       sinon.assert.calledTwice(uuid)
@@ -5399,23 +5381,13 @@ rules:
       const configModule = loadConfigModule({ uuid })
       const config = configModule()
 
-      configModule.refreshRuntimeId(config)
+      channel('datadog:identity:update').publish(config)
       const firstRefresh = config.tags['runtime-id']
 
-      configModule.refreshRuntimeId(config)
+      channel('datadog:identity:update').publish(config)
       const secondRefresh = config.tags['runtime-id']
 
       assert.notStrictEqual(firstRefresh, secondRefresh)
-    })
-
-    it('should refresh the runtime id when datadog:identity:update is published', () => {
-      const configModule = loadConfigModule()
-      const config = configModule()
-      const originalId = config.tags['runtime-id']
-
-      channel('datadog:identity:update').publish(config)
-
-      assert.notStrictEqual(config.tags['runtime-id'], originalId)
     })
   })
 })
