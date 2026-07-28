@@ -170,11 +170,11 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
       earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
+      isRumCorrelationEnabled: !canRunBrowserTestFilesInParallel(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
       quarantinedTests: getSelectedTestManagementTests(testManagementTestsBySuite, 'isQuarantined'),
       repositoryRoot: repositoryRoot || process.cwd(),
-      rumFlushWaitMillis: getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'),
       rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
       testPropertiesByFilepath: testPropertiesByFilepath || {},
     },
@@ -1358,9 +1358,42 @@ function normalizeProjectName (name) {
   return typeof label === 'string' ? label : undefined
 }
 
+/**
+ * Returns whether Vitest can overlap browser files that share the RUM correlation cookie origin.
+ *
+ * @param {object} ctx
+ * @param {object[]|undefined} testSpecifications
+ * @returns {boolean}
+ */
+function canRunBrowserTestFilesInParallel (ctx, testSpecifications) {
+  if (!Array.isArray(testSpecifications) || testSpecifications.length < 2) return false
+
+  let browserFileCount = 0
+  let hasBrowserProject = false
+  let project
+  for (const testSpecification of testSpecifications) {
+    const testProject = getTestSpecificationProject(testSpecification)
+    if (
+      getTestSpecificationPool(testSpecification) !== 'browser' &&
+      getProjectReportingConfig(testProject)?.browser?.enabled !== true
+    ) {
+      continue
+    }
+
+    browserFileCount++
+    if (hasBrowserProject && testProject !== project) return true
+    project = testProject
+    hasBrowserProject = true
+  }
+  if (browserFileCount < 2) return false
+
+  const config = getProjectReportingConfig(project) || safeConfig(ctx)
+  return config?.browser?.fileParallelism !== false && config?.maxWorkers !== 1
+}
+
 function getTestModuleBrowserEnvironment (testModule) {
   const project = testModule?.project
-  const config = safeConfig(project)
+  const config = getProjectReportingConfig(project)
   let isBrowserMode = testModule?.task?.pool === 'browser' || testModule?.pool === 'browser'
   try {
     isBrowserMode ||= project?.isBrowserEnabled?.() === true
@@ -1377,6 +1410,21 @@ function getTestModuleBrowserEnvironment (testModule) {
     browserProjectName: getTestModuleProjectName(testModule),
     isBrowserMode: true,
   }
+}
+
+/**
+ * Returns the runtime or serialized project configuration used for read-only reporting metadata.
+ *
+ * @param {object|undefined} project
+ * @returns {object|undefined}
+ */
+function getProjectReportingConfig (project) {
+  const config = safeConfig(project)
+  if (config) return config
+
+  try {
+    return project?.serializedConfig
+  } catch {}
 }
 
 function safeConfig (project) {

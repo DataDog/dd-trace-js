@@ -18,12 +18,9 @@ const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnable
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
 const quarantinedTests = providedContext.quarantinedTests || {}
-const rumFlushWaitMillis = Number.isFinite(providedContext.rumFlushWaitMillis)
-  ? providedContext.rumFlushWaitMillis
-  : 500
+const isRumCorrelationEnabled = providedContext.isRumCorrelationEnabled !== false
 const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
-const realSetTimeout = getRealSetTimeout()
 let setVitestTaskFn
 if (isNoWorkerInitActive) {
   try {
@@ -36,7 +33,6 @@ const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
-let shouldRestartRumSession = false
 
 if (isNoWorkerInitActive) {
   // eslint-disable-next-line no-empty-pattern
@@ -83,7 +79,7 @@ if (isNoWorkerInitActive) {
     })
   })
 
-  afterEach(async function ({ task }) {
+  afterEach(function ({ task }) {
     const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
     const restoredEarlyFlakeDetectionResult = restoreEarlyFlakeDetectionSkippedResult(task)
     if (!restoredEarlyFlakeDetectionResult && attemptIndex === getFinalAttemptIndex(task)) {
@@ -92,7 +88,7 @@ if (isNoWorkerInitActive) {
     if (!restoredEarlyFlakeDetectionResult) {
       switchQuarantinedFinalFailure(task, attemptIndex)
     }
-    await finishRumCorrelation(task, attemptIndex)
+    finishRumCorrelation(task, attemptIndex)
   })
 }
 
@@ -135,7 +131,7 @@ function getNextAttemptIndex (task) {
  */
 function prepareRumCorrelation (task, attemptIndex) {
   // A per-origin cookie cannot identify overlapping attempts without racing.
-  if (isConcurrentTask(task)) return
+  if (!isRumCorrelationEnabled || isConcurrentTask(task)) return
 
   if (
     typeof window === 'undefined' ||
@@ -150,31 +146,16 @@ function prepareRumCorrelation (task, attemptIndex) {
 
   task.meta.__ddTestOptRumTestExecutionIds ||= []
   task.meta.__ddTestOptRumTestExecutionIds[attemptIndex] = testExecutionId
-
-  if (!shouldRestartRumSession) return
-
-  const rum = getRum()
-  if (!rum) return
-
-  shouldRestartRumSession = false
-  try {
-    const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
-    Object.defineProperty(event, '__ddIsTrusted', { value: true })
-    window.dispatchEvent(event)
-  } catch {}
-  try {
-    rum.startView?.()
-  } catch {}
 }
 
 /**
- * Records whether RUM was active, stops it, flushes its events, and clears the attempt cookie.
+ * Records whether RUM was active and clears the attempt cookie.
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {Promise<void>}
+ * @returns {void}
  */
-async function finishRumCorrelation (task, attemptIndex) {
+function finishRumCorrelation (task, attemptIndex) {
   const testExecutionId = task.meta.__ddTestOptRumTestExecutionIds?.[attemptIndex]
   if (!testExecutionId) return
 
@@ -183,14 +164,6 @@ async function finishRumCorrelation (task, attemptIndex) {
   if (isRumActive) {
     task.meta.__ddTestOptRumActive ||= []
     task.meta.__ddTestOptRumActive[attemptIndex] = true
-  }
-
-  if (isRumActive && typeof rum?.stopSession === 'function') {
-    shouldRestartRumSession = true
-    try {
-      rum.stopSession()
-      await new Promise(resolve => realSetTimeout(resolve, rumFlushWaitMillis))
-    } catch {}
   }
 
   clearRumCorrelationCookie(testExecutionId)
@@ -222,20 +195,6 @@ function getIsRumActive (rum) {
   } catch {
     return false
   }
-}
-
-/**
- * Returns a timer outside Vitest's test iframe, where user fake timers are not installed.
- *
- * @returns {typeof setTimeout}
- */
-function getRealSetTimeout () {
-  try {
-    if (typeof window !== 'undefined' && window.parent !== window) {
-      return window.parent.setTimeout.bind(window.parent)
-    }
-  } catch {}
-  return globalThis.setTimeout
 }
 
 /**

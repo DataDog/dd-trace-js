@@ -291,8 +291,8 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
     }
 
-    function configureNoWorkerReporter (ctx) {
-      noWorkerInit.configure(ctx, '3.2.6', undefined, {
+    function configureNoWorkerReporter (ctx, testSpecifications) {
+      noWorkerInit.configure(ctx, '3.2.6', testSpecifications, {
         knownTestsBySuite: {},
         modifiedFiles: {},
         repositoryRoot: '/repo',
@@ -343,8 +343,82 @@ describe('vitest no-worker init instrumentation selection', () => {
 
       const setupContext = ctx.getRootProject()._provided._ddVitestWorkerSetup
       assert.deepStrictEqual(setupContext.earlyFlakeDetectionRetryThresholds, EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS)
-      assert.strictEqual(setupContext.rumFlushWaitMillis, 500)
+      assert.strictEqual(setupContext.isRumCorrelationEnabled, true)
       assert.strictEqual(setupContext.rumTestExecutionIdCookieName, RUM_TEST_EXECUTION_ID_COOKIE_NAME)
+    })
+
+    it('disables RUM correlation when browser files can run in parallel', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+            fileParallelism: true,
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
+        [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, false)
+    })
+
+    it('keeps RUM correlation enabled when browser files run sequentially', () => {
+      const ctx = getNoWorkerReporterContext()
+      const project = {
+        config: {
+          browser: {
+            enabled: true,
+            fileParallelism: false,
+          },
+        },
+      }
+
+      configureNoWorkerReporter(ctx, [
+        [project, { filepath: '/repo/first.test.mjs', pool: 'browser' }],
+        [project, { filepath: '/repo/second.test.mjs', pool: 'browser' }],
+      ])
+
+      assert.strictEqual(ctx.getRootProject()._provided._ddVitestWorkerSetup.isRumCorrelationEnabled, true)
+    })
+
+    it('uses serialized browser configuration for reporter metadata', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testSuiteStarts = []
+      const onTestSuiteStart = context => testSuiteStarts.push({
+        browserDriver: context.browserDriver,
+        browserName: context.browserName,
+        isBrowserMode: context.isBrowserMode,
+      })
+      testSuiteStartCh.subscribe(onTestSuiteStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        ctx.reporters[0].onTestModuleStart({
+          id: 'serialized-browser-module',
+          moduleId: '/repo/serialized-browser.test.mjs',
+          project: {
+            serializedConfig: {
+              browser: {
+                enabled: true,
+                name: 'chromium',
+                provider: 'playwright',
+              },
+            },
+          },
+        })
+      } finally {
+        testSuiteStartCh.unsubscribe(onTestSuiteStart)
+      }
+
+      assert.deepStrictEqual(testSuiteStarts, [{
+        browserDriver: 'playwright',
+        browserName: 'chromium',
+        isBrowserMode: true,
+      }])
     })
 
     it('deactivates the no-worker reporter for reused contexts that fall back', () => {

@@ -2,30 +2,31 @@ import { afterAll, describe, expect, test } from 'vitest'
 
 const RUM_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 const rumState = {
-  isActive: true,
+  clickCalls: 0,
   startViewCalls: 0,
   stopSessionCalls: 0,
 }
 let retryAttempts = 0
 
 window.DD_RUM = {
-  getInternalContext: () => rumState.isActive ? { session_id: 'rum-session' } : undefined,
+  getInternalContext: () => ({ session_id: 'rum-session' }),
   startView: () => {
-    rumState.isActive = true
     rumState.startViewCalls++
   },
   stopSession: () => {
-    rumState.isActive = false
     rumState.stopSessionCalls++
   },
 }
+window.addEventListener('click', () => {
+  rumState.clickCalls++
+})
 
 describe('vitest browser RUM correlation', () => {
   test('correlates the first browser test', () => {
     assertAndLogExecutionId('first')
   })
 
-  test('uses a new correlation ID after restarting RUM', () => {
+  test('uses a new correlation ID without restarting RUM', () => {
     assertAndLogExecutionId('second')
   })
 
@@ -38,8 +39,9 @@ describe('vitest browser RUM correlation', () => {
 
 afterAll(() => {
   expect(getCookie(RUM_COOKIE_NAME)).toBeUndefined()
-  expect(rumState.startViewCalls).toBe(3)
-  expect(rumState.stopSessionCalls).toBe(4)
+  expect(rumState.clickCalls).toBe(0)
+  expect(rumState.startViewCalls).toBe(0)
+  expect(rumState.stopSessionCalls).toBe(0)
 })
 
 function assertAndLogExecutionId (testName) {

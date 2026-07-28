@@ -226,7 +226,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
       const firstTest = getTestByName(tests, 'vitest browser RUM correlation correlates the first browser test')
       const secondTest = getTestByName(
         tests,
-        'vitest browser RUM correlation uses a new correlation ID after restarting RUM'
+        'vitest browser RUM correlation uses a new correlation ID without restarting RUM'
       )
       const retriedTests = tests.filter(
         test => test.meta[TEST_NAME] === 'vitest browser RUM correlation uses a new RUM correlation ID on retry'
@@ -252,9 +252,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     })
 
     const [exitCode] = await Promise.all([
-      runVitest('browser-rum.mjs', {
-        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
-      }),
+      runVitest('browser-rum.mjs'),
       payloadsPromise,
     ])
 
@@ -269,27 +267,7 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     })
 
     const [exitCode] = await Promise.all([
-      runVitest('browser-rum-uninitialized.mjs', {
-        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
-      }),
-      payloadsPromise,
-    ])
-
-    assert.strictEqual(exitCode, 0, testOutput)
-  })
-
-  it('flushes RUM when a user setup file enables fake timers', async () => {
-    const payloadsPromise = gatherEvents(events => {
-      const [test] = getEventContents(events, 'test')
-      assert.ok(test)
-      assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
-    })
-
-    const [exitCode] = await Promise.all([
-      runVitest('browser-rum-fake-timers.mjs', {
-        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
-        VITEST_SETUP_FILE: 'ci-visibility/vitest-browser-tests/browser-fake-timers-setup.mjs',
-      }),
+      runVitest('browser-rum-uninitialized.mjs'),
       payloadsPromise,
     ])
 
@@ -306,9 +284,24 @@ describe(`vitest@${vitestVersion} Browser Mode`, function () {
     })
 
     const [exitCode] = await Promise.all([
-      runVitest('browser-rum-concurrent.mjs', {
-        DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: '0',
-      }),
+      runVitest('browser-rum-concurrent.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not correlate parallel browser files with RUM', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      assert.strictEqual(tests.length, 2)
+      for (const test of tests) {
+        assert.ok(!(TEST_IS_RUM_ACTIVE in test.meta))
+      }
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-parallel-*.mjs'),
       payloadsPromise,
     ])
 
