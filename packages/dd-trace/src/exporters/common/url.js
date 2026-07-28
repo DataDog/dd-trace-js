@@ -32,11 +32,9 @@ function parseUrl (urlObjOrString) {
   // `urlToHttpOptions` returns `pathname` at runtime, but @types/node narrows it
   // to `ClientRequestArgs`, which omits it; cast so the named-pipe fold below can
   // read and rewrite it.
-  const url = /** @type {import('node:http').ClientRequestArgs & { pathname: string }} */ (
-    urlObjOrString !== null && typeof urlObjOrString === 'object'
-      ? urlToHttpOptions(urlObjOrString)
-      : urlToHttpOptions(new URL(urlObjOrString))
-  )
+  const url = /** @type {import('node:http').ClientRequestArgs & { pathname: string }} */ (urlToHttpOptions(
+    urlObjOrString !== null && typeof urlObjOrString === 'object' ? urlObjOrString : new URL(urlObjOrString)
+  ))
 
   if (url.protocol === 'unix:' && url.hostname === '.') {
     url.path = url.pathname = `//.${url.pathname}`

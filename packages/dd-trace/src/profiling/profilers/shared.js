@@ -17,8 +17,8 @@ function getThreadLabels () {
   const nativeThreadId = pprof.getNativeThreadId()
   return {
     [THREAD_NAME_LABEL]: eventLoopThreadName,
-    [THREAD_ID_LABEL]: `${threadId}`,
-    [OS_THREAD_ID_LABEL]: `${nativeThreadId}`,
+    [THREAD_ID_LABEL]: threadId.toString(),
+    [OS_THREAD_ID_LABEL]: nativeThreadId.toString(),
   }
 }
 

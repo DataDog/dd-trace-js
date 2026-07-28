@@ -550,14 +550,17 @@ module.exports = {
     {
       name: '@openai/agents',
       versions: ['>=0.7.0'],
+      node: '>=22',
     },
     {
       name: '@openai/agents-core',
       versions: ['>=0.7.0'],
+      node: '>=22',
     },
     {
       name: '@openai/agents-openai',
       versions: ['>=0.7.0'],
+      node: '>=22',
     },
   ],
   passport: [

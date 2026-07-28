@@ -477,8 +477,7 @@ function buildGeneratedTestStrategy ({ framework, projectRoot, representative })
     const stepsFile = cucumber.getGeneratedStepsPath(testDirectory)
     files.push({ path: stepsFile, contentLines: cucumber.getGeneratedStepsContent().split('\n') })
     cleanupPaths.push(stepsFile)
-  }
-  if (framework === 'playwright') {
+  } else if (framework === 'playwright') {
     const configFile = playwright.getGeneratedConfigPath(testDirectory)
     files.push({ path: configFile, contentLines: playwright.getGeneratedConfigContent().split('\n') })
     cleanupPaths.push(configFile)
