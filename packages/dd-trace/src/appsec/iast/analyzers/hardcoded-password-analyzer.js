@@ -11,7 +11,7 @@ class HardcodedPasswordAnalyzer extends HardcodedBaseAnalyzer {
   }
 
   _getEvidence (value) {
-    return { value: `${value.ident}` }
+    return { value: value.ident }
   }
 }
 

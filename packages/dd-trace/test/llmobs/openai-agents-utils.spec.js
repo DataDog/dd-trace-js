@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const {
   extractInputMessages,
   extractOutputMessages,
+  extractGenerationOutputMessages,
   extractMetrics,
   extractMetadata,
 } = require('../../src/llmobs/plugins/openai-agents/utils')
@@ -27,7 +28,7 @@ describe('openai-agents utils', () => {
       )
     })
 
-    it('joins input_text and text parts on array message content', () => {
+    it('preserves Chat Completions image parts alongside text content', () => {
       const input = [{
         type: 'message',
         role: 'user',
@@ -39,7 +40,50 @@ describe('openai-agents utils', () => {
       }]
       assert.deepStrictEqual(
         extractInputMessages(input),
-        [{ role: 'user', content: 'foo bar' }]
+        [{ role: 'user', content: 'foo bar[image]' }]
+      )
+    })
+
+    it('preserves Chat Completions audio parts', () => {
+      const input = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'transcribe' },
+          { type: 'input_audio', input_audio: { data: 'aGVsbG8=', format: 'wav' } },
+        ],
+      }]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [{
+          role: 'user',
+          content: 'transcribe',
+          audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }],
+        }]
+      )
+    })
+
+    it('ignores null items and preserves image and file input parts', () => {
+      const input = [
+        null,
+        undefined,
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            null,
+            { type: 'input_text', text: 'inspect ' },
+            { type: 'input_image', image_url: 'https://example.com/image.png' },
+            { type: 'input_file', file_id: 'file-123' },
+            { type: 'input_image' },
+            { type: 'input_file' },
+          ],
+        },
+      ]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [{ role: 'user', content: 'inspect https://example.com/image.pngfile-123[image][file]' }]
       )
     })
 
@@ -64,6 +108,42 @@ describe('openai-agents utils', () => {
       assert.deepStrictEqual(
         extractInputMessages(input),
         [{ role: 'assistant', content: 'reply' }]
+      )
+    })
+
+    it('normalizes Chat Completions tool calls and results', () => {
+      const input = [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"city":"Paris"}' },
+          }],
+        },
+        {
+          role: 'tool',
+          content: '72F',
+          tool_call_id: 'call-1',
+        },
+      ]
+
+      assert.deepStrictEqual(
+        extractInputMessages(input),
+        [
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              toolId: 'call-1',
+              name: 'lookup',
+              arguments: { city: 'Paris' },
+              type: 'function',
+            }],
+          },
+          { role: 'tool', content: '72F', toolId: 'call-1' },
+        ]
       )
     })
 
@@ -138,6 +218,80 @@ describe('openai-agents utils', () => {
       assert.deepStrictEqual(
         extractInputMessages([]),
         [{ role: 'user', content: '' }]
+      )
+    })
+
+    it('ignores null output items and content parts', () => {
+      const result = {
+        output: [
+          null,
+          undefined,
+          {
+            type: 'message',
+            content: [null, { type: 'output_text', text: 'hello' }],
+          },
+        ],
+      }
+
+      assert.deepStrictEqual(
+        extractOutputMessages(result),
+        [{ role: 'assistant', content: 'hello' }]
+      )
+    })
+  })
+
+  describe('extractGenerationOutputMessages', () => {
+    it('extracts assistant messages from Chat Completions output', () => {
+      const output = [
+        null,
+        {
+          choices: [
+            null,
+            { message: { role: 'assistant', content: 'hello' } },
+          ],
+        },
+      ]
+
+      assert.deepStrictEqual(
+        extractGenerationOutputMessages(output),
+        [{ role: 'assistant', content: 'hello' }]
+      )
+    })
+
+    it('normalizes Chat Completions tool calls', () => {
+      const output = [{
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'lookup', arguments: '{"city":"Paris"}' },
+            }],
+          },
+        }],
+      }]
+
+      assert.deepStrictEqual(
+        extractGenerationOutputMessages(output),
+        [{
+          role: 'assistant',
+          content: '',
+          toolCalls: [{
+            toolId: 'call-1',
+            name: 'lookup',
+            arguments: { city: 'Paris' },
+            type: 'function',
+          }],
+        }]
+      )
+    })
+
+    it('returns a placeholder when no message is available', () => {
+      assert.deepStrictEqual(
+        extractGenerationOutputMessages(undefined),
+        [{ content: '', role: '' }]
       )
     })
   })
@@ -259,6 +413,13 @@ describe('openai-agents utils', () => {
         usage: { output_tokens_details: { reasoning_tokens: 4 } },
       })
       assert.strictEqual(metrics.reasoningOutputTokens, 4)
+    })
+
+    it('includes reasoning tokens from Chat Completions details', () => {
+      const metrics = extractMetrics({
+        usage: { completion_tokens_details: { reasoning_tokens: 5 } },
+      })
+      assert.strictEqual(metrics.reasoningOutputTokens, 5)
     })
 
     it('omits a zero reasoning token count', () => {

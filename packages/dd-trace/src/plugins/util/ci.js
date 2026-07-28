@@ -317,10 +317,8 @@ module.exports = {
       }
 
       if (NODE_LABELS) {
-        let nodeLabels
         try {
-          nodeLabels = JSON.stringify(NODE_LABELS.split(' '))
-          tags[CI_NODE_LABELS] = nodeLabels
+          tags[CI_NODE_LABELS] = JSON.stringify(NODE_LABELS.split(' '))
         } catch {
           // ignore errors
         }

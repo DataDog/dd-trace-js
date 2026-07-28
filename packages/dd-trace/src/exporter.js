@@ -4,6 +4,7 @@ const fs = require('fs')
 const exporters = require('../../../ext/exporters')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const constants = require('./constants')
+const { isTrue } = require('./util')
 
 module.exports = function getExporter (name) {
   switch (name) {
@@ -20,20 +21,26 @@ module.exports = function getExporter (name) {
     case exporters.AGENT_PROXY:
       return require('./ci-visibility/exporters/agent-proxy')
     case exporters.CI_VALIDATION:
-      return require('./ci-visibility/exporters/ci-validation')
+      if (hasCiValidationEnvironment()) return require('./ci-visibility/exporters/ci-validation')
+      break
     case exporters.JEST_WORKER:
     case exporters.CUCUMBER_WORKER:
     case exporters.MOCHA_WORKER:
     case exporters.PLAYWRIGHT_WORKER:
     case exporters.VITEST_WORKER:
       return require('./ci-visibility/exporters/test-worker')
-    default: {
-      const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-      const usingAgent = inAWSLambda && (
-        fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
-        fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
-      )
-      return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
-    }
   }
+
+  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+  const usingAgent = inAWSLambda && (
+    fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
+    fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
+  )
+  return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
+}
+
+function hasCiValidationEnvironment () {
+  return isTrue(getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MODE')) &&
+    getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
+    getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }

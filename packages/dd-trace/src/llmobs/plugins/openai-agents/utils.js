@@ -1,5 +1,83 @@
 'use strict'
 
+const { extractContentParts, extractTextFromContentItem } = require('../openai/utils')
+const { safeJsonParse } = require('../../util')
+
+/**
+ * Flatten Responses and Chat Completions content parts without dropping
+ * provider-specific image or audio inputs.
+ *
+ * @param {Array<object>} parts
+ * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
+ */
+function extractMessageContent (parts) {
+  const contentParts = []
+  const audioParts = []
+
+  for (const part of parts) {
+    if (!part) continue
+    const text = extractTextFromContentItem(part)
+    if (text) {
+      contentParts.push(text)
+      continue
+    }
+
+    const extracted = extractContentParts([part])
+    if (extracted.content) contentParts.push(extracted.content)
+    if (extracted.audioParts.length > 0) audioParts.push(...extracted.audioParts)
+  }
+
+  return { content: contentParts.join(''), audioParts }
+}
+
+/**
+ * Normalize OpenAI Chat Completions tool calls to the LLMObs message schema.
+ *
+ * @param {object} message
+ * @returns {Array<{ toolId?: string, name?: string, arguments: object, type?: string }>}
+ */
+function extractChatCompletionToolCalls (message) {
+  if (message.function_call) {
+    return [{
+      name: message.function_call.name,
+      arguments: safeJsonParse(message.function_call.arguments, {}),
+      type: 'function',
+    }]
+  }
+
+  const toolCalls = []
+  if (!Array.isArray(message.tool_calls)) return toolCalls
+
+  for (const toolCall of message.tool_calls) {
+    if (!toolCall) continue
+    toolCalls.push({
+      toolId: toolCall.id,
+      name: toolCall.function?.name,
+      arguments: safeJsonParse(toolCall.function?.arguments, {}),
+      type: toolCall.type,
+    })
+  }
+  return toolCalls
+}
+
+/**
+ * Normalize a Chat Completions message to the LLMObs message schema.
+ *
+ * @param {object} message
+ * @returns {object}
+ */
+function normalizeChatCompletionMessage (message) {
+  const normalized = {
+    role: message.role || 'assistant',
+    content: message.content ?? '',
+  }
+  if (message.audioParts?.length > 0) normalized.audioParts = message.audioParts
+  const toolCalls = extractChatCompletionToolCalls(message)
+  if (toolCalls.length > 0) normalized.toolCalls = toolCalls
+  if (message.tool_call_id) normalized.toolId = message.tool_call_id
+  return normalized
+}
+
 /**
  * Extracts input messages for an LLM span. agents-openai stores only
  * `request.input` on `spanData._input` (string or message-array), and the
@@ -20,22 +98,24 @@ function extractInputMessages (input, instructions) {
     messages.push({ role: 'user', content: input })
   } else if (Array.isArray(input)) {
     for (const item of input) {
-      if (item.type === 'message') {
+      if (!item) continue
+      if (item.type === 'message' || item.role) {
         const role = item.role
         if (!role) continue
 
         let content = ''
+        let audioParts
         if (Array.isArray(item.content)) {
-          const textParts = item.content
-            .filter(c => c.type === 'input_text' || c.type === 'text')
-            .map(c => c.text)
-          content = textParts.join('')
+          const extracted = extractMessageContent(item.content)
+          content = extracted.content
+          audioParts = extracted.audioParts
         } else if (typeof item.content === 'string') {
           content = item.content
         }
 
-        if (content) {
-          messages.push({ role, content })
+        const message = normalizeChatCompletionMessage({ ...item, content, role, audioParts })
+        if (content || message.audioParts || message.toolCalls || message.toolId) {
+          messages.push(message)
         }
       } else if (item.type === 'function_call') {
         let args = item.arguments
@@ -83,12 +163,16 @@ function extractOutputMessages (result) {
 
   if (result?.output) {
     for (const item of result.output) {
+      if (!item) continue
       if (item.type === 'message') {
         let content = ''
         if (Array.isArray(item.content)) {
-          const textParts = item.content
-            .filter(c => c.type === 'output_text')
-            .map(c => c.text)
+          const textParts = []
+          for (const contentItem of item.content) {
+            if (contentItem?.type === 'output_text' && contentItem.text) {
+              textParts.push(contentItem.text)
+            }
+          }
           content = textParts.join('')
         } else if (typeof item.content === 'string') {
           content = item.content
@@ -121,12 +205,36 @@ function extractOutputMessages (result) {
 }
 
 /**
+ * Extracts output messages from an OpenAI Chat Completions response.
+ *
+ * @param {Array<{ choices?: Array<{ message?: object }> }>} result - The model responses
+ * @returns {Array<object>}
+ */
+function extractGenerationOutputMessages (result) {
+  const messages = []
+
+  if (Array.isArray(result)) {
+    for (const response of result) {
+      if (!Array.isArray(response?.choices)) continue
+      for (const choice of response.choices) {
+        const message = choice?.message
+        if (!message) continue
+        messages.push(normalizeChatCompletionMessage(message))
+      }
+    }
+  }
+
+  return messages.length > 0 ? messages : [{ content: '', role: '' }]
+}
+
+/**
  * Extracts token usage metrics from the model response. Returns `undefined`
  * when there's nothing to tag, so callers can skip the tagger call without
  * allocating an Object.keys array.
  *
  * @param {{ usage?: { inputTokens?: number, outputTokens?: number, totalTokens?: number,
- *   outputTokensDetails?: { reasoningTokens?: number } } }} result
+ *   outputTokensDetails?: { reasoningTokens?: number },
+ *   completion_tokens_details?: { reasoning_tokens?: number } } }} result
  * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number,
  *   reasoningOutputTokens?: number } | undefined}
  */
@@ -134,11 +242,12 @@ function extractMetrics (result) {
   const usage = result?.usage
   if (!usage) return
 
-  const inputTokens = usage.inputTokens ?? usage.input_tokens
-  const outputTokens = usage.outputTokens ?? usage.output_tokens
+  const inputTokens = usage.inputTokens ?? usage.input_tokens ?? usage.prompt_tokens
+  const outputTokens = usage.outputTokens ?? usage.output_tokens ?? usage.completion_tokens
   const totalTokens = usage.totalTokens ?? usage.total_tokens
   const reasoningTokens = usage.outputTokensDetails?.reasoningTokens ??
-    usage.output_tokens_details?.reasoning_tokens
+    usage.output_tokens_details?.reasoning_tokens ??
+    usage.completion_tokens_details?.reasoning_tokens
 
   if (inputTokens === undefined && outputTokens === undefined &&
       totalTokens === undefined && !reasoningTokens) return
@@ -206,6 +315,7 @@ function extractMetadata (response) {
 module.exports = {
   extractInputMessages,
   extractOutputMessages,
+  extractGenerationOutputMessages,
   extractMetrics,
   extractMetadata,
 }
