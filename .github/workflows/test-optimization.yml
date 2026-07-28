@@ -101,8 +101,8 @@ jobs:
           OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
           IMAGES=$(printf \
-            '{"latest-latest":"%s:%s","latest-oldest":"%s:%s","oldest-latest":"%s:%s","oldest-oldest":"%s:%s"}' \
-            "$BASE" "$LATEST_TAG" "$BASE" "$LATEST_NODE18_TAG" "$BASE" "$OLDEST_TAG" "$BASE" "$OLDEST_TAG")
+            '{"latest":{"latest":"%s:%s","oldest":"%s:%s"},"oldest":{"latest":"%s:%s","oldest":"%s:%s"}}' \
+            "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG" "$BASE" "$LATEST_NODE18_TAG" "$BASE" "$OLDEST_TAG")
           case "${{ matrix.playwright-version }}" in
             latest)
               PW_VERSION="$LATEST"
@@ -160,9 +160,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: >-
-        ${{ fromJson(needs.playwright-image.outputs.images)
-          [format('{0}-{1}', matrix.playwright-version, matrix.node-version)] }}
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.node-version][matrix.playwright-version] }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
