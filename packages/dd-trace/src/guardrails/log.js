@@ -2,16 +2,11 @@
 
 /* eslint-disable no-console */
 
+var logLevels = require('../log/levels')
 var isTrue = require('./util').isTrue
 
 var DD_TRACE_DEBUG = process.env.DD_TRACE_DEBUG
 var DD_TRACE_LOG_LEVEL = process.env.DD_TRACE_LOG_LEVEL
-
-// Numeric severities match the canonical `Level` map in `../log/channels.js`.
-var logLevels = {
-  debug: 20,
-  off: 100
-}
 
 var logLevel = isTrue(DD_TRACE_DEBUG)
   ? Number(DD_TRACE_LOG_LEVEL) || logLevels.debug

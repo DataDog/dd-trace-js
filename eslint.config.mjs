@@ -280,8 +280,10 @@ export default [
       }],
       'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
+      // The option keeps `@overload` blocks that document fewer params than the implementation.
       'jsdoc/check-param-names': ['error', { disableMissingParamChecks: true }],
       'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
+      'jsdoc/check-types': 'error',
       'jsdoc/no-bad-blocks': 'error',
       'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
@@ -292,6 +294,7 @@ export default [
       'jsdoc/require-param-description': 'off', // Having a description is not crucial for now.
       'jsdoc/require-param': 'off',
       'jsdoc/require-property-description': 'off',
+      'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
       'jsdoc/require-returns': 'off',
       'jsdoc/tag-lines': 'off', // Alignment is not important for us.
@@ -477,6 +480,7 @@ export default [
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
+      'n/no-mixed-requires': 'error',
       'n/no-process-exit': 'error',
       'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
@@ -499,6 +503,10 @@ export default [
       // `no-async-promise-executor` already covers the executor footgun that loses errors.
       'no-promise-executor-return': 'off',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
+      'no-return-assign': 'error',
+      'no-template-curly-in-string': 'error',
+      'no-unmodified-loop-condition': 'error',
+      'no-unreachable-loop': 'error',
       'no-useless-assignment': 'error',
       'no-var': 'error',
       'no-void': ['error', { allowAsStatement: true }],
@@ -506,6 +514,7 @@ export default [
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
+      radix: 'error',
       // 49 errors, all in single-flow init or test scaffolding. The one site with real
       // concurrency (the debugger's breakpoint bookkeeping) already runs behind a lock.
       'require-atomic-updates': 'off',
@@ -525,6 +534,7 @@ export default [
       'sonarjs/no-code-after-done': 'error',
       'sonarjs/no-commented-code': 'error',
       'sonarjs/no-duplicated-branches': 'error',
+      'sonarjs/no-empty-collection': 'error',
       'sonarjs/no-extra-arguments': 'error',
       'sonarjs/no-gratuitous-expressions': 'error',
       'sonarjs/no-identical-functions': 'error',
@@ -714,6 +724,7 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      'unicorn/consistent-date-clone': 'error',
       'unicorn/prefer-optional-catch-binding': 'error',
     },
   },
@@ -777,6 +788,7 @@ export default [
     files: [
       'init.js',
       'packages/dd-trace/src/guardrails/**/*',
+      'packages/dd-trace/src/log/levels.js', // Required by the guardrails logger.
       'version.js',
     ],
     settings: {
