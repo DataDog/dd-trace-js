@@ -76,7 +76,8 @@ function makeEventDetail (size) {
  * @param {boolean} [options.dsmEnabled]
  * @param {boolean} [options.batchPropagationEnabled]
  * @param {() => Record<string, string>|undefined} [options.inject]
- * @param {(edgeTags: string[], span: unknown, payloadSize: number) => object|undefined} [options.setCheckpoint]
+ * @param {(edgeTags: string[], span: unknown, payloadSize: number, pathwayContextSize: number)
+ *   => object|undefined} [options.setCheckpoint]
  */
 function buildChannelPlugin ({
   dsmEnabled = false,
@@ -201,6 +202,31 @@ describe('EventBridge plugin requestInject', () => {
     assert.strictEqual(request.params.Entries[1].Detail, '{"id":2}')
   })
 
+  it('leaves the batch untouched when the first entry carries no string detail', () => {
+    buildChannelPlugin()
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Source: 'checkout' }, { Detail: '{"id":2}' }] },
+    }
+
+    publishRequest(request)
+
+    assert.deepStrictEqual(request.params.Entries, [{ Source: 'checkout' }, { Detail: '{"id":2}' }])
+  })
+
+  it('leaves the batch untouched when the first detail is not a JSON object', () => {
+    buildChannelPlugin()
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: 'not-json' }, { Detail: '{"id":2}' }] },
+    }
+
+    const errors = captureLog('error', () => publishRequest(request))
+
+    assert.deepStrictEqual(request.params.Entries, [{ Detail: 'not-json' }, { Detail: '{"id":2}' }])
+    assert.strictEqual(errors.length, 1)
+  })
+
   it('injects the trace context into every entry when batch propagation is enabled', () => {
     buildChannelPlugin({ batchPropagationEnabled: true })
     const request = {
@@ -247,6 +273,23 @@ describe('EventBridge plugin requestInject', () => {
     assert.deepStrictEqual(Object.keys(second), ['dd-pathway-ctx-base64'])
     assert.strictEqual(first['dd-pathway-ctx-base64'].length, 28)
     assert.notStrictEqual(second['dd-pathway-ctx-base64'], first['dd-pathway-ctx-base64'])
+  })
+
+  it('builds one pathway-only carrier for every entry past the first', () => {
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint([]) })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }, { Detail: '{"id":3}' }],
+      },
+    }
+
+    publishRequest(request)
+
+    const pathways = request.params.Entries.map(entry => injectedContext(entry)['dd-pathway-ctx-base64'])
+    assert.strictEqual(new Set(pathways).size, 3)
+    assert.deepStrictEqual(Object.keys(injectedContext(request.params.Entries[1])), ['dd-pathway-ctx-base64'])
+    assert.deepStrictEqual(Object.keys(injectedContext(request.params.Entries[2])), ['dd-pathway-ctx-base64'])
   })
 
   it('adds the pathway alone when the propagator injects nothing', () => {
@@ -409,6 +452,115 @@ describe('EventBridge plugin requestInject', () => {
     assert.strictEqual(calls[1][2], Buffer.byteLength('{"id":2}'))
     // The `_datadog` context ships but is not the caller's payload, so it must not be reported.
     assert.ok(Buffer.byteLength(request.params.Entries[1].Detail) > calls[1][2])
+  })
+
+  it('opts out of the pathway estimate the processor adds for other producers', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: '{"id":1}' }] },
+    }
+
+    publishRequest(request)
+
+    assert.strictEqual(calls[0][3], 0)
+  })
+
+  it('sizes every field EventBridge bills for except Time', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [{
+          Detail: '{"id":1}',
+          DetailType: 'invoice.created',
+          EventBusName: 'payments',
+          Resources: ['arn:one', 'arn:two'],
+          Source: 'checkout',
+          Time: new Date(),
+          TraceHeader: 'Root=1-5759e988',
+        }],
+      },
+    }
+
+    publishRequest(request)
+
+    assert.strictEqual(calls[0][2], Buffer.byteLength(
+      '{"id":1}' + 'invoice.created' + 'payments' + 'arn:one' + 'arn:two' + 'checkout' + 'Root=1-5759e988',
+    ))
+  })
+
+  it('sizes multibyte fields by their UTF-8 byte length', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [{ Detail: '{"emoji":"🎉"}', DetailType: 'facturé', Source: '注文' }],
+      },
+    }
+
+    publishRequest(request)
+
+    assert.strictEqual(calls[0][2], Buffer.byteLength('{"emoji":"🎉"}' + 'facturé' + '注文'))
+    assert.ok(calls[0][2] > '{"emoji":"🎉"}facturé注文'.length)
+  })
+
+  it('skips resources that are not strings when sizing', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: '{}', Resources: ['keep', null, 7] }] },
+    }
+
+    publishRequest(request)
+
+    assert.strictEqual(calls[0][2], Buffer.byteLength('{}') + Buffer.byteLength('keep'))
+  })
+
+  it('records no checkpoint for an entry whose detail is not a JSON object', () => {
+    const calls = []
+    buildChannelPlugin({ dsmEnabled: true, setCheckpoint: recordingCheckpoint(calls) })
+    const request = {
+      operation: 'putEvents',
+      params: { Entries: [{ Detail: 'not-json' }, { Detail: '{"id":2}' }] },
+    }
+
+    captureLog('error', () => publishRequest(request))
+
+    assert.strictEqual(calls.length, 1)
+    assert.strictEqual(calls[0][2], Buffer.byteLength('{"id":2}'))
+  })
+
+  it('gives every batched entry its own trace context and pathway', () => {
+    const calls = []
+    buildChannelPlugin({
+      batchPropagationEnabled: true,
+      dsmEnabled: true,
+      setCheckpoint: recordingCheckpoint(calls),
+    })
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [
+          { Detail: '{"id":1}', DetailType: 'invoice.created' },
+          { Detail: '{"id":2}', DetailType: 'invoice.paid' },
+        ],
+      },
+    }
+
+    publishRequest(request)
+
+    const first = injectedContext(request.params.Entries[0])
+    const second = injectedContext(request.params.Entries[1])
+    const expectedKeys = [...Object.keys(TRACE_CONTEXT), 'dd-pathway-ctx-base64']
+    assert.deepStrictEqual(Object.keys(first), expectedKeys)
+    assert.deepStrictEqual(Object.keys(second), expectedKeys)
+    assert.notStrictEqual(second['dd-pathway-ctx-base64'], first['dd-pathway-ctx-base64'])
+    assert.deepStrictEqual(calls.map(call => call[0][2]), ['topic:invoice.created', 'topic:invoice.paid'])
   })
 
   it('tags the checkpoint with the event bus and detail type', () => {

@@ -282,10 +282,19 @@ class DataStreamsProcessor {
     if (this.flushInterval === 0) this.onInterval()
   }
 
-  setCheckpoint (edgeTags, span, ctx, payloadSize = 0) {
+  /**
+   * @param {string[]} edgeTags Direction tag first.
+   * @param {import('../opentracing/span')|null} span
+   * @param {object|null|undefined} ctx Parent pathway context.
+   * @param {number} [payloadSize] Bytes the caller built, before any propagation context.
+   * @param {number} [pathwayContextSize] Bytes the pathway context adds to an outbound payload.
+   *   Most producers size their payload before this call hands them the context to inject, so they
+   *   cannot measure it and take the default estimate. Pass `0` to report the payload alone.
+   * @returns {object|undefined}
+   */
+  setCheckpoint (edgeTags, span, ctx, payloadSize = 0, pathwayContextSize = PATHWAY_FIELD_BYTES) {
     if (!this.enabled) return
     const nowNs = Date.now() * 1e6
-    // Callers must place the direction tag at index 0.
     const direction = edgeTags[0]
     let pathwayStartNs = nowNs
     let edgeStartNs = nowNs
@@ -337,7 +346,7 @@ class DataStreamsProcessor {
       closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
-      payloadSize += PATHWAY_FIELD_BYTES
+      payloadSize += pathwayContextSize
     }
     const checkpoint = {
       currentTimestamp: nowNs,

@@ -21,7 +21,30 @@ const PATHWAY_SIZE_PROBE = { hash: Buffer.alloc(8), pathwayStartNs: 0, edgeStart
  * @property {string[]} [Resources]
  * @property {string} [Source]
  * @property {Date} [Time]
+ * @property {string} [TraceHeader]
  */
+
+/**
+ * Size a single entry the way DSM reports payloads across tracers: the UTF-8 byte length of every
+ * string field the caller supplied. `Time` is excluded because it is not part of the message the
+ * consumer receives, which is also why this differs from `putEventEntrySize`.
+ *
+ * @param {PutEventsRequestEntry} entry whose `Detail` the caller has already checked is a string.
+ * @returns {number}
+ */
+function dsmPayloadSize (entry) {
+  let size = Buffer.byteLength(entry.Detail)
+  if (typeof entry.DetailType === 'string') size += Buffer.byteLength(entry.DetailType)
+  if (typeof entry.EventBusName === 'string') size += Buffer.byteLength(entry.EventBusName)
+  if (typeof entry.Source === 'string') size += Buffer.byteLength(entry.Source)
+  if (typeof entry.TraceHeader === 'string') size += Buffer.byteLength(entry.TraceHeader)
+  if (Array.isArray(entry.Resources)) {
+    for (const resource of entry.Resources) {
+      if (typeof resource === 'string') size += Buffer.byteLength(resource)
+    }
+  }
+  return size
+}
 
 /**
  * Size a single `PutEventsRequestEntry` the way EventBridge does server-side:
@@ -140,7 +163,7 @@ class EventBridge extends BaseAwsSdkPlugin {
           injectable.push({
             entry,
             carrier,
-            payloadSize: dsmEnabled ? putEventEntrySize(entry) : 0,
+            payloadSize: dsmEnabled ? dsmPayloadSize(entry) : 0,
             traceOnlyDetail: tracePropagated ? traceOnlyDetail : undefined,
           })
           continue
@@ -170,13 +193,15 @@ class EventBridge extends BaseAwsSdkPlugin {
   }
 
   /**
-   * @param {import('../../../..').Span} span
-   * @param {PutEventsRequestEntry} entry
-   * @param {number} payloadSize the entry's byte size as the caller built it, before the `_datadog`
-   *   context is injected; DSM measures the payload, not our propagation overhead
-   *
    * Edge tags feed the pathway hash, so they are a cross-tracer contract: renaming or merging one
    * splits the DSM pathway instead of extending it.
+   *
+   * @param {import('../../../..').Span} span
+   * @param {PutEventsRequestEntry} entry
+   * @param {number} payloadSize `dsmPayloadSize(entry)`, taken before the `_datadog` context is
+   *   injected. The trailing `0` opts out of the pathway estimate the processor adds by default,
+   *   because that context is propagation overhead rather than the caller's payload.
+   * @returns {object|undefined}
    */
   setDSMCheckpoint (span, entry, payloadSize) {
     const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS
@@ -185,6 +210,7 @@ class EventBridge extends BaseAwsSdkPlugin {
       ['direction:out', `exchange:${eventBus}`, `topic:${detailType}`, 'type:eventbridge'],
       span,
       payloadSize,
+      0,
     )
   }
 }
