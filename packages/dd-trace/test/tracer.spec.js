@@ -560,6 +560,19 @@ describe('Tracer', () => {
 
       assert.strictEqual(t._inmem_cfg, initialHandle)
     })
+
+    it('should call storeConfig when _inmem_cfg is a falsy but defined handle', () => {
+      storeConfigStub.onFirstCall().returns(0)
+      storeConfigStub.onSecondCall().returns('new-handle')
+      const t = new PatchedTracer(config)
+      assert.strictEqual(t._inmem_cfg, 0)
+
+      t.refreshMetadata(config)
+
+      // once at construction, once on refresh
+      sinon.assert.calledTwice(storeConfigStub)
+      assert.strictEqual(t._inmem_cfg, 'new-handle')
+    })
   })
 
   describe('service discovery warning', () => {
