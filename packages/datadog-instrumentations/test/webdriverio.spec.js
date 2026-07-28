@@ -263,12 +263,20 @@ describe('webdriverio instrumentation', () => {
       })
 
       firstWorker.emit('message', {
-        name: WORKER_READY,
-        content: { frameworkVersion: '10.8.2' },
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: {
+          name: WORKER_READY,
+          content: { frameworkVersion: '10.8.2' },
+        },
       })
       secondWorker.emit('message', {
-        name: WORKER_READY,
-        content: { frameworkVersion: '10.8.2' },
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: {
+          name: WORKER_READY,
+          content: { frameworkVersion: '10.8.2' },
+        },
       })
       await new Promise(setImmediate)
 
@@ -276,8 +284,16 @@ describe('webdriverio instrumentation', () => {
       requestConfiguration(secondWorker, secondFile, 'second-request')
       await new Promise(setImmediate)
 
-      firstWorker.emit('message', [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'first-trace'])
-      secondWorker.emit('message', [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'second-trace'])
+      firstWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'first-trace'],
+      })
+      secondWorker.emit('message', {
+        origin: 'datadog',
+        name: 'workerEvent',
+        args: [MOCHA_WORKER_TRACE_PAYLOAD_CODE, 'second-trace'],
+      })
 
       assert.strictEqual(firstWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
@@ -723,11 +739,15 @@ function finishLocalRunner (localRunner, error) {
  */
 function requestConfiguration (worker, file, requestId) {
   worker.emit('message', {
-    name: CONFIGURATION_REQUEST,
-    content: {
-      files: [file],
-      frameworkVersion: '10.8.2',
-      requestId,
+    origin: 'datadog',
+    name: 'workerEvent',
+    args: {
+      name: CONFIGURATION_REQUEST,
+      content: {
+        files: [file],
+        frameworkVersion: '10.8.2',
+        requestId,
+      },
     },
   })
 }
@@ -742,9 +762,13 @@ function requestConfiguration (worker, file, requestId) {
  */
 function reportSuiteFinish (worker, file, status = 'pass') {
   worker.emit('message', {
-    name: SUITE_FINISH,
-    content: {
-      results: [{ file, status }],
+    origin: 'datadog',
+    name: 'workerEvent',
+    args: {
+      name: SUITE_FINISH,
+      content: {
+        results: [{ file, status }],
+      },
     },
   })
 }

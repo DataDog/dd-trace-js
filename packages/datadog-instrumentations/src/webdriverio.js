@@ -15,6 +15,8 @@ const {
   CONFIGURATION_RESPONSE,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
+  WEBDRIVERIO_WORKER_EVENT,
+  WEBDRIVERIO_WORKER_ORIGIN,
   WORKER_READY,
 } = require('./mocha/webdriverio-protocol')
 
@@ -447,6 +449,10 @@ function handleSuiteResults (workerRecord, message) {
  * @returns {void}
  */
 function handleWorkerMessage (state, workerRecord, message) {
+  if (message?.origin === WEBDRIVERIO_WORKER_ORIGIN && message.name === WEBDRIVERIO_WORKER_EVENT) {
+    message = message.args
+  }
+
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
@@ -455,6 +461,10 @@ function handleWorkerMessage (state, workerRecord, message) {
         [TEST_SUITE_EXECUTION_ID]: workerRecord.testSuiteExecutionId,
       })
     }
+    return
+  }
+
+  if (!message || typeof message !== 'object') {
     return
   }
 
