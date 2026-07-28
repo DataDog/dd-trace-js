@@ -83,7 +83,7 @@ spanEndingHook.hook = (ddSpan) => {
   const route = tags['next.route'] ?? tags['http.route']
   // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we
   // mirror Next's own naming, and only construct the resource when it is absent.
-  const resource = tags['next.span_name'] ?? (route ? `${method} ${route}` : method)
+  const resource = tags['next.span_name']?.replace(/\/route$/, '') ?? (route ? `${method} ${route}` : method)
 
   ddSpan.setOperationName(nomenclature.opName('web', 'server', 'next'))
   ddSpan.setTag(RESOURCE_NAME, resource)

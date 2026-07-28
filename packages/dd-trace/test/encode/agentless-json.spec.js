@@ -293,7 +293,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(decoded.traces[0].spans[1].metrics._top_level, 1)
     })
 
-    it('should not set _top_level when _dd.top_level is 0', () => {
+    it('should override stale _dd.top_level=0 when the parent is absent from the chunk', () => {
       data[0].metrics['_dd.top_level'] = 0
 
       encoder.encode(data)
@@ -301,7 +301,18 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.traces[0].spans[0].metrics._top_level, undefined)
+      assert.strictEqual(decoded.traces[0].spans[0].metrics._top_level, 1)
+    })
+
+    it('should preserve _dd.top_level=0 when the parent is present in the chunk', () => {
+      childSpan.metrics['_dd.top_level'] = 0
+
+      encoder.encode([data[0], childSpan])
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.traces[0].spans[1].metrics._top_level, undefined)
     })
 
     it('should set _dd.compute_stats on next span when first span is malformed', () => {

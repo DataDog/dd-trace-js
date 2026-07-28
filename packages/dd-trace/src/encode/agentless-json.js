@@ -36,7 +36,7 @@ function formatSpan (span, isFirstSpan, isTopLevel) {
     span.metrics._trace_root = 1
   }
 
-  if (span.metrics[TOP_LEVEL_KEY] || (span.metrics[TOP_LEVEL_KEY] === undefined && isTopLevel)) {
+  if (span.metrics[TOP_LEVEL_KEY] || isTopLevel) {
     span.metrics._top_level = 1
   }
 

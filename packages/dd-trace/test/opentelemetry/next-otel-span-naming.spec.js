@@ -114,6 +114,20 @@ describe('Next.js OTel bridge span naming', () => {
     assert.strictEqual(exported.resource, 'POST /api/login')
   })
 
+  it('removes Next App Route filesystem markers from the root resource', () => {
+    const exported = captureExportedRootSpan(() => {
+      const span = startNextRootSpan({ method: 'GET' })
+      span.setAttributes({
+        'next.route': '/api/users',
+        'next.span_name': 'GET /api/users/route',
+      })
+      span.updateName('GET /api/users/route')
+      span.end()
+    })
+    assert.strictEqual(exported.name, 'next.request')
+    assert.strictEqual(exported.resource, 'GET /api/users')
+  })
+
   for (const [spanType, initialRoute] of [
     ['AppRouteRouteHandlers.runHandler', '/api/app'],
     ['Node.runHandler', undefined],
