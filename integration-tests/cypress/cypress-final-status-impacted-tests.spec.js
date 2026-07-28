@@ -43,6 +43,7 @@ const {
   TEST_IS_MODIFIED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { getCypressDependencies } = require('./dependencies')
 
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
@@ -110,9 +111,7 @@ moduleTypes.forEach(({
     this.timeout(80_000)
     let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
-    // cypress-fail-fast is required as an incompatible plugin.
-    // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    useSandbox(getCypressDependencies(version), true)
 
     before(async function () {
       this.timeout(180_000)
