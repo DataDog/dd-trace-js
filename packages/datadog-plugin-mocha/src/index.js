@@ -60,8 +60,9 @@ class MochaPlugin extends CiPlugin {
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
 
-    this.addSub('ci:mocha:worker:configuration', ({ libraryConfig, repositoryRoot }) => {
+    this.addSub('ci:mocha:worker:configuration', ({ libraryConfig, repositoryRoot, testFramework }) => {
       this.libraryConfig = libraryConfig
+      this.testFramework = testFramework
       this._setRepositoryRoot(repositoryRoot)
     })
 

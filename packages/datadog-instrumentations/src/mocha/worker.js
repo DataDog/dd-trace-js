@@ -412,6 +412,7 @@ addHook({
         workerConfigurationCh.publish({
           libraryConfig: config,
           repositoryRoot: config.repositoryRoot,
+          testFramework: config.testFramework,
         })
       }
       filterSkippedFiles(runner, skippedFiles)

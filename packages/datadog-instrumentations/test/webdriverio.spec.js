@@ -9,10 +9,15 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { promisify } = require('node:util')
 
+const MochaTest = require('mocha/lib/test')
 const sinon = require('sinon')
 
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
+const {
+  adjustRunnerFailuresForTestOptimization,
+  efdTests,
+} = require('../src/mocha/utils')
 const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
@@ -183,6 +188,31 @@ describe('webdriverio instrumentation', () => {
 
   it('does not track WebdriverIO hook failures in regular Mocha workers', async () => {
     await execFileAsync(process.execPath, [regularMochaWorkerFixturePath])
+  })
+
+  it('keeps failures when all executed EFD attempts fail and unused attempts are pending', () => {
+    const testName = 'mocha.test-suite.test-name'
+    const firstFailure = new MochaTest('first failure', () => {})
+    const secondFailure = new MochaTest('second failure', () => {})
+    const unusedRetry = new MochaTest('unused retry', () => {})
+    firstFailure.state = 'failed'
+    secondFailure.state = 'failed'
+    unusedRetry.pending = true
+    unusedRetry.state = 'pending'
+    efdTests[testName] = [firstFailure, secondFailure, unusedRetry]
+    const runner = {
+      failures: 2,
+      stats: { failures: 2 },
+    }
+
+    try {
+      adjustRunnerFailuresForTestOptimization(runner, { isEarlyFlakeDetectionEnabled: true })
+    } finally {
+      delete efdTests[testName]
+    }
+
+    assert.strictEqual(runner.failures, 2)
+    assert.strictEqual(runner.stats.failures, 2)
   })
 
   it('coordinates two Mocha workers under one session', async () => {
@@ -418,6 +448,7 @@ describe('webdriverio instrumentation', () => {
           'first.spec.js': [1],
         },
         repositoryRoot: process.cwd(),
+        testFramework: 'webdriverio',
         testManagementAttemptToFixRetries: 5,
         testManagementTests: {
           mocha: {

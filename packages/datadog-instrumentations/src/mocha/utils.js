@@ -74,8 +74,9 @@ function isTestFailed (test) {
 function adjustRunnerFailuresForTestOptimization (runner, config) {
   if (config.isEarlyFlakeDetectionEnabled) {
     for (const tests of Object.values(efdTests)) {
+      const executedEfdTests = tests.filter(test => !test.isPending())
       const failingEfdTests = tests.filter(test => isTestFailed(test))
-      const areAllEfdTestsFailing = failingEfdTests.length === tests.length
+      const areAllEfdTestsFailing = failingEfdTests.length === executedEfdTests.length
       const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
       if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
         if (runner.stats) {

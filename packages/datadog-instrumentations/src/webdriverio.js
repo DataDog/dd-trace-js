@@ -142,6 +142,7 @@ function createWorkerConfiguration () {
     knownTests: {},
     modifiedFiles: [],
     repositoryRoot: undefined,
+    testFramework: TEST_FRAMEWORK,
     testManagementAttemptToFixRetries: 0,
     testManagementTests: {},
   }
