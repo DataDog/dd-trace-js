@@ -167,7 +167,9 @@ function logAbortedIntegrations () {
   for (const [nameVersion, success] of instrumentedIntegrationsSuccess) {
     // Only ever log a single version of an integration, even if it is loaded later.
     if (!success && !alreadyLoggedIncompatibleIntegrations.has(nameVersion)) {
-      const [name, version] = nameVersion.split('@')
+      const lastAtPosition = nameVersion.lastIndexOf('@')
+      const name = nameVersion.slice(0, lastAtPosition)
+      const version = nameVersion.slice(lastAtPosition + 1)
       telemetry('abort.integration', [
         `integration:${name}`,
         `integration_version:${version}`,
