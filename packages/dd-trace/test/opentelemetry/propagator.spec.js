@@ -4,6 +4,7 @@ const assert = require('node:assert')
 
 const { ROOT_CONTEXT, defaultTextMapGetter, defaultTextMapSetter, trace } = require('@opentelemetry/api')
 
+const getConfig = require('../../src/config')
 const id = require('../../src/id')
 const DatadogSpanContext = require('../../src/opentracing/span_context')
 const DatadogPropagator = require('../../src/opentelemetry/propagator')
@@ -56,5 +57,21 @@ describe('OpenTelemetry DatadogPropagator', () => {
     assert.strictEqual(context.spanId, '2222222222222222')
     assert.strictEqual(context.traceFlags, 1)
     assert.ok(context._ddContext)
+  })
+
+  it('uses a consistent 64-bit trace ID for W3C input with the agentless exporter', () => {
+    const config = getConfig()
+    const propagator = new DatadogPropagator({
+      ...config,
+      experimental: { ...config.experimental, exporter: 'agentless' },
+    })
+    const extracted = propagator.extract(ROOT_CONTEXT, {
+      traceparent: '00-11111111111111112222222222222222-3333333333333333-01',
+    }, defaultTextMapGetter)
+
+    const context = trace.getSpanContext(extracted)
+    assert.strictEqual(context.traceId, '00000000000000002222222222222222')
+    assert.strictEqual(context.spanId, '3333333333333333')
+    assert.strictEqual(context._ddContext._trace.tags['_dd.p.tid'], undefined)
   })
 })

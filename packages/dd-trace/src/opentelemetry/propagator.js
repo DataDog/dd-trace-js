@@ -3,14 +3,18 @@
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const getConfig = require('../config')
+const id = require('../id')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const { getApi } = require('./api')
 const SpanContext = require('./span_context')
 
+const TRACE_ID_128 = '_dd.p.tid'
+
 class DatadogPropagator {
-  constructor () {
+  constructor (config = getConfig()) {
+    this._agentless = config.experimental?.exporter === 'agentless'
     this._datadog = new TextMapPropagator({
-      ...getConfig(),
+      ...config,
       DD_TRACE_PROPAGATION_EXTRACT_FIRST: true,
     })
     this._w3c = new W3CTraceContextPropagator()
@@ -38,6 +42,14 @@ class DatadogPropagator {
 
     const extracted = this._datadog.extract(headers)
     if (!extracted) return this._w3c.extract(context, carrier, getter)
+
+    // The agentless intake accepts 64-bit trace IDs only. Truncate when the
+    // remote context is created so separately executed Vercel functions use
+    // one consistent ID instead of truncating independent chunks at export.
+    if (this._agentless) {
+      extracted._traceId = id(extracted._traceId.toString(16).slice(-16), 16)
+      delete extracted._trace.tags[TRACE_ID_128]
+    }
 
     return getApi().trace.setSpanContext(context, new SpanContext(extracted))
   }
