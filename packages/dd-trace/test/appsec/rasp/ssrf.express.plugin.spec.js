@@ -15,7 +15,7 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
-const UNRESOLVABLE_HOST = 'not-a-threat.invalid'
+const NON_ROUTABLE_HOST = '192.0.2.1'
 
 describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
@@ -92,7 +92,7 @@ describe('RASP - ssrf', () => {
 
             await Promise.all([
               checkRaspExecutedAndNotThreat(agent),
-              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
             ])
           })
 
@@ -160,7 +160,7 @@ describe('RASP - ssrf', () => {
             }
 
             await Promise.all([
-              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -218,7 +218,7 @@ describe('RASP - ssrf', () => {
             }
 
             await Promise.all([
-              axios.get(`/?host=${UNRESOLVABLE_HOST}`),
+              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
