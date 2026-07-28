@@ -1,12 +1,54 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
+const path = require('node:path')
+
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('../src/helpers/instrument')
 const names = ['url', 'node:url']
+
+describe('url ESM loading', () => {
+  it('does not instrument the same URL implementation twice', () => {
+    const repositoryRoot = path.resolve(__dirname, '../../..')
+    const script = [
+      "const dc = require('dc-polyfill')",
+      'let parseCount = 0',
+      'let getterCount = 0',
+      "dc.subscribe('datadog:url:parse:finish', () => parseCount++)",
+      "dc.subscribe('datadog:url:getter:finish', () => getterCount++)",
+      "require('node:url')",
+      "import('node:url').then(({ URL }) => {",
+      '  const parseCountBefore = parseCount',
+      "  const parsed = new URL('https://www.datadoghq.com/path')",
+      '  const getterCountBefore = getterCount',
+      '  parsed.host',
+      '  console.log("URL_COUNTS " + (parseCount - parseCountBefore) + " " + ' +
+        '(getterCount - getterCountBefore))',
+      '})',
+    ].join('\n')
+    const result = spawnSync(process.execPath, ['-e', script], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: '0',
+        DD_REMOTE_CONFIG_ENABLED: '0',
+        DD_TRACE_AGENT_URL: 'http://127.0.0.1:9',
+        DD_TRACE_DEBUG: '1',
+        NODE_OPTIONS: `-r ${path.join(repositoryRoot, 'init.js')} ` +
+          `--loader ${path.join(repositoryRoot, 'loader-hook.mjs')}`,
+      },
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.doesNotMatch(`${result.stdout}${result.stderr}`, /Error during ddtrace instrumentation/)
+    assert.match(result.stdout, /URL_COUNTS 1 1/)
+  })
+})
 
 names.forEach(name => {
   describe(name, () => {

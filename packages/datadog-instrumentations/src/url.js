@@ -6,7 +6,12 @@ const parseFinishedChannel = channel('datadog:url:parse:finish')
 const urlGetterChannel = channel('datadog:url:getter:finish')
 const instrumentedGetters = ['host', 'origin', 'hostname']
 
+// CommonJS and ESM expose the same URL constructor through different module objects.
+const instrumentedUrlConstructors = new WeakSet()
+
 addHook({ name: 'url' }, function (url) {
+  if (instrumentedUrlConstructors.has(url.URL)) return url
+
   shimmer.wrap(url, 'parse', (parse) => {
     return function wrappedParse (input) {
       const parsedValue = parse.apply(this, arguments)
@@ -75,4 +80,8 @@ addHook({ name: 'url' }, function (url) {
       }
     })
   }
+
+  instrumentedUrlConstructors.add(url.URL)
+
+  return url
 })
