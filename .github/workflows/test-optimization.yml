@@ -56,7 +56,11 @@ jobs:
       - name: Get Playwright version from versions package.json
         id: playwright-version
         run: |
-          PLAYWRIGHT_VERSION=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies['@playwright/test']")
+          PLAYWRIGHT_VERSION=$(node -p \
+            "const versions = require('./integration-tests/playwright/versions'); \
+            versions.getLatestPlaywrightSpecifier() === 'latest' \
+              ? versions.latest \
+              : versions.latestSupportedByNode18")
           echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
           echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
@@ -73,14 +77,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        playwright-version: [oldest, latest]
+        playwright-version: [oldest, latest, latest-node18]
     name: Ensure Playwright Docker image (${{ matrix.playwright-version }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     outputs:
-      # Both matrix jobs set this to the same value, so the last-writer-wins
+      # All matrix jobs set this to the same value, so the last-writer-wins
       # behaviour of matrix outputs is safe here.
       images: ${{ steps.versions.outputs.images }}
     steps:
@@ -89,14 +93,30 @@ jobs:
         id: versions
         run: |
           LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
+          LATEST_NODE18=$(node -p "require('./integration-tests/playwright/versions').latestSupportedByNode18")
           OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
           DOCKER_HASH=$(sha256sum .github/playwright/Dockerfile | cut -c1-8)
           LATEST_TAG="${LATEST}-${DOCKER_HASH}"
+          LATEST_NODE18_TAG="${LATEST_NODE18}-${DOCKER_HASH}"
           OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
           BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
-          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
-          PW_VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
-          IMAGE_TAG=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
+          IMAGES=$(printf \
+            '{"latest":{"latest":"%s:%s","oldest":"%s:%s"},"oldest":{"latest":"%s:%s","oldest":"%s:%s"}}' \
+            "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG" "$BASE" "$LATEST_NODE18_TAG" "$BASE" "$OLDEST_TAG")
+          case "${{ matrix.playwright-version }}" in
+            latest)
+              PW_VERSION="$LATEST"
+              IMAGE_TAG="$LATEST_TAG"
+              ;;
+            latest-node18)
+              PW_VERSION="$LATEST_NODE18"
+              IMAGE_TAG="$LATEST_NODE18_TAG"
+              ;;
+            *)
+              PW_VERSION="$OLDEST"
+              IMAGE_TAG="$OLDEST_TAG"
+              ;;
+          esac
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
           echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
           echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
@@ -140,7 +160,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.playwright-version] }}
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.node-version][matrix.playwright-version] }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -278,6 +298,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/plugins/test
+
+  dependency-helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node
+      - uses: ./.github/actions/install
+      - run: npm run test:integration:test-optimization:helpers
 
   integration-cucumber:
     strategy:
