@@ -9,10 +9,10 @@ const tracer = require('.')
 // Load Next's OTel span normalization hook without enabling the legacy plugin.
 require('./packages/datadog-instrumentations/src/next')
 
-// Next's native OTel spans own the server lifecycle, including fetch. Keep the
-// native fetch span so distributed W3C context refers to an exported parent.
+// Keep Next's native fetch span visible so distributed W3C context refers to
+// an exported parent. dd-trace's fetch integration keeps that span connected
+// to the active Next request and provides Datadog propagation and HTTP tags.
 tracer.use('http', { server: false })
-tracer.use('fetch', false)
 tracer.use('next', false)
 
 onApiReady(API, () => {
