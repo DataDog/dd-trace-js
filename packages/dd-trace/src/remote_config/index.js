@@ -595,4 +595,3 @@ function refreshClientId (config) {
 }
 
 module.exports = RemoteConfig
-module.exports.refreshClientId = refreshClientId

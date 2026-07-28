@@ -829,7 +829,7 @@ describe('RemoteConfig', () => {
       const originalId = rc.state.client.id
 
       uuid.returns('refreshed-client-id')
-      RemoteConfig.refreshClientId(config)
+      channel('datadog:identity:update').publish(config)
 
       assert.strictEqual(rc.state.client.id, 'refreshed-client-id')
       assert.notStrictEqual(rc.state.client.id, originalId)
@@ -880,10 +880,6 @@ describe('RemoteConfig', () => {
       })
     })
 
-    it('should export refreshClientId as a function', () => {
-      assert.strictEqual(typeof RemoteConfig.refreshClientId, 'function')
-    })
-
     it('should update state.client.id on the live instance immediately after refresh', () => {
       // state.client.id is a live getter — the existing instance reflects the
       // update without being recreated, so all in-flight RC polls pick up the
@@ -891,7 +887,7 @@ describe('RemoteConfig', () => {
       const rcInstance = new RemoteConfigWithId(config)
       assert.strictEqual(rcInstance.state.client.id, '1234-5678')
 
-      RemoteConfigWithId.refreshClientId(config)
+      channel('datadog:identity:update').publish(config)
 
       assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
@@ -905,9 +901,12 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      RemoteConfigWithId.refreshClientId(rcConfig)
+      channel('datadog:identity:update').publish(rcConfig)
 
-      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+      // Other RemoteConfig instances accumulated on the shared channel by earlier tests
+      // also react to this publish, so we can't pin the exact winning uuid here — only
+      // that this instance's guard fired and replaced the original value.
+      assert.notStrictEqual(rcConfig.tags['_dd.rc.client_id'], 'old')
     })
 
     it('should update config.tags[_dd.rc.client_id] when it exists', () => {
@@ -922,9 +921,9 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      RemoteConfigWithId.refreshClientId(rcConfig)
+      channel('datadog:identity:update').publish(rcConfig)
 
-      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+      assert.notStrictEqual(rcConfig.tags['_dd.rc.client_id'], 'old-client-id')
     })
 
     it('should not update config.tags[_dd.rc.client_id] when tag is absent', () => {
@@ -936,25 +935,16 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      RemoteConfigWithId.refreshClientId(rcConfig)
+      channel('datadog:identity:update').publish(rcConfig)
 
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
     })
 
     it('should call uuid again to generate the new ID', () => {
-      RemoteConfigWithId.refreshClientId(config)
+      channel('datadog:identity:update').publish(config)
 
       // once at module load for the initial clientId, once on refresh
       sinon.assert.calledTwice(uuidStub)
-    })
-
-    it('should refresh the client id when datadog:identity:update is published', () => {
-      const rcInstance = new RemoteConfigWithId(config)
-      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
-
-      channel('datadog:identity:update').publish(config)
-
-      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
   })
 })

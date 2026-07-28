@@ -162,15 +162,26 @@ describe('id', () => {
     let randomFillSyncStub
 
     beforeEach(() => {
+      // Fill with a value that increments per call, so IDs drawn from different
+      // randomFillSync() fills are distinguishable instead of all looking alike.
+      let fillByte = 0
       randomFillSyncStub = sinon.stub().callsFake(buf => {
-        for (let i = 0; i < buf.length; i++) {
-          buf[i] = 0xAB
-        }
+        fillByte++
+        buf.fill(fillByte)
       })
 
       freshId = proxyquire('../src/id', {
         crypto: { randomFillSync: randomFillSyncStub },
       })
+    })
+
+    it('should generate a different id after reseed', () => {
+      const before = freshId().toString()
+
+      channel('datadog:identity:update').publish({ tags: {} })
+      const after = freshId().toString()
+
+      assert.notStrictEqual(after, before)
     })
 
     it('should reset the batch cursor to 0', () => {
@@ -180,7 +191,7 @@ describe('id', () => {
       freshId()
       randomFillSyncStub.resetHistory()
 
-      freshId.reseed()
+      channel('datadog:identity:update').publish({ tags: {} })
       // After reseed, batch = 0, so the next call must refill from randomFillSync
       freshId()
 
@@ -188,7 +199,7 @@ describe('id', () => {
     })
 
     it('should force a fresh randomFillSync() call on the very next id() after reseed', () => {
-      freshId.reseed()
+      channel('datadog:identity:update').publish({ tags: {} })
       randomFillSyncStub.resetHistory()
 
       freshId()
@@ -197,8 +208,8 @@ describe('id', () => {
     })
 
     it('should be safe to call repeatedly', () => {
-      freshId.reseed()
-      freshId.reseed()
+      channel('datadog:identity:update').publish({ tags: {} })
+      channel('datadog:identity:update').publish({ tags: {} })
       randomFillSyncStub.resetHistory()
 
       freshId()
