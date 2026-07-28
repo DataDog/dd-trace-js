@@ -880,6 +880,9 @@ module.exports = {
       tracer.use(plugin, { enabled: false })
     }
     loadedPlugins.clear()
+    // The propagation-hash singleton is not in `RELOAD_EVICTION_IDS`, so the
+    // `Config` this tracer installed would stay live for every later spec file.
+    require('../../src/propagation-hash').configure(null)
     // Force the next `agent.load` through the gate-fired rebuild path
     // so cross-file leaks (`code_origin` tags sticking across files,
     // `router`'s path-stack accumulating, …) cannot silently inherit
